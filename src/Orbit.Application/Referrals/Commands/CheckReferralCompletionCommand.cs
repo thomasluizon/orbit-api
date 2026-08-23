@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
+using Orbit.Application.Notifications;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -171,11 +172,11 @@ public partial class CheckReferralCompletionCommandHandler(
         var (title, body) = GetNotificationContent(isReferrer, isPt, user.IsPro);
 
         await repos.NotificationRepository.AddAsync(
-            Notification.Create(user.Id, title, body, "/profile"), cancellationToken);
+            Notification.Create(user.Id, title, body, NotificationUrls.Profile), cancellationToken);
 
         _ = Task.Run(async () =>
         {
-            try { await pushNotificationService.SendToUserAsync(user.Id, title, body, "/profile", CancellationToken.None); }
+            try { await pushNotificationService.SendToUserAsync(user.Id, title, body, NotificationUrls.Profile, CancellationToken.None); }
             catch (Exception ex) { LogReferralPushNotificationFailed(logger, ex, user.Id); }
         }, CancellationToken.None);
     }

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Orbit.Application.Notifications;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -160,7 +161,7 @@ public partial class ProactiveCheckinSchedulerService(
 
         ctx.SentDates.Add((user.Id, userToday));
 
-        await ctx.PushService.SendToUserAsync(user.Id, title, body, "/chat", ct);
+        await ctx.PushService.SendToUserAsync(user.Id, title, body, NotificationUrls.Chat, ct);
 
         if (logger.IsEnabled(LogLevel.Information))
             LogSentProactiveCheckin(logger, user.Id);
@@ -195,7 +196,7 @@ public partial class ProactiveCheckinSchedulerService(
     {
         await dbContext.SentProactiveCheckins.AddAsync(SentProactiveCheckin.Create(userId, date), ct);
         await dbContext.Notifications.AddAsync(
-            Notification.Create(userId, title, body, "/chat"), ct);
+            Notification.Create(userId, title, body, NotificationUrls.Chat), ct);
 
         try
         {

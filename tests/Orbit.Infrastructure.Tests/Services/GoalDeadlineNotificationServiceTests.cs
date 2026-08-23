@@ -7,6 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using Orbit.Application.Notifications;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -217,7 +218,7 @@ public class GoalDeadlineNotificationServiceTests
         var goalId = Guid.NewGuid();
         var daysBefore = 3;
 
-        var key = $"goal-deadline-{goalId}-{daysBefore}d";
+        var key = GoalDeadlineNotificationService.BuildDedupeKey(goalId, daysBefore);
 
         key.Should().StartWith("goal-deadline-");
         key.Should().EndWith("3d");
@@ -230,8 +231,8 @@ public class GoalDeadlineNotificationServiceTests
         var goal1 = Guid.NewGuid();
         var goal2 = Guid.NewGuid();
 
-        var key1 = $"goal-deadline-{goal1}-3d";
-        var key2 = $"goal-deadline-{goal2}-3d";
+        var key1 = GoalDeadlineNotificationService.BuildDedupeKey(goal1, 3);
+        var key2 = GoalDeadlineNotificationService.BuildDedupeKey(goal2, 3);
 
         key1.Should().NotBe(key2);
     }
@@ -241,9 +242,9 @@ public class GoalDeadlineNotificationServiceTests
     {
         var goalId = Guid.NewGuid();
 
-        var key7 = $"goal-deadline-{goalId}-7d";
-        var key3 = $"goal-deadline-{goalId}-3d";
-        var key1 = $"goal-deadline-{goalId}-1d";
+        var key7 = GoalDeadlineNotificationService.BuildDedupeKey(goalId, 7);
+        var key3 = GoalDeadlineNotificationService.BuildDedupeKey(goalId, 3);
+        var key1 = GoalDeadlineNotificationService.BuildDedupeKey(goalId, 1);
 
         key7.Should().NotBe(key3);
         key3.Should().NotBe(key1);
@@ -322,8 +323,10 @@ public class GoalDeadlineNotificationServiceTests
         await service.CheckAndSendDeadlineNotifications(CancellationToken.None);
 
         await pushService.Received(1).SendToUserAsync(
-            user.Id, Arg.Any<string>(), Arg.Is<string>(b => b.Contains("7 days")), Arg.Any<string?>(), Arg.Any<CancellationToken>());
-        (await dbContext.Notifications.CountAsync(n => n.Url == $"goal-deadline-{goal.Id}-7d")).Should().Be(1);
+            user.Id, Arg.Any<string>(), Arg.Is<string>(b => b.Contains("7 days")), NotificationUrls.Progress, Arg.Any<CancellationToken>());
+        var notification = await dbContext.Notifications.SingleAsync();
+        notification.Url.Should().Be(NotificationUrls.Progress);
+        notification.DedupeKey.Should().Be(GoalDeadlineNotificationService.BuildDedupeKey(goal.Id, 7));
     }
 
     [Fact]
@@ -338,8 +341,10 @@ public class GoalDeadlineNotificationServiceTests
 
         await pushService.Received(1).SendToUserAsync(
             user.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
-        (await dbContext.Notifications.CountAsync(n => n.Url == $"goal-deadline-{goal.Id}-7d")).Should().Be(1);
-        (await dbContext.Notifications.CountAsync(n => n.Url == $"goal-deadline-{goal.Id}-3d")).Should().Be(0);
+        (await dbContext.Notifications.CountAsync(
+            n => n.DedupeKey == GoalDeadlineNotificationService.BuildDedupeKey(goal.Id, 7))).Should().Be(1);
+        (await dbContext.Notifications.CountAsync(
+            n => n.DedupeKey == GoalDeadlineNotificationService.BuildDedupeKey(goal.Id, 3))).Should().Be(0);
     }
 
     [Fact]
@@ -352,7 +357,8 @@ public class GoalDeadlineNotificationServiceTests
         var service = CreateService(dbContext, pushService);
         await service.CheckAndSendDeadlineNotifications(CancellationToken.None);
 
-        (await dbContext.Notifications.CountAsync(n => n.Url == $"goal-deadline-{goal.Id}-7d")).Should().Be(1);
+        (await dbContext.Notifications.CountAsync(
+            n => n.DedupeKey == GoalDeadlineNotificationService.BuildDedupeKey(goal.Id, 7))).Should().Be(1);
     }
 
     [Fact]
@@ -361,8 +367,9 @@ public class GoalDeadlineNotificationServiceTests
         await using var dbContext = CreateInMemoryDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
         var (user, goal) = await SeedDeadlineGoalAsync(dbContext, deadlineInDays: 5);
+        var dedupeKey = GoalDeadlineNotificationService.BuildDedupeKey(goal.Id, 7);
         dbContext.Notifications.Add(Notification.Create(
-            user.Id, goal.Title, "already sent", $"goal-deadline-{goal.Id}-7d"));
+            user.Id, goal.Title, "already sent", NotificationUrls.Progress, dedupeKey: dedupeKey));
         await dbContext.SaveChangesAsync();
 
         var service = CreateService(dbContext, pushService);
@@ -370,7 +377,7 @@ public class GoalDeadlineNotificationServiceTests
 
         await pushService.DidNotReceive().SendToUserAsync(
             Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
-        (await dbContext.Notifications.CountAsync(n => n.Url == $"goal-deadline-{goal.Id}-7d")).Should().Be(1);
+        (await dbContext.Notifications.CountAsync(n => n.DedupeKey == dedupeKey)).Should().Be(1);
     }
 
     [Fact]
@@ -393,7 +400,7 @@ public class GoalDeadlineNotificationServiceTests
         await using var dbContext = CreateInMemoryDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
         var (user, goal) = await SeedDeadlineGoalAsync(dbContext, deadlineInDays: 7);
-        var dedupKey = $"goal-deadline-{goal.Id}-7d";
+        var dedupKey = GoalDeadlineNotificationService.BuildDedupeKey(goal.Id, 7);
 
         var notificationExistedAtPushTime = false;
         pushService
@@ -401,7 +408,7 @@ public class GoalDeadlineNotificationServiceTests
             .Returns(_ =>
             {
                 notificationExistedAtPushTime = dbContext.Notifications
-                    .AsNoTracking().Any(n => n.Url == dedupKey);
+                    .AsNoTracking().Any(n => n.DedupeKey == dedupKey && n.Url == NotificationUrls.Progress);
                 return Task.CompletedTask;
             });
 
@@ -409,7 +416,7 @@ public class GoalDeadlineNotificationServiceTests
         await service.CheckAndSendDeadlineNotifications(CancellationToken.None);
 
         notificationExistedAtPushTime.Should().BeTrue();
-        (await dbContext.Notifications.CountAsync(n => n.Url == dedupKey)).Should().Be(1);
+        (await dbContext.Notifications.CountAsync(n => n.DedupeKey == dedupKey)).Should().Be(1);
     }
 
     [Fact]
@@ -421,9 +428,9 @@ public class GoalDeadlineNotificationServiceTests
             conflictUser.Id, "Run Marathon", 10, "km", Deadline: Today.AddDays(7))).Value;
         var healthyGoal = Goal.Create(new Goal.CreateGoalParams(
             healthyUser.Id, "Read Books", 10, "books", Deadline: Today.AddDays(7))).Value;
-        var conflictKey = $"goal-deadline-{conflictGoal.Id}-7d";
+        var conflictKey = GoalDeadlineNotificationService.BuildDedupeKey(conflictGoal.Id, 7);
 
-        var interceptor = new ThrowUniqueViolationForUrlInterceptor(conflictKey);
+        var interceptor = new ThrowUniqueViolationForDedupeKeyInterceptor(conflictKey);
         await using var dbContext = CreateInterceptingDbContext(interceptor);
         var pushService = Substitute.For<IPushNotificationService>();
 
@@ -439,8 +446,9 @@ public class GoalDeadlineNotificationServiceTests
         await pushService.Received(1).SendToUserAsync(
             healthyUser.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
 
-        (await dbContext.Notifications.CountAsync(n => n.Url == conflictKey)).Should().Be(0);
-        (await dbContext.Notifications.CountAsync(n => n.Url == $"goal-deadline-{healthyGoal.Id}-7d")).Should().Be(1);
+        (await dbContext.Notifications.CountAsync(n => n.DedupeKey == conflictKey)).Should().Be(0);
+        (await dbContext.Notifications.CountAsync(
+            n => n.DedupeKey == GoalDeadlineNotificationService.BuildDedupeKey(healthyGoal.Id, 7))).Should().Be(1);
     }
 
     [Fact]
@@ -463,7 +471,8 @@ public class GoalDeadlineNotificationServiceTests
 
         await pushService.Received(1).SendToUserAsync(
             user.Id, Arg.Any<string>(), Arg.Is<string>(b => b.Contains("7 days")), Arg.Any<string?>(), Arg.Any<CancellationToken>());
-        (await dbContext.Notifications.CountAsync(n => n.Url == $"goal-deadline-{goal.Id}-7d")).Should().Be(1);
+        (await dbContext.Notifications.CountAsync(
+            n => n.DedupeKey == GoalDeadlineNotificationService.BuildDedupeKey(goal.Id, 7))).Should().Be(1);
         service.ExecuteTask.Should().NotBeNull();
         service.ExecuteTask!.IsCompleted.Should().BeTrue();
         service.ExecuteTask!.IsFaulted.Should().BeFalse();
@@ -492,8 +501,10 @@ public class GoalDeadlineNotificationServiceTests
             throwingUser.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
         await pushService.Received(1).SendToUserAsync(
             healthyUser.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
-        (await dbContext.Notifications.CountAsync(n => n.Url == $"goal-deadline-{healthyGoal.Id}-7d")).Should().Be(1);
-        (await dbContext.Notifications.CountAsync(n => n.Url == $"goal-deadline-{throwingGoal.Id}-7d")).Should().Be(1);
+        (await dbContext.Notifications.CountAsync(
+            n => n.DedupeKey == GoalDeadlineNotificationService.BuildDedupeKey(healthyGoal.Id, 7))).Should().Be(1);
+        (await dbContext.Notifications.CountAsync(
+            n => n.DedupeKey == GoalDeadlineNotificationService.BuildDedupeKey(throwingGoal.Id, 7))).Should().Be(1);
     }
 
     private static async Task<(User User, Goal Goal)> SeedDeadlineGoalAsync(
@@ -546,14 +557,14 @@ public class GoalDeadlineNotificationServiceTests
             new ConfigurationBuilder().Build());
     }
 
-    private sealed class ThrowUniqueViolationForUrlInterceptor(string conflictUrl) : SaveChangesInterceptor
+    private sealed class ThrowUniqueViolationForDedupeKeyInterceptor(string conflictKey) : SaveChangesInterceptor
     {
         public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
             DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
         {
             var hasConflictingNotification = eventData.Context?.ChangeTracker
                 .Entries<Notification>()
-                .Any(e => e.State == EntityState.Added && e.Entity.Url == conflictUrl) == true;
+                .Any(e => e.State == EntityState.Added && e.Entity.DedupeKey == conflictKey) == true;
 
             if (hasConflictingNotification)
                 throw new DbUpdateException("duplicate", new FakeUniqueViolationException());

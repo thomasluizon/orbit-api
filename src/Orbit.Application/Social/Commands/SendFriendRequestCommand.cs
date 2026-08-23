@@ -16,8 +16,6 @@ public class SendFriendRequestCommandHandler(
     SocialNotificationDispatcher notificationDispatcher,
     IUnitOfWork unitOfWork) : IRequestHandler<SendFriendRequestCommand, Result<Guid>>
 {
-    private const string RequestNotificationUrl = "/social?tab=friends";
-
     public async Task<Result<Guid>> Handle(SendFriendRequestCommand request, CancellationToken cancellationToken)
     {
         var access = await socialAccessGuard.EnsureEnabledAsync(request.UserId, cancellationToken);
@@ -63,6 +61,6 @@ public class SendFriendRequestCommandHandler(
             ? $"{requester.Name} quer ser seu amigo."
             : $"{requester.Name} wants to be your friend.";
 
-        return Notification.Create(target.Id, title, body, RequestNotificationUrl);
+        return Notification.Create(target.Id, title, body, null);
     }
 }

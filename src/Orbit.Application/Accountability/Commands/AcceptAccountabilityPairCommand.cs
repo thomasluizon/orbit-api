@@ -25,8 +25,6 @@ public class AcceptAccountabilityPairCommandHandler(
     IUnitOfWork unitOfWork) : IRequestHandler<AcceptAccountabilityPairCommand, Result>
 {
     private const string BattleBuddyAchievementId = "battle_buddy";
-    private const string BuddyNotificationUrl = "/social?tab=buddies";
-
     public async Task<Result> Handle(AcceptAccountabilityPairCommand request, CancellationToken cancellationToken)
     {
         var access = await socialAccessGuard.EnsureEnabledAsync(request.UserId, cancellationToken);
@@ -105,6 +103,6 @@ public class AcceptAccountabilityPairCommandHandler(
             ? $"{accepter.Name} aceitou seu convite de parceria."
             : $"{accepter.Name} accepted your accountability invite.";
 
-        return Notification.Create(requester.Id, title, body, BuddyNotificationUrl);
+        return Notification.Create(requester.Id, title, body, null);
     }
 }

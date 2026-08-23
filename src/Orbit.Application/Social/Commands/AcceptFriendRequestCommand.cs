@@ -24,8 +24,6 @@ public class AcceptFriendRequestCommandHandler(
     private const string FirstFriendAchievementId = "first_friend";
     private const string SquadGoalsAchievementId = "squad_goals";
     private const int SquadGoalsThreshold = 5;
-    private const string FriendNotificationUrl = "/social?tab=friends";
-
     public async Task<Result> Handle(AcceptFriendRequestCommand request, CancellationToken cancellationToken)
     {
         var access = await socialAccessGuard.EnsureEnabledAsync(request.UserId, cancellationToken);
@@ -119,6 +117,6 @@ public class AcceptFriendRequestCommandHandler(
             ? $"{accepter.Name} aceitou seu pedido de amizade."
             : $"{accepter.Name} accepted your friend request.";
 
-        return Notification.Create(requester.Id, title, body, FriendNotificationUrl);
+        return Notification.Create(requester.Id, title, body, null);
     }
 }

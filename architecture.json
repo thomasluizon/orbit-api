@@ -2725,7 +2725,7 @@
       "Goals": 33,
       "Habits": 74,
       "Marketing": 4,
-      "Notifications": 12,
+      "Notifications": 13,
       "Profile": 37,
       "Referrals": 8,
       "Social": 30,
@@ -2934,7 +2934,7 @@
       "Goals": 38,
       "Habits": 83,
       "Marketing": 6,
-      "Notifications": 16,
+      "Notifications": 19,
       "Profile": 39,
       "Referrals": 13,
       "Social": 32,
@@ -4934,6 +4934,11 @@
         "references": [
           "Habit"
         ]
+      },
+      {
+        "testClass": "NotificationUrlsTests",
+        "file": "tests/Orbit.Application.Tests/Notifications/NotificationUrlsTests.cs",
+        "references": []
       },
       {
         "testClass": "GetApiKeysQueryHandlerTests",
@@ -7805,6 +7810,7 @@
         "testClass": "PushNotificationServiceTests",
         "file": "tests/Orbit.Infrastructure.Tests/Services/PushNotificationServiceTests.cs",
         "references": [
+          "Notification",
           "PushSubscription",
           "User"
         ]
