@@ -252,7 +252,7 @@ public static class HabitScheduleService
 
         var unit = habit.FrequencyUnit;
         if (unit is null)
-            return target == recurrenceAnchor;
+            return target == habit.DueDate;
 
         return MatchesFrequency(habit, target, recurrenceAnchor, unit, habit.FrequencyQuantity ?? 1);
     }

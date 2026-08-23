@@ -110,7 +110,9 @@ public class GetRecapQueryHandler(
         CancellationToken cancellationToken)
     {
         Func<IQueryable<Habit>, IQueryable<Habit>> includePeriodLogs =
-            q => q.Include(h => h.Logs.Where(l => l.Date >= request.DateFrom && l.Date <= request.DateTo));
+            q => q.Include(h => h.Logs.Where(l => !l.IsDeleted
+                && l.Date >= request.DateFrom
+                && l.Date <= request.DateTo));
         return isClosedMonth
             ? await habitRepository.FindIgnoringFiltersAsync(
                 h => h.UserId == request.UserId,

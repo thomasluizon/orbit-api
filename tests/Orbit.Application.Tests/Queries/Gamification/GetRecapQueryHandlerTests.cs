@@ -346,6 +346,34 @@ public class GetRecapQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_ClosedMonthWithDeletedLog_ExcludesDeletedCompletion()
+    {
+        var monthStart = new DateOnly(2026, 6, 1);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Walk", FrequencyUnit.Day, 1, DueDate: monthStart)).Value;
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
+            habit,
+            new DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc));
+        habit.Log(monthStart, advanceDueDate: false);
+        habit.Unlog(monthStart).IsSuccess.Should().BeTrue();
+        StubHabits(habit);
+
+        var result = await _handler.Handle(
+            new GetRecapQuery(
+                UserId,
+                monthStart,
+                new DateOnly(2026, 6, 30),
+                "month",
+                2026,
+                6),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Metrics.TotalCompletions.Should().Be(0);
+        result.Value.Metrics.ActiveDays.Should().Be(0);
+    }
+
+    [Fact]
     public async Task Handle_EmptyPeriod_ReturnsZeroedMetrics_NotFailure()
     {
         StubHabits();

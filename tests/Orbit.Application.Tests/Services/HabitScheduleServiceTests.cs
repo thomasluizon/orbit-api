@@ -748,6 +748,26 @@ public class HabitScheduleServiceTests
     }
 
     [Fact]
+    public void GetHistoricalScheduledDates_PostponedOneTimeTask_UsesCurrentDueDate()
+    {
+        var originalDate = new DateOnly(2026, 6, 5);
+        var postponedDate = new DateOnly(2026, 6, 20);
+        var habit = CreateHabit(null, null, dueDate: originalDate);
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
+            habit,
+            new DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc));
+        habit.PostponeTo(postponedDate);
+
+        var dates = HabitScheduleService.GetHistoricalScheduledDates(
+            habit,
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 6, 30),
+            TimeZoneInfo.Utc);
+
+        dates.Should().Equal(postponedDate);
+    }
+
+    [Fact]
     public void GetHistoricalScheduledDates_DeletedDuringWindow_StopsOnLocalizedDeletionDate()
     {
         var monthStart = new DateOnly(2026, 6, 1);
