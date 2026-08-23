@@ -81,7 +81,7 @@ public sealed partial class AchievementEligibilityReconciliationHostedService(
 
     private async Task RunWorkerAsync(CancellationToken cancellationToken)
     {
-        while (true)
+        while (!cancellationToken.IsCancellationRequested)
         {
             await RunReconciliationAsync(cancellationToken);
             await Task.Delay(RetryDelay, cancellationToken);
