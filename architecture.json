@@ -2895,7 +2895,7 @@
       "Challenges": 14,
       "Chat": 61,
       "ChecklistTemplates": 9,
-      "Common": 168,
+      "Common": 169,
       "Gamification": 36,
       "Goals": 38,
       "Habits": 83,
@@ -4794,6 +4794,11 @@
       {
         "testClass": "StripeSettingsTests",
         "file": "tests/Orbit.Application.Tests/Common/StripeSettingsTests.cs",
+        "references": []
+      },
+      {
+        "testClass": "SubscriptionLapseReasonExtensionsTests",
+        "file": "tests/Orbit.Application.Tests/Common/SubscriptionLapseReasonExtensionsTests.cs",
         "references": []
       },
       {
