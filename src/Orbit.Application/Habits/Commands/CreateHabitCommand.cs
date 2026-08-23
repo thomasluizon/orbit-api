@@ -149,13 +149,6 @@ public partial class CreateHabitCommandHandler(
                 return subGateCheck;
         }
 
-        if (request.GoalIds is { Count: > 0 })
-        {
-            var goalLinkGate = await payGate.CanLinkGoalsToHabits(request.UserId, cancellationToken);
-            if (goalLinkGate.IsFailure)
-                return goalLinkGate;
-        }
-
         if (opts.SlipAlertEnabled)
         {
             var slipAlertGate = await payGate.CanUseSlipAlerts(request.UserId, cancellationToken);

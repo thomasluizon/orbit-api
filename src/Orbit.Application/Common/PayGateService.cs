@@ -142,21 +142,8 @@ public class PayGateService(
         return Result.Success();
     }
 
-    public async Task<Result> CanAccessGoals(Guid userId, CancellationToken ct = default)
-    {
-        var user = await userRepository.GetByIdAsync(userId, ct);
-        if (user is null)
-            return Result.Failure(ErrorMessages.UserNotFound);
-
-        var goalsProOnly = await appConfig.GetAsync(AppConfigKeys.GoalsProOnly, true, ct);
-        if (goalsProOnly && !user.HasProAccess)
-            return Result.PayGateFailure("Goals are a Pro feature. Upgrade to unlock!");
-
-        return Result.Success();
-    }
-
-    public Task<Result> CanCreateGoals(Guid userId, CancellationToken ct = default) =>
-        CanAccessGoals(userId, ct);
+    public Task<Result> CanUseGoalReview(Guid userId, CancellationToken ct = default) =>
+        RequireProAccess(userId, "Goal reviews are a Pro feature. Upgrade to unlock!", ct);
 
     public Task<Result> CanAccessCalendar(Guid userId, CancellationToken ct = default) =>
         RequireProAccess(userId, "Calendar integration is a Pro feature. Upgrade to unlock!", ct);
@@ -190,9 +177,6 @@ public class PayGateService(
 
     public Task<Result> CanUseSlipAlerts(Guid userId, CancellationToken ct = default) =>
         RequireProAccess(userId, "Slip alerts are a Pro feature. Upgrade to unlock!", ct);
-
-    public Task<Result> CanLinkGoalsToHabits(Guid userId, CancellationToken ct = default) =>
-        CanAccessGoals(userId, ct);
 
     public async Task<Result> CanCreateApiKeys(Guid userId, CancellationToken ct = default)
     {

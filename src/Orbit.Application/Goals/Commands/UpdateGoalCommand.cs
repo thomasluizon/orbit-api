@@ -21,7 +21,6 @@ public record UpdateGoalCommand(
 
 public class UpdateGoalCommandHandler(
     GoalRepositories repos,
-    IPayGateService payGate,
     IUserDateService userDateService,
     IGoalCompletionService goalCompletionService,
     IUnitOfWork unitOfWork,
@@ -29,10 +28,6 @@ public class UpdateGoalCommandHandler(
 {
     public async Task<Result> Handle(UpdateGoalCommand request, CancellationToken cancellationToken)
     {
-        var gateCheck = await payGate.CanAccessGoals(request.UserId, cancellationToken);
-        if (gateCheck.IsFailure)
-            return gateCheck;
-
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         if (request.Deadline is { } deadline && deadline < today)
             return Result.Failure(ErrorMessages.DeadlineInPast);

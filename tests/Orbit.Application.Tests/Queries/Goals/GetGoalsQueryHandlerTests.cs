@@ -12,7 +12,6 @@ namespace Orbit.Application.Tests.Queries.Goals;
 public class GetGoalsQueryHandlerTests
 {
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
-    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IGoalProgressReadSyncer _goalProgressReadSyncer = Substitute.For<IGoalProgressReadSyncer>();
     private readonly GetGoalsQueryHandler _handler;
@@ -22,9 +21,7 @@ public class GetGoalsQueryHandlerTests
 
     public GetGoalsQueryHandlerTests()
     {
-        _handler = new GetGoalsQueryHandler(_goalRepo, _payGate, _userDateService, _goalProgressReadSyncer);
-        _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Orbit.Domain.Common.Result.Success());
+        _handler = new GetGoalsQueryHandler(_goalRepo, _userDateService, _goalProgressReadSyncer);
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
         _goalProgressReadSyncer.ComputeFreshValuesAsync(Arg.Any<Guid>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
             .Returns(new Dictionary<Guid, int>());
@@ -146,25 +143,6 @@ public class GetGoalsQueryHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Items[0].TrackingStatus.Should().Be("on_track");
-    }
-
-    [Fact]
-    public async Task Handle_PaywalledUser_ReturnsPayGateFailure()
-    {
-        _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Orbit.Domain.Common.Result.PayGateFailure("Goals are a Pro feature"));
-
-        var result = await _handler.Handle(new GetGoalsQuery(UserId), CancellationToken.None);
-
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be(Orbit.Domain.Common.Result.PayGateErrorCode);
-        await _goalRepo.DidNotReceive().FindPagedAsync(
-            Arg.Any<Expression<Func<Goal, bool>>>(),
-            Arg.Any<Func<IQueryable<Goal>, IOrderedQueryable<Goal>>>(),
-            Arg.Any<int>(),
-            Arg.Any<int>(),
-            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
-            Arg.Any<CancellationToken>());
     }
 
     [Fact]

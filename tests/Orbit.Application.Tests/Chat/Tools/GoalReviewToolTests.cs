@@ -5,6 +5,7 @@ using NSubstitute;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Goals.Services;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -14,6 +15,7 @@ namespace Orbit.Application.Tests.Chat.Tools;
 public class GoalReviewToolTests
 {
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
+    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IGoalProgressReadSyncer _goalProgressReadSyncer = Substitute.For<IGoalProgressReadSyncer>();
     private readonly GoalReviewTool _tool;
@@ -23,7 +25,8 @@ public class GoalReviewToolTests
 
     public GoalReviewToolTests()
     {
-        _tool = new GoalReviewTool(_goalRepo, _userDateService, _goalProgressReadSyncer);
+        _tool = new GoalReviewTool(_goalRepo, _payGate, _userDateService, _goalProgressReadSyncer);
+        _payGate.CanUseGoalReview(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
         _goalProgressReadSyncer.ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>())
             .Returns(new Dictionary<Guid, int>());
@@ -57,6 +60,22 @@ public class GoalReviewToolTests
 
         result.Success.Should().BeTrue();
         result.EntityName.Should().Contain("No active goals");
+    }
+
+    [Fact]
+    public async Task FreeUser_ReturnsPayGateFailureBeforeLoadingGoals()
+    {
+        _payGate.CanUseGoalReview(UserId, Arg.Any<CancellationToken>())
+            .Returns(Result.PayGateFailure("Goal reviews are a Pro feature"));
+
+        var result = await Execute("{}");
+
+        result.Success.Should().BeFalse();
+        result.ErrorCode.Should().Be(Result.PayGateErrorCode);
+        await _goalRepo.DidNotReceive().FindAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

@@ -33,7 +33,6 @@ public class PayGateServiceTests
         _appConfig.GetAsync("ProAiMessagesPerMonth", 500, Arg.Any<CancellationToken>()).Returns(500);
         _appConfig.GetAsync("DailySummaryProOnly", true, Arg.Any<CancellationToken>()).Returns(true);
         _appConfig.GetAsync("RetrospectiveProOnly", true, Arg.Any<CancellationToken>()).Returns(true);
-        _appConfig.GetAsync("GoalsProOnly", true, Arg.Any<CancellationToken>()).Returns(true);
     }
 
     private static User CreateFreeUser()
@@ -494,51 +493,39 @@ public class PayGateServiceTests
     }
 
     [Fact]
-    public async Task CanCreateGoals_ProUser_Success()
+    public async Task CanUseGoalReview_ProUser_Success()
     {
         var user = CreateProUser();
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
-        var result = await _sut.CanCreateGoals(UserId);
+        var result = await _sut.CanUseGoalReview(UserId);
 
         result.IsSuccess.Should().BeTrue();
     }
 
     [Fact]
-    public async Task CanCreateGoals_FreeUser_PayGateFailure()
+    public async Task CanUseGoalReview_FreeUser_PayGateFailure()
     {
         var user = CreateFreeUser();
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
-        var result = await _sut.CanCreateGoals(UserId);
+        var result = await _sut.CanUseGoalReview(UserId);
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be("PAY_GATE");
+        result.Error.Should().Contain("Goal reviews are a Pro feature");
     }
 
     [Fact]
-    public async Task CanCreateGoals_UserNotFound_Failure()
+    public async Task CanUseGoalReview_UserNotFound_Failure()
     {
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns((User?)null);
 
-        var result = await _sut.CanCreateGoals(UserId);
+        var result = await _sut.CanUseGoalReview(UserId);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("User not found");
-    }
-
-    [Fact]
-    public async Task CanCreateGoals_ConfigDisabled_FreeUserAllowed()
-    {
-        var user = CreateFreeUser();
-        user.StartTrial(DateTime.UtcNow.AddDays(-1));
-        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-        _appConfig.GetAsync("GoalsProOnly", true, Arg.Any<CancellationToken>()).Returns(false);
-
-        var result = await _sut.CanCreateGoals(UserId);
-
-        result.IsSuccess.Should().BeTrue();
     }
 
     [Fact]

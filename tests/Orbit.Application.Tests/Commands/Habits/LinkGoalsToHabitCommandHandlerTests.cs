@@ -15,7 +15,6 @@ public class LinkGoalsToHabitCommandHandlerTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
-    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IGoalCompletionService _goalCompletionService = Substitute.For<IGoalCompletionService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly LinkGoalsToHabitCommandHandler _handler;
@@ -25,11 +24,9 @@ public class LinkGoalsToHabitCommandHandlerTests
 
     public LinkGoalsToHabitCommandHandlerTests()
     {
-        _payGate.CanLinkGoalsToHabits(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(Result.Success()));
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
         _handler = new LinkGoalsToHabitCommandHandler(
-            _habitRepo, _goalRepo, _payGate, _goalCompletionService, _userDateService);
+            _habitRepo, _goalRepo, _goalCompletionService, _userDateService);
     }
 
     private static Habit CreateTestHabit() =>
