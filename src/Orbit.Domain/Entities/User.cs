@@ -105,12 +105,13 @@ public partial class User : Entity
         if (!EmailRegex().IsMatch(trimmedEmail))
             return Result.Failure<User>(DomainErrors.InvalidEmailFormat);
 
+        var now = DateTime.UtcNow;
         return Result.Success(new User
         {
             Name = name.Trim(),
             Email = trimmedEmail.ToLowerInvariant(),
-            CreatedAtUtc = DateTime.UtcNow,
-            TrialEndsAt = DateTime.UtcNow.AddDays(7)
+            CreatedAtUtc = now,
+            TrialEndsAt = now.AddDays(7)
         });
     }
 

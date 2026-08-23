@@ -3,7 +3,6 @@ using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Challenges.Commands;
 using Orbit.Application.Common;
-using Orbit.Application.Gamification.Services;
 using Orbit.Application.Social.Services;
 using Orbit.Application.Tests.Social;
 using Orbit.Domain.Entities;
@@ -19,8 +18,6 @@ public class JoinChallengeCommandHandlerTests
     private readonly IGenericRepository<BlockedUser> _blockedUserRepository = Substitute.For<IGenericRepository<BlockedUser>>();
     private readonly IGenericRepository<Challenge> _challengeRepository = Substitute.For<IGenericRepository<Challenge>>();
     private readonly IGenericRepository<Habit> _habitRepository = Substitute.For<IGenericRepository<Habit>>();
-    private readonly IGenericRepository<UserAchievement> _achievementRepository = Substitute.For<IGenericRepository<UserAchievement>>();
-    private readonly IGenericRepository<XpAwardLog> _xpAwardLogRepository = Substitute.For<IGenericRepository<XpAwardLog>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
 
     private readonly JoinChallengeCommandHandler _handler;
@@ -35,12 +32,10 @@ public class JoinChallengeCommandHandlerTests
         var guard = new SocialAccessGuard(_userRepository);
         var friendGraph = new FriendGraphService(_userRepository, _friendshipRepository, _blockedUserRepository);
         _handler = new JoinChallengeCommandHandler(
-            guard, friendGraph, _challengeRepository, _habitRepository, _achievementRepository,
-            new XpAwarder(_xpAwardLogRepository), _unitOfWork);
+            guard, friendGraph, _challengeRepository, _habitRepository, _unitOfWork);
 
         SocialTestHelpers.StubUsers(_userRepository, _joiner);
         SocialTestHelpers.StubFind(_blockedUserRepository);
-        SocialTestHelpers.StubFind(_achievementRepository);
         _habitRepository.CountAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns(1);
         StubChallengeLookup(ActiveChallenge());
     }
@@ -79,13 +74,14 @@ public class JoinChallengeCommandHandlerTests
     }
 
     [Fact]
-    public async Task ValidJoin_GrantsTeamPlayer()
+    public async Task ValidJoin_DoesNotAwardRetiredAchievementXp()
     {
+        var xpBefore = _joiner.TotalXp;
+
         var result = await _handler.Handle(Command(), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _achievementRepository.Received().AddAsync(
-            Arg.Is<UserAchievement>(a => a.AchievementId == "team_player"), Arg.Any<CancellationToken>());
+        _joiner.TotalXp.Should().Be(xpBefore);
     }
 
     [Fact]

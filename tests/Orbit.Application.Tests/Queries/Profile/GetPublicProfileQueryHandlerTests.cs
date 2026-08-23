@@ -135,6 +135,18 @@ public class GetPublicProfileQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_RetiredAchievementEarned_RendersHistoricalBadge()
+    {
+        var user = BuildOwner(u => u.SetPublicProfileVisibility(true, true, true, false));
+        StubUserBySlug(user);
+        StubAchievements(AchievementDefinitions.BattleBuddy);
+
+        var result = await _handler.Handle(new GetPublicProfileQuery(Slug), CancellationToken.None);
+
+        result.Value.Achievements.Should().ContainSingle().Which.Name.Should().Be("Battle Buddy");
+    }
+
+    [Fact]
     public async Task Handle_TopHabitsFlagOn_ReturnsTopThreeByCompletionsWithNameTieBreak()
     {
         var user = BuildOwner(u => u.SetPublicProfileVisibility(false, false, false, true));

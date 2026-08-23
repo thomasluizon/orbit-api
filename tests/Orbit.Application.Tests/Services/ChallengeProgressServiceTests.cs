@@ -2,7 +2,6 @@ using System.Linq.Expressions;
 using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Challenges.Services;
-using Orbit.Application.Gamification.Services;
 using Orbit.Application.Tests.Social;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -16,9 +15,6 @@ public class ChallengeProgressServiceTests
     private readonly IGenericRepository<ChallengeParticipant> _participantRepository = Substitute.For<IGenericRepository<ChallengeParticipant>>();
     private readonly IGenericRepository<ChallengeParticipantHabit> _participantHabitRepository = Substitute.For<IGenericRepository<ChallengeParticipantHabit>>();
     private readonly IGenericRepository<HabitLog> _habitLogRepository = Substitute.For<IGenericRepository<HabitLog>>();
-    private readonly IGenericRepository<User> _userRepository = Substitute.For<IGenericRepository<User>>();
-    private readonly IGenericRepository<UserAchievement> _achievementRepository = Substitute.For<IGenericRepository<UserAchievement>>();
-    private readonly IGenericRepository<XpAwardLog> _xpAwardLogRepository = Substitute.For<IGenericRepository<XpAwardLog>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
 
@@ -32,14 +28,11 @@ public class ChallengeProgressServiceTests
     {
         var repositories = new ChallengeProgressRepositories(
             _challengeRepository, _participantRepository, _participantHabitRepository,
-            _habitLogRepository, _userRepository, _achievementRepository);
+            _habitLogRepository);
         _service = new ChallengeProgressService(
-            repositories, new XpAwarder(_xpAwardLogRepository), _unitOfWork, _userDateService);
+            repositories, _unitOfWork, _userDateService);
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
-        SocialTestHelpers.StubFind(_achievementRepository);
-        _userRepository.FindTrackedAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(new List<User> { _user }.AsReadOnly());
     }
 
     private Challenge BuildTrackedChallenge(int target)
@@ -80,15 +73,15 @@ public class ChallengeProgressServiceTests
     }
 
     [Fact]
-    public async Task LogReachingTarget_GrantsMissionAccomplished()
+    public async Task LogReachingTarget_DoesNotAwardRetiredAchievementXp()
     {
+        var xpBefore = _user.TotalXp;
         BuildTrackedChallenge(target: 1);
         StubLogs(HabitLog.Create(_habitId, Today, 1));
 
         await _service.EvaluateOnHabitLoggedAsync(_user.Id, _habitId, CancellationToken.None);
 
-        await _achievementRepository.Received().AddAsync(
-            Arg.Is<UserAchievement>(a => a.AchievementId == "mission_accomplished"), Arg.Any<CancellationToken>());
+        _user.TotalXp.Should().Be(xpBefore);
     }
 
     [Fact]

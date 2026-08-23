@@ -1,5 +1,7 @@
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
+using Orbit.Application.Common;
 using Orbit.Application.Gamification;
 using Orbit.Application.Gamification.Models;
 using Orbit.Application.Gamification.Queries;
@@ -14,16 +16,26 @@ public class GetAchievementsQueryHandlerTests
 {
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IGenericRepository<UserAchievement> _achievementRepo = Substitute.For<IGenericRepository<UserAchievement>>();
+    private readonly IFeatureFlagService _featureFlagService = Substitute.For<IFeatureFlagService>();
     private readonly IAchievementProgressService _progressService = Substitute.For<IAchievementProgressService>();
+    private readonly IProductAnalytics _productAnalytics = Substitute.For<IProductAnalytics>();
     private readonly GetAchievementsQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
 
     public GetAchievementsQueryHandlerTests()
     {
+        _featureFlagService.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { FeatureFlagKeys.GamificationFreeTier });
         _progressService.LoadAsync(Arg.Any<User>(), Arg.Any<IReadOnlySet<string>>(), Arg.Any<CancellationToken>())
             .Returns(AchievementProgressMetrics.Empty);
-        _handler = new GetAchievementsQueryHandler(_userRepo, _achievementRepo, _progressService);
+        _handler = new GetAchievementsQueryHandler(
+            _userRepo,
+            _achievementRepo,
+            _featureFlagService,
+            _progressService,
+            _productAnalytics,
+            Substitute.For<ILogger<GetAchievementsQueryHandler>>());
     }
 
     private static User CreateProUser()
@@ -61,7 +73,7 @@ public class GetAchievementsQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Achievements.Should().HaveCount(AchievementDefinitions.All.Count);
+        result.Value.Achievements.Should().HaveCount(32);
 
         var firstOrbit = result.Value.Achievements.First(a => a.Id == AchievementDefinitions.FirstOrbit);
         firstOrbit.IsEarned.Should().BeTrue();
@@ -92,7 +104,7 @@ public class GetAchievementsQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Achievements.Should().HaveCount(AchievementDefinitions.All.Count);
+        result.Value.Achievements.Should().HaveCount(32);
         result.Value.Achievements.Should().AllSatisfy(a =>
         {
             a.IsEarned.Should().BeFalse();
@@ -141,7 +153,7 @@ public class GetAchievementsQueryHandlerTests
         _progressService.LoadAsync(Arg.Any<User>(), Arg.Any<IReadOnlySet<string>>(), Arg.Any<CancellationToken>())
             .Returns(new AchievementProgressMetrics(
                 CurrentStreak: 12, TotalCompletions: 40, GoalsCreated: 2, GoalsCompleted: 0,
-                FriendsCount: 5, CheersSent: 30, EarlyLogs: 3, NightLogs: 9));
+                EarlyLogs: 3, NightLogs: 9));
 
         var result = await _handler.Handle(new GetAchievementsQuery(UserId), CancellationToken.None);
 
@@ -150,14 +162,6 @@ public class GetAchievementsQueryHandlerTests
         var fortnight = result.Value.Achievements.First(a => a.Id == AchievementDefinitions.FortnightFocus);
         fortnight.ProgressCurrent.Should().Be(12);
         fortnight.ProgressTarget.Should().Be(14);
-
-        var squadGoals = result.Value.Achievements.First(a => a.Id == AchievementDefinitions.SquadGoals);
-        squadGoals.ProgressCurrent.Should().Be(5);
-        squadGoals.ProgressTarget.Should().Be(5);
-
-        var cheerleader = result.Value.Achievements.First(a => a.Id == AchievementDefinitions.Cheerleader);
-        cheerleader.ProgressCurrent.Should().Be(25);
-        cheerleader.ProgressTarget.Should().Be(25);
 
         var nightOwl = result.Value.Achievements.First(a => a.Id == AchievementDefinitions.NightOwl);
         nightOwl.ProgressCurrent.Should().Be(9);
@@ -174,7 +178,7 @@ public class GetAchievementsQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_FreeUser_ReturnsPayGateFailure()
+    public async Task Handle_FreeUser_ReturnsActiveAchievementsAndViewedEvent()
     {
         var user = CreateFreeUser();
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
@@ -183,8 +187,49 @@ public class GetAchievementsQueryHandlerTests
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Achievements.Should().HaveCount(32);
+        _productAnalytics.Received(1).CaptureUserEvent(
+            user.Id,
+            "achievements_viewed",
+            "Free",
+            Arg.Is<IReadOnlyDictionary<string, object>>(properties =>
+                properties["isPro"].Equals(false) && properties["earnedCount"].Equals(0)));
+    }
+
+    [Fact]
+    public async Task Handle_FreeUser_FlagOff_ReturnsPayGateFailure()
+    {
+        var user = CreateFreeUser();
+        _featureFlagService.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<string>());
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+
+        var result = await _handler.Handle(new GetAchievementsQuery(UserId), CancellationToken.None);
+
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be("PAY_GATE");
+    }
+
+    [Fact]
+    public async Task Handle_RetiredAchievementEarned_IncludesHistoricalBadge()
+    {
+        var user = CreateFreeUser();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _achievementRepo.FindAsync(
+                Arg.Any<Expression<Func<UserAchievement, bool>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new List<UserAchievement>
+            {
+                UserAchievement.Create(UserId, AchievementDefinitions.BattleBuddy)
+            });
+
+        var result = await _handler.Handle(new GetAchievementsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Achievements.Should().HaveCount(33);
+        result.Value.Achievements.Single(a => a.Id == AchievementDefinitions.BattleBuddy)
+            .IsEarned.Should().BeTrue();
     }
 
     [Fact]

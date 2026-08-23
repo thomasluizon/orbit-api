@@ -2929,15 +2929,15 @@
       "Challenges": 14,
       "Chat": 61,
       "ChecklistTemplates": 9,
-      "Common": 176,
-      "Gamification": 41,
+      "Common": 177,
+      "Gamification": 36,
       "Goals": 54,
       "Habits": 86,
       "Marketing": 6,
       "Notifications": 19,
       "Profile": 39,
       "Referrals": 13,
-      "Social": 35,
+      "Social": 34,
       "Subscriptions": 18,
       "Support": 4,
       "Tags": 14,
@@ -3156,9 +3156,7 @@
           "AccountabilityPairHabit",
           "Habit",
           "Notification",
-          "User",
-          "UserAchievement",
-          "XpAwardLog"
+          "User"
         ]
       },
       {
@@ -3187,8 +3185,7 @@
           "Friendship",
           "Habit",
           "Notification",
-          "User",
-          "UserAchievement"
+          "User"
         ]
       },
       {
@@ -3239,8 +3236,7 @@
           "InviteAccountabilityBuddyCommand",
           "InviteAccountabilityBuddyCommandHandler",
           "Notification",
-          "User",
-          "UserAchievement"
+          "User"
         ]
       },
       {
@@ -3945,9 +3941,7 @@
           "Habit",
           "JoinChallengeCommand",
           "JoinChallengeCommandHandler",
-          "User",
-          "UserAchievement",
-          "XpAwardLog"
+          "User"
         ]
       },
       {
@@ -4905,9 +4899,6 @@
         "testClass": "AchievementProgressServiceTests",
         "file": "tests/Orbit.Application.Tests/Gamification/AchievementProgressServiceTests.cs",
         "references": [
-          "BlockedUser",
-          "Cheer",
-          "Friendship",
           "Goal",
           "Habit",
           "HabitLog",
@@ -5475,9 +5466,7 @@
           "ChallengeParticipant",
           "ChallengeParticipantHabit",
           "HabitLog",
-          "User",
-          "UserAchievement",
-          "XpAwardLog"
+          "User"
         ]
       },
       {
@@ -5607,9 +5596,7 @@
           "RemoveFriendCommandHandler",
           "SendFriendRequestCommand",
           "SendFriendRequestCommandHandler",
-          "User",
-          "UserAchievement",
-          "XpAwardLog"
+          "User"
         ]
       },
       {
@@ -5681,9 +5668,7 @@
           "Notification",
           "SendCheerCommand",
           "SendCheerCommandHandler",
-          "User",
-          "UserAchievement",
-          "XpAwardLog"
+          "User"
         ]
       },
       {

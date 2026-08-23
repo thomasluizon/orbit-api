@@ -8,8 +8,8 @@ public class AchievementProgressCalculatorTests
 {
     private static AchievementProgressMetrics Metrics(
         int currentStreak = 0, int totalCompletions = 0, int goalsCreated = 0, int goalsCompleted = 0,
-        int friendsCount = 0, int cheersSent = 0, int earlyLogs = 0, int nightLogs = 0) =>
-        new(currentStreak, totalCompletions, goalsCreated, goalsCompleted, friendsCount, cheersSent, earlyLogs, nightLogs);
+        int earlyLogs = 0, int nightLogs = 0) =>
+        new(currentStreak, totalCompletions, goalsCreated, goalsCompleted, earlyLogs, nightLogs);
 
     [Fact]
     public void Compute_LockedStreakAchievement_ReturnsCurrentAndTarget()
@@ -36,14 +36,12 @@ public class AchievementProgressCalculatorTests
     [Theory]
     [InlineData(AchievementDefinitions.GoalSetter, 2, 2, 3)]
     [InlineData(AchievementDefinitions.Overachiever, 4, 4, 5)]
-    [InlineData(AchievementDefinitions.SquadGoals, 3, 3, 5)]
-    [InlineData(AchievementDefinitions.Cheerleader, 12, 12, 25)]
     [InlineData(AchievementDefinitions.EarlyBird, 6, 6, 10)]
     [InlineData(AchievementDefinitions.NightOwl, 8, 8, 10)]
     public void Compute_QuantifiableMetrics_MapToTheirValue(string id, int _, int expectedCurrent, int expectedTarget)
     {
         var definition = AchievementDefinitions.GetById(id)!;
-        var metrics = Metrics(goalsCreated: 2, goalsCompleted: 4, friendsCount: 3, cheersSent: 12, earlyLogs: 6, nightLogs: 8);
+        var metrics = Metrics(goalsCreated: 2, goalsCompleted: 4, earlyLogs: 6, nightLogs: 8);
 
         var (current, target) = AchievementProgressCalculator.Compute(definition, metrics, isEarned: false);
 

@@ -1,6 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Orbit.Application.Gamification;
-using Orbit.Application.Gamification.Models;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -12,18 +10,13 @@ public record ChallengeProgressRepositories(
     IGenericRepository<Challenge> Challenges,
     IGenericRepository<ChallengeParticipant> Participants,
     IGenericRepository<ChallengeParticipantHabit> ParticipantHabits,
-    IGenericRepository<HabitLog> HabitLogs,
-    IGenericRepository<User> Users,
-    IGenericRepository<UserAchievement> Achievements);
+    IGenericRepository<HabitLog> HabitLogs);
 
 public class ChallengeProgressService(
     ChallengeProgressRepositories repositories,
-    IXpAwarder xpAwarder,
     IUnitOfWork unitOfWork,
     IUserDateService userDateService) : IChallengeProgressService
 {
-    private const string MissionAccomplishedAchievementId = "mission_accomplished";
-
     public async Task EvaluateOnHabitLoggedAsync(Guid userId, Guid habitId, CancellationToken cancellationToken = default)
     {
         var links = await repositories.ParticipantHabits.FindAsync(cph => cph.HabitId == habitId, cancellationToken);
@@ -88,37 +81,6 @@ public class ChallengeProgressService(
         if (!challenge.MarkCompleted())
             return false;
 
-        await AwardMissionAccomplishedAsync(challenge, cancellationToken);
         return true;
-    }
-
-    private async Task AwardMissionAccomplishedAsync(Challenge challenge, CancellationToken cancellationToken)
-    {
-        var participantUserIds = challenge.GetActiveParticipants().Select(p => p.UserId).Distinct().ToList();
-        var users = await repositories.Users.FindTrackedAsync(u => participantUserIds.Contains(u.Id), cancellationToken);
-        var alreadyEarned = await repositories.Achievements.FindAsync(
-            a => participantUserIds.Contains(a.UserId) && a.AchievementId == MissionAccomplishedAchievementId,
-            cancellationToken);
-        var earnedUserIds = alreadyEarned.Select(a => a.UserId).ToHashSet();
-
-        foreach (var user in users)
-        {
-            if (earnedUserIds.Contains(user.Id))
-                continue;
-
-            var earned = new HashSet<string>();
-            var newAchievements = new List<(UserAchievement Entity, AchievementDefinition Definition)>();
-            AchievementChecks.TryGrant(MissionAccomplishedAchievementId, user, earned, newAchievements);
-
-            if (newAchievements.Count == 0)
-                continue;
-
-            await repositories.Achievements.AddAsync(newAchievements[0].Entity, cancellationToken);
-            await xpAwarder.AwardAsync(
-                user, newAchievements[0].Definition.XpReward, XpAwardSource.Achievement,
-                newAchievements[0].Entity.Id, awardedAtUtc: DateTime.UtcNow, cancellationToken);
-
-            LevelDefinitions.SyncLevel(user);
-        }
     }
 }
