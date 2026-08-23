@@ -13,16 +13,16 @@ using Orbit.Infrastructure.Services;
 namespace Orbit.Infrastructure.Tests.Services;
 
 /// <summary>
-/// DB-backed regression for the passive streak-goal sweep: an active streak goal advances its
-/// CurrentValue from linked habit logs without any request, auto-completes when it reaches target,
-/// and routes that completion through gamification exactly once.
+/// DB-backed regressions for passive derived-goal reconciliation: linked Standard and Streak goals
+/// advance from habit logs without a request, auto-complete at target, and route completion through
+/// gamification exactly once.
 /// </summary>
-public class StreakGoalSyncServiceTests
+public class GoalProgressReconciliationServiceTests
 {
     private static readonly DateOnly Today = DateOnly.FromDateTime(DateTime.UtcNow);
 
     [Fact]
-    public async Task SyncActiveStreakGoals_AdvancesCurrentValueFromLinkedHabitLogs()
+    public async Task SyncActiveGoals_StreakAdvancesCurrentValueFromLinkedHabitLogs()
     {
         await using var dbContext = CreateInMemoryDbContext();
         var user = User.Create("Thomas", "thomas@test.com").Value;
@@ -36,7 +36,7 @@ public class StreakGoalSyncServiceTests
         await dbContext.SaveChangesAsync();
 
         var service = CreateService(dbContext, Substitute.For<IGamificationService>());
-        await service.SyncActiveStreakGoals(CancellationToken.None);
+        await service.SyncActiveGoals(CancellationToken.None);
 
         var reloaded = await dbContext.Goals.AsNoTracking().SingleAsync(g => g.Id == goal.Id);
         reloaded.CurrentValue.Should().Be(3);
@@ -45,7 +45,7 @@ public class StreakGoalSyncServiceTests
     }
 
     [Fact]
-    public async Task SyncActiveStreakGoals_StreakReachesTarget_AutoCompletesAndGamifiesOnce()
+    public async Task SyncActiveGoals_StreakReachesTarget_AutoCompletesAndGamifiesOnce()
     {
         await using var dbContext = CreateInMemoryDbContext();
         var user = User.Create("Thomas", "thomas@test.com").Value;
@@ -60,7 +60,7 @@ public class StreakGoalSyncServiceTests
 
         var gamification = Substitute.For<IGamificationService>();
         var service = CreateService(dbContext, gamification);
-        await service.SyncActiveStreakGoals(CancellationToken.None);
+        await service.SyncActiveGoals(CancellationToken.None);
 
         var reloaded = await dbContext.Goals.AsNoTracking().SingleAsync(g => g.Id == goal.Id);
         reloaded.Status.Should().Be(GoalStatus.Completed);
@@ -69,7 +69,35 @@ public class StreakGoalSyncServiceTests
     }
 
     [Fact]
-    public async Task SyncActiveStreakGoals_AlreadySyncedToday_LeavesValueAndSkipsGamification()
+    public async Task SyncActiveGoals_LinkedStandardAtTarget_AutoCompletesAndGamifiesOnce()
+    {
+        await using var dbContext = CreateInMemoryDbContext();
+        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var habit = Habit.Create(new HabitCreateParams(
+            user.Id, "Exercise", FrequencyUnit.Day, 2, DueDate: Today, IsFlexible: true)).Value;
+        var goal = Goal.Create(user.Id, "Exercise twice", 2, "sessions").Value;
+        goal.AddHabit(habit);
+        habit.Log(Today);
+        habit.Log(Today);
+
+        dbContext.Users.Add(user);
+        dbContext.Habits.Add(habit);
+        dbContext.Goals.Add(goal);
+        await dbContext.SaveChangesAsync();
+
+        var gamification = Substitute.For<IGamificationService>();
+        var service = CreateService(dbContext, gamification);
+        await service.SyncActiveGoals(CancellationToken.None);
+
+        var reloaded = await dbContext.Goals.AsNoTracking().SingleAsync(g => g.Id == goal.Id);
+        reloaded.CurrentValue.Should().Be(2);
+        reloaded.Status.Should().Be(GoalStatus.Completed);
+        reloaded.CompletedAtUtc.Should().NotBeNull();
+        await gamification.Received(1).ProcessGoalCompleted(user.Id, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SyncActiveGoals_StreakAlreadySyncedToday_LeavesValueAndSkipsGamification()
     {
         await using var dbContext = CreateInMemoryDbContext();
         var user = User.Create("Thomas", "thomas@test.com").Value;
@@ -85,7 +113,7 @@ public class StreakGoalSyncServiceTests
 
         var gamification = Substitute.For<IGamificationService>();
         var service = CreateService(dbContext, gamification);
-        await service.SyncActiveStreakGoals(CancellationToken.None);
+        await service.SyncActiveGoals(CancellationToken.None);
 
         var reloaded = await dbContext.Goals.AsNoTracking().SingleAsync(g => g.Id == goal.Id);
         reloaded.CurrentValue.Should().Be(3);
@@ -93,7 +121,7 @@ public class StreakGoalSyncServiceTests
     }
 
     [Fact]
-    public async Task SyncActiveStreakGoals_MultipleCompletingGoals_PersistsEachAndGamifiesEachUser()
+    public async Task SyncActiveGoals_MultipleCompletingStreakGoals_PersistsEachAndGamifiesEachUser()
     {
         await using var dbContext = CreateInMemoryDbContext();
         var firstUser = User.Create("Alice", "alice@test.com").Value;
@@ -112,7 +140,7 @@ public class StreakGoalSyncServiceTests
 
         var gamification = Substitute.For<IGamificationService>();
         var service = CreateService(dbContext, gamification);
-        await service.SyncActiveStreakGoals(CancellationToken.None);
+        await service.SyncActiveGoals(CancellationToken.None);
 
         var reloaded = await dbContext.Goals.AsNoTracking().ToListAsync();
         reloaded.Should().OnlyContain(g => g.Status == GoalStatus.Completed);
@@ -121,7 +149,7 @@ public class StreakGoalSyncServiceTests
     }
 
     [Fact]
-    public async Task SyncActiveStreakGoals_NoLinkedHabits_LeavesGoalUntouched()
+    public async Task SyncActiveGoals_StreakWithNoLinkedHabits_LeavesGoalUntouched()
     {
         await using var dbContext = CreateInMemoryDbContext();
         var user = User.Create("Thomas", "thomas@test.com").Value;
@@ -132,7 +160,7 @@ public class StreakGoalSyncServiceTests
         await dbContext.SaveChangesAsync();
 
         var service = CreateService(dbContext, Substitute.For<IGamificationService>());
-        await service.SyncActiveStreakGoals(CancellationToken.None);
+        await service.SyncActiveGoals(CancellationToken.None);
 
         var reloaded = await dbContext.Goals.AsNoTracking().SingleAsync(g => g.Id == goal.Id);
         reloaded.CurrentValue.Should().Be(0);
@@ -164,21 +192,21 @@ public class StreakGoalSyncServiceTests
     private static OrbitDbContext CreateInMemoryDbContext()
     {
         var options = new DbContextOptionsBuilder<OrbitDbContext>()
-            .UseInMemoryDatabase($"StreakGoalSyncServiceTests_{Guid.NewGuid()}")
+            .UseInMemoryDatabase($"GoalProgressReconciliationServiceTests_{Guid.NewGuid()}")
             .Options;
         return new OrbitDbContext(options);
     }
 
-    private static StreakGoalSyncService CreateService(OrbitDbContext dbContext, IGamificationService gamificationService)
+    private static GoalProgressReconciliationService CreateService(OrbitDbContext dbContext, IGamificationService gamificationService)
     {
         var serviceProvider = new ServiceCollection()
             .AddSingleton(dbContext)
             .AddSingleton(gamificationService)
             .BuildServiceProvider();
         var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
-        return new StreakGoalSyncService(
+        return new GoalProgressReconciliationService(
             scopeFactory,
-            NullLogger<StreakGoalSyncService>.Instance,
+            NullLogger<GoalProgressReconciliationService>.Instance,
             new ConfigurationBuilder().Build());
     }
 }

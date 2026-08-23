@@ -70,13 +70,14 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
     }
 
     /// <summary>
-    /// Clears a Standard goal's derived completion count when its final habit is unlinked. With no
-    /// linked habits the goal returns to manual progress, so retaining its old derived value would
-    /// report completions that no current link can justify. Returns true when the value changed.
+    /// Clears an Active Standard goal's derived completion count when its final habit is unlinked.
+    /// A Completed goal keeps the value that justified its earned completion so CurrentValue,
+    /// Status, and CompletedAtUtc cannot become contradictory when the link is removed. With no
+    /// linked habits either goal returns to manual progress. Returns true when the value changed.
     /// </summary>
     public bool ResetStandardProgress()
     {
-        if (Type != GoalType.Standard || CurrentValue == 0)
+        if (Type != GoalType.Standard || Status == GoalStatus.Completed || CurrentValue == 0)
             return false;
 
         CurrentValue = 0;

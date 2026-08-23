@@ -849,6 +849,26 @@ public class GoalTests
     }
 
     [Fact]
+    public void RemoveHabit_LastHabitOnCompletedStandardGoal_PreservesEarnedCompletionAndRestoresManualProgress()
+    {
+        var goal = CreateValidGoal(targetValue: 2);
+        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        goal.AddHabit(habit);
+        goal.SyncStandardProgress(2);
+        var completedAtUtc = goal.CompletedAtUtc;
+
+        goal.RemoveHabit(habit);
+
+        goal.IsProgressDerived.Should().BeFalse();
+        goal.CurrentValue.Should().Be(2);
+        goal.Status.Should().Be(GoalStatus.Completed);
+        goal.CompletedAtUtc.Should().Be(completedAtUtc);
+        goal.Reactivate();
+        goal.UpdateProgress(1).IsSuccess.Should().BeTrue();
+        goal.CurrentValue.Should().Be(1);
+    }
+
+    [Fact]
     public void ResetStreakProgress_StreakGoalWithProgress_ClearsValueAndReturnsTrue()
     {
         var goal = CreateStreakGoal(targetValue: 7);

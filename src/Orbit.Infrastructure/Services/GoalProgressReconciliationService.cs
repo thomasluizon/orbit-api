@@ -14,18 +14,15 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Services;
 
 /// <summary>
-/// Time-driven sweep that advances active Streak goals without waiting for a request.
-/// A Streak goal's progress only changes when its linked habits' logs are recomputed, and every
-/// other trigger is request-bound (the three goal read queries, habit log/skip). A user who simply
-/// keeps resisting a bad habit issues no request, so without this sweep their streak goal stays at
-/// its last-synced value and never auto-completes. Each tick recomputes every active streak goal in
-/// the goal owner's local timezone and routes any Active to Completed transition through gamification
-/// exactly once. Distinct from the static <see cref="GoalStreakSyncService"/>, which is the pure
-/// per-goal sync helper this service invokes.
+/// Time-driven sweep that reconciles active derived goals without waiting for a request. Standard
+/// goals may already qualify from historical completion logs when derivation first applies, while a
+/// Streak goal may advance as time passes without a request. Each tick recomputes linked Standard
+/// goals and every Streak goal, then routes any Active to Completed transition through persistence
+/// and gamification exactly once.
 /// </summary>
-public partial class StreakGoalSyncService(
+public partial class GoalProgressReconciliationService(
     IServiceScopeFactory scopeFactory,
-    ILogger<StreakGoalSyncService> logger,
+    ILogger<GoalProgressReconciliationService> logger,
     IConfiguration configuration) : BackgroundService, IScheduledJob
 {
     private readonly TimeSpan _interval = TimeSpan.FromMinutes(
@@ -37,7 +34,7 @@ public partial class StreakGoalSyncService(
 
     public async Task RunAsync(CancellationToken cancellationToken)
     {
-        await SyncActiveStreakGoals(cancellationToken);
+        await SyncActiveGoals(cancellationToken);
         BackgroundServiceHealthCheck.RecordTick("StreakGoalSync");
     }
 
@@ -51,7 +48,7 @@ public partial class StreakGoalSyncService(
             {
                 try
                 {
-                    await SyncActiveStreakGoals(stoppingToken);
+                    await SyncActiveGoals(stoppingToken);
                     BackgroundServiceHealthCheck.RecordTick("StreakGoalSync");
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
@@ -68,13 +65,16 @@ public partial class StreakGoalSyncService(
         }
     }
 
-    internal async Task SyncActiveStreakGoals(CancellationToken ct)
+    internal async Task SyncActiveGoals(CancellationToken ct)
     {
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
 
         var goals = await dbContext.Goals
-            .Where(g => g.Type == GoalType.Streak && g.Status == GoalStatus.Active && !g.IsDeleted)
+            .Where(g => g.Status == GoalStatus.Active
+                        && !g.IsDeleted
+                        && (g.Type == GoalType.Streak
+                            || (g.Type == GoalType.Standard && g.Habits.Any())))
             .Include(g => g.Habits).ThenInclude(h => h.Logs)
             .ToListAsync(ct);
 
@@ -94,7 +94,9 @@ public partial class StreakGoalSyncService(
             var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
             var userToday = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
 
-            var outcome = GoalStreakSyncService.SyncCurrentStreakIfNeeded(goal, userToday);
+            var outcome = goal.Type == GoalType.Streak
+                ? ToProgressOutcome(GoalStreakSyncService.SyncCurrentStreakIfNeeded(goal, userToday))
+                : GoalProgressSyncService.SyncCurrentProgress(goal, userToday);
             if (!outcome.Synced) continue;
 
             if (!await TrySaveGoalAsync(goal, dbContext, ct)) continue;
@@ -108,8 +110,11 @@ public partial class StreakGoalSyncService(
             await ProcessCompletedGoalsAsync(scope.ServiceProvider, usersWithCompletedGoal, ct);
 
         if (synced > 0 && logger.IsEnabled(LogLevel.Information))
-            LogStreakGoalsSynced(logger, synced);
+            LogDerivedGoalsSynced(logger, synced);
     }
+
+    private static GoalProgressSyncOutcome ToProgressOutcome(StreakSyncOutcome outcome) =>
+        new(outcome.Synced, outcome.JustCompleted);
 
     private async Task<bool> TrySaveGoalAsync(Goal goal, OrbitDbContext dbContext, CancellationToken ct)
     {
@@ -122,7 +127,7 @@ public partial class StreakGoalSyncService(
         {
             await dbContext.Entry(goal).ReloadAsync(ct);
             if (logger.IsEnabled(LogLevel.Debug))
-                LogStreakGoalSyncConflict(logger, goal.Id);
+                LogGoalProgressSyncConflict(logger, goal.Id);
             return false;
         }
     }
@@ -144,21 +149,21 @@ public partial class StreakGoalSyncService(
         }
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "StreakGoalSyncService started")]
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "GoalProgressReconciliationService started")]
     private static partial void LogServiceStarted(ILogger logger);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "StreakGoalSyncService stopped")]
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "GoalProgressReconciliationService stopped")]
     private static partial void LogServiceStopped(ILogger logger);
 
-    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Error in streak goal sync")]
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Error in derived goal reconciliation")]
     private static partial void LogServiceError(ILogger logger, Exception ex);
 
-    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Synced {Count} active streak goals")]
-    private static partial void LogStreakGoalsSynced(ILogger logger, int count);
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Synced {Count} active derived goals")]
+    private static partial void LogDerivedGoalsSynced(ILogger logger, int count);
 
-    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Gamification processing failed for streak goal completion by user {UserId}")]
+    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Gamification processing failed for derived goal completion by user {UserId}")]
     private static partial void LogGamificationGoalCompletionFailed(ILogger logger, Exception ex, Guid userId);
 
-    [LoggerMessage(EventId = 6, Level = LogLevel.Debug, Message = "Streak goal {GoalId} sync raced a concurrent writer; skipping (already synced)")]
-    private static partial void LogStreakGoalSyncConflict(ILogger logger, Guid goalId);
+    [LoggerMessage(EventId = 6, Level = LogLevel.Debug, Message = "Goal {GoalId} progress sync raced a concurrent writer; skipping")]
+    private static partial void LogGoalProgressSyncConflict(ILogger logger, Guid goalId);
 }

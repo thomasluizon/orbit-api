@@ -168,7 +168,7 @@ public class GetGoalByIdQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_LinkedStandardAtTarget_RefreshesValueWithoutPersistingCompletion()
+    public async Task Handle_LinkedStandardAtTarget_RefreshesValueAndLeavesCompletionForHostedSweep()
     {
         var goal = Goal.Create(UserId, "Exercise twice", 2, "sessions").Value;
         var habit = Habit.Create(new HabitCreateParams(
