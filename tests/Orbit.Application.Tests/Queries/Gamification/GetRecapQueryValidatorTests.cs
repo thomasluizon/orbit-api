@@ -41,4 +41,44 @@ public class GetRecapQueryValidatorTests
 
         result.IsValid.Should().BeFalse();
     }
+
+    [Fact]
+    public void Validate_ClosedMonthWithCalendarParameters_Passes()
+    {
+        var query = new GetRecapQuery(
+            Guid.NewGuid(),
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 6, 30),
+            "month",
+            2026,
+            6);
+
+        var result = _validator.Validate(query);
+
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("month", 2026, null)]
+    [InlineData("month", null, 6)]
+    [InlineData("week", 2026, 6)]
+    [InlineData("month", 2026, 13)]
+    public void Validate_InvalidClosedMonthParameters_Fails(string period, int? year, int? month)
+    {
+        var query = new GetRecapQuery(Guid.NewGuid(), DateFrom, DateTo, period, year, month);
+
+        var result = _validator.Validate(query);
+
+        result.IsValid.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Validate_ClosedMonthWithRollingDates_Fails()
+    {
+        var query = new GetRecapQuery(Guid.NewGuid(), DateFrom, DateTo, "month", 2026, 6);
+
+        var result = _validator.Validate(query);
+
+        result.IsValid.Should().BeFalse();
+    }
 }

@@ -31,6 +31,48 @@ public static class RetrospectiveMetricsCalculator
         int currentStreak,
         int bestStreak)
     {
+        return Compute(
+            habits,
+            dateFrom,
+            dateTo,
+            currentStreak,
+            bestStreak,
+            habit => HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo));
+    }
+
+    /// <summary>
+    /// Computes closed-period metrics from the schedule that applied during the resolved window,
+    /// independent of the habit's later forward-advanced due date.
+    /// </summary>
+    public static RetrospectiveMetrics ComputeHistorical(
+        List<Habit> habits,
+        DateOnly dateFrom,
+        DateOnly dateTo,
+        int currentStreak,
+        int bestStreak,
+        TimeZoneInfo userTimeZone)
+    {
+        return Compute(
+            habits,
+            dateFrom,
+            dateTo,
+            currentStreak,
+            bestStreak,
+            habit => HabitScheduleService.GetHistoricalScheduledDates(
+                habit,
+                dateFrom,
+                dateTo,
+                userTimeZone));
+    }
+
+    private static RetrospectiveMetrics Compute(
+        List<Habit> habits,
+        DateOnly dateFrom,
+        DateOnly dateTo,
+        int currentStreak,
+        int bestStreak,
+        Func<Habit, List<DateOnly>> resolveScheduledDates)
+    {
         var trackedHabits = habits.Where(h => h.ParentHabitId is null).ToList();
 
         var totalCompletions = 0;
@@ -43,8 +85,11 @@ public static class RetrospectiveMetricsCalculator
 
         foreach (var habit in trackedHabits)
         {
-            var scheduledDates = HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo);
-            var completedCount = habit.Logs.Count(l => l.Date >= dateFrom && l.Date <= dateTo && l.Value > 0);
+            var scheduledDates = resolveScheduledDates(habit);
+            var completedCount = habit.Logs.Count(l => !l.IsDeleted
+                && l.Date >= dateFrom
+                && l.Date <= dateTo
+                && l.Value > 0);
 
             if (scheduledDates.Count == 0 && completedCount == 0)
                 continue;
@@ -99,7 +144,7 @@ public static class RetrospectiveMetricsCalculator
         Habit habit, List<DateOnly> scheduledDates, int[] weekdayScheduled, int[] weekdayCompleted)
     {
         var completedDates = habit.Logs
-            .Where(l => l.Value > 0)
+            .Where(l => !l.IsDeleted && l.Value > 0)
             .Select(l => l.Date)
             .ToHashSet();
 
@@ -136,7 +181,7 @@ public static class RetrospectiveMetricsCalculator
         {
             foreach (var log in habit.Logs)
             {
-                if (log.Value > 0 && log.Date >= dateFrom && log.Date <= dateTo)
+                if (!log.IsDeleted && log.Value > 0 && log.Date >= dateFrom && log.Date <= dateTo)
                     activeDates.Add(log.Date);
             }
         }

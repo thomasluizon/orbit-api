@@ -178,4 +178,78 @@ public class GamificationControllerTests
 
         result.Should().BeOfType<OkObjectResult>();
     }
+
+    [Fact]
+    public async Task GetRecap_ClosedMonth_SendsCalendarBoundsAndParameters()
+    {
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new DateOnly(2026, 8, 1));
+        _mediator.Send(Arg.Any<GetRecapQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(default(RecapResponse)!));
+
+        var result = await _controller.GetRecap("month", CancellationToken.None, 2026, 7);
+
+        result.Should().BeOfType<OkObjectResult>();
+        await _mediator.Received(1).Send(
+            Arg.Is<GetRecapQuery>(query =>
+                query.DateFrom == new DateOnly(2026, 7, 1)
+                && query.DateTo == new DateOnly(2026, 7, 31)
+                && query.ClosedYear == 2026
+                && query.ClosedMonth == 7),
+            Arg.Any<CancellationToken>());
+        await _userDateService.DidNotReceive()
+            .GetUserWeekStartDayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetRecap_RollingMonth_KeepsThirtyDayWindow()
+    {
+        var today = new DateOnly(2026, 8, 22);
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(today);
+        _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(1);
+        _mediator.Send(Arg.Any<GetRecapQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(default(RecapResponse)!));
+
+        var result = await _controller.GetRecap("month", CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+        await _mediator.Received(1).Send(
+            Arg.Is<GetRecapQuery>(query =>
+                query.DateFrom == today.AddDays(-30)
+                && query.DateTo == today
+                && query.ClosedYear == null
+                && query.ClosedMonth == null),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetRecap_CurrentMonth_ReturnsNamedBadRequest()
+    {
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new DateOnly(2026, 8, 22));
+
+        var result = await _controller.GetRecap("month", CancellationToken.None, 2026, 8);
+
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        objectResult.Value.Should().NotBeNull();
+        System.Text.Json.JsonSerializer.Serialize(objectResult.Value)
+            .Should().Contain(ErrorCodes.RecapMonthNotClosed);
+        await _mediator.DidNotReceive().Send(Arg.Any<GetRecapQuery>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("month", 2026, null)]
+    [InlineData("month", null, 7)]
+    [InlineData("week", 2026, 7)]
+    public async Task GetRecap_InvalidClosedMonthShape_ReturnsBadRequest(string period, int? year, int? month)
+    {
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new DateOnly(2026, 8, 1));
+
+        var result = await _controller.GetRecap(period, CancellationToken.None, year, month);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+        await _mediator.DidNotReceive().Send(Arg.Any<GetRecapQuery>(), Arg.Any<CancellationToken>());
+    }
 }
