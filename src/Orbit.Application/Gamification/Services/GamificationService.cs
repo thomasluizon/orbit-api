@@ -443,6 +443,8 @@ public partial class GamificationService(
         var user = await repos.UserRepository.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: ct);
         if (user is null)
             return new GrantAchievementsOutcome([], ShouldSave: false);
+        if (markEligibilityReconciled && user.AchievementEligibilityReconciledAtUtc is not null)
+            return new GrantAchievementsOutcome([], ShouldSave: false);
 
         var earned = await LoadEarnedAchievementIds(userId, ct);
         var newAchievements = new List<(UserAchievement Entity, AchievementDefinition Definition)>();

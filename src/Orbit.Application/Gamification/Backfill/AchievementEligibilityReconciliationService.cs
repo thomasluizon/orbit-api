@@ -13,6 +13,10 @@ public interface IAchievementEligibilityReconciliationService
 {
     Task<AchievementEligibilityReconciliationResult> ReconcileAllAsync(
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<string>> ReconcileUnlockedUserAsync(
+        User user,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -60,6 +64,48 @@ public sealed class AchievementEligibilityReconciliationService(
         if (users.Count == 0)
             return new AchievementEligibilityReconciliationResult(0, 0, accountsDeferred);
 
+        var eligibilityByUser = await LoadEligibilityAsync(users, cancellationToken);
+        var accountsGranted = 0;
+        var achievementsGranted = 0;
+
+        foreach (var user in users)
+        {
+            var granted = await ReconcileUnlockedUserAsync(
+                user,
+                eligibilityByUser[user.Id],
+                cancellationToken);
+
+            if (granted.Count > 0)
+            {
+                accountsGranted++;
+                achievementsGranted += granted.Count;
+            }
+        }
+
+        return new AchievementEligibilityReconciliationResult(
+            accountsGranted,
+            achievementsGranted,
+            accountsDeferred);
+    }
+
+    public async Task<IReadOnlyList<string>> ReconcileUnlockedUserAsync(
+        User user,
+        CancellationToken cancellationToken = default)
+    {
+        if (user.AchievementEligibilityReconciledAtUtc is not null)
+            return [];
+
+        var eligibilityByUser = await LoadEligibilityAsync([user], cancellationToken);
+        return await ReconcileUnlockedUserAsync(
+            user,
+            eligibilityByUser[user.Id],
+            cancellationToken);
+    }
+
+    private async Task<IReadOnlyDictionary<Guid, HistoricalAchievementEligibility>> LoadEligibilityAsync(
+        IReadOnlyCollection<User> users,
+        CancellationToken cancellationToken)
+    {
         var userIds = users.Select(user => user.Id).ToList();
         var habits = await habitRepository.FindTrackedIgnoringFiltersAsync(
             habit => userIds.Contains(habit.UserId),
@@ -103,38 +149,33 @@ public sealed class AchievementEligibilityReconciliationService(
                 group => group.Key,
                 group => group.Select(achievement => achievement.AchievementId).ToHashSet());
 
-        var accountsGranted = 0;
-        var achievementsGranted = 0;
-
-        foreach (var user in users)
-        {
-            earnedByUser.TryGetValue(user.Id, out var earned);
-            earned ??= [];
-
-            var eligible = BuildEligibleAchievementIds(
-                user,
+        return users.ToDictionary(
+            user => user.Id,
+            user => new HistoricalAchievementEligibility(
                 topLevelHabitOwnerIds.Contains(user.Id),
                 completedHabitOwnerIds.Contains(user.Id),
                 goalOwnerIds.Contains(user.Id),
-                completedGoalOwnerIds.Contains(user.Id));
-            var missing = eligible.Where(id => !earned.Contains(id)).ToList();
+                completedGoalOwnerIds.Contains(user.Id),
+                earnedByUser.TryGetValue(user.Id, out var earned) ? earned : []));
+    }
 
-            var granted = await gamificationService.ReconcileAchievementEligibilityAsync(
-                user.Id,
-                missing,
-                cancellationToken);
+    private async Task<IReadOnlyList<string>> ReconcileUnlockedUserAsync(
+        User user,
+        HistoricalAchievementEligibility eligibility,
+        CancellationToken cancellationToken)
+    {
+        var eligible = BuildEligibleAchievementIds(
+            user,
+            eligibility.HasTopLevelHabit,
+            eligibility.HasCompletedHabit,
+            eligibility.HasGoal,
+            eligibility.HasCompletedGoal);
+        var missing = eligible.Where(id => !eligibility.EarnedIds.Contains(id)).ToList();
 
-            if (granted.Count > 0)
-            {
-                accountsGranted++;
-                achievementsGranted += granted.Count;
-            }
-        }
-
-        return new AchievementEligibilityReconciliationResult(
-            accountsGranted,
-            achievementsGranted,
-            accountsDeferred);
+        return await gamificationService.ReconcileAchievementEligibilityAsync(
+            user.Id,
+            missing,
+            cancellationToken);
     }
 
     private static IReadOnlyList<string> BuildEligibleAchievementIds(
@@ -159,4 +200,11 @@ public sealed class AchievementEligibilityReconciliationService(
 
         return eligible;
     }
+
+    private sealed record HistoricalAchievementEligibility(
+        bool HasTopLevelHabit,
+        bool HasCompletedHabit,
+        bool HasGoal,
+        bool HasCompletedGoal,
+        IReadOnlySet<string> EarnedIds);
 }
