@@ -7749,6 +7749,13 @@
         ]
       },
       {
+        "testClass": "StreakFreezeAutoActivationServiceTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Services/StreakFreezeAutoActivationServiceTests.cs",
+        "references": [
+          "User"
+        ]
+      },
+      {
         "testClass": "StreakGoalSyncServiceTests",
         "file": "tests/Orbit.Infrastructure.Tests/Services/StreakGoalSyncServiceTests.cs",
         "references": [
