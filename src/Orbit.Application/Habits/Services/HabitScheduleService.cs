@@ -98,7 +98,11 @@ public static class HabitScheduleService
         {
             if (!IsStreakContributingHabit(habit)) continue;
 
-            foreach (var date in GetHistoricalScheduledDates(habit, from, to, userTimeZone))
+            var habitStart = DateOnly.FromDateTime(
+                TimeZoneInfo.ConvertTimeFromUtc(habit.CreatedAtUtc, userTimeZone));
+            var effectiveFrom = from < habitStart ? habitStart : from;
+
+            foreach (var date in GetStreakScheduledDates(habit, effectiveFrom, to, habitStart))
                 union.Add(date);
         }
         return union;
@@ -201,10 +205,11 @@ public static class HabitScheduleService
     }
 
     /// <summary>
-    /// Returns occurrences that applied within a historical window. This is separate from
-    /// <see cref="GetScheduledDates"/> because the live path starts at the moving
-    /// <see cref="Habit.DueDate"/> cursor, while a historical read aligns recurrence to the
-    /// immutable <see cref="Habit.ScheduledStartDate"/> and bounds it by lifecycle dates.
+    /// Returns occurrences used only for the first computation of a closed-month recap. This is
+    /// separate from <see cref="GetScheduledDates"/> and the live streak path because it aligns
+    /// recurrence to <see cref="Habit.ScheduledStartDate"/> and bounds it by lifecycle dates. A
+    /// later cadence edit cannot reconstruct the earlier cadence because the model stores no cadence
+    /// history, so the computed recap is persisted and this helper never recomputes a stored month.
     /// </summary>
     public static List<DateOnly> GetHistoricalScheduledDates(
         Habit habit,
@@ -255,6 +260,48 @@ public static class HabitScheduleService
             return target == habit.DueDate;
 
         return MatchesFrequency(habit, target, recurrenceAnchor, unit, habit.FrequencyQuantity ?? 1);
+    }
+
+    /// <summary>
+    /// Applies the habit's current cadence using its moving due date as the alignment anchor while
+    /// allowing the live streak lookback to inspect dates back to account activity.
+    /// </summary>
+    public static bool IsHabitDueOnDateForStreakLookback(Habit habit, DateOnly target, DateOnly habitCreationDate)
+    {
+        if (habit.EndDate.HasValue && target > habit.EndDate.Value)
+            return false;
+
+        if (habit.IsFlexible)
+        {
+            if (habit.FrequencyUnit is null) return false;
+            return target >= habitCreationDate;
+        }
+
+        var unit = habit.FrequencyUnit;
+        if (unit is null)
+            return target == habit.DueDate;
+
+        if (target < habitCreationDate) return false;
+
+        return MatchesFrequency(habit, target, habit.DueDate, unit, habit.FrequencyQuantity ?? 1);
+    }
+
+    private static List<DateOnly> GetStreakScheduledDates(
+        Habit habit,
+        DateOnly from,
+        DateOnly to,
+        DateOnly habitCreationDate)
+    {
+        if (to.DayNumber - from.DayNumber > AppConstants.MaxRangeDays)
+            to = from.AddDays(AppConstants.MaxRangeDays);
+
+        var dates = new List<DateOnly>();
+        for (var current = from; current <= to; current = current.AddDays(1))
+        {
+            if (IsHabitDueOnDateForStreakLookback(habit, current, habitCreationDate))
+                dates.Add(current);
+        }
+        return dates;
     }
 
     private static DateOnly Max(DateOnly first, DateOnly second, DateOnly third) =>
@@ -511,8 +558,8 @@ public static class HabitScheduleService
     }
 
     /// <summary>
-    /// The schedule tail shared by <see cref="IsHabitDueOnDate"/> and
-    /// the historical occurrence path: applies the active-days filter, then resolves the
+    /// The schedule tail shared by <see cref="IsHabitDueOnDate"/> and the recurrence readers:
+    /// applies the active-days filter, then resolves the
     /// frequency-unit modulo against <paramref name="anchor"/>. Both callers reach this only after
     /// establishing a non-null <paramref name="unit"/> and their own earliest-date gate.
     /// </summary>

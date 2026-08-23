@@ -287,6 +287,7 @@ public class OrbitDbContextTests
             (typeof(PushSubscription), nameof(PushSubscription.UserId), typeof(User), DeleteBehavior.Cascade),
             (typeof(SentProactiveCheckin), nameof(SentProactiveCheckin.UserId), typeof(User), DeleteBehavior.Cascade),
             (typeof(ProcessedRequest), nameof(ProcessedRequest.UserId), typeof(User), DeleteBehavior.Cascade),
+            (typeof(ClosedMonthRecap), nameof(ClosedMonthRecap.UserId), typeof(User), DeleteBehavior.Cascade),
             (typeof(AiFactExtractionBatch), nameof(AiFactExtractionBatch.UserId), typeof(User), DeleteBehavior.Cascade),
             (typeof(PendingClarification), nameof(PendingClarification.UserId), typeof(User), DeleteBehavior.Cascade),
             (typeof(ChecklistTemplate), nameof(ChecklistTemplate.UserId), typeof(User), DeleteBehavior.Cascade),
@@ -348,6 +349,10 @@ public class OrbitDbContextTests
             (typeof(ProcessedRequest), new[]
             {
                 nameof(ProcessedRequest.UserId), nameof(ProcessedRequest.IdempotencyKey), nameof(ProcessedRequest.RequestType),
+            }),
+            (typeof(ClosedMonthRecap), new[]
+            {
+                nameof(ClosedMonthRecap.UserId), nameof(ClosedMonthRecap.DateFrom), nameof(ClosedMonthRecap.DateTo),
             }),
             (typeof(AiFactExtractionBatch), new[] { nameof(AiFactExtractionBatch.BatchId) }),
             (typeof(AiUsageDaily), new[]

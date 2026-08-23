@@ -1,9 +1,9 @@
 using FluentAssertions;
 using MediatR;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Application.Common;
+using Orbit.Application.Gamification;
 using Orbit.Application.Gamification.Queries;
 using Orbit.Application.Habits.Services;
 using Orbit.Application.Referrals.Commands;
@@ -24,8 +24,10 @@ public class GetRecapQueryHandlerTests
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IUserStreakService _userStreakService = Substitute.For<IUserStreakService>();
     private readonly IMediator _mediator = Substitute.For<IMediator>();
-    private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
+    private readonly IClosedMonthRecapStore _closedMonthRecapStore = Substitute.For<IClosedMonthRecapStore>();
+    private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly GetRecapQueryHandler _handler;
+    private string? _storedResponseJson;
 
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly DateOnly DateTo = new(2026, 6, 20);
@@ -35,19 +37,44 @@ public class GetRecapQueryHandlerTests
     public GetRecapQueryHandlerTests()
     {
         var frontendSettings = Options.Create(new FrontendSettings { BaseUrl = "https://app.useorbit.org" });
-        _handler = new GetRecapQueryHandler(
-            _habitRepo,
-            _goalRepo,
-            _userRepo,
-            _userStreakService,
-            frontendSettings,
-            _mediator,
-            _cache);
+        _handler = CreateHandler(frontendSettings);
+
+        _closedMonthRecapStore.FindResponseJsonAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ => _storedResponseJson);
+        _closedMonthRecapStore.AddAsync(
+                Arg.Do<ClosedMonthRecap>(recap => _storedResponseJson = recap.ResponseJson),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        _unitOfWork.ExecuteInTransactionAsync(
+                Arg.Any<Func<CancellationToken, Task<Result<RecapResponse>>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var operation = call.ArgAt<Func<CancellationToken, Task<Result<RecapResponse>>>>(0);
+                return operation(call.ArgAt<CancellationToken>(1));
+            });
 
         _mediator.Send(Arg.Any<GetOrCreateReferralCodeCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(ReferralCode));
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>())
             .Returns(CreateUser("UTC", new DateTime(2025, 1, 15, 12, 0, 0, DateTimeKind.Utc)));
+    }
+
+    private GetRecapQueryHandler CreateHandler(IOptions<FrontendSettings>? frontendSettings = null)
+    {
+        return new GetRecapQueryHandler(
+            _habitRepo,
+            _goalRepo,
+            _userRepo,
+            _userStreakService,
+            frontendSettings ?? Options.Create(new FrontendSettings { BaseUrl = "https://app.useorbit.org" }),
+            _mediator,
+            _closedMonthRecapStore,
+            _unitOfWork);
     }
 
     private void StubHabits(params Habit[] habits)
@@ -161,6 +188,14 @@ public class GetRecapQueryHandlerTests
         result.Value.ShareDeepLink.Should().Be("https://app.useorbit.org/r/ABCD2345?recap=month");
         result.Value.DateFrom.Should().BeNull();
         result.Value.DateTo.Should().BeNull();
+        await _closedMonthRecapStore.DidNotReceive().FindResponseJsonAsync(
+            Arg.Any<Guid>(),
+            Arg.Any<DateOnly>(),
+            Arg.Any<DateOnly>(),
+            Arg.Any<CancellationToken>());
+        await _unitOfWork.DidNotReceive().ExecuteInTransactionAsync(
+            Arg.Any<Func<CancellationToken, Task<Result<RecapResponse>>>>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -287,7 +322,7 @@ public class GetRecapQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ClosedMonthTwice_ReturnsCachedIdenticalResponse()
+    public async Task Handle_ClosedMonthTwice_ReturnsPersistedIdenticalResponse()
     {
         StubHabits(CreateLoggedDailyHabit());
         StubGoalCount(CreateCompletedGoal(new DateTime(2026, 6, 15, 0, 0, 0, DateTimeKind.Utc)));
@@ -310,6 +345,22 @@ public class GetRecapQueryHandlerTests
         await _goalRepo.Received(1).CountAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),
             Arg.Any<CancellationToken>());
+        await _closedMonthRecapStore.Received(1).AddAsync(
+            Arg.Is<ClosedMonthRecap>(recap => recap.UserId == UserId
+                && recap.DateFrom == query.DateFrom
+                && recap.DateTo == query.DateTo),
+            Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).AcquireAdvisoryLockAsync(
+            $"closed-month-recap:{UserId}:2026-06-01:2026-06-30",
+            Arg.Any<CancellationToken>());
+        await _mediator.Received(1).Send(
+            Arg.Any<GetOrCreateReferralCodeCommand>(),
+            Arg.Any<CancellationToken>());
+        await _userStreakService.Received(1).RecalculateAsync(
+            UserId,
+            awardFreezeIfEligible: false,
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -329,20 +380,45 @@ public class GetRecapQueryHandlerTests
 
         var first = await _handler.Handle(query, CancellationToken.None);
         habit.AdvanceDueDate(new DateOnly(2026, 9, 30));
-        var secondHandler = new GetRecapQueryHandler(
-            _habitRepo,
-            _goalRepo,
-            _userRepo,
-            _userStreakService,
-            Options.Create(new FrontendSettings { BaseUrl = "https://app.useorbit.org" }),
-            _mediator,
-            new MemoryCache(new MemoryCacheOptions()));
+        var secondHandler = CreateHandler();
         var second = await secondHandler.Handle(query, CancellationToken.None);
 
         first.IsSuccess.Should().BeTrue();
         second.IsSuccess.Should().BeTrue();
         JsonSerializer.SerializeToUtf8Bytes(second.Value.Metrics)
             .Should().Equal(JsonSerializer.SerializeToUtf8Bytes(first.Value.Metrics));
+    }
+
+    [Fact]
+    public async Task Handle_ClosedMonthAfterCadenceChange_ReturnsByteIdenticalResponse()
+    {
+        var monthStart = new DateOnly(2026, 6, 1);
+        var monthEnd = new DateOnly(2026, 6, 30);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Walk", FrequencyUnit.Day, 1, DueDate: monthStart)).Value;
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
+            habit,
+            new DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc));
+        habit.Log(monthStart, advanceDueDate: false);
+        StubHabits(habit);
+        var query = new GetRecapQuery(UserId, monthStart, monthEnd, "month", 2026, 6);
+
+        var first = await _handler.Handle(query, CancellationToken.None);
+        var updateResult = habit.Update(new HabitUpdateParams(
+            habit.Title,
+            habit.Description,
+            FrequencyUnit.Week,
+            1,
+            null,
+            habit.IsBadHabit,
+            monthEnd.AddMonths(2)));
+        updateResult.IsSuccess.Should().BeTrue();
+        var second = await CreateHandler().Handle(query, CancellationToken.None);
+
+        first.IsSuccess.Should().BeTrue();
+        second.IsSuccess.Should().BeTrue();
+        JsonSerializer.SerializeToUtf8Bytes(second.Value)
+            .Should().Equal(JsonSerializer.SerializeToUtf8Bytes(first.Value));
     }
 
     [Fact]

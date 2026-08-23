@@ -14,6 +14,7 @@ using Orbit.Api.OAuth;
 using Orbit.Api.Observability;
 using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
+using Orbit.Application.Gamification;
 using Orbit.Application.Gamification.Services;
 using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Validators;
@@ -76,6 +77,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
         builder.Services.AddScoped<IAccountResetRepository, AccountResetRepository>();
         builder.Services.AddScoped<IIdempotencyStore, IdempotencyStore>();
+        builder.Services.AddScoped<IClosedMonthRecapStore, ClosedMonthRecapStore>();
         builder.Services.AddScoped<IAppConfigService, AppConfigService>();
         builder.Services.AddScoped<IUserDateService, UserDateService>();
         builder.Services.AddScoped<IUserStreakService, UserStreakService>();

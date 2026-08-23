@@ -58,7 +58,7 @@ public static class HabitMetricsCalculator
         var tz = userTimeZone ?? TimeZoneInfo.Utc;
         var createdDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(habit.CreatedAtUtc, tz));
         var habitStartDate = habit.ScheduledStartDate
-            ?? ResolveLegacyStartDate(habit, logs, createdDate, tz);
+            ?? ResolveLegacyStartDate(habit, logs, createdDate);
 
         if (habit.FrequencyUnit is null || habit.FrequencyQuantity is null)
             return [habitStartDate];
@@ -72,22 +72,19 @@ public static class HabitMetricsCalculator
     private static DateOnly ResolveLegacyStartDate(
         Habit habit,
         IReadOnlyCollection<HabitLog> logs,
-        DateOnly createdDate,
-        TimeZoneInfo userTimeZone)
+        DateOnly createdDate)
     {
         var hasProgressingHistory = HasProgressingLegacyHistory(
             habit,
             logs,
-            createdDate,
-            userTimeZone);
+            createdDate);
         return hasProgressingHistory ? createdDate : habit.DueDate;
     }
 
     private static bool HasProgressingLegacyHistory(
         Habit habit,
         IReadOnlyCollection<HabitLog> logs,
-        DateOnly createdDate,
-        TimeZoneInfo userTimeZone)
+        DateOnly createdDate)
     {
         if (habit.FrequencyUnit is null || habit.IsBadHabit)
             return false;
@@ -103,11 +100,10 @@ public static class HabitMetricsCalculator
         if (candidateCount <= 0)
             return false;
 
-        var expectedBeforeDue = HabitScheduleService.GetHistoricalScheduledDates(
-            habit,
-            firstCandidate,
-            habit.DueDate.AddDays(-1),
-            userTimeZone);
+        var expectedBeforeDue = Enumerable.Range(0, candidateCount)
+            .Select(firstCandidate.AddDays)
+            .Where(date => HabitScheduleService.IsHabitDueOnDateForStreakLookback(habit, date, createdDate))
+            .ToList();
 
         return expectedBeforeDue.Count > 0 && expectedBeforeDue.All(resolvedDates.Contains);
     }

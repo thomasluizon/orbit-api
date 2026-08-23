@@ -1,9 +1,10 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Orbit.Application.Common;
+using Orbit.Application.Gamification;
 using Orbit.Application.Habits.Queries;
 using Orbit.Application.Habits.Services;
 using Orbit.Application.Referrals.Commands;
@@ -45,18 +46,14 @@ public class GetRecapQueryHandler(
     IUserStreakService userStreakService,
     IOptions<FrontendSettings> frontendSettings,
     IMediator mediator,
-    IMemoryCache cache) : IRequestHandler<GetRecapQuery, Result<RecapResponse>>
+    IClosedMonthRecapStore closedMonthRecapStore,
+    IUnitOfWork unitOfWork) : IRequestHandler<GetRecapQuery, Result<RecapResponse>>
 {
+    private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
+
     public async Task<Result<RecapResponse>> Handle(GetRecapQuery request, CancellationToken cancellationToken)
     {
         var isClosedMonth = request.ClosedYear.HasValue && request.ClosedMonth.HasValue;
-        var cacheKey = isClosedMonth
-            ? $"recap:closed:{request.UserId}:{request.DateFrom:yyyy-MM-dd}:{request.DateTo:yyyy-MM-dd}"
-            : null;
-
-        if (cacheKey is not null && cache.TryGetValue(cacheKey, out RecapResponse? cached) && cached is not null)
-            return Result.Success(cached);
-
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
             return Result.Failure<RecapResponse>(ErrorMessages.UserNotFound);
@@ -65,6 +62,84 @@ public class GetRecapQueryHandler(
         if (isClosedMonth && IsBeforeAccountMonth(request.DateFrom, user, userTimeZone))
             return Result.Failure<RecapResponse>(ErrorMessages.RecapMonthBeforeAccount);
 
+        if (isClosedMonth)
+            return await HandleClosedMonthAsync(request, userTimeZone, cancellationToken);
+
+        return await BuildResponseAsync(request, userTimeZone, isClosedMonth: false, cancellationToken);
+    }
+
+    private async Task<Result<RecapResponse>> HandleClosedMonthAsync(
+        GetRecapQuery request,
+        TimeZoneInfo userTimeZone,
+        CancellationToken cancellationToken)
+    {
+        var storedResponse = await closedMonthRecapStore.FindResponseJsonAsync(
+            request.UserId,
+            request.DateFrom,
+            request.DateTo,
+            cancellationToken);
+        if (storedResponse is not null)
+            return Result.Success(DeserializeResponse(storedResponse));
+
+        try
+        {
+            return await unitOfWork.ExecuteInTransactionAsync(async transactionToken =>
+            {
+                await unitOfWork.AcquireAdvisoryLockAsync(
+                    $"closed-month-recap:{request.UserId}:{request.DateFrom:yyyy-MM-dd}:{request.DateTo:yyyy-MM-dd}",
+                    transactionToken);
+
+                var responseAfterLock = await closedMonthRecapStore.FindResponseJsonAsync(
+                    request.UserId,
+                    request.DateFrom,
+                    request.DateTo,
+                    transactionToken);
+                if (responseAfterLock is not null)
+                    return Result.Success(DeserializeResponse(responseAfterLock));
+
+                var result = await BuildResponseAsync(
+                    request,
+                    userTimeZone,
+                    isClosedMonth: true,
+                    transactionToken);
+                if (result.IsFailure)
+                    return result;
+
+                var responseJson = JsonSerializer.Serialize(result.Value, SerializerOptions);
+                var recapResult = ClosedMonthRecap.Create(
+                    request.UserId,
+                    request.DateFrom,
+                    request.DateTo,
+                    responseJson);
+                if (recapResult.IsFailure)
+                    throw new InvalidOperationException(recapResult.Error);
+
+                await closedMonthRecapStore.AddAsync(recapResult.Value, transactionToken);
+                await unitOfWork.SaveChangesAsync(transactionToken);
+                return result;
+            }, cancellationToken);
+        }
+        catch (DbUpdateException exception) when (DbUniqueViolation.IsUniqueViolation(exception))
+        {
+            unitOfWork.ResetTracking();
+            var racedResponse = await closedMonthRecapStore.FindResponseJsonAsync(
+                request.UserId,
+                request.DateFrom,
+                request.DateTo,
+                cancellationToken);
+            if (racedResponse is null)
+                throw;
+
+            return Result.Success(DeserializeResponse(racedResponse));
+        }
+    }
+
+    private async Task<Result<RecapResponse>> BuildResponseAsync(
+        GetRecapQuery request,
+        TimeZoneInfo userTimeZone,
+        bool isClosedMonth,
+        CancellationToken cancellationToken)
+    {
         var codeResult = await mediator.Send(new GetOrCreateReferralCodeCommand(request.UserId), cancellationToken);
         if (!codeResult.IsSuccess)
             return codeResult.PropagateError<RecapResponse>();
@@ -89,10 +164,13 @@ public class GetRecapQueryHandler(
             isClosedMonth ? request.DateFrom : null,
             isClosedMonth ? request.DateTo : null);
 
-        if (cacheKey is not null)
-            cache.Set(cacheKey, response);
-
         return Result.Success(response);
+    }
+
+    private static RecapResponse DeserializeResponse(string responseJson)
+    {
+        return JsonSerializer.Deserialize<RecapResponse>(responseJson, SerializerOptions)
+            ?? throw new InvalidOperationException("Stored closed month recap response is invalid.");
     }
 
     private static bool IsBeforeAccountMonth(DateOnly dateFrom, User user, TimeZoneInfo userTimeZone)
