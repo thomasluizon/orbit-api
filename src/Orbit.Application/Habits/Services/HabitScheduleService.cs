@@ -98,11 +98,7 @@ public static class HabitScheduleService
         {
             if (!IsStreakContributingHabit(habit)) continue;
 
-            var habitStart = DateOnly.FromDateTime(
-                TimeZoneInfo.ConvertTimeFromUtc(habit.CreatedAtUtc, userTimeZone));
-            var effectiveFrom = from < habitStart ? habitStart : from;
-
-            foreach (var date in GetHistoricalScheduledDates(habit, effectiveFrom, to, habitStart))
+            foreach (var date in GetHistoricalScheduledDates(habit, from, to, userTimeZone))
                 union.Add(date);
         }
         return union;
@@ -205,49 +201,66 @@ public static class HabitScheduleService
     }
 
     /// <summary>
-    /// Like <see cref="IsHabitDueOnDate"/> but uses a provided creation date as the
-    /// earliest anchor instead of DueDate. DueDate is still used for frequency modulo
-    /// alignment but does NOT gate historical dates.
+    /// Returns occurrences that applied within a historical window. This is separate from
+    /// <see cref="GetScheduledDates"/> because the live path starts at the moving
+    /// <see cref="Habit.DueDate"/> cursor, while a historical read aligns recurrence to the
+    /// immutable <see cref="Habit.ScheduledStartDate"/> and bounds it by lifecycle dates.
     /// </summary>
-    public static bool IsHabitHistoricallyDueOnDate(Habit habit, DateOnly target, DateOnly habitCreationDate)
+    public static List<DateOnly> GetHistoricalScheduledDates(
+        Habit habit,
+        DateOnly from,
+        DateOnly to,
+        TimeZoneInfo userTimeZone)
     {
-        if (habit.EndDate.HasValue && target > habit.EndDate.Value)
-            return false;
+        var createdDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(
+            DateTime.SpecifyKind(habit.CreatedAtUtc, DateTimeKind.Utc),
+            userTimeZone));
+        var recurrenceAnchor = habit.ScheduledStartDate ?? habit.DueDate;
+        var scheduledStart = habit.ScheduledStartDate ?? createdDate;
+        var effectiveFrom = Max(from, createdDate, scheduledStart);
+        var effectiveTo = habit.EndDate.HasValue && habit.EndDate.Value < to
+            ? habit.EndDate.Value
+            : to;
 
-        if (habit.IsFlexible)
+        if (habit.DeletedAtUtc.HasValue)
         {
-            if (habit.FrequencyUnit is null) return false;
-            return target >= habitCreationDate;
+            var deletedDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(
+                DateTime.SpecifyKind(habit.DeletedAtUtc.Value, DateTimeKind.Utc),
+                userTimeZone));
+            if (deletedDate < effectiveTo)
+                effectiveTo = deletedDate;
         }
 
-        var anchor = habit.DueDate;
-        var unit = habit.FrequencyUnit;
-        var qty = habit.FrequencyQuantity ?? 1;
-
-        if (unit is null)
-            return target == habit.DueDate;
-
-        if (target < habitCreationDate) return false;
-
-        return MatchesFrequency(habit, target, anchor, unit, qty);
-    }
-
-    private static List<DateOnly> GetHistoricalScheduledDates(
-        Habit habit, DateOnly from, DateOnly to, DateOnly habitCreationDate)
-    {
-        if (to.DayNumber - from.DayNumber > AppConstants.MaxRangeDays)
-            to = from.AddDays(AppConstants.MaxRangeDays);
+        if (effectiveTo < effectiveFrom)
+            return [];
+        if (effectiveTo.DayNumber - effectiveFrom.DayNumber > AppConstants.MaxRangeDays)
+            effectiveTo = effectiveFrom.AddDays(AppConstants.MaxRangeDays);
 
         var dates = new List<DateOnly>();
-        var current = from;
-        while (current <= to)
+        for (var current = effectiveFrom; current <= effectiveTo; current = current.AddDays(1))
         {
-            if (IsHabitHistoricallyDueOnDate(habit, current, habitCreationDate))
+            if (IsHistoricallyDueOnDate(habit, current, recurrenceAnchor))
                 dates.Add(current);
-            current = current.AddDays(1);
         }
         return dates;
     }
+
+    private static bool IsHistoricallyDueOnDate(Habit habit, DateOnly target, DateOnly recurrenceAnchor)
+    {
+        if (habit.IsFlexible)
+            return habit.FrequencyUnit is not null;
+
+        var unit = habit.FrequencyUnit;
+        if (unit is null)
+            return target == recurrenceAnchor;
+
+        return MatchesFrequency(habit, target, recurrenceAnchor, unit, habit.FrequencyQuantity ?? 1);
+    }
+
+    private static DateOnly Max(DateOnly first, DateOnly second, DateOnly third) =>
+        first > second
+            ? first > third ? first : third
+            : second > third ? second : third;
 
     /// <summary>
     /// True when a recurring, non-flexible, non-bad habit has an unresolved past
@@ -499,7 +512,7 @@ public static class HabitScheduleService
 
     /// <summary>
     /// The schedule tail shared by <see cref="IsHabitDueOnDate"/> and
-    /// <see cref="IsHabitHistoricallyDueOnDate"/>: applies the active-days filter, then resolves the
+    /// the historical occurrence path: applies the active-days filter, then resolves the
     /// frequency-unit modulo against <paramref name="anchor"/>. Both callers reach this only after
     /// establishing a non-null <paramref name="unit"/> and their own earliest-date gate.
     /// </summary>

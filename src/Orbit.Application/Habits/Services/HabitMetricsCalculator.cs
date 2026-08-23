@@ -58,7 +58,7 @@ public static class HabitMetricsCalculator
         var tz = userTimeZone ?? TimeZoneInfo.Utc;
         var createdDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(habit.CreatedAtUtc, tz));
         var habitStartDate = habit.ScheduledStartDate
-            ?? ResolveLegacyStartDate(habit, logs, createdDate);
+            ?? ResolveLegacyStartDate(habit, logs, createdDate, tz);
 
         if (habit.FrequencyUnit is null || habit.FrequencyQuantity is null)
             return [habitStartDate];
@@ -72,19 +72,22 @@ public static class HabitMetricsCalculator
     private static DateOnly ResolveLegacyStartDate(
         Habit habit,
         IReadOnlyCollection<HabitLog> logs,
-        DateOnly createdDate)
+        DateOnly createdDate,
+        TimeZoneInfo userTimeZone)
     {
         var hasProgressingHistory = HasProgressingLegacyHistory(
             habit,
             logs,
-            createdDate);
+            createdDate,
+            userTimeZone);
         return hasProgressingHistory ? createdDate : habit.DueDate;
     }
 
     private static bool HasProgressingLegacyHistory(
         Habit habit,
         IReadOnlyCollection<HabitLog> logs,
-        DateOnly createdDate)
+        DateOnly createdDate,
+        TimeZoneInfo userTimeZone)
     {
         if (habit.FrequencyUnit is null || habit.IsBadHabit)
             return false;
@@ -100,10 +103,11 @@ public static class HabitMetricsCalculator
         if (candidateCount <= 0)
             return false;
 
-        var expectedBeforeDue = Enumerable.Range(0, candidateCount)
-            .Select(firstCandidate.AddDays)
-            .Where(date => HabitScheduleService.IsHabitHistoricallyDueOnDate(habit, date, createdDate))
-            .ToList();
+        var expectedBeforeDue = HabitScheduleService.GetHistoricalScheduledDates(
+            habit,
+            firstCandidate,
+            habit.DueDate.AddDays(-1),
+            userTimeZone);
 
         return expectedBeforeDue.Count > 0 && expectedBeforeDue.All(resolvedDates.Contains);
     }

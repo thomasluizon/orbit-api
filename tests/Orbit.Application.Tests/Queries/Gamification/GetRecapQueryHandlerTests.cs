@@ -13,6 +13,7 @@ using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using System.Linq.Expressions;
+using System.Text.Json;
 
 namespace Orbit.Application.Tests.Queries.Gamification;
 
@@ -51,11 +52,17 @@ public class GetRecapQueryHandlerTests
 
     private void StubHabits(params Habit[] habits)
     {
+        var result = habits.ToList().AsReadOnly();
         _habitRepo.FindAsync(
-            Arg.Any<Expression<Func<Habit, bool>>>(),
-            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
-            Arg.Any<CancellationToken>())
-            .Returns(habits.ToList().AsReadOnly());
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(result);
+        _habitRepo.FindIgnoringFiltersAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(result);
     }
 
     private static Habit CreateLoggedDailyHabit()
@@ -296,13 +303,46 @@ public class GetRecapQueryHandlerTests
         var second = await _handler.Handle(query, CancellationToken.None);
 
         second.Value.Should().BeEquivalentTo(first.Value);
-        await _habitRepo.Received(1).FindAsync(
+        await _habitRepo.Received(1).FindIgnoringFiltersAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>());
         await _goalRepo.Received(1).CountAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ClosedMonthAfterDueDateAdvances_ReturnsByteIdenticalMetrics()
+    {
+        var monthStart = new DateOnly(2026, 6, 1);
+        var monthEnd = new DateOnly(2026, 6, 30);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Walk", FrequencyUnit.Day, 1, DueDate: monthStart)).Value;
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
+            habit,
+            new DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc));
+        habit.Log(monthStart);
+        habit.Log(monthStart.AddDays(1));
+        StubHabits(habit);
+        var query = new GetRecapQuery(UserId, monthStart, monthEnd, "month", 2026, 6);
+
+        var first = await _handler.Handle(query, CancellationToken.None);
+        habit.AdvanceDueDate(new DateOnly(2026, 9, 30));
+        var secondHandler = new GetRecapQueryHandler(
+            _habitRepo,
+            _goalRepo,
+            _userRepo,
+            _userStreakService,
+            Options.Create(new FrontendSettings { BaseUrl = "https://app.useorbit.org" }),
+            _mediator,
+            new MemoryCache(new MemoryCacheOptions()));
+        var second = await secondHandler.Handle(query, CancellationToken.None);
+
+        first.IsSuccess.Should().BeTrue();
+        second.IsSuccess.Should().BeTrue();
+        JsonSerializer.SerializeToUtf8Bytes(second.Value.Metrics)
+            .Should().Equal(JsonSerializer.SerializeToUtf8Bytes(first.Value.Metrics));
     }
 
     [Fact]

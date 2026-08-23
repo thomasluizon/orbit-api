@@ -706,6 +706,68 @@ public class HabitScheduleServiceTests
 
         dates.Should().HaveCount(4);    }
 
+    [Fact]
+    public void GetHistoricalScheduledDates_DueDateAdvancedPastWindow_UsesScheduledStart()
+    {
+        var monthStart = new DateOnly(2026, 6, 1);
+        var habit = CreateHabit(FrequencyUnit.Day, 1, dueDate: monthStart);
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
+            habit,
+            new DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc));
+        habit.AdvanceDueDate(new DateOnly(2026, 9, 30));
+
+        var dates = HabitScheduleService.GetHistoricalScheduledDates(
+            habit,
+            monthStart,
+            new DateOnly(2026, 6, 30),
+            TimeZoneInfo.Utc);
+
+        dates.Should().HaveCount(30);
+        dates.Should().StartWith(monthStart);
+        dates.Should().EndWith(new DateOnly(2026, 6, 30));
+    }
+
+    [Fact]
+    public void GetHistoricalScheduledDates_HabitCreatedAfterWindow_ReturnsEmpty()
+    {
+        var habit = CreateHabit(
+            FrequencyUnit.Day,
+            1,
+            dueDate: new DateOnly(2026, 7, 1));
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
+            habit,
+            new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc));
+
+        var dates = HabitScheduleService.GetHistoricalScheduledDates(
+            habit,
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 6, 30),
+            TimeZoneInfo.Utc);
+
+        dates.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void GetHistoricalScheduledDates_DeletedDuringWindow_StopsOnLocalizedDeletionDate()
+    {
+        var monthStart = new DateOnly(2026, 6, 1);
+        var habit = CreateHabit(FrequencyUnit.Day, 1, dueDate: monthStart);
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
+            habit,
+            new DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc));
+        habit.SoftDelete(new DateTime(2026, 6, 15, 2, 30, 0, DateTimeKind.Utc));
+        var timeZone = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
+
+        var dates = HabitScheduleService.GetHistoricalScheduledDates(
+            habit,
+            monthStart,
+            new DateOnly(2026, 6, 30),
+            timeZone);
+
+        dates.Should().HaveCount(14);
+        dates.Should().EndWith(new DateOnly(2026, 6, 14));
+    }
+
     [Theory]
     [InlineData(FrequencyUnit.Day, 3, 3)]
     [InlineData(FrequencyUnit.Week, 2, 14)]
