@@ -360,7 +360,9 @@ public class ChecklistUserFactPlatformToolTests
         mediator.Send(Arg.Any<GetAchievementsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AchievementsResponse([])));
         mediator.Send(Arg.Any<GetStreakInfoQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(new StreakInfoResponse(7, 10, new DateOnly(2026, 4, 14), 0, 3, 3, false, [], 3, 3, 0, 3, false)));
+            .Returns(Result.Success(new StreakInfoResponse(
+                7, 10, new DateOnly(2026, 4, 14), 0, 3, 3, false, [], 3, 3, 0, 3, false,
+                false, null, 3)));
         var tool = new GetGamificationOverviewTool(mediator);
 
         var result = await tool.ExecuteAsync(Parse("{}"), UserId, CancellationToken.None);

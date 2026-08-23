@@ -739,43 +739,6 @@ public class UserTests
         user.LongestStreak.Should().Be(5);    }
 
     [Fact]
-    public void UpdateStreak_FreezeBridge_ContinuesStreak()
-    {
-        var user = CreateValidUser();
-        var day1 = new DateOnly(2026, 3, 28);
-        var freezeDay = new DateOnly(2026, 3, 29);
-        var day3 = new DateOnly(2026, 3, 30);
-
-        user.UpdateStreak(day1);
-        user.CurrentStreak.Should().Be(1);
-
-        user.ApplyStreakFreeze(freezeDay);
-        user.CurrentStreak.Should().Be(1);        user.LastActiveDate.Should().Be(freezeDay);
-
-        user.UpdateStreak(day3);
-        user.CurrentStreak.Should().Be(2);
-        user.LongestStreak.Should().Be(2);
-    }
-
-    [Fact]
-    public void ApplyStreakFreeze_SetsLastActiveDate_DoesNotChangeStreak()
-    {
-        var user = CreateValidUser();
-        var day1 = new DateOnly(2026, 3, 28);
-        var freezeDay = new DateOnly(2026, 3, 29);
-
-        user.UpdateStreak(day1);
-        var streakBefore = user.CurrentStreak;
-        var longestBefore = user.LongestStreak;
-
-        user.ApplyStreakFreeze(freezeDay);
-
-        user.CurrentStreak.Should().Be(streakBefore);
-        user.LongestStreak.Should().Be(longestBefore);
-        user.LastActiveDate.Should().Be(freezeDay);
-    }
-
-    [Fact]
     public void UpdateStreak_LongerStreakUpdatesLongest()
     {
         var user = CreateValidUser();
@@ -839,6 +802,31 @@ public class UserTests
 
         awardedAgain.Should().BeFalse();
         user.StreakFreezesAccumulated.Should().Be(1);
+    }
+
+    [Fact]
+    public void ConsumeStreakFreeze_WithBankedFreeze_DecrementsExactlyOne()
+    {
+        var user = CreateValidUser();
+        user.SetStreakState(7, 7, new DateOnly(2026, 1, 7));
+        user.AwardStreakFreezeIfEligible();
+
+        var result = user.ConsumeStreakFreeze();
+
+        result.IsSuccess.Should().BeTrue();
+        user.StreakFreezesAccumulated.Should().Be(0);
+    }
+
+    [Fact]
+    public void ConsumeStreakFreeze_EmptyBank_ReturnsGuardFailure()
+    {
+        var user = CreateValidUser();
+
+        var result = user.ConsumeStreakFreeze();
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("NO_STREAK_FREEZES");
+        user.StreakFreezesAccumulated.Should().Be(0);
     }
 
     [Fact]

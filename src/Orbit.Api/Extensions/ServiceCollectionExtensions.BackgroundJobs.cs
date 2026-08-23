@@ -39,7 +39,7 @@ public static partial class ServiceCollectionExtensions
             .AddCheck<DatabaseHealthCheck>("database");
     }
 
-    private static void AddInProcessSchedulers(WebApplicationBuilder builder)
+    internal static void AddInProcessSchedulers(WebApplicationBuilder builder)
     {
         builder.Services.AddHostedService<ReminderSchedulerService>();
         builder.Services.AddHostedService<GoalDeadlineNotificationService>();
@@ -47,8 +47,9 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddHostedService<ProactiveCheckinSchedulerService>();
         builder.Services.AddHostedService<AccountDeletionService>();
         builder.Services.AddHostedService<HabitDueDateAdvancementService>();
+        if (IsStreakFreezeAutoActivationEnabled(builder.Configuration))
+            builder.Services.AddHostedService<StreakFreezeAutoActivationService>();
         builder.Services.AddHostedService<StreakGoalSyncService>();
-        builder.Services.AddHostedService<StreakFreezeAutoActivationService>();
         builder.Services.AddHostedService<SyncCleanupService>();
         builder.Services.AddHostedService<PlayNotificationCleanupService>();
         builder.Services.AddHostedService<CalendarAutoSyncService>();
@@ -87,7 +88,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<SendMarketingEmailJob>();
     }
 
-    private static void AddDurableRecurringJobs(WebApplicationBuilder builder)
+    internal static void AddDurableRecurringJobs(WebApplicationBuilder builder)
     {
         builder.Services.AddSingleton<ScheduledJobRunner>();
         AddScheduledJob<ReminderSchedulerService>(builder);
@@ -96,8 +97,9 @@ public static partial class ServiceCollectionExtensions
         AddScheduledJob<ProactiveCheckinSchedulerService>(builder);
         AddScheduledJob<AccountDeletionService>(builder);
         AddScheduledJob<HabitDueDateAdvancementService>(builder);
+        if (IsStreakFreezeAutoActivationEnabled(builder.Configuration))
+            AddScheduledJob<StreakFreezeAutoActivationService>(builder);
         AddScheduledJob<StreakGoalSyncService>(builder);
-        AddScheduledJob<StreakFreezeAutoActivationService>(builder);
         AddScheduledJob<SyncCleanupService>(builder);
         AddScheduledJob<PlayNotificationCleanupService>(builder);
         AddScheduledJob<CalendarAutoSyncService>(builder);
@@ -113,4 +115,10 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddSingleton<TJob>();
         builder.Services.AddSingleton<IScheduledJob>(sp => sp.GetRequiredService<TJob>());
     }
+
+    /// <summary>
+    /// Reads the permanent operational kill switch for automatic streak coverage, which defaults to enabled.
+    /// </summary>
+    internal static bool IsStreakFreezeAutoActivationEnabled(IConfiguration configuration) =>
+        configuration.GetValue("BackgroundServices:StreakFreezeAutoActivationEnabled", true);
 }

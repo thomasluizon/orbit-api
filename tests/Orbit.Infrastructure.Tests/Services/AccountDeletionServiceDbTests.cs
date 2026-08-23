@@ -50,24 +50,6 @@ public class AccountDeletionServiceDbTests : IDisposable
     }
 
     [Fact]
-    public async Task CleanupStaleSentRecords_RemovesStreakFreezeAlertsOlderThan90Days_KeepsRecent()
-    {
-        var userId = Guid.NewGuid();
-        SeedUser(userId, "gc@example.com");
-
-        var stale = SentStreakFreezeAlert.Create(userId, DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-91)));
-        var recent = SentStreakFreezeAlert.Create(userId, DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-89)));
-        _dbContext.SentStreakFreezeAlerts.AddRange(stale, recent);
-        await _dbContext.SaveChangesAsync();
-
-        await _service.CleanupStaleSentRecords(CancellationToken.None);
-
-        var remaining = await _dbContext.SentStreakFreezeAlerts.ToListAsync();
-        remaining.Should().HaveCount(1);
-        remaining[0].FrozenDate.Should().Be(DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-89)));
-    }
-
-    [Fact]
     public async Task DeleteAllUserDataAsync_RemovesSentProactiveCheckins()
     {
         var userId = Guid.NewGuid();

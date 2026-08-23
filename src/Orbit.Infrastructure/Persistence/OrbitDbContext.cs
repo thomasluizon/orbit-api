@@ -36,7 +36,6 @@ public class OrbitDbContext : DbContext
     public DbSet<SentReminder> SentReminders => Set<SentReminder>();
     public DbSet<SentSlipAlert> SentSlipAlerts => Set<SentSlipAlert>();
     public DbSet<SentProactiveCheckin> SentProactiveCheckins => Set<SentProactiveCheckin>();
-    public DbSet<SentStreakFreezeAlert> SentStreakFreezeAlerts => Set<SentStreakFreezeAlert>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<Goal> Goals => Set<Goal>();
     public DbSet<GoalProgressLog> GoalProgressLogs => Set<GoalProgressLog>();
@@ -97,7 +96,6 @@ public class OrbitDbContext : DbContext
         ConfigureSentReminderEntity(modelBuilder);
         ConfigureSentSlipAlertEntity(modelBuilder);
         ConfigureSentProactiveCheckinEntity(modelBuilder);
-        ConfigureSentStreakFreezeAlertEntity(modelBuilder);
         ConfigureProcessedPlayNotificationEntity(modelBuilder);
         ConfigureProcessedStripeEventEntity(modelBuilder);
         ConfigureProcessedRequestEntity(modelBuilder);
@@ -214,15 +212,6 @@ public class OrbitDbContext : DbContext
         modelBuilder.Entity<SentProactiveCheckin>(entity =>
         {
             entity.HasIndex(a => new { a.UserId, a.Date }).IsUnique();
-            entity.HasOne<User>().WithMany().HasForeignKey(a => a.UserId).OnDelete(DeleteBehavior.Cascade);
-        });
-    }
-
-    private static void ConfigureSentStreakFreezeAlertEntity(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<SentStreakFreezeAlert>(entity =>
-        {
-            entity.HasIndex(a => new { a.UserId, a.FrozenDate }).IsUnique();
             entity.HasOne<User>().WithMany().HasForeignKey(a => a.UserId).OnDelete(DeleteBehavior.Cascade);
         });
     }

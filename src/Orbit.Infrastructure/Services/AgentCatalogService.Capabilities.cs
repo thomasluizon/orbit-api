@@ -660,7 +660,20 @@ public partial class AgentCatalogService
                     "GamificationController.GetStreakHistory",
                     "GamificationController.GetXpHistory",
                     "AchievementsController.ReportEvent"
-                ])
+                ]),
+
+            CreateCapability(
+                AgentCapabilityIds.GamificationRepair,
+                "Repair Streak",
+                "Spends one banked freeze to repair the eligible missed streak day.",
+                "gamification",
+                AgentScopes.WriteGamification,
+                AgentRiskClass.Low,
+                isMutation: true,
+                isPhaseOneReadOnly: false,
+                AgentConfirmationRequirement.None,
+                planRequirement: "Pro",
+                controllerActions: ["GamificationController.RepairStreak"])
         ];
     }
 
