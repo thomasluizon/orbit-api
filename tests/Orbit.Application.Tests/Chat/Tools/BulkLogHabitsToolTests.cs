@@ -1,21 +1,22 @@
 using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
-using Microsoft.EntityFrameworkCore;
+using MediatR;
 using NSubstitute;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Habits.Commands;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
-using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Application.Tests.Chat.Tools;
 
 public class BulkLogHabitsToolTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
-    private readonly IGenericRepository<HabitLog> _habitLogRepo = Substitute.For<IGenericRepository<HabitLog>>();
+    private readonly IMediator _mediator = Substitute.For<IMediator>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly BulkLogHabitsTool _tool;
 
@@ -24,8 +25,16 @@ public class BulkLogHabitsToolTests
 
     public BulkLogHabitsToolTests()
     {
-        _tool = new BulkLogHabitsTool(_habitRepo, _habitLogRepo, _userDateService);
+        _tool = new BulkLogHabitsTool(_mediator, _habitRepo, _userDateService);
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
+        _mediator.Send(Arg.Any<BulkLogHabitsCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var command = call.Arg<BulkLogHabitsCommand>();
+                var items = command.Items.Select((item, index) => new BulkLogItemResult(
+                    index, BulkItemStatus.Success, item.HabitId, Guid.NewGuid())).ToList();
+                return Result.Success(new BulkLogResult(items));
+            });
     }
 
     [Fact]
@@ -40,7 +49,9 @@ public class BulkLogHabitsToolTests
         result.Success.Should().BeTrue();
         result.EntityName.Should().Contain("Water");
         result.EntityName.Should().Contain("Exercise");
-        await _habitLogRepo.Received(2).AddAsync(Arg.Any<HabitLog>(), Arg.Any<CancellationToken>());
+        await _mediator.Received(1).Send(
+            Arg.Is<BulkLogHabitsCommand>(command => command.Items.Count == 2),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -70,8 +81,12 @@ public class BulkLogHabitsToolTests
     public async Task AlreadyLogged_SkipsAlreadyLogged()
     {
         var logged = CreateHabit("Water");
-        logged.Log(Today);        var fresh = CreateHabit("Exercise");
+        var fresh = CreateHabit("Exercise");
         SetupHabitsFound(logged, fresh);
+        _mediator.Send(Arg.Any<BulkLogHabitsCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new BulkLogResult([
+                new(0, BulkItemStatus.Success, logged.Id),
+                new(1, BulkItemStatus.Success, fresh.Id, Guid.NewGuid())])));
 
         var result = await Execute($$$"""{"habit_ids": ["{{{logged.Id}}}", "{{{fresh.Id}}}"]}""");
 
@@ -107,56 +122,26 @@ public class BulkLogHabitsToolTests
         var result = await Execute($$$"""{"habit_ids": ["{{{h1.Id}}}"], "note": "Morning routine"}""");
 
         result.Success.Should().BeTrue();
-        await _habitLogRepo.Received(1).AddAsync(
-            Arg.Is<HabitLog>(l => l.Note == null),
+        await _mediator.Received(1).Send(
+            Arg.Is<BulkLogHabitsCommand>(command => command.Items.Single().Date == Today),
             Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task WrongUser_CannotLogAnothersHabit_OwnerCan_RealContext()
+    public async Task WrongUser_CannotLogAnothersHabit()
     {
-        var databaseName = $"BulkLogIsolation_{Guid.NewGuid()}";
-        Guid habitId;
-        await using (var seed = CreateContext(databaseName))
-        {
-            var ownerHabit = CreateHabit("Owner-only habit");
-            seed.Habits.Add(ownerHabit);
-            await seed.SaveChangesAsync();
-            habitId = ownerHabit.Id;
-        }
-
-        await using var context = CreateContext(databaseName);
-        var userDateService = Substitute.For<IUserDateService>();
-        userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
-        var tool = new BulkLogHabitsTool(
-            new GenericRepository<Habit>(context),
-            new GenericRepository<HabitLog>(context),
-            userDateService);
-
+        var habit = CreateHabit("Owner-only habit");
+        SetupHabitsFound(habit);
         var attackerId = Guid.NewGuid();
-        var attackerResult = await tool.ExecuteAsync(ArgsFor(habitId), attackerId, CancellationToken.None);
-        await context.SaveChangesAsync();
+        var attackerResult = await _tool.ExecuteAsync(ArgsFor(habit.Id), attackerId, CancellationToken.None);
 
         attackerResult.Success.Should().BeFalse();
         attackerResult.Error.Should().Contain("No habits were logged");
-        await using (var afterAttack = CreateContext(databaseName))
-            (await afterAttack.HabitLogs.AnyAsync())
-                .Should().BeFalse("a foreign user must not create a log against another user's habit");
-
-        var ownerResult = await tool.ExecuteAsync(ArgsFor(habitId), UserId, CancellationToken.None);
-        await context.SaveChangesAsync();
-
-        ownerResult.Success.Should().BeTrue("the owner can bulk-log their own habit");
-        ownerResult.EntityName.Should().Contain("Owner-only habit");
-        await using (var afterOwner = CreateContext(databaseName))
-            (await afterOwner.HabitLogs.CountAsync()).Should().Be(1);
+        await _mediator.DidNotReceive().Send(Arg.Any<BulkLogHabitsCommand>(), Arg.Any<CancellationToken>());
     }
 
     private static JsonElement ArgsFor(Guid habitId) =>
         JsonDocument.Parse($$"""{"habit_ids":["{{habitId}}"]}""").RootElement;
-
-    private static OrbitDbContext CreateContext(string databaseName) =>
-        new(new DbContextOptionsBuilder<OrbitDbContext>().UseInMemoryDatabase(databaseName).Options);
 
     private static Habit CreateHabit(string title)
     {
@@ -165,9 +150,8 @@ public class BulkLogHabitsToolTests
 
     private void SetupHabitsFound(params Habit[] habits)
     {
-        _habitRepo.FindTrackedAsync(
+        _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
-            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>()
         ).Returns(callInfo =>
         {

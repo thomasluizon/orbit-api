@@ -30,6 +30,7 @@ public class UpdateGoalProgressToolTests
         var goal = Goal.Create(UserId, "Lose Weight", 10, "kg").Value;
         _goalRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(new List<Goal> { goal });
 
@@ -48,6 +49,7 @@ public class UpdateGoalProgressToolTests
     {
         _goalRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(new List<Goal>());
 
@@ -102,6 +104,7 @@ public class UpdateGoalProgressToolTests
         var goal = Goal.Create(UserId, "Lose 10kg by Summer", 10, "kg").Value;
         _goalRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(new List<Goal> { goal });
 
@@ -118,6 +121,7 @@ public class UpdateGoalProgressToolTests
         var goal = Goal.Create(UserId, "Read Books", 12, "books").Value;
         _goalRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(new List<Goal> { goal });
 

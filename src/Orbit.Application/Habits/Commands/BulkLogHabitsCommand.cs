@@ -1,7 +1,9 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
+using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -36,6 +38,7 @@ public record BulkLogServices(
 public partial class BulkLogHabitsCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<HabitLog> habitLogRepository,
+    IGenericRepository<Goal> goalRepository,
     BulkLogServices services,
     IUnitOfWork unitOfWork,
     IMemoryCache cache,
@@ -45,6 +48,7 @@ public partial class BulkLogHabitsCommandHandler(
     {
         var today = await services.UserDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var results = new List<BulkLogItemResult>();
+        var anyGoalJustCompleted = false;
 
         var habitMap = await BulkHabitLoader.LoadHabitsWithRecentLogsAsync(
             habitRepository, request.Items.Select(i => i.HabitId), request.UserId, today, cancellationToken);
@@ -72,12 +76,28 @@ public partial class BulkLogHabitsCommandHandler(
                 }
             }
 
-            await unitOfWork.SaveChangesAsync(ct);
-
-            var loggedHabitIds = results
+            var changedHabitIds = results
                 .Where(r => r.Status == BulkItemStatus.Success && r.LogId is not null)
                 .Select(r => r.HabitId)
-                .ToList();
+                .ToHashSet();
+            var goalIds = habitMap.Values
+                .Where(h => changedHabitIds.Contains(h.Id))
+                .SelectMany(h => h.Goals)
+                .Select(g => g.Id)
+                .ToHashSet();
+            if (goalIds.Count > 0)
+            {
+                var goals = await goalRepository.FindTrackedAsync(
+                    g => goalIds.Contains(g.Id),
+                    q => q.Include(g => g.Habits).ThenInclude(h => h.Logs),
+                    ct);
+                foreach (var goal in goals)
+                    anyGoalJustCompleted |= GoalProgressSyncService.SyncCurrentProgress(goal, today).JustCompleted;
+            }
+
+            await unitOfWork.SaveChangesAsync(ct);
+
+            var loggedHabitIds = changedHabitIds.ToList();
             if (loggedHabitIds.Count > 0)
             {
                 try
@@ -90,6 +110,18 @@ public partial class BulkLogHabitsCommandHandler(
                     unitOfWork,
                     c => services.UserStreakService.RecalculateAsync(request.UserId, cancellationToken: c),
                     ct);
+
+                if (anyGoalJustCompleted)
+                {
+                    try
+                    {
+                        await services.GamificationService.ProcessGoalCompleted(request.UserId, ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        LogGamificationGoalCompletionFailed(logger, ex, request.UserId);
+                    }
+                }
             }
         }, cancellationToken);
 
@@ -143,4 +175,7 @@ public partial class BulkLogHabitsCommandHandler(
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Gamification processing failed for bulk log by user {UserId}")]
     private static partial void LogGamificationBulkLogFailed(ILogger logger, Exception ex, Guid userId);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Gamification processing failed for linked goal completion by user {UserId}")]
+    private static partial void LogGamificationGoalCompletionFailed(ILogger logger, Exception ex, Guid userId);
 }

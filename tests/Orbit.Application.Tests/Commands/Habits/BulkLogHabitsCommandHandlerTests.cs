@@ -18,6 +18,7 @@ public class BulkLogHabitsCommandHandlerTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<HabitLog> _habitLogRepo = Substitute.For<IGenericRepository<HabitLog>>();
+    private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IUserStreakService _userStreakService = Substitute.For<IUserStreakService>();
     private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
@@ -32,7 +33,7 @@ public class BulkLogHabitsCommandHandlerTests
     {
         var services = new BulkLogServices(_userDateService, _userStreakService, _gamificationService);
         _handler = new BulkLogHabitsCommandHandler(
-            _habitRepo, _habitLogRepo, services, _unitOfWork, _cache,
+            _habitRepo, _habitLogRepo, _goalRepo, services, _unitOfWork, _cache,
             Substitute.For<ILogger<BulkLogHabitsCommandHandler>>());
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
@@ -418,6 +419,31 @@ public class BulkLogHabitsCommandHandlerTests
         taskResult.ErrorCode.Should().Be(DomainErrors.CannotLogCompletedHabit.Code);
 
         result.Value.Results.Single(r => r.HabitId == okHabit.Id).Status.Should().Be(BulkItemStatus.Success);
+    }
+
+    [Fact]
+    public async Task Handle_LinkedStandardGoal_DerivesProgressFromBulkCompletions()
+    {
+        var goal = Goal.Create(UserId, "Complete 10 sessions", 10, "sessions").Value;
+        var first = Habit.Create(new HabitCreateParams(
+            UserId, "Exercise", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var second = Habit.Create(new HabitCreateParams(
+            UserId, "Stretch", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        goal.AddHabit(first);
+        goal.AddHabit(second);
+        SetupHabitsForUser([first, second]);
+        _goalRepo.FindTrackedAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>()).Returns([goal]);
+
+        var result = await _handler.Handle(
+            new BulkLogHabitsCommand(UserId, [new(first.Id), new(second.Id)]),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        goal.CurrentValue.Should().Be(2);
+        goal.IsProgressDerived.Should().BeTrue();
     }
 
     private void SetupHabitsForUser(List<Habit> habits)

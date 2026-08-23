@@ -1,4 +1,5 @@
 using System.Text.Json;
+using MediatR;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -24,7 +25,7 @@ public class ChatToolMetadataTests
 
         var assignTagsTool = new AssignTagsTool(Repo<Habit>(), Repo<Tag>(), unitOfWork);
         var bulkUpdateHabitEmojisTool = new BulkUpdateHabitEmojisTool(Repo<Habit>());
-        var bulkLogHabitsTool = new BulkLogHabitsTool(Repo<Habit>(), Repo<HabitLog>(), userDateService);
+        var bulkLogHabitsTool = new BulkLogHabitsTool(Substitute.For<IMediator>(), Repo<Habit>(), userDateService);
         var bulkSkipHabitsTool = new BulkSkipHabitsTool(Repo<Habit>(), Repo<HabitLog>(), userDateService);
         var createGoalTool = new CreateGoalTool(Repo<Goal>(), unitOfWork);
         var createHabitTool = new CreateHabitTool(Repo<Habit>(), Repo<Tag>(), Repo<Goal>(), userDateService, payGateService, unitOfWork);
@@ -36,8 +37,8 @@ public class ChatToolMetadataTests
         var getRetrospectiveTool = new GetRetrospectiveTool(mediator, userDateService);
         var getHabitMetricsTool = new GetHabitMetricsTool(mediator);
         var goalReviewTool = new GoalReviewTool(Repo<Goal>(), userDateService);
-        var linkHabitsTool = new LinkHabitsToGoalTool(Repo<Goal>(), Repo<Habit>(), unitOfWork);
-        var logHabitTool = new LogHabitTool(Repo<Habit>(), Repo<HabitLog>(), userDateService);
+        var linkHabitsTool = new LinkHabitsToGoalTool(Substitute.For<IMediator>(), Repo<Goal>());
+        var logHabitTool = new LogHabitTool(Substitute.For<IMediator>(), Repo<Habit>(), userDateService);
         var moveHabitTool = new MoveHabitTool(Repo<Habit>());
         var queryGoalsTool = new QueryGoalsTool(Repo<Goal>(), userDateService, goalProgressReadSyncer);
         var queryHabitsTool = new QueryHabitsTool(Repo<Habit>(), Repo<User>());

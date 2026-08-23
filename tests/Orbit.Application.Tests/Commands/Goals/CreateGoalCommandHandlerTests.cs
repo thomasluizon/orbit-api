@@ -201,7 +201,10 @@ public class CreateGoalCommandHandlerTests
     {
         var first = CreateHabit("First");
         var second = CreateHabit("Second");
-        _habitRepo.FindTrackedAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+        _habitRepo.FindTrackedAsync(
+            Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
             .Returns([first, second]);
         var command = new CreateGoalCommand(UserId, "Goal", null, 10, "units", null, HabitIds: [first.Id, second.Id]);
 
@@ -217,7 +220,10 @@ public class CreateGoalCommandHandlerTests
     [Fact]
     public async Task CreateGoal_WithForeignHabitId_FailsAndCreatesNoGoal()
     {
-        _habitRepo.FindTrackedAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+        _habitRepo.FindTrackedAsync(
+            Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
             .Returns([]);
         var command = new CreateGoalCommand(UserId, "Goal", null, 10, "units", null, HabitIds: [Guid.NewGuid()]);
 
@@ -258,7 +264,7 @@ public class CreateGoalCommandHandlerTests
     }
 
     [Fact]
-    public async Task CreateGoal_StreakGoalWithHabit_UsesExistingPassiveSyncPath()
+    public async Task CreateGoal_StreakGoalWithHabit_SyncsProgressOnLink()
     {
         var habit = CreateHabit("Daily habit");
         typeof(Habit)
@@ -267,7 +273,10 @@ public class CreateGoalCommandHandlerTests
         habit.Log(Today.AddDays(-2), advanceDueDate: false);
         habit.Log(Today.AddDays(-1), advanceDueDate: false);
         habit.Log(Today, advanceDueDate: false);
-        _habitRepo.FindTrackedAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+        _habitRepo.FindTrackedAsync(
+            Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
             .Returns([habit]);
         Goal? createdGoal = null;
         _goalRepo.AddAsync(Arg.Do<Goal>(goal => createdGoal = goal), Arg.Any<CancellationToken>())
@@ -278,8 +287,8 @@ public class CreateGoalCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         createdGoal.Should().NotBeNull();
-        createdGoal!.CurrentValue.Should().Be(0);
-        GoalStreakSyncService.NeedsPassiveSync(createdGoal, Today).Should().BeTrue();
+        createdGoal!.CurrentValue.Should().Be(1);
+        createdGoal.StreakSyncedAtUtc.Should().NotBeNull();
     }
 
     private static Habit CreateHabit(string title) =>

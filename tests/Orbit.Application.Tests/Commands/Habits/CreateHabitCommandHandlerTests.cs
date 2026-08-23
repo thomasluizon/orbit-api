@@ -219,7 +219,10 @@ public class CreateHabitCommandHandlerTests
     {
         var goal = Goal.Create(UserId, "Fitness Goal", 10, "workouts").Value;
 
-        _goalRepo.FindTrackedAsync(Arg.Any<Expression<Func<Goal, bool>>>(), Arg.Any<CancellationToken>())
+        _goalRepo.FindTrackedAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>())
             .Returns(new List<Goal> { goal });
 
         var command = new CreateHabitCommand(
@@ -230,13 +233,18 @@ public class CreateHabitCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         await _goalRepo.Received(1).FindTrackedAsync(
-            Arg.Any<Expression<Func<Goal, bool>>>(), Arg.Any<CancellationToken>());
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task Handle_ForeignGoalId_ReturnsFailureWithoutCreating()
     {
-        _goalRepo.FindTrackedAsync(Arg.Any<Expression<Func<Goal, bool>>>(), Arg.Any<CancellationToken>())
+        _goalRepo.FindTrackedAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>())
             .Returns(new List<Goal>());
 
         var command = new CreateHabitCommand(
@@ -449,6 +457,8 @@ public class CreateHabitCommandHandlerTests
         await _tagRepo.DidNotReceive().FindTrackedAsync(
             Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>());
         await _goalRepo.DidNotReceive().FindTrackedAsync(
-            Arg.Any<Expression<Func<Goal, bool>>>(), Arg.Any<CancellationToken>());
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>());
     }
 }

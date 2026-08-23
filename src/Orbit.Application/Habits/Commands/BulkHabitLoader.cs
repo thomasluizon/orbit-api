@@ -22,7 +22,8 @@ internal static class BulkHabitLoader
         var windowStart = today.AddDays(-AppConstants.DefaultOverdueWindowDays);
         var habits = await habitRepository.FindTrackedAsync(
             h => idSet.Contains(h.Id) && h.UserId == userId,
-            q => q.Include(h => h.Logs.Where(l => l.Date >= windowStart)),
+            q => q.Include(h => h.Logs.Where(l => l.Date >= windowStart))
+                  .Include(h => h.Goals),
             cancellationToken);
         return habits.ToDictionary(h => h.Id);
     }

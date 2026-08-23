@@ -104,6 +104,21 @@ public class GoalProgressReadSyncerTests
     }
 
     [Fact]
+    public void CalculateStandardCompletions_ExcludesLogsCreatedBeforeGoalStarted()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Exercise", FrequencyUnit.Day, 2, DueDate: Today, IsFlexible: true)).Value;
+        habit.Log(Today);
+        var goal = Goal.Create(UserId, "Complete 10 sessions", 10, "sessions").Value;
+        goal.AddHabit(habit);
+        habit.Log(Today);
+
+        var completions = GoalProgressSyncService.CalculateStandardCompletions(goal);
+
+        completions.Should().Be(1);
+    }
+
+    [Fact]
     public async Task ComputeFreshValuesAsync_NoActiveStreakGoals_ReturnsEmpty()
     {
         ArrangeGoals();
