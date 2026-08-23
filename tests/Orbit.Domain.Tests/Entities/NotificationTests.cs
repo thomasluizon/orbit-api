@@ -18,12 +18,14 @@ public class NotificationTests
             "Reminder",
             "Time to exercise!",
             url: "/habits",
-            habitId: habitId);
+            habitId: habitId,
+            dedupeKey: "reminder-key");
 
         notification.UserId.Should().Be(ValidUserId);
         notification.Title.Should().Be("Reminder");
         notification.Body.Should().Be("Time to exercise!");
         notification.Url.Should().Be("/habits");
+        notification.DedupeKey.Should().Be("reminder-key");
         notification.HabitId.Should().Be(habitId);
         notification.IsRead.Should().BeFalse();
         notification.CreatedAtUtc.Should().BeOnOrAfter(before);
@@ -38,5 +40,16 @@ public class NotificationTests
         notification.MarkAsRead();
 
         notification.IsRead.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("goal-deadline-key")]
+    [InlineData("//external.example")]
+    public void Create_WithNonAppRelativeUrl_Throws(string url)
+    {
+        var action = () => Notification.Create(ValidUserId, "Title", "Body", url);
+
+        action.Should().Throw<ArgumentException>()
+            .WithParameterName("url");
     }
 }

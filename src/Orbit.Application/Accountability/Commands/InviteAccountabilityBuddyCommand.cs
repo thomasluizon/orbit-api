@@ -23,8 +23,6 @@ public class InviteAccountabilityBuddyCommandHandler(
     SocialNotificationDispatcher notificationDispatcher,
     IUnitOfWork unitOfWork) : IRequestHandler<InviteAccountabilityBuddyCommand, Result<Guid>>
 {
-    private const string BuddyNotificationUrl = "/social?tab=buddies";
-
     public async Task<Result<Guid>> Handle(InviteAccountabilityBuddyCommand request, CancellationToken cancellationToken)
     {
         var access = await socialAccessGuard.EnsureEnabledAsync(request.UserId, cancellationToken);
@@ -82,6 +80,6 @@ public class InviteAccountabilityBuddyCommandHandler(
             ? $"{requester.Name} quer ser seu parceiro de responsabilidade."
             : $"{requester.Name} wants to be your accountability buddy.";
 
-        return Notification.Create(buddy.Id, title, body, BuddyNotificationUrl);
+        return Notification.Create(buddy.Id, title, body, null);
     }
 }

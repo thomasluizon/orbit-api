@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Orbit.Application.Notifications;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -19,8 +20,6 @@ public partial class StreakFreezeAutoActivationService(
     ILogger<StreakFreezeAutoActivationService> logger,
     IConfiguration configuration) : ScheduledServiceBase, IScheduledJob
 {
-    private const string StreakUrl = "/streak";
-
     private readonly TimeSpan _interval = TimeSpan.FromMinutes(
         configuration.GetValue("BackgroundServices:StreakFreezeIntervalMinutes", 60));
 
@@ -137,7 +136,7 @@ public partial class StreakFreezeAutoActivationService(
         dbContext.StreakFreezes.Add(StreakFreeze.Create(user.Id, missedDate));
 
         var (title, body) = BuildNotification(user.CurrentStreak, user.Language ?? "en");
-        dbContext.Notifications.Add(Notification.Create(user.Id, title, body, StreakUrl));
+        dbContext.Notifications.Add(Notification.Create(user.Id, title, body, NotificationUrls.Progress));
 
         return new StagedFreeze(user, missedDate, title, body);
     }
@@ -250,7 +249,7 @@ public partial class StreakFreezeAutoActivationService(
                 freeze.User.Id,
                 freeze.Title,
                 freeze.Body,
-                StreakUrl,
+                NotificationUrls.Progress,
                 cancellationToken);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)

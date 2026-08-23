@@ -72,10 +72,10 @@ public class CheckInAccountabilityCommandTests
                 c.PairId == _pair.Id && c.UserId == _caller.Id && c.Date == new DateOnly(2026, 6, 30)),
             Arg.Any<CancellationToken>());
         await _notificationRepository.Received(1).AddAsync(
-            Arg.Is<Notification>(n => n.UserId == _buddy.Id && n.Url == "/social?tab=buddies"),
+            Arg.Is<Notification>(n => n.UserId == _buddy.Id && n.Url == null),
             Arg.Any<CancellationToken>());
         await _push.Received(1).SendToUserAsync(
-            _buddy.Id, Arg.Any<string>(), Arg.Any<string>(), "/social?tab=buddies", Arg.Any<CancellationToken>());
+            _buddy.Id, Arg.Any<string>(), Arg.Any<string>(), null, Arg.Any<CancellationToken>());
     }
 
     [Fact]

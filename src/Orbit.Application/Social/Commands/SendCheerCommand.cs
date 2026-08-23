@@ -23,8 +23,6 @@ public partial class SendCheerCommandHandler(
     IUnitOfWork unitOfWork,
     ILogger<SendCheerCommandHandler> logger) : IRequestHandler<SendCheerCommand, Result<Guid>>
 {
-    private const string RecipientNotificationUrl = "/social?tab=feed";
-
     public async Task<Result<Guid>> Handle(SendCheerCommand request, CancellationToken cancellationToken)
     {
         var access = await social.AccessGuard.EnsureEnabledAsync(request.UserId, cancellationToken);
@@ -102,7 +100,7 @@ public partial class SendCheerCommandHandler(
             ? $"{sender.Name} torceu por você!"
             : $"{sender.Name} cheered you on!";
 
-        return Notification.Create(recipient.Id, title, body, RecipientNotificationUrl);
+        return Notification.Create(recipient.Id, title, body, null);
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Cheer note moderation unavailable for sender {UserId}; allowing note (fail open)")]

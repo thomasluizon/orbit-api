@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
+using Orbit.Application.Notifications;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -70,11 +71,11 @@ public partial class GoalDeadlineNotificationService(
 
         var allKeys = goals
             .Where(g => g.Deadline.HasValue)
-            .SelectMany(g => NotifyDaysBefore.Select(d => $"goal-deadline-{g.Id}-{d}d"))
+            .SelectMany(g => NotifyDaysBefore.Select(d => BuildDedupeKey(g.Id, d)))
             .ToList();
         var sentKeys = (await dbContext.Notifications
-            .Where(n => allKeys.Contains(n.Url!))
-            .Select(n => n.Url)
+            .Where(n => allKeys.Contains(n.DedupeKey!))
+            .Select(n => n.DedupeKey!)
             .ToListAsync(ct))
             .ToHashSet();
 
@@ -131,7 +132,7 @@ public partial class GoalDeadlineNotificationService(
         freshStreakValues.TryGetValue(goal.Id, out var fresh) ? fresh : goal.CurrentValue;
 
     private async Task ProcessGoalDeadlineAsync(
-        Goal goal, decimal currentValue, Dictionary<Guid, User> users, HashSet<string?> sentKeys,
+        Goal goal, decimal currentValue, Dictionary<Guid, User> users, HashSet<string> sentKeys,
         IPushNotificationService pushService, OrbitDbContext dbContext, CancellationToken ct)
     {
         if (!users.TryGetValue(goal.UserId, out var user)) return;
@@ -148,7 +149,7 @@ public partial class GoalDeadlineNotificationService(
         {
             if (daysUntilDeadline > daysBefore) continue;
 
-            var notificationKey = $"goal-deadline-{goal.Id}-{daysBefore}d";
+            var notificationKey = BuildDedupeKey(goal.Id, daysBefore);
             if (sentKeys.Contains(notificationKey)) continue;
 
             var body = FormatDeadlineBody(goal, currentValue, daysBefore, user.Language ?? "en");
@@ -170,7 +171,12 @@ public partial class GoalDeadlineNotificationService(
         IPushNotificationService pushService, OrbitDbContext dbContext, CancellationToken ct)
     {
         await dbContext.Notifications.AddAsync(
-            Notification.Create(goal.UserId, goal.Title, body, notificationKey), ct);
+            Notification.Create(
+                goal.UserId,
+                goal.Title,
+                body,
+                NotificationUrls.Progress,
+                dedupeKey: notificationKey), ct);
 
         try
         {
@@ -190,9 +196,13 @@ public partial class GoalDeadlineNotificationService(
             return false;
         }
 
-        await pushService.SendToUserAsync(goal.UserId, goal.Title, body, "/", ct);
+        await pushService.SendToUserAsync(
+            goal.UserId, goal.Title, body, NotificationUrls.Progress, ct);
         return true;
     }
+
+    internal static string BuildDedupeKey(Guid goalId, int daysBefore) =>
+        $"goal-deadline-{goalId}-{daysBefore}d";
 
     private static void DetachPendingEntries(OrbitDbContext dbContext)
     {

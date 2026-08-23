@@ -64,10 +64,10 @@ public class AcceptAccountabilityPairCommandTests
             Arg.Is<AccountabilityPairHabit>(ph => ph.UserId == _addressee.Id && ph.HabitId == _habitId),
             Arg.Any<CancellationToken>());
         await _notificationRepository.Received(1).AddAsync(
-            Arg.Is<Notification>(n => n.UserId == _requester.Id && n.Url == "/social?tab=buddies"),
+            Arg.Is<Notification>(n => n.UserId == _requester.Id && n.Url == null),
             Arg.Any<CancellationToken>());
         await _push.Received(1).SendToUserAsync(
-            _requester.Id, Arg.Any<string>(), Arg.Any<string>(), "/social?tab=buddies", Arg.Any<CancellationToken>());
+            _requester.Id, Arg.Any<string>(), Arg.Any<string>(), null, Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
