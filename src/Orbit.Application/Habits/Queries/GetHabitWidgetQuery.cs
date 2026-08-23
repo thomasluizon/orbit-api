@@ -109,7 +109,7 @@ public class GetHabitWidgetQueryHandler(
     {
         var scheduledDates = HabitScheduleService.GetScheduledDates(habit, date, date);
         return scheduledDates.Count > 0
-            || IsOverdue(habit, date, scheduledDates)
+            || (!habit.IsCompleted && HabitScheduleService.IsOverdueOnDate(habit, date))
             || IsLoggedOnDate(habit, date)
             || HasVisibleDescendant(habit.Id, lookup, date);
     }
@@ -121,7 +121,6 @@ public class GetHabitWidgetQueryHandler(
 
     private static HabitWidgetItem MapItem(Habit habit, ILookup<Guid?, Habit> lookup, DateOnly date)
     {
-        var scheduledDates = HabitScheduleService.GetScheduledDates(habit, date, date);
         var children = lookup[habit.Id]
             .OrderBy(h => h.Position ?? int.MaxValue)
             .ThenBy(h => h.CreatedAtUtc)
@@ -134,7 +133,7 @@ public class GetHabitWidgetQueryHandler(
             habit.Id,
             habit.Title,
             isCompleted,
-            !isCompleted && IsOverdue(habit, date, scheduledDates),
+            !isCompleted && HabitScheduleService.IsOverdueOnDate(habit, date),
             habit.DueTime,
             habit.ChecklistItems.Count(item => item.IsChecked),
             habit.ChecklistItems.Count,
@@ -146,32 +145,5 @@ public class GetHabitWidgetQueryHandler(
     private static bool IsLoggedOnDate(Habit habit, DateOnly date)
     {
         return habit.Logs.Any(log => log.Date == date && log.Value > 0);
-    }
-
-    private static bool IsOverdue(Habit habit, DateOnly date, List<DateOnly> scheduledDates)
-    {
-        if (habit.IsFlexible || habit.IsBadHabit || habit.IsCompleted)
-            return false;
-
-        if (habit.FrequencyUnit is null)
-        {
-            return habit.DueDate < date
-                && (!habit.EndDate.HasValue || habit.EndDate.Value >= date);
-        }
-
-        if (scheduledDates.Contains(date))
-            return false;
-
-        var quantity = habit.FrequencyQuantity ?? 1;
-        var lookbackDays = Math.Min(
-            HabitScheduleService.GetLookbackDays(habit.FrequencyUnit, quantity),
-            AppConstants.MaxRangeDays);
-        var lookbackStart = date.AddDays(-lookbackDays);
-        if (habit.DueDate > lookbackStart)
-            lookbackStart = habit.DueDate;
-
-        var pastDates = HabitScheduleService.GetScheduledDates(habit, lookbackStart, date.AddDays(-1));
-        var logDates = habit.Logs.Select(log => log.Date).ToHashSet();
-        return pastDates.Any(pastDate => !logDates.Contains(pastDate));
     }
 }
