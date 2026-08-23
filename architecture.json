@@ -2896,14 +2896,14 @@
       "Chat": 61,
       "ChecklistTemplates": 9,
       "Common": 168,
-      "Gamification": 37,
+      "Gamification": 38,
       "Goals": 39,
       "Habits": 85,
       "Marketing": 6,
       "Notifications": 16,
       "Profile": 38,
       "Referrals": 12,
-      "Social": 33,
+      "Social": 34,
       "Subscriptions": 18,
       "Support": 4,
       "Tags": 14,
@@ -4083,7 +4083,11 @@
           "BulkLogHabitsCommandHandler",
           "Goal",
           "Habit",
-          "HabitLog"
+          "HabitLog",
+          "Notification",
+          "User",
+          "UserAchievement",
+          "XpAwardLog"
         ]
       },
       {
