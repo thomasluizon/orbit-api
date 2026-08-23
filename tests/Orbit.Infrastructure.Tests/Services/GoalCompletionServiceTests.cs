@@ -24,6 +24,30 @@ public class GoalCompletionServiceTests
     private static readonly DateOnly Today = new(2026, 8, 23);
 
     [Fact]
+    public async Task SyncDerivedGoals_EmptyGoalSet_PersistsRecurringHabitSkipExactlyOnce()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var dbContext = factory.Context;
+        var user = User.Create("Skip User", "skip@example.com").Value;
+        var habit = CreateHabit(user.Id, "Daily habit");
+        dbContext.AddRange(user, habit);
+        await dbContext.SaveChangesAsync();
+
+        habit.AdvanceDueDate(Today);
+        var advancedDueDate = habit.DueDate;
+        var unitOfWork = new SaveCountingUnitOfWork(CreateUnitOfWork(dbContext));
+        var service = CreateCompletionService(dbContext, Substitute.For<IGamificationService>(), unitOfWork);
+
+        var updates = await service.SyncDerivedGoalsAsync(user.Id, [], Today);
+
+        updates.Should().BeEmpty();
+        unitOfWork.SaveCount.Should().Be(1);
+        dbContext.ChangeTracker.Clear();
+        var persistedHabit = await dbContext.Habits.AsNoTracking().SingleAsync(candidate => candidate.Id == habit.Id);
+        persistedHabit.DueDate.Should().Be(advancedDueDate);
+    }
+
+    [Fact]
     public async Task SaveCompletedGoal_AmbiguousCommitReplay_DoesNotAwardTwice()
     {
         using var factory = new SqliteOrbitDbContextFactory();
@@ -337,6 +361,36 @@ public class GoalCompletionServiceTests
             inner.ResetTracking();
             await inner.ExecuteInTransactionAsync(operation, cancellationToken);
         }
+
+        public Task<T> ExecuteInTransactionAsync<T>(
+            Func<CancellationToken, Task<T>> operation,
+            CancellationToken cancellationToken = default) =>
+            inner.ExecuteInTransactionAsync(operation, cancellationToken);
+
+        public Task AcquireAdvisoryLockAsync(string key, CancellationToken cancellationToken = default) =>
+            inner.AcquireAdvisoryLockAsync(key, cancellationToken);
+
+        public void DiscardChanges() => inner.DiscardChanges();
+
+        public void ResetTracking() => inner.ResetTracking();
+
+        public void Dispose() => inner.Dispose();
+    }
+
+    private sealed class SaveCountingUnitOfWork(IUnitOfWork inner) : IUnitOfWork
+    {
+        public int SaveCount { get; private set; }
+
+        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            SaveCount++;
+            return inner.SaveChangesAsync(cancellationToken);
+        }
+
+        public Task ExecuteInTransactionAsync(
+            Func<CancellationToken, Task> operation,
+            CancellationToken cancellationToken = default) =>
+            inner.ExecuteInTransactionAsync(operation, cancellationToken);
 
         public Task<T> ExecuteInTransactionAsync<T>(
             Func<CancellationToken, Task<T>> operation,

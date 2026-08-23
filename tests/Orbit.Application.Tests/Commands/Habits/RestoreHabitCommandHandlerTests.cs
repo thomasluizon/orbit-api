@@ -118,23 +118,26 @@ public class RestoreHabitCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_LegacyHiddenGoalLink_ReconcilesGoalDuringRestore()
+    public async Task Handle_LegacyHiddenGoalLink_PreservesAcceptedManualProgressDuringRestore()
     {
         var habit = CreateHabit();
         var goal = Goal.Create(UserId, "Exercise", 10, "sessions").Value;
         goal.AddHabit(habit);
         habit.SoftDelete(new DateTime(2026, 3, 20, 10, 0, 0, DateTimeKind.Utc));
         goal.IsProgressDerived.Should().BeFalse();
+        goal.UpdateProgress(4).IsSuccess.Should().BeTrue();
         SetupUserHabits(habit);
 
         var result = await _handler.Handle(new RestoreHabitCommand(UserId, habit.Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         goal.IsProgressDerived.Should().BeTrue();
-        await _goalCompletionService.Received(1).SyncDerivedGoalsAsync(
-            UserId,
-            Arg.Is<IReadOnlyCollection<Guid>>(ids => ids.Count == 1 && ids.Contains(goal.Id)),
-            Today,
-            cancellationToken: Arg.Any<CancellationToken>());
+        goal.CurrentValue.Should().Be(4);
+        await _goalCompletionService.DidNotReceive().SyncDerivedGoalsAsync(
+            Arg.Any<Guid>(),
+            Arg.Any<IReadOnlyCollection<Guid>>(),
+            Arg.Any<DateOnly>(),
+            Arg.Any<bool>(),
+            Arg.Any<CancellationToken>());
     }
 }

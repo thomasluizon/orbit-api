@@ -63,15 +63,19 @@ public sealed class GoalCompletionService(
         ArgumentNullException.ThrowIfNull(goalIds);
 
         var candidateIds = goalIds.Distinct().ToList();
-        if (candidateIds.Count == 0)
-            return [];
-
         if (passiveSync)
-            return await SyncDerivedBatchAsync(userId, candidateIds, userToday, passiveSync, cancellationToken);
+        {
+            return candidateIds.Count == 0
+                ? []
+                : await SyncDerivedBatchAsync(userId, candidateIds, userToday, passiveSync, cancellationToken);
+        }
 
         return await unitOfWork.ExecuteInTransactionAsync<IReadOnlyList<GoalCompletionUpdate>>(async transactionToken =>
         {
             await unitOfWork.SaveChangesAsync(transactionToken);
+            if (candidateIds.Count == 0)
+                return [];
+
             return await SyncDerivedBatchAsync(userId, candidateIds, userToday, passiveSync, transactionToken);
         }, cancellationToken);
     }
