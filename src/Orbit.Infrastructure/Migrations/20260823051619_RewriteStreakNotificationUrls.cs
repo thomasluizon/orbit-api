@@ -25,7 +25,8 @@ namespace Orbit.Infrastructure.Migrations
                             LIMIT 1000
                         )
                         UPDATE "Notifications" AS notification
-                        SET "Url" = '/progress'
+                        SET "Url" = '/progress',
+                            "DedupeKey" = 'legacy-streak-url-' || notification."Id"::text
                         FROM candidates
                         WHERE notification."Id" = candidates."Id";
 
@@ -53,10 +54,12 @@ namespace Orbit.Infrastructure.Migrations
                             SELECT "Id"
                             FROM "Notifications"
                             WHERE "Url" = '/progress'
+                              AND "DedupeKey" = 'legacy-streak-url-' || "Id"::text
                             LIMIT 1000
                         )
                         UPDATE "Notifications" AS notification
-                        SET "Url" = '/streak'
+                        SET "Url" = '/streak',
+                            "DedupeKey" = NULL
                         FROM candidates
                         WHERE notification."Id" = candidates."Id";
 

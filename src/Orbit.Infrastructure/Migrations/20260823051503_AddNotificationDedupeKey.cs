@@ -24,16 +24,33 @@ namespace Orbit.Infrastructure.Migrations
                     total_count integer := 0;
                 BEGIN
                     LOOP
-                        WITH candidates AS (
-                            SELECT "Id"
+                        WITH ranked AS (
+                            SELECT "Id",
+                                   "Url",
+                                   ROW_NUMBER() OVER (
+                                       PARTITION BY "Url"
+                                       ORDER BY "CreatedAtUtc", "Id") AS duplicate_rank
                             FROM "Notifications"
                             WHERE "DedupeKey" IS NULL
                               AND "Url" NOT LIKE '/%'
                               AND "Url" ~ '^goal-deadline-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}-(7|3|1)d$'
+                        ),
+                        candidates AS (
+                            SELECT "Id", "Url", duplicate_rank
+                            FROM ranked
+                            ORDER BY "Url", duplicate_rank
                             LIMIT 1000
                         )
                         UPDATE "Notifications" AS notification
-                        SET "DedupeKey" = notification."Url",
+                        SET "DedupeKey" = CASE
+                                WHEN candidates.duplicate_rank = 1
+                                  AND NOT EXISTS (
+                                      SELECT 1
+                                      FROM "Notifications" AS existing
+                                      WHERE existing."DedupeKey" = candidates."Url")
+                                THEN candidates."Url"
+                                ELSE candidates."Url" || '-duplicate-' || candidates."Id"::text
+                            END,
                             "Url" = '/progress'
                         FROM candidates
                         WHERE notification."Id" = candidates."Id";
@@ -68,11 +85,14 @@ namespace Orbit.Infrastructure.Migrations
                         WITH candidates AS (
                             SELECT "Id"
                             FROM "Notifications"
-                            WHERE "DedupeKey" ~ '^goal-deadline-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}-(7|3|1)d$'
+                            WHERE "DedupeKey" ~ '^goal-deadline-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}-(7|3|1)d(-duplicate-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})?$'
                             LIMIT 1000
                         )
                         UPDATE "Notifications" AS notification
-                        SET "Url" = notification."DedupeKey",
+                        SET "Url" = regexp_replace(
+                                notification."DedupeKey",
+                                '-duplicate-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+                                ''),
                             "DedupeKey" = NULL
                         FROM candidates
                         WHERE notification."Id" = candidates."Id";

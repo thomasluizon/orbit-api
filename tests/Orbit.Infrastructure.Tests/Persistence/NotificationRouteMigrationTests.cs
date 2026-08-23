@@ -21,6 +21,8 @@ public class NotificationRouteMigrationTests
         sql.Should().Contain("\"DedupeKey\" IS NULL");
         sql.Should().Contain("\"Url\" NOT LIKE '/%'");
         sql.Should().Contain("^goal-deadline-");
+        sql.Should().Contain("ROW_NUMBER() OVER");
+        sql.Should().Contain("-duplicate-");
         sql.Should().Contain("LIMIT 1000");
         sql.Should().Contain("\"Url\" = '/progress'");
         sql.Should().Contain("RAISE NOTICE");
@@ -37,7 +39,8 @@ public class NotificationRouteMigrationTests
         var operations = GetOperations<AddNotificationDedupeKey>("Down");
 
         var sql = operations.OfType<SqlOperation>().Should().ContainSingle().Subject.Sql;
-        sql.Should().Contain("\"Url\" = notification.\"DedupeKey\"");
+        sql.Should().Contain("regexp_replace");
+        sql.Should().Contain("-duplicate-");
         sql.Should().Contain("\"DedupeKey\" = NULL");
         sql.Should().Contain("LIMIT 1000");
         operations.Last().Should().BeOfType<DropColumnOperation>()
@@ -51,13 +54,16 @@ public class NotificationRouteMigrationTests
             .OfType<SqlOperation>().Should().ContainSingle().Subject.Sql;
         upSql.Should().Contain("WHERE \"Url\" = '/streak'");
         upSql.Should().Contain("SET \"Url\" = '/progress'");
+        upSql.Should().Contain("\"DedupeKey\" = 'legacy-streak-url-'");
         upSql.Should().Contain("LIMIT 1000");
         upSql.Should().Contain("RAISE NOTICE");
 
         var downSql = GetOperations<RewriteStreakNotificationUrls>("Down")
             .OfType<SqlOperation>().Should().ContainSingle().Subject.Sql;
         downSql.Should().Contain("WHERE \"Url\" = '/progress'");
+        downSql.Should().Contain("\"DedupeKey\" = 'legacy-streak-url-'");
         downSql.Should().Contain("SET \"Url\" = '/streak'");
+        downSql.Should().Contain("\"DedupeKey\" = NULL");
         downSql.Should().Contain("LIMIT 1000");
     }
 
