@@ -1,10 +1,14 @@
 using System.Security.Claims;
+using System.Text.Json;
 using FluentAssertions;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 using Orbit.Api.Controllers;
+using Orbit.Api.RateLimiting;
+using Orbit.Application.Common;
+using Orbit.Application.Gamification.Commands;
 using Orbit.Application.Gamification.Queries;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
@@ -108,6 +112,56 @@ public class GamificationControllerTests
 
         var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
         objectResult.StatusCode.Should().Be(403);
+    }
+
+    [Fact]
+    public async Task RepairStreak_Success_ReturnsOk()
+    {
+        _mediator.Send(Arg.Any<RepairStreakCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(default(StreakInfoResponse)!));
+
+        var result = await _controller.RepairStreak(null, CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task RepairStreak_Unavailable_Returns409WithStableCode()
+    {
+        _mediator.Send(Arg.Any<RepairStreakCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure<StreakInfoResponse>(ErrorMessages.StreakRepairUnavailable));
+
+        var result = await _controller.RepairStreak(null, CancellationToken.None);
+
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(StatusCodes.Status409Conflict);
+        objectResult.Value.Should().BeEquivalentTo(new
+        {
+            error = "No streak repair is available for yesterday.",
+            errorCode = ErrorCodes.StreakRepairUnavailable
+        });
+    }
+
+    [Fact]
+    public void RepairStreak_IsTheOnlyPostAndIsRateLimited()
+    {
+        var postActions = typeof(GamificationController).GetMethods()
+            .Where(method => method.GetCustomAttributes(typeof(HttpPostAttribute), inherit: false).Length > 0)
+            .ToList();
+
+        postActions.Should().ContainSingle();
+        postActions[0].Name.Should().Be(nameof(GamificationController.RepairStreak));
+        postActions[0].GetCustomAttributes(typeof(DistributedRateLimitAttribute), inherit: false)
+            .Should().ContainSingle();
+    }
+
+    [Fact]
+    public void RepairStreakRequest_ClientSuppliedDate_IsRejected()
+    {
+        var deserialize = () => JsonSerializer.Deserialize<RepairStreakRequest>(
+            "{\"date\":\"2026-08-21\"}");
+
+        deserialize.Should().Throw<JsonException>();
     }
 
     [Fact]

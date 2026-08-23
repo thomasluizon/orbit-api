@@ -677,6 +677,15 @@
     },
     {
       "controller": "GamificationController",
+      "action": "RepairStreak",
+      "httpMethod": "POST",
+      "routeTemplate": "/api/gamification/streak/repair",
+      "authorization": "Authorize (class)",
+      "mediatrRequest": "RepairStreakCommand",
+      "responseDto": "StreakInfoResponse"
+    },
+    {
+      "controller": "GamificationController",
       "action": "GetXpHistory",
       "httpMethod": "GET",
       "routeTemplate": "/api/gamification/xp-history",
@@ -2334,6 +2343,12 @@
       "featureFolder": "Habits"
     },
     {
+      "request": "RepairStreakCommand",
+      "response": "Result<StreakInfoResponse>",
+      "handlerFile": "src/Orbit.Application/Gamification/Commands/RepairStreakCommand.cs",
+      "featureFolder": "Gamification"
+    },
+    {
       "request": "ReportEventCommand",
       "response": "Result<ReportEventResponse>",
       "handlerFile": "src/Orbit.Application/Gamification/Commands/ReportEventCommand.cs",
@@ -2676,7 +2691,7 @@
       "Chat": 80,
       "ChecklistTemplates": 5,
       "Common": 34,
-      "Gamification": 26,
+      "Gamification": 28,
       "Goals": 34,
       "Habits": 74,
       "Marketing": 4,
@@ -2842,10 +2857,6 @@
       "file": "src/Orbit.Domain/Entities/SentSlipAlert.cs"
     },
     {
-      "entity": "SentStreakFreezeAlert",
-      "file": "src/Orbit.Domain/Entities/SentStreakFreezeAlert.cs"
-    },
-    {
       "entity": "StreakFreeze",
       "file": "src/Orbit.Domain/Entities/StreakFreeze.cs"
     },
@@ -2879,20 +2890,20 @@
       "Accountability": 9,
       "ApiKeys": 11,
       "Auth": 24,
-      "Behaviors": 12,
+      "Behaviors": 13,
       "Calendar": 16,
       "Challenges": 14,
       "Chat": 61,
       "ChecklistTemplates": 9,
-      "Common": 167,
-      "Gamification": 34,
+      "Common": 168,
+      "Gamification": 37,
       "Goals": 39,
       "Habits": 85,
       "Marketing": 6,
       "Notifications": 16,
       "Profile": 38,
       "Referrals": 12,
-      "Social": 32,
+      "Social": 33,
       "Subscriptions": 18,
       "Support": 4,
       "Tags": 14,
@@ -3944,6 +3955,17 @@
           "ChecklistTemplate",
           "DeleteChecklistTemplateCommand",
           "DeleteChecklistTemplateCommandHandler"
+        ]
+      },
+      {
+        "testClass": "RepairStreakCommandHandlerTests",
+        "file": "tests/Orbit.Application.Tests/Commands/Gamification/RepairStreakCommandHandlerTests.cs",
+        "references": [
+          "GetStreakInfoQuery",
+          "RepairStreakCommand",
+          "RepairStreakCommandHandler",
+          "StreakFreeze",
+          "User"
         ]
       },
       {
@@ -6071,6 +6093,13 @@
         ]
       },
       {
+        "testClass": "RepairStreakCommandValidatorTests",
+        "file": "tests/Orbit.Application.Tests/Validators/RepairStreakCommandValidatorTests.cs",
+        "references": [
+          "RepairStreakCommand"
+        ]
+      },
+      {
         "testClass": "RestoreGoalCommandValidatorTests",
         "file": "tests/Orbit.Application.Tests/Validators/RestoreGoalCommandValidatorTests.cs",
         "references": [
@@ -6688,6 +6717,7 @@
           "GetGamificationProfileQuery",
           "GetRecapQuery",
           "GetStreakInfoQuery",
+          "RepairStreakCommand",
           "User"
         ]
       },
@@ -7089,7 +7119,6 @@
           "PushSubscription",
           "Referral",
           "Report",
-          "SentStreakFreezeAlert",
           "StreakFreeze",
           "Tag",
           "User",
@@ -7203,7 +7232,6 @@
           "SentProactiveCheckin",
           "SentReminder",
           "SentSlipAlert",
-          "SentStreakFreezeAlert",
           "StreakFreeze",
           "Tag",
           "User",
@@ -7288,7 +7316,6 @@
           "LogHabitCommand",
           "ProcessedRequest",
           "SentProactiveCheckin",
-          "SentStreakFreezeAlert",
           "Tag",
           "User"
         ]
@@ -7735,9 +7762,7 @@
         "testClass": "StreakFreezeAutoActivationServiceTests",
         "file": "tests/Orbit.Infrastructure.Tests/Services/StreakFreezeAutoActivationServiceTests.cs",
         "references": [
-          "AppFeatureFlag",
           "Habit",
-          "SentStreakFreezeAlert",
           "StreakFreeze",
           "User"
         ]
@@ -7748,7 +7773,11 @@
         "references": [
           "Goal",
           "Habit",
-          "User"
+          "HabitLog",
+          "Notification",
+          "User",
+          "UserAchievement",
+          "XpAwardLog"
         ]
       },
       {

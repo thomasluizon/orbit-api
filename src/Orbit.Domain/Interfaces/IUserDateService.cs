@@ -4,6 +4,11 @@ public interface IUserDateService
 {
     Task<DateOnly> GetUserTodayAsync(Guid userId, CancellationToken cancellationToken = default);
 
+    Task<DateOnly> GetUserTodayAsync(
+        string? timeZoneId,
+        Guid userId,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Returns the user's week-start preference (0 = Sunday, 1 = Monday) for anchoring
     /// week-based date math (flexible weekly windows, weekly retrospective period) so the
