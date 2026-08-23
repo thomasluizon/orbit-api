@@ -112,6 +112,9 @@ public class ApplyOnboardingCommandHandlerTests
         await _habitRepo.Received(2).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
         await _goalRepo.Received(1).AddAsync(Arg.Any<Goal>(), Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).AcquireAdvisoryLockAsync(
+            HabitCeilingLock.ForUser(UserId),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

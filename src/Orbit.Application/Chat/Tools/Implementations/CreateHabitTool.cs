@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
+using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -149,6 +150,19 @@ public class CreateHabitTool(
 
         var title = titleEl.GetString() ?? string.Empty;
 
+        return await HabitCeilingLock.ExecuteAsync(
+            unitOfWork,
+            userId,
+            transactionToken => ExecuteLockedAsync(args, userId, title, transactionToken),
+            ct);
+    }
+
+    private async Task<ToolResult> ExecuteLockedAsync(
+        JsonElement args,
+        Guid userId,
+        string title,
+        CancellationToken ct)
+    {
         var habitGate = await payGate.CanCreateHabits(userId, 1, ct);
         if (habitGate.IsFailure)
             return ToolResult.FromFailure(habitGate);

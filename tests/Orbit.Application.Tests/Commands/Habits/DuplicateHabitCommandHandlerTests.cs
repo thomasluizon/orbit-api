@@ -33,6 +33,14 @@ public class DuplicateHabitCommandHandlerTests
             .Returns(Result.Success());
         _payGate.CanCreateSubHabits(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
+        _unitOfWork.ExecuteInTransactionAsync(
+                Arg.Any<Func<CancellationToken, Task<Result<Guid>>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var operation = call.ArgAt<Func<CancellationToken, Task<Result<Guid>>>>(0);
+                return operation(call.ArgAt<CancellationToken>(1));
+            });
     }
 
     [Fact]
@@ -55,6 +63,9 @@ public class DuplicateHabitCommandHandlerTests
             Arg.Is<Habit>(h => h.Title == "Exercise" && h.Id != original.Id),
             Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).AcquireAdvisoryLockAsync(
+            HabitCeilingLock.ForUser(UserId),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -72,20 +83,20 @@ public class DuplicateHabitCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_PayGateLimitReached_ReturnsPayGateFailure()
+    public async Task Handle_HabitLimitReached_ReturnsNeutralFailure()
     {
         var original = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         SetupAllHabitsForUser(new List<Habit> { original });
 
         _payGate.CanCreateHabits(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns(Result.PayGateFailure("Habit limit reached"));
+            .Returns(Result.Failure("Habit limit reached"));
 
         var command = new DuplicateHabitCommand(UserId, original.Id);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be("PAY_GATE");
+        result.ErrorCode.Should().BeNull();
     }
 
     [Fact]

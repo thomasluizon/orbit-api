@@ -73,7 +73,7 @@ public class PayGateServiceTests
     }
 
     [Fact]
-    public async Task CanCreateHabits_ProUserAtLimit_PayGateFailure()
+    public async Task CanCreateHabits_ProUserAtLimit_NeutralFailure()
     {
         var user = CreateProUser();
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
@@ -85,7 +85,7 @@ public class PayGateServiceTests
         var result = await _sut.CanCreateHabits(UserId);
 
         result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be("PAY_GATE");
+        result.ErrorCode.Should().BeNull();
         result.Error.Should().Be("You've reached the 1000 habit limit.");
     }
 
@@ -140,7 +140,7 @@ public class PayGateServiceTests
     }
 
     [Fact]
-    public async Task CanCreateHabits_FreeUserAtLimit_PayGateFailureWithoutUpsell()
+    public async Task CanCreateHabits_FreeUserAtLimit_NeutralFailureWithoutUpsell()
     {
         var user = CreateFreeUser();
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
@@ -152,7 +152,7 @@ public class PayGateServiceTests
         var result = await _sut.CanCreateHabits(UserId);
 
         result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be("PAY_GATE");
+        result.ErrorCode.Should().BeNull();
         result.Error.Should().Be("You've reached the 1000 habit limit.");
     }
 
@@ -170,7 +170,7 @@ public class PayGateServiceTests
         var result = await _sut.CanCreateHabits(UserId, 5);
 
         result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be("PAY_GATE");
+        result.ErrorCode.Should().BeNull();
         result.Error.Should().Be("You've reached the 1000 habit limit.");
     }
 
@@ -190,7 +190,7 @@ public class PayGateServiceTests
             CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be("PAY_GATE");
+        result.ErrorCode.Should().BeNull();
         habit.IsCompleted.Should().BeTrue();
         habit.Logs.Should().ContainSingle().Which.IsDeleted.Should().BeFalse();
     }
@@ -234,7 +234,7 @@ public class PayGateServiceTests
             CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be("PAY_GATE");
+        result.ErrorCode.Should().BeNull();
         habit.Title.Should().Be("Finished recurring habit");
         habit.IsCompleted.Should().BeTrue();
         habit.DueDate.Should().Be(originalDueDate);

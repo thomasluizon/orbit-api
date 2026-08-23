@@ -89,7 +89,7 @@ public class ApplyOnboardingCommandHandler(
     private async Task<Result<ApplyOnboardingResponse>> ApplyOnboardingTransactionAsync(
         ApplyOnboardingCommand request, CancellationToken ct)
     {
-        await unitOfWork.AcquireAdvisoryLockAsync($"onboarding-apply:{request.UserId}", ct);
+        await HabitCeilingLock.AcquireAsync(unitOfWork, request.UserId, ct);
 
         var user = await repos.Users.FindOneTrackedAsync(
             u => u.Id == request.UserId, cancellationToken: ct);
