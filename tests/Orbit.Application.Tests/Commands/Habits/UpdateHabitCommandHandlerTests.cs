@@ -28,8 +28,6 @@ public class UpdateHabitCommandHandlerTests
 
     public UpdateHabitCommandHandlerTests()
     {
-        _payGate.CanLinkGoalsToHabits(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(Result.Success()));
         _payGate.CanUseSlipAlerts(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result.Success()));
         _handler = new UpdateHabitCommandHandler(

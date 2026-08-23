@@ -18,17 +18,12 @@ public record LinkHabitsToGoalCommand(
 public class LinkHabitsToGoalCommandHandler(
     IGenericRepository<Goal> goalRepository,
     IGenericRepository<Habit> habitRepository,
-    IPayGateService payGate,
     IGoalCompletionService goalCompletionService,
     IUserDateService userDateService,
     IMemoryCache cache) : IRequestHandler<LinkHabitsToGoalCommand, Result>
 {
     public async Task<Result> Handle(LinkHabitsToGoalCommand request, CancellationToken cancellationToken)
     {
-        var gateCheck = await payGate.CanAccessGoals(request.UserId, cancellationToken);
-        if (gateCheck.IsFailure)
-            return gateCheck;
-
         if (request.HabitIds.Count > AppConstants.MaxHabitsPerGoal)
             return Result.Failure(ErrorMessages.MaxHabitsPerGoal.Format(AppConstants.MaxHabitsPerGoal));
 

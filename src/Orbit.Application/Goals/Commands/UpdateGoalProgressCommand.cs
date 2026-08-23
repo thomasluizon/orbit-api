@@ -17,7 +17,6 @@ public record UpdateGoalProgressCommand(
 
 public class UpdateGoalProgressCommandHandler(
     GoalRepositories repos,
-    IPayGateService payGate,
     IGoalCompletionService goalCompletionService,
     IUnitOfWork unitOfWork,
     IUserDateService userDateService,
@@ -25,10 +24,6 @@ public class UpdateGoalProgressCommandHandler(
 {
     public async Task<Result> Handle(UpdateGoalProgressCommand request, CancellationToken cancellationToken)
     {
-        var gateCheck = await payGate.CanAccessGoals(request.UserId, cancellationToken);
-        if (gateCheck.IsFailure)
-            return gateCheck;
-
         var saved = await unitOfWork.ExecuteInTransactionAsync(async transactionToken =>
         {
             var justCompleted = false;

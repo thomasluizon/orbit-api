@@ -11,6 +11,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class GoalReviewTool(
     IGenericRepository<Goal> goalRepository,
+    IPayGateService payGate,
     IUserDateService userDateService,
     IGoalProgressReadSyncer goalProgressReadSyncer) : IAiTool
 {
@@ -22,6 +23,10 @@ public class GoalReviewTool(
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
+        var gateCheck = await payGate.CanUseGoalReview(userId, ct);
+        if (gateCheck.IsFailure)
+            return ToolResult.FromFailure(gateCheck);
+
         var userToday = await userDateService.GetUserTodayAsync(userId, ct);
         var freshValues = await goalProgressReadSyncer.ComputeFreshValuesAsync(userId, userToday, ct);
         var streakWindowStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);

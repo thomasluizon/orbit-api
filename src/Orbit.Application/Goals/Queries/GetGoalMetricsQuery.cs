@@ -13,16 +13,11 @@ public record GetGoalMetricsQuery(Guid UserId, Guid GoalId) : IRequest<Result<Go
 
 public class GetGoalMetricsQueryHandler(
     IGenericRepository<Goal> goalRepository,
-    IPayGateService payGate,
     IUserDateService userDateService,
     IGoalProgressReadSyncer goalProgressReadSyncer) : IRequestHandler<GetGoalMetricsQuery, Result<GoalMetrics>>
 {
     public async Task<Result<GoalMetrics>> Handle(GetGoalMetricsQuery request, CancellationToken cancellationToken)
     {
-        var gateCheck = await payGate.CanAccessGoals(request.UserId, cancellationToken);
-        if (gateCheck.IsFailure)
-            return gateCheck.PropagateError<GoalMetrics>();
-
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var freshValues = await goalProgressReadSyncer.ComputeFreshValuesAsync(
             request.UserId,

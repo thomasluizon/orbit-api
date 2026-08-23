@@ -37,15 +37,10 @@ public record GetGoalByIdQuery(
 
 public class GetGoalByIdQueryHandler(
     IGenericRepository<Goal> goalRepository,
-    IPayGateService payGate,
     IUserDateService userDateService) : IRequestHandler<GetGoalByIdQuery, Result<GoalDetailDto>>
 {
     public async Task<Result<GoalDetailDto>> Handle(GetGoalByIdQuery request, CancellationToken cancellationToken)
     {
-        var gateCheck = await payGate.CanAccessGoals(request.UserId, cancellationToken);
-        if (gateCheck.IsFailure)
-            return gateCheck.PropagateError<GoalDetailDto>();
-
         var loaded = await GoalDetailLoader.BuildGoalDetailAsync(
             goalRepository, userDateService, request.GoalId, request.UserId, cancellationToken);
         if (loaded is null)

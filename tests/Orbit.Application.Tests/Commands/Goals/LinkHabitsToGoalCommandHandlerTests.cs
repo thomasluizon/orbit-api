@@ -17,7 +17,6 @@ public class LinkHabitsToGoalCommandHandlerTests
 {
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
-    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IGoalCompletionService _goalCompletionService = Substitute.For<IGoalCompletionService>();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
@@ -30,11 +29,9 @@ public class LinkHabitsToGoalCommandHandlerTests
     public LinkHabitsToGoalCommandHandlerTests()
     {
         _handler = new LinkHabitsToGoalCommandHandler(
-            _goalRepo, _habitRepo, _payGate, _goalCompletionService,
+            _goalRepo, _habitRepo, _goalCompletionService,
             _userDateService, _cache);
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
-        _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
     }
 
     [Fact]
@@ -153,23 +150,6 @@ public class LinkHabitsToGoalCommandHandlerTests
         goal.Habits.Should().HaveCount(1);
         goal.Habits.Should().Contain(newHabit);
         goal.Habits.Should().NotContain(oldHabit);
-    }
-
-    [Fact]
-    public async Task Handle_PaywalledUser_ReturnsPayGateFailure()
-    {
-        _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Result.PayGateFailure("Goals are a Pro feature"));
-
-        var command = new LinkHabitsToGoalCommand(UserId, GoalId, new List<Guid> { Guid.NewGuid() });
-
-        var result = await _handler.Handle(command, CancellationToken.None);
-
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be(Result.PayGateErrorCode);
-        await _goalCompletionService.DidNotReceive().SyncDerivedGoalsAsync(
-            Arg.Any<Guid>(), Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(),
-            Arg.Any<bool>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
