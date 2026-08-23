@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Orbit.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    partial class OrbitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260823210933_RaiseMinSupportedVersionFloor")]
+    partial class RaiseMinSupportedVersionFloor
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -557,6 +560,7 @@ namespace Orbit.Infrastructure.Migrations
                             Key = "goal_tracking",
                             Description = "Goal tracking with progress",
                             Enabled = true,
+                            PlanRequirement = "Pro",
                             UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
@@ -1905,10 +1909,10 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<bool>("AiMemoryEnabled")
                         .HasColumnType("boolean");
 
-                    b.Property<DateOnly?>("AiMessagesLocalDate")
-                        .HasColumnType("date");
+                    b.Property<DateTime?>("AiMessagesResetAt")
+                        .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("AiMessagesUsedToday")
+                    b.Property<int>("AiMessagesUsedThisMonth")
                         .HasColumnType("integer");
 
                     b.Property<bool>("AiSummaryEnabled")

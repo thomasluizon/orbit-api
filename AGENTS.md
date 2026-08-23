@@ -110,3 +110,47 @@ five are P0/P1, and no gate sees them.
    supports.** No CI job can see this: the suite is green precisely because the author
    wrote both the code and the fixture. Safe path: the complete redacted response shape
    plus a way to re-derive it, or a design that does not read the unconfirmed field.
+
+### Minimum supported version operations
+
+The live floor is the `Value` of the `MinSupportedVersion` row in the production
+`AppConfigs` table. Read it before planning a raise and read it back after every write:
+
+```sql
+SELECT "Key", "Value"
+FROM "AppConfigs"
+WHERE "Key" = 'MinSupportedVersion';
+```
+
+The initial raise to `1.3.11` is versioned in the EF migration that introduced that
+value. Future raises are policy changes and use a guarded production database update
+after the preconditions below are recorded in the owning ticket:
+
+```sql
+UPDATE "AppConfigs"
+SET "Value" = '<new floor>'
+WHERE "Key" = 'MinSupportedVersion'
+  AND "Value" = '<current floor>';
+```
+
+- Read the active version distribution and release dates from Google Play Console.
+- Confirm the proposed floor is already live and sends `X-App-Version` and handles the
+  existing HTTP 426 response with a usable upgrade prompt.
+- Check `APP_VERSION` in every deployed environment of the Orbit web project in Vercel.
+  An unset value is fail open. A set value must be at least the proposed floor before
+  changing the database row.
+- Read the row back and verify its exact value. Monitor Android and web HTTP 426 traffic
+  and client reports for 24 hours.
+
+`AppConfigService` caches the value for 30 minutes in each process. A change takes up
+to 30 minutes to affect a warm process, and running instances can start enforcing it
+at different times. Do not treat the database write as immediate fleet-wide activation.
+
+Rollback does not require a deploy. Set the row to `0.0.0`, read it back, and allow the
+same per-process cache window for recovery:
+
+```sql
+UPDATE "AppConfigs"
+SET "Value" = '0.0.0'
+WHERE "Key" = 'MinSupportedVersion';
+```
