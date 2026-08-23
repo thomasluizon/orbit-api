@@ -232,7 +232,9 @@ public partial class LogHabitCommandHandler(
         var loggableWindowStart = today.AddDays(-AppConstants.DefaultOverdueWindowDays);
         return repos.HabitRepository.FindOneTrackedAsync(
             h => h.Id == habitId,
-            q => q.Include(h => h.Logs.Where(l => l.Date >= loggableWindowStart)).Include(h => h.Goals),
+            q => q.Include(h => h.Logs.Where(l => l.Date >= loggableWindowStart))
+                  .Include(h => h.Goals)
+                  .AsSplitQuery(),
             cancellationToken);
     }
 

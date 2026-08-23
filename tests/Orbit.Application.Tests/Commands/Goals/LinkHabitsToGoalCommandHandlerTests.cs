@@ -225,6 +225,33 @@ public class LinkHabitsToGoalCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_LinkingHabitToStandardGoalAtTarget_CompletesAndProcessesGamification()
+    {
+        var goal = Goal.Create(UserId, "Exercise once", 1, "session").Value;
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Exercise", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        habit.Log(Today);
+
+        _goalRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>()).Returns(goal);
+        _habitRepo.FindTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>()).Returns(new List<Habit> { habit });
+
+        var result = await _handler.Handle(
+            new LinkHabitsToGoalCommand(UserId, goal.Id, [habit.Id]),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        goal.CurrentValue.Should().Be(1);
+        goal.Status.Should().Be(GoalStatus.Completed);
+        await _gamificationService.Received(1).ProcessGoalCompleted(UserId, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_UnlinkingFinalHabit_ClearsDerivedValueAndRestoresManualProgress()
     {
         var goal = Goal.Create(UserId, "Exercise 10 times", 10, "sessions").Value;

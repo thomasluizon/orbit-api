@@ -23,7 +23,8 @@ internal static class BulkHabitLoader
         var habits = await habitRepository.FindTrackedAsync(
             h => idSet.Contains(h.Id) && h.UserId == userId,
             q => q.Include(h => h.Logs.Where(l => l.Date >= windowStart))
-                  .Include(h => h.Goals),
+                  .Include(h => h.Goals)
+                  .AsSplitQuery(),
             cancellationToken);
         return habits.ToDictionary(h => h.Id);
     }
