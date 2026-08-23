@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
+using Orbit.Application.Auth.Services;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -28,12 +29,24 @@ public class CreateApiKeyCommandHandler(
     IGenericRepository<ApiKey> apiKeyRepository,
     IPayGateService payGate,
     IUnitOfWork unitOfWork,
-    IMemoryCache cache) : IRequestHandler<CreateApiKeyCommand, Result<CreateApiKeyResponse>>
+    IMemoryCache cache,
+    IAppConfigService appConfigService,
+    EmailChallengeService challengeService) : IRequestHandler<CreateApiKeyCommand, Result<CreateApiKeyResponse>>
 {
     private const int MaxActiveKeys = 5;
 
     public async Task<Result<CreateApiKeyResponse>> Handle(CreateApiKeyCommand request, CancellationToken cancellationToken)
     {
+        var requiresStepUp = await appConfigService.GetAsync(
+            AppConfigKeys.RequireApiKeyCreationStepUp,
+            true,
+            cancellationToken);
+        if (requiresStepUp &&
+            !challengeService.HasAuthorization(EmailChallengeOperation.ApiKeyCreation, request.UserId))
+        {
+            return Result.Failure<CreateApiKeyResponse>(ErrorMessages.ApiKeyCreationChallengeRequired);
+        }
+
         var gateCheck = await payGate.CanCreateApiKeys(request.UserId, cancellationToken);
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<CreateApiKeyResponse>();
@@ -55,6 +68,12 @@ public class CreateApiKeyCommandHandler(
             return createResult.PropagateError<CreateApiKeyResponse>();
 
         var (apiKey, rawKey) = createResult.Value;
+
+        if (requiresStepUp &&
+            !challengeService.TryConsumeAuthorization(EmailChallengeOperation.ApiKeyCreation, request.UserId))
+        {
+            return Result.Failure<CreateApiKeyResponse>(ErrorMessages.ApiKeyCreationChallengeRequired);
+        }
 
         await apiKeyRepository.AddAsync(apiKey, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
