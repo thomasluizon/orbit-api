@@ -208,6 +208,24 @@
       "responseDto": null
     },
     {
+      "controller": "ApiKeysController",
+      "action": "RequestCreationChallenge",
+      "httpMethod": "POST",
+      "routeTemplate": "/api/api-keys/creation-challenge",
+      "authorization": "Authorize (class)",
+      "mediatrRequest": "RequestApiKeyCreationChallengeCommand",
+      "responseDto": null
+    },
+    {
+      "controller": "ApiKeysController",
+      "action": "ConfirmCreationChallenge",
+      "httpMethod": "POST",
+      "routeTemplate": "/api/api-keys/creation-challenge/confirm",
+      "authorization": "Authorize (class)",
+      "mediatrRequest": "ConfirmApiKeyCreationChallengeCommand",
+      "responseDto": null
+    },
+    {
       "controller": "AuthController",
       "action": "ConfirmDeletion",
       "httpMethod": "POST",
@@ -1773,6 +1791,12 @@
       "featureFolder": "Auth"
     },
     {
+      "request": "ConfirmApiKeyCreationChallengeCommand",
+      "response": "Result",
+      "handlerFile": "src/Orbit.Application/ApiKeys/Commands/ConfirmApiKeyCreationChallengeCommand.cs",
+      "featureFolder": "ApiKeys"
+    },
+    {
       "request": "ConfirmWaitlistCommand",
       "response": "Result",
       "handlerFile": "src/Orbit.Application/Waitlist/Commands/ConfirmWaitlistCommand.cs",
@@ -2367,6 +2391,12 @@
       "featureFolder": "Auth"
     },
     {
+      "request": "RequestApiKeyCreationChallengeCommand",
+      "response": "Result",
+      "handlerFile": "src/Orbit.Application/ApiKeys/Commands/RequestApiKeyCreationChallengeCommand.cs",
+      "featureFolder": "ApiKeys"
+    },
+    {
       "request": "ResetAccountCommand",
       "response": "Result",
       "handlerFile": "src/Orbit.Application/Profile/Commands/ResetAccountCommand.cs",
@@ -2683,8 +2713,8 @@
     },
     "featureFolders": {
       "Accountability": 17,
-      "ApiKeys": 6,
-      "Auth": 21,
+      "ApiKeys": 11,
+      "Auth": 22,
       "Behaviors": 4,
       "Calendar": 15,
       "Challenges": 15,
@@ -2892,14 +2922,14 @@
   "testCoverage": {
     "featureFolders": {
       "Accountability": 9,
-      "ApiKeys": 11,
-      "Auth": 24,
+      "ApiKeys": 14,
+      "Auth": 26,
       "Behaviors": 13,
       "Calendar": 16,
       "Challenges": 14,
       "Chat": 61,
       "ChecklistTemplates": 9,
-      "Common": 171,
+      "Common": 174,
       "Gamification": 38,
       "Goals": 38,
       "Habits": 83,
@@ -3699,6 +3729,20 @@
         "references": []
       },
       {
+        "testClass": "ApiKeyCreationChallengeFlowTests",
+        "file": "tests/Orbit.Application.Tests/Commands/ApiKeys/ApiKeyCreationChallengeFlowTests.cs",
+        "references": [
+          "ApiKey",
+          "ConfirmApiKeyCreationChallengeCommand",
+          "ConfirmApiKeyCreationChallengeCommandHandler",
+          "CreateApiKeyCommand",
+          "CreateApiKeyCommandHandler",
+          "RequestApiKeyCreationChallengeCommand",
+          "RequestApiKeyCreationChallengeCommandHandler",
+          "User"
+        ]
+      },
+      {
         "testClass": "CreateApiKeyCommandHandlerTests",
         "file": "tests/Orbit.Application.Tests/Commands/ApiKeys/CreateApiKeyCommandHandlerTests.cs",
         "references": [
@@ -3715,6 +3759,11 @@
           "RevokeApiKeyCommand",
           "RevokeApiKeyCommandHandler"
         ]
+      },
+      {
+        "testClass": "SendApiKeyCreationCodeEmailJobTests",
+        "file": "tests/Orbit.Application.Tests/Commands/ApiKeys/SendApiKeyCreationCodeEmailJobTests.cs",
+        "references": []
       },
       {
         "testClass": "AuthCommandHandlerTests",
@@ -5667,6 +5716,14 @@
         ]
       },
       {
+        "testClass": "ApiKeyCreationChallengeCommandValidatorTests",
+        "file": "tests/Orbit.Application.Tests/Validators/ApiKeyCreationChallengeCommandValidatorTests.cs",
+        "references": [
+          "ConfirmApiKeyCreationChallengeCommand",
+          "RequestApiKeyCreationChallengeCommand"
+        ]
+      },
+      {
         "testClass": "ApplyGoalInputValidatorTests",
         "file": "tests/Orbit.Application.Tests/Validators/ApplyOnboardingCommandValidatorTests.cs",
         "references": [
@@ -6651,8 +6708,10 @@
         "testClass": "ApiKeysControllerTests",
         "file": "tests/Orbit.Infrastructure.Tests/Controllers/ApiKeysControllerTests.cs",
         "references": [
+          "ConfirmApiKeyCreationChallengeCommand",
           "CreateApiKeyCommand",
           "GetApiKeysQuery",
+          "RequestApiKeyCreationChallengeCommand",
           "RevokeApiKeyCommand",
           "User"
         ]

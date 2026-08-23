@@ -18,6 +18,7 @@ public static class ErrorCodes
     public const string SelfReferral = "SELF_REFERRAL";
     public const string AlreadyReferred = "ALREADY_REFERRED";
     public const string ApiKeyNotFound = "API_KEY_NOT_FOUND";
+    public const string ApiKeyCreationChallengeRequired = "API_KEY_CREATION_CHALLENGE_REQUIRED";
     public const string NotificationNotFound = "NOTIFICATION_NOT_FOUND";
     public const string NoPushSubscriptions = "NO_PUSH_SUBSCRIPTIONS";
     public const string SubscriptionNotFound = "SUBSCRIPTION_NOT_FOUND";

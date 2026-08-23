@@ -459,7 +459,8 @@ public class OrbitDbContext : DbContext
                 AppConfig.Create("MaxTagsPerHabit", "5", "Maximum number of tags per habit"),
                 AppConfig.Create("ReferralRewardDays", "10", "Days of Pro added per successful referral"),
                 AppConfig.Create("MaxReferrals", "10", "Maximum successful referrals per user"),
-                AppConfig.Create("MinSupportedVersion", "0.0.0", "Minimum supported client app version; clients below this receive HTTP 426"));
+                AppConfig.Create("MinSupportedVersion", "0.0.0", "Minimum supported client app version; clients below this receive HTTP 426"),
+                AppConfig.Create("RequireApiKeyCreationStepUp", "false", "Turn on once a client build carrying the API key creation challenge flow is live in the Play fleet"));
         });
     }
 

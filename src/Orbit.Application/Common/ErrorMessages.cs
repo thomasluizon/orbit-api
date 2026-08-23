@@ -22,6 +22,7 @@ public static class ErrorMessages
     public static readonly AppError SelfReferral = new(ErrorCodes.SelfReferral, "You cannot refer yourself.");
     public static readonly AppError AlreadyReferred = new(ErrorCodes.AlreadyReferred, "This account was already referred.");
     public static readonly AppError ApiKeyNotFound = new(ErrorCodes.ApiKeyNotFound, "API key not found.");
+    public static readonly AppError ApiKeyCreationChallengeRequired = new(ErrorCodes.ApiKeyCreationChallengeRequired, "Confirm the emailed code before creating an API key.");
     public static readonly AppError NotificationNotFound = new(ErrorCodes.NotificationNotFound, "Notification not found.");
     public static readonly AppError NoPushSubscriptions = new(ErrorCodes.NoPushSubscriptions, "No push subscriptions found for this user.");
     public static readonly AppError SubscriptionNotFound = new(ErrorCodes.SubscriptionNotFound, "No subscription found.");
@@ -63,6 +64,8 @@ public static class ErrorMessages
     public static readonly AppError TooManyCodeAttempts = new(ErrorCodes.TooManyAttempts, "Too many attempts. Please request a new code");
     public static readonly AppError InvalidVerificationCode = new(ErrorCodes.InvalidVerificationCode, "Invalid verification code");
     public static readonly AppError InvalidDeletionCode = new(ErrorCodes.InvalidVerificationCode, "Invalid code");
+    public static readonly AppError ApiKeyCreationCodeExpired = new(ErrorCodes.CodeExpired, "API key creation code expired or not found");
+    public static readonly AppError InvalidApiKeyCreationCode = new(ErrorCodes.InvalidVerificationCode, "Invalid code. Remaining attempts: {0}");
     public static readonly AppError InvalidGoogleToken = new(ErrorCodes.InvalidGoogleToken, "Invalid or expired Google sign-in token");
     public static readonly AppError GoogleEmailUnavailable = new(ErrorCodes.GoogleEmailUnavailable, "Could not retrieve email from Google account");
     public static readonly AppError GoogleTokenAudienceMismatch = new(ErrorCodes.GoogleTokenAudienceMismatch, "Google token was not issued for this application");
