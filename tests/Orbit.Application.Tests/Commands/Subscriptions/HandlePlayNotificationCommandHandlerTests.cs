@@ -163,6 +163,50 @@ public class HandlePlayNotificationCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_CanceledAfterPaymentFailure_PreservesPaymentFailureReason()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        user.SetPlaySubscription("tok_old", DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly);
+        user.RecordSubscriptionLapseReason(SubscriptionLapseReason.PaymentFailed);
+        StubUser(user);
+        StubVerify(new PlaySubscriptionState(false, DateTime.UtcNow, null, true, "orbit_pro", null, null));
+
+        var result = await _handler.Handle(new HandlePlayNotificationCommand(BuildPushBody(3, "tok_old", "orbit_pro")), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.SubscriptionLapseReason.Should().Be(SubscriptionLapseReason.PaymentFailed);
+    }
+
+    [Fact]
+    public async Task Handle_ExpiredAfterCancellation_PreservesCanceledReason()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        user.SetPlaySubscription("tok_old", DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly);
+        user.RecordSubscriptionLapseReason(SubscriptionLapseReason.Canceled);
+        StubUser(user);
+        StubVerify(new PlaySubscriptionState(false, DateTime.UtcNow, null, true, "orbit_pro", null, null));
+
+        var result = await _handler.Handle(new HandlePlayNotificationCommand(BuildPushBody(13, "tok_old", "orbit_pro")), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.SubscriptionLapseReason.Should().Be(SubscriptionLapseReason.Canceled);
+    }
+
+    [Fact]
+    public async Task Handle_RevokedSubscription_RecordsExpiredReason()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        user.SetPlaySubscription("tok_old", DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly);
+        StubUser(user);
+        StubVerify(new PlaySubscriptionState(false, DateTime.UtcNow, null, true, "orbit_pro", null, null));
+
+        var result = await _handler.Handle(new HandlePlayNotificationCommand(BuildPushBody(12, "tok_old", "orbit_pro")), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.SubscriptionLapseReason.Should().Be(SubscriptionLapseReason.Expired);
+    }
+
+    [Fact]
     public async Task Handle_PurchaseGrantingPro_InvokesCouponConsumerBeforeTokenOverwrite()
     {
         var user = User.Create("Thomas", "test@example.com").Value;

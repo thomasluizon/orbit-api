@@ -218,6 +218,26 @@ public class HandleWebhookCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_SubscriptionDeleted_CancellationRequested_RecordsCanceledReason()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddMonths(1));
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
+            Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(user);
+
+        var (json, signature) = BuildSignedEvent("customer.subscription.deleted",
+            BuildSubscriptionJson("sub_test", "canceled", "cancellation_requested"));
+
+        var result = await _handler.Handle(
+            new HandleWebhookCommand(json, signature), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.SubscriptionLapseReason.Should().Be(SubscriptionLapseReason.Canceled);
+    }
+
+    [Fact]
     public async Task Handle_SubscriptionUpdated_Active_UpdatesExpiry()
     {
         var user = User.Create("Thomas", "test@example.com").Value;
@@ -258,6 +278,30 @@ public class HandleWebhookCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         user.StripeSubscriptionId.Should().BeNull();
         user.SubscriptionLapseReason.Should().Be(SubscriptionLapseReason.Canceled);
+        user.SubscriptionEndedAtUtc.Should().NotBeNull();
+    }
+
+    [Theory]
+    [InlineData("payment_failed")]
+    [InlineData("payment_disputed")]
+    public async Task Handle_SubscriptionUpdated_CanceledForPayment_RecordsPaymentFailure(
+        string cancellationReason)
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddMonths(1));
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
+            Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(user);
+
+        var (json, signature) = BuildSignedEvent("customer.subscription.updated",
+            BuildSubscriptionJson("sub_test", "canceled", cancellationReason));
+
+        var result = await _handler.Handle(
+            new HandleWebhookCommand(json, signature), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.SubscriptionLapseReason.Should().Be(SubscriptionLapseReason.PaymentFailed);
         user.SubscriptionEndedAtUtc.Should().NotBeNull();
     }
 
@@ -1000,8 +1044,17 @@ public class HandleWebhookCommandHandlerTests
         """;
     }
 
-    private static string BuildSubscriptionJson(string subscriptionId, string status)
+    private static string BuildSubscriptionJson(
+        string subscriptionId, string status, string? cancellationReason = null)
     {
+        var cancellationDetails = cancellationReason is null
+            ? string.Empty
+            : $$"""
+            ,"cancellation_details": {
+                "reason": "{{cancellationReason}}"
+            }
+            """;
+
         return $$"""
         {
             "id": "{{subscriptionId}}",
@@ -1022,7 +1075,7 @@ public class HandleWebhookCommandHandlerTests
                         }
                     }
                 }]
-            }
+            }{{cancellationDetails}}
         }
         """;
     }
