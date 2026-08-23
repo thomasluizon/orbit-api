@@ -2789,7 +2789,24 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                }
+              }
+            }
           },
           "400": {
             "description": "Bad Request",
@@ -12328,6 +12345,316 @@
       "AccountabilityCadence": {
         "type": "integer"
       },
+      "ActionResult": {
+        "required": [
+          "type",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ActionStatus"
+          },
+          "entityId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "entityName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "field": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "suggestedSubHabits": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/AiAction"
+            }
+          },
+          "clarificationRequest": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ClarificationRequest"
+              }
+            ]
+          }
+        }
+      },
+      "ActionStatus": {
+        "type": "integer"
+      },
+      "AgentConfirmationRequirement": {
+        "type": "integer"
+      },
+      "AgentOperationResult": {
+        "required": [
+          "operationId",
+          "sourceName",
+          "riskClass",
+          "confirmationRequirement",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "sourceName": {
+            "type": "string"
+          },
+          "riskClass": {
+            "$ref": "#/components/schemas/AgentRiskClass"
+          },
+          "confirmationRequirement": {
+            "$ref": "#/components/schemas/AgentConfirmationRequirement"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AgentOperationStatus"
+          },
+          "summary": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "targetId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "targetName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "policyReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "pendingOperationId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "payload": { }
+        }
+      },
+      "AgentOperationStatus": {
+        "type": "integer"
+      },
+      "AgentPolicyDenial": {
+        "required": [
+          "operationId",
+          "sourceName",
+          "riskClass",
+          "confirmationRequirement",
+          "reason"
+        ],
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "sourceName": {
+            "type": "string"
+          },
+          "riskClass": {
+            "$ref": "#/components/schemas/AgentRiskClass"
+          },
+          "confirmationRequirement": {
+            "$ref": "#/components/schemas/AgentConfirmationRequirement"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "pendingOperationId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
+      "AgentRiskClass": {
+        "type": "integer"
+      },
+      "AiAction": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "$ref": "#/components/schemas/AiActionType"
+          },
+          "habitId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "frequencyUnit": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FrequencyUnit"
+              }
+            ]
+          },
+          "frequencyQuantity": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "days": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/DayOfWeek"
+            }
+          },
+          "isBadHabit": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "slipAlertEnabled": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "reminderEnabled": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "reminderTimes": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          "dueDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "dueTime": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "time"
+          },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "subHabits": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/AiAction"
+            }
+          },
+          "suggestedSubHabits": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/AiAction"
+            }
+          },
+          "tagNames": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "checklistItems": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ChecklistItem"
+            }
+          }
+        }
+      },
+      "AiActionType": {
+        "type": "integer"
+      },
       "ApplyGoalInput": {
         "required": [
           "title",
@@ -12882,6 +13209,99 @@
       "ChallengeType": {
         "type": "integer"
       },
+      "ChatResponse": {
+        "required": [
+          "aiMessage",
+          "actions"
+        ],
+        "type": "object",
+        "properties": {
+          "aiMessage": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActionResult"
+            }
+          },
+          "operations": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/AgentOperationResult"
+            }
+          },
+          "pendingOperations": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PendingAgentOperation"
+            }
+          },
+          "policyDenials": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/AgentPolicyDenial"
+            }
+          },
+          "correlationId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "relatedSurfaces": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "habitList": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/HabitListCard"
+              }
+            ]
+          },
+          "goalList": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GoalListCard"
+              }
+            ]
+          },
+          "metricsCard": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MetricsCard"
+              }
+            ]
+          }
+        }
+      },
       "CheckInAccountabilityBody": {
         "required": [
           "note"
@@ -12908,6 +13328,33 @@
           },
           "isChecked": {
             "type": "boolean"
+          }
+        }
+      },
+      "ClarificationRequest": {
+        "required": [
+          "question",
+          "operationId",
+          "missingArgumentKey",
+          "quickActions"
+        ],
+        "type": "object",
+        "properties": {
+          "question": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "missingArgumentKey": {
+            "type": "string"
+          },
+          "quickActions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuickAction"
+            }
           }
         }
       },
@@ -13432,6 +13879,64 @@
       "FrequencyUnit": {
         "type": "integer"
       },
+      "GoalListCard": {
+        "required": [
+          "items"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GoalListCardItem"
+            }
+          }
+        }
+      },
+      "GoalListCardItem": {
+        "required": [
+          "id",
+          "title",
+          "current",
+          "target",
+          "unit",
+          "deadline"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "current": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "target": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "deadline": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "GoalPositionRequest": {
         "required": [
           "id",
@@ -13523,6 +14028,63 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "HabitListCard": {
+        "required": [
+          "scope",
+          "items"
+        ],
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HabitListCardItem"
+            }
+          }
+        }
+      },
+      "HabitListCardItem": {
+        "required": [
+          "id",
+          "title",
+          "emoji",
+          "depth",
+          "isBadHabit",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "emoji": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "depth": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "isBadHabit": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string"
           }
         }
       },
@@ -13677,6 +14239,79 @@
           }
         }
       },
+      "MetricsCard": {
+        "required": [
+          "period",
+          "completionRate",
+          "totalCompletions",
+          "totalScheduled",
+          "activeDays",
+          "currentStreak",
+          "bestStreak",
+          "hasData",
+          "surfaceId"
+        ],
+        "type": "object",
+        "properties": {
+          "period": {
+            "type": "string"
+          },
+          "completionRate": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalCompletions": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalScheduled": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "activeDays": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "currentStreak": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "bestStreak": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "hasData": {
+            "type": "boolean"
+          },
+          "surfaceId": {
+            "type": "string"
+          }
+        }
+      },
       "MoveHabitParentRequest": {
         "required": [
           "parentId"
@@ -13689,6 +14324,43 @@
               "string"
             ],
             "format": "uuid"
+          }
+        }
+      },
+      "PendingAgentOperation": {
+        "required": [
+          "id",
+          "capabilityId",
+          "displayName",
+          "summary",
+          "riskClass",
+          "confirmationRequirement",
+          "expiresAtUtc"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "capabilityId": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "riskClass": {
+            "$ref": "#/components/schemas/AgentRiskClass"
+          },
+          "confirmationRequirement": {
+            "$ref": "#/components/schemas/AgentConfirmationRequirement"
+          },
+          "expiresAtUtc": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -13723,6 +14395,27 @@
             ]
           },
           "instance": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "QuickAction": {
+        "required": [
+          "label",
+          "value"
+        ],
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          },
+          "description": {
             "type": [
               "null",
               "string"

@@ -192,7 +192,8 @@ public record AgentClientContext(
     string? CurrentAppArea = null,
     bool? ShowGeneralOnToday = null,
     bool? SupportsHabitListCard = null,
-    bool? SupportsGoalListCard = null);
+    bool? SupportsGoalListCard = null,
+    bool? SupportsMetricsCard = null);
 
 public record AgentContextSnapshot(
     string Plan,

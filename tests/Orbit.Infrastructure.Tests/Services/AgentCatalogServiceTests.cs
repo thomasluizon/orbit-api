@@ -153,6 +153,7 @@ public class AgentCatalogServiceTests
             "goals",
             "advanced-api",
             "onboarding-auth",
+            "progress",
             "gamification",
             "referrals",
             "subscriptions",
