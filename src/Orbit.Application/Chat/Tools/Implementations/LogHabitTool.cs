@@ -1,14 +1,16 @@
 using System.Globalization;
 using System.Text.Json;
+using MediatR;
 using Orbit.Application.Common;
+using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class LogHabitTool(
+    IMediator mediator,
     IGenericRepository<Habit> habitRepository,
-    IGenericRepository<HabitLog> habitLogRepository,
     IUserDateService userDateService) : IAiTool
 {
     public string Name => "log_habit";
@@ -46,12 +48,10 @@ public class LogHabitTool(
         if (targetDate > today)
             return new ToolResult(false, Error: "Cannot log a future date.");
 
-        var shouldAdvanceDueDate = targetDate >= today;
-        var logResult = habit.Log(targetDate, advanceDueDate: shouldAdvanceDueDate);
-        if (logResult.IsFailure)
-            return ToolResult.FromFailure(logResult);
+        var result = await mediator.Send(new LogHabitCommand(userId, habitId, targetDate), ct);
+        if (result.IsFailure)
+            return ToolResult.FromFailure(result);
 
-        await habitLogRepository.AddAsync(logResult.Value, ct);
         return new ToolResult(true, EntityId: habit.Id.ToString(), EntityName: habit.Title);
     }
 }

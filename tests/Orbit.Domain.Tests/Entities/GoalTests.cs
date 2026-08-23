@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 
@@ -296,6 +297,34 @@ public class GoalTests
     }
 
     [Fact]
+    public void UpdateProgress_LinkedStandardGoal_ReturnsDerivedProgressErrorWithoutChangingValue()
+    {
+        var goal = CreateValidGoal();
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: new DateOnly(2026, 8, 22))).Value;
+        goal.AddHabit(habit);
+        goal.SyncStandardProgress(3);
+
+        var result = goal.UpdateProgress(8);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(DomainErrors.GoalProgressDerived.Code);
+        result.Error.Should().Contain("derived from habit logs");
+        goal.CurrentValue.Should().Be(3);
+    }
+
+    [Fact]
+    public void UpdateProgress_StreakGoal_ReturnsDerivedProgressError()
+    {
+        var goal = CreateStreakGoal();
+
+        var result = goal.UpdateProgress(3);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(DomainErrors.GoalProgressDerived.Code);
+    }
+
+    [Fact]
     public void UpdateProgress_CompletedGoal_ReturnsFailure()
     {
         var goal = CreateValidGoal(targetValue: 100);
@@ -385,6 +414,23 @@ public class GoalTests
         var result = goal.SyncStreakProgress(8);
 
         result.IsFailure.Should().BeTrue();
+    }
+
+    [Fact]
+    public void SyncStandardProgress_ReadRefreshAtTarget_DoesNotComplete()
+    {
+        var goal = CreateValidGoal(targetValue: 2);
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: new DateOnly(2026, 8, 22))).Value;
+        goal.AddHabit(habit);
+
+        var result = goal.SyncStandardProgress(2, allowCompletion: false);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeFalse();
+        goal.CurrentValue.Should().Be(2);
+        goal.Status.Should().Be(GoalStatus.Active);
+        goal.CompletedAtUtc.Should().BeNull();
     }
 
     [Fact]
@@ -744,6 +790,25 @@ public class GoalTests
     }
 
     [Fact]
+    public void RemoveHabit_ExistingHabit_UpdatesGoalTimestampWhenValueIsAlreadyZero()
+    {
+        var goal = CreateValidGoal();
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId,
+            "Exercise",
+            FrequencyUnit.Day,
+            1,
+            DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        goal.AddHabit(habit);
+        var previousUpdatedAtUtc = goal.UpdatedAtUtc;
+
+        goal.RemoveHabit(habit);
+
+        goal.UpdatedAtUtc.Should().BeOnOrAfter(previousUpdatedAtUtc);
+        goal.IsProgressDerived.Should().BeFalse();
+    }
+
+    [Fact]
     public void RemoveHabit_NonExistentHabit_NoOp()
     {
         var goal = CreateValidGoal();
@@ -787,16 +852,39 @@ public class GoalTests
     }
 
     [Fact]
-    public void RemoveHabit_LastHabitOnStandardGoal_DoesNotResetCurrentValue()
+    public void RemoveHabit_LastHabitOnStandardGoal_ResetsDerivedValueAndRestoresManualProgress()
     {
         var goal = CreateValidGoal(targetValue: 100);
         var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         goal.AddHabit(habit);
-        goal.UpdateProgress(40);
+        goal.SyncStandardProgress(40);
 
         goal.RemoveHabit(habit);
 
-        goal.CurrentValue.Should().Be(40);
+        goal.CurrentValue.Should().Be(0);
+        goal.IsProgressDerived.Should().BeFalse();
+        goal.UpdateProgress(25).IsSuccess.Should().BeTrue();
+        goal.CurrentValue.Should().Be(25);
+    }
+
+    [Fact]
+    public void RemoveHabit_LastHabitOnCompletedStandardGoal_PreservesEarnedCompletionAndRestoresManualProgress()
+    {
+        var goal = CreateValidGoal(targetValue: 2);
+        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        goal.AddHabit(habit);
+        goal.SyncStandardProgress(2);
+        var completedAtUtc = goal.CompletedAtUtc;
+
+        goal.RemoveHabit(habit);
+
+        goal.IsProgressDerived.Should().BeFalse();
+        goal.CurrentValue.Should().Be(2);
+        goal.Status.Should().Be(GoalStatus.Completed);
+        goal.CompletedAtUtc.Should().Be(completedAtUtc);
+        goal.Reactivate();
+        goal.UpdateProgress(1).IsSuccess.Should().BeTrue();
+        goal.CurrentValue.Should().Be(1);
     }
 
     [Fact]

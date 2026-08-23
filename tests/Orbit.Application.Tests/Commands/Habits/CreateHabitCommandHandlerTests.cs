@@ -3,6 +3,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
+using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -20,6 +21,7 @@ public class CreateHabitCommandHandlerTests
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
+    private readonly IGoalCompletionService _goalCompletionService = Substitute.For<IGoalCompletionService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly MemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly CreateHabitCommandHandler _handler;
@@ -31,7 +33,7 @@ public class CreateHabitCommandHandlerTests
     {
         var repos = new CreateHabitRepositories(_habitRepo, _tagRepo, _goalRepo);
         _handler = new CreateHabitCommandHandler(
-            repos, _userDateService, _payGate, _gamificationService, _unitOfWork, _cache,
+            repos, _userDateService, _payGate, _gamificationService, _goalCompletionService, _unitOfWork, _cache,
             Substitute.For<ILogger<CreateHabitCommandHandler>>());
 
         _payGate.CanCreateHabits(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
@@ -219,7 +221,10 @@ public class CreateHabitCommandHandlerTests
     {
         var goal = Goal.Create(UserId, "Fitness Goal", 10, "workouts").Value;
 
-        _goalRepo.FindTrackedAsync(Arg.Any<Expression<Func<Goal, bool>>>(), Arg.Any<CancellationToken>())
+        _goalRepo.FindTrackedAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>())
             .Returns(new List<Goal> { goal });
 
         var command = new CreateHabitCommand(
@@ -230,13 +235,18 @@ public class CreateHabitCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         await _goalRepo.Received(1).FindTrackedAsync(
-            Arg.Any<Expression<Func<Goal, bool>>>(), Arg.Any<CancellationToken>());
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task Handle_ForeignGoalId_ReturnsFailureWithoutCreating()
     {
-        _goalRepo.FindTrackedAsync(Arg.Any<Expression<Func<Goal, bool>>>(), Arg.Any<CancellationToken>())
+        _goalRepo.FindTrackedAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>())
             .Returns(new List<Goal>());
 
         var command = new CreateHabitCommand(
@@ -449,6 +459,8 @@ public class CreateHabitCommandHandlerTests
         await _tagRepo.DidNotReceive().FindTrackedAsync(
             Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>());
         await _goalRepo.DidNotReceive().FindTrackedAsync(
-            Arg.Any<Expression<Func<Goal, bool>>>(), Arg.Any<CancellationToken>());
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>());
     }
 }

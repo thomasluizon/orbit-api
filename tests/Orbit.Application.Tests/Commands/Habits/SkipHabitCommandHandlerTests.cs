@@ -1,8 +1,8 @@
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Common;
+using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -18,7 +18,7 @@ public class SkipHabitCommandHandlerTests
     private readonly IGenericRepository<HabitLog> _habitLogRepo = Substitute.For<IGenericRepository<HabitLog>>();
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
-    private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
+    private readonly IGoalCompletionService _goalCompletionService = Substitute.For<IGoalCompletionService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly MemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly SkipHabitCommandHandler _handler;
@@ -29,8 +29,8 @@ public class SkipHabitCommandHandlerTests
     public SkipHabitCommandHandlerTests()
     {
         _handler = new SkipHabitCommandHandler(
-            new SkipHabitRepositories(_habitRepo, _habitLogRepo, _goalRepo), _userDateService, _gamificationService, _unitOfWork, _cache,
-            Substitute.For<ILogger<SkipHabitCommandHandler>>());
+            new SkipHabitRepositories(_habitRepo, _habitLogRepo), _userDateService,
+            _goalCompletionService, _unitOfWork, _cache);
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);
@@ -67,7 +67,8 @@ public class SkipHabitCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         habit.DueDate.Should().BeAfter(Today);
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _goalCompletionService.Received(1).SyncDerivedGoalsAsync(
+            UserId, Arg.Any<IReadOnlyCollection<Guid>>(), Today, false, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -234,7 +235,12 @@ public class SkipHabitCommandHandlerTests
         var result = await _handler.Handle(new SkipHabitCommand(UserId, skippedHabit.Id, Today), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        goal.CurrentValue.Should().Be(2);
+        await _goalCompletionService.Received(1).SyncDerivedGoalsAsync(
+            UserId,
+            Arg.Is<IReadOnlyCollection<Guid>>(ids => ids.SequenceEqual(new[] { goal.Id })),
+            Today,
+            false,
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -251,7 +257,8 @@ public class SkipHabitCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         await _habitLogRepo.Received(1).AddAsync(Arg.Any<HabitLog>(), Arg.Any<CancellationToken>());
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _goalCompletionService.Received(1).SyncDerivedGoalsAsync(
+            UserId, Arg.Any<IReadOnlyCollection<Guid>>(), Today, false, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -305,7 +312,8 @@ public class SkipHabitCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         habit.DueDate.Should().BeAfter(boundary);
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _goalCompletionService.Received(1).SyncDerivedGoalsAsync(
+            UserId, Arg.Any<IReadOnlyCollection<Guid>>(), Today, false, Arg.Any<CancellationToken>());
     }
 
     private void SetupHabitFound(Habit habit)

@@ -1,10 +1,13 @@
 using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
+using MediatR;
 using NSubstitute;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Common;
+using Orbit.Application.Goals.Commands;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -14,8 +17,7 @@ namespace Orbit.Application.Tests.Chat.Tools;
 public class LinkHabitsToGoalToolTests
 {
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
-    private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
-    private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
+    private readonly IMediator _mediator = Substitute.For<IMediator>();
     private readonly LinkHabitsToGoalTool _tool;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -23,7 +25,9 @@ public class LinkHabitsToGoalToolTests
 
     public LinkHabitsToGoalToolTests()
     {
-        _tool = new LinkHabitsToGoalTool(_goalRepo, _habitRepo, _unitOfWork);
+        _tool = new LinkHabitsToGoalTool(_mediator, _goalRepo);
+        _mediator.Send(Arg.Any<LinkHabitsToGoalCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success());
     }
 
     [Fact]
@@ -32,13 +36,14 @@ public class LinkHabitsToGoalToolTests
         var goal = Goal.Create(UserId, "Be Healthy", 1, "goal").Value;
         var habit = CreateHabit("Run");
         SetupGoalFound(goal);
-        SetupHabitsFound(habit);
 
         var result = await Execute($$$"""{"goal_id": "{{{goal.Id}}}", "habit_ids": ["{{{habit.Id}}}"]}""");
 
         result.Success.Should().BeTrue();
         result.EntityName.Should().Be("Be Healthy");
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _mediator.Received(1).Send(
+            Arg.Is<LinkHabitsToGoalCommand>(command => command.GoalId == goal.Id && command.HabitIds.SequenceEqual(new[] { habit.Id })),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -59,20 +64,19 @@ public class LinkHabitsToGoalToolTests
     }
 
     [Fact]
-    public async Task HabitNotFound_LinksOnlyFoundHabits()
+    public async Task HabitNotFound_ReturnsCommandFailure()
     {
         var goal = Goal.Create(UserId, "Be Healthy", 1, "goal").Value;
         SetupGoalFound(goal);
 
-        _habitRepo.FindTrackedAsync(
-            Arg.Any<Expression<Func<Habit, bool>>>(),
-            Arg.Any<CancellationToken>()
-        ).Returns(new List<Habit>());
+        _mediator.Send(Arg.Any<LinkHabitsToGoalCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure(ErrorMessages.HabitNotFound));
 
         var missingId = Guid.NewGuid();
         var result = await Execute($$$"""{"goal_id": "{{{goal.Id}}}", "habit_ids": ["{{{missingId}}}"]}""");
 
-        result.Success.Should().BeTrue();
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be(ErrorMessages.HabitNotFound.Message);
     }
 
     [Fact]
@@ -118,13 +122,13 @@ public class LinkHabitsToGoalToolTests
         SetupGoalFound(goal);
 
         var newHabit = CreateHabit("Run");
-        SetupHabitsFound(newHabit);
 
         var result = await Execute($$$"""{"goal_id": "{{{goal.Id}}}", "habit_ids": ["{{{newHabit.Id}}}"]}""");
 
         result.Success.Should().BeTrue();
-        goal.Habits.Should().Contain(newHabit);
-        goal.Habits.Should().NotContain(oldHabit);
+        await _mediator.Received(1).Send(
+            Arg.Is<LinkHabitsToGoalCommand>(command => command.HabitIds.SequenceEqual(new[] { newHabit.Id })),
+            Arg.Any<CancellationToken>());
     }
 
     private static Habit CreateHabit(string title)
@@ -139,14 +143,6 @@ public class LinkHabitsToGoalToolTests
             Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
             Arg.Any<CancellationToken>()
         ).Returns(goal);
-    }
-
-    private void SetupHabitsFound(params Habit[] habits)
-    {
-        _habitRepo.FindTrackedAsync(
-            Arg.Any<Expression<Func<Habit, bool>>>(),
-            Arg.Any<CancellationToken>()
-        ).Returns(habits.ToList());
     }
 
     private async Task<ToolResult> Execute(string json)

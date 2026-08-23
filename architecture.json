@@ -2722,7 +2722,7 @@
       "ChecklistTemplates": 5,
       "Common": 35,
       "Gamification": 31,
-      "Goals": 33,
+      "Goals": 35,
       "Habits": 74,
       "Marketing": 4,
       "Notifications": 13,
@@ -2929,15 +2929,15 @@
       "Challenges": 14,
       "Chat": 61,
       "ChecklistTemplates": 9,
-      "Common": 174,
-      "Gamification": 38,
-      "Goals": 38,
-      "Habits": 83,
+      "Common": 176,
+      "Gamification": 41,
+      "Goals": 54,
+      "Habits": 86,
       "Marketing": 6,
       "Notifications": 19,
       "Profile": 39,
       "Referrals": 13,
-      "Social": 32,
+      "Social": 35,
       "Subscriptions": 18,
       "Support": 4,
       "Tags": 14,
@@ -3417,8 +3417,8 @@
         "testClass": "BulkLogHabitsToolTests",
         "file": "tests/Orbit.Application.Tests/Chat/Tools/BulkLogHabitsToolTests.cs",
         "references": [
-          "Habit",
-          "HabitLog"
+          "BulkLogHabitsCommand",
+          "Habit"
         ]
       },
       {
@@ -3562,7 +3562,8 @@
         "testClass": "GoalReviewToolTests",
         "file": "tests/Orbit.Application.Tests/Chat/Tools/GoalReviewToolTests.cs",
         "references": [
-          "Goal"
+          "Goal",
+          "Habit"
         ]
       },
       {
@@ -3583,7 +3584,8 @@
         "file": "tests/Orbit.Application.Tests/Chat/Tools/LinkHabitsToGoalToolTests.cs",
         "references": [
           "Goal",
-          "Habit"
+          "Habit",
+          "LinkHabitsToGoalCommand"
         ]
       },
       {
@@ -3591,7 +3593,7 @@
         "file": "tests/Orbit.Application.Tests/Chat/Tools/LogHabitToolTests.cs",
         "references": [
           "Habit",
-          "HabitLog"
+          "LogHabitCommand"
         ]
       },
       {
@@ -4093,6 +4095,7 @@
         "references": [
           "Goal",
           "GoalProgressLog",
+          "Habit",
           "UpdateGoalProgressCommand",
           "UpdateGoalProgressCommandHandler"
         ]
@@ -4123,6 +4126,7 @@
         "references": [
           "BulkDeleteHabitsCommand",
           "BulkDeleteHabitsCommandHandler",
+          "Goal",
           "Habit"
         ]
       },
@@ -4132,8 +4136,13 @@
         "references": [
           "BulkLogHabitsCommand",
           "BulkLogHabitsCommandHandler",
+          "Goal",
           "Habit",
-          "HabitLog"
+          "HabitLog",
+          "Notification",
+          "User",
+          "UserAchievement",
+          "XpAwardLog"
         ]
       },
       {
@@ -4173,6 +4182,7 @@
         "references": [
           "DeleteHabitCommand",
           "DeleteHabitCommandHandler",
+          "Goal",
           "Habit"
         ]
       },
@@ -4245,6 +4255,7 @@
         "testClass": "RestoreHabitCommandHandlerTests",
         "file": "tests/Orbit.Application.Tests/Commands/Habits/RestoreHabitCommandHandlerTests.cs",
         "references": [
+          "Goal",
           "Habit",
           "RestoreHabitCommand",
           "RestoreHabitCommandHandler"
@@ -5168,7 +5179,8 @@
         "references": [
           "GetGoalsQuery",
           "GetGoalsQueryHandler",
-          "Goal"
+          "Goal",
+          "Habit"
         ]
       },
       {
@@ -5494,7 +5506,7 @@
         ]
       },
       {
-        "testClass": "StreakGoalReadSyncerTests",
+        "testClass": "GoalProgressReadSyncerTests",
         "file": "tests/Orbit.Application.Tests/Services/Goals/StreakGoalReadSyncerTests.cs",
         "references": [
           "Goal",
@@ -7655,6 +7667,26 @@
         ]
       },
       {
+        "testClass": "GoalCompletionServiceTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Services/GoalCompletionServiceTests.cs",
+        "references": [
+          "Goal",
+          "GoalProgressLog",
+          "Habit",
+          "HabitLog",
+          "LinkGoalsToHabitCommand",
+          "LinkGoalsToHabitCommandHandler",
+          "LinkHabitsToGoalCommand",
+          "LinkHabitsToGoalCommandHandler",
+          "Notification",
+          "UpdateGoalProgressCommand",
+          "UpdateGoalProgressCommandHandler",
+          "User",
+          "UserAchievement",
+          "XpAwardLog"
+        ]
+      },
+      {
         "testClass": "GoalDeadlineNotificationServiceTests",
         "file": "tests/Orbit.Infrastructure.Tests/Services/GoalDeadlineNotificationServiceTests.cs",
         "references": [
@@ -7885,7 +7917,11 @@
         "references": [
           "Goal",
           "Habit",
-          "User"
+          "HabitLog",
+          "Notification",
+          "User",
+          "UserAchievement",
+          "XpAwardLog"
         ]
       },
       {

@@ -11,7 +11,8 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class GoalReviewTool(
     IGenericRepository<Goal> goalRepository,
-    IUserDateService userDateService) : IAiTool
+    IUserDateService userDateService,
+    IGoalProgressReadSyncer goalProgressReadSyncer) : IAiTool
 {
     public string Name => "review_goals";
     public string Description => "Review all active goals with progress metrics, projections, and linked habit performance. Use when user asks about their goals progress.";
@@ -22,6 +23,7 @@ public class GoalReviewTool(
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
         var userToday = await userDateService.GetUserTodayAsync(userId, ct);
+        var freshValues = await goalProgressReadSyncer.ComputeFreshValuesAsync(userId, userToday, ct);
         var streakWindowStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
 
         var goals = await goalRepository.FindAsync(
@@ -35,6 +37,9 @@ public class GoalReviewTool(
         var sb = new StringBuilder();
         foreach (var goal in goals)
         {
+            if (freshValues.TryGetValue(goal.Id, out var freshValue))
+                GoalProgressSyncService.ApplyReadValue(goal, freshValue);
+
             var m = GoalMetricsCalculator.Calculate(goal, userToday);
             sb.AppendLine($"Goal: \"{goal.Title}\" | {goal.CurrentValue}/{goal.TargetValue} {goal.Unit} ({m.ProgressPercentage}%)");
             sb.AppendLine($"  Status: {m.TrackingStatus} | Velocity: {m.VelocityPerDay} {goal.Unit}/day");

@@ -19,7 +19,8 @@ public record GamificationRepositories(
     IGenericRepository<HabitLog> HabitLogRepository,
     IGenericRepository<Goal> GoalRepository,
     IGenericRepository<UserAchievement> AchievementRepository,
-    IGenericRepository<Notification> NotificationRepository);
+    IGenericRepository<Notification> NotificationRepository,
+    IGenericRepository<XpAwardLog> XpAwardLogRepository);
 
 /// <summary>Groups the outbound notification channels gamification emits through to keep the service constructor small.</summary>
 public record GamificationNotifiers(
@@ -280,11 +281,19 @@ public partial class GamificationService(
         }, ct);
     }
 
-    public async Task ProcessGoalCompleted(Guid userId, CancellationToken ct = default)
+    public async Task ProcessGoalCompleted(Guid userId, Guid goalId, CancellationToken ct = default)
     {
+        var wasAlreadyAwarded = await repos.XpAwardLogRepository.AnyAsync(
+            award => award.UserId == userId
+                     && award.Source == XpAwardSource.GoalCompleted
+                     && award.SourceId == goalId,
+            ct);
+        if (wasAlreadyAwarded)
+            return;
+
         await ProcessGamificationEventAsync(userId, async (user, earned, newAchievements) =>
         {
-            await AwardXpAsync(user, 100, XpAwardSource.GoalCompleted, sourceId: null, awardedAtUtc: DateTime.UtcNow, ct);
+            await AwardXpAsync(user, 100, XpAwardSource.GoalCompleted, goalId, awardedAtUtc: DateTime.UtcNow, ct);
 
             if (!user.HasProAccess) return;
 

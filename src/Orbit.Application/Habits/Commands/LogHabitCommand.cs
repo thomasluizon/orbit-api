@@ -37,7 +37,6 @@ public record LogHabitCommand(
 public record LogHabitRepositories(
     IGenericRepository<Habit> HabitRepository,
     IGenericRepository<HabitLog> HabitLogRepository,
-    IGenericRepository<Goal> GoalRepository,
     IGenericRepository<User> UserRepository);
 
 /// <summary>
@@ -47,6 +46,7 @@ public record LogHabitServices(
     IUserDateService UserDateService,
     IUserStreakService UserStreakService,
     IGamificationService GamificationService,
+    IGoalCompletionService GoalCompletionService,
     IChallengeProgressService ChallengeProgressService,
     IMediator Mediator,
     IPayGateService? PayGate = null);
@@ -124,11 +124,16 @@ public partial class LogHabitCommandHandler(
                 return unlogResult.PropagateError<LogHabitResponse>();
             unlogEntity = unlogResult.Value;
 
-            goalSync = await UpdateLinkedGoalProgress(habit, -1, today, cancellationToken);
+            var goalIds = habit.Goals.Select(g => g.Id).ToList();
 
             try
             {
-                await unitOfWork.SaveChangesAsync(cancellationToken);
+                var updates = await services.GoalCompletionService.SyncDerivedGoalsAsync(
+                    habit.UserId,
+                    goalIds,
+                    today,
+                    cancellationToken: cancellationToken);
+                goalSync = ToLinkedGoalSyncResult(updates);
                 break;
             }
             catch (DbUpdateConcurrencyException) when (attempt < MaxLogAttempts)
@@ -143,16 +148,18 @@ public partial class LogHabitCommandHandler(
             attempt++;
         }
 
+        var unlogId = unlogEntity.Id;
+        var userId = habit.UserId;
         UserStreakState? streakState = null;
         await ConcurrencyRetry.SaveWithRetryAsync(
             unitOfWork,
             async ct => streakState = await services.UserStreakService.RecalculateAsync(
-                habit.UserId, awardFreezeIfEligible: false, ct),
+                userId, awardFreezeIfEligible: false, ct),
             cancellationToken);
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId, today);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, userId, today);
 
         return Result.Success(new LogHabitResponse(
-            unlogEntity.Id,
+            unlogId,
             IsFirstCompletionToday: false,
             CurrentStreak: streakState?.CurrentStreak ?? 0,
             LinkedGoalUpdates: goalSync.Updates));
@@ -180,11 +187,16 @@ public partial class LogHabitCommandHandler(
 
             await repos.HabitLogRepository.AddAsync(logEntity, cancellationToken);
 
-            goalSync = await UpdateLinkedGoalProgress(habit, 1, today, cancellationToken);
+            var goalIds = habit.Goals.Select(g => g.Id).ToList();
 
             try
             {
-                await unitOfWork.SaveChangesAsync(cancellationToken);
+                var updates = await services.GoalCompletionService.SyncDerivedGoalsAsync(
+                    request.UserId,
+                    goalIds,
+                    today,
+                    cancellationToken: cancellationToken);
+                goalSync = ToLinkedGoalSyncResult(updates);
                 break;
             }
             catch (DbUpdateException ex) when (IsUniqueViolation(ex))
@@ -203,23 +215,21 @@ public partial class LogHabitCommandHandler(
             attempt++;
         }
 
+        var logId = logEntity.Id;
         var streakState = await services.UserStreakService.RecalculateAsync(request.UserId, cancellationToken: cancellationToken);
         var gamificationResult = await ProcessGamificationSafeAsync(request.UserId, request.HabitId, cancellationToken);
         await ProcessChallengeProgressSafeAsync(request.UserId, request.HabitId, cancellationToken);
         await ProcessOnboardingChecklistSafeAsync(request.UserId, OnboardingChecklistSignal.HabitLogged, cancellationToken);
 
-        if (goalSync.AnyJustCompleted)
-            await ProcessGoalCompletionSafeAsync(request.UserId, cancellationToken);
-
         if (gamificationResult is null)
             await PersistStreakRecalcAsync(request.UserId, cancellationToken);
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId, today);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
         await CheckReferralCompletionSafeAsync(request.UserId, cancellationToken);
 
         return Result.Success(new LogHabitResponse(
-            logEntity.Id,
+            logId,
             isFirstCompletionToday,
             CurrentStreak: streakState?.CurrentStreak ?? 0,
             LinkedGoalUpdates: goalSync.Updates,
@@ -232,7 +242,9 @@ public partial class LogHabitCommandHandler(
         var loggableWindowStart = today.AddDays(-AppConstants.DefaultOverdueWindowDays);
         return repos.HabitRepository.FindOneTrackedAsync(
             h => h.Id == habitId,
-            q => q.Include(h => h.Logs.Where(l => l.Date >= loggableWindowStart)).Include(h => h.Goals),
+            q => q.Include(h => h.Logs.Where(l => l.Date >= loggableWindowStart))
+                  .Include(h => h.Goals)
+                  .AsSplitQuery(),
             cancellationToken);
     }
 
@@ -339,63 +351,20 @@ public partial class LogHabitCommandHandler(
         }
     }
 
-    private async Task<LinkedGoalSyncResult> UpdateLinkedGoalProgress(Habit habit, decimal delta, DateOnly today, CancellationToken ct)
-    {
-        if (habit.Goals.Count == 0) return LinkedGoalSyncResult.None;
-
-        var goalIds = habit.Goals.Select(g => g.Id).ToHashSet();
-        var streakWindowStart = today.AddDays(-AppConstants.MaxStreakLookbackDays);
-
-        var trackedGoals = await repos.GoalRepository.FindTrackedAsync(
-            g => goalIds.Contains(g.Id),
-            q => q.Include(g => g.Habits).ThenInclude(h => h.Logs.Where(l => l.Date >= streakWindowStart)),
-            ct);
-
-        var updates = new List<LinkedGoalUpdate>();
-        var anyJustCompleted = false;
-        foreach (var trackedGoal in trackedGoals)
-        {
-            if (trackedGoal.Type == GoalType.Streak && trackedGoal.Status == GoalStatus.Active)
-            {
-                var outcome = GoalStreakSyncService.SyncCurrentStreak(trackedGoal, today);
-                if (outcome.Synced)
-                {
-                    anyJustCompleted |= outcome.JustCompleted;
-                    updates.Add(new LinkedGoalUpdate(trackedGoal.Id, trackedGoal.Title, trackedGoal.CurrentValue, trackedGoal.TargetValue));
-                }
-            }
-            else if (trackedGoal.Status == GoalStatus.Active)
-            {
-                var newValue = Math.Max(0, trackedGoal.CurrentValue + delta);
-                var progressResult = trackedGoal.UpdateProgress(newValue);
-                anyJustCompleted |= progressResult.IsSuccess && progressResult.Value;
-                updates.Add(new LinkedGoalUpdate(trackedGoal.Id, trackedGoal.Title, newValue, trackedGoal.TargetValue));
-            }
-        }
-
-        return new LinkedGoalSyncResult(updates, anyJustCompleted);
-    }
-
-    private async Task ProcessGoalCompletionSafeAsync(Guid userId, CancellationToken ct)
-    {
-        try
-        {
-            await services.GamificationService.ProcessGoalCompleted(userId, ct);
-        }
-        catch (Exception ex)
-        {
-            LogGamificationGoalCompletionFailed(logger, ex, userId);
-        }
-    }
+    private static LinkedGoalSyncResult ToLinkedGoalSyncResult(IReadOnlyList<GoalCompletionUpdate> updates) =>
+        updates.Count == 0
+            ? new LinkedGoalSyncResult(null)
+            : new LinkedGoalSyncResult(updates.Select(update => new LinkedGoalUpdate(
+                update.GoalId,
+                update.Title,
+                update.CurrentValue,
+                update.TargetValue)).ToList());
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Gamification processing failed for habit {HabitId}")]
     private static partial void LogGamificationHabitLogFailed(ILogger logger, Exception ex, Guid habitId);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Referral completion check failed for user {UserId}")]
     private static partial void LogReferralCompletionCheckFailed(ILogger logger, Exception ex, Guid userId);
-
-    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Gamification processing failed for linked goal completion by user {UserId}")]
-    private static partial void LogGamificationGoalCompletionFailed(ILogger logger, Exception ex, Guid userId);
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Onboarding checklist processing failed for user {UserId}")]
     private static partial void LogOnboardingChecklistFailed(ILogger logger, Exception ex, Guid userId);
@@ -404,7 +373,4 @@ public partial class LogHabitCommandHandler(
     private static partial void LogChallengeProgressFailed(ILogger logger, Exception ex, Guid habitId);
 }
 
-internal record LinkedGoalSyncResult(IReadOnlyList<LinkedGoalUpdate>? Updates, bool AnyJustCompleted)
-{
-    public static readonly LinkedGoalSyncResult None = new(null, false);
-}
+internal record LinkedGoalSyncResult(IReadOnlyList<LinkedGoalUpdate>? Updates);

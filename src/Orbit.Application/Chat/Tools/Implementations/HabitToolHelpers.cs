@@ -67,7 +67,7 @@ internal static class HabitToolHelpers
         required = new[] { "habit_ids" }
     };
 
-    private static (List<Guid> HabitIds, ToolResult? Error) ParseHabitIds(JsonElement args)
+    public static (List<Guid> HabitIds, ToolResult? Error) ParseHabitIds(JsonElement args)
     {
         if (!args.TryGetProperty("habit_ids", out var idsEl) || idsEl.ValueKind != JsonValueKind.Array)
             return (new List<Guid>(), new ToolResult(false, Error: "habit_ids is required and must be an array of GUIDs."));

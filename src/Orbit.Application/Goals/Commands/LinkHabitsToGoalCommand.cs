@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -18,7 +19,7 @@ public class LinkHabitsToGoalCommandHandler(
     IGenericRepository<Goal> goalRepository,
     IGenericRepository<Habit> habitRepository,
     IPayGateService payGate,
-    IUnitOfWork unitOfWork,
+    IGoalCompletionService goalCompletionService,
     IUserDateService userDateService,
     IMemoryCache cache) : IRequestHandler<LinkHabitsToGoalCommand, Result>
 {
@@ -31,9 +32,10 @@ public class LinkHabitsToGoalCommandHandler(
         if (request.HabitIds.Count > AppConstants.MaxHabitsPerGoal)
             return Result.Failure(ErrorMessages.MaxHabitsPerGoal.Format(AppConstants.MaxHabitsPerGoal));
 
+        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var goal = await goalRepository.FindOneTrackedAsync(
             g => g.Id == request.GoalId && g.UserId == request.UserId,
-            q => q.Include(g => g.Habits),
+            q => q.Include(g => g.Habits).ThenInclude(h => h.Logs),
             cancellationToken);
 
         if (goal is null)
@@ -41,6 +43,7 @@ public class LinkHabitsToGoalCommandHandler(
 
         var habits = await habitRepository.FindTrackedAsync(
             h => request.HabitIds.Contains(h.Id) && h.UserId == request.UserId,
+            q => q.Include(h => h.Logs),
             cancellationToken);
 
         var habitsResolved = OwnershipValidation.AllResolved(request.HabitIds, habits, h => h.Id, ErrorMessages.HabitNotFound);
@@ -53,11 +56,15 @@ public class LinkHabitsToGoalCommandHandler(
         foreach (var habit in habits)
             goal.AddHabit(habit);
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await goalCompletionService.SyncDerivedGoalsAsync(
+            request.UserId,
+            [goal.Id],
+            today,
+            cancellationToken: cancellationToken);
 
-        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
         return Result.Success();
     }
+
 }

@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
@@ -31,12 +32,16 @@ public class DeleteHabitCommandHandler(
 
         var userHabits = await habitRepository.FindTrackedAsync(
             h => h.UserId == request.UserId,
+            query => query.Include(h => h.Goals),
             cancellationToken);
         var childrenByParentId = userHabits.ToLookup(h => h.ParentHabitId);
 
         var deletedAtUtc = DateTime.UtcNow;
         foreach (var inSubtree in HabitHierarchy.SelfAndDescendants(habit, childrenByParentId))
+        {
+            inSubtree.RemoveAllGoals();
             inSubtree.SoftDelete(deletedAtUtc);
+        }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await ConcurrencyRetry.SaveWithRetryAsync(

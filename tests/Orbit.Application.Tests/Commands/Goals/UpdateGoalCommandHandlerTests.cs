@@ -5,6 +5,7 @@ using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Commands;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -19,7 +20,7 @@ public class UpdateGoalCommandHandlerTests
     private readonly IGenericRepository<GoalProgressLog> _progressLogRepo = Substitute.For<IGenericRepository<GoalProgressLog>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
-    private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
+    private readonly IGoalCompletionService _goalCompletionService = Substitute.For<IGoalCompletionService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly UpdateGoalCommandHandler _handler;
@@ -31,8 +32,8 @@ public class UpdateGoalCommandHandlerTests
     public UpdateGoalCommandHandlerTests()
     {
         _handler = new UpdateGoalCommandHandler(
-            new GoalRepositories(_goalRepo, _progressLogRepo), _payGate, _userDateService, _gamificationService, _unitOfWork, _cache,
-            Substitute.For<ILogger<UpdateGoalCommandHandler>>());
+            new GoalRepositories(_goalRepo, _progressLogRepo), _payGate, _userDateService,
+            _goalCompletionService, _unitOfWork, _cache);
         _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
@@ -201,7 +202,8 @@ public class UpdateGoalCommandHandlerTests
         await _progressLogRepo.Received(1).AddAsync(
             Arg.Is<GoalProgressLog>(l => l.Value == 80 && l.PreviousValue == 80),
             Arg.Any<CancellationToken>());
-        await _gamificationService.Received(1).ProcessGoalCompleted(UserId, Arg.Any<CancellationToken>());
+        await _goalCompletionService.Received(1).SaveCompletedGoalAsync(
+            UserId, goal.Id, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -219,7 +221,8 @@ public class UpdateGoalCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         goal.Status.Should().Be(GoalStatus.Active);
         await _progressLogRepo.DidNotReceive().AddAsync(Arg.Any<GoalProgressLog>(), Arg.Any<CancellationToken>());
-        await _gamificationService.DidNotReceive().ProcessGoalCompleted(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        await _goalCompletionService.DidNotReceive().SaveCompletedGoalAsync(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -236,23 +239,23 @@ public class UpdateGoalCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         goal.Status.Should().Be(GoalStatus.Active);
         await _progressLogRepo.DidNotReceive().AddAsync(Arg.Any<GoalProgressLog>(), Arg.Any<CancellationToken>());
-        await _gamificationService.DidNotReceive().ProcessGoalCompleted(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        await _goalCompletionService.DidNotReceive().SaveCompletedGoalAsync(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_TargetEditCompletes_GamificationThrows_StillSucceeds()
+    public async Task Handle_TargetEditCompletes_CompletionPipelineThrows_Propagates()
     {
         var goal = Goal.Create(UserId, "Read", 100, "pages").Value;
         goal.UpdateProgress(80);
         SetupGoalFound(goal);
-        _gamificationService.ProcessGoalCompleted(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+        _goalCompletionService.SaveCompletedGoalAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("gamification error"));
 
         var command = new UpdateGoalCommand(UserId, GoalId, "Read", null, 50, "pages", null);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        var act = () => _handler.Handle(command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeTrue();
-        goal.Status.Should().Be(GoalStatus.Completed);
+        await act.Should().ThrowAsync<InvalidOperationException>();
     }
 }

@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
@@ -7,6 +9,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 public class UpdateGoalProgressTool(
     IGenericRepository<Goal> goalRepository,
     IGenericRepository<GoalProgressLog> progressLogRepository,
+    IGoalCompletionService goalCompletionService,
     IUnitOfWork unitOfWork) : IAiTool, IConcurrencyRetryableTool
 {
     public string Name => "update_goal_progress";
@@ -35,15 +38,19 @@ public class UpdateGoalProgressTool(
         var (goal, error) = await ResolveGoalAsync(args, userId, ct);
         if (goal is null) return new ToolResult(false, Error: error);
 
+        var goalId = goal.Id;
+        var goalTitle = goal.Title;
         var previousValue = goal.CurrentValue;
-        var progressLog = GoalProgressLog.Create(goal.Id, previousValue, valueEl.GetDecimal(), note);
-        await progressLogRepository.AddAsync(progressLog, ct);
-
         var result = goal.UpdateProgress(valueEl.GetDecimal());
         if (result.IsFailure) return ToolResult.FromFailure(result);
 
-        await unitOfWork.SaveChangesAsync(ct);
-        return new ToolResult(true, EntityId: goal.Id.ToString(), EntityName: goal.Title);
+        var progressLog = GoalProgressLog.Create(goal.Id, previousValue, valueEl.GetDecimal(), note);
+        await progressLogRepository.AddAsync(progressLog, ct);
+        if (result.Value)
+            await goalCompletionService.SaveCompletedGoalAsync(userId, goalId, ct);
+        else
+            await unitOfWork.SaveChangesAsync(ct);
+        return new ToolResult(true, EntityId: goalId.ToString(), EntityName: goalTitle);
     }
 
     private async Task<(Goal? Goal, string? Error)> ResolveGoalAsync(JsonElement args, Guid userId, CancellationToken ct)
@@ -51,7 +58,9 @@ public class UpdateGoalProgressTool(
         if (args.TryGetProperty("goal_id", out var idEl) && Guid.TryParse(idEl.GetString(), out var goalId))
         {
             var byId = await goalRepository.FindOneTrackedAsync(
-                g => g.Id == goalId && g.UserId == userId, cancellationToken: ct);
+                g => g.Id == goalId && g.UserId == userId,
+                q => q.Include(g => g.Habits),
+                ct);
             return byId is null ? (null, $"Goal {goalId} not found.") : (byId, null);
         }
 
@@ -59,7 +68,10 @@ public class UpdateGoalProgressTool(
             return (null, "Provide either goal_id or goal_name.");
 
         var goalName = nameEl.GetString() ?? string.Empty;
-        var goals = await goalRepository.FindTrackedAsync(g => g.UserId == userId && g.Status == Domain.Enums.GoalStatus.Active, ct);
+        var goals = await goalRepository.FindTrackedAsync(
+            g => g.UserId == userId && g.Status == Domain.Enums.GoalStatus.Active,
+            q => q.Include(g => g.Habits),
+            ct);
         var goal = goals.FirstOrDefault(g => g.Title.Equals(goalName, StringComparison.OrdinalIgnoreCase))
             ?? goals.FirstOrDefault(g => g.Title.Contains(goalName, StringComparison.OrdinalIgnoreCase));
 

@@ -1,6 +1,7 @@
 using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Goals.Queries;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -13,6 +14,7 @@ public class GetGoalMetricsQueryHandlerTests
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
+    private readonly IGoalProgressReadSyncer _goalProgressReadSyncer = Substitute.For<IGoalProgressReadSyncer>();
     private readonly GetGoalMetricsQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -21,10 +23,16 @@ public class GetGoalMetricsQueryHandlerTests
 
     public GetGoalMetricsQueryHandlerTests()
     {
-        _handler = new GetGoalMetricsQueryHandler(_goalRepo, _payGate, _userDateService);
+        _handler = new GetGoalMetricsQueryHandler(
+            _goalRepo,
+            _payGate,
+            _userDateService,
+            _goalProgressReadSyncer);
         _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Orbit.Domain.Common.Result.Success());
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
+        _goalProgressReadSyncer.ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<Guid, int>());
     }
 
     private static Goal CreateTestGoal()
@@ -118,11 +126,36 @@ public class GetGoalMetricsQueryHandlerTests
         badHabit.AddGoal(goal);
         goal.AddHabit(badHabit);
         ArrangeGoal(goal);
+        _goalProgressReadSyncer.ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<Guid, int> { [goal.Id] = 2 });
 
         var result = await _handler.Handle(new GetGoalMetricsQuery(UserId, GoalId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.ProgressPercentage.Should().Be(Math.Round(2m / 7m * 100, 1));
+        goal.Status.Should().Be(GoalStatus.Active);
+    }
+
+    [Fact]
+    public async Task Handle_LinkedStandardGoal_CalculatesMetricsFromFreshValueWithoutCompleting()
+    {
+        var goal = Goal.Create(UserId, "Read books", 10, "books").Value;
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId,
+            "Read",
+            FrequencyUnit.Day,
+            1,
+            DueDate: Today)).Value;
+        goal.AddHabit(habit);
+        ArrangeGoal(goal);
+        _goalProgressReadSyncer.ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<Guid, int> { [goal.Id] = 3 });
+
+        var result = await _handler.Handle(new GetGoalMetricsQuery(UserId, GoalId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.ProgressPercentage.Should().Be(30);
+        goal.CurrentValue.Should().Be(3);
         goal.Status.Should().Be(GoalStatus.Active);
     }
 }
