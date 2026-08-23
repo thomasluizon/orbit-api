@@ -1,7 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
-using Orbit.Application.Gamification.Backfill;
 using Orbit.Application.Gamification.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -30,7 +29,6 @@ public class GetAchievementsQueryHandler(
     IGenericRepository<User> userRepository,
     IGenericRepository<UserAchievement> achievementRepository,
     IFeatureFlagService featureFlagService,
-    IAchievementEligibilityReconciliationService reconciliationService,
     IAchievementProgressService progressService,
     IProductAnalytics productAnalytics,
     ILogger<GetAchievementsQueryHandler> logger) : IRequestHandler<GetAchievementsQuery, Result<AchievementsResponse>>
@@ -48,12 +46,6 @@ public class GetAchievementsQueryHandler(
                 cancellationToken);
             if (!enabledFlags.Contains(FeatureFlagKeys.GamificationFreeTier))
                 return Result.PayGateFailure<AchievementsResponse>("Gamification is a Pro feature. Upgrade to unlock!");
-        }
-
-        if (user.AchievementEligibilityReconciledAtUtc is null)
-        {
-            await reconciliationService.ReconcileUnlockedUserAsync(user, cancellationToken);
-            user = await userRepository.GetByIdAsync(request.UserId, cancellationToken) ?? user;
         }
 
         var earnedList = await achievementRepository.FindAsync(a => a.UserId == request.UserId, cancellationToken);

@@ -97,9 +97,6 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IGamificationService, GamificationService>();
         builder.Services.AddScoped<Orbit.Application.Gamification.Services.IAchievementProgressService, Orbit.Application.Gamification.Services.AchievementProgressService>();
         builder.Services.AddScoped<Orbit.Application.Gamification.Backfill.XpAwardLogBackfillService>();
-        builder.Services.AddScoped<
-            Orbit.Application.Gamification.Backfill.IAchievementEligibilityReconciliationService,
-            Orbit.Application.Gamification.Backfill.AchievementEligibilityReconciliationService>();
         builder.Services.AddScoped<Orbit.Application.Social.Services.SocialAccessGuard>();
         builder.Services.AddScoped<Orbit.Application.Social.Services.FriendGraphService>();
         builder.Services.AddScoped<Orbit.Application.Social.Services.SocialNotificationDispatcher>();

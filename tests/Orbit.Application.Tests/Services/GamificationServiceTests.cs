@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
+using Npgsql;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification;
 using Orbit.Application.Gamification.Services;
@@ -1179,40 +1180,46 @@ public class GamificationServiceTests
     }
 
     [Fact]
-    public async Task ReconcileAchievementEligibilityAsync_NoMissingAchievement_StampsAndSaves()
+    public async Task TryGrantAchievementsAsync_ConcurrentDuplicate_ReloadsPersistedWinnerWithoutDuplicateXp()
     {
-        var user = CreateFreeUser();
-        SetupUserLookup(user);
-        SetupNoEarnedAchievements();
+        var losingAttemptUser = CreateFreeUser();
+        var persistedWinnerUser = CreateFreeUser();
+        _userRepo.FindOneTrackedAsync(
+                Arg.Any<Expression<Func<User, bool>>>(),
+                Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(losingAttemptUser, persistedWinnerUser);
+        _achievementRepo.FindAsync(
+                Arg.Any<Expression<Func<UserAchievement, bool>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new List<UserAchievement>(),
+                new List<UserAchievement>
+                {
+                    UserAchievement.Create(UserId, AchievementDefinitions.ShowOff)
+                });
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DbUpdateException(
+                "duplicate key value violates unique constraint",
+                new PostgresException(
+                    "duplicate key",
+                    "ERROR",
+                    "ERROR",
+                    PostgresErrorCodes.UniqueViolation)));
 
-        var granted = await _sut.ReconcileAchievementEligibilityAsync(UserId, []);
-
-        granted.Should().BeEmpty();
-        user.AchievementEligibilityReconciledAtUtc.Should().NotBeNull();
-        await _achievementRepo.DidNotReceive().AddAsync(
-            Arg.Any<UserAchievement>(),
-            Arg.Any<CancellationToken>());
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task ReconcileAchievementEligibilityAsync_AlreadyReconciled_DoesNoWork()
-    {
-        var user = CreateFreeUser();
-        user.MarkAchievementEligibilityReconciled();
-        SetupUserLookup(user);
-
-        var granted = await _sut.ReconcileAchievementEligibilityAsync(
+        var granted = await _sut.TryGrantAchievementsAsync(
             UserId,
-            [AchievementDefinitions.FirstOrbit]);
+            [AchievementDefinitions.ShowOff]);
 
         granted.Should().BeEmpty();
-        await _achievementRepo.DidNotReceive().FindAsync(
-            Arg.Any<Expression<Func<UserAchievement, bool>>>(),
+        persistedWinnerUser.TotalXp.Should().Be(0);
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        _unitOfWork.Received(1).ResetTracking();
+        await _pushService.DidNotReceive().SendToUserAsync(
+            Arg.Any<Guid>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
-        await _achievementRepo.DidNotReceive().AddAsync(
-            Arg.Any<UserAchievement>(),
-            Arg.Any<CancellationToken>());
-        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 }

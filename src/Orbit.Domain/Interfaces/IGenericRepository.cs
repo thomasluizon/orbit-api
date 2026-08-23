@@ -64,17 +64,6 @@ public interface IGenericRepository<T> where T : Entity
         Func<IQueryable<T>, IQueryable<T>>? includes = null,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Loads one deterministically ordered, untracked page without running a separate count query.
-    /// Background migrations request one lookahead row to detect remaining work while keeping each
-    /// pass bounded.
-    /// </summary>
-    Task<IReadOnlyList<T>> FindPageAsync(
-        Expression<Func<T, bool>> predicate,
-        Func<IQueryable<T>, IOrderedQueryable<T>> orderBy,
-        int pageSize,
-        CancellationToken cancellationToken = default);
-
     Task<bool> AnyAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default);
 
     /// <summary>

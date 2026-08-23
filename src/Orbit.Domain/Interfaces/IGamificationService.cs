@@ -20,13 +20,4 @@ public interface IGamificationService
     /// The grant funnel is available to free and Pro users; callers decide which verified ids to request.
     /// </summary>
     Task<IReadOnlyList<string>> TryGrantAchievementsAsync(Guid userId, IReadOnlyList<string> achievementIds, CancellationToken ct = default);
-
-    /// <summary>
-    /// Grants any missing historically eligible achievements and marks the account reconciled in the
-    /// same retryable persistence operation. Returns the ids that were newly granted.
-    /// </summary>
-    Task<IReadOnlyList<string>> ReconcileAchievementEligibilityAsync(
-        Guid userId,
-        IReadOnlyList<string> achievementIds,
-        CancellationToken ct = default);
 }

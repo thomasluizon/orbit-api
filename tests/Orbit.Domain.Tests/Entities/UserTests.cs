@@ -99,14 +99,6 @@ public class UserTests
     }
 
     [Fact]
-    public void Create_LeavesHistoricalAchievementEligibilityPending()
-    {
-        var user = CreateValidUser();
-
-        user.AchievementEligibilityReconciledAtUtc.Should().BeNull();
-    }
-
-    [Fact]
     public void IsPro_LifetimePro_ReturnsTrue()
     {
         var user = CreateValidUser();
@@ -930,19 +922,6 @@ public class UserTests
         user.CompleteOnboardingChecklist();
 
         user.HasCompletedOnboardingChecklist.Should().BeTrue();
-    }
-
-    [Fact]
-    public void MarkAchievementEligibilityReconciled_RecordsUtcTimestamp()
-    {
-        var user = CreateValidUser();
-        var before = DateTime.UtcNow;
-
-        user.MarkAchievementEligibilityReconciled();
-
-        user.AchievementEligibilityReconciledAtUtc.Should().BeOnOrAfter(before);
-        user.AchievementEligibilityReconciledAtUtc.Should().BeOnOrBefore(DateTime.UtcNow);
-        user.AchievementEligibilityReconciledAtUtc!.Value.Kind.Should().Be(DateTimeKind.Utc);
     }
 
     [Fact]

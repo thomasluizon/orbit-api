@@ -87,38 +87,6 @@ public class FeatureFlagAndAgentSupportTests : IDisposable
     }
 
     [Fact]
-    public async Task FeatureFlagService_BatchResolution_UsesProvidedUsersAndAppliesPlanRequirement()
-    {
-        var proUser = User.Create("Pro User", "pro@example.com").Value;
-        proUser.SetStripeSubscription("sub_123", DateTime.UtcNow.AddDays(30), SubscriptionInterval.Monthly);
-        var freeUser = User.Create("Free User", "free@example.com").Value;
-        freeUser.StartTrial(DateTime.UtcNow.AddDays(-1));
-        _dbContext.AppFeatureFlags.Add(AppFeatureFlag.Create("pro_only", true, "pro", "Pro"));
-        await _dbContext.SaveChangesAsync();
-        var service = new FeatureFlagService(_dbContext, new MemoryCache(new MemoryCacheOptions()));
-
-        var result = await service.GetUserIdsWithEnabledKeyAsync("pro_only", [proUser, freeUser]);
-
-        result.Should().BeEquivalentTo([proUser.Id]);
-        _dbContext.ChangeTracker.Entries<User>().Should().BeEmpty();
-    }
-
-    [Fact]
-    public async Task FeatureFlagService_BatchResolution_UnknownOrDisabledKey_ReturnsEmpty()
-    {
-        var user = User.Create("Free User", "free@example.com").Value;
-        _dbContext.AppFeatureFlags.Add(AppFeatureFlag.Create("disabled", false, null, "Disabled"));
-        await _dbContext.SaveChangesAsync();
-        var service = new FeatureFlagService(_dbContext, new MemoryCache(new MemoryCacheOptions()));
-
-        var disabled = await service.GetUserIdsWithEnabledKeyAsync("disabled", [user]);
-        var missing = await service.GetUserIdsWithEnabledKeyAsync("missing", [user]);
-
-        disabled.Should().BeEmpty();
-        missing.Should().BeEmpty();
-    }
-
-    [Fact]
     public async Task AgentTargetOwnershipService_ReturnsNullWhenNoTargetsAreProvided()
     {
         var service = new AgentTargetOwnershipService(_dbContext);

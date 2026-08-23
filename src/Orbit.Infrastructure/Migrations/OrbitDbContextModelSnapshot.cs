@@ -1894,9 +1894,6 @@ namespace Orbit.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<DateTime?>("AchievementEligibilityReconciledAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<int>("AdRewardBonusMessages")
                         .HasColumnType("integer");
 
@@ -2119,9 +2116,6 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnName("xmin");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("AchievementEligibilityReconciledAtUtc")
-                        .HasFilter("\"AchievementEligibilityReconciledAtUtc\" IS NULL");
 
                     b.HasIndex("Email")
                         .IsUnique();

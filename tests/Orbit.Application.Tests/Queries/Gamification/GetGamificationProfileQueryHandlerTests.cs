@@ -2,7 +2,6 @@ using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification;
-using Orbit.Application.Gamification.Backfill;
 using Orbit.Application.Gamification.Models;
 using Orbit.Application.Gamification.Queries;
 using Orbit.Application.Gamification.Services;
@@ -17,8 +16,6 @@ public class GetGamificationProfileQueryHandlerTests
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IGenericRepository<UserAchievement> _achievementRepo = Substitute.For<IGenericRepository<UserAchievement>>();
     private readonly IFeatureFlagService _featureFlagService = Substitute.For<IFeatureFlagService>();
-    private readonly IAchievementEligibilityReconciliationService _reconciliationService =
-        Substitute.For<IAchievementEligibilityReconciliationService>();
     private readonly IAchievementProgressService _progressService = Substitute.For<IAchievementProgressService>();
     private readonly GetGamificationProfileQueryHandler _handler;
 
@@ -30,19 +27,10 @@ public class GetGamificationProfileQueryHandlerTests
             .Returns(Array.Empty<string>());
         _progressService.LoadAsync(Arg.Any<User>(), Arg.Any<IReadOnlySet<string>>(), Arg.Any<CancellationToken>())
             .Returns(AchievementProgressMetrics.Empty);
-        _reconciliationService.ReconcileUnlockedUserAsync(
-                Arg.Any<User>(),
-                Arg.Any<CancellationToken>())
-            .Returns(call =>
-            {
-                call.ArgAt<User>(0).MarkAchievementEligibilityReconciled();
-                return Task.FromResult<IReadOnlyList<string>>([]);
-            });
         _handler = new GetGamificationProfileQueryHandler(
             _userRepo,
             _achievementRepo,
             _featureFlagService,
-            _reconciliationService,
             _progressService);
     }
 
@@ -174,10 +162,6 @@ public class GetGamificationProfileQueryHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be("PAY_GATE");
-        user.AchievementEligibilityReconciledAtUtc.Should().BeNull();
-        await _reconciliationService.DidNotReceive().ReconcileUnlockedUserAsync(
-            Arg.Any<User>(),
-            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -211,38 +195,6 @@ public class GetGamificationProfileQueryHandlerTests
         result.Value.AchievementsTotal.Should().Be(32);
         result.Value.NextReward.ProTeaser.Should().BeNull();
         result.Value.NextReward.NextLevel.Should().Be(3);
-    }
-
-    [Fact]
-    public async Task Handle_UnreconciledFreeUser_FlagOn_FirstReadRepairsHistoryAndSecondReadDoesNoWork()
-    {
-        var user = CreateFreeUser();
-        EnableFreeTierFlag();
-        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-        var earned = new List<UserAchievement>();
-        _achievementRepo.FindAsync(
-                Arg.Any<Expression<Func<UserAchievement, bool>>>(),
-                Arg.Any<CancellationToken>())
-            .Returns(_ => earned.ToList());
-        _reconciliationService.ReconcileUnlockedUserAsync(user, Arg.Any<CancellationToken>())
-            .Returns(_ =>
-            {
-                user.MarkAchievementEligibilityReconciled();
-                earned.Add(UserAchievement.Create(user.Id, AchievementDefinitions.FirstOrbit));
-                return Task.FromResult<IReadOnlyList<string>>([AchievementDefinitions.FirstOrbit]);
-            });
-
-        var first = await _handler.Handle(new GetGamificationProfileQuery(UserId), CancellationToken.None);
-        var second = await _handler.Handle(new GetGamificationProfileQuery(UserId), CancellationToken.None);
-
-        first.IsSuccess.Should().BeTrue();
-        first.Value.Achievements.Single(achievement => achievement.Id == AchievementDefinitions.FirstOrbit)
-            .IsEarned.Should().BeTrue();
-        first.Value.AchievementsLocked.Should().BeFalse();
-        second.IsSuccess.Should().BeTrue();
-        await _reconciliationService.Received(1).ReconcileUnlockedUserAsync(
-            user,
-            Arg.Any<CancellationToken>());
     }
 
     [Fact]

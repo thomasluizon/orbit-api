@@ -31,28 +31,6 @@ public class FeatureFlagService(OrbitDbContext dbContext, IMemoryCache cache) : 
             .ToList();
     }
 
-    public async Task<IReadOnlySet<Guid>> GetUserIdsWithEnabledKeyAsync(
-        string key,
-        IReadOnlyCollection<User> users,
-        CancellationToken cancellationToken = default)
-    {
-        if (users.Count == 0)
-            return new HashSet<Guid>();
-
-        var flags = await GetEnabledFlagsAsync(cancellationToken);
-        var flag = flags.FirstOrDefault(item =>
-            string.Equals(item.Key, key, StringComparison.OrdinalIgnoreCase));
-
-        if (flag is null)
-            return new HashSet<Guid>();
-
-        return users
-            .Where(user => string.IsNullOrWhiteSpace(flag.PlanRequirement)
-                || UserHasFeaturePlan(user, flag.PlanRequirement))
-            .Select(user => user.Id)
-            .ToHashSet();
-    }
-
     private async Task<IReadOnlyList<EnabledFlag>> GetEnabledFlagsAsync(CancellationToken cancellationToken)
     {
         if (cache.TryGetValue(EnabledFlagsCacheKey, out IReadOnlyList<EnabledFlag>? cached) && cached is not null)
