@@ -3,7 +3,6 @@ using NSubstitute;
 using Orbit.Application.Gamification;
 using Orbit.Application.Gamification.Services;
 using Orbit.Application.Habits.Services;
-using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -17,10 +16,6 @@ public class AchievementProgressServiceTests
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<HabitLog> _habitLogRepo = Substitute.For<IGenericRepository<HabitLog>>();
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
-    private readonly IGenericRepository<Cheer> _cheerRepo = Substitute.For<IGenericRepository<Cheer>>();
-    private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
-    private readonly IGenericRepository<Friendship> _friendshipRepo = Substitute.For<IGenericRepository<Friendship>>();
-    private readonly IGenericRepository<BlockedUser> _blockedUserRepo = Substitute.For<IGenericRepository<BlockedUser>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly AchievementProgressService _service;
 
@@ -29,9 +24,8 @@ public class AchievementProgressServiceTests
 
     public AchievementProgressServiceTests()
     {
-        var friendGraphService = new FriendGraphService(_userRepo, _friendshipRepo, _blockedUserRepo);
         _service = new AchievementProgressService(
-            _habitRepo, _habitLogRepo, _goalRepo, _cheerRepo, friendGraphService, _userDateService);
+            _habitRepo, _habitLogRepo, _goalRepo, _userDateService);
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);
     }
@@ -84,8 +78,6 @@ public class AchievementProgressServiceTests
     {
         _habitLogRepo.CountAsync(Arg.Any<Expression<Func<HabitLog, bool>>>(), Arg.Any<CancellationToken>()).Returns(42);
         _goalRepo.CountAsync(Arg.Any<Expression<Func<Goal, bool>>>(), Arg.Any<CancellationToken>()).Returns(7, 3);
-        _friendshipRepo.CountAsync(Arg.Any<Expression<Func<Friendship, bool>>>(), Arg.Any<CancellationToken>()).Returns(6);
-        _cheerRepo.CountAsync(Arg.Any<Expression<Func<Cheer, bool>>>(), Arg.Any<CancellationToken>()).Returns(15);
     }
 
     [Fact]
@@ -103,11 +95,14 @@ public class AchievementProgressServiceTests
         metrics.TotalCompletions.Should().Be(42);
         metrics.GoalsCreated.Should().Be(7);
         metrics.GoalsCompleted.Should().Be(3);
-        metrics.FriendsCount.Should().Be(6);
-        metrics.CheersSent.Should().Be(15);
         metrics.EarlyLogs.Should().Be(0);
         metrics.NightLogs.Should().Be(0);
         await _habitLogRepo.Received(1).FindAsync(Arg.Any<Expression<Func<HabitLog, bool>>>(), Arg.Any<CancellationToken>());
+
+        var repositoryQueryCount = _habitRepo.ReceivedCalls().Count()
+            + _habitLogRepo.ReceivedCalls().Count()
+            + _goalRepo.ReceivedCalls().Count();
+        repositoryQueryCount.Should().Be(5);
     }
 
     [Fact]

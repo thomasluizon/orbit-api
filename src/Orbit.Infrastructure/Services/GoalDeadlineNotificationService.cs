@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
+using Orbit.Application.Notifications;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -49,7 +50,7 @@ public partial class GoalDeadlineNotificationService(
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
         var pushService = scope.ServiceProvider.GetRequiredService<IPushNotificationService>();
 
-        var freshStreakValues = await ComputeFreshStreakValuesAsync(dbContext, ct);
+        var freshDerivedValues = await ComputeFreshDerivedValuesAsync(dbContext, ct);
 
         var candidateGoals = await dbContext.Goals
             .AsNoTracking()
@@ -57,7 +58,7 @@ public partial class GoalDeadlineNotificationService(
             .ToListAsync(ct);
 
         var goals = candidateGoals
-            .Where(g => EffectiveCurrentValue(g, freshStreakValues) < g.TargetValue)
+            .Where(g => EffectiveCurrentValue(g, freshDerivedValues) < g.TargetValue)
             .ToList();
 
         if (goals.Count == 0) return;
@@ -70,11 +71,11 @@ public partial class GoalDeadlineNotificationService(
 
         var allKeys = goals
             .Where(g => g.Deadline.HasValue)
-            .SelectMany(g => NotifyDaysBefore.Select(d => $"goal-deadline-{g.Id}-{d}d"))
+            .SelectMany(g => NotifyDaysBefore.Select(d => BuildDedupeKey(g.Id, d)))
             .ToList();
         var sentKeys = (await dbContext.Notifications
-            .Where(n => allKeys.Contains(n.Url!))
-            .Select(n => n.Url)
+            .Where(n => allKeys.Contains(n.DedupeKey!))
+            .Select(n => n.DedupeKey!)
             .ToListAsync(ct))
             .ToHashSet();
 
@@ -83,7 +84,7 @@ public partial class GoalDeadlineNotificationService(
             try
             {
                 await ProcessGoalDeadlineAsync(
-                    goal, EffectiveCurrentValue(goal, freshStreakValues), users, sentKeys, pushService, dbContext, ct);
+                    goal, EffectiveCurrentValue(goal, freshDerivedValues), users, sentKeys, pushService, dbContext, ct);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -92,34 +93,51 @@ public partial class GoalDeadlineNotificationService(
         }
     }
 
-    private async Task<Dictionary<Guid, int>> ComputeFreshStreakValuesAsync(OrbitDbContext dbContext, CancellationToken ct)
+    private async Task<Dictionary<Guid, int>> ComputeFreshDerivedValuesAsync(OrbitDbContext dbContext, CancellationToken ct)
     {
 #pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC-date window or UTC-keyed dedupe/aggregation bucket (not a user's calendar date), per-site justification ledger: https://github.com/thomasluizon/orbit-api/issues/431
         var streakWindowStart = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-AppConstants.MaxStreakLookbackDays - 1);
 #pragma warning restore ORBIT0004
-        var streakGoals = await dbContext.Goals
+        var candidates = await dbContext.Goals
             .AsNoTracking()
-            .Where(g => g.Type == GoalType.Streak && g.Status == GoalStatus.Active && g.Deadline != null && !g.IsDeleted)
-            .Include(g => g.Habits).ThenInclude(h => h.Logs.Where(l => l.Date >= streakWindowStart))
+            .Where(g => g.Status == GoalStatus.Active
+                        && g.Deadline != null
+                        && !g.IsDeleted
+                        && (g.Type == GoalType.Streak || g.Habits.Any()))
             .ToListAsync(ct);
 
         var freshValues = new Dictionary<Guid, int>();
-        if (streakGoals.Count == 0) return freshValues;
+        if (candidates.Count == 0) return freshValues;
 
-        var streakUserIds = streakGoals.Select(g => g.UserId).Distinct().ToList();
-        var streakUsers = await dbContext.Users
+        var standardWindowStart = candidates
+            .Where(goal => goal.Type == GoalType.Standard)
+            .Select(goal => goal.CreatedAtUtc)
+            .DefaultIfEmpty(DateTime.MaxValue)
+            .Min();
+        var candidateIds = candidates.Select(goal => goal.Id).ToList();
+        var goals = await dbContext.Goals
             .AsNoTracking()
-            .Where(u => streakUserIds.Contains(u.Id))
+            .Where(goal => candidateIds.Contains(goal.Id))
+            .Include(goal => goal.Habits)
+            .ThenInclude(habit => habit.Logs.Where(log =>
+                log.Date >= streakWindowStart || log.CreatedAtUtc >= standardWindowStart))
+            .AsSplitQuery()
+            .ToListAsync(ct);
+
+        var userIds = goals.Select(goal => goal.UserId).Distinct().ToList();
+        var users = await dbContext.Users
+            .AsNoTracking()
+            .Where(user => userIds.Contains(user.Id))
             .ToDictionaryAsync(u => u.Id, ct);
 
-        foreach (var goal in streakGoals)
+        foreach (var goal in goals)
         {
-            if (!streakUsers.TryGetValue(goal.UserId, out var user)) continue;
+            if (!users.TryGetValue(goal.UserId, out var user)) continue;
 
             var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
             var userToday = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
 
-            var readValue = GoalStreakSyncService.ComputeReadValue(goal, userToday);
+            var readValue = GoalProgressSyncService.ComputeReadValue(goal, userToday);
             if (readValue.HasValue)
                 freshValues[goal.Id] = readValue.Value;
         }
@@ -131,7 +149,7 @@ public partial class GoalDeadlineNotificationService(
         freshStreakValues.TryGetValue(goal.Id, out var fresh) ? fresh : goal.CurrentValue;
 
     private async Task ProcessGoalDeadlineAsync(
-        Goal goal, decimal currentValue, Dictionary<Guid, User> users, HashSet<string?> sentKeys,
+        Goal goal, decimal currentValue, Dictionary<Guid, User> users, HashSet<string> sentKeys,
         IPushNotificationService pushService, OrbitDbContext dbContext, CancellationToken ct)
     {
         if (!users.TryGetValue(goal.UserId, out var user)) return;
@@ -148,7 +166,7 @@ public partial class GoalDeadlineNotificationService(
         {
             if (daysUntilDeadline > daysBefore) continue;
 
-            var notificationKey = $"goal-deadline-{goal.Id}-{daysBefore}d";
+            var notificationKey = BuildDedupeKey(goal.Id, daysBefore);
             if (sentKeys.Contains(notificationKey)) continue;
 
             var body = FormatDeadlineBody(goal, currentValue, daysBefore, user.Language ?? "en");
@@ -170,7 +188,12 @@ public partial class GoalDeadlineNotificationService(
         IPushNotificationService pushService, OrbitDbContext dbContext, CancellationToken ct)
     {
         await dbContext.Notifications.AddAsync(
-            Notification.Create(goal.UserId, goal.Title, body, notificationKey), ct);
+            Notification.Create(
+                goal.UserId,
+                goal.Title,
+                body,
+                NotificationUrls.Progress,
+                dedupeKey: notificationKey), ct);
 
         try
         {
@@ -190,9 +213,13 @@ public partial class GoalDeadlineNotificationService(
             return false;
         }
 
-        await pushService.SendToUserAsync(goal.UserId, goal.Title, body, "/", ct);
+        await pushService.SendToUserAsync(
+            goal.UserId, goal.Title, body, NotificationUrls.Progress, ct);
         return true;
     }
+
+    internal static string BuildDedupeKey(Guid goalId, int daysBefore) =>
+        $"goal-deadline-{goalId}-{daysBefore}d";
 
     private static void DetachPendingEntries(OrbitDbContext dbContext)
     {

@@ -233,6 +233,7 @@ public class DistributedRateLimitServiceTests : IDisposable
     [InlineData("ai-operations", 15)]
     [InlineData("friend-mutations", 50)]
     [InlineData("accountability-mutations", 50)]
+    [InlineData("streak-repair", 10)]
     public async Task TryAcquireAsync_StateChangingSweepPolicy_BlocksAfterPermitLimit(string policyName, int permitLimit)
     {
         DistributedRateLimitDecision finalDecision = new(true, 0, 0, DateTime.UtcNow);

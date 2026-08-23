@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Commands;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -48,17 +49,16 @@ public class GoalAiCacheInvalidationTests
 
         var goalRepo = Substitute.For<IGenericRepository<Goal>>();
         var habitRepo = Substitute.For<IGenericRepository<Habit>>();
-        var payGate = Substitute.For<IPayGateService>();
         var userDateService = Substitute.For<IUserDateService>();
         var gamificationService = Substitute.For<IGamificationService>();
         var unitOfWork = Substitute.For<IUnitOfWork>();
 
-        payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
         userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new DateOnly(2026, 7, 12));
 
         var handler = new CreateGoalCommandHandler(
-            goalRepo, habitRepo, payGate, userDateService, gamificationService, unitOfWork, cache,
+            goalRepo, habitRepo, userDateService, gamificationService,
+            Substitute.For<IGoalCompletionService>(), unitOfWork, cache,
             Substitute.For<ILogger<CreateGoalCommandHandler>>());
 
         var result = await handler.Handle(

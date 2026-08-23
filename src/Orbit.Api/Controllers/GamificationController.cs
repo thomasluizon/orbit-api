@@ -1,13 +1,20 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
+using System.Text.Json.Serialization;
 using Orbit.Api.Extensions;
+using Orbit.Api.RateLimiting;
 using Orbit.Application.Common;
+using Orbit.Application.Gamification.Commands;
 using Orbit.Application.Gamification.Queries;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Api.Controllers;
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed class RepairStreakRequest;
 
 [Authorize]
 [ApiController]
@@ -52,23 +59,60 @@ public class GamificationController(IMediator mediator, IUserDateService userDat
         return result.ToPayGateAwareResult(v => Ok(v));
     }
 
+    [HttpPost("streak/repair")]
+    [DistributedRateLimit("streak-repair")]
+    [ProducesResponseType(typeof(StreakInfoResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> RepairStreak(
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RepairStreakRequest? request,
+        CancellationToken cancellationToken)
+    {
+        var command = new RepairStreakCommand(HttpContext.GetUserId());
+        var result = await mediator.Send(command, cancellationToken);
+
+        return result.ToPayGateAwareResult(value => Ok(value));
+    }
+
     [HttpGet("recap")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetRecap(
         [FromQuery] string period,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] int? year = null,
+        [FromQuery] int? month = null)
     {
         if (!RetrospectivePeriodRange.IsKnownPeriod(period))
             return BadRequest(ErrorMessages.InvalidPeriod.ToErrorBody());
 
         var userId = HttpContext.GetUserId();
         var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
-        var weekStartDay = await userDateService.GetUserWeekStartDayAsync(userId, cancellationToken);
-        var (dateFrom, dateTo) = RetrospectivePeriodRange.Resolve(period, today, weekStartDay);
+        DateOnly dateFrom;
+        DateOnly dateTo;
 
-        var query = new GetRecapQuery(userId, dateFrom, dateTo, period);
+        if (year.HasValue || month.HasValue)
+        {
+            if (!year.HasValue || !month.HasValue || !period.Equals("month", StringComparison.OrdinalIgnoreCase))
+                return BadRequest(ErrorMessages.InvalidClosedMonthParameters.ToErrorBody());
+
+            var closedMonth = ClosedMonthPeriodRange.Resolve(year.Value, month.Value, today);
+            if (closedMonth.IsFailure)
+                return closedMonth.ToErrorResult();
+
+            dateFrom = closedMonth.Value.DateFrom;
+            dateTo = closedMonth.Value.DateTo;
+        }
+        else
+        {
+            var weekStartDay = await userDateService.GetUserWeekStartDayAsync(userId, cancellationToken);
+            (dateFrom, dateTo) = RetrospectivePeriodRange.Resolve(period, today, weekStartDay);
+        }
+
+        var query = new GetRecapQuery(userId, dateFrom, dateTo, period, year, month);
         var result = await mediator.Send(query, cancellationToken);
 
         return result.ToPayGateAwareResult(v => Ok(v));

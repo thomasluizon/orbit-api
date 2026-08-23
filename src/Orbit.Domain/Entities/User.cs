@@ -32,10 +32,13 @@ public partial class User : Entity
     public DateTime? PlanExpiresAt { get; private set; }
     public DateTime? TrialEndsAt { get; private set; }
     public bool IsLifetimePro { get; private set; } = false;
-    public int AiMessagesUsedThisMonth { get; private set; } = 0;
-    public DateTime? AiMessagesResetAt { get; private set; }
+    public int AiMessagesUsedToday { get; private set; } = 0;
+    public DateOnly? AiMessagesLocalDate { get; private set; }
     public SubscriptionInterval? SubscriptionInterval { get; private set; }
     public SubscriptionSource? SubscriptionSource { get; private set; }
+    public SubscriptionLapseReason? SubscriptionLapseReason { get; private set; }
+    public DateTime? SubscriptionEndedAtUtc { get; private set; }
+    public DateTime? StripeSubscriptionEventCreatedAtUtc { get; private set; }
     public string? PlayPurchaseToken { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public bool HasImportedCalendar { get; private set; } = false;
@@ -102,12 +105,13 @@ public partial class User : Entity
         if (!EmailRegex().IsMatch(trimmedEmail))
             return Result.Failure<User>(DomainErrors.InvalidEmailFormat);
 
+        var now = DateTime.UtcNow;
         return Result.Success(new User
         {
             Name = name.Trim(),
             Email = trimmedEmail.ToLowerInvariant(),
-            CreatedAtUtc = DateTime.UtcNow,
-            TrialEndsAt = DateTime.UtcNow.AddDays(7)
+            CreatedAtUtc = now,
+            TrialEndsAt = now.AddDays(7)
         });
     }
 
@@ -223,12 +227,21 @@ public partial class User : Entity
 
     public void SetStripeCustomerId(string customerId) => StripeCustomerId = customerId;
 
-    public void SetStripeSubscription(string subscriptionId, DateTime expiresAt, SubscriptionInterval? interval = null)
+    public void SetStripeSubscription(
+        string subscriptionId,
+        DateTime expiresAt,
+        SubscriptionInterval? interval = null,
+        DateTime? eventCreatedAtUtc = null)
     {
+        if (!TryAcceptStripeEvent(eventCreatedAtUtc, acceptEqualTimestamp: true))
+            return;
+
         StripeSubscriptionId = subscriptionId;
         PlanExpiresAt = expiresAt;
         Plan = UserPlan.Pro;
         SubscriptionSource = Enums.SubscriptionSource.Stripe;
+        SubscriptionLapseReason = null;
+        SubscriptionEndedAtUtc = null;
         PlayPurchaseToken = null;
         if (interval.HasValue)
             SubscriptionInterval = interval.Value;
@@ -240,48 +253,111 @@ public partial class User : Entity
         PlanExpiresAt = expiresAt;
         Plan = UserPlan.Pro;
         SubscriptionSource = Enums.SubscriptionSource.GooglePlay;
+        SubscriptionLapseReason = null;
+        SubscriptionEndedAtUtc = null;
         if (interval.HasValue)
             SubscriptionInterval = interval.Value;
     }
 
     public void LinkPlayPurchaseToken(string purchaseToken) => PlayPurchaseToken = purchaseToken;
 
-    public void CancelStripeSubscription()
+    public void CancelStripeSubscription(
+        SubscriptionLapseReason reason,
+        DateTime? eventCreatedAtUtc = null)
     {
+        EnsureValidLapseReason(reason);
+        if (!TryAcceptStripeEvent(eventCreatedAtUtc, acceptEqualTimestamp: true))
+            return;
+
         StripeSubscriptionId = null;
         if (SubscriptionSource == Enums.SubscriptionSource.Stripe)
-            ClearEntitlement();
+            ClearEntitlement(reason);
     }
 
-    public void CancelPlaySubscription()
+    public void CancelPlaySubscription(SubscriptionLapseReason reason)
     {
+        EnsureValidLapseReason(reason);
         PlayPurchaseToken = null;
         if (SubscriptionSource == Enums.SubscriptionSource.GooglePlay)
-            ClearEntitlement();
+            ClearEntitlement(reason);
     }
 
-    private void ClearEntitlement()
+    public void RecordSubscriptionLapseReason(
+        SubscriptionSource source,
+        SubscriptionLapseReason reason,
+        DateTime? eventCreatedAtUtc = null)
+    {
+        EnsureValidSubscriptionSource(source);
+        EnsureValidLapseReason(reason);
+
+        if (SubscriptionSource != source)
+            return;
+
+        if (source == Enums.SubscriptionSource.Stripe
+            && !TryAcceptStripeEvent(eventCreatedAtUtc, acceptEqualTimestamp: false))
+            return;
+
+        SubscriptionLapseReason = reason;
+    }
+
+    private void ClearEntitlement(SubscriptionLapseReason reason)
     {
         Plan = UserPlan.Free;
         PlanExpiresAt = null;
         SubscriptionInterval = null;
         SubscriptionSource = null;
+        SubscriptionLapseReason = reason;
+        SubscriptionEndedAtUtc = DateTime.UtcNow;
+    }
+
+    private static void EnsureValidLapseReason(SubscriptionLapseReason reason)
+    {
+        if (!Enum.IsDefined(reason))
+            throw new ArgumentOutOfRangeException(nameof(reason));
+    }
+
+    private static void EnsureValidSubscriptionSource(SubscriptionSource source)
+    {
+        if (!Enum.IsDefined(source))
+            throw new ArgumentOutOfRangeException(nameof(source));
+    }
+
+    private bool TryAcceptStripeEvent(DateTime? eventCreatedAtUtc, bool acceptEqualTimestamp)
+    {
+        if (!eventCreatedAtUtc.HasValue)
+            return true;
+
+        if (eventCreatedAtUtc.Value.Kind != DateTimeKind.Utc)
+            throw new ArgumentException("Stripe event time must be UTC.", nameof(eventCreatedAtUtc));
+
+        if (StripeSubscriptionEventCreatedAtUtc.HasValue
+            && (acceptEqualTimestamp
+                ? eventCreatedAtUtc.Value < StripeSubscriptionEventCreatedAtUtc.Value
+                : eventCreatedAtUtc.Value <= StripeSubscriptionEventCreatedAtUtc.Value))
+            return false;
+
+        StripeSubscriptionEventCreatedAtUtc = eventCreatedAtUtc.Value;
+        return true;
     }
 
     public void StartTrial(DateTime endsAt) => TrialEndsAt = endsAt;
 
-    public void IncrementAiMessageCount() => IncrementAiMessageCount(DateTime.UtcNow);
-
-    public void IncrementAiMessageCount(DateTime utcNow)
+    public void IncrementAiMessageCount(DateOnly userToday)
     {
-        if (!AiMessagesResetAt.HasValue || AiMessagesResetAt.Value <= utcNow)
+        if (!AiMessagesLocalDate.HasValue || AiMessagesLocalDate.Value < userToday)
         {
-            AiMessagesUsedThisMonth = 0;
+            AiMessagesUsedToday = 0;
             AdRewardBonusMessages = 0;
-            AiMessagesResetAt = utcNow.AddDays(30);
+            AiMessagesLocalDate = userToday;
         }
-        AiMessagesUsedThisMonth++;
+        AiMessagesUsedToday++;
     }
+
+    public int GetAiMessagesUsedToday(DateOnly userToday) =>
+        AiMessagesLocalDate == userToday ? AiMessagesUsedToday : 0;
+
+    public int GetAiMessagesUsedForQuota(DateOnly userToday) =>
+        AiMessagesLocalDate >= userToday ? AiMessagesUsedToday : 0;
 
     public Result GrantAdReward(DateOnly userToday, int bonusMessages = 5, int dailyCap = 3)
     {
@@ -493,11 +569,6 @@ public partial class User : Entity
             LongestStreak = CurrentStreak;
     }
 
-    public void ApplyStreakFreeze(DateOnly today)
-    {
-        LastActiveDate = today;
-    }
-
     public void SetStreakState(int currentStreak, int longestStreak, DateOnly? lastActiveDate)
     {
         var normalizedStreak = Math.Max(0, currentStreak);
@@ -544,13 +615,17 @@ public partial class User : Entity
 
     /// <summary>
     /// Resets progress and integration state (onboarding, gamification, calendar) to defaults while
-    /// preserving identity, preferences, subscription, and metered AI usage — the monthly message
-    /// quota and ad-reward allowances are kept so an account reset cannot refill the AI paygate.
+    /// preserving identity, preferences, subscription, and metered AI usage. The daily message
+    /// quota and ad reward allowances are kept so an account reset cannot refill the AI paygate.
     /// </summary>
     public void ResetAccount()
     {
         HasCompletedOnboarding = false;
         HasCompletedTour = false;
+        HasCreatedFirstHabit = false;
+        HasLoggedFirstHabit = false;
+        HasTriedAstra = false;
+        HasCompletedOnboardingChecklist = false;
         TotalXp = 0;
         Level = 1;
         CurrentStreak = 0;

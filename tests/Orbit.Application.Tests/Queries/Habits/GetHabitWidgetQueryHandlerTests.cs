@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using FluentAssertions;
 using NSubstitute;
+using Orbit.Application.Common;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -56,13 +57,41 @@ public class GetHabitWidgetQueryHandlerTests
         result.Value.Items.Should().ContainSingle(item => item.Title == "Tomorrow run");
     }
 
-    private static Habit CreateHabit(string title, DateOnly dueDate)
+    [Fact]
+    public async Task Handle_MissedOccurrenceBeyondMaxRange_MatchesHabitScheduleOverdueStatus()
+    {
+        var habit = CreateHabit(
+            "Long overdue",
+            Today.AddDays(-AppConstants.MaxRangeDays - 1),
+            AppConstants.MaxRangeDays + 34);
+        SetupHabits(habit);
+        var scheduleHandler = new GetHabitScheduleQueryHandler(
+            _habitRepository,
+            _userDateService,
+            _unitOfWork);
+
+        var scheduleResult = await scheduleHandler.Handle(
+            new GetHabitScheduleQuery(UserId, Today, Today, IncludeOverdue: true),
+            CancellationToken.None);
+        var widgetResult = await _handler.Handle(
+            new GetHabitWidgetQuery(UserId),
+            CancellationToken.None);
+
+        scheduleResult.IsSuccess.Should().BeTrue();
+        widgetResult.IsSuccess.Should().BeTrue();
+        scheduleResult.Value.Items.Should().ContainSingle();
+        widgetResult.Value.Items.Should().ContainSingle();
+        scheduleResult.Value.Items[0].IsOverdue.Should().BeTrue();
+        widgetResult.Value.Items[0].IsOverdue.Should().Be(scheduleResult.Value.Items[0].IsOverdue);
+    }
+
+    private static Habit CreateHabit(string title, DateOnly dueDate, int frequencyQuantity = 1)
     {
         return Habit.Create(new HabitCreateParams(
             UserId,
             title,
             FrequencyUnit.Day,
-            1,
+            frequencyQuantity,
             DueDate: dueDate)).Value;
     }
 

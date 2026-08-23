@@ -34,7 +34,7 @@ public record ExportUserDataRepositories(
 public class ExportUserDataQueryHandler(
     ExportUserDataRepositories repos,
     IUserDateService userDateService,
-    IStreakGoalReadSyncer streakGoalReadSyncer)
+    IGoalProgressReadSyncer goalProgressReadSyncer)
     : IRequestHandler<ExportUserDataQuery, Result<UserDataExport>>
 {
     public async Task<Result<UserDataExport>> Handle(ExportUserDataQuery request, CancellationToken cancellationToken)
@@ -45,7 +45,7 @@ public class ExportUserDataQueryHandler(
             return Result.Failure<UserDataExport>(ErrorMessages.UserNotFound);
 
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-        var freshStreakValues = await streakGoalReadSyncer.ComputeFreshValuesAsync(request.UserId, userToday, cancellationToken);
+        var freshProgressValues = await goalProgressReadSyncer.ComputeFreshValuesAsync(request.UserId, userToday, cancellationToken);
 
         var habits = await repos.Habits.FindAsync(h => h.UserId == request.UserId, cancellationToken);
         var habitIds = habits.Select(h => h.Id).ToHashSet();
@@ -101,7 +101,7 @@ public class ExportUserDataQueryHandler(
                 user.PlanExpiresAt,
                 user.TrialEndsAt),
             habits.Select(h => MapHabit(h, logsByHabit)).ToList(),
-            goals.Select(g => MapGoal(g, progressByGoal, freshStreakValues)).ToList(),
+            goals.Select(g => MapGoal(g, progressByGoal, freshProgressValues)).ToList(),
             tags.Select(t => new ExportedTag(t.Id, t.Name, t.Color, t.CreatedAtUtc)).ToList(),
             facts.Select(f => new ExportedUserFact(f.FactText, f.Category, f.ExtractedAtUtc)).ToList(),
             notifications
@@ -192,13 +192,13 @@ public class ExportUserDataQueryHandler(
     private static ExportedGoal MapGoal(
         Goal goal,
         Dictionary<Guid, List<GoalProgressLog>> progressByGoal,
-        IReadOnlyDictionary<Guid, int> freshStreakValues)
+        IReadOnlyDictionary<Guid, int> freshProgressValues)
     {
         var progress = progressByGoal.TryGetValue(goal.Id, out var goalLogs)
             ? goalLogs.Select(p => new ExportedGoalProgressLog(p.Value, p.PreviousValue, p.Note, p.CreatedAtUtc)).ToList()
             : [];
 
-        var currentValue = freshStreakValues.TryGetValue(goal.Id, out var fresh) ? fresh : goal.CurrentValue;
+        var currentValue = freshProgressValues.TryGetValue(goal.Id, out var fresh) ? fresh : goal.CurrentValue;
 
         return new ExportedGoal(
             goal.Id,

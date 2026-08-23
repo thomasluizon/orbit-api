@@ -16,17 +16,12 @@ public record ReorderGoalsCommand(
 
 public class ReorderGoalsCommandHandler(
     IGenericRepository<Goal> goalRepository,
-    IPayGateService payGate,
     IUnitOfWork unitOfWork,
     IUserDateService userDateService,
     IMemoryCache cache) : IRequestHandler<ReorderGoalsCommand, Result>
 {
     public async Task<Result> Handle(ReorderGoalsCommand request, CancellationToken cancellationToken)
     {
-        var gateCheck = await payGate.CanAccessGoals(request.UserId, cancellationToken);
-        if (gateCheck.IsFailure)
-            return gateCheck;
-
         var ids = request.Positions.Select(p => p.GoalId).ToHashSet();
 
         var goals = await goalRepository.FindTrackedAsync(

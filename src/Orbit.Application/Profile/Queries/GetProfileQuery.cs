@@ -118,7 +118,7 @@ public class GetProfileQueryHandler(
             user.IsTrialActive,
             user.TrialEndsAt,
             user.PlanExpiresAt,
-            user.AiMessagesUsedThisMonth,
+            user.GetAiMessagesUsedToday(today),
             aiMessageLimit,
             user.HasImportedCalendar,
             user.HasSeenImportPrompt,

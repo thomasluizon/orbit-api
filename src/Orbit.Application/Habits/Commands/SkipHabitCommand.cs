@@ -1,7 +1,6 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging;
 using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
@@ -21,16 +20,14 @@ public record SkipHabitCommand(
 /// <summary>Groups the repositories a habit skip touches to keep the handler constructor small.</summary>
 public record SkipHabitRepositories(
     IGenericRepository<Habit> Habits,
-    IGenericRepository<HabitLog> HabitLogs,
-    IGenericRepository<Goal> Goals);
+    IGenericRepository<HabitLog> HabitLogs);
 
-public partial class SkipHabitCommandHandler(
+public class SkipHabitCommandHandler(
     SkipHabitRepositories repos,
     IUserDateService userDateService,
-    IGamificationService gamificationService,
+    IGoalCompletionService goalCompletionService,
     IUnitOfWork unitOfWork,
-    IMemoryCache cache,
-    ILogger<SkipHabitCommandHandler> logger) : IRequestHandler<SkipHabitCommand, Result>
+    IMemoryCache cache) : IRequestHandler<SkipHabitCommand, Result>
 {
     public async Task<Result> Handle(SkipHabitCommand request, CancellationToken cancellationToken)
     {
@@ -65,14 +62,18 @@ public partial class SkipHabitCommandHandler(
         if (skipError is not null)
             return skipError;
 
-        var anyGoalJustCompleted = await SyncStreakGoals(habit, today, cancellationToken);
+        var userId = habit.UserId;
+        var streakGoalIds = habit.Goals
+            .Where(g => g.Type == GoalType.Streak && g.Status == GoalStatus.Active)
+            .Select(g => g.Id)
+            .ToList();
+        await goalCompletionService.SyncDerivedGoalsAsync(
+            userId,
+            streakGoalIds,
+            today,
+            cancellationToken: cancellationToken);
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-
-        if (anyGoalJustCompleted)
-            await ProcessGoalCompletionSafeAsync(habit.UserId, cancellationToken);
-
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId, today);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, userId, today);
 
         return Result.Success();
     }
@@ -128,42 +129,4 @@ public partial class SkipHabitCommandHandler(
         return null;
     }
 
-    private async Task<bool> SyncStreakGoals(Habit habit, DateOnly today, CancellationToken cancellationToken)
-    {
-        if (habit.Goals.Count == 0) return false;
-
-        var goalIds = habit.Goals.Select(g => g.Id).ToHashSet();
-        var streakWindowStart = today.AddDays(-AppConstants.MaxStreakLookbackDays);
-        var trackedGoals = await repos.Goals.FindTrackedAsync(
-            g => goalIds.Contains(g.Id),
-            q => q.Include(g => g.Habits).ThenInclude(h => h.Logs.Where(l => l.Date >= streakWindowStart)),
-            cancellationToken);
-
-        var streakGoals = trackedGoals
-            .Where(g => g.Type == GoalType.Streak && g.Status == GoalStatus.Active)
-            .ToList();
-
-        if (streakGoals.Count == 0) return false;
-
-        var anyJustCompleted = false;
-        foreach (var streakGoal in streakGoals)
-            anyJustCompleted |= GoalStreakSyncService.SyncCurrentStreak(streakGoal, today).JustCompleted;
-
-        return anyJustCompleted;
-    }
-
-    private async Task ProcessGoalCompletionSafeAsync(Guid userId, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await gamificationService.ProcessGoalCompleted(userId, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            LogGamificationGoalCompletionFailed(logger, ex, userId);
-        }
-    }
-
-    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Gamification processing failed for linked goal completion by user {UserId}")]
-    private static partial void LogGamificationGoalCompletionFailed(ILogger logger, Exception ex, Guid userId);
 }

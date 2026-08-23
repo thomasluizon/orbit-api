@@ -155,11 +155,10 @@ internal static class HabitToolTestFactory
             1,
             new DateOnly(2026, 8, 6))).Value;
 
-        habitRepository.FindOneTrackedAsync(
+        habitRepository.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
-            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>())
-        .Returns(habit);
+        .Returns([habit]);
 
         return new MoveHabitParentTool(mediator, habitRepository);
     }

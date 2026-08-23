@@ -6,6 +6,7 @@ using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Application.Auth.Commands;
 using Orbit.Application.Auth.Jobs;
+using Orbit.Application.Auth.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
@@ -24,7 +25,10 @@ public class RequestAccountDeletionCommandHandlerTests
     public RequestAccountDeletionCommandHandlerTests()
     {
         _backgroundJobClient.Create(Arg.Do<Job>(job => _enqueuedJob = job), Arg.Any<IState>());
-        _handler = new RequestAccountDeletionCommandHandler(_cache, _userRepo, _backgroundJobClient);
+        _handler = new RequestAccountDeletionCommandHandler(
+            new EmailChallengeService(_cache, TimeProvider.System),
+            _userRepo,
+            _backgroundJobClient);
     }
 
     [Fact]

@@ -72,12 +72,9 @@ public partial class PushNotificationService(
         for (int offset = 0; offset < subs.Count; offset += FcmBatchSize)
         {
             var chunk = subs.Skip(offset).Take(FcmBatchSize).ToList();
-            var messages = chunk.Select(s => new Message
-            {
-                Token = s.Endpoint,
-                Notification = new Notification { Title = title, Body = body },
-                Data = new Dictionary<string, string> { ["url"] = url ?? "/" }
-            }).ToList();
+            var messages = chunk
+                .Select(s => CreateFcmMessage(s.Endpoint, title, body, url))
+                .ToList();
 
             BatchResponse response;
             try
@@ -131,12 +128,7 @@ public partial class PushNotificationService(
         var tokenPreview = sub.Endpoint[..Math.Min(20, sub.Endpoint.Length)] + "...";
         try
         {
-            var message = new Message
-            {
-                Token = sub.Endpoint,
-                Notification = new Notification { Title = title, Body = body },
-                Data = new Dictionary<string, string> { ["url"] = url ?? "/" }
-            };
+            var message = CreateFcmMessage(sub.Endpoint, title, body, url);
             await FirebaseMessaging.DefaultInstance!.SendAsync(message, ct);
             if (logger.IsEnabled(LogLevel.Debug))
                 LogFcmPushSent(logger, tokenPreview);
@@ -167,7 +159,7 @@ public partial class PushNotificationService(
             Subject = _settings.Subject
         };
 
-        var payload = System.Text.Json.JsonSerializer.Serialize(new { title, body, url });
+        var payload = CreateWebPushPayload(title, body, url);
         var message = new PushMessage(payload) { TimeToLive = 3600 };
 
         foreach (var sub in subs)
@@ -282,6 +274,33 @@ public partial class PushNotificationService(
             or HttpStatusCode.BadGateway
             or HttpStatusCode.ServiceUnavailable
             or HttpStatusCode.GatewayTimeout;
+
+    internal static Message CreateFcmMessage(string token, string title, string body, string? url)
+    {
+        var data = new Dictionary<string, string>();
+        if (url is not null)
+            data["url"] = url;
+
+        return new Message
+        {
+            Token = token,
+            Notification = new Notification { Title = title, Body = body },
+            Data = data
+        };
+    }
+
+    internal static string CreateWebPushPayload(string title, string body, string? url)
+    {
+        var payload = new Dictionary<string, string>
+        {
+            ["title"] = title,
+            ["body"] = body
+        };
+        if (url is not null)
+            payload["url"] = url;
+
+        return System.Text.Json.JsonSerializer.Serialize(payload);
+    }
 
     internal const int MaxTitleBytes = 256;
     internal const int MaxBodyBytes = 768;

@@ -22,6 +22,7 @@ public static class ErrorMessages
     public static readonly AppError SelfReferral = new(ErrorCodes.SelfReferral, "You cannot refer yourself.");
     public static readonly AppError AlreadyReferred = new(ErrorCodes.AlreadyReferred, "This account was already referred.");
     public static readonly AppError ApiKeyNotFound = new(ErrorCodes.ApiKeyNotFound, "API key not found.");
+    public static readonly AppError ApiKeyCreationChallengeRequired = new(ErrorCodes.ApiKeyCreationChallengeRequired, "Confirm the emailed code before creating an API key.");
     public static readonly AppError NotificationNotFound = new(ErrorCodes.NotificationNotFound, "Notification not found.");
     public static readonly AppError NoPushSubscriptions = new(ErrorCodes.NoPushSubscriptions, "No push subscriptions found for this user.");
     public static readonly AppError SubscriptionNotFound = new(ErrorCodes.SubscriptionNotFound, "No subscription found.");
@@ -63,6 +64,8 @@ public static class ErrorMessages
     public static readonly AppError TooManyCodeAttempts = new(ErrorCodes.TooManyAttempts, "Too many attempts. Please request a new code");
     public static readonly AppError InvalidVerificationCode = new(ErrorCodes.InvalidVerificationCode, "Invalid verification code");
     public static readonly AppError InvalidDeletionCode = new(ErrorCodes.InvalidVerificationCode, "Invalid code");
+    public static readonly AppError ApiKeyCreationCodeExpired = new(ErrorCodes.CodeExpired, "API key creation code expired or not found");
+    public static readonly AppError InvalidApiKeyCreationCode = new(ErrorCodes.InvalidVerificationCode, "Invalid code. Remaining attempts: {0}");
     public static readonly AppError InvalidGoogleToken = new(ErrorCodes.InvalidGoogleToken, "Invalid or expired Google sign-in token");
     public static readonly AppError GoogleEmailUnavailable = new(ErrorCodes.GoogleEmailUnavailable, "Could not retrieve email from Google account");
     public static readonly AppError GoogleTokenAudienceMismatch = new(ErrorCodes.GoogleTokenAudienceMismatch, "Google token was not issued for this application");
@@ -79,6 +82,9 @@ public static class ErrorMessages
     public static readonly AppError CalendarIdsRequired = new(ErrorCodes.CalendarIdsRequired, "Calendar ids are required.");
     public static readonly AppError NoHabitsForPeriod = new(ErrorCodes.NoHabitsForPeriod, "No habits found for this period.");
     public static readonly AppError InvalidPeriod = new(ErrorCodes.InvalidPeriod, "Period must be one of: week, month, quarter, semester, year.");
+    public static readonly AppError InvalidClosedMonthParameters = new(ErrorCodes.InvalidClosedMonthParameters, "Year and month must be valid, provided together, and used only with the month period.");
+    public static readonly AppError RecapMonthNotClosed = new(ErrorCodes.RecapMonthNotClosed, "The requested recap month has not closed yet.");
+    public static readonly AppError RecapMonthBeforeAccount = new(ErrorCodes.RecapMonthBeforeAccount, "The requested recap month is before this account existed.");
     public static readonly AppError AiSummaryDisabled = new(ErrorCodes.AiSummaryDisabled, "AI summary is disabled.");
     public static readonly AppError NoActiveGoals = new(ErrorCodes.NoActiveGoals, "No active goals found.");
     public static readonly AppError NoGoalsData = new(ErrorCodes.NoGoalsData, "No goals data provided.");
@@ -146,4 +152,5 @@ public static class ErrorMessages
     public static readonly AppError PairLimitReached = new(ErrorCodes.PairLimitReached, "You've reached the maximum of {0} accountability pairs.");
     public static readonly AppError AlreadyPaired = new(ErrorCodes.AlreadyPaired, "You already have an accountability pair with this person.");
     public static readonly AppError AlreadyCheckedIn = new(ErrorCodes.AlreadyCheckedIn, "You've already checked in for today.");
+    public static readonly AppError StreakRepairUnavailable = new(ErrorCodes.StreakRepairUnavailable, "No streak repair is available for yesterday.");
 }

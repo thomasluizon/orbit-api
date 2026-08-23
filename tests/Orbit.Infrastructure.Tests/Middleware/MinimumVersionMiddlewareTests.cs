@@ -17,7 +17,7 @@ namespace Orbit.Infrastructure.Tests.Middleware;
 /// </summary>
 public class MinimumVersionMiddlewareTests
 {
-    private const string FloorVersion = "1.0.0";
+    private const string FloorVersion = "1.1.4";
 
     private static IAppConfigService BuildConfigService(string floor)
     {
@@ -64,7 +64,7 @@ public class MinimumVersionMiddlewareTests
     [Fact]
     public async Task InvokeAsync_VersionBelowFloor_Returns426WithUpgradeBody()
     {
-        var (nextCalled, context) = await InvokeWithVersion("0.9.0");
+        var (nextCalled, context) = await InvokeWithVersion("1.1.3");
 
         nextCalled.Should().BeFalse();
         context.Response.StatusCode.Should().Be(StatusCodes.Status426UpgradeRequired);
@@ -81,7 +81,7 @@ public class MinimumVersionMiddlewareTests
     [Fact]
     public async Task InvokeAsync_VersionEqualToFloor_CallsNext()
     {
-        var (nextCalled, context) = await InvokeWithVersion("1.0.0");
+        var (nextCalled, context) = await InvokeWithVersion("1.1.4");
 
         nextCalled.Should().BeTrue();
         context.Response.StatusCode.Should().Be(StatusCodes.Status200OK);
@@ -118,7 +118,7 @@ public class MinimumVersionMiddlewareTests
     [Fact]
     public async Task InvokeAsync_UnparseableHeader_CallsNext()
     {
-        var (nextCalled, context) = await InvokeWithVersion("not-a-version");
+        var (nextCalled, context) = await InvokeWithVersion("banana");
 
         nextCalled.Should().BeTrue();
         context.Response.StatusCode.Should().Be(StatusCodes.Status200OK);
@@ -127,7 +127,7 @@ public class MinimumVersionMiddlewareTests
     [Fact]
     public async Task InvokeAsync_IgnoresPrereleaseSuffixWhenComparing()
     {
-        var (nextCalled, _) = await InvokeWithVersion("1.0.0-beta");
+        var (nextCalled, _) = await InvokeWithVersion("1.1.4-rc1");
 
         nextCalled.Should().BeTrue();
     }

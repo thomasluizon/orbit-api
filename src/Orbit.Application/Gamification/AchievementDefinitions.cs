@@ -75,20 +75,21 @@ public static class AchievementDefinitions
         new(NightOwl, "Night Owl", "Complete a habit after 10 PM (10 times)", AchievementCategory.Special, AchievementRarity.Rare, 100, "night_owl", ProgressMetric.NightLogs, 10),
         new(Comeback, "Comeback", "Resume after 7+ days of inactivity", AchievementCategory.Special, AchievementRarity.Uncommon, 50, "comeback"),
         new(BadHabitBreaker, "Bad Habit Breaker", "Achieve a 30-day streak on a bad habit", AchievementCategory.Special, AchievementRarity.Rare, 150, "bad_habit_breaker"),
-        new(FirstCheer, "Good Vibes", "Send or receive your first cheer", AchievementCategory.Special, AchievementRarity.Common, 50, "first_cheer"),
-        new(FirstFriend, "First Friend", "Add your first friend", AchievementCategory.Social, AchievementRarity.Common, 50, "first_friend"),
-        new(SquadGoals, "Squad Goals", "Reach 5 friends", AchievementCategory.Social, AchievementRarity.Rare, 150, "squad_goals", ProgressMetric.FriendsCount, 5),
-        new(Cheerleader, "Cheerleader", "Send 25 cheers", AchievementCategory.Social, AchievementRarity.Rare, 150, "cheerleader", ProgressMetric.CheersSent, 25),
+        new(FirstCheer, "Good Vibes", "Send or receive your first cheer", AchievementCategory.Special, AchievementRarity.Common, 50, "first_cheer", IsRetired: true),
+        new(FirstFriend, "First Friend", "Add your first friend", AchievementCategory.Social, AchievementRarity.Common, 50, "first_friend", IsRetired: true),
+        new(SquadGoals, "Squad Goals", "Reach 5 friends", AchievementCategory.Social, AchievementRarity.Rare, 150, "squad_goals", IsRetired: true),
+        new(Cheerleader, "Cheerleader", "Send 25 cheers", AchievementCategory.Social, AchievementRarity.Rare, 150, "cheerleader", IsRetired: true),
         new(ShowOff, "Show Off", "Share your first card", AchievementCategory.Sharing, AchievementRarity.Uncommon, 75, "show_off"),
         new(YearInReview, "Year in Review", "View your first Wrapped", AchievementCategory.Sharing, AchievementRarity.Uncommon, 75, "year_in_review"),
-        new(TeamPlayer, "Team Player", "Join your first cooperative challenge", AchievementCategory.Together, AchievementRarity.Uncommon, 75, "team_player"),
-        new(MissionAccomplished, "Mission Accomplished", "Complete a cooperative challenge", AchievementCategory.Together, AchievementRarity.Rare, 150, "mission_accomplished"),
-        new(BattleBuddy, "Battle Buddy", "Start a 1:1 accountability pair", AchievementCategory.Together, AchievementRarity.Uncommon, 75, "battle_buddy"),
+        new(TeamPlayer, "Team Player", "Join your first cooperative challenge", AchievementCategory.Together, AchievementRarity.Uncommon, 75, "team_player", IsRetired: true),
+        new(MissionAccomplished, "Mission Accomplished", "Complete a cooperative challenge", AchievementCategory.Together, AchievementRarity.Rare, 150, "mission_accomplished", IsRetired: true),
+        new(BattleBuddy, "Battle Buddy", "Start a 1:1 accountability pair", AchievementCategory.Together, AchievementRarity.Uncommon, 75, "battle_buddy", IsRetired: true),
         new(StreakImmortal, "Streak Immortal", "Achieve a 1000-day streak", AchievementCategory.Consistency, AchievementRarity.Legendary, 1500, "streak_immortal", ProgressMetric.CurrentStreak, 1000),
         new(Unstoppable, "Unstoppable", "Complete 2500 habits total", AchievementCategory.Volume, AchievementRarity.Legendary, 1000, "unstoppable", ProgressMetric.TotalCompletions, 2500),
     ];
 
     public static IReadOnlyList<AchievementDefinition> All => _all;
+    public static IReadOnlyList<AchievementDefinition> Active { get; } = _all.Where(a => !a.IsRetired).ToList();
 
     public static AchievementDefinition? GetById(string id) =>
         _all.FirstOrDefault(a => a.Id == id);

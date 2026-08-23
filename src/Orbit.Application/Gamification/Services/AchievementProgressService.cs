@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification.Models;
 using Orbit.Application.Habits.Services;
-using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -23,8 +22,6 @@ public class AchievementProgressService(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<HabitLog> habitLogRepository,
     IGenericRepository<Goal> goalRepository,
-    IGenericRepository<Cheer> cheerRepository,
-    FriendGraphService friendGraphService,
     IUserDateService userDateService) : IAchievementProgressService
 {
     private const int TotalCompletionWindowDays = 2750;
@@ -61,8 +58,6 @@ public class AchievementProgressService(
         var goalsCreated = await goalRepository.CountAsync(g => g.UserId == user.Id, cancellationToken);
         var goalsCompleted = await goalRepository.CountAsync(
             g => g.UserId == user.Id && g.Status == GoalStatus.Completed, cancellationToken);
-        var friendsCount = await friendGraphService.CountAcceptedFriendsAsync(user.Id, cancellationToken);
-        var cheersSent = await cheerRepository.CountAsync(c => c.SenderId == user.Id, cancellationToken);
 
         var (earlyLogs, nightLogs) = await CountTimeOfDayLogsAsync(
             habitIds, earnedIds, userTimeZone, cancellationToken);
@@ -72,8 +67,6 @@ public class AchievementProgressService(
             totalCompletions,
             goalsCreated,
             goalsCompleted,
-            friendsCount,
-            cheersSent,
             earlyLogs,
             nightLogs);
     }

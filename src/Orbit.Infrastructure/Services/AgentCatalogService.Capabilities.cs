@@ -319,8 +319,6 @@ public partial class AgentCatalogService
                 isMutation: false,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                planRequirement: "Pro",
-                featureFlagKeys: ["goal_tracking"],
                 chatTools: ["query_goals", "review_goals"],
                 mcpTools: ["list_goals", "get_goal", "get_goal_metrics", "get_goal_review"],
                 controllerActions:
@@ -343,8 +341,6 @@ public partial class AgentCatalogService
                 isMutation: true,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                planRequirement: "Pro",
-                featureFlagKeys: ["goal_tracking"],
                 chatTools: ["create_goal", "update_goal", "update_goal_status", "update_goal_progress", "link_habits_to_goal", "reorder_goals"],
                 mcpTools: ["create_goal", "update_goal", "update_goal_progress", "update_goal_status", "reorder_goals", "link_habits_to_goal"],
                 controllerActions:
@@ -368,8 +364,6 @@ public partial class AgentCatalogService
                 isMutation: true,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.FreshConfirmation,
-                planRequirement: "Pro",
-                featureFlagKeys: ["goal_tracking"],
                 chatTools: ["delete_goal"],
                 mcpTools: ["delete_goal"],
                 controllerActions: ["GoalsController.DeleteGoal"])
@@ -660,7 +654,20 @@ public partial class AgentCatalogService
                     "GamificationController.GetStreakHistory",
                     "GamificationController.GetXpHistory",
                     "AchievementsController.ReportEvent"
-                ])
+                ]),
+
+            CreateCapability(
+                AgentCapabilityIds.GamificationRepair,
+                "Repair Streak",
+                "Spends one banked freeze to repair the eligible missed streak day.",
+                "gamification",
+                AgentScopes.WriteGamification,
+                AgentRiskClass.Low,
+                isMutation: true,
+                isPhaseOneReadOnly: false,
+                AgentConfirmationRequirement.None,
+                planRequirement: "Pro",
+                controllerActions: ["GamificationController.RepairStreak"])
         ];
     }
 
@@ -855,7 +862,13 @@ public partial class AgentCatalogService
                 featureFlagKeys: ["api_keys"],
                 chatTools: ["manage_api_keys"],
                 mcpTools: ["manage_api_keys"],
-                controllerActions: ["ApiKeysController.CreateApiKey", "ApiKeysController.RevokeApiKey"])
+                controllerActions:
+                [
+                    "ApiKeysController.CreateApiKey",
+                    "ApiKeysController.RequestCreationChallenge",
+                    "ApiKeysController.ConfirmCreationChallenge",
+                    "ApiKeysController.RevokeApiKey"
+                ])
         ];
     }
 

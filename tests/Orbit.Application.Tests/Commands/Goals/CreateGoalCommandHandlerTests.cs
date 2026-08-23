@@ -21,9 +21,9 @@ public class CreateGoalCommandHandlerTests
 {
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
-    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
+    private readonly IGoalCompletionService _goalCompletionService = Substitute.For<IGoalCompletionService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly CreateGoalCommandHandler _handler;
@@ -34,11 +34,10 @@ public class CreateGoalCommandHandlerTests
     public CreateGoalCommandHandlerTests()
     {
         _handler = new CreateGoalCommandHandler(
-            _goalRepo, _habitRepo, _payGate, _userDateService, _gamificationService, _unitOfWork, _cache,
+            _goalRepo, _habitRepo, _userDateService, _gamificationService,
+            _goalCompletionService, _unitOfWork, _cache,
             Substitute.For<ILogger<CreateGoalCommandHandler>>());
 
-        _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);
     }
@@ -70,21 +69,6 @@ public class CreateGoalCommandHandlerTests
         await _goalRepo.Received(1).AddAsync(
             Arg.Is<Goal>(g => g.Title == "Learn piano" && g.Deadline == deadline),
             Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Handle_PayGateLimitReached_ReturnsPayGateFailure()
-    {
-        _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Result.PayGateFailure("Goals are a Pro feature"));
-
-        var command = new CreateGoalCommand(UserId, "New goal", null, 10, "units", null);
-
-        var result = await _handler.Handle(command, CancellationToken.None);
-
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be("PAY_GATE");
-        await _goalRepo.DidNotReceive().AddAsync(Arg.Any<Goal>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -201,7 +185,10 @@ public class CreateGoalCommandHandlerTests
     {
         var first = CreateHabit("First");
         var second = CreateHabit("Second");
-        _habitRepo.FindTrackedAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+        _habitRepo.FindTrackedAsync(
+            Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
             .Returns([first, second]);
         var command = new CreateGoalCommand(UserId, "Goal", null, 10, "units", null, HabitIds: [first.Id, second.Id]);
 
@@ -211,13 +198,17 @@ public class CreateGoalCommandHandlerTests
         await _goalRepo.Received(1).AddAsync(
             Arg.Is<Goal>(goal => goal.Habits.Count == 2 && goal.Habits.Contains(first) && goal.Habits.Contains(second)),
             Arg.Any<CancellationToken>());
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _goalCompletionService.Received(1).SyncDerivedGoalsAsync(
+            UserId, Arg.Any<IReadOnlyCollection<Guid>>(), Today, false, Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task CreateGoal_WithForeignHabitId_FailsAndCreatesNoGoal()
     {
-        _habitRepo.FindTrackedAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+        _habitRepo.FindTrackedAsync(
+            Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
             .Returns([]);
         var command = new CreateGoalCommand(UserId, "Goal", null, 10, "units", null, HabitIds: [Guid.NewGuid()]);
 
@@ -258,7 +249,7 @@ public class CreateGoalCommandHandlerTests
     }
 
     [Fact]
-    public async Task CreateGoal_StreakGoalWithHabit_UsesExistingPassiveSyncPath()
+    public async Task CreateGoal_StreakGoalWithHabit_SyncsProgressOnLink()
     {
         var habit = CreateHabit("Daily habit");
         typeof(Habit)
@@ -267,7 +258,10 @@ public class CreateGoalCommandHandlerTests
         habit.Log(Today.AddDays(-2), advanceDueDate: false);
         habit.Log(Today.AddDays(-1), advanceDueDate: false);
         habit.Log(Today, advanceDueDate: false);
-        _habitRepo.FindTrackedAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+        _habitRepo.FindTrackedAsync(
+            Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
             .Returns([habit]);
         Goal? createdGoal = null;
         _goalRepo.AddAsync(Arg.Do<Goal>(goal => createdGoal = goal), Arg.Any<CancellationToken>())
@@ -278,8 +272,12 @@ public class CreateGoalCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         createdGoal.Should().NotBeNull();
-        createdGoal!.CurrentValue.Should().Be(0);
-        GoalStreakSyncService.NeedsPassiveSync(createdGoal, Today).Should().BeTrue();
+        await _goalCompletionService.Received(1).SyncDerivedGoalsAsync(
+            UserId,
+            Arg.Is<IReadOnlyCollection<Guid>>(ids => ids.SequenceEqual(new[] { createdGoal!.Id })),
+            Today,
+            false,
+            Arg.Any<CancellationToken>());
     }
 
     private static Habit CreateHabit(string title) =>

@@ -18,6 +18,7 @@ public static class ErrorCodes
     public const string SelfReferral = "SELF_REFERRAL";
     public const string AlreadyReferred = "ALREADY_REFERRED";
     public const string ApiKeyNotFound = "API_KEY_NOT_FOUND";
+    public const string ApiKeyCreationChallengeRequired = "API_KEY_CREATION_CHALLENGE_REQUIRED";
     public const string NotificationNotFound = "NOTIFICATION_NOT_FOUND";
     public const string NoPushSubscriptions = "NO_PUSH_SUBSCRIPTIONS";
     public const string SubscriptionNotFound = "SUBSCRIPTION_NOT_FOUND";
@@ -80,6 +81,9 @@ public static class ErrorCodes
     public const string CalendarIdsRequired = "CALENDAR_IDS_REQUIRED";
     public const string NoHabitsForPeriod = "NO_HABITS_FOR_PERIOD";
     public const string InvalidPeriod = "INVALID_PERIOD";
+    public const string InvalidClosedMonthParameters = "INVALID_CLOSED_MONTH_PARAMETERS";
+    public const string RecapMonthNotClosed = "RECAP_MONTH_NOT_CLOSED";
+    public const string RecapMonthBeforeAccount = "RECAP_MONTH_BEFORE_ACCOUNT";
     public const string AiSummaryDisabled = "AI_SUMMARY_DISABLED";
     public const string NoActiveGoals = "NO_ACTIVE_GOALS";
     public const string NoGoalsData = "NO_GOALS_DATA";
@@ -135,4 +139,5 @@ public static class ErrorCodes
     public const string PairLimitReached = "PAIR_LIMIT_REACHED";
     public const string AlreadyPaired = "ALREADY_PAIRED";
     public const string AlreadyCheckedIn = "ALREADY_CHECKED_IN";
+    public const string StreakRepairUnavailable = "STREAK_REPAIR_UNAVAILABLE";
 }

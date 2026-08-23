@@ -7,7 +7,9 @@ using Microsoft.Extensions.Logging;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Common;
+using Orbit.Application.Gamification.Queries;
 using Orbit.Application.Goals.Services;
+using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -41,7 +43,8 @@ public record ChatResponse(
     string? CorrelationId = null,
     IReadOnlyList<string>? RelatedSurfaces = null,
     HabitListCard? HabitList = null,
-    GoalListCard? GoalList = null);
+    GoalListCard? GoalList = null,
+    MetricsCard? MetricsCard = null);
 
 public record ActionResult(
     string Type,
@@ -87,8 +90,10 @@ public record ChatExecutionDependencies(
     IServiceScopeFactory ServiceScopeFactory,
     IAgentOperationExecutor OperationExecutor,
     IPendingClarificationStore PendingClarificationStore,
-    IStreakGoalReadSyncer StreakGoalReadSyncer,
-    IGamificationService GamificationService);
+    IGoalProgressReadSyncer GoalProgressReadSyncer,
+    IGamificationService GamificationService,
+    IMediator Mediator,
+    IProductAnalytics ProductAnalytics);
 
 public partial class ProcessUserChatCommandHandler(
     ChatDataDependencies data,
@@ -114,7 +119,10 @@ public partial class ProcessUserChatCommandHandler(
             return contextResult.PropagateError<ChatResponse>();
 
         var context = contextResult.Value;
-        var aiStreamSink = BuildAiStreamSink(request.StreamSink);
+        var aiStreamFilter = BuildAiStreamFilter(request.StreamSink);
+        Func<AiStreamEvent, Task>? aiStreamSink = aiStreamFilter is null
+            ? null
+            : aiStreamFilter.HandleAsync;
 
         var faqMatch = ChatFaqCache.TryMatchFaqKey(request.Message);
         if (faqMatch is { } faqHit && ChatFaqCache.TryGetAnswer(faqHit.Key, faqHit.Locale, out var cachedFaqAnswer))
@@ -138,6 +146,8 @@ public partial class ProcessUserChatCommandHandler(
         var toolLoopResult = await RunToolCallLoopAsync(response.Value, request, executionResults, aiStreamSink, cancellationToken);
         var aiResponse = toolLoopResult.FinalResponse;
         var iterations = toolLoopResult.Iterations;
+        if (aiStreamFilter is not null)
+            await aiStreamFilter.FlushAsync();
         actionsStopwatch.Stop();
         LogToolExecutionCompleted(logger, actionsStopwatch.ElapsedMilliseconds, iterations, executionResults.ActionResults.Count);
 
@@ -150,11 +160,30 @@ public partial class ProcessUserChatCommandHandler(
         if (toolLoopResult.TokenBudgetExceeded && string.IsNullOrWhiteSpace(aiResponse.TextMessage))
             return Result.Failure<ChatResponse>(ErrorMessages.AiUnavailable);
 
-        var (aiMessage, habitList, goalList) = BuildResponseCards(
-            StripJsonWrapper(aiResponse.TextMessage), request, context);
+        var (aiMessage, habitList, goalList, metricsCard) = await BuildResponseCardsAsync(
+            StripJsonWrapper(aiResponse.TextMessage), request, context, cancellationToken);
 
-        if (faqMatch is { } faqToCache && !string.IsNullOrWhiteSpace(aiMessage) && IsShareableFaqTurn(executionResults))
+        if (faqMatch is { } faqToCache
+            && !string.IsNullOrWhiteSpace(aiMessage)
+            && IsShareableFaqTurn(executionResults, metricsCard))
+        {
             ChatFaqCache.StoreAnswer(faqToCache.Key, faqToCache.Locale, aiMessage);
+        }
+
+        if (metricsCard is not null && context.User is not null)
+        {
+            AnalyticsCapture.SafeCaptureUserEvent(
+                execution.ProductAnalytics,
+                logger,
+                request.UserId,
+                context.User.Plan.ToString(),
+                "chat_metrics_card_emitted",
+                new Dictionary<string, object>
+                {
+                    ["platform"] = request.ClientContext?.Platform ?? "unknown",
+                    ["chip_present"] = !string.IsNullOrWhiteSpace(metricsCard.SurfaceId)
+                });
+        }
 
         RunBackgroundPostResponseWork(
             request.UserId,
@@ -179,11 +208,15 @@ public partial class ProcessUserChatCommandHandler(
             request.CorrelationId,
             executionResults.RelatedSurfaces.Count > 0 ? executionResults.RelatedSurfaces : null,
             habitList,
-            goalList));
+            goalList,
+            metricsCard));
     }
 
-    private static (string? AiMessage, HabitListCard? HabitList, GoalListCard? GoalList) BuildResponseCards(
-        string? aiMessage, ProcessUserChatCommand request, ChatContext context)
+    private async Task<(string? AiMessage, HabitListCard? HabitList, GoalListCard? GoalList, MetricsCard? MetricsCard)> BuildResponseCardsAsync(
+        string? aiMessage,
+        ProcessUserChatCommand request,
+        ChatContext context,
+        CancellationToken cancellationToken)
     {
         HabitListCard? habitList = null;
         if (HabitListCardBuilder.TryExtractScope(aiMessage, out var habitListScope, out var strippedMessage))
@@ -201,7 +234,43 @@ public partial class ProcessUserChatCommandHandler(
                 goalList = GoalListCardBuilder.Build(context.ActiveGoals);
         }
 
-        return (aiMessage, habitList, goalList);
+        MetricsCard? metricsCard = null;
+        if (MetricsCardBuilder.TryExtractDirective(aiMessage, out var strippedMetricsMessage))
+        {
+            aiMessage = strippedMetricsMessage;
+            if (request.ClientContext?.SupportsMetricsCard == true)
+                metricsCard = await TryBuildMetricsCardAsync(request.UserId, context.UserToday, cancellationToken);
+        }
+
+        return (aiMessage, habitList, goalList, metricsCard);
+    }
+
+    private async Task<MetricsCard?> TryBuildMetricsCardAsync(
+        Guid userId,
+        DateOnly userToday,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var weekStartDay = await execution.UserDateService.GetUserWeekStartDayAsync(userId, cancellationToken);
+            var (dateFrom, dateTo) = RetrospectivePeriodRange.Resolve("week", userToday, weekStartDay);
+            var recapResult = await execution.Mediator.Send(
+                new GetRecapQuery(userId, dateFrom, dateTo, "week"),
+                cancellationToken);
+
+            if (recapResult.IsFailure)
+            {
+                LogMetricsCardBuildFailed(logger, recapResult.Error);
+                return null;
+            }
+
+            return MetricsCardBuilder.Build(recapResult.Value.Period, recapResult.Value.Metrics);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogMetricsCardBuildThrew(logger, ex);
+            return null;
+        }
     }
 
     /// <summary>
@@ -209,8 +278,11 @@ public partial class ProcessUserChatCommandHandler(
     /// confirmation and every tool it ran (if any) was a successful describe_feature — a static,
     /// user-data-free lookup. Any write or user-specific read makes the answer unshareable.
     /// </summary>
-    internal static bool IsShareableFaqTurn(ToolExecutionAccumulator results) =>
-        results.PendingOperations.Count == 0
+    internal static bool IsShareableFaqTurn(
+        ToolExecutionAccumulator results,
+        MetricsCard? metricsCard = null) =>
+        metricsCard is null
+        && results.PendingOperations.Count == 0
         && results.CalledToolNames.All(name => name == DescribeFeatureToolName)
         && results.OperationResults.All(operation => operation.Status == AgentOperationStatus.Succeeded);
 
@@ -296,4 +368,10 @@ public partial class ProcessUserChatCommandHandler(
         long totalReportedTokens,
         int maxTokens,
         int toolIterations);
+
+    [LoggerMessage(EventId = 29, Level = LogLevel.Warning, Message = "Metrics card could not be built: {Error}")]
+    private static partial void LogMetricsCardBuildFailed(ILogger logger, string? error);
+
+    [LoggerMessage(EventId = 30, Level = LogLevel.Warning, Message = "Metrics card computation failed")]
+    private static partial void LogMetricsCardBuildThrew(ILogger logger, Exception ex);
 }

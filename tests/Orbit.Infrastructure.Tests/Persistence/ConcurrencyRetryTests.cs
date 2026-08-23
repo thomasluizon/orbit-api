@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Commands;
+using Orbit.Application.Goals.Services;
 using Orbit.Application.Subscriptions.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -344,17 +345,23 @@ public class ConcurrencyRetryTests
         return Goal.Create(new Goal.CreateGoalParams(userId, "Squat", targetValue, "kg")).Value;
     }
 
-    private static UpdateGoalProgressCommandHandler CreateGoalProgressHandler(OrbitDbContext context) =>
-        new(
-            new GoalRepositories(
-                new GenericRepository<Goal>(context),
-                new GenericRepository<GoalProgressLog>(context)),
-            PassingGoalGate(),
+    private static UpdateGoalProgressCommandHandler CreateGoalProgressHandler(OrbitDbContext context)
+    {
+        var goalRepository = new GenericRepository<Goal>(context);
+        var unitOfWork = new UnitOfWork(context, new DatabaseConnectionSettings());
+        var completionService = new GoalCompletionService(
+            goalRepository,
             Substitute.For<IGamificationService>(),
-            new UnitOfWork(context, new DatabaseConnectionSettings()),
+            unitOfWork);
+        return new UpdateGoalProgressCommandHandler(
+            new GoalRepositories(
+                goalRepository,
+                new GenericRepository<GoalProgressLog>(context)),
+            completionService,
+            unitOfWork,
             StubToday(new DateOnly(2026, 3, 20)),
-            new MemoryCache(new MemoryCacheOptions()),
-            NullLogger<UpdateGoalProgressCommandHandler>.Instance);
+            new MemoryCache(new MemoryCacheOptions()));
+    }
 
     private static OrbitDbContext CreateContext(string dbName, ISaveChangesInterceptor? interceptor = null)
     {
@@ -375,13 +382,6 @@ public class ConcurrencyRetryTests
     {
         var payGate = Substitute.For<IPayGateService>();
         payGate.GetAiMessageLimit(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(25);
-        return payGate;
-    }
-
-    private static IPayGateService PassingGoalGate()
-    {
-        var payGate = Substitute.For<IPayGateService>();
-        payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
         return payGate;
     }
 

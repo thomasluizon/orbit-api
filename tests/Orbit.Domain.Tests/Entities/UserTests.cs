@@ -294,12 +294,15 @@ public class UserTests
         var user = CreateValidUser();
         user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddDays(30));
 
-        user.CancelStripeSubscription();
+        var beforeCancellation = DateTime.UtcNow;
+        user.CancelStripeSubscription(SubscriptionLapseReason.Canceled);
 
         user.Plan.Should().Be(UserPlan.Free);
         user.StripeSubscriptionId.Should().BeNull();
         user.PlanExpiresAt.Should().BeNull();
         user.SubscriptionSource.Should().BeNull();
+        user.SubscriptionLapseReason.Should().Be(SubscriptionLapseReason.Canceled);
+        user.SubscriptionEndedAtUtc.Should().BeOnOrAfter(beforeCancellation);
     }
 
     [Fact]
@@ -346,12 +349,14 @@ public class UserTests
         var user = CreateValidUser();
         user.SetPlaySubscription("play_token_123", DateTime.UtcNow.AddDays(30), SubscriptionInterval.Monthly);
 
-        user.CancelPlaySubscription();
+        user.CancelPlaySubscription(SubscriptionLapseReason.Expired);
 
         user.Plan.Should().Be(UserPlan.Free);
         user.PlayPurchaseToken.Should().BeNull();
         user.SubscriptionSource.Should().BeNull();
         user.SubscriptionInterval.Should().BeNull();
+        user.SubscriptionLapseReason.Should().Be(SubscriptionLapseReason.Expired);
+        user.SubscriptionEndedAtUtc.Should().NotBeNull();
     }
 
     [Fact]
@@ -362,7 +367,7 @@ public class UserTests
         user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddMonths(6));
         user.SetPlaySubscription("play_token_123", playExpiry, SubscriptionInterval.Monthly);
 
-        user.CancelStripeSubscription();
+        user.CancelStripeSubscription(SubscriptionLapseReason.Canceled);
 
         user.StripeSubscriptionId.Should().BeNull();
         user.Plan.Should().Be(UserPlan.Pro);
@@ -370,6 +375,8 @@ public class UserTests
         user.PlayPurchaseToken.Should().Be("play_token_123");
         user.SubscriptionSource.Should().Be(SubscriptionSource.GooglePlay);
         user.PlanExpiresAt.Should().Be(playExpiry);
+        user.SubscriptionLapseReason.Should().BeNull();
+        user.SubscriptionEndedAtUtc.Should().BeNull();
     }
 
     [Fact]
@@ -379,12 +386,13 @@ public class UserTests
         user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddMonths(6));
         user.LinkPlayPurchaseToken("play_token_123");
 
-        user.CancelStripeSubscription();
+        user.CancelStripeSubscription(SubscriptionLapseReason.PaymentFailed);
 
         user.Plan.Should().Be(UserPlan.Free);
         user.StripeSubscriptionId.Should().BeNull();
         user.SubscriptionSource.Should().BeNull();
         user.PlayPurchaseToken.Should().Be("play_token_123");
+        user.SubscriptionLapseReason.Should().Be(SubscriptionLapseReason.PaymentFailed);
     }
 
     [Fact]
@@ -395,7 +403,7 @@ public class UserTests
         user.SetPlaySubscription("play_token_123", DateTime.UtcNow.AddDays(20), SubscriptionInterval.Monthly);
         user.SetStripeSubscription("sub_123", stripeExpiry);
 
-        user.CancelPlaySubscription();
+        user.CancelPlaySubscription(SubscriptionLapseReason.Expired);
 
         user.PlayPurchaseToken.Should().BeNull();
         user.Plan.Should().Be(UserPlan.Pro);
@@ -403,58 +411,126 @@ public class UserTests
         user.StripeSubscriptionId.Should().Be("sub_123");
         user.SubscriptionSource.Should().Be(SubscriptionSource.Stripe);
         user.PlanExpiresAt.Should().Be(stripeExpiry);
+        user.SubscriptionLapseReason.Should().BeNull();
+        user.SubscriptionEndedAtUtc.Should().BeNull();
+    }
+
+    [Fact]
+    public void SetStripeSubscription_AfterPaymentFailure_ClearsPendingLapse()
+    {
+        var user = CreateValidUser();
+        user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddDays(30));
+        user.RecordSubscriptionLapseReason(
+            SubscriptionSource.Stripe, SubscriptionLapseReason.PaymentFailed);
+
+        user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddDays(30));
+
+        user.SubscriptionLapseReason.Should().BeNull();
+        user.SubscriptionEndedAtUtc.Should().BeNull();
+    }
+
+    [Fact]
+    public void CancelStripeSubscription_InvalidReason_Throws()
+    {
+        var user = CreateValidUser();
+
+        var act = () => user.CancelStripeSubscription((SubscriptionLapseReason)999);
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
     }
 
     [Fact]
     public void IncrementAiMessageCount_FirstTime_ResetsAndIncrements()
     {
         var user = CreateValidUser();
+        var today = new DateOnly(2026, 3, 1);
 
-        user.IncrementAiMessageCount();
+        user.IncrementAiMessageCount(today);
 
-        user.AiMessagesUsedThisMonth.Should().Be(1);
-        user.AiMessagesResetAt.Should().NotBeNull();
+        user.AiMessagesUsedToday.Should().Be(1);
+        user.AiMessagesLocalDate.Should().Be(today);
     }
 
     [Fact]
-    public void IncrementAiMessageCount_WithinPeriod_JustIncrements()
+    public void IncrementAiMessageCount_SameLocalDate_JustIncrements()
     {
         var user = CreateValidUser();
-        user.IncrementAiMessageCount();        var resetAt = user.AiMessagesResetAt;
+        var today = new DateOnly(2026, 3, 1);
+        user.IncrementAiMessageCount(today);
 
-        user.IncrementAiMessageCount();
+        user.IncrementAiMessageCount(today);
 
-        user.AiMessagesUsedThisMonth.Should().Be(2);
-        user.AiMessagesResetAt.Should().Be(resetAt);    }
-
-    [Fact]
-    public void IncrementAiMessageCount_PastReset_ResetsCounter()
-    {
-        var user = CreateValidUser();
-        var now = new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
-        user.IncrementAiMessageCount(now);
-        user.IncrementAiMessageCount(now);
-        user.AiMessagesUsedThisMonth.Should().Be(2);
-
-        user.IncrementAiMessageCount(now.AddDays(31));
-
-        user.AiMessagesUsedThisMonth.Should().Be(1);
+        user.AiMessagesUsedToday.Should().Be(2);
+        user.AiMessagesLocalDate.Should().Be(today);
     }
 
     [Fact]
-    public void IncrementAiMessageCount_PastReset_ZeroesAdRewardBonus()
+    public void IncrementAiMessageCount_NextLocalDate_ResetsCounter()
     {
         var user = CreateValidUser();
-        var now = new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
+        var today = new DateOnly(2026, 3, 1);
+        user.IncrementAiMessageCount(today);
+        user.IncrementAiMessageCount(today);
+        user.AiMessagesUsedToday.Should().Be(2);
+
+        user.IncrementAiMessageCount(today.AddDays(1));
+
+        user.AiMessagesUsedToday.Should().Be(1);
+        user.AiMessagesLocalDate.Should().Be(today.AddDays(1));
+    }
+
+    [Fact]
+    public void IncrementAiMessageCount_PreviousLocalDateAfterTimezoneChange_PreservesBucket()
+    {
+        var user = CreateValidUser();
+        var today = new DateOnly(2026, 3, 1);
+        for (var i = 0; i < 5; i++)
+            user.IncrementAiMessageCount(today.AddDays(1));
+
+        user.IncrementAiMessageCount(today);
+
+        user.AiMessagesUsedToday.Should().Be(6);
+        user.AiMessagesLocalDate.Should().Be(today.AddDays(1));
+    }
+
+    [Fact]
+    public void GetAiMessagesUsedToday_StoredDateMismatch_ReturnsZero()
+    {
+        var user = CreateValidUser();
+        var today = new DateOnly(2026, 3, 1);
+        user.IncrementAiMessageCount(today.AddDays(-1));
+
+        var result = user.GetAiMessagesUsedToday(today);
+
+        result.Should().Be(0);
+    }
+
+    [Fact]
+    public void GetAiMessagesUsedForQuota_StoredFutureDate_ReturnsExistingUsage()
+    {
+        var user = CreateValidUser();
+        var today = new DateOnly(2026, 3, 1);
+        user.IncrementAiMessageCount(today.AddDays(1));
+
+        var result = user.GetAiMessagesUsedForQuota(today);
+
+        result.Should().Be(1);
+    }
+
+    [Fact]
+    public void IncrementAiMessageCount_NextLocalDate_ZeroesAdRewardBonus()
+    {
+        var user = CreateValidUser();
+        var today = new DateOnly(2026, 3, 1);
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
-        user.IncrementAiMessageCount(now);
-        user.GrantAdReward(DateOnly.FromDateTime(now), bonusMessages: 5);
-        user.IncrementAiMessageCount(now);
+        user.IncrementAiMessageCount(today);
+        user.GrantAdReward(today, bonusMessages: 5);
+        user.IncrementAiMessageCount(today);
         user.AdRewardBonusMessages.Should().Be(5);
 
-        user.IncrementAiMessageCount(now.AddDays(31));
+        user.IncrementAiMessageCount(today.AddDays(1));
 
-        user.AiMessagesUsedThisMonth.Should().Be(1);
+        user.AiMessagesUsedToday.Should().Be(1);
         user.AdRewardBonusMessages.Should().Be(0);
     }
 
@@ -463,31 +539,49 @@ public class UserTests
     {
         var user = CreateValidUser();
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        var today = new DateOnly(2026, 3, 1);
         for (int i = 0; i < 20; i++)
-            user.IncrementAiMessageCount();
-        user.GrantAdReward(DateOnly.FromDateTime(DateTime.UtcNow), bonusMessages: 5);
-        var resetAt = user.AiMessagesResetAt;
+            user.IncrementAiMessageCount(today);
+        user.GrantAdReward(today, bonusMessages: 5);
 
         user.ResetAccount();
 
-        user.AiMessagesUsedThisMonth.Should().Be(20);
-        user.AiMessagesResetAt.Should().Be(resetAt);
+        user.AiMessagesUsedToday.Should().Be(20);
+        user.AiMessagesLocalDate.Should().Be(today);
         user.AdRewardBonusMessages.Should().Be(5);
         user.AdRewardsClaimedToday.Should().Be(1);
-        user.LastAdRewardLocalDate.Should().Be(DateOnly.FromDateTime(DateTime.UtcNow));
+        user.LastAdRewardLocalDate.Should().Be(today);
+    }
+
+    [Fact]
+    public void ResetAccount_ClearsOnboardingChecklistEvidence()
+    {
+        var user = CreateValidUser();
+        user.MarkFirstHabitCreated();
+        user.MarkFirstHabitLogged();
+        user.MarkAstraUsed();
+        user.CompleteOnboardingChecklist();
+
+        user.ResetAccount();
+
+        user.HasCreatedFirstHabit.Should().BeFalse();
+        user.HasLoggedFirstHabit.Should().BeFalse();
+        user.HasTriedAstra.Should().BeFalse();
+        user.HasCompletedOnboardingChecklist.Should().BeFalse();
     }
 
     [Fact]
     public void ResetAccount_ThenSendMessage_DoesNotRefillQuota()
     {
         var user = CreateValidUser();
+        var today = new DateOnly(2026, 3, 1);
         for (int i = 0; i < 20; i++)
-            user.IncrementAiMessageCount();
+            user.IncrementAiMessageCount(today);
 
         user.ResetAccount();
-        user.IncrementAiMessageCount();
+        user.IncrementAiMessageCount(today);
 
-        user.AiMessagesUsedThisMonth.Should().Be(21);
+        user.AiMessagesUsedToday.Should().Be(21);
     }
 
     [Fact]
@@ -736,43 +830,7 @@ public class UserTests
         user.UpdateStreak(new DateOnly(2026, 3, 11));
         user.UpdateStreak(new DateOnly(2026, 3, 12));
         user.CurrentStreak.Should().Be(3);
-        user.LongestStreak.Should().Be(5);    }
-
-    [Fact]
-    public void UpdateStreak_FreezeBridge_ContinuesStreak()
-    {
-        var user = CreateValidUser();
-        var day1 = new DateOnly(2026, 3, 28);
-        var freezeDay = new DateOnly(2026, 3, 29);
-        var day3 = new DateOnly(2026, 3, 30);
-
-        user.UpdateStreak(day1);
-        user.CurrentStreak.Should().Be(1);
-
-        user.ApplyStreakFreeze(freezeDay);
-        user.CurrentStreak.Should().Be(1);        user.LastActiveDate.Should().Be(freezeDay);
-
-        user.UpdateStreak(day3);
-        user.CurrentStreak.Should().Be(2);
-        user.LongestStreak.Should().Be(2);
-    }
-
-    [Fact]
-    public void ApplyStreakFreeze_SetsLastActiveDate_DoesNotChangeStreak()
-    {
-        var user = CreateValidUser();
-        var day1 = new DateOnly(2026, 3, 28);
-        var freezeDay = new DateOnly(2026, 3, 29);
-
-        user.UpdateStreak(day1);
-        var streakBefore = user.CurrentStreak;
-        var longestBefore = user.LongestStreak;
-
-        user.ApplyStreakFreeze(freezeDay);
-
-        user.CurrentStreak.Should().Be(streakBefore);
-        user.LongestStreak.Should().Be(longestBefore);
-        user.LastActiveDate.Should().Be(freezeDay);
+        user.LongestStreak.Should().Be(5);
     }
 
     [Fact]
@@ -839,6 +897,31 @@ public class UserTests
 
         awardedAgain.Should().BeFalse();
         user.StreakFreezesAccumulated.Should().Be(1);
+    }
+
+    [Fact]
+    public void ConsumeStreakFreeze_WithBankedFreeze_DecrementsExactlyOne()
+    {
+        var user = CreateValidUser();
+        user.SetStreakState(7, 7, new DateOnly(2026, 1, 7));
+        user.AwardStreakFreezeIfEligible();
+
+        var result = user.ConsumeStreakFreeze();
+
+        result.IsSuccess.Should().BeTrue();
+        user.StreakFreezesAccumulated.Should().Be(0);
+    }
+
+    [Fact]
+    public void ConsumeStreakFreeze_EmptyBank_ReturnsGuardFailure()
+    {
+        var user = CreateValidUser();
+
+        var result = user.ConsumeStreakFreeze();
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("NO_STREAK_FREEZES");
+        user.StreakFreezesAccumulated.Should().Be(0);
     }
 
     [Fact]

@@ -18,6 +18,7 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime? CompletedAtUtc { get; private set; }
+    public DateTime? FirstCompletedAtUtc { get; private set; }
     public DateTime? StreakSyncedAtUtc { get; private set; }
     public bool IsDeleted { get; private set; }
     public DateTime? DeletedAtUtc { get; private set; }
@@ -27,14 +28,32 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
 
     private readonly List<Habit> _habits = [];
     public IReadOnlyCollection<Habit> Habits => _habits.AsReadOnly();
+    public bool HasActiveLinkedHabits => _habits.Any(habit => !habit.IsDeleted);
+    public bool IsProgressDerived => Type == GoalType.Streak || HasActiveLinkedHabits;
 
-    public void AddHabit(Habit habit) { if (!_habits.Contains(habit)) _habits.Add(habit); }
+    public void AddHabit(Habit habit)
+    {
+        if (_habits.Contains(habit))
+            return;
+
+        _habits.Add(habit);
+        habit.AddGoal(this);
+    }
 
     public void RemoveHabit(Habit habit)
     {
-        _habits.Remove(habit);
-        if (Type == GoalType.Streak && _habits.Count == 0)
+        if (!_habits.Remove(habit))
+            return;
+
+        habit.RemoveGoal(this);
+        UpdatedAtUtc = DateTime.UtcNow;
+        if (HasActiveLinkedHabits)
+            return;
+
+        if (Type == GoalType.Streak)
             ResetStreakProgress();
+        else
+            ResetStandardProgress();
     }
 
     /// <summary>
@@ -49,6 +68,22 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
 
         CurrentValue = 0;
         StreakSyncedAtUtc = null;
+        UpdatedAtUtc = DateTime.UtcNow;
+        return true;
+    }
+
+    /// <summary>
+    /// Clears an Active Standard goal's derived completion count when its final habit is unlinked.
+    /// A Completed goal keeps the value that justified its earned completion so CurrentValue,
+    /// Status, and CompletedAtUtc cannot become contradictory when the link is removed. With no
+    /// linked habits either goal returns to manual progress. Returns true when the value changed.
+    /// </summary>
+    public bool ResetStandardProgress()
+    {
+        if (Type != GoalType.Standard || Status == GoalStatus.Completed || CurrentValue == 0)
+            return false;
+
+        CurrentValue = 0;
         UpdatedAtUtc = DateTime.UtcNow;
         return true;
     }
@@ -120,6 +155,9 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
     /// </summary>
     public Result<bool> UpdateProgress(decimal newValue)
     {
+        if (IsProgressDerived)
+            return Result.Failure<bool>(DomainErrors.GoalProgressDerived);
+
         if (Status != GoalStatus.Active)
             return Result.Failure<bool>(DomainErrors.GoalNotActive);
 
@@ -157,14 +195,49 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
         return Result.Success(justCompleted);
     }
 
+    /// <summary>
+    /// Syncs a linked Standard goal to the number of positive, active completion logs created for
+    /// its linked habits on or after the goal started. Completions are used because TargetValue is
+    /// a count; counting distinct days would undercount quantities, while counting currently
+    /// completed habits would discard history. When <paramref name="allowCompletion"/> is false,
+    /// read paths refresh the displayed value without changing status or firing write-side effects.
+    /// </summary>
+    public Result<bool> SyncStandardProgress(int completionCount, bool allowCompletion = true)
+    {
+        if (Type != GoalType.Standard)
+            return Result.Failure<bool>(DomainErrors.NotStandardGoal);
+
+        if (!HasActiveLinkedHabits)
+            return Result.Failure<bool>(DomainErrors.StandardGoalHasNoLinkedHabits);
+
+        if (Status != GoalStatus.Active)
+            return Result.Failure<bool>(DomainErrors.GoalNotActive);
+
+        if (completionCount < 0)
+            return Result.Failure<bool>(DomainErrors.ProgressValueNegative);
+
+        CurrentValue = completionCount;
+        var justCompleted = allowCompletion && TryComplete();
+
+        UpdatedAtUtc = DateTime.UtcNow;
+        return Result.Success(justCompleted);
+    }
+
     private bool TryComplete()
     {
         if (CurrentValue < TargetValue)
             return false;
 
         Status = GoalStatus.Completed;
-        CompletedAtUtc = DateTime.UtcNow;
+        RecordCompletion();
         return true;
+    }
+
+    private void RecordCompletion()
+    {
+        var completedAtUtc = DateTime.UtcNow;
+        CompletedAtUtc = completedAtUtc;
+        FirstCompletedAtUtc ??= completedAtUtc;
     }
 
     /// <summary>
@@ -190,7 +263,7 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
         if (Status == GoalStatus.Active && CurrentValue >= TargetValue)
         {
             Status = GoalStatus.Completed;
-            CompletedAtUtc = DateTime.UtcNow;
+            RecordCompletion();
             return Result.Success(GoalEditTransition.Completed);
         }
 
@@ -217,7 +290,7 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
             return Result.Failure(DomainErrors.GoalAlreadyCompleted);
 
         Status = GoalStatus.Completed;
-        CompletedAtUtc = DateTime.UtcNow;
+        RecordCompletion();
         UpdatedAtUtc = DateTime.UtcNow;
         return Result.Success();
     }

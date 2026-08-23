@@ -7,5 +7,4 @@ namespace Orbit.Application.Accountability.Commands;
 public record AccountabilityRepositories(
     IGenericRepository<User> Users,
     IGenericRepository<AccountabilityPair> Pairs,
-    IGenericRepository<AccountabilityCheckIn> CheckIns,
-    IGenericRepository<UserAchievement> Achievements);
+    IGenericRepository<AccountabilityCheckIn> CheckIns);

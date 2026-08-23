@@ -5,7 +5,7 @@ namespace Orbit.Domain.Interfaces;
 public interface IPayGateService
 {
     /// <summary>
-    /// Checks if the user can create more habits (free plan: max 10 active).
+    /// Checks whether the shared live top-level habit ceiling allows the requested count.
     /// </summary>
     Task<Result> CanCreateHabits(Guid userId, int count = 1, CancellationToken ct = default);
 
@@ -15,7 +15,7 @@ public interface IPayGateService
     Task<Result> CanCreateSubHabits(Guid userId, CancellationToken ct = default);
 
     /// <summary>
-    /// Checks if the user can send AI messages (free: 20/month, Pro: 500/month).
+    /// Checks if the user can send AI messages (free: 5/day, Pro: 50/day).
     /// </summary>
     Task<Result> CanSendAiMessage(Guid userId, CancellationToken ct = default);
 
@@ -43,14 +43,9 @@ public interface IPayGateService
     Task<Result> CanUseRetrospective(Guid userId, CancellationToken ct = default);
 
     /// <summary>
-    /// Checks if the user can access goals (Pro-only feature).
+    /// Checks if the user can use AI goal reviews (Pro-only feature).
     /// </summary>
-    Task<Result> CanAccessGoals(Guid userId, CancellationToken ct = default);
-
-    /// <summary>
-    /// Checks if the user can create goals (Pro-only feature).
-    /// </summary>
-    Task<Result> CanCreateGoals(Guid userId, CancellationToken ct = default);
+    Task<Result> CanUseGoalReview(Guid userId, CancellationToken ct = default);
 
     /// <summary>
     /// Checks if the user can read calendar integration data (Pro-only feature).
@@ -117,8 +112,4 @@ public interface IPayGateService
     /// </summary>
     Task<Result> CanUseSlipAlerts(Guid userId, CancellationToken ct = default);
 
-    /// <summary>
-    /// Checks if the user can manage goal links on habits (Pro-only feature).
-    /// </summary>
-    Task<Result> CanLinkGoalsToHabits(Guid userId, CancellationToken ct = default);
 }

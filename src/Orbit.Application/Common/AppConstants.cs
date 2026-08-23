@@ -17,9 +17,9 @@ public static class AppConstants
     public const int HabitLogsLookbackDays = 365;
     public const int MaxHabitLogsReturned = 1000;
     public const int DefaultReminderMinutes = 15;
-    public const int DefaultFreeMaxHabits = 10;
-    public const int DefaultFreeAiMessages = 20;
-    public const int DefaultProAiMessages = 500;
+    public const int DefaultFreeMaxHabits = 1000;
+    public const int DefaultFreeAiMessages = 5;
+    public const int DefaultProAiMessages = 50;
     public const int MaxBulkOperationSize = 100;
     public const int MaxGoalsPerHabit = 10;
     public const int MaxHabitsPerGoal = 20;
@@ -41,6 +41,8 @@ public static class AppConstants
     public const int MaxLanguageLength = 10;
     public const int MaxVerificationAttempts = 3;
     public const int VerificationAttemptWindowMinutes = 15;
+    public const int SensitiveOperationChallengeCooldownSeconds = 60;
+    public const int SensitiveOperationChallengeTtlMinutes = 10;
     public const int MaxDeletionGraceDays = 30;
     public const int MaxChatMessageLength = 4000;
     public const int MaxClarificationValueLength = 2048;

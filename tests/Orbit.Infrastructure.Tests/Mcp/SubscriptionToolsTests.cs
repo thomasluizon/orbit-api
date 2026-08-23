@@ -18,6 +18,7 @@ public class SubscriptionToolsTests
 {
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
+    private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IMediator _mediator = Substitute.For<IMediator>();
     private readonly IAgentOperationExecutor _executor = Substitute.For<IAgentOperationExecutor>();
     private readonly SubscriptionTools _tools;
@@ -27,7 +28,15 @@ public class SubscriptionToolsTests
     public SubscriptionToolsTests()
     {
         var frontendSettings = Options.Create(new FrontendSettings { BaseUrl = "https://app.useorbit.org" });
-        _tools = new SubscriptionTools(_userRepo, _payGate, _mediator, frontendSettings, new McpExecutorBridge(_executor));
+        _tools = new SubscriptionTools(
+            _userRepo,
+            _payGate,
+            _userDateService,
+            _mediator,
+            frontendSettings,
+            new McpExecutorBridge(_executor));
+        _userDateService.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>())
+            .Returns(new DateOnly(2026, 8, 23));
 
         var claims = new[] { new Claim(ClaimTypes.NameIdentifier, _userId.ToString()) };
         _user = new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"));
@@ -66,7 +75,7 @@ public class SubscriptionToolsTests
         var result = await _tools.GetSubscriptionStatus(_user);
 
         result.Should().Contain("Plan: Pro");
-        result.Should().Contain("AI Messages: 0/5");
+        result.Should().Contain("Daily AI Messages: 0/5");
     }
 
     [Fact]
@@ -94,7 +103,24 @@ public class SubscriptionToolsTests
 
         var result = await _tools.GetSubscriptionStatus(_user);
 
-        result.Should().Contain("AI Messages: 0/50");
+        result.Should().Contain("Daily AI Messages: 0/50");
+    }
+
+    [Fact]
+    public async Task GetSubscriptionStatus_AfterLocalMidnight_ShowsZeroDailyUsage()
+    {
+        var today = new DateOnly(2026, 8, 23);
+        var user = User.Create("Thomas", "thomas@example.com").Value;
+        for (var i = 0; i < 5; i++)
+            user.IncrementAiMessageCount(today.AddDays(-1));
+        _userRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(user);
+        _payGate.GetAiMessageLimit(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(50);
+
+        var result = await _tools.GetSubscriptionStatus(_user);
+
+        result.Should().Contain("Daily AI Messages: 0/50");
     }
 
     [Fact]

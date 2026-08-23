@@ -28,7 +28,8 @@ public record GoalDetailDto(
     DateTime? CompletedAtUtc,
     decimal ProgressPercentage,
     IReadOnlyList<GoalProgressEntryDto> ProgressHistory,
-    List<LinkedHabitDto> LinkedHabits);
+    List<LinkedHabitDto> LinkedHabits,
+    bool? IsProgressDerived = null);
 
 public record GetGoalByIdQuery(
     Guid UserId,
@@ -36,15 +37,10 @@ public record GetGoalByIdQuery(
 
 public class GetGoalByIdQueryHandler(
     IGenericRepository<Goal> goalRepository,
-    IPayGateService payGate,
     IUserDateService userDateService) : IRequestHandler<GetGoalByIdQuery, Result<GoalDetailDto>>
 {
     public async Task<Result<GoalDetailDto>> Handle(GetGoalByIdQuery request, CancellationToken cancellationToken)
     {
-        var gateCheck = await payGate.CanAccessGoals(request.UserId, cancellationToken);
-        if (gateCheck.IsFailure)
-            return gateCheck.PropagateError<GoalDetailDto>();
-
         var loaded = await GoalDetailLoader.BuildGoalDetailAsync(
             goalRepository, userDateService, request.GoalId, request.UserId, cancellationToken);
         if (loaded is null)

@@ -17,6 +17,9 @@ public static class EmailCopy
     public sealed record AccountDeletionCopy(
         string Subject, string Heading, string Intro, string CodeLabel, string Warning, string Footer, string Preheader);
 
+    public sealed record ApiKeyCreationCopy(
+        string Subject, string Heading, string Intro, string CodeLabel, string Warning, string Footer, string Preheader);
+
     public sealed record WaitlistConfirmationCopy(
         string Subject, string Heading, string Intro, string Cta, string Warning, string Footer, string Preheader);
 
@@ -71,6 +74,24 @@ public static class EmailCopy
             Warning: isPtBr
                 ? "Se você não solicitou isso, ignore este e-mail. Sua conta permanecerá segura."
                 : "If you didn't request this, ignore this email. Your account will remain safe.",
+            Footer: TeamFooter(isPtBr),
+            Preheader: intro);
+    }
+
+    public static ApiKeyCreationCopy ApiKeyCreation(bool isPtBr)
+    {
+        var intro = isPtBr
+            ? "Você solicitou a criação de uma chave de API do Orbit. Essa chave pode acessar sua conta por meio de ferramentas de agentes conectadas. Este código expira em 10 minutos."
+            : "You requested to create an Orbit API key. This key can access your account through connected agent tools. This code expires in 10 minutes.";
+
+        return new ApiKeyCreationCopy(
+            Subject: isPtBr ? "Confirme a criação da sua chave de API do Orbit" : "Confirm your Orbit API key creation",
+            Heading: isPtBr ? "Criar uma chave de API" : "Create an API key",
+            Intro: intro,
+            CodeLabel: isPtBr ? "Use o código abaixo para confirmar:" : "Use the code below to confirm:",
+            Warning: isPtBr
+                ? "Se você não solicitou isso, ignore este e-mail. Nenhuma chave de API será criada."
+                : "If you didn't request this, ignore this email. No API key will be created.",
             Footer: TeamFooter(isPtBr),
             Preheader: intro);
     }

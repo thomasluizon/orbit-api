@@ -13,16 +13,16 @@ public record GetGoalMetricsQuery(Guid UserId, Guid GoalId) : IRequest<Result<Go
 
 public class GetGoalMetricsQueryHandler(
     IGenericRepository<Goal> goalRepository,
-    IPayGateService payGate,
-    IUserDateService userDateService) : IRequestHandler<GetGoalMetricsQuery, Result<GoalMetrics>>
+    IUserDateService userDateService,
+    IGoalProgressReadSyncer goalProgressReadSyncer) : IRequestHandler<GetGoalMetricsQuery, Result<GoalMetrics>>
 {
     public async Task<Result<GoalMetrics>> Handle(GetGoalMetricsQuery request, CancellationToken cancellationToken)
     {
-        var gateCheck = await payGate.CanAccessGoals(request.UserId, cancellationToken);
-        if (gateCheck.IsFailure)
-            return gateCheck.PropagateError<GoalMetrics>();
-
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var freshValues = await goalProgressReadSyncer.ComputeFreshValuesAsync(
+            request.UserId,
+            userToday,
+            cancellationToken);
         var streakWindowStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
 
         var goals = await goalRepository.FindAsync(
@@ -35,7 +35,8 @@ public class GetGoalMetricsQueryHandler(
         if (goal is null)
             return Result.Failure<GoalMetrics>(ErrorMessages.GoalNotFound);
 
-        GoalStreakSyncService.ApplyReadValue(goal, userToday);
+        if (freshValues.TryGetValue(goal.Id, out var freshValue))
+            GoalProgressSyncService.ApplyReadValue(goal, freshValue);
 
         var metrics = GoalMetricsCalculator.Calculate(goal, userToday);
         return Result.Success(metrics);

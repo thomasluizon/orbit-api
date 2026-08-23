@@ -27,7 +27,8 @@ public record GoalDto(
     DateTime? CompletedAtUtc,
     decimal ProgressPercentage,
     List<LinkedHabitDto> LinkedHabits,
-    string? TrackingStatus);
+    string? TrackingStatus,
+    bool? IsProgressDerived = null);
 
 public record GetGoalsQuery(
     Guid UserId,
@@ -37,18 +38,13 @@ public record GetGoalsQuery(
 
 public class GetGoalsQueryHandler(
     IGenericRepository<Goal> goalRepository,
-    IPayGateService payGate,
     IUserDateService userDateService,
-    IStreakGoalReadSyncer streakGoalReadSyncer) : IRequestHandler<GetGoalsQuery, Result<PaginatedResponse<GoalDto>>>
+    IGoalProgressReadSyncer goalProgressReadSyncer) : IRequestHandler<GetGoalsQuery, Result<PaginatedResponse<GoalDto>>>
 {
     public async Task<Result<PaginatedResponse<GoalDto>>> Handle(GetGoalsQuery request, CancellationToken cancellationToken)
     {
-        var gateCheck = await payGate.CanAccessGoals(request.UserId, cancellationToken);
-        if (gateCheck.IsFailure)
-            return gateCheck.PropagateError<PaginatedResponse<GoalDto>>();
-
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-        var freshStreakValues = await streakGoalReadSyncer.ComputeFreshValuesAsync(request.UserId, userToday, cancellationToken);
+        var freshProgressValues = await goalProgressReadSyncer.ComputeFreshValuesAsync(request.UserId, userToday, cancellationToken);
 
         var statusFilter = request.StatusFilter;
         Expression<Func<Goal, bool>> predicate = statusFilter.HasValue
@@ -66,21 +62,22 @@ public class GetGoalsQueryHandler(
         var totalPages = (int)Math.Ceiling((double)totalCount / request.PageSize);
 
         var items = pageGoals
-            .Select(g => MapToDto(g, userToday, ResolveCurrentValue(g, freshStreakValues)))
+            .Select(g => MapToDto(g, userToday, ResolveCurrentValue(g, freshProgressValues)))
             .ToList();
 
         return Result.Success(new PaginatedResponse<GoalDto>(items, request.Page, request.PageSize, totalCount, totalPages));
     }
 
-    private static decimal ResolveCurrentValue(Goal goal, IReadOnlyDictionary<Guid, int> freshStreakValues) =>
-        freshStreakValues.TryGetValue(goal.Id, out var fresh) ? fresh : goal.CurrentValue;
+    private static decimal ResolveCurrentValue(Goal goal, IReadOnlyDictionary<Guid, int> freshProgressValues) =>
+        freshProgressValues.TryGetValue(goal.Id, out var fresh) ? fresh : goal.CurrentValue;
 
     private static GoalDto MapToDto(Goal g, DateOnly userToday, decimal currentValue) => new(
         g.Id, g.Title, g.Description, g.TargetValue, currentValue,
         g.Unit, g.Status, g.Type, g.Deadline, g.Position, g.CreatedAtUtc, g.CompletedAtUtc,
         g.TargetValue > 0 ? Math.Min(100, Math.Round(currentValue / g.TargetValue * 100, 1)) : 0,
         g.Habits.Select(h => new LinkedHabitDto(h.Id, h.Title)).ToList(),
-        ComputeSimpleTrackingStatus(g, userToday, currentValue));
+        ComputeSimpleTrackingStatus(g, userToday, currentValue),
+        g.IsProgressDerived);
 
     private static string? ComputeSimpleTrackingStatus(Goal goal, DateOnly userToday, decimal currentValue)
     {

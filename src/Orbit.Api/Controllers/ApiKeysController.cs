@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
+using Orbit.Api.RateLimiting;
 using Orbit.Application.ApiKeys.Commands;
 using Orbit.Application.ApiKeys.Queries;
 
@@ -19,12 +20,14 @@ public partial class ApiKeysController(IMediator mediator, ILogger<ApiKeysContro
         IReadOnlyList<string>? Scopes = null,
         bool IsReadOnly = false,
         DateTime? ExpiresAtUtc = null);
+    public record ConfirmApiKeyCreationChallengeRequest(string Code);
 
     [HttpPost]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status428PreconditionRequired)]
     public async Task<IActionResult> CreateApiKey(
         [FromBody] CreateApiKeyRequest request,
         CancellationToken cancellationToken)
@@ -42,6 +45,34 @@ public partial class ApiKeysController(IMediator mediator, ILogger<ApiKeysContro
             LogApiKeyCreated(logger, value.Id, HttpContext.GetUserId());
             return Created($"/api/api-keys/{value.Id}", value);
         });
+    }
+
+    [HttpPost("creation-challenge")]
+    [DistributedRateLimit("auth")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> RequestCreationChallenge(CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(
+            new RequestApiKeyCreationChallengeCommand(HttpContext.GetUserId()),
+            cancellationToken);
+        return result.ToPayGateAwareResult(() => Ok(new { message = "API key creation code sent" }));
+    }
+
+    [HttpPost("creation-challenge/confirm")]
+    [DistributedRateLimit("auth")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> ConfirmCreationChallenge(
+        [FromBody] ConfirmApiKeyCreationChallengeRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(
+            new ConfirmApiKeyCreationChallengeCommand(HttpContext.GetUserId(), request.Code),
+            cancellationToken);
+        return result.ToPayGateAwareResult(() => Ok(new { message = "API key creation confirmed" }));
     }
 
     [HttpGet]

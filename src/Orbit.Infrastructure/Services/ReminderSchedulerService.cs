@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Orbit.Application.Notifications;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
@@ -139,7 +140,8 @@ public partial class ReminderSchedulerService(
             var minutesText = FormatReminderText(minutesBefore, lang);
 
             var sentReminder = SentReminder.Create(habit.Id, userToday, minutesBefore);
-            var notification = Notification.Create(habit.UserId, habit.Title, minutesText, "/", habit.Id);
+            var notification = Notification.Create(
+                habit.UserId, habit.Title, minutesText, NotificationUrls.Home, habit.Id);
 
             sentReminderSet.Add((habit.Id, userToday, minutesBefore));
 
@@ -226,7 +228,8 @@ public partial class ReminderSchedulerService(
             var text = FormatScheduledReminderText(sr.When, lang);
 
             var sentReminder = SentReminder.Create(habit.Id, userToday, 0, sr.Time, sr.When);
-            var notification = Notification.Create(habit.UserId, habit.Title, text, "/", habit.Id);
+            var notification = Notification.Create(
+                habit.UserId, habit.Title, text, NotificationUrls.Home, habit.Id);
 
             sentScheduledSet.Add((habit.Id, userToday, sr.Time, sr.When));
 
@@ -300,7 +303,8 @@ public partial class ReminderSchedulerService(
         {
             try
             {
-                await pushService.SendToUserAsync(push.UserId, push.Title, push.Body, "/", ct);
+                await pushService.SendToUserAsync(
+                    push.UserId, push.Title, push.Body, NotificationUrls.Home, ct);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

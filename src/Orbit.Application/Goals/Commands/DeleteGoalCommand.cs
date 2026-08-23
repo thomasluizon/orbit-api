@@ -14,17 +14,12 @@ public record DeleteGoalCommand(
 
 public class DeleteGoalCommandHandler(
     IGenericRepository<Goal> goalRepository,
-    IPayGateService payGate,
     IUnitOfWork unitOfWork,
     IUserDateService userDateService,
     IMemoryCache cache) : IRequestHandler<DeleteGoalCommand, Result>
 {
     public async Task<Result> Handle(DeleteGoalCommand request, CancellationToken cancellationToken)
     {
-        var gateCheck = await payGate.CanAccessGoals(request.UserId, cancellationToken);
-        if (gateCheck.IsFailure)
-            return gateCheck;
-
         var goal = await goalRepository.FindOneTrackedAsync(
             g => g.Id == request.GoalId && g.UserId == request.UserId,
             cancellationToken: cancellationToken);

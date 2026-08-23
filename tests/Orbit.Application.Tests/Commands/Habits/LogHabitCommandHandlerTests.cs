@@ -6,6 +6,7 @@ using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Orbit.Application.Challenges.Services;
 using Orbit.Application.Common;
+using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Commands;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Common;
@@ -27,6 +28,7 @@ public class LogHabitCommandHandlerTests
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IUserStreakService _userStreakService = Substitute.For<IUserStreakService>();
     private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
+    private readonly IGoalCompletionService _goalCompletionService = Substitute.For<IGoalCompletionService>();
     private readonly IChallengeProgressService _challengeProgressService = Substitute.For<IChallengeProgressService>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
@@ -40,21 +42,34 @@ public class LogHabitCommandHandlerTests
 
     public LogHabitCommandHandlerTests()
     {
-        var repos = new LogHabitRepositories(_habitRepo, _habitLogRepo, _goalRepo, _userRepo);
+        var repos = new LogHabitRepositories(_habitRepo, _habitLogRepo, _userRepo);
         var services = new LogHabitServices(
             _userDateService,
             _userStreakService,
             _gamificationService,
+            _goalCompletionService,
             _challengeProgressService,
             _mediator,
             _payGate);
         _handler = new LogHabitCommandHandler(
             repos, services, _unitOfWork, _cache, _logger);
+        _unitOfWork.ExecuteInTransactionAsync(
+                Arg.Any<Func<CancellationToken, Task<Result<LogHabitResponse>>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<Result<LogHabitResponse>>>>(0)(
+                call.ArgAt<CancellationToken>(1)));
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);
         _userStreakService.RecalculateAsync(Arg.Any<Guid>(), cancellationToken: Arg.Any<CancellationToken>())
             .Returns(new UserStreakState(1, 1, Today));
+        _goalCompletionService.SyncDerivedGoalsAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<IReadOnlyCollection<Guid>>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<bool>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<GoalCompletionUpdate>());
 
         var user = User.Create("Test", "test@test.com").Value;
         _userRepo.FindOneTrackedAsync(
@@ -90,7 +105,8 @@ public class LogHabitCommandHandlerTests
         await _habitLogRepo.Received(1).AddAsync(
             Arg.Is<HabitLog>(l => l.HabitId == habit.Id),
             Arg.Any<CancellationToken>());
-        await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _goalCompletionService.Received(1).SyncDerivedGoalsAsync(
+            UserId, Arg.Any<IReadOnlyCollection<Guid>>(), Today, false, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -123,13 +139,18 @@ public class LogHabitCommandHandlerTests
             .Returns(habit, reloadedHabit);
 
         var saveCount = 0;
-        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+        _goalCompletionService.SyncDerivedGoalsAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<IReadOnlyCollection<Guid>>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<bool>(),
+                Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
                 saveCount++;
                 return saveCount == 1
                     ? throw new DbUpdateConcurrencyException("simulated stale linked goal")
-                    : Task.FromResult(1);
+                    : Array.Empty<GoalCompletionUpdate>();
             });
 
         var result = await _handler.Handle(new LogHabitCommand(UserId, habit.Id), CancellationToken.None);
@@ -161,7 +182,8 @@ public class LogHabitCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         _habitLogRepo.DidNotReceive().Remove(Arg.Any<HabitLog>());
         habit.Logs.Should().ContainSingle(l => l.Date == Today).Which.IsDeleted.Should().BeTrue();
-        await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _goalCompletionService.Received(1).SyncDerivedGoalsAsync(
+            UserId, Arg.Any<IReadOnlyCollection<Guid>>(), Today, false, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -393,7 +415,7 @@ public class LogHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -527,7 +549,12 @@ public class LogHabitCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(habit);
 
-        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+        _goalCompletionService.SyncDerivedGoalsAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<IReadOnlyCollection<Guid>>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<bool>(),
+                Arg.Any<CancellationToken>())
             .ThrowsAsync(new DbUpdateException("duplicate", new FakeUniqueViolationException()));
 
         var winningLog = HabitLog.Create(habit.Id, Today, 1);

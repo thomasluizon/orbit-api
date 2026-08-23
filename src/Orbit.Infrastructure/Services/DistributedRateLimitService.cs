@@ -27,6 +27,7 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
             ["tag-suggest"] = new(TimeSpan.FromMinutes(1), PermitLimit: 15, SegmentCount: 4),
             ["tags"] = new(TimeSpan.FromMinutes(1), PermitLimit: 60, SegmentCount: 4),
             ["achievements"] = new(TimeSpan.FromMinutes(1), PermitLimit: 30, SegmentCount: 4),
+            ["streak-repair"] = new(TimeSpan.FromMinutes(1), PermitLimit: 10, SegmentCount: 1),
             ["cheers"] = new(TimeSpan.FromHours(24), PermitLimit: 20, SegmentCount: 1),
             ["friend-requests"] = new(TimeSpan.FromHours(24), PermitLimit: 30, SegmentCount: 1),
             ["friend-mutations"] = new(TimeSpan.FromHours(24), PermitLimit: 50, SegmentCount: 1),

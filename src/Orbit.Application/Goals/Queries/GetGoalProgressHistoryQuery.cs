@@ -18,19 +18,14 @@ public record GetGoalProgressHistoryQuery(
 
 /// <summary>
 /// Returns a goal's progress-log entries within a date range as an ascending series, for charting
-/// progress over time. Pro-gated behind goals access; scoped to the requesting user's own goal.
+/// progress over time, scoped to the requesting user's own goal.
 /// </summary>
 public class GetGoalProgressHistoryQueryHandler(
     IGenericRepository<Goal> goalRepository,
-    IGenericRepository<GoalProgressLog> progressLogRepository,
-    IPayGateService payGate) : IRequestHandler<GetGoalProgressHistoryQuery, Result<GoalProgressHistoryResponse>>
+    IGenericRepository<GoalProgressLog> progressLogRepository) : IRequestHandler<GetGoalProgressHistoryQuery, Result<GoalProgressHistoryResponse>>
 {
     public async Task<Result<GoalProgressHistoryResponse>> Handle(GetGoalProgressHistoryQuery request, CancellationToken cancellationToken)
     {
-        var gateCheck = await payGate.CanAccessGoals(request.UserId, cancellationToken);
-        if (gateCheck.IsFailure)
-            return gateCheck.PropagateError<GoalProgressHistoryResponse>();
-
         var goalExists = await goalRepository.AnyAsync(
             g => g.Id == request.GoalId && g.UserId == request.UserId,
             cancellationToken);

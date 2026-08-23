@@ -12,7 +12,6 @@ public class GetGoalProgressHistoryQueryHandlerTests
 {
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IGenericRepository<GoalProgressLog> _progressLogRepo = Substitute.For<IGenericRepository<GoalProgressLog>>();
-    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly GetGoalProgressHistoryQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -21,9 +20,7 @@ public class GetGoalProgressHistoryQueryHandlerTests
 
     public GetGoalProgressHistoryQueryHandlerTests()
     {
-        _handler = new GetGoalProgressHistoryQueryHandler(_goalRepo, _progressLogRepo, _payGate);
-        _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
+        _handler = new GetGoalProgressHistoryQueryHandler(_goalRepo, _progressLogRepo);
         _goalRepo.AnyAsync(Arg.Any<Expression<Func<Goal, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(true);
     }
@@ -109,18 +106,4 @@ public class GetGoalProgressHistoryQueryHandlerTests
             Arg.Any<Expression<Func<GoalProgressLog, bool>>>(), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task Handle_PaywalledUser_ReturnsPayGateFailure()
-    {
-        _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Result.PayGateFailure("Goals are a Pro feature"));
-
-        var query = new GetGoalProgressHistoryQuery(UserId, GoalId, Today.AddDays(-5), Today);
-        var result = await _handler.Handle(query, CancellationToken.None);
-
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be(Result.PayGateErrorCode);
-        await _goalRepo.DidNotReceive().AnyAsync(
-            Arg.Any<Expression<Func<Goal, bool>>>(), Arg.Any<CancellationToken>());
-    }
 }

@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
+using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -37,6 +38,7 @@ public partial class BulkLogHabitsCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<HabitLog> habitLogRepository,
     BulkLogServices services,
+    IGoalCompletionService goalCompletionService,
     IUnitOfWork unitOfWork,
     IMemoryCache cache,
     ILogger<BulkLogHabitsCommandHandler> logger) : IRequestHandler<BulkLogHabitsCommand, Result<BulkLogResult>>
@@ -72,12 +74,18 @@ public partial class BulkLogHabitsCommandHandler(
                 }
             }
 
-            await unitOfWork.SaveChangesAsync(ct);
-
-            var loggedHabitIds = results
+            var changedHabitIds = results
                 .Where(r => r.Status == BulkItemStatus.Success && r.LogId is not null)
                 .Select(r => r.HabitId)
-                .ToList();
+                .ToHashSet();
+            var goalIds = habitMap.Values
+                .Where(h => changedHabitIds.Contains(h.Id))
+                .SelectMany(h => h.Goals)
+                .Select(g => g.Id)
+                .ToHashSet();
+            await goalCompletionService.SyncDerivedGoalsAsync(request.UserId, goalIds, today, cancellationToken: ct);
+
+            var loggedHabitIds = changedHabitIds.ToList();
             if (loggedHabitIds.Count > 0)
             {
                 try
@@ -90,6 +98,7 @@ public partial class BulkLogHabitsCommandHandler(
                     unitOfWork,
                     c => services.UserStreakService.RecalculateAsync(request.UserId, cancellationToken: c),
                     ct);
+
             }
         }, cancellationToken);
 
@@ -143,4 +152,5 @@ public partial class BulkLogHabitsCommandHandler(
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Gamification processing failed for bulk log by user {UserId}")]
     private static partial void LogGamificationBulkLogFailed(ILogger logger, Exception ex, Guid userId);
+
 }

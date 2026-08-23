@@ -5,7 +5,6 @@ using NSubstitute;
 using Orbit.Application.Accountability.Commands;
 using Orbit.Application.Accountability.Services;
 using Orbit.Application.Common;
-using Orbit.Application.Gamification.Services;
 using Orbit.Application.Social.Services;
 using Orbit.Application.Tests.Social;
 using Orbit.Domain.Entities;
@@ -20,9 +19,7 @@ public class AcceptAccountabilityPairCommandTests
     private readonly IGenericRepository<AccountabilityPair> _pairRepository = Substitute.For<IGenericRepository<AccountabilityPair>>();
     private readonly IGenericRepository<AccountabilityPairHabit> _pairHabitRepository = Substitute.For<IGenericRepository<AccountabilityPairHabit>>();
     private readonly IGenericRepository<AccountabilityCheckIn> _checkInRepository = Substitute.For<IGenericRepository<AccountabilityCheckIn>>();
-    private readonly IGenericRepository<UserAchievement> _achievementRepository = Substitute.For<IGenericRepository<UserAchievement>>();
     private readonly IGenericRepository<Habit> _habitRepository = Substitute.For<IGenericRepository<Habit>>();
-    private readonly IGenericRepository<XpAwardLog> _xpAwardLogRepository = Substitute.For<IGenericRepository<XpAwardLog>>();
     private readonly IGenericRepository<Notification> _notificationRepository = Substitute.For<IGenericRepository<Notification>>();
     private readonly IPushNotificationService _push = Substitute.For<IPushNotificationService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
@@ -38,18 +35,17 @@ public class AcceptAccountabilityPairCommandTests
     {
         var guard = new SocialAccessGuard(_userRepository);
         var pairService = new AccountabilityPairService(_pairRepository, _pairHabitRepository, _habitRepository);
-        var repositories = new AccountabilityRepositories(_userRepository, _pairRepository, _checkInRepository, _achievementRepository);
+        var repositories = new AccountabilityRepositories(_userRepository, _pairRepository, _checkInRepository);
         var dispatcher = new SocialNotificationDispatcher(
             _notificationRepository, _push, Substitute.For<ILogger<SocialNotificationDispatcher>>());
         _handler = new AcceptAccountabilityPairCommandHandler(
-            guard, pairService, repositories, dispatcher, new XpAwarder(_xpAwardLogRepository), _unitOfWork);
+            guard, pairService, repositories, dispatcher, _unitOfWork);
 
         _pair = AccountabilityPair.Create(_requester.Id, _addressee.Id, AccountabilityCadence.Daily).Value;
 
         SocialTestHelpers.StubUsers(_userRepository, _addressee, _requester);
         AccountabilityTestHelpers.StubFind(_pairRepository, _pair);
         AccountabilityTestHelpers.StubFind(_pairHabitRepository);
-        AccountabilityTestHelpers.StubFind(_achievementRepository);
         _habitRepository.CountAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns(1);
     }
 
@@ -68,10 +64,10 @@ public class AcceptAccountabilityPairCommandTests
             Arg.Is<AccountabilityPairHabit>(ph => ph.UserId == _addressee.Id && ph.HabitId == _habitId),
             Arg.Any<CancellationToken>());
         await _notificationRepository.Received(1).AddAsync(
-            Arg.Is<Notification>(n => n.UserId == _requester.Id && n.Url == "/social?tab=buddies"),
+            Arg.Is<Notification>(n => n.UserId == _requester.Id && n.Url == null),
             Arg.Any<CancellationToken>());
         await _push.Received(1).SendToUserAsync(
-            _requester.Id, Arg.Any<string>(), Arg.Any<string>(), "/social?tab=buddies", Arg.Any<CancellationToken>());
+            _requester.Id, Arg.Any<string>(), Arg.Any<string>(), null, Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -119,7 +115,7 @@ public class AcceptAccountabilityPairCommandTests
     }
 
     [Fact]
-    public async Task BattleBuddyAward_GrantsToBothParticipants()
+    public async Task Accept_DoesNotAwardRetiredAchievementXp()
     {
         var requesterXpBefore = _requester.TotalXp;
         var addresseeXpBefore = _addressee.TotalXp;
@@ -127,9 +123,7 @@ public class AcceptAccountabilityPairCommandTests
         var result = await _handler.Handle(Command(), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _achievementRepository.Received(2).AddAsync(
-            Arg.Is<UserAchievement>(a => a.AchievementId == "battle_buddy"), Arg.Any<CancellationToken>());
-        _requester.TotalXp.Should().BeGreaterThan(requesterXpBefore);
-        _addressee.TotalXp.Should().BeGreaterThan(addresseeXpBefore);
+        _requester.TotalXp.Should().Be(requesterXpBefore);
+        _addressee.TotalXp.Should().Be(addresseeXpBefore);
     }
 }

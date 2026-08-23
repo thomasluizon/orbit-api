@@ -21,7 +21,6 @@ public class InviteAccountabilityBuddyCommandTests
     private readonly IGenericRepository<AccountabilityPair> _pairRepository = Substitute.For<IGenericRepository<AccountabilityPair>>();
     private readonly IGenericRepository<AccountabilityPairHabit> _pairHabitRepository = Substitute.For<IGenericRepository<AccountabilityPairHabit>>();
     private readonly IGenericRepository<AccountabilityCheckIn> _checkInRepository = Substitute.For<IGenericRepository<AccountabilityCheckIn>>();
-    private readonly IGenericRepository<UserAchievement> _achievementRepository = Substitute.For<IGenericRepository<UserAchievement>>();
     private readonly IGenericRepository<Habit> _habitRepository = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<Notification> _notificationRepository = Substitute.For<IGenericRepository<Notification>>();
     private readonly IPushNotificationService _push = Substitute.For<IPushNotificationService>();
@@ -38,7 +37,7 @@ public class InviteAccountabilityBuddyCommandTests
         var guard = new SocialAccessGuard(_userRepository);
         var friendGraph = new FriendGraphService(_userRepository, _friendshipRepository, _blockedUserRepository);
         var pairService = new AccountabilityPairService(_pairRepository, _pairHabitRepository, _habitRepository);
-        var repositories = new AccountabilityRepositories(_userRepository, _pairRepository, _checkInRepository, _achievementRepository);
+        var repositories = new AccountabilityRepositories(_userRepository, _pairRepository, _checkInRepository);
         var dispatcher = new SocialNotificationDispatcher(
             _notificationRepository, _push, Substitute.For<ILogger<SocialNotificationDispatcher>>());
         _handler = new InviteAccountabilityBuddyCommandHandler(
@@ -77,10 +76,10 @@ public class InviteAccountabilityBuddyCommandTests
             Arg.Is<AccountabilityPairHabit>(ph => ph.UserId == _caller.Id && ph.HabitId == _habitId),
             Arg.Any<CancellationToken>());
         await _notificationRepository.Received(1).AddAsync(
-            Arg.Is<Notification>(n => n.UserId == _buddy.Id && n.Url == "/social?tab=buddies"),
+            Arg.Is<Notification>(n => n.UserId == _buddy.Id && n.Url == null),
             Arg.Any<CancellationToken>());
         await _push.Received(1).SendToUserAsync(
-            _buddy.Id, Arg.Any<string>(), Arg.Any<string>(), "/social?tab=buddies", Arg.Any<CancellationToken>());
+            _buddy.Id, Arg.Any<string>(), Arg.Any<string>(), null, Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 

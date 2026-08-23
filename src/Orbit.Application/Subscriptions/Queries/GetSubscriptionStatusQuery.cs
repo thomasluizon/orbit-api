@@ -10,7 +10,8 @@ public record GetSubscriptionStatusQuery(Guid UserId) : IRequest<Result<Subscrip
 
 public class GetSubscriptionStatusQueryHandler(
     IGenericRepository<User> userRepository,
-    IPayGateService payGate) : IRequestHandler<GetSubscriptionStatusQuery, Result<SubscriptionStatusResponse>>
+    IPayGateService payGate,
+    IUserDateService userDateService) : IRequestHandler<GetSubscriptionStatusQuery, Result<SubscriptionStatusResponse>>
 {
     public async Task<Result<SubscriptionStatusResponse>> Handle(GetSubscriptionStatusQuery request, CancellationToken cancellationToken)
     {
@@ -18,16 +19,20 @@ public class GetSubscriptionStatusQueryHandler(
         if (user is null)
             return Result.Failure<SubscriptionStatusResponse>(ErrorMessages.UserNotFound);
 
+        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+
         return Result.Success(new SubscriptionStatusResponse(
             user.HasProAccess ? "pro" : "free",
             user.HasProAccess,
             user.IsTrialActive,
             user.TrialEndsAt,
             user.PlanExpiresAt,
-            user.AiMessagesUsedThisMonth,
+            user.GetAiMessagesUsedToday(today),
             await payGate.GetAiMessageLimit(user.Id, cancellationToken),
             user.IsLifetimePro,
             user.SubscriptionInterval?.ToString().ToLowerInvariant(),
-            user.SubscriptionSource.ToApiValue()));
+            user.SubscriptionSource.ToApiValue(),
+            user.SubscriptionLapseReason.ToApiValue(),
+            user.SubscriptionEndedAtUtc));
     }
 }
