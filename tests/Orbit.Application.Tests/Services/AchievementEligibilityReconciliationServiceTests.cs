@@ -377,6 +377,32 @@ public sealed class AchievementEligibilityReconciliationServiceTests
     }
 
     [Fact]
+    public async Task ReconcileAll_MoreThanOneBatch_ProcessesBoundedPagesUntilNoCandidatesRemain()
+    {
+        var users = Enumerable.Range(0, AchievementEligibilityReconciliationService.BatchSize + 1)
+            .Select(index => CreateFreeUser())
+            .ToList();
+        foreach (var user in users)
+            user.CompleteOnboardingChecklist();
+        ArrangePersistedState(users, [], [], [], []);
+
+        var first = await _sut.ReconcileAllAsync();
+        var second = await _sut.ReconcileAllAsync();
+
+        first.Should().Be(new AchievementEligibilityReconciliationResult(
+            AchievementEligibilityReconciliationService.BatchSize,
+            AchievementEligibilityReconciliationService.BatchSize,
+            HasMoreCandidates: true));
+        second.Should().Be(new AchievementEligibilityReconciliationResult(1, 1));
+        users.Should().OnlyContain(user => user.AchievementEligibilityReconciledAtUtc != null);
+        await _userRepository.Received(2).FindPageAsync(
+            Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<Func<IQueryable<User>, IOrderedQueryable<User>>>(),
+            AchievementEligibilityReconciliationService.BatchSize + 1,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task ReconcileAll_SoftDeletedMilestoneRecords_RemainHistoricalEligibilityEvidence()
     {
         var user = CreateFreeUser();
@@ -421,11 +447,16 @@ public sealed class AchievementEligibilityReconciliationServiceTests
         IReadOnlyCollection<UserAchievement> achievements)
     {
         _persistedUsers = users;
-        _userRepository.FindTrackedAsync(
+        _userRepository.FindPageAsync(
                 Arg.Any<Expression<Func<User, bool>>>(),
+                Arg.Any<Func<IQueryable<User>, IOrderedQueryable<User>>>(),
+                Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
-            .Returns(_ => users
+            .Returns(call => users
                 .Where(user => user.AchievementEligibilityReconciledAtUtc is null)
+                .OrderByDescending(user => user.HasProAccess)
+                .ThenBy(user => user.Id)
+                .Take(call.ArgAt<int>(2))
                 .ToList());
         _habitRepository.FindTrackedIgnoringFiltersAsync(
                 Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -463,10 +494,7 @@ public sealed class AchievementEligibilityReconciliationServiceTests
 
     private static User CreateUnreconciledUser(string name, string email)
     {
-        var user = User.Create(name, email).Value;
-        typeof(User).GetProperty(nameof(User.AchievementEligibilityReconciledAtUtc))!
-            .SetValue(user, null);
-        return user;
+        return User.Create(name, email).Value;
     }
 
     private static Habit CreateHabit(

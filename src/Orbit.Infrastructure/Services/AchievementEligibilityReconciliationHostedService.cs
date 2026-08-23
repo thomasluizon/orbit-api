@@ -6,55 +6,48 @@ using Orbit.Application.Gamification.Backfill;
 namespace Orbit.Infrastructure.Services;
 
 /// <summary>
-/// Reconciles achievement eligibility before free users can read the achievement payload. Failures retry
-/// before startup, while feature-locked accounts are deferred to background retries until they unlock.
+/// Reconciles historical achievement eligibility in bounded background passes. Startup only launches
+/// the worker; failures, remaining pages, and feature-locked accounts retry without delaying readiness.
 /// </summary>
 public sealed partial class AchievementEligibilityReconciliationHostedService(
     IServiceScopeFactory scopeFactory,
     ILogger<AchievementEligibilityReconciliationHostedService> logger) : IHostedService
 {
-    private CancellationTokenSource? _retryCancellation;
-    private Task? _retryTask;
+    private CancellationTokenSource? _workerCancellation;
+    private Task? _workerTask;
 
     internal TimeSpan RetryDelay { get; init; } = TimeSpan.FromSeconds(30);
 
-    internal Task? DeferredRetryTask => _retryTask;
+    internal Task? WorkerTask => _workerTask;
 
-    public async Task StartAsync(CancellationToken cancellationToken)
+    public Task StartAsync(CancellationToken cancellationToken)
     {
-        var status = await RunReconciliationAsync(cancellationToken);
-        while (status == ReconciliationRunStatus.Failed)
-        {
-            await Task.Delay(RetryDelay, cancellationToken);
-            status = await RunReconciliationAsync(cancellationToken);
-        }
-
-        if (status == ReconciliationRunStatus.Deferred)
-        {
-            _retryCancellation = new CancellationTokenSource();
-            _retryTask = RetryDeferredAccountsAsync(_retryCancellation.Token);
-        }
+        _workerCancellation = new CancellationTokenSource();
+        _workerTask = Task.Run(
+            () => RunWorkerAsync(_workerCancellation.Token),
+            CancellationToken.None);
+        return Task.CompletedTask;
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        if (_retryCancellation is null || _retryTask is null)
+        if (_workerCancellation is null || _workerTask is null)
             return;
 
-        await _retryCancellation.CancelAsync();
+        await _workerCancellation.CancelAsync();
         try
         {
-            await _retryTask;
+            await _workerTask.WaitAsync(cancellationToken);
         }
-        catch (OperationCanceledException) when (_retryCancellation.IsCancellationRequested)
+        catch (OperationCanceledException) when (_workerCancellation.IsCancellationRequested)
         {
             return;
         }
         finally
         {
-            _retryCancellation.Dispose();
-            _retryCancellation = null;
-            _retryTask = null;
+            _workerCancellation.Dispose();
+            _workerCancellation = null;
+            _workerTask = null;
         }
     }
 
@@ -65,13 +58,18 @@ public sealed partial class AchievementEligibilityReconciliationHostedService(
             using var scope = scopeFactory.CreateScope();
             var service = scope.ServiceProvider.GetRequiredService<IAchievementEligibilityReconciliationService>();
             var result = await service.ReconcileAllAsync(stoppingToken);
+            if (result.AchievementsGranted > 0)
+                LogCompleted(logger, result.AccountsGranted, result.AchievementsGranted);
+
             if (result.AccountsDeferred > 0)
             {
                 LogDeferred(logger, result.AccountsDeferred);
                 return ReconciliationRunStatus.Deferred;
             }
 
-            LogCompleted(logger, result.AccountsGranted, result.AchievementsGranted);
+            if (result.HasMoreCandidates)
+                return ReconciliationRunStatus.Pending;
+
             return ReconciliationRunStatus.Complete;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -81,14 +79,12 @@ public sealed partial class AchievementEligibilityReconciliationHostedService(
         }
     }
 
-    private async Task RetryDeferredAccountsAsync(CancellationToken cancellationToken)
+    private async Task RunWorkerAsync(CancellationToken cancellationToken)
     {
         while (true)
         {
+            await RunReconciliationAsync(cancellationToken);
             await Task.Delay(RetryDelay, cancellationToken);
-            var status = await RunReconciliationAsync(cancellationToken);
-            if (status == ReconciliationRunStatus.Complete)
-                return;
         }
     }
 
@@ -106,5 +102,6 @@ internal enum ReconciliationRunStatus
 {
     Complete,
     Deferred,
+    Pending,
     Failed
 }

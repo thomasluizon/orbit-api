@@ -112,8 +112,7 @@ public partial class User : Entity
             Name = name.Trim(),
             Email = trimmedEmail.ToLowerInvariant(),
             CreatedAtUtc = now,
-            TrialEndsAt = now.AddDays(7),
-            AchievementEligibilityReconciledAtUtc = now
+            TrialEndsAt = now.AddDays(7)
         });
     }
 

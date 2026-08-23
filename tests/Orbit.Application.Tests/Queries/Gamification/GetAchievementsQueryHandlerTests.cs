@@ -32,6 +32,14 @@ public class GetAchievementsQueryHandlerTests
             .Returns(new[] { FeatureFlagKeys.GamificationFreeTier });
         _progressService.LoadAsync(Arg.Any<User>(), Arg.Any<IReadOnlySet<string>>(), Arg.Any<CancellationToken>())
             .Returns(AchievementProgressMetrics.Empty);
+        _reconciliationService.ReconcileUnlockedUserAsync(
+                Arg.Any<User>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                call.ArgAt<User>(0).MarkAchievementEligibilityReconciled();
+                return Task.FromResult<IReadOnlyList<string>>([]);
+            });
         _handler = new GetAchievementsQueryHandler(
             _userRepo,
             _achievementRepo,
@@ -202,7 +210,7 @@ public class GetAchievementsQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_NewFreeUserWithFlagEnabled_ReturnsAchievements()
+    public async Task Handle_NewFreeUserWithFlagEnabled_ReconcilesBeforeReturningAchievements()
     {
         var user = CreateFreeUser();
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
@@ -211,8 +219,9 @@ public class GetAchievementsQueryHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Achievements.Should().HaveCount(32);
-        await _reconciliationService.DidNotReceive().ReconcileUnlockedUserAsync(
-            Arg.Any<User>(),
+        user.AchievementEligibilityReconciledAtUtc.Should().NotBeNull();
+        await _reconciliationService.Received(1).ReconcileUnlockedUserAsync(
+            user,
             Arg.Any<CancellationToken>());
     }
 
@@ -220,8 +229,6 @@ public class GetAchievementsQueryHandlerTests
     public async Task Handle_UnlockedUnreconciledUser_FirstReadRepairsHistoryAndSecondReadDoesNoWork()
     {
         var user = CreateFreeUser();
-        typeof(User).GetProperty(nameof(User.AchievementEligibilityReconciledAtUtc))!
-            .SetValue(user, null);
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
         var earned = new List<UserAchievement>();
         _achievementRepo.FindAsync(
@@ -253,8 +260,6 @@ public class GetAchievementsQueryHandlerTests
     public async Task Handle_FreeUser_FlagOff_ReturnsPayGateFailure()
     {
         var user = CreateFreeUser();
-        typeof(User).GetProperty(nameof(User.AchievementEligibilityReconciledAtUtc))!
-            .SetValue(user, null);
         _featureFlagService.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Array.Empty<string>());
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);

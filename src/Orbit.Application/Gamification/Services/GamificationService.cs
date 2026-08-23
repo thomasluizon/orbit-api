@@ -80,7 +80,6 @@ public partial class GamificationService(
                 attempt++;
                 continue;
             }
-
             await FlushPushesAsync(pushes, ct);
             return outcome.Results;
         }
@@ -323,7 +322,6 @@ public partial class GamificationService(
                 attempt++;
                 continue;
             }
-
             await FlushPushesAsync(pushes, ct);
             return;
         }
@@ -419,6 +417,13 @@ public partial class GamificationService(
                 await unitOfWork.SaveChangesAsync(ct);
             }
             catch (DbUpdateConcurrencyException) when (attempt < MaxConcurrencyAttempts)
+            {
+                attempt++;
+                continue;
+            }
+            catch (DbUpdateException exception) when (
+                DbUniqueViolation.IsUniqueViolation(exception)
+                && attempt < MaxConcurrencyAttempts)
             {
                 attempt++;
                 continue;

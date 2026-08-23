@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
+using Npgsql;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification;
 using Orbit.Application.Gamification.Backfill;
@@ -135,7 +136,7 @@ public sealed class AchievementEligibilityReconciliationQueryTests
     }
 
     [Fact]
-    public async Task InlineReadAndBackgroundSweep_ConcurrentForSameUser_GrantAndAwardXpOnce()
+    public async Task InlineReadAndBackgroundSweep_ConcurrentUniqueInsert_GrantAndAwardXpOnce()
     {
         var databaseName = $"AchievementEligibilityRace_{Guid.NewGuid()}";
         Guid userId;
@@ -145,8 +146,6 @@ public sealed class AchievementEligibilityReconciliationQueryTests
             var user = User.Create("Legacy User", "legacy-race@example.com").Value;
             user.StartTrial(DateTime.UtcNow.AddDays(-1));
             user.CompleteOnboardingChecklist();
-            typeof(User).GetProperty(nameof(User.AchievementEligibilityReconciledAtUtc))!
-                .SetValue(user, null);
             seed.Users.Add(user);
             await seed.SaveChangesAsync();
             userId = user.Id;
@@ -281,7 +280,13 @@ public sealed class AchievementEligibilityReconciliationQueryTests
             {
                 _bothSavesStarted.TrySetResult();
                 await _winnerSaved.Task.WaitAsync(TimeSpan.FromSeconds(5));
-                throw new DbUpdateConcurrencyException("simulated concurrent reconciliation");
+                throw new DbUpdateException(
+                    "simulated unique constraint race",
+                    new PostgresException(
+                        "duplicate key value violates unique constraint",
+                        "ERROR",
+                        "ERROR",
+                        "23505"));
             }
         }
 

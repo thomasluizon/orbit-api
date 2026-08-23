@@ -64,24 +64,26 @@ public sealed class AchievementEligibilityReconciliationHostedServiceTests : IDi
     }
 
     [Fact]
-    public async Task StartAsync_FirstSweepFails_RetriesAndCompletesBeforeReturning()
+    public async Task StartAsync_DoesNotWaitForFirstSweep()
     {
-        var attempts = 0;
+        var sweepStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseSweep = new TaskCompletionSource<AchievementEligibilityReconciliationResult>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
         _reconciliationService.ReconcileAllAsync(Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
-                attempts++;
-                if (attempts == 1)
-                    throw new InvalidOperationException("transient failure");
-
-                return Task.FromResult(new AchievementEligibilityReconciliationResult(2, 5));
+                sweepStarted.TrySetResult();
+                return releaseSweep.Task;
             });
+        var sut = CreateSut(TimeSpan.FromMilliseconds(10));
 
-        await CreateSut().StartAsync(CancellationToken.None);
+        await sut.StartAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(1));
+        await sweepStarted.Task.WaitAsync(TimeSpan.FromSeconds(1));
 
-        attempts.Should().Be(2);
-        _logger.Entries.Should().Contain(entry => entry.Level == LogLevel.Error && entry.EventId == 3);
-        _logger.Entries.Should().Contain(entry => entry.Level == LogLevel.Information && entry.EventId == 1);
+        sut.WorkerTask.Should().NotBeNull();
+        sut.WorkerTask!.IsCompleted.Should().BeFalse();
+        releaseSweep.TrySetResult(new AchievementEligibilityReconciliationResult(0, 0));
+        await sut.StopAsync(CancellationToken.None);
     }
 
     [Fact]
@@ -98,13 +100,28 @@ public sealed class AchievementEligibilityReconciliationHostedServiceTests : IDi
     }
 
     [Fact]
-    public async Task StartAsync_DeferredAccounts_RetriesInBackgroundAndCompletes()
+    public async Task RunReconciliationAsync_MoreCandidates_ReturnsPending()
+    {
+        _reconciliationService.ReconcileAllAsync(Arg.Any<CancellationToken>())
+            .Returns(new AchievementEligibilityReconciliationResult(2, 5, HasMoreCandidates: true));
+
+        var result = await CreateSut().RunReconciliationAsync(CancellationToken.None);
+
+        result.Should().Be(ReconciliationRunStatus.Pending);
+        _logger.Entries.Should().ContainSingle(entry => entry.Level == LogLevel.Information && entry.EventId == 1);
+    }
+
+    [Fact]
+    public async Task StartAsync_DeferredAccounts_RetriesInBackground()
     {
         var attempts = 0;
+        var secondPassCompleted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _reconciliationService.ReconcileAllAsync(Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
                 attempts++;
+                if (attempts >= 2)
+                    secondPassCompleted.TrySetResult();
                 return Task.FromResult(attempts == 1
                     ? new AchievementEligibilityReconciliationResult(0, 0, 1)
                     : new AchievementEligibilityReconciliationResult(1, 2));
@@ -112,11 +129,12 @@ public sealed class AchievementEligibilityReconciliationHostedServiceTests : IDi
         var sut = CreateSut(TimeSpan.FromMilliseconds(10));
 
         await sut.StartAsync(CancellationToken.None);
-        await sut.DeferredRetryTask!;
-
-        attempts.Should().Be(2);
-        await _reconciliationService.Received(2).ReconcileAllAsync(Arg.Any<CancellationToken>());
+        await secondPassCompleted.Task.WaitAsync(TimeSpan.FromSeconds(1));
         await sut.StopAsync(CancellationToken.None);
+
+        attempts.Should().BeGreaterThanOrEqualTo(2);
+        _logger.Entries.Should().Contain(entry => entry.Level == LogLevel.Debug && entry.EventId == 2);
+        _logger.Entries.Should().Contain(entry => entry.Level == LogLevel.Information && entry.EventId == 1);
     }
 
     private AchievementEligibilityReconciliationHostedService CreateSut(TimeSpan? retryDelay = null) =>

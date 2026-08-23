@@ -1182,8 +1182,6 @@ public class GamificationServiceTests
     public async Task ReconcileAchievementEligibilityAsync_NoMissingAchievement_StampsAndSaves()
     {
         var user = CreateFreeUser();
-        typeof(User).GetProperty(nameof(User.AchievementEligibilityReconciledAtUtc))!
-            .SetValue(user, null);
         SetupUserLookup(user);
         SetupNoEarnedAchievements();
 
@@ -1201,6 +1199,7 @@ public class GamificationServiceTests
     public async Task ReconcileAchievementEligibilityAsync_AlreadyReconciled_DoesNoWork()
     {
         var user = CreateFreeUser();
+        user.MarkAchievementEligibilityReconciled();
         SetupUserLookup(user);
 
         var granted = await _sut.ReconcileAchievementEligibilityAsync(

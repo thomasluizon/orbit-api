@@ -50,7 +50,11 @@ public class GetAchievementsQueryHandler(
                 return Result.PayGateFailure<AchievementsResponse>("Gamification is a Pro feature. Upgrade to unlock!");
         }
 
-        await ReconcileHistoricalEligibilityOnFirstReadAsync(user, cancellationToken);
+        if (user.AchievementEligibilityReconciledAtUtc is null)
+        {
+            await reconciliationService.ReconcileUnlockedUserAsync(user, cancellationToken);
+            user = await userRepository.GetByIdAsync(request.UserId, cancellationToken) ?? user;
+        }
 
         var earnedList = await achievementRepository.FindAsync(a => a.UserId == request.UserId, cancellationToken);
         var earnedMap = earnedList.ToDictionary(a => a.AchievementId, a => a.EarnedAtUtc);
@@ -90,18 +94,5 @@ public class GetAchievementsQueryHandler(
             });
 
         return Result.Success(new AchievementsResponse(achievements));
-    }
-
-    /// <summary>
-    /// Runs a bounded lazy migration at most once for a legacy account, then the persisted stamp makes
-    /// future reads write-free. Unlike the recurring recalculation removed from GET /streak in #331,
-    /// this repairs one account's historical eligibility once and never takes a write lock per request.
-    /// </summary>
-    private async Task ReconcileHistoricalEligibilityOnFirstReadAsync(
-        User user,
-        CancellationToken cancellationToken)
-    {
-        if (user.AchievementEligibilityReconciledAtUtc is null)
-            await reconciliationService.ReconcileUnlockedUserAsync(user, cancellationToken);
     }
 }

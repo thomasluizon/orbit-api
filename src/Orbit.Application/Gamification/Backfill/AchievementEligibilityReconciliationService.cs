@@ -7,13 +7,19 @@ namespace Orbit.Application.Gamification.Backfill;
 public sealed record AchievementEligibilityReconciliationResult(
     int AccountsGranted,
     int AchievementsGranted,
-    int AccountsDeferred = 0);
+    int AccountsDeferred = 0,
+    bool HasMoreCandidates = false);
 
 public interface IAchievementEligibilityReconciliationService
 {
     Task<AchievementEligibilityReconciliationResult> ReconcileAllAsync(
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Runs a bounded lazy migration for one unlocked account and stamps it after persisted historical
+    /// eligibility is evaluated. Reads may call this only while the stamp is absent: unlike the recurring
+    /// recalculation removed from GET /streak in #331, this writes at most once per account.
+    /// </summary>
     Task<IReadOnlyList<string>> ReconcileUnlockedUserAsync(
         User user,
         CancellationToken cancellationToken = default);
@@ -33,6 +39,8 @@ public sealed class AchievementEligibilityReconciliationService(
     IGamificationService gamificationService,
     IFeatureFlagService featureFlagService) : IAchievementEligibilityReconciliationService
 {
+    internal const int BatchSize = 100;
+
     private static readonly string[] ReconciledAchievementIds =
     [
         AchievementDefinitions.Liftoff,
@@ -45,9 +53,22 @@ public sealed class AchievementEligibilityReconciliationService(
     public async Task<AchievementEligibilityReconciliationResult> ReconcileAllAsync(
         CancellationToken cancellationToken = default)
     {
-        var candidates = await userRepository.FindTrackedAsync(
+        var eligibilityCheckedAtUtc = DateTime.UtcNow;
+        var candidatePage = await userRepository.FindPageAsync(
             user => user.AchievementEligibilityReconciledAtUtc == null,
+            users => users
+                .OrderByDescending(user =>
+                    user.IsLifetimePro
+                    || (user.Plan == UserPlan.Pro
+                        && user.PlanExpiresAt.HasValue
+                        && user.PlanExpiresAt.Value > eligibilityCheckedAtUtc)
+                    || (user.TrialEndsAt.HasValue
+                        && user.TrialEndsAt.Value > eligibilityCheckedAtUtc))
+                .ThenBy(user => user.Id),
+            BatchSize + 1,
             cancellationToken);
+        var hasMoreCandidates = candidatePage.Count > BatchSize;
+        var candidates = candidatePage.Take(BatchSize).ToList();
         if (candidates.Count == 0)
             return new AchievementEligibilityReconciliationResult(0, 0);
 
@@ -62,7 +83,11 @@ public sealed class AchievementEligibilityReconciliationService(
         var accountsDeferred = freeUsers.Count(user => !unlockedFreeUserIds.Contains(user.Id));
 
         if (users.Count == 0)
-            return new AchievementEligibilityReconciliationResult(0, 0, accountsDeferred);
+            return new AchievementEligibilityReconciliationResult(
+                0,
+                0,
+                accountsDeferred,
+                hasMoreCandidates);
 
         var eligibilityByUser = await LoadEligibilityAsync(users, cancellationToken);
         var accountsGranted = 0;
@@ -85,7 +110,8 @@ public sealed class AchievementEligibilityReconciliationService(
         return new AchievementEligibilityReconciliationResult(
             accountsGranted,
             achievementsGranted,
-            accountsDeferred);
+            accountsDeferred,
+            hasMoreCandidates);
     }
 
     public async Task<IReadOnlyList<string>> ReconcileUnlockedUserAsync(

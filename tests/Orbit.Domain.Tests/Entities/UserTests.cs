@@ -99,15 +99,11 @@ public class UserTests
     }
 
     [Fact]
-    public void Create_MarksHistoricalAchievementEligibilityReconciled()
+    public void Create_LeavesHistoricalAchievementEligibilityPending()
     {
-        var before = DateTime.UtcNow;
-
         var user = CreateValidUser();
 
-        user.AchievementEligibilityReconciledAtUtc.Should().BeOnOrAfter(before);
-        user.AchievementEligibilityReconciledAtUtc.Should().BeOnOrBefore(DateTime.UtcNow);
-        user.AchievementEligibilityReconciledAtUtc!.Value.Kind.Should().Be(DateTimeKind.Utc);
+        user.AchievementEligibilityReconciledAtUtc.Should().BeNull();
     }
 
     [Fact]

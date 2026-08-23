@@ -133,6 +133,17 @@ public class GenericRepository<T>(OrbitDbContext context) : IGenericRepository<T
         return (items, totalCount);
     }
 
+    public async Task<IReadOnlyList<T>> FindPageAsync(
+        Expression<Func<T, bool>> predicate,
+        Func<IQueryable<T>, IOrderedQueryable<T>> orderBy,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        return await orderBy(_dbSet.AsNoTracking().Where(predicate))
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<bool> AnyAsync(
         Expression<Func<T, bool>> predicate,
         CancellationToken cancellationToken = default)
