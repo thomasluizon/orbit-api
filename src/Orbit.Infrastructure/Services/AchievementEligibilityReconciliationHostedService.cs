@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Orbit.Application.Common;
 using Orbit.Application.Gamification.Backfill;
 using Orbit.Domain.Entities;
 using Orbit.Infrastructure.Persistence;
@@ -10,22 +9,25 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Services;
 
 /// <summary>
-/// Runs the one-time achievement eligibility reconciliation after startup. The completion marker is
-/// written only after the free-tier flag is available to free users and the full sweep succeeds.
+/// Completes the one-time achievement eligibility reconciliation before the host accepts requests.
+/// Failed attempts retry in-process, and the completion marker is written only after a full sweep.
 /// </summary>
 public sealed partial class AchievementEligibilityReconciliationHostedService(
     IServiceScopeFactory scopeFactory,
-    ILogger<AchievementEligibilityReconciliationHostedService> logger) : BackgroundService
+    ILogger<AchievementEligibilityReconciliationHostedService> logger) : IHostedService
 {
     private const string CompletionKey = "AchievementEligibilityReconciliationComplete";
+    private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(1);
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
-        await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
-        await RunReconciliationAsync(stoppingToken);
+        while (!await RunReconciliationAsync(cancellationToken))
+            await Task.Delay(RetryDelay, cancellationToken);
     }
 
-    internal async Task RunReconciliationAsync(CancellationToken stoppingToken)
+    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    internal async Task<bool> RunReconciliationAsync(CancellationToken stoppingToken)
     {
         try
         {
@@ -35,16 +37,7 @@ public sealed partial class AchievementEligibilityReconciliationHostedService(
             if (await db.AppConfigs.AnyAsync(config => config.Key == CompletionKey, stoppingToken))
             {
                 LogAlreadyComplete(logger);
-                return;
-            }
-
-            var freeTierFlag = await db.AppFeatureFlags
-                .AsNoTracking()
-                .FirstOrDefaultAsync(flag => flag.Key == FeatureFlagKeys.GamificationFreeTier, stoppingToken);
-            if (!IsAvailableToFreeUsers(freeTierFlag))
-            {
-                LogFreeTierUnavailable(logger);
-                return;
+                return true;
             }
 
             var service = scope.ServiceProvider.GetRequiredService<IAchievementEligibilityReconciliationService>();
@@ -57,31 +50,21 @@ public sealed partial class AchievementEligibilityReconciliationHostedService(
             await db.SaveChangesAsync(stoppingToken);
 
             LogCompleted(logger, result.AccountsGranted, result.AchievementsGranted);
+            return true;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             LogFailed(logger, ex);
-        }
-    }
-
-    private static bool IsAvailableToFreeUsers(AppFeatureFlag? flag)
-    {
-        if (flag is not { Enabled: true })
             return false;
-
-        return string.IsNullOrWhiteSpace(flag.PlanRequirement)
-            || string.Equals(flag.PlanRequirement.Trim(), "free", StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Achievement eligibility reconciliation already completed; skipping")]
     private static partial void LogAlreadyComplete(ILogger logger);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Achievement eligibility reconciliation deferred because the free-tier flag is unavailable")]
-    private static partial void LogFreeTierUnavailable(ILogger logger);
-
-    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Achievement eligibility reconciliation granted {AchievementCount} achievements across {AccountCount} accounts")]
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Achievement eligibility reconciliation granted {AchievementCount} achievements across {AccountCount} accounts")]
     private static partial void LogCompleted(ILogger logger, int accountCount, int achievementCount);
 
-    [LoggerMessage(EventId = 4, Level = LogLevel.Error, Message = "Achievement eligibility reconciliation failed and will retry on next startup")]
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Achievement eligibility reconciliation failed; retrying before startup completes")]
     private static partial void LogFailed(ILogger logger, Exception ex);
 }

@@ -4,7 +4,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
-using Orbit.Application.Common;
 using Orbit.Application.Gamification.Backfill;
 using Orbit.Domain.Entities;
 using Orbit.Infrastructure.Configuration;
@@ -54,86 +53,60 @@ public sealed class AchievementEligibilityReconciliationHostedServiceTests : IDi
             .Which.Should().Match<LogEntry>(entry => entry.Level == LogLevel.Information && entry.EventId == 1);
     }
 
-    [Theory]
-    [InlineData(false, null)]
-    [InlineData(true, "pro")]
-    public async Task RunReconciliationAsync_FreeTierUnavailable_DefersWithoutCompletionMarker(
-        bool enabled,
-        string? planRequirement)
+    [Fact]
+    public async Task RunReconciliationAsync_RunsSweepWritesMarkerAndLogsBothCounts()
     {
-        await SeedFlagAsync(enabled, planRequirement);
-
-        await CreateSut().RunReconciliationAsync(CancellationToken.None);
+        var completed = await CreateSut().RunReconciliationAsync(CancellationToken.None);
 
         await using var verify = CreateContext(_dbName);
-        (await verify.AppConfigs.AnyAsync(config => config.Key == CompletionKey)).Should().BeFalse();
-        await _reconciliationService.DidNotReceive().ReconcileAllAsync(Arg.Any<CancellationToken>());
-        _logger.Entries.Should().ContainSingle()
-            .Which.Should().Match<LogEntry>(entry => entry.Level == LogLevel.Information && entry.EventId == 2);
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("Free")]
-    public async Task RunReconciliationAsync_FreeTierAvailable_RunsSweepWritesMarkerAndLogsBothCounts(
-        string? planRequirement)
-    {
-        await SeedFlagAsync(enabled: true, planRequirement);
-
-        await CreateSut().RunReconciliationAsync(CancellationToken.None);
-
-        await using var verify = CreateContext(_dbName);
+        completed.Should().BeTrue();
         (await verify.AppConfigs.CountAsync(config => config.Key == CompletionKey)).Should().Be(1);
         await _reconciliationService.Received(1).ReconcileAllAsync(Arg.Any<CancellationToken>());
         var completion = _logger.Entries.Should()
-            .ContainSingle(entry => entry.Level == LogLevel.Information && entry.EventId == 3).Subject;
+            .ContainSingle(entry => entry.Level == LogLevel.Information && entry.EventId == 2).Subject;
         completion.Message.Should().Contain("5").And.Contain("2");
     }
 
     [Fact]
     public async Task RunReconciliationAsync_SweepFails_LogsErrorAndLeavesMarkerUnset()
     {
-        await SeedFlagAsync(enabled: true);
         _reconciliationService.ReconcileAllAsync(Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("reconciliation failed"));
 
-        var act = async () => await CreateSut().RunReconciliationAsync(CancellationToken.None);
+        var completed = await CreateSut().RunReconciliationAsync(CancellationToken.None);
 
-        await act.Should().NotThrowAsync();
+        completed.Should().BeFalse();
         await using var verify = CreateContext(_dbName);
         (await verify.AppConfigs.AnyAsync(config => config.Key == CompletionKey)).Should().BeFalse();
-        _logger.Entries.Should().ContainSingle(entry => entry.Level == LogLevel.Error && entry.EventId == 4);
+        _logger.Entries.Should().ContainSingle(entry => entry.Level == LogLevel.Error && entry.EventId == 3);
     }
 
     [Fact]
-    public async Task RunReconciliationAsync_RunTwice_SecondRunSkipsSweep()
+    public async Task StartAsync_FirstSweepFails_RetriesAndCompletesBeforeReturning()
     {
-        await SeedFlagAsync(enabled: true);
+        var attempts = 0;
+        _reconciliationService.ReconcileAllAsync(Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                attempts++;
+                if (attempts == 1)
+                    throw new InvalidOperationException("transient failure");
+
+                return Task.FromResult(new AchievementEligibilityReconciliationResult(2, 5));
+            });
         var sut = CreateSut();
 
-        await sut.RunReconciliationAsync(CancellationToken.None);
-        await sut.RunReconciliationAsync(CancellationToken.None);
+        await sut.StartAsync(CancellationToken.None);
 
-        await _reconciliationService.Received(1).ReconcileAllAsync(Arg.Any<CancellationToken>());
+        attempts.Should().Be(2);
         await using var verify = CreateContext(_dbName);
         (await verify.AppConfigs.CountAsync(config => config.Key == CompletionKey)).Should().Be(1);
-        _logger.Entries.Should().Contain(entry => entry.EventId == 3);
-        _logger.Entries.Should().Contain(entry => entry.EventId == 1);
+        _logger.Entries.Should().Contain(entry => entry.Level == LogLevel.Error && entry.EventId == 3);
+        _logger.Entries.Should().Contain(entry => entry.Level == LogLevel.Information && entry.EventId == 2);
     }
 
     private AchievementEligibilityReconciliationHostedService CreateSut() =>
         new(_scopeFactory, _logger);
-
-    private async Task SeedFlagAsync(bool enabled, string? planRequirement = null)
-    {
-        await using var seed = CreateContext(_dbName);
-        seed.AppFeatureFlags.Add(AppFeatureFlag.Create(
-            FeatureFlagKeys.GamificationFreeTier,
-            enabled,
-            planRequirement));
-        await seed.SaveChangesAsync();
-    }
 
     private static OrbitDbContext CreateContext(string dbName) =>
         new(new DbContextOptionsBuilder<OrbitDbContext>().UseInMemoryDatabase(dbName).Options);
