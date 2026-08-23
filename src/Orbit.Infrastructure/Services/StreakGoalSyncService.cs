@@ -20,9 +20,9 @@ namespace Orbit.Infrastructure.Services;
 /// goals and every Streak goal, then routes any Active to Completed transition through persistence
 /// and gamification exactly once.
 /// </summary>
-public partial class GoalProgressReconciliationService(
+public partial class StreakGoalSyncService(
     IServiceScopeFactory scopeFactory,
-    ILogger<GoalProgressReconciliationService> logger,
+    ILogger<StreakGoalSyncService> logger,
     IConfiguration configuration) : BackgroundService, IScheduledJob
 {
     private readonly TimeSpan _interval = TimeSpan.FromMinutes(
@@ -149,10 +149,10 @@ public partial class GoalProgressReconciliationService(
         }
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "GoalProgressReconciliationService started")]
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "StreakGoalSyncService started")]
     private static partial void LogServiceStarted(ILogger logger);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "GoalProgressReconciliationService stopped")]
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "StreakGoalSyncService stopped")]
     private static partial void LogServiceStopped(ILogger logger);
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Error in derived goal reconciliation")]

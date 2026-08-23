@@ -7527,15 +7527,6 @@
         ]
       },
       {
-        "testClass": "GoalProgressReconciliationServiceTests",
-        "file": "tests/Orbit.Infrastructure.Tests/Services/GoalProgressReconciliationServiceTests.cs",
-        "references": [
-          "Goal",
-          "Habit",
-          "User"
-        ]
-      },
-      {
         "testClass": "GoogleCalendarEventFetcherTests",
         "file": "tests/Orbit.Infrastructure.Tests/Services/GoogleCalendarEventFetcherTests.cs",
         "references": []
@@ -7748,6 +7739,15 @@
           "Habit",
           "SentStreakFreezeAlert",
           "StreakFreeze",
+          "User"
+        ]
+      },
+      {
+        "testClass": "StreakGoalSyncServiceTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Services/StreakGoalSyncServiceTests.cs",
+        "references": [
+          "Goal",
+          "Habit",
           "User"
         ]
       },

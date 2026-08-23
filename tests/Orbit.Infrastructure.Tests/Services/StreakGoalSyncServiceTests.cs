@@ -17,7 +17,7 @@ namespace Orbit.Infrastructure.Tests.Services;
 /// advance from habit logs without a request, auto-complete at target, and route completion through
 /// gamification exactly once.
 /// </summary>
-public class GoalProgressReconciliationServiceTests
+public class StreakGoalSyncServiceTests
 {
     private static readonly DateOnly Today = DateOnly.FromDateTime(DateTime.UtcNow);
 
@@ -167,6 +167,29 @@ public class GoalProgressReconciliationServiceTests
         reloaded.StreakSyncedAtUtc.Should().BeNull();
     }
 
+    [Fact]
+    public async Task SyncActiveGoals_ManualStandardWithNoLinkedHabits_LeavesGoalUntouched()
+    {
+        await using var dbContext = CreateInMemoryDbContext();
+        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var goal = Goal.Create(user.Id, "Exercise seven times", 7, "sessions").Value;
+        goal.UpdateProgress(2);
+
+        dbContext.Users.Add(user);
+        dbContext.Goals.Add(goal);
+        await dbContext.SaveChangesAsync();
+
+        var gamification = Substitute.For<IGamificationService>();
+        var service = CreateService(dbContext, gamification);
+        await service.SyncActiveGoals(CancellationToken.None);
+
+        var reloaded = await dbContext.Goals.AsNoTracking().SingleAsync(g => g.Id == goal.Id);
+        reloaded.CurrentValue.Should().Be(2);
+        reloaded.Status.Should().Be(GoalStatus.Active);
+        reloaded.IsProgressDerived.Should().BeFalse();
+        await gamification.DidNotReceive().ProcessGoalCompleted(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
     private static Habit CreateDailyHabitLoggedLastDays(Guid userId, int days)
     {
         var startDate = Today.AddDays(-(days - 1));
@@ -192,21 +215,21 @@ public class GoalProgressReconciliationServiceTests
     private static OrbitDbContext CreateInMemoryDbContext()
     {
         var options = new DbContextOptionsBuilder<OrbitDbContext>()
-            .UseInMemoryDatabase($"GoalProgressReconciliationServiceTests_{Guid.NewGuid()}")
+            .UseInMemoryDatabase($"StreakGoalSyncServiceTests_{Guid.NewGuid()}")
             .Options;
         return new OrbitDbContext(options);
     }
 
-    private static GoalProgressReconciliationService CreateService(OrbitDbContext dbContext, IGamificationService gamificationService)
+    private static StreakGoalSyncService CreateService(OrbitDbContext dbContext, IGamificationService gamificationService)
     {
         var serviceProvider = new ServiceCollection()
             .AddSingleton(dbContext)
             .AddSingleton(gamificationService)
             .BuildServiceProvider();
         var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
-        return new GoalProgressReconciliationService(
+        return new StreakGoalSyncService(
             scopeFactory,
-            NullLogger<GoalProgressReconciliationService>.Instance,
+            NullLogger<StreakGoalSyncService>.Instance,
             new ConfigurationBuilder().Build());
     }
 }

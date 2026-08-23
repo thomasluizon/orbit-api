@@ -77,7 +77,7 @@ public class ScheduledJobRegistryTests
         new SlipAlertSchedulerService(ScopeFactory(), NullLogger<SlipAlertSchedulerService>.Instance, EmptyConfiguration),
         new AccountDeletionService(ScopeFactory(), NullLogger<AccountDeletionService>.Instance, EmptyConfiguration),
         new HabitDueDateAdvancementService(ScopeFactory(), NullLogger<HabitDueDateAdvancementService>.Instance, EmptyConfiguration),
-        new GoalProgressReconciliationService(ScopeFactory(), NullLogger<GoalProgressReconciliationService>.Instance, EmptyConfiguration),
+        new StreakGoalSyncService(ScopeFactory(), NullLogger<StreakGoalSyncService>.Instance, EmptyConfiguration),
         new StreakFreezeAutoActivationService(ScopeFactory(), NullLogger<StreakFreezeAutoActivationService>.Instance, EmptyConfiguration),
         new SyncCleanupService(ScopeFactory(), NullLogger<SyncCleanupService>.Instance),
         new PlayNotificationCleanupService(ScopeFactory(), NullLogger<PlayNotificationCleanupService>.Instance),

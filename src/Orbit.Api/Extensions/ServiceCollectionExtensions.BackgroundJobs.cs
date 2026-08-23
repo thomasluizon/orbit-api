@@ -46,7 +46,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddHostedService<ProactiveCheckinSchedulerService>();
         builder.Services.AddHostedService<AccountDeletionService>();
         builder.Services.AddHostedService<HabitDueDateAdvancementService>();
-        builder.Services.AddHostedService<GoalProgressReconciliationService>();
+        builder.Services.AddHostedService<StreakGoalSyncService>();
         builder.Services.AddHostedService<StreakFreezeAutoActivationService>();
         builder.Services.AddHostedService<SyncCleanupService>();
         builder.Services.AddHostedService<PlayNotificationCleanupService>();
@@ -95,7 +95,7 @@ public static partial class ServiceCollectionExtensions
         AddScheduledJob<ProactiveCheckinSchedulerService>(builder);
         AddScheduledJob<AccountDeletionService>(builder);
         AddScheduledJob<HabitDueDateAdvancementService>(builder);
-        AddScheduledJob<GoalProgressReconciliationService>(builder);
+        AddScheduledJob<StreakGoalSyncService>(builder);
         AddScheduledJob<StreakFreezeAutoActivationService>(builder);
         AddScheduledJob<SyncCleanupService>(builder);
         AddScheduledJob<PlayNotificationCleanupService>(builder);
