@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Orbit.Application.Notifications;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -12,21 +13,13 @@ using Orbit.Infrastructure.Services.Hosting;
 namespace Orbit.Infrastructure.Services;
 
 /// <summary>
-/// Auto-activates a streak freeze for an eligible user who held an active streak but logged
-/// nothing on their fully-elapsed local "yesterday". Inserting a <see cref="StreakFreeze"/>
-/// row for the missed date is sufficient to preserve the streak: the presence-based
-/// resolver in <see cref="UserStreakService"/> treats any date carrying a freeze as covered,
-/// so the next on-read RecalculateAsync keeps CurrentStreak intact without mutating it here.
-/// Idempotency is enforced by two unique guards — the StreakFreeze (UserId, UsedOnDate) index
-/// and the SentStreakFreezeAlert (UserId, FrozenDate) index — both re-checked before spending.
+/// Permanently provides automatic streak coverage. Its configuration flag is an operational kill switch.
 /// </summary>
 public partial class StreakFreezeAutoActivationService(
     IServiceScopeFactory scopeFactory,
     ILogger<StreakFreezeAutoActivationService> logger,
     IConfiguration configuration) : ScheduledServiceBase, IScheduledJob
 {
-    private const int MaxTimeZoneSkewDays = 1;
-
     private readonly TimeSpan _interval = TimeSpan.FromMinutes(
         configuration.GetValue("BackgroundServices:StreakFreezeIntervalMinutes", 60));
 
@@ -50,219 +43,266 @@ public partial class StreakFreezeAutoActivationService(
 
     protected override void LogTickError(Exception ex) => LogServiceError(logger, ex);
 
-    internal async Task ActivateMissedDayFreezes(CancellationToken ct)
+    internal async Task ActivateMissedDayFreezes(CancellationToken cancellationToken)
     {
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
         var pushService = scope.ServiceProvider.GetRequiredService<IPushNotificationService>();
+        var userDateService = scope.ServiceProvider.GetRequiredService<IUserDateService>();
 
-#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC-date window or UTC-keyed dedupe/aggregation bucket (not a user's calendar date), per-site justification ledger: https://github.com/thomasluizon/orbit-api/issues/431
-        var utcYesterday = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
-#pragma warning restore ORBIT0004
         var candidates = await dbContext.Users
-            .Where(u => u.CurrentStreak > 0
-                && u.StreakFreezesAccumulated > 0
-                && u.LastActiveDate != null
-                && u.LastActiveDate < utcYesterday)
-            .ToListAsync(ct);
+            .Where(user => user.CurrentStreak > 0
+                && user.StreakFreezesAccumulated > 0)
+            .ToListAsync(cancellationToken);
 
-        if (candidates.Count == 0) return;
+        if (candidates.Count == 0)
+            return;
 
         var gamificationFreeTierEnabled = await dbContext.AppFeatureFlags
             .AsNoTracking()
-            .AnyAsync(f => f.Key == FeatureFlagKeys.GamificationFreeTier && f.Enabled, ct);
+            .AnyAsync(
+                flag => flag.Key == FeatureFlagKeys.GamificationFreeTier && flag.Enabled,
+                cancellationToken);
 
-        var candidateIds = candidates.Select(u => u.Id).ToList();
-
-        var earliestMissed = utcYesterday.AddDays(-MaxTimeZoneSkewDays);
-        var monthFloor = new DateOnly(earliestMissed.Year, earliestMissed.Month, 1);
-        var freezesByUser = (await dbContext.StreakFreezes
-            .Where(f => candidateIds.Contains(f.UserId) && f.UsedOnDate >= monthFloor)
-            .ToListAsync(ct))
-            .GroupBy(f => f.UserId)
-            .ToDictionary(g => g.Key, g => g.ToList());
-
-        var guardedByUser = (await dbContext.SentStreakFreezeAlerts
-            .Where(a => candidateIds.Contains(a.UserId) && a.FrozenDate >= monthFloor)
-            .ToListAsync(ct))
-            .GroupBy(a => a.UserId)
-            .ToDictionary(g => g.Key, g => g.Select(a => a.FrozenDate).ToHashSet());
-
-        var completionsByUser = await LoadRecentCompletionsAsync(dbContext, candidateIds, monthFloor, ct);
-
+        var repairBatch = await LoadRepairBatchAsync(
+            candidates,
+            dbContext,
+            userDateService,
+            cancellationToken);
         var staged = new List<StagedFreeze>(candidates.Count);
         foreach (var user in candidates)
         {
-            var stagedFreeze = StageFreeze(user, gamificationFreeTierEnabled, freezesByUser, guardedByUser, completionsByUser, dbContext);
+            var stagedFreeze = StageFreeze(
+                user,
+                gamificationFreeTierEnabled,
+                dbContext,
+                repairBatch);
             if (stagedFreeze is not null)
                 staged.Add(stagedFreeze);
         }
 
-        if (staged.Count == 0) return;
+        if (staged.Count == 0)
+            return;
 
-        if (await TrySaveBatchAsync(dbContext, ct))
+        if (await TrySaveBatchAsync(dbContext, cancellationToken))
         {
-            await NotifyActivatedAsync(staged, pushService, ct);
+            await NotifyActivatedAsync(staged, pushService, cancellationToken);
             return;
         }
 
         dbContext.ChangeTracker.Clear();
         await ActivatePerUserFallbackAsync(
-            candidateIds, gamificationFreeTierEnabled,
-            new PerUserStreakLookups(freezesByUser, guardedByUser, completionsByUser), pushService, dbContext, ct);
+            staged.Select(freeze => freeze.User.Id).ToList(),
+            gamificationFreeTierEnabled,
+            pushService,
+            dbContext,
+            userDateService,
+            cancellationToken);
     }
 
     private sealed record StagedFreeze(User User, DateOnly MissedDate, string Title, string Body);
 
-    private StagedFreeze? StageFreeze(
+    private sealed record RepairBatch(
+        IReadOnlyDictionary<Guid, DateOnly> UserTodayById,
+        IReadOnlyDictionary<Guid, List<Habit>> EligibleHabitsByUser,
+        IReadOnlyDictionary<Guid, HashSet<DateOnly>> CompletionDatesByUser,
+        IReadOnlyDictionary<Guid, HashSet<DateOnly>> FreezeDatesByUser);
+
+    private static StagedFreeze? StageFreeze(
         User user,
         bool gamificationFreeTierEnabled,
-        Dictionary<Guid, List<StreakFreeze>> freezesByUser,
-        Dictionary<Guid, HashSet<DateOnly>> guardedByUser,
-        Dictionary<Guid, HashSet<DateOnly>> completionsByUser,
-        OrbitDbContext dbContext)
+        OrbitDbContext dbContext,
+        RepairBatch repairBatch)
     {
-        if (!user.HasProAccess && !gamificationFreeTierEnabled) return null;
+        if (!user.HasProAccess && !gamificationFreeTierEnabled)
+            return null;
 
-        var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
-        var userToday = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
-        var missedDate = userToday.AddDays(-1);
-
-        if (user.LastActiveDate is null || user.LastActiveDate >= missedDate) return null;
-
-        var existingFreezes = freezesByUser.GetValueOrDefault(user.Id) ?? [];
-        if (existingFreezes.Any(f => f.UsedOnDate == missedDate)) return null;
-
-        var guardedDates = guardedByUser.GetValueOrDefault(user.Id) ?? [];
-        if (guardedDates.Contains(missedDate)) return null;
-
-        var completions = completionsByUser.GetValueOrDefault(user.Id) ?? [];
-        if (completions.Contains(missedDate)) return null;
-
-        var monthStart = new DateOnly(missedDate.Year, missedDate.Month, 1);
-        var monthEnd = monthStart.AddMonths(1);
-        var freezesThisMonth = existingFreezes.Count(f => f.UsedOnDate >= monthStart && f.UsedOnDate < monthEnd);
-        if (freezesThisMonth >= AppConstants.MaxStreakFreezesPerMonth) return null;
+        var userToday = repairBatch.UserTodayById[user.Id];
+        var missedDate = DateOnly.FromDayNumber(userToday.DayNumber - 1);
+        var repair = UserStreakService.EvaluateRepair(
+            user,
+            userToday,
+            missedDate,
+            repairBatch.EligibleHabitsByUser.GetValueOrDefault(user.Id) ?? [],
+            repairBatch.CompletionDatesByUser.GetValueOrDefault(user.Id) ?? [],
+            repairBatch.FreezeDatesByUser.GetValueOrDefault(user.Id) ?? []);
+        if (!repair.IsAvailable)
+            return null;
 
         var consume = user.ConsumeStreakFreeze();
-        if (consume.IsFailure) return null;
+        if (consume.IsFailure)
+            return null;
 
         dbContext.StreakFreezes.Add(StreakFreeze.Create(user.Id, missedDate));
-        dbContext.SentStreakFreezeAlerts.Add(SentStreakFreezeAlert.Create(user.Id, missedDate));
 
         var (title, body) = BuildNotification(user.CurrentStreak, user.Language ?? "en");
-        dbContext.Notifications.Add(Notification.Create(user.Id, title, body, StreakUrl));
+        dbContext.Notifications.Add(Notification.Create(user.Id, title, body, NotificationUrls.Progress));
 
         return new StagedFreeze(user, missedDate, title, body);
     }
 
-    private static async Task<bool> TrySaveBatchAsync(OrbitDbContext dbContext, CancellationToken ct)
+    private static async Task<RepairBatch> LoadRepairBatchAsync(
+        List<User> candidates,
+        OrbitDbContext dbContext,
+        IUserDateService userDateService,
+        CancellationToken cancellationToken)
+    {
+        var userTodayById = new Dictionary<Guid, DateOnly>(candidates.Count);
+        foreach (var user in candidates)
+        {
+            userTodayById[user.Id] = await userDateService.GetUserTodayAsync(
+                user.TimeZone,
+                user.Id,
+                cancellationToken);
+        }
+
+        var candidateIds = candidates.Select(user => user.Id).ToList();
+        var lookbackStart = userTodayById.Values
+            .Min()
+            .AddDays(-AppConstants.MaxStreakLookbackDays);
+        var eligibleHabits = await dbContext.Habits
+            .AsNoTracking()
+            .Where(habit => candidateIds.Contains(habit.UserId)
+                && !habit.IsDeleted
+                && !habit.IsBadHabit)
+            .ToListAsync(cancellationToken);
+        var eligibleHabitsByUser = eligibleHabits
+            .GroupBy(habit => habit.UserId)
+            .ToDictionary(group => group.Key, group => group.ToList());
+
+        var ownerByHabitId = eligibleHabits.ToDictionary(habit => habit.Id, habit => habit.UserId);
+        var eligibleHabitIds = ownerByHabitId.Keys.ToList();
+        var logs = eligibleHabitIds.Count == 0
+            ? []
+            : await dbContext.HabitLogs
+                .AsNoTracking()
+                .Where(log => eligibleHabitIds.Contains(log.HabitId)
+                    && log.Value > 0
+                    && log.Date >= lookbackStart)
+                .ToListAsync(cancellationToken);
+        var completionDatesByUser = new Dictionary<Guid, HashSet<DateOnly>>();
+        foreach (var log in logs)
+        {
+            var userId = ownerByHabitId[log.HabitId];
+            if (!completionDatesByUser.TryGetValue(userId, out var dates))
+            {
+                dates = [];
+                completionDatesByUser[userId] = dates;
+            }
+            dates.Add(log.Date);
+        }
+
+        var freezes = await dbContext.StreakFreezes
+            .AsNoTracking()
+            .Where(freeze => candidateIds.Contains(freeze.UserId)
+                && freeze.UsedOnDate >= lookbackStart)
+            .ToListAsync(cancellationToken);
+        var freezeDatesByUser = freezes
+            .GroupBy(freeze => freeze.UserId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(freeze => freeze.UsedOnDate).ToHashSet());
+
+        return new RepairBatch(
+            userTodayById,
+            eligibleHabitsByUser,
+            completionDatesByUser,
+            freezeDatesByUser);
+    }
+
+    private static async Task<bool> TrySaveBatchAsync(
+        OrbitDbContext dbContext,
+        CancellationToken cancellationToken)
     {
         try
         {
-            await dbContext.SaveChangesAsync(ct);
+            await dbContext.SaveChangesAsync(cancellationToken);
             return true;
         }
         catch (DbUpdateConcurrencyException)
         {
             return false;
         }
-        catch (DbUpdateException ex) when (DbUniqueViolation.IsUniqueViolation(ex))
+        catch (DbUpdateException exception) when (DbUniqueViolation.IsUniqueViolation(exception))
         {
             return false;
         }
     }
 
     private async Task NotifyActivatedAsync(
-        List<StagedFreeze> staged, IPushNotificationService pushService, CancellationToken ct)
+        List<StagedFreeze> staged,
+        IPushNotificationService pushService,
+        CancellationToken cancellationToken)
     {
         foreach (var freeze in staged)
-            await NotifyFreezeActivatedAsync(freeze, pushService, ct);
+            await NotifyFreezeActivatedAsync(freeze, pushService, cancellationToken);
     }
 
     private async Task NotifyFreezeActivatedAsync(
-        StagedFreeze freeze, IPushNotificationService pushService, CancellationToken ct)
+        StagedFreeze freeze,
+        IPushNotificationService pushService,
+        CancellationToken cancellationToken)
     {
         try
         {
-            await pushService.SendToUserAsync(freeze.User.Id, freeze.Title, freeze.Body, StreakUrl, ct);
+            await pushService.SendToUserAsync(
+                freeze.User.Id,
+                freeze.Title,
+                freeze.Body,
+                NotificationUrls.Progress,
+                cancellationToken);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            LogFreezePushFailed(logger, freeze.User.Id, ex);
+            LogFreezePushFailed(logger, freeze.User.Id, exception);
         }
 
         if (logger.IsEnabled(LogLevel.Information))
             LogFreezeActivated(logger, freeze.User.Id, freeze.MissedDate);
     }
 
-    private sealed record PerUserStreakLookups(
-        Dictionary<Guid, List<StreakFreeze>> Freezes,
-        Dictionary<Guid, HashSet<DateOnly>> Guarded,
-        Dictionary<Guid, HashSet<DateOnly>> Completions);
-
     private async Task ActivatePerUserFallbackAsync(
         List<Guid> candidateIds,
         bool gamificationFreeTierEnabled,
-        PerUserStreakLookups lookups,
         IPushNotificationService pushService,
         OrbitDbContext dbContext,
-        CancellationToken ct)
+        IUserDateService userDateService,
+        CancellationToken cancellationToken)
     {
-        var (freezesByUser, guardedByUser, completionsByUser) = lookups;
-
         var users = await dbContext.Users
-            .Where(u => candidateIds.Contains(u.Id))
-            .ToListAsync(ct);
+            .Where(user => candidateIds.Contains(user.Id))
+            .ToListAsync(cancellationToken);
+        var repairBatch = await LoadRepairBatchAsync(
+            users,
+            dbContext,
+            userDateService,
+            cancellationToken);
 
         foreach (var user in users)
         {
-            var staged = StageFreeze(user, gamificationFreeTierEnabled, freezesByUser, guardedByUser, completionsByUser, dbContext);
-            if (staged is null) continue;
-
-            if (!await TrySaveUserFreezeAsync(user.Id, dbContext, ct))
+            var staged = StageFreeze(
+                user,
+                gamificationFreeTierEnabled,
+                dbContext,
+                repairBatch);
+            if (staged is null)
                 continue;
 
-            await NotifyFreezeActivatedAsync(staged, pushService, ct);
+            if (!await TrySaveUserFreezeAsync(user.Id, dbContext, cancellationToken))
+                continue;
+
+            await NotifyFreezeActivatedAsync(staged, pushService, cancellationToken);
         }
     }
 
-    private static async Task<Dictionary<Guid, HashSet<DateOnly>>> LoadRecentCompletionsAsync(
-        OrbitDbContext dbContext, List<Guid> userIds, DateOnly since, CancellationToken ct)
-    {
-        var habitOwners = await dbContext.Habits
-            .Where(h => userIds.Contains(h.UserId) && !h.IsDeleted && !h.IsBadHabit)
-            .Select(h => new { h.Id, h.UserId })
-            .ToListAsync(ct);
-
-        var ownerByHabit = habitOwners.ToDictionary(h => h.Id, h => h.UserId);
-        var habitIds = habitOwners.Select(h => h.Id).ToList();
-        if (habitIds.Count == 0) return new Dictionary<Guid, HashSet<DateOnly>>();
-
-        var logs = await dbContext.HabitLogs
-            .Where(l => habitIds.Contains(l.HabitId) && l.Value > 0 && l.Date >= since)
-            .Select(l => new { l.HabitId, l.Date })
-            .ToListAsync(ct);
-
-        var completions = new Dictionary<Guid, HashSet<DateOnly>>();
-        foreach (var log in logs)
-        {
-            if (!ownerByHabit.TryGetValue(log.HabitId, out var ownerId)) continue;
-            if (!completions.TryGetValue(ownerId, out var dates))
-            {
-                dates = [];
-                completions[ownerId] = dates;
-            }
-            dates.Add(log.Date);
-        }
-        return completions;
-    }
-
-    private async Task<bool> TrySaveUserFreezeAsync(Guid userId, OrbitDbContext dbContext, CancellationToken ct)
+    private async Task<bool> TrySaveUserFreezeAsync(
+        Guid userId,
+        OrbitDbContext dbContext,
+        CancellationToken cancellationToken)
     {
         try
         {
-            await dbContext.SaveChangesAsync(ct);
+            await dbContext.SaveChangesAsync(cancellationToken);
             return true;
         }
         catch (DbUpdateConcurrencyException)
@@ -272,7 +312,7 @@ public partial class StreakFreezeAutoActivationService(
                 LogFreezeConflictSkipped(logger, userId);
             return false;
         }
-        catch (DbUpdateException ex) when (DbUniqueViolation.IsUniqueViolation(ex))
+        catch (DbUpdateException exception) when (DbUniqueViolation.IsUniqueViolation(exception))
         {
             DiscardPendingChanges(dbContext);
             if (logger.IsEnabled(LogLevel.Debug))
@@ -294,12 +334,10 @@ public partial class StreakFreezeAutoActivationService(
         }
     }
 
-    private const string StreakUrl = "/streak";
-
-    internal static (string Title, string Body) BuildNotification(int currentStreak, string lang)
+    internal static (string Title, string Body) BuildNotification(int currentStreak, string language)
     {
-        var isPt = LocaleHelper.IsPortuguese(lang);
-        return isPt
+        var isPortuguese = LocaleHelper.IsPortuguese(language);
+        return isPortuguese
             ? ("Sequência protegida", $"Usamos um congelamento para manter sua sequência de {currentStreak} dias depois de um dia sem registro.")
             : ("Streak protected", $"We used a freeze to keep your {currentStreak}-day streak alive after a day with no check-ins.");
     }
@@ -311,7 +349,7 @@ public partial class StreakFreezeAutoActivationService(
     private static partial void LogServiceStopped(ILogger logger);
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Error in streak freeze auto-activation")]
-    private static partial void LogServiceError(ILogger logger, Exception ex);
+    private static partial void LogServiceError(ILogger logger, Exception exception);
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Auto-activated streak freeze for user {UserId} on {FrozenDate}")]
     private static partial void LogFreezeActivated(ILogger logger, Guid userId, DateOnly frozenDate);
@@ -323,5 +361,5 @@ public partial class StreakFreezeAutoActivationService(
     private static partial void LogFreezeConflictSkipped(ILogger logger, Guid userId);
 
     [LoggerMessage(EventId = 7, Level = LogLevel.Warning, Message = "Failed to deliver streak-freeze push for user {UserId}; freeze already persisted")]
-    private static partial void LogFreezePushFailed(ILogger logger, Guid userId, Exception ex);
+    private static partial void LogFreezePushFailed(ILogger logger, Guid userId, Exception exception);
 }

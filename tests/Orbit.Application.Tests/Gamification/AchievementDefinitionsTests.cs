@@ -13,6 +13,34 @@ public class AchievementDefinitionsTests
     }
 
     [Fact]
+    public void Active_Has32AchievementsAndExcludesOnlyRetiredDefinitions()
+    {
+        AchievementDefinitions.Active.Should().HaveCount(32);
+        AchievementDefinitions.Active.Should().OnlyContain(a => !a.IsRetired);
+        AchievementDefinitions.All.Except(AchievementDefinitions.Active)
+            .Should().OnlyContain(a => a.IsRetired);
+    }
+
+    [Fact]
+    public void RetiredDefinitions_RemainResolvableWhileSharingDefinitionsStayActive()
+    {
+        var retiredIds = new[]
+        {
+            AchievementDefinitions.FirstCheer,
+            AchievementDefinitions.FirstFriend,
+            AchievementDefinitions.SquadGoals,
+            AchievementDefinitions.Cheerleader,
+            AchievementDefinitions.TeamPlayer,
+            AchievementDefinitions.MissionAccomplished,
+            AchievementDefinitions.BattleBuddy
+        };
+
+        retiredIds.Should().AllSatisfy(id => AchievementDefinitions.GetById(id)!.IsRetired.Should().BeTrue());
+        AchievementDefinitions.GetById(AchievementDefinitions.ShowOff)!.IsRetired.Should().BeFalse();
+        AchievementDefinitions.GetById(AchievementDefinitions.YearInReview)!.IsRetired.Should().BeFalse();
+    }
+
+    [Fact]
     public void All_HaveUniqueIds()
     {
         var ids = AchievementDefinitions.All.Select(a => a.Id).ToList();
@@ -224,8 +252,6 @@ public class AchievementDefinitionsTests
     [InlineData(AchievementDefinitions.GoalSetter, ProgressMetric.GoalsCreated, 3)]
     [InlineData(AchievementDefinitions.Overachiever, ProgressMetric.GoalsCompleted, 5)]
     [InlineData(AchievementDefinitions.DreamMaker, ProgressMetric.GoalsCompleted, 10)]
-    [InlineData(AchievementDefinitions.SquadGoals, ProgressMetric.FriendsCount, 5)]
-    [InlineData(AchievementDefinitions.Cheerleader, ProgressMetric.CheersSent, 25)]
     [InlineData(AchievementDefinitions.EarlyBird, ProgressMetric.EarlyLogs, 10)]
     [InlineData(AchievementDefinitions.NightOwl, ProgressMetric.NightLogs, 10)]
     public void QuantifiableAchievements_HaveExpectedMetricAndTarget(string id, ProgressMetric metric, int target)

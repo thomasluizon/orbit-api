@@ -30,7 +30,7 @@ public class ExportUserDataQueryHandlerTests
     private readonly IGenericRepository<Report> _reportRepo = Substitute.For<IGenericRepository<Report>>();
     private readonly IGenericRepository<FriendFeedEvent> _friendFeedEventRepo = Substitute.For<IGenericRepository<FriendFeedEvent>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
-    private readonly IStreakGoalReadSyncer _streakGoalReadSyncer = Substitute.For<IStreakGoalReadSyncer>();
+    private readonly IGoalProgressReadSyncer _goalProgressReadSyncer = Substitute.For<IGoalProgressReadSyncer>();
     private readonly ExportUserDataQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -43,10 +43,10 @@ public class ExportUserDataQueryHandlerTests
                 _userRepo, _habitRepo, _habitLogRepo, _goalRepo, _goalProgressLogRepo, _tagRepo, _userFactRepo,
                 _notificationRepo, _checklistTemplateRepo, _userAchievementRepo, _streakFreezeRepo, _referralRepo, _apiKeyRepo,
                 _friendshipRepo, _cheerRepo, _blockedUserRepo, _reportRepo, _friendFeedEventRepo),
-            _userDateService, _streakGoalReadSyncer);
+            _userDateService, _goalProgressReadSyncer);
 
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
-        _streakGoalReadSyncer.ComputeFreshValuesAsync(Arg.Any<Guid>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+        _goalProgressReadSyncer.ComputeFreshValuesAsync(Arg.Any<Guid>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
             .Returns(new Dictionary<Guid, int>());
 
         ReturnsEmpty(_habitRepo);
@@ -233,7 +233,7 @@ public class ExportUserDataQueryHandlerTests
         var streakGoal = Goal.Create(new Goal.CreateGoalParams(
             UserId, "Avoid doom scrolling", 7, "days", Type: GoalType.Streak)).Value;
 
-        _streakGoalReadSyncer
+        _goalProgressReadSyncer
             .ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>())
             .Returns(new Dictionary<Guid, int> { [streakGoal.Id] = 4 });
 
@@ -242,7 +242,7 @@ public class ExportUserDataQueryHandlerTests
         var result = await _handler.Handle(new ExportUserDataQuery(UserId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _streakGoalReadSyncer.Received(1).ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>());
+        await _goalProgressReadSyncer.Received(1).ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>());
         result.Value.Goals.Should().ContainSingle();
         result.Value.Goals[0].CurrentValue.Should().Be(4);
     }

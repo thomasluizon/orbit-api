@@ -1,15 +1,15 @@
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
+using MediatR;
 using Orbit.Application.Common;
+using Orbit.Application.Goals.Commands;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class LinkHabitsToGoalTool(
-    IGenericRepository<Goal> goalRepository,
-    IGenericRepository<Habit> habitRepository,
-    IUnitOfWork unitOfWork) : IAiTool, IConcurrencyRetryableTool
+    IMediator mediator,
+    IGenericRepository<Goal> goalRepository) : IAiTool, IConcurrencyRetryableTool
 {
     public string Name => "link_habits_to_goal";
 
@@ -53,23 +53,14 @@ public class LinkHabitsToGoalTool(
 
         var goal = await goalRepository.FindOneTrackedAsync(
             g => g.Id == goalId && g.UserId == userId,
-            q => q.Include(g => g.Habits),
-            ct);
+            cancellationToken: ct);
 
         if (goal is null)
             return new ToolResult(false, Error: ErrorMessages.GoalNotFound.Message);
 
-        var habits = await habitRepository.FindTrackedAsync(
-            h => habitIds.Contains(h.Id) && h.UserId == userId,
-            ct);
-
-        foreach (var existing in goal.Habits.ToList())
-            goal.RemoveHabit(existing);
-
-        foreach (var habit in habits)
-            goal.AddHabit(habit);
-
-        await unitOfWork.SaveChangesAsync(ct);
+        var result = await mediator.Send(new LinkHabitsToGoalCommand(userId, goalId, habitIds), ct);
+        if (result.IsFailure)
+            return ToolResult.FromFailure(result);
 
         return new ToolResult(true, EntityId: goal.Id.ToString(), EntityName: goal.Title);
     }

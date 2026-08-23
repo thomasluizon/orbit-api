@@ -102,7 +102,7 @@ public static class HabitMetricsCalculator
 
         var expectedBeforeDue = Enumerable.Range(0, candidateCount)
             .Select(firstCandidate.AddDays)
-            .Where(date => HabitScheduleService.IsHabitHistoricallyDueOnDate(habit, date, createdDate))
+            .Where(date => HabitScheduleService.IsHabitDueOnDateForStreakLookback(habit, date, createdDate))
             .ToList();
 
         return expectedBeforeDue.Count > 0 && expectedBeforeDue.All(resolvedDates.Contains);

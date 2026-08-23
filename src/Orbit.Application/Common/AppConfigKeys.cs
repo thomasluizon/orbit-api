@@ -9,11 +9,11 @@ public static class AppConfigKeys
     public const string MaxReferrals = "MaxReferrals";
     public const string FreeMaxHabits = "FreeMaxHabits";
     public const string SubHabitsProOnly = "SubHabitsProOnly";
-    public const string FreeAiMessagesPerMonth = "FreeAiMessagesPerMonth";
-    public const string ProAiMessagesPerMonth = "ProAiMessagesPerMonth";
+    public const string FreeAiMessagesPerDay = "FreeAiMessagesPerDay";
+    public const string ProAiMessagesPerDay = "ProAiMessagesPerDay";
     public const string DailySummaryProOnly = "DailySummaryProOnly";
     public const string SmartRescheduleProOnly = "SmartRescheduleProOnly";
     public const string RetrospectiveProOnly = "RetrospectiveProOnly";
-    public const string GoalsProOnly = "GoalsProOnly";
     public const string MinSupportedVersion = "MinSupportedVersion";
+    public const string RequireApiKeyCreationStepUp = "RequireApiKeyCreationStepUp";
 }

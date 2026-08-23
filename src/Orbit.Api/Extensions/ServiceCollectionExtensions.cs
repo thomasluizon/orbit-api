@@ -14,6 +14,7 @@ using Orbit.Api.OAuth;
 using Orbit.Api.Observability;
 using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
+using Orbit.Application.Gamification;
 using Orbit.Application.Gamification.Services;
 using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Validators;
@@ -75,11 +76,15 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
         builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
         builder.Services.AddScoped<IAccountResetRepository, AccountResetRepository>();
+        builder.Services.AddScoped<IFoundingAchievementReader, FoundingAchievementReader>();
         builder.Services.AddScoped<IIdempotencyStore, IdempotencyStore>();
+        builder.Services.AddScoped<IClosedMonthRecapStore, ClosedMonthRecapStore>();
         builder.Services.AddScoped<IAppConfigService, AppConfigService>();
+        builder.Services.AddSingleton<Orbit.Application.Auth.Services.EmailChallengeService>();
         builder.Services.AddScoped<IUserDateService, UserDateService>();
         builder.Services.AddScoped<IUserStreakService, UserStreakService>();
-        builder.Services.AddScoped<IStreakGoalReadSyncer, StreakGoalReadSyncer>();
+        builder.Services.AddScoped<IGoalProgressReadSyncer, GoalProgressReadSyncer>();
+        builder.Services.AddScoped<IGoalCompletionService, GoalCompletionService>();
         builder.Services.AddScoped<IPayGateService, PayGateService>();
         builder.Services.AddScoped<IFeatureFlagService, FeatureFlagService>();
         builder.Services.AddScoped<GamificationRepositories>(sp =>
@@ -89,7 +94,9 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.HabitLog>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Goal>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserAchievement>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Notification>>()));
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Notification>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.XpAwardLog>>(),
+                sp.GetRequiredService<IFoundingAchievementReader>()));
         builder.Services.AddScoped<IXpAwarder, Orbit.Application.Gamification.Services.XpAwarder>();
         builder.Services.AddScoped<IGamificationService, GamificationService>();
         builder.Services.AddScoped<Orbit.Application.Gamification.Services.IAchievementProgressService, Orbit.Application.Gamification.Services.AchievementProgressService>();
@@ -107,22 +114,18 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Challenge>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.ChallengeParticipant>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.ChallengeParticipantHabit>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.HabitLog>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserAchievement>>()));
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.HabitLog>>()));
         builder.Services.AddScoped<Orbit.Application.Social.Commands.SendCheerRepositories>(sp =>
             new Orbit.Application.Social.Commands.SendCheerRepositories(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Cheer>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserAchievement>>()));
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Cheer>>()));
         builder.Services.AddScoped<Orbit.Application.Accountability.Services.AccountabilityPairService>();
         builder.Services.AddScoped<Orbit.Application.Accountability.Commands.AccountabilityRepositories>(sp =>
             new Orbit.Application.Accountability.Commands.AccountabilityRepositories(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.AccountabilityPair>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.AccountabilityCheckIn>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserAchievement>>()));
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.AccountabilityCheckIn>>()));
         builder.Services.AddScoped<Orbit.Application.Goals.Commands.GoalRepositories>(sp =>
             new Orbit.Application.Goals.Commands.GoalRepositories(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Goal>>(),
@@ -135,8 +138,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<Orbit.Application.Habits.Commands.SkipHabitRepositories>(sp =>
             new Orbit.Application.Habits.Commands.SkipHabitRepositories(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.HabitLog>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Goal>>()));
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.HabitLog>>()));
         builder.Services.AddScoped<Orbit.Application.Calendar.Queries.GetCalendarEventsRepositories>(sp =>
             new Orbit.Application.Calendar.Queries.GetCalendarEventsRepositories(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),

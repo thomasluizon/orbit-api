@@ -36,7 +36,6 @@ public class OrbitDbContext : DbContext
     public DbSet<SentReminder> SentReminders => Set<SentReminder>();
     public DbSet<SentSlipAlert> SentSlipAlerts => Set<SentSlipAlert>();
     public DbSet<SentProactiveCheckin> SentProactiveCheckins => Set<SentProactiveCheckin>();
-    public DbSet<SentStreakFreezeAlert> SentStreakFreezeAlerts => Set<SentStreakFreezeAlert>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<Goal> Goals => Set<Goal>();
     public DbSet<GoalProgressLog> GoalProgressLogs => Set<GoalProgressLog>();
@@ -71,6 +70,7 @@ public class OrbitDbContext : DbContext
     public DbSet<AccountabilityPair> AccountabilityPairs => Set<AccountabilityPair>();
     public DbSet<AccountabilityPairHabit> AccountabilityPairHabits => Set<AccountabilityPairHabit>();
     public DbSet<AccountabilityCheckIn> AccountabilityCheckIns => Set<AccountabilityCheckIn>();
+    public DbSet<ClosedMonthRecap> ClosedMonthRecaps => Set<ClosedMonthRecap>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -97,7 +97,6 @@ public class OrbitDbContext : DbContext
         ConfigureSentReminderEntity(modelBuilder);
         ConfigureSentSlipAlertEntity(modelBuilder);
         ConfigureSentProactiveCheckinEntity(modelBuilder);
-        ConfigureSentStreakFreezeAlertEntity(modelBuilder);
         ConfigureProcessedPlayNotificationEntity(modelBuilder);
         ConfigureProcessedStripeEventEntity(modelBuilder);
         ConfigureProcessedRequestEntity(modelBuilder);
@@ -132,6 +131,17 @@ public class OrbitDbContext : DbContext
         ConfigureAccountabilityPairEntity(modelBuilder);
         ConfigureAccountabilityPairHabitEntity(modelBuilder);
         ConfigureAccountabilityCheckInEntity(modelBuilder);
+        ConfigureClosedMonthRecapEntity(modelBuilder);
+    }
+
+    private static void ConfigureClosedMonthRecapEntity(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ClosedMonthRecap>(entity =>
+        {
+            entity.HasIndex(recap => new { recap.UserId, recap.DateFrom, recap.DateTo }).IsUnique();
+            entity.Property(recap => recap.ResponseJson).HasColumnType(JsonbColumnType).IsRequired();
+            entity.HasOne<User>().WithMany().HasForeignKey(recap => recap.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
     }
 
     /// <summary>
@@ -218,15 +228,6 @@ public class OrbitDbContext : DbContext
         });
     }
 
-    private static void ConfigureSentStreakFreezeAlertEntity(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<SentStreakFreezeAlert>(entity =>
-        {
-            entity.HasIndex(a => new { a.UserId, a.FrozenDate }).IsUnique();
-            entity.HasOne<User>().WithMany().HasForeignKey(a => a.UserId).OnDelete(DeleteBehavior.Cascade);
-        });
-    }
-
     private static void ConfigureProcessedPlayNotificationEntity(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<ProcessedPlayNotification>(entity =>
@@ -291,6 +292,7 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(n => new { n.UserId, n.IsRead });
             entity.HasIndex(n => new { n.UserId, n.CreatedAtUtc }).IsDescending(false, true);
             entity.HasIndex(n => n.Url).HasFilter("\"Url\" IS NOT NULL");
+            entity.HasIndex(n => n.DedupeKey).IsUnique().HasFilter("\"DedupeKey\" IS NOT NULL");
             entity.HasIndex(n => new { n.UserId, n.IsDeleted });
             entity.HasIndex(n => new { n.UserId, n.UpdatedAtUtc });
             entity.HasQueryFilter(n => !n.IsDeleted);
@@ -457,7 +459,8 @@ public class OrbitDbContext : DbContext
                 AppConfig.Create("MaxTagsPerHabit", "5", "Maximum number of tags per habit"),
                 AppConfig.Create("ReferralRewardDays", "10", "Days of Pro added per successful referral"),
                 AppConfig.Create("MaxReferrals", "10", "Maximum successful referrals per user"),
-                AppConfig.Create("MinSupportedVersion", "0.0.0", "Minimum supported client app version; clients below this receive HTTP 426"));
+                AppConfig.Create("MinSupportedVersion", "1.3.11", "Minimum supported client app version; clients below this receive HTTP 426"),
+                AppConfig.Create("RequireApiKeyCreationStepUp", "false", "Turn on once a client build carrying the API key creation challenge flow is live in the Play fleet"));
         });
     }
 
@@ -500,7 +503,7 @@ public class OrbitDbContext : DbContext
                 new { Key = "ai_summary", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"AI daily summary", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "ai_retrospective", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"AI retrospective analysis", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "sub_habits", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"Sub-habit nesting", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
-                new { Key = "goal_tracking", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"Goal tracking with progress", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { Key = "goal_tracking", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Goal tracking with progress", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "push_notifications", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Push notification reminders", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "scheduled_reminders", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Custom scheduled reminders", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "slip_alerts", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"Slip detection alerts", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
@@ -697,6 +700,10 @@ public class OrbitDbContext : DbContext
                 .HasConversion<string>()
                 .HasMaxLength(32);
 
+            entity.Property(u => u.SubscriptionLapseReason)
+                .HasConversion<string>()
+                .HasMaxLength(32);
+
             entity.Property(u => u.GoogleCalendarLastSyncError).HasMaxLength(500);
 
             entity.Property(u => u.GoogleCalendarSelectedIds).HasColumnType("text");
@@ -869,6 +876,8 @@ public class OrbitDbContext : DbContext
     {
         modelBuilder.Entity<Goal>(entity =>
         {
+            entity.Ignore(g => g.HasActiveLinkedHabits);
+            entity.Ignore(g => g.IsProgressDerived);
             entity.HasIndex(g => g.UserId);
             entity.HasIndex(g => new { g.UserId, g.IsDeleted });
             entity.HasIndex(g => new { g.UserId, g.UpdatedAtUtc });

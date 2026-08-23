@@ -18,15 +18,10 @@ public record GetGoalDetailQuery(
 
 public class GetGoalDetailQueryHandler(
     IGenericRepository<Goal> goalRepository,
-    IPayGateService payGate,
     IUserDateService userDateService) : IRequestHandler<GetGoalDetailQuery, Result<GoalDetailWithMetricsResponse>>
 {
     public async Task<Result<GoalDetailWithMetricsResponse>> Handle(GetGoalDetailQuery request, CancellationToken cancellationToken)
     {
-        var gateCheck = await payGate.CanAccessGoals(request.UserId, cancellationToken);
-        if (gateCheck.IsFailure)
-            return gateCheck.PropagateError<GoalDetailWithMetricsResponse>();
-
         var loaded = await GoalDetailLoader.BuildGoalDetailAsync(
             goalRepository, userDateService, request.GoalId, request.UserId, cancellationToken);
         if (loaded is null)

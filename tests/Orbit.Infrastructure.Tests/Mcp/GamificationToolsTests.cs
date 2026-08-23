@@ -103,7 +103,8 @@ public class GamificationToolsTests
             15, 30, new DateOnly(2026, 4, 2),
             1, 1, 2, false,
             [new DateOnly(2026, 3, 15)],
-            1, 3, 7, 1, true);
+            1, 3, 7, 1, true,
+            false, null, 1);
 
         _mediator.Send(Arg.Any<GetStreakInfoQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(streak));

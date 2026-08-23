@@ -86,6 +86,28 @@ public partial class ResendEmailService(
         await SendEmailAsync(toEmail, copy.Subject, html, text, cancellationToken);
     }
 
+    public async Task SendApiKeyCreationCodeAsync(string toEmail, string code, string language = "en", CancellationToken cancellationToken = default)
+    {
+        var isPtBr = LocaleHelper.IsPortuguese(language);
+        var copy = EmailCopy.ApiKeyCreation(isPtBr);
+
+        var tokens = new Dictionary<string, string>
+        {
+            [HeadingToken] = copy.Heading,
+            [IntroToken] = copy.Intro,
+            ["codeLabel"] = copy.CodeLabel,
+            ["code"] = code,
+            ["warning"] = copy.Warning,
+            [FooterToken] = copy.Footer,
+        };
+
+        var layout = new EmailLayout(LangCode(isPtBr), copy.Preheader, copy.Footer, LogoUrl, GradientHeader: false);
+        var html = EmailTemplateRenderer.RenderHtml("ApiKeyCreation", layout, tokens);
+        var text = EmailTemplateRenderer.RenderText("ApiKeyCreation", tokens);
+
+        await SendEmailAsync(toEmail, copy.Subject, html, text, cancellationToken);
+    }
+
     public async Task SendWaitlistConfirmationAsync(string toEmail, string confirmUrl, string language = "en", CancellationToken cancellationToken = default)
     {
         var isPtBr = LocaleHelper.IsPortuguese(language);

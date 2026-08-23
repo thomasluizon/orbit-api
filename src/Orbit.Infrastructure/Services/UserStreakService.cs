@@ -1,5 +1,3 @@
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
 using Orbit.Application.Social.Services;
@@ -16,13 +14,10 @@ public record UserStreakRepositories(
     IGenericRepository<HabitLog> HabitLogs,
     IGenericRepository<StreakFreeze> StreakFreezes);
 
-public partial class UserStreakService(
+public class UserStreakService(
     UserStreakRepositories repos,
     IUserDateService userDateService,
-    IFriendFeedEventEmitter friendFeedEventEmitter,
-    IUnitOfWork unitOfWork,
-    IFeatureFlagService featureFlagService,
-    ILogger<UserStreakService> logger) : IUserStreakService
+    IFriendFeedEventEmitter friendFeedEventEmitter) : IUserStreakService
 {
     public async Task<UserStreakState?> RecalculateAsync(
         Guid userId,
@@ -36,40 +31,8 @@ public partial class UserStreakService(
             return null;
 
         var previousStreak = user.CurrentStreak;
-        var userToday = await userDateService.GetUserTodayAsync(userId, cancellationToken);
-        var lookbackStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
-
-        var (completionDateSet, freezeDateSet, contributingHabits) =
-            await LoadStreakDataAsync(userId, lookbackStart, cancellationToken);
-
-        var hasRecurring = contributingHabits.Any(h => h.FrequencyUnit is not null);
-        if (!hasRecurring)
-        {
-            var fallbackState = CalendarFallback(user, completionDateSet, freezeDateSet, awardFreezeIfEligible);
-            await friendFeedEventEmitter.EmitStreakMilestonesAsync(user, previousStreak, cancellationToken);
-            return fallbackState;
-        }
-
-        var userTimeZone = TimeZoneHelper.FindTimeZone(user.TimeZone, userId: user.Id);
-        var expectedDates = HabitScheduleService.GetUnionScheduledDatesForStreak(
-            contributingHabits, lookbackStart, userToday, userTimeZone);
-
-        var (currentStreak, lastActiveDate) = HabitScheduleService.ComputeStreakAsOf(
-            expectedDates, completionDateSet, freezeDateSet, lookbackStart, userToday);
-
-        if (await TryBridgeRecentGapWithBankedFreezeAsync(
-                user,
-                new StreakBridgeContext(userToday, lookbackStart, expectedDates, completionDateSet),
-                freezeDateSet, currentStreak, cancellationToken))
-        {
-            (currentStreak, lastActiveDate) = HabitScheduleService.ComputeStreakAsOf(
-                expectedDates, completionDateSet, freezeDateSet, lookbackStart, userToday);
-        }
-
-        var longestStreak = ComputeLongestStreak(expectedDates, completionDateSet, freezeDateSet);
-        if (currentStreak > longestStreak) longestStreak = currentStreak;
-
-        user.SetStreakState(currentStreak, longestStreak, lastActiveDate);
+        var state = await CalculateStateAsync(userId, user, cancellationToken);
+        user.SetStreakState(state.CurrentStreak, state.LongestStreak, state.LastActiveDate);
         if (awardFreezeIfEligible)
         {
             user.AwardStreakFreezeIfEligible(
@@ -77,10 +40,104 @@ public partial class UserStreakService(
                 AppConstants.StreakDaysPerFreeze);
         }
         await friendFeedEventEmitter.EmitStreakMilestonesAsync(user, previousStreak, cancellationToken);
-        return new UserStreakState(currentStreak, longestStreak, lastActiveDate);
+        return state;
     }
 
-    private async Task<(HashSet<DateOnly> CompletionDates, HashSet<DateOnly> FreezeDates, List<Habit> ContributingHabits)>
+    public async Task<UserStreakState?> CalculateAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        var users = await repos.Users.FindAsync(
+            user => user.Id == userId,
+            cancellationToken);
+        var user = users.SingleOrDefault();
+        return user is null
+            ? null
+            : await CalculateStateAsync(userId, user, cancellationToken);
+    }
+
+    public async Task<StreakRepairEvaluation?> EvaluateRepairAsync(
+        Guid userId,
+        DateOnly userToday,
+        DateOnly missedDate,
+        CancellationToken cancellationToken = default)
+    {
+        var user = await repos.Users.FindOneTrackedAsync(
+            u => u.Id == userId,
+            cancellationToken: cancellationToken);
+        if (user is null)
+            return null;
+
+        var lookbackStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
+        var (completionDateSet, freezeDateSet, eligibleHabits) =
+            await LoadStreakDataAsync(userId, lookbackStart, cancellationToken);
+
+        return EvaluateRepair(
+            user,
+            userToday,
+            missedDate,
+            eligibleHabits,
+            completionDateSet,
+            freezeDateSet);
+    }
+
+    internal static StreakRepairEvaluation EvaluateRepair(
+        User user,
+        DateOnly userToday,
+        DateOnly missedDate,
+        IReadOnlyCollection<Habit> eligibleHabits,
+        HashSet<DateOnly> completionDateSet,
+        HashSet<DateOnly> freezeDateSet)
+    {
+        if (missedDate.DayNumber != userToday.DayNumber - 1
+            || user.StreakFreezesAccumulated <= 0)
+        {
+            return StreakRepairEvaluation.Unavailable(missedDate);
+        }
+
+        var contributingHabits = GetContributingHabits(eligibleHabits);
+        if (!contributingHabits.Any(habit => habit.FrequencyUnit is not null))
+            return StreakRepairEvaluation.Unavailable(missedDate);
+
+        var lookbackStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
+
+        var userTimeZone = TimeZoneHelper.FindTimeZone(user.TimeZone, userId: user.Id);
+        var expectedDates = HabitScheduleService.GetUnionScheduledDatesForStreak(
+            contributingHabits, lookbackStart, userToday, userTimeZone);
+
+        if (!expectedDates.Contains(missedDate)
+            || completionDateSet.Contains(missedDate)
+            || freezeDateSet.Contains(missedDate))
+        {
+            return StreakRepairEvaluation.Unavailable(missedDate);
+        }
+
+        var monthStart = new DateOnly(missedDate.Year, missedDate.Month, 1);
+        var monthEnd = monthStart.AddMonths(1);
+        var freezesThisMonth = freezeDateSet.Count(date => date >= monthStart && date < monthEnd);
+        if (freezesThisMonth >= AppConstants.MaxStreakFreezesPerMonth)
+            return StreakRepairEvaluation.Unavailable(missedDate);
+
+        var (currentStreak, _) = HabitScheduleService.ComputeStreakAsOf(
+            expectedDates, completionDateSet, freezeDateSet, lookbackStart, userToday);
+        var repairedFreezeDates = new HashSet<DateOnly>(freezeDateSet) { missedDate };
+        var (repairedStreak, repairedLastActiveDate) = HabitScheduleService.ComputeStreakAsOf(
+            expectedDates, completionDateSet, repairedFreezeDates, lookbackStart, userToday);
+        if (repairedStreak <= currentStreak)
+            return StreakRepairEvaluation.Unavailable(missedDate);
+
+        var repairedLongestStreak = ComputeLongestStreak(
+            expectedDates, completionDateSet, repairedFreezeDates);
+        repairedLongestStreak = Math.Max(
+            user.LongestStreak,
+            Math.Max(repairedLongestStreak, repairedStreak));
+
+        return StreakRepairEvaluation.Available(
+            missedDate,
+            new UserStreakState(repairedStreak, repairedLongestStreak, repairedLastActiveDate));
+    }
+
+    private async Task<(HashSet<DateOnly> CompletionDates, HashSet<DateOnly> FreezeDates, List<Habit> EligibleHabits)>
         LoadStreakDataAsync(Guid userId, DateOnly lookbackStart, CancellationToken cancellationToken)
     {
         var allHabits = await repos.Habits.FindAsync(h => h.UserId == userId, cancellationToken);
@@ -103,106 +160,51 @@ public partial class UserStreakService(
             .Select(freeze => freeze.UsedOnDate)
             .ToHashSet();
 
-        var contributingHabits = allHabits
-            .Where(h => !h.IsDeleted && !h.IsBadHabit && !h.IsGeneral && !h.IsFlexible)
-            .Where(h => !(h.FrequencyUnit is null && h.IsCompleted))
+        var eligibleHabits = allHabits
+            .Where(habit => !habit.IsDeleted && !habit.IsBadHabit)
             .ToList();
 
-        return (completionDateSet, freezeDateSet, contributingHabits);
+        return (completionDateSet, freezeDateSet, eligibleHabits);
     }
 
-    private sealed record StreakBridgeContext(
-        DateOnly UserToday,
-        DateOnly LookbackStart,
-        HashSet<DateOnly> ExpectedDates,
-        HashSet<DateOnly> CompletionDates);
-
-    /// <summary>
-    /// Applies one banked streak freeze to bridge the user's most recent scheduled miss (their local
-    /// "yesterday") during recalculation — the same action the hourly <see cref="StreakFreezeAutoActivationService"/>
-    /// takes — so the streak is preserved regardless of which path runs first. The consume + the
-    /// <see cref="StreakFreeze"/> insert are flushed in one guarded save so they commit atomically; a persisted row
-    /// makes the operation idempotent, since a later recalculation sees the frozen date in
-    /// <paramref name="freezeDateSet"/> and neither re-consumes a freeze nor inflates the streak. The hourly job
-    /// can insert the same <c>(UserId, UsedOnDate)</c> row concurrently: on that unique-violation the save rolls
-    /// back this consume (so exactly one freeze is spent overall), the staged rows are dropped, and the day is
-    /// still treated as covered because the winner's row already bridges it. Only spends a freeze when covering the
-    /// day actually raises the streak (so an over-large gap is left to break) and the user is freeze-eligible and
-    /// under the monthly cap. Returns true, extending <paramref name="freezeDateSet"/> with the covered date,
-    /// whenever the day ends up covered by this call or its concurrent winner.
-    /// </summary>
-    private async Task<bool> TryBridgeRecentGapWithBankedFreezeAsync(
+    private async Task<UserStreakState> CalculateStateAsync(
+        Guid userId,
         User user,
-        StreakBridgeContext context,
-        HashSet<DateOnly> freezeDateSet,
-        int currentStreak,
         CancellationToken cancellationToken)
     {
-        var (userToday, lookbackStart, expectedDates, completionDateSet) = context;
+        var userToday = await userDateService.GetUserTodayAsync(userId, cancellationToken);
+        var lookbackStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
+        var (completionDateSet, freezeDateSet, eligibleHabits) =
+            await LoadStreakDataAsync(userId, lookbackStart, cancellationToken);
+        var contributingHabits = GetContributingHabits(eligibleHabits);
 
-        if (user.StreakFreezesAccumulated <= 0)
-            return false;
+        if (!contributingHabits.Any(habit => habit.FrequencyUnit is not null))
+            return CalendarFallback(completionDateSet, freezeDateSet);
 
-        var missedDate = userToday.AddDays(-1);
-        if (!expectedDates.Contains(missedDate)
-            || completionDateSet.Contains(missedDate)
-            || freezeDateSet.Contains(missedDate))
-        {
-            return false;
-        }
+        var userTimeZone = TimeZoneHelper.FindTimeZone(user.TimeZone, userId: user.Id);
+        var expectedDates = HabitScheduleService.GetUnionScheduledDatesForStreak(
+            contributingHabits,
+            lookbackStart,
+            userToday,
+            userTimeZone);
+        var (currentStreak, lastActiveDate) = HabitScheduleService.ComputeStreakAsOf(
+            expectedDates,
+            completionDateSet,
+            freezeDateSet,
+            lookbackStart,
+            userToday);
+        var longestStreak = Math.Max(
+            currentStreak,
+            ComputeLongestStreak(expectedDates, completionDateSet, freezeDateSet));
 
-        var monthStart = new DateOnly(missedDate.Year, missedDate.Month, 1);
-        var monthEnd = monthStart.AddMonths(1);
-        var freezesThisMonth = freezeDateSet.Count(date => date >= monthStart && date < monthEnd);
-        if (freezesThisMonth >= AppConstants.MaxStreakFreezesPerMonth)
-            return false;
-
-        var bridged = new HashSet<DateOnly>(freezeDateSet) { missedDate };
-        var (streakWithBridge, _) = HabitScheduleService.ComputeStreakAsOf(
-            expectedDates, completionDateSet, bridged, lookbackStart, userToday);
-        if (streakWithBridge <= currentStreak)
-            return false;
-
-        var enabledFlags = await featureFlagService.GetEnabledKeysForUserAsync(user.Id, cancellationToken);
-        if (!user.HasProAccess && !enabledFlags.Contains(FeatureFlagKeys.GamificationFreeTier))
-            return false;
-
-        if (user.ConsumeStreakFreeze().IsFailure)
-            return false;
-
-        await repos.StreakFreezes.AddAsync(StreakFreeze.Create(user.Id, missedDate), cancellationToken);
-
-        try
-        {
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException ex) when (DbUniqueViolation.IsUniqueViolation(ex))
-        {
-            unitOfWork.DiscardChanges();
-            freezeDateSet.Add(missedDate);
-            if (logger.IsEnabled(LogLevel.Debug))
-                LogBankedFreezeAlreadyCovered(logger, user.Id, missedDate);
-            return true;
-        }
-
-        freezeDateSet.Add(missedDate);
-        if (logger.IsEnabled(LogLevel.Information))
-            LogBankedFreezeApplied(logger, user.Id, missedDate);
-
-        return true;
+        return new UserStreakState(currentStreak, longestStreak, lastActiveDate);
     }
 
-    [LoggerMessage(
-        EventId = 1,
-        Level = LogLevel.Information,
-        Message = "Applied banked streak freeze for user {UserId} on {FrozenDate} during recalculation to bridge a missed scheduled day")]
-    private static partial void LogBankedFreezeApplied(ILogger logger, Guid userId, DateOnly frozenDate);
-
-    [LoggerMessage(
-        EventId = 2,
-        Level = LogLevel.Debug,
-        Message = "Banked streak freeze for user {UserId} on {FrozenDate} was already inserted by a concurrent activation; treating the day as covered")]
-    private static partial void LogBankedFreezeAlreadyCovered(ILogger logger, Guid userId, DateOnly frozenDate);
+    private static List<Habit> GetContributingHabits(IReadOnlyCollection<Habit> eligibleHabits) =>
+        eligibleHabits
+            .Where(habit => !habit.IsGeneral && !habit.IsFlexible)
+            .Where(habit => !(habit.FrequencyUnit is null && habit.IsCompleted))
+            .ToList();
 
     private static int ComputeLongestStreak(
         HashSet<DateOnly> expectedDates,
@@ -230,10 +232,8 @@ public partial class UserStreakService(
     }
 
     private static UserStreakState CalendarFallback(
-        User user,
         HashSet<DateOnly> completionDateSet,
-        HashSet<DateOnly> freezeDateSet,
-        bool awardFreezeIfEligible)
+        HashSet<DateOnly> freezeDateSet)
     {
         var orderedDates = completionDateSet
             .Concat(freezeDateSet)
@@ -249,7 +249,8 @@ public partial class UserStreakService(
         {
             if (completionDateSet.Contains(date))
             {
-                currentStreak = lastActiveDate == date.AddDays(-1)
+                currentStreak = lastActiveDate.HasValue
+                    && lastActiveDate.Value.DayNumber == date.DayNumber - 1
                     ? currentStreak + 1
                     : 1;
                 lastActiveDate = date;
@@ -268,13 +269,6 @@ public partial class UserStreakService(
             lastActiveDate = date;
         }
 
-        user.SetStreakState(currentStreak, longestStreak, lastActiveDate);
-        if (awardFreezeIfEligible)
-        {
-            user.AwardStreakFreezeIfEligible(
-                AppConstants.MaxStreakFreezesAccumulated,
-                AppConstants.StreakDaysPerFreeze);
-        }
         return new UserStreakState(currentStreak, longestStreak, lastActiveDate);
     }
 }

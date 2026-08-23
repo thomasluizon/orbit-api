@@ -12,8 +12,6 @@ public enum ProgressMetric
     TotalCompletions,
     GoalsCreated,
     GoalsCompleted,
-    FriendsCount,
-    CheersSent,
     EarlyLogs,
     NightLogs
 }

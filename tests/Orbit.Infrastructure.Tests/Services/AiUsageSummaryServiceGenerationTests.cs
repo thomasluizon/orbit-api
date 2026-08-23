@@ -4,7 +4,10 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using NSubstitute;
+using Orbit.Application.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
@@ -36,7 +39,9 @@ public class AiUsageSummaryServiceGenerationTests
 
         await harness.Service.SummarizeYesterdayAsync(CancellationToken.None);
 
-        harness.SingleSummaryLine().Should().Be($"AI cost {Yesterday:yyyy-MM-dd}: no usage recorded");
+        harness.SingleSummaryLine().Should().Be(
+            $"AI cost {Yesterday:yyyy-MM-dd}: no usage recorded; " +
+            $"Astra quota {Yesterday:yyyy-MM-dd}: no active users");
     }
 
     [Fact]
@@ -51,10 +56,39 @@ public class AiUsageSummaryServiceGenerationTests
         harness.Logger.Entries.Count(entry => entry.Message.StartsWith("AI cost")).Should().Be(1);
     }
 
+    [Fact]
+    public async Task SummarizeYesterdayAsync_WithQuotaUsers_EmitsDailyQuotaMetrics()
+    {
+        var harness = new Harness();
+        await harness.SeedUsersAsync(
+            UserWithMessages(5, hasProAccess: false),
+            UserWithMessages(50, hasProAccess: true));
+
+        await harness.Service.SummarizeYesterdayAsync(CancellationToken.None);
+
+        harness.SingleSummaryLine().Should().Contain(
+            "free_cap_hits=1; pro_cap_hits=1; mean_messages_per_active_user=27.50; " +
+            "p95_messages_per_active_user=50");
+    }
+
     private static AiUsageDaily Row(string purpose, long calls, decimal costUsd) =>
         AiUsageDaily.Create(
             Yesterday, "gpt-4.1-mini", purpose,
             new AiUsageTotals(calls, CachedTokens: 0, PromptTokens: 0, CompletionTokens: 0, TotalTokens: 0, CostUsd: costUsd));
+
+    private static User UserWithMessages(int count, bool hasProAccess)
+    {
+        var user = User.Create("Metrics User", $"metrics-{Guid.NewGuid():N}@example.com").Value;
+        if (hasProAccess)
+            user.GrantLifetimePro();
+        else
+            user.StartTrial(DateTime.UtcNow.AddDays(-1));
+
+        for (var i = 0; i < count; i++)
+            user.IncrementAiMessageCount(Yesterday);
+
+        return user;
+    }
 
     private sealed class Harness
     {
@@ -67,8 +101,12 @@ public class AiUsageSummaryServiceGenerationTests
 
         public Harness()
         {
+            var appConfig = Substitute.For<IAppConfigService>();
+            appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerDay, 5, Arg.Any<CancellationToken>()).Returns(5);
+            appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerDay, 50, Arg.Any<CancellationToken>()).Returns(50);
             _provider = new ServiceCollection()
                 .AddDbContext<OrbitDbContext>(options => options.UseInMemoryDatabase(_databaseName))
+                .AddSingleton(appConfig)
                 .BuildServiceProvider();
 
             var settings = new AiSettings
@@ -95,6 +133,14 @@ public class AiUsageSummaryServiceGenerationTests
             using var scope = _provider.GetRequiredService<IServiceScopeFactory>().CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
             dbContext.AiUsageDaily.AddRange(rows);
+            await dbContext.SaveChangesAsync();
+        }
+
+        public async Task SeedUsersAsync(params User[] users)
+        {
+            using var scope = _provider.GetRequiredService<IServiceScopeFactory>().CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
+            dbContext.Users.AddRange(users);
             await dbContext.SaveChangesAsync();
         }
 

@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -10,7 +11,9 @@ using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Common;
+using Orbit.Application.Gamification.Queries;
 using Orbit.Application.Goals.Services;
+using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -35,12 +38,14 @@ public class ProcessUserChatCommandHandlerTests
     private readonly IUserStreakService _userStreakService = Substitute.For<IUserStreakService>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
-    private readonly IStreakGoalReadSyncer _streakGoalReadSyncer = Substitute.For<IStreakGoalReadSyncer>();
+    private readonly IGoalProgressReadSyncer _goalProgressReadSyncer = Substitute.For<IGoalProgressReadSyncer>();
     private readonly IServiceScopeFactory _scopeFactory = Substitute.For<IServiceScopeFactory>();
     private readonly IAgentCatalogService _catalogService = Substitute.For<IAgentCatalogService>();
     private readonly IAgentOperationExecutor _operationExecutor = Substitute.For<IAgentOperationExecutor>();
     private readonly IPendingClarificationStore _pendingClarificationStore = Substitute.For<IPendingClarificationStore>();
     private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
+    private readonly IMediator _mediator = Substitute.For<IMediator>();
+    private readonly IProductAnalytics _productAnalytics = Substitute.For<IProductAnalytics>();
     private readonly ILogger<ProcessUserChatCommandHandler> _logger = Substitute.For<ILogger<ProcessUserChatCommandHandler>>();
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -87,7 +92,8 @@ public class ProcessUserChatCommandHandlerTests
         var aiDeps = new ChatAiDependencies(_aiIntentService, toolRegistry, _promptBuilder, _catalogService);
         var dataDeps = new ChatDataDependencies(_habitRepo, _goalRepo, userRepository, _userFactRepo, _tagRepo, _checklistTemplateRepo, _featureFlagService);
         var executionDeps = new ChatExecutionDependencies(
-            _userDateService, _userStreakService, payGate, unitOfWork, _scopeFactory, _operationExecutor, _pendingClarificationStore, _streakGoalReadSyncer, _gamificationService);
+            _userDateService, _userStreakService, payGate, unitOfWork, _scopeFactory, _operationExecutor,
+            _pendingClarificationStore, _goalProgressReadSyncer, _gamificationService, _mediator, _productAnalytics);
 
         return new ProcessUserChatCommandHandler(
             dataDeps, aiDeps, executionDeps, _logger);
@@ -105,9 +111,10 @@ public class ProcessUserChatCommandHandlerTests
         _catalogService.BuildDynamicSupplement(Arg.Any<AgentContextSnapshot>()).Returns("dynamic supplement");
 
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
+        _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(1);
         _userStreakService.RecalculateAsync(UserId, cancellationToken: Arg.Any<CancellationToken>())
             .Returns(new UserStreakState(1, 1, Today));
-        _streakGoalReadSyncer.ComputeFreshValuesAsync(Arg.Any<Guid>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+        _goalProgressReadSyncer.ComputeFreshValuesAsync(Arg.Any<Guid>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
             .Returns(new Dictionary<Guid, int>());
         _promptBuilder.BuildStatic(Arg.Any<PromptBuildRequest>()).Returns("static prompt");
         _promptBuilder.BuildDynamic(Arg.Any<PromptBuildRequest>()).Returns("dynamic prompt");
@@ -246,12 +253,12 @@ public class ProcessUserChatCommandHandlerTests
     private PayGateService CreateRealPayGate(IGenericRepository<User> userRepository)
     {
         var appConfig = Substitute.For<IAppConfigService>();
-        appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerMonth, AppConstants.DefaultFreeAiMessages, Arg.Any<CancellationToken>())
-            .Returns(20);
-        appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerMonth, AppConstants.DefaultProAiMessages, Arg.Any<CancellationToken>())
-            .Returns(500);
+        appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerDay, AppConstants.DefaultFreeAiMessages, Arg.Any<CancellationToken>())
+            .Returns(5);
+        appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerDay, AppConstants.DefaultProAiMessages, Arg.Any<CancellationToken>())
+            .Returns(50);
 
-        return new PayGateService(_habitRepo, userRepository, appConfig);
+        return new PayGateService(_habitRepo, userRepository, appConfig, _userDateService);
     }
 
     private static readonly AiConversationContext TestConversationContext = new()
@@ -273,6 +280,32 @@ public class ProcessUserChatCommandHandlerTests
             Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<AiResponse>(error));
     }
+
+    private void SetupRecap(RetrospectiveMetrics metrics)
+    {
+        _mediator.Send(Arg.Any<GetRecapQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new RecapResponse("week", metrics, "https://example.test/recap")));
+    }
+
+    private static RetrospectiveMetrics Metrics(
+        int completionRate = 0,
+        int totalCompletions = 0,
+        int totalScheduled = 0,
+        int activeDays = 0,
+        int currentStreak = 0,
+        int bestStreak = 0) =>
+        new(
+            completionRate,
+            totalCompletions,
+            totalScheduled,
+            activeDays,
+            7,
+            currentStreak,
+            bestStreak,
+            0,
+            new int[7],
+            [],
+            []);
 
     private static IAiTool FakeTool(string name)
     {
@@ -345,7 +378,7 @@ public class ProcessUserChatCommandHandlerTests
     public async Task Handle_TenConcurrentRequestsWithOneMessageRemaining_OnlyOneCallsAi()
     {
         const int requestCount = 10;
-        var persistence = new StaleSnapshotQuotaStore(initialCount: 19, requestCount);
+        var persistence = new StaleSnapshotQuotaStore(initialCount: 4, requestCount);
         SetupAiResponse(new AiResponse { TextMessage = "Reserved response", ToolCalls = null });
         var command = new ProcessUserChatCommand(UserId, "Hello AI");
         var handlers = Enumerable.Range(0, requestCount)
@@ -364,7 +397,7 @@ public class ProcessUserChatCommandHandlerTests
 
         results.Should().ContainSingle(result => result.IsSuccess);
         results.Count(result => result.IsFailure && result.ErrorCode == Result.PayGateErrorCode).Should().Be(requestCount - 1);
-        persistence.PersistedCount.Should().Be(20);
+        persistence.PersistedCount.Should().Be(5);
         persistence.InitialSnapshotCount.Should().Be(requestCount);
         persistence.DistinctInitialSnapshotCount.Should().Be(requestCount);
         persistence.ConcurrencyFailureCount.Should().Be(requestCount - 1);
@@ -395,8 +428,8 @@ public class ProcessUserChatCommandHandlerTests
     {
         var user = User.Create("Thomas", "thomas@test.com").Value;
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
-        for (var i = 0; i < 19; i++)
-            user.IncrementAiMessageCount();
+        for (var i = 0; i < 4; i++)
+            user.IncrementAiMessageCount(Today);
 
         _aiIntentService.SendWithToolsAsync(
                 Arg.Any<AiToolRequest>(),
@@ -404,7 +437,7 @@ public class ProcessUserChatCommandHandlerTests
                 Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
-                user.AiMessagesUsedThisMonth.Should().Be(20);
+                user.AiMessagesUsedToday.Should().Be(5);
                 return Result.Failure<AiResponse>("AI service unavailable");
             });
         var handler = CreateHandler(CreateRealPayGate(user));
@@ -415,7 +448,7 @@ public class ProcessUserChatCommandHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be("AI service unavailable");
-        user.AiMessagesUsedThisMonth.Should().Be(20);
+        user.AiMessagesUsedToday.Should().Be(5);
     }
 
     [Fact]
@@ -509,6 +542,138 @@ public class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_MetricsCapableClientWithDirective_BuildsCurrentWeekCardAndTracksEmission()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "Here is your week:\n[[orbit:metrics]]", ToolCalls = null });
+        _mediator.Send(Arg.Any<GetRecapQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new RecapResponse(
+                "week",
+                Metrics(completionRate: 75, totalCompletions: 6, totalScheduled: 8, activeDays: 4, currentStreak: 3, bestStreak: 9),
+                "https://example.test/recap")));
+        var handler = CreateHandler();
+
+        var result = await handler.Handle(
+            new ProcessUserChatCommand(
+                UserId,
+                "How did my week go?",
+                ClientContext: new AgentClientContext(Platform: "ios", SupportsMetricsCard: true)),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessage.Should().Be("Here is your week:");
+        result.Value.MetricsCard.Should().Be(new MetricsCard("week", 75, 6, 8, 4, 3, 9, true, "progress"));
+        await _mediator.Received(1).Send(
+            Arg.Is<GetRecapQuery>(query =>
+                query.UserId == UserId
+                && query.DateFrom == new DateOnly(2026, 3, 30)
+                && query.DateTo == Today
+                && query.Period == "week"),
+            Arg.Any<CancellationToken>());
+        _productAnalytics.Received(1).CaptureUserEvent(
+            UserId,
+            "chat_metrics_card_emitted",
+            "Free",
+            Arg.Is<IReadOnlyDictionary<string, object>>(properties =>
+                properties["platform"].Equals("ios")
+                && properties["chip_present"].Equals(true)));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(false)]
+    public async Task Handle_MetricsDirectiveWithoutCapability_StripsTokenAndSkipsRecap(bool? supportsMetricsCard)
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "Here is your week:\n[[orbit:metrics]]", ToolCalls = null });
+        var handler = CreateHandler();
+        var clientContext = supportsMetricsCard.HasValue
+            ? new AgentClientContext(SupportsMetricsCard: supportsMetricsCard)
+            : null;
+
+        var result = await handler.Handle(
+            new ProcessUserChatCommand(UserId, "How did my week go?", ClientContext: clientContext),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessage.Should().Be("Here is your week:");
+        result.Value.AiMessage.Should().NotContain("[[orbit:metrics]]");
+        result.Value.MetricsCard.Should().BeNull();
+        await _mediator.DidNotReceive().Send(Arg.Any<GetRecapQuery>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_MetricsAndHabitDirectives_ReturnsBothCards()
+    {
+        SetupUserAndPayGate();
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { CreateHabit("Meditate") }.AsReadOnly());
+        SetupAiResponse(new AiResponse
+        {
+            TextMessage = "Here is today and your week:\n[[orbit:habits:today]]\n[[orbit:metrics]]",
+            ToolCalls = null
+        });
+        SetupRecap(Metrics(totalScheduled: 1));
+        var handler = CreateHandler();
+
+        var result = await handler.Handle(
+            new ProcessUserChatCommand(
+                UserId,
+                "Show today and my progress",
+                ClientContext: new AgentClientContext(SupportsHabitListCard: true, SupportsMetricsCard: true)),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessage.Should().Be("Here is today and your week:");
+        result.Value.HabitList.Should().NotBeNull();
+        result.Value.MetricsCard.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Handle_MetricsDirectiveWithZeroData_ReturnsEmptyCard()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "Your week:\n[[orbit:metrics]]", ToolCalls = null });
+        SetupRecap(Metrics());
+        var handler = CreateHandler();
+
+        var result = await handler.Handle(
+            new ProcessUserChatCommand(
+                UserId,
+                "How did my week go?",
+                ClientContext: new AgentClientContext(SupportsMetricsCard: true)),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.MetricsCard.Should().NotBeNull();
+        result.Value.MetricsCard!.HasData.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_MetricsComputationThrows_KeepsCleanProseAndOmitsCard()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "Your week:\n[[orbit:metrics]]", ToolCalls = null });
+        _mediator.Send(Arg.Any<GetRecapQuery>(), Arg.Any<CancellationToken>())
+            .Returns<Task<Result<RecapResponse>>>(_ => throw new InvalidOperationException("recap unavailable"));
+        var handler = CreateHandler();
+
+        var result = await handler.Handle(
+            new ProcessUserChatCommand(
+                UserId,
+                "How did my week go?",
+                ClientContext: new AgentClientContext(SupportsMetricsCard: true)),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessage.Should().Be("Your week:");
+        result.Value.MetricsCard.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Handle_PromptBuilderReceivesOnlyActiveHabits()
     {
         SetupUserAndPayGate();
@@ -541,7 +706,7 @@ public class ProcessUserChatCommandHandlerTests
         var streakGoal = Goal.Create(new Goal.CreateGoalParams(
             UserId, "Avoid doom scrolling", 7, "days", Type: GoalType.Streak)).Value;
 
-        _streakGoalReadSyncer
+        _goalProgressReadSyncer
             .ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>())
             .Returns(new Dictionary<Guid, int> { [streakGoal.Id] = 4 });
 
@@ -557,7 +722,7 @@ public class ProcessUserChatCommandHandlerTests
         var result = await handler.Handle(new ProcessUserChatCommand(UserId, "How am I doing?"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _streakGoalReadSyncer.Received(1).ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>());
+        await _goalProgressReadSyncer.Received(1).ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>());
         _promptBuilder.Received(1).BuildDynamic(Arg.Is<PromptBuildRequest>(request =>
             request.ActiveGoals != null &&
             request.ActiveGoals.Count == 1 &&
@@ -805,6 +970,45 @@ public class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_StreamedMetricsDirectiveAcrossChunks_NeverEmitsToken()
+    {
+        SetupUserAndPayGate();
+        SetupRecap(Metrics(totalScheduled: 1));
+        _aiIntentService.SendWithToolsAsync(
+            Arg.Any<AiToolRequest>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(async callInfo =>
+            {
+                var sink = callInfo.ArgAt<Func<AiStreamEvent, Task>?>(1);
+                await sink!(AiStreamEvent.Delta("Your week:\n[[orbit:met"));
+                await sink(AiStreamEvent.Delta("rics]]"));
+                return Result.Success(new AiResponse { TextMessage = "Your week:\n[[orbit:metrics]]" });
+            });
+        var streamEvents = new List<ChatStreamEvent>();
+        var handler = CreateHandler();
+
+        var result = await handler.Handle(
+            new ProcessUserChatCommand(
+                UserId,
+                "How did my week go?",
+                ClientContext: new AgentClientContext(SupportsMetricsCard: true),
+                StreamSink: streamEvent =>
+                {
+                    streamEvents.Add(streamEvent);
+                    return Task.CompletedTask;
+                }),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        string.Concat(streamEvents.Where(streamEvent => streamEvent.Type == "delta").Select(streamEvent => streamEvent.Text))
+            .Should().Be("Your week:\n");
+        streamEvents
+            .Where(streamEvent => streamEvent.Text?.Contains("orbit:metrics", StringComparison.OrdinalIgnoreCase) == true)
+            .Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Handle_WithoutStreamSink_PassesNullSinkToIntentService()
     {
         SetupUserAndPayGate();
@@ -912,6 +1116,34 @@ public class ProcessUserChatCommandHandlerTests
         staticSections.Should().BeLessThan(staticSupplement);
         staticSupplement.Should().BeLessThan(dynamicSections);
         dynamicSections.Should().BeLessThan(dynamicSupplement);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Handle_MetricsPromptInstruction_MatchesClientCapability(bool supportsMetricsCard)
+    {
+        SetupUserAndPayGate();
+        string? capturedPrompt = null;
+        _aiIntentService.SendWithToolsAsync(
+            Arg.Do<AiToolRequest>(request => capturedPrompt = request.SystemPrompt),
+            Arg.Any<Func<AiStreamEvent, Task>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "ok" }));
+        var handler = CreateHandler();
+
+        await handler.Handle(
+            new ProcessUserChatCommand(
+                UserId,
+                "Hello",
+                ClientContext: new AgentClientContext(SupportsMetricsCard: supportsMetricsCard)),
+            CancellationToken.None);
+
+        capturedPrompt.Should().NotBeNull();
+        if (supportsMetricsCard)
+            capturedPrompt.Should().Contain(MetricsCardBuilder.PromptInstruction);
+        else
+            capturedPrompt.Should().NotContain(MetricsCardBuilder.PromptInstruction);
     }
 
     [Fact]
@@ -2031,10 +2263,10 @@ public class ProcessUserChatCommandHandlerTests
                             throw new DbUpdateConcurrencyException("The quota snapshot is stale.");
                         }
 
-                        if (trackedUser.AiMessagesUsedThisMonth == _persistedCount)
+                        if (trackedUser.AiMessagesUsedToday == _persistedCount)
                             return 0;
 
-                        _persistedCount = trackedUser.AiMessagesUsedThisMonth;
+                        _persistedCount = trackedUser.AiMessagesUsedToday;
                         _version++;
                         trackedVersion = _version;
                         return 1;
@@ -2049,7 +2281,7 @@ public class ProcessUserChatCommandHandlerTests
             var user = User.Create("Thomas", "thomas@test.com").Value;
             user.StartTrial(DateTime.UtcNow.AddDays(-1));
             for (var i = 0; i < messageCount; i++)
-                user.IncrementAiMessageCount();
+                user.IncrementAiMessageCount(Today);
             return user;
         }
     }

@@ -11,4 +11,5 @@ public record AchievementDefinition(
     int XpReward,
     string IconKey,
     ProgressMetric Metric = ProgressMetric.None,
-    int? ProgressTarget = null);
+    int? ProgressTarget = null,
+    bool IsRetired = false);

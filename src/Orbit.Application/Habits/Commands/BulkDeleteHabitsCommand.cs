@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -32,6 +33,7 @@ public class BulkDeleteHabitsCommandHandler(
 
         var habits = await habitRepository.FindTrackedAsync(
             h => request.HabitIds.Contains(h.Id) && h.UserId == request.UserId,
+            query => query.Include(h => h.Goals),
             cancellationToken);
         var habitDict = habits.ToDictionary(h => h.Id);
 
@@ -51,6 +53,7 @@ public class BulkDeleteHabitsCommandHandler(
                     continue;
                 }
 
+                habit.RemoveAllGoals();
                 habit.SoftDelete();
                 results.Add(new BulkDeleteItemResult(
                     Index: i,

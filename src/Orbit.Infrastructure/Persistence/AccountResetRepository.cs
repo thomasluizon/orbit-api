@@ -56,12 +56,12 @@ public class AccountResetRepository(OrbitDbContext context) : IAccountResetRepos
             .Where(ua => ua.UserId == userId)
             .ExecuteDeleteAsync(cancellationToken);
 
-        await context.StreakFreezes
-            .Where(sf => sf.UserId == userId)
+        await context.XpAwardLogs
+            .Where(award => award.UserId == userId)
             .ExecuteDeleteAsync(cancellationToken);
 
-        await context.SentStreakFreezeAlerts
-            .Where(a => a.UserId == userId)
+        await context.StreakFreezes
+            .Where(sf => sf.UserId == userId)
             .ExecuteDeleteAsync(cancellationToken);
 
         await context.SentProactiveCheckins
@@ -109,6 +109,10 @@ public class AccountResetRepository(OrbitDbContext context) : IAccountResetRepos
 
         await context.ProcessedRequests
             .Where(r => r.UserId == userId)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        await context.ClosedMonthRecaps
+            .Where(recap => recap.UserId == userId)
             .ExecuteDeleteAsync(cancellationToken);
 
         await context.Referrals

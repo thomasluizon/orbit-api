@@ -8,7 +8,8 @@ namespace Orbit.Application.Common;
 public class PayGateService(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<User> userRepository,
-    IAppConfigService appConfig) : IPayGateService
+    IAppConfigService appConfig,
+    IUserDateService userDateService) : IPayGateService
 {
     public async Task<Result> CanCreateHabits(Guid userId, int count = 1, CancellationToken ct = default)
     {
@@ -16,15 +17,12 @@ public class PayGateService(
         if (user is null)
             return Result.Failure(ErrorMessages.UserNotFound);
 
-        if (user.HasProAccess)
-            return Result.Success();
-
         var maxHabits = await appConfig.GetAsync(AppConfigKeys.FreeMaxHabits, AppConstants.DefaultFreeMaxHabits, ct);
         var activeHabitCount = await habitRepository.CountAsync(
             h => h.UserId == userId && h.ParentHabitId == null && !h.IsCompleted, ct);
 
         if (activeHabitCount + count > maxHabits)
-            return Result.PayGateFailure($"You've reached the {maxHabits} habit limit on the free plan. Upgrade to Pro for unlimited habits.");
+            return Result.Failure($"You've reached the {maxHabits} habit limit.");
 
         return Result.Success();
     }
@@ -51,16 +49,16 @@ public class PayGateService(
         if (IsProductionSmokeAccount(user.Email))
             return Result.Success();
 
-        var freeLimit = await appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerMonth, AppConstants.DefaultFreeAiMessages, ct);
-        var proLimit = await appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerMonth, AppConstants.DefaultProAiMessages, ct);
-        var baseLimit = user.HasProAccess ? proLimit : freeLimit;
-        var messageLimit = baseLimit + user.AdRewardBonusMessages;
+        var freeLimit = await appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerDay, AppConstants.DefaultFreeAiMessages, ct);
+        var proLimit = await appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerDay, AppConstants.DefaultProAiMessages, ct);
+        var messageLimit = user.HasProAccess ? proLimit : freeLimit;
+        var userToday = await userDateService.GetUserTodayAsync(userId, ct);
 
-        if (user.AiMessagesUsedThisMonth >= messageLimit)
+        if (user.AiMessagesLocalDate == userToday && user.AiMessagesUsedToday >= messageLimit)
         {
             var errorMessage = user.HasProAccess
-                ? $"You've reached your monthly AI message limit ({messageLimit})."
-                : $"You've reached your monthly AI message limit ({messageLimit}). Upgrade to Pro for {proLimit} messages per month.";
+                ? $"You've reached your daily AI message limit ({messageLimit})."
+                : $"You've reached your daily AI message limit ({messageLimit}). Upgrade to Pro for {proLimit} messages per day.";
 
             return Result.PayGateFailure(errorMessage);
         }
@@ -73,8 +71,9 @@ public class PayGateService(
         IUnitOfWork unitOfWork,
         CancellationToken ct = default)
     {
-        var freeLimit = await appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerMonth, AppConstants.DefaultFreeAiMessages, ct);
-        var proLimit = await appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerMonth, AppConstants.DefaultProAiMessages, ct);
+        var freeLimit = await appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerDay, AppConstants.DefaultFreeAiMessages, ct);
+        var proLimit = await appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerDay, AppConstants.DefaultProAiMessages, ct);
+        var userToday = await userDateService.GetUserTodayAsync(userId, ct);
 
         var consumption = await ConcurrencyRetry.ExecuteAsync(
             userRepository,
@@ -82,22 +81,20 @@ public class PayGateService(
             token => userRepository.FindOneTrackedAsync(user => user.Id == userId, cancellationToken: token),
             user =>
             {
-                var currentAtUtc = DateTime.UtcNow;
                 if (!IsProductionSmokeAccount(user.Email))
                 {
-                    var messageLimit = (user.HasProAccess ? proLimit : freeLimit) + user.AdRewardBonusMessages;
-                    var cycleIsActive = user.AiMessagesResetAt.HasValue && user.AiMessagesResetAt.Value > currentAtUtc;
-                    if (cycleIsActive && user.AiMessagesUsedThisMonth >= messageLimit)
+                    var messageLimit = user.HasProAccess ? proLimit : freeLimit;
+                    if (user.GetAiMessagesUsedForQuota(userToday) >= messageLimit)
                     {
                         var errorMessage = user.HasProAccess
-                            ? $"You've reached your monthly AI message limit ({messageLimit})."
-                            : $"You've reached your monthly AI message limit ({messageLimit}). Upgrade to Pro for {proLimit} messages per month.";
+                            ? $"You've reached your daily AI message limit ({messageLimit})."
+                            : $"You've reached your daily AI message limit ({messageLimit}). Upgrade to Pro for {proLimit} messages per day.";
 
                         return Task.FromResult(Result.PayGateFailure(errorMessage));
                     }
                 }
 
-                user.IncrementAiMessageCount(currentAtUtc);
+                user.IncrementAiMessageCount(userToday);
                 return Task.FromResult(Result.Success());
             },
             ErrorMessages.UserNotFound,
@@ -145,21 +142,8 @@ public class PayGateService(
         return Result.Success();
     }
 
-    public async Task<Result> CanAccessGoals(Guid userId, CancellationToken ct = default)
-    {
-        var user = await userRepository.GetByIdAsync(userId, ct);
-        if (user is null)
-            return Result.Failure(ErrorMessages.UserNotFound);
-
-        var goalsProOnly = await appConfig.GetAsync(AppConfigKeys.GoalsProOnly, true, ct);
-        if (goalsProOnly && !user.HasProAccess)
-            return Result.PayGateFailure("Goals are a Pro feature. Upgrade to unlock!");
-
-        return Result.Success();
-    }
-
-    public Task<Result> CanCreateGoals(Guid userId, CancellationToken ct = default) =>
-        CanAccessGoals(userId, ct);
+    public Task<Result> CanUseGoalReview(Guid userId, CancellationToken ct = default) =>
+        RequireProAccess(userId, "Goal reviews are a Pro feature. Upgrade to unlock!", ct);
 
     public Task<Result> CanAccessCalendar(Guid userId, CancellationToken ct = default) =>
         RequireProAccess(userId, "Calendar integration is a Pro feature. Upgrade to unlock!", ct);
@@ -194,9 +178,6 @@ public class PayGateService(
     public Task<Result> CanUseSlipAlerts(Guid userId, CancellationToken ct = default) =>
         RequireProAccess(userId, "Slip alerts are a Pro feature. Upgrade to unlock!", ct);
 
-    public Task<Result> CanLinkGoalsToHabits(Guid userId, CancellationToken ct = default) =>
-        CanAccessGoals(userId, ct);
-
     public async Task<Result> CanCreateApiKeys(Guid userId, CancellationToken ct = default)
     {
         return await CanManageApiKeys(userId, ct);
@@ -210,10 +191,9 @@ public class PayGateService(
         var user = await userRepository.GetByIdAsync(userId, ct);
         if (user is null) return AppConstants.DefaultFreeAiMessages;
 
-        var freeLimit = await appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerMonth, AppConstants.DefaultFreeAiMessages, ct);
-        var proLimit = await appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerMonth, AppConstants.DefaultProAiMessages, ct);
-        var baseLimit = user.HasProAccess ? proLimit : freeLimit;
-        return baseLimit + user.AdRewardBonusMessages;
+        var freeLimit = await appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerDay, AppConstants.DefaultFreeAiMessages, ct);
+        var proLimit = await appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerDay, AppConstants.DefaultProAiMessages, ct);
+        return user.HasProAccess ? proLimit : freeLimit;
     }
 
     private static bool IsProductionSmokeAccount(string email)
@@ -237,63 +217,4 @@ public class PayGateService(
             ? Result.Success()
             : Result.PayGateFailure(errorMessage);
     }
-}
-
-internal static class HabitReactivationAllowance
-{
-    public static bool IsRequiredForUnlog(Habit habit) =>
-        habit.IsCompleted && habit.ParentHabitId is null;
-
-    public static bool IsRequiredForEndDateChange(
-        Habit habit,
-        FrequencyUnit? frequencyUnit,
-        DateOnly? dueDate,
-        DateOnly? endDate,
-        bool clearEndDate)
-    {
-        if (!habit.IsCompleted || habit.ParentHabitId is not null || frequencyUnit is null)
-            return false;
-
-        if (clearEndDate)
-            return true;
-
-        return endDate.HasValue && (dueDate ?? habit.DueDate) <= endDate.Value;
-    }
-
-    public static async Task<Result<T>> ExecuteAsync<T>(
-        Guid userId,
-        bool requiresAllowance,
-        IPayGateService? payGate,
-        Func<Result<T>> transition,
-        CancellationToken cancellationToken)
-    {
-        if (requiresAllowance)
-        {
-            var allowanceGate = await GetPayGate(payGate).CanCreateHabits(userId, 1, cancellationToken);
-            if (allowanceGate.IsFailure)
-                return allowanceGate.PropagateError<T>();
-        }
-
-        return transition();
-    }
-
-    public static async Task<Result> ExecuteAsync(
-        Guid userId,
-        bool requiresAllowance,
-        IPayGateService? payGate,
-        Func<Result> transition,
-        CancellationToken cancellationToken)
-    {
-        if (requiresAllowance)
-        {
-            var allowanceGate = await GetPayGate(payGate).CanCreateHabits(userId, 1, cancellationToken);
-            if (allowanceGate.IsFailure)
-                return allowanceGate;
-        }
-
-        return transition();
-    }
-
-    private static IPayGateService GetPayGate(IPayGateService? payGate) =>
-        payGate ?? throw new InvalidOperationException("Habit reactivation allowance service is not configured.");
 }

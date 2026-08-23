@@ -80,10 +80,16 @@ public static class DomainErrors
     public static readonly AppError UnitRequired = new("UNIT_REQUIRED", "Unit is required.");
     public static readonly AppError GoalNotActive = new("GOAL_NOT_ACTIVE", "Cannot update progress on a non-active goal.");
     public static readonly AppError ProgressValueNegative = new("PROGRESS_NEGATIVE", "Progress value cannot be negative.");
+    public static readonly AppError GoalProgressDerived = new("GOAL_PROGRESS_DERIVED", "Progress is derived from habit logs and cannot be updated manually.");
     public static readonly AppError NotStreakGoal = new("NOT_STREAK_GOAL", "Cannot sync streak on a non-streak goal.");
+    public static readonly AppError NotStandardGoal = new("NOT_STANDARD_GOAL", "Cannot sync completion count on a non-standard goal.");
+    public static readonly AppError StandardGoalHasNoLinkedHabits = new("STANDARD_GOAL_HAS_NO_LINKED_HABITS", "Cannot sync completion count without a linked habit.");
     public static readonly AppError GoalAlreadyCompleted = new("GOAL_ALREADY_COMPLETED", "Goal is already completed.");
     public static readonly AppError GoalAlreadyAbandoned = new("GOAL_ALREADY_ABANDONED", "Goal is already abandoned.");
     public static readonly AppError GoalAlreadyActive = new("GOAL_ALREADY_ACTIVE", "Goal is already active.");
+
+    public static readonly AppError ClosedMonthRangeInvalid = new("CLOSED_MONTH_RANGE_INVALID", "A closed month must span one complete calendar month.");
+    public static readonly AppError ClosedMonthRecapResponseInvalid = new("CLOSED_MONTH_RECAP_RESPONSE_INVALID", "A closed month recap response must be a JSON object.");
 
     public static readonly AppError ChallengeTargetRequired = new("CHALLENGE_TARGET_REQUIRED", "A goal challenge must have a target count greater than 0.");
     public static readonly AppError ChallengeTargetNotAllowed = new("CHALLENGE_TARGET_NOT_ALLOWED", "A streak challenge cannot have a target count.");

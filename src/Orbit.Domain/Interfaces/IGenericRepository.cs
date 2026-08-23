@@ -9,6 +9,15 @@ public interface IGenericRepository<T> where T : Entity
     Task<IReadOnlyList<T>> GetAllAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<T>> FindAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<T>> FindAsync(Expression<Func<T, bool>> predicate, Func<IQueryable<T>, IQueryable<T>>? includes, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Loads untracked entities with global query filters disabled and optional navigations included.
+    /// Historical reads use this when a later soft delete must not erase an earlier period.
+    /// </summary>
+    Task<IReadOnlyList<T>> FindIgnoringFiltersAsync(
+        Expression<Func<T, bool>> predicate,
+        Func<IQueryable<T>, IQueryable<T>>? includes = null,
+        CancellationToken cancellationToken = default);
     Task<T?> FindOneTrackedAsync(Expression<Func<T, bool>> predicate, Func<IQueryable<T>, IQueryable<T>>? includes = null, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -26,6 +35,10 @@ public interface IGenericRepository<T> where T : Entity
     /// queries hide; always constrain the predicate with the owner's id to keep the scope per-user.
     /// </summary>
     Task<IReadOnlyList<T>> FindTrackedIgnoringFiltersAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<T>> FindTrackedIgnoringFiltersAsync(
+        Expression<Func<T, bool>> predicate,
+        Func<IQueryable<T>, IQueryable<T>> includes,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Loads a single tracked entity matching <paramref name="predicate"/> with global query filters

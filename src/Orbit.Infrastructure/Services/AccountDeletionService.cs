@@ -136,10 +136,6 @@ public partial class AccountDeletionService(
             .Where(a => a.WeekStart < cutoff)
             .ExecuteDeleteAsync(ct);
 
-        var deletedStreakFreezeAlerts = await dbContext.SentStreakFreezeAlerts
-            .Where(a => a.FrozenDate < cutoff)
-            .ExecuteDeleteAsync(ct);
-
 #pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC instant (expiry/TTL/cutoff math, not a user-facing date), per-site justification ledger: https://github.com/thomasluizon/orbit-api/issues/431
         var processedRequestCutoff = DateTime.UtcNow.AddDays(-ProcessedRequestRetentionDays);
 #pragma warning restore ORBIT0004
@@ -147,8 +143,8 @@ public partial class AccountDeletionService(
             .Where(r => r.CreatedAtUtc < processedRequestCutoff)
             .ExecuteDeleteAsync(ct);
 
-        if ((deletedReminders > 0 || deletedSlipAlerts > 0 || deletedStreakFreezeAlerts > 0 || deletedProcessedRequests > 0) && logger.IsEnabled(LogLevel.Information))
-            LogStaleRecordsCleaned(logger, deletedReminders, deletedSlipAlerts, deletedStreakFreezeAlerts, deletedProcessedRequests);
+        if ((deletedReminders > 0 || deletedSlipAlerts > 0 || deletedProcessedRequests > 0) && logger.IsEnabled(LogLevel.Information))
+            LogStaleRecordsCleaned(logger, deletedReminders, deletedSlipAlerts, deletedProcessedRequests);
     }
 
     private const int ProcessedRequestRetentionDays = 30;
@@ -171,7 +167,7 @@ public partial class AccountDeletionService(
     [LoggerMessage(EventId = 6, Level = LogLevel.Error, Message = "Failed to delete account {UserId}")]
     private static partial void LogAccountDeletionFailed(ILogger logger, Exception ex, Guid userId);
 
-    [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Cleaned up {Reminders} stale SentReminders, {SlipAlerts} stale SentSlipAlerts, and {StreakFreezeAlerts} stale SentStreakFreezeAlerts older than 90 days, plus {ProcessedRequests} ProcessedRequests older than 30 days")]
-    private static partial void LogStaleRecordsCleaned(ILogger logger, int reminders, int slipAlerts, int streakFreezeAlerts, int processedRequests);
+    [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Cleaned up {Reminders} stale SentReminders and {SlipAlerts} stale SentSlipAlerts older than 90 days, plus {ProcessedRequests} ProcessedRequests older than 30 days")]
+    private static partial void LogStaleRecordsCleaned(ILogger logger, int reminders, int slipAlerts, int processedRequests);
 
 }

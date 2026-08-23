@@ -11,7 +11,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 public class QueryGoalsTool(
     IGenericRepository<Goal> goalRepository,
     IUserDateService userDateService,
-    IStreakGoalReadSyncer streakGoalReadSyncer) : IAiTool
+    IGoalProgressReadSyncer goalProgressReadSyncer) : IAiTool
 {
     public string Name => "query_goals";
     public bool IsReadOnly => true;
@@ -52,7 +52,7 @@ public class QueryGoalsTool(
         var limit = Math.Clamp(JsonArgumentParser.GetOptionalInt(args, "limit") ?? 50, 1, 200);
 
         var userToday = await userDateService.GetUserTodayAsync(userId, ct);
-        var freshStreakValues = await streakGoalReadSyncer.ComputeFreshValuesAsync(userId, userToday, ct);
+        var freshProgressValues = await goalProgressReadSyncer.ComputeFreshValuesAsync(userId, userToday, ct);
 
         var goals = await goalRepository.FindAsync(
             g => g.UserId == userId
@@ -73,7 +73,7 @@ public class QueryGoalsTool(
         if (filtered.Count == 0)
             return new ToolResult(true, EntityName: "No goals found matching the given filters.");
 
-        return new ToolResult(true, EntityName: BuildOutput(filtered, freshStreakValues, includeDescriptions, includeLinkedHabits));
+        return new ToolResult(true, EntityName: BuildOutput(filtered, freshProgressValues, includeDescriptions, includeLinkedHabits));
     }
 
     private static GoalStatus? ParseStatus(JsonElement args)
@@ -99,7 +99,7 @@ public class QueryGoalsTool(
 
     private static string BuildOutput(
         List<Goal> goals,
-        IReadOnlyDictionary<Guid, int> freshStreakValues,
+        IReadOnlyDictionary<Guid, int> freshProgressValues,
         bool includeDescriptions,
         bool includeLinkedHabits)
     {
@@ -109,7 +109,7 @@ public class QueryGoalsTool(
 
         foreach (var goal in goals)
         {
-            var currentValue = freshStreakValues.TryGetValue(goal.Id, out var fresh) ? fresh : goal.CurrentValue;
+            var currentValue = freshProgressValues.TryGetValue(goal.Id, out var fresh) ? fresh : goal.CurrentValue;
             var labels = new List<string>
             {
                 $"Status: {goal.Status}",

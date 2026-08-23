@@ -1,7 +1,8 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -14,48 +15,48 @@ public record UpdateGoalProgressCommand(
     decimal NewValue,
     string? Note = null) : IRequest<Result>, IIdempotentCommand;
 
-public partial class UpdateGoalProgressCommandHandler(
+public class UpdateGoalProgressCommandHandler(
     GoalRepositories repos,
-    IPayGateService payGate,
-    IGamificationService gamificationService,
+    IGoalCompletionService goalCompletionService,
     IUnitOfWork unitOfWork,
     IUserDateService userDateService,
-    IMemoryCache cache,
-    ILogger<UpdateGoalProgressCommandHandler> logger) : IRequestHandler<UpdateGoalProgressCommand, Result>
+    IMemoryCache cache) : IRequestHandler<UpdateGoalProgressCommand, Result>
 {
     public async Task<Result> Handle(UpdateGoalProgressCommand request, CancellationToken cancellationToken)
     {
-        var gateCheck = await payGate.CanAccessGoals(request.UserId, cancellationToken);
-        if (gateCheck.IsFailure)
-            return gateCheck;
+        var saved = await unitOfWork.ExecuteInTransactionAsync(async transactionToken =>
+        {
+            var justCompleted = false;
+            var result = await ConcurrencyRetry.ExecuteAsync(
+                repos.Goals,
+                unitOfWork,
+                ct => repos.Goals.FindOneTrackedAsync(
+                    g => g.Id == request.GoalId && g.UserId == request.UserId,
+                    q => q.Include(g => g.Habits),
+                    ct),
+                async goal =>
+                {
+                    var previousValue = goal.CurrentValue;
+                    var updateResult = goal.UpdateProgress(request.NewValue);
+                    if (updateResult.IsFailure)
+                        return updateResult;
 
-        var justCompleted = false;
+                    justCompleted = updateResult.Value;
+                    var progressLog = GoalProgressLog.Create(goal.Id, previousValue, request.NewValue, request.Note);
+                    await repos.ProgressLogs.AddAsync(progressLog, transactionToken);
+                    return Result.Success();
+                },
+                ErrorMessages.GoalNotFound,
+                transactionToken);
 
-        var saved = await ConcurrencyRetry.ExecuteAsync(
-            repos.Goals,
-            unitOfWork,
-            ct => repos.Goals.FindOneTrackedAsync(
-                g => g.Id == request.GoalId && g.UserId == request.UserId, cancellationToken: ct),
-            async goal =>
-            {
-                var previousValue = goal.CurrentValue;
-                var result = goal.UpdateProgress(request.NewValue);
-                if (result.IsFailure)
-                    return result;
+            if (result.IsSuccess && justCompleted)
+                await goalCompletionService.SaveCompletedGoalAsync(request.UserId, request.GoalId, transactionToken);
 
-                justCompleted = result.Value;
-                var progressLog = GoalProgressLog.Create(goal.Id, previousValue, request.NewValue, request.Note);
-                await repos.ProgressLogs.AddAsync(progressLog, cancellationToken);
-                return Result.Success();
-            },
-            ErrorMessages.GoalNotFound,
-            cancellationToken);
+            return result;
+        }, cancellationToken);
 
         if (saved.IsFailure)
             return saved;
-
-        if (justCompleted)
-            await ProcessGoalCompletionSafeAsync(request.UserId, cancellationToken);
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
@@ -63,18 +64,4 @@ public partial class UpdateGoalProgressCommandHandler(
         return Result.Success();
     }
 
-    private async Task ProcessGoalCompletionSafeAsync(Guid userId, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await gamificationService.ProcessGoalCompleted(userId, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            LogGamificationGoalCompletionFailed(logger, ex, userId);
-        }
-    }
-
-    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Gamification processing failed for goal completion by user {UserId}")]
-    private static partial void LogGamificationGoalCompletionFailed(ILogger logger, Exception ex, Guid userId);
 }

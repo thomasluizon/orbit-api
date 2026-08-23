@@ -1,5 +1,4 @@
 using FluentAssertions;
-using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Orbit.Application.Gamification.Queries;
 using Orbit.Application.Social.Services;
@@ -265,11 +264,6 @@ public class GetStreakHistoryQueryHandlerTests
         var freezeRepo = Substitute.For<IGenericRepository<StreakFreeze>>();
         var userDateService = Substitute.For<IUserDateService>();
         var feedEmitter = Substitute.For<IFriendFeedEventEmitter>();
-        var unitOfWork = Substitute.For<IUnitOfWork>();
-        var featureFlagService = Substitute.For<IFeatureFlagService>();
-        featureFlagService.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(new List<string>());
-
         userRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
             Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
@@ -284,8 +278,9 @@ public class GetStreakHistoryQueryHandlerTests
             .Returns(new List<StreakFreeze>());
 
         var service = new UserStreakService(
-            new UserStreakRepositories(userRepo, habitRepo, habitLogRepo, freezeRepo), userDateService, feedEmitter,
-            unitOfWork, featureFlagService, NullLogger<UserStreakService>.Instance);
+            new UserStreakRepositories(userRepo, habitRepo, habitLogRepo, freezeRepo),
+            userDateService,
+            feedEmitter);
         var state = await service.RecalculateAsync(UserId, cancellationToken: CancellationToken.None);
         return state!.CurrentStreak;
     }

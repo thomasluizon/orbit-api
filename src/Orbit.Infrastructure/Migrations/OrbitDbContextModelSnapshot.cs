@@ -478,7 +478,13 @@ namespace Orbit.Infrastructure.Migrations
                         {
                             Key = "MinSupportedVersion",
                             Description = "Minimum supported client app version; clients below this receive HTTP 426",
-                            Value = "0.0.0"
+                            Value = "1.3.11"
+                        },
+                        new
+                        {
+                            Key = "RequireApiKeyCreationStepUp",
+                            Description = "Turn on once a client build carrying the API key creation challenge flow is live in the Play fleet",
+                            Value = "false"
                         });
                 });
 
@@ -551,7 +557,6 @@ namespace Orbit.Infrastructure.Migrations
                             Key = "goal_tracking",
                             Description = "Goal tracking with progress",
                             Enabled = true,
-                            PlanRequirement = "Pro",
                             UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
@@ -834,6 +839,36 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("Cheers");
                 });
 
+            modelBuilder.Entity("Orbit.Domain.Entities.ClosedMonthRecap", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("DateFrom")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("DateTo")
+                        .HasColumnType("date");
+
+                    b.Property<string>("ResponseJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "DateFrom", "DateTo")
+                        .IsUnique();
+
+                    b.ToTable("ClosedMonthRecaps");
+                });
+
             modelBuilder.Entity("Orbit.Domain.Entities.ContentBlock", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1004,6 +1039,9 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.Property<string>("Description")
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("FirstCompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
@@ -1323,6 +1361,9 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("DedupeKey")
+                        .HasColumnType("text");
+
                     b.Property<DateTime?>("DeletedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -1349,6 +1390,10 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("DedupeKey")
+                        .IsUnique()
+                        .HasFilter("\"DedupeKey\" IS NOT NULL");
 
                     b.HasIndex("Url")
                         .HasFilter("\"Url\" IS NOT NULL");
@@ -1778,29 +1823,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("SentSlipAlerts");
                 });
 
-            modelBuilder.Entity("Orbit.Domain.Entities.SentStreakFreezeAlert", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateOnly>("FrozenDate")
-                        .HasColumnType("date");
-
-                    b.Property<DateTime>("SentAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId", "FrozenDate")
-                        .IsUnique();
-
-                    b.ToTable("SentStreakFreezeAlerts");
-                });
-
             modelBuilder.Entity("Orbit.Domain.Entities.StreakFreeze", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1883,10 +1905,10 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<bool>("AiMemoryEnabled")
                         .HasColumnType("boolean");
 
-                    b.Property<DateTime?>("AiMessagesResetAt")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<DateOnly?>("AiMessagesLocalDate")
+                        .HasColumnType("date");
 
-                    b.Property<int>("AiMessagesUsedThisMonth")
+                    b.Property<int>("AiMessagesUsedToday")
                         .HasColumnType("integer");
 
                     b.Property<bool>("AiSummaryEnabled")
@@ -2053,11 +2075,21 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<string>("StripeCustomerId")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("StripeSubscriptionEventCreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("StripeSubscriptionId")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("SubscriptionEndedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int?>("SubscriptionInterval")
                         .HasColumnType("integer");
+
+                    b.Property<string>("SubscriptionLapseReason")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
 
                     b.Property<int?>("SubscriptionSource")
                         .HasColumnType("integer");
@@ -2415,6 +2447,15 @@ namespace Orbit.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Orbit.Domain.Entities.ClosedMonthRecap", b =>
+                {
+                    b.HasOne("Orbit.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Orbit.Domain.Entities.FriendFeedEvent", b =>
                 {
                     b.HasOne("Orbit.Domain.Entities.User", null)
@@ -2528,15 +2569,6 @@ namespace Orbit.Infrastructure.Migrations
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.SentProactiveCheckin", b =>
-                {
-                    b.HasOne("Orbit.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.SentStreakFreezeAlert", b =>
                 {
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()

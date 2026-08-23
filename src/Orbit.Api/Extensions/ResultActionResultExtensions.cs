@@ -39,10 +39,12 @@ public static class ResultActionResultExtensions
         [ErrorCodes.AlreadyPaired] = StatusCodes.Status409Conflict,
         [ErrorCodes.PairLimitReached] = StatusCodes.Status409Conflict,
         [ErrorCodes.AlreadyCheckedIn] = StatusCodes.Status409Conflict,
+        [ErrorCodes.StreakRepairUnavailable] = StatusCodes.Status409Conflict,
 
         [ErrorCodes.SocialDisabled] = StatusCodes.Status403Forbidden,
         [ErrorCodes.Blocked] = StatusCodes.Status403Forbidden,
         [ErrorCodes.NotChallengeParticipant] = StatusCodes.Status403Forbidden,
+        [ErrorCodes.ApiKeyCreationChallengeRequired] = StatusCodes.Status428PreconditionRequired,
 
         [ErrorCodes.FriendRequestNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.ChallengeNotFound] = StatusCodes.Status404NotFound,

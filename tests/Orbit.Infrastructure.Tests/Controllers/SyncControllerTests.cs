@@ -143,6 +143,7 @@ public class SyncControllerTests : IDisposable
 
         var activeHabit = Habit.Create(new HabitCreateParams(UserId, "Exercise", FrequencyUnit.Day, 1, DueDate: today)).Value;
         var activeGoal = Goal.Create(UserId, "Read books", 12, "books").Value;
+        activeGoal.AddHabit(activeHabit);
         var activeTag = Tag.Create(UserId, "Health", "#00ff00").Value;
         var notification = Notification.Create(UserId, "Reminder", "Drink water");
         var checklistTemplate = ChecklistTemplate.Create(UserId, "Morning", ["Water", "Stretch"]).Value;
@@ -159,6 +160,7 @@ public class SyncControllerTests : IDisposable
         response.Habits.Updated.Should().ContainSingle();
         response.Habits.Updated[0].Title.Should().Be("Exercise");
         response.Goals.Updated.Should().ContainSingle();
+        response.Goals.Updated[0].IsProgressDerived.Should().BeTrue();
         response.Tags.Updated.Should().ContainSingle();
         response.Notifications.Updated.Should().ContainSingle();
         response.ChecklistTemplates.Updated.Should().ContainSingle();

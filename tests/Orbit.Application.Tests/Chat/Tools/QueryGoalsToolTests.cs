@@ -14,16 +14,16 @@ public class QueryGoalsToolTests
 {
     private readonly IGenericRepository<Goal> _goalRepository = Substitute.For<IGenericRepository<Goal>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
-    private readonly IStreakGoalReadSyncer _streakGoalReadSyncer = Substitute.For<IStreakGoalReadSyncer>();
+    private readonly IGoalProgressReadSyncer _goalProgressReadSyncer = Substitute.For<IGoalProgressReadSyncer>();
     private readonly QueryGoalsTool _tool;
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly DateOnly Today = DateOnly.FromDateTime(DateTime.UtcNow);
 
     public QueryGoalsToolTests()
     {
-        _tool = new QueryGoalsTool(_goalRepository, _userDateService, _streakGoalReadSyncer);
+        _tool = new QueryGoalsTool(_goalRepository, _userDateService, _goalProgressReadSyncer);
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
-        _streakGoalReadSyncer.ComputeFreshValuesAsync(Arg.Any<Guid>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+        _goalProgressReadSyncer.ComputeFreshValuesAsync(Arg.Any<Guid>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
             .Returns(new Dictionary<Guid, int>());
     }
 
@@ -78,7 +78,7 @@ public class QueryGoalsToolTests
         var streakGoal = Goal.Create(new Goal.CreateGoalParams(
             UserId, "Avoid doom scrolling", 7, "days", Type: GoalType.Streak)).Value;
 
-        _streakGoalReadSyncer
+        _goalProgressReadSyncer
             .ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>())
             .Returns(new Dictionary<Guid, int> { [streakGoal.Id] = 4 });
 
@@ -91,7 +91,7 @@ public class QueryGoalsToolTests
         var result = await Execute("{}");
 
         result.Success.Should().BeTrue();
-        await _streakGoalReadSyncer.Received(1).ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>());
+        await _goalProgressReadSyncer.Received(1).ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>());
         result.EntityName.Should().Contain("4/7 days");
     }
 

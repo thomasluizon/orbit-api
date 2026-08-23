@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification.Services;
 using Orbit.Domain.Common;
@@ -27,7 +28,11 @@ public record GetAchievementsQuery(Guid UserId) : IRequest<Result<AchievementsRe
 public class GetAchievementsQueryHandler(
     IGenericRepository<User> userRepository,
     IGenericRepository<UserAchievement> achievementRepository,
-    IAchievementProgressService progressService) : IRequestHandler<GetAchievementsQuery, Result<AchievementsResponse>>
+    IFeatureFlagService featureFlagService,
+    IAchievementProgressService progressService,
+    IGamificationService gamificationService,
+    IProductAnalytics productAnalytics,
+    ILogger<GetAchievementsQueryHandler> logger) : IRequestHandler<GetAchievementsQuery, Result<AchievementsResponse>>
 {
     public async Task<Result<AchievementsResponse>> Handle(GetAchievementsQuery request, CancellationToken cancellationToken)
     {
@@ -36,7 +41,17 @@ public class GetAchievementsQueryHandler(
             return Result.Failure<AchievementsResponse>(ErrorMessages.UserNotFound);
 
         if (!user.HasProAccess)
-            return Result.PayGateFailure<AchievementsResponse>("Gamification is a Pro feature. Upgrade to unlock!");
+        {
+            var enabledFlags = await featureFlagService.GetEnabledKeysForUserAsync(
+                request.UserId,
+                cancellationToken);
+            if (!enabledFlags.Contains(FeatureFlagKeys.GamificationFreeTier))
+                return Result.PayGateFailure<AchievementsResponse>("Gamification is a Pro feature. Upgrade to unlock!");
+        }
+
+        await gamificationService.ReconcileFoundingAchievementsAsync(
+            request.UserId,
+            cancellationToken);
 
         var earnedList = await achievementRepository.FindAsync(a => a.UserId == request.UserId, cancellationToken);
         var earnedMap = earnedList.ToDictionary(a => a.AchievementId, a => a.EarnedAtUtc);
@@ -44,7 +59,9 @@ public class GetAchievementsQueryHandler(
 
         var metrics = await progressService.LoadAsync(user, earnedIds, cancellationToken);
 
-        var achievements = AchievementDefinitions.All.Select(def =>
+        var achievements = AchievementDefinitions.All
+            .Where(def => !def.IsRetired || earnedMap.ContainsKey(def.Id))
+            .Select(def =>
         {
             var isEarned = earnedMap.TryGetValue(def.Id, out var earnedAt);
             var (progressCurrent, progressTarget) = AchievementProgressCalculator.Compute(def, metrics, isEarned);
@@ -61,6 +78,17 @@ public class GetAchievementsQueryHandler(
                 progressCurrent,
                 progressTarget);
         }).ToList();
+
+        AnalyticsCapture.SafeCaptureUserEvent(
+            productAnalytics,
+            logger,
+            user,
+            "achievements_viewed",
+            new Dictionary<string, object>
+            {
+                ["isPro"] = user.HasProAccess,
+                ["earnedCount"] = earnedList.Count
+            });
 
         return Result.Success(new AchievementsResponse(achievements));
     }

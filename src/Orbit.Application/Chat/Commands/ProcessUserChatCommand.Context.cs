@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -38,15 +39,15 @@ public partial class ProcessUserChatCommandHandler
         IReadOnlyList<Goal> activeGoals = [];
         if (hasProAccess)
         {
-            var freshStreakValues = await execution.StreakGoalReadSyncer.ComputeFreshValuesAsync(request.UserId, userToday, cancellationToken);
+            var freshProgressValues = await execution.GoalProgressReadSyncer.ComputeFreshValuesAsync(request.UserId, userToday, cancellationToken);
             var loadedGoals = await data.GoalRepository.FindAsync(
                 g => g.UserId == request.UserId && g.Status == GoalStatus.Active,
                 q => q.Include(g => g.Habits),
                 cancellationToken);
             foreach (var goal in loadedGoals)
             {
-                if (freshStreakValues.TryGetValue(goal.Id, out var fresh))
-                    goal.SyncStreakProgress(fresh, allowCompletion: false);
+                if (freshProgressValues.TryGetValue(goal.Id, out var fresh))
+                    GoalProgressSyncService.ApplyReadValue(goal, fresh);
             }
             activeGoals = loadedGoals;
         }

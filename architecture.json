@@ -208,6 +208,24 @@
       "responseDto": null
     },
     {
+      "controller": "ApiKeysController",
+      "action": "RequestCreationChallenge",
+      "httpMethod": "POST",
+      "routeTemplate": "/api/api-keys/creation-challenge",
+      "authorization": "Authorize (class)",
+      "mediatrRequest": "RequestApiKeyCreationChallengeCommand",
+      "responseDto": null
+    },
+    {
+      "controller": "ApiKeysController",
+      "action": "ConfirmCreationChallenge",
+      "httpMethod": "POST",
+      "routeTemplate": "/api/api-keys/creation-challenge/confirm",
+      "authorization": "Authorize (class)",
+      "mediatrRequest": "ConfirmApiKeyCreationChallengeCommand",
+      "responseDto": null
+    },
+    {
       "controller": "AuthController",
       "action": "ConfirmDeletion",
       "httpMethod": "POST",
@@ -674,6 +692,15 @@
       "authorization": "Authorize (class)",
       "mediatrRequest": "GetStreakHistoryQuery",
       "responseDto": "StreakHistoryResponse"
+    },
+    {
+      "controller": "GamificationController",
+      "action": "RepairStreak",
+      "httpMethod": "POST",
+      "routeTemplate": "/api/gamification/streak/repair",
+      "authorization": "Authorize (class)",
+      "mediatrRequest": "RepairStreakCommand",
+      "responseDto": "StreakInfoResponse"
     },
     {
       "controller": "GamificationController",
@@ -1764,6 +1791,12 @@
       "featureFolder": "Auth"
     },
     {
+      "request": "ConfirmApiKeyCreationChallengeCommand",
+      "response": "Result",
+      "handlerFile": "src/Orbit.Application/ApiKeys/Commands/ConfirmApiKeyCreationChallengeCommand.cs",
+      "featureFolder": "ApiKeys"
+    },
+    {
       "request": "ConfirmWaitlistCommand",
       "response": "Result",
       "handlerFile": "src/Orbit.Application/Waitlist/Commands/ConfirmWaitlistCommand.cs",
@@ -2334,6 +2367,12 @@
       "featureFolder": "Habits"
     },
     {
+      "request": "RepairStreakCommand",
+      "response": "Result<StreakInfoResponse>",
+      "handlerFile": "src/Orbit.Application/Gamification/Commands/RepairStreakCommand.cs",
+      "featureFolder": "Gamification"
+    },
+    {
       "request": "ReportEventCommand",
       "response": "Result<ReportEventResponse>",
       "handlerFile": "src/Orbit.Application/Gamification/Commands/ReportEventCommand.cs",
@@ -2350,6 +2389,12 @@
       "response": "Result",
       "handlerFile": "src/Orbit.Application/Auth/Commands/RequestAccountDeletionCommand.cs",
       "featureFolder": "Auth"
+    },
+    {
+      "request": "RequestApiKeyCreationChallengeCommand",
+      "response": "Result",
+      "handlerFile": "src/Orbit.Application/ApiKeys/Commands/RequestApiKeyCreationChallengeCommand.cs",
+      "featureFolder": "ApiKeys"
     },
     {
       "request": "ResetAccountCommand",
@@ -2668,19 +2713,19 @@
     },
     "featureFolders": {
       "Accountability": 17,
-      "ApiKeys": 6,
-      "Auth": 21,
+      "ApiKeys": 11,
+      "Auth": 22,
       "Behaviors": 4,
       "Calendar": 15,
       "Challenges": 15,
-      "Chat": 79,
+      "Chat": 80,
       "ChecklistTemplates": 5,
-      "Common": 34,
-      "Gamification": 26,
-      "Goals": 33,
+      "Common": 36,
+      "Gamification": 31,
+      "Goals": 35,
       "Habits": 74,
       "Marketing": 4,
-      "Notifications": 12,
+      "Notifications": 13,
       "Profile": 37,
       "Referrals": 8,
       "Social": 30,
@@ -2756,6 +2801,10 @@
     {
       "entity": "Cheer",
       "file": "src/Orbit.Domain/Entities/Cheer.cs"
+    },
+    {
+      "entity": "ClosedMonthRecap",
+      "file": "src/Orbit.Domain/Entities/ClosedMonthRecap.cs"
     },
     {
       "entity": "ContentBlock",
@@ -2842,10 +2891,6 @@
       "file": "src/Orbit.Domain/Entities/SentSlipAlert.cs"
     },
     {
-      "entity": "SentStreakFreezeAlert",
-      "file": "src/Orbit.Domain/Entities/SentStreakFreezeAlert.cs"
-    },
-    {
       "entity": "StreakFreeze",
       "file": "src/Orbit.Domain/Entities/StreakFreeze.cs"
     },
@@ -2877,22 +2922,22 @@
   "testCoverage": {
     "featureFolders": {
       "Accountability": 9,
-      "ApiKeys": 11,
-      "Auth": 24,
-      "Behaviors": 12,
+      "ApiKeys": 14,
+      "Auth": 26,
+      "Behaviors": 13,
       "Calendar": 16,
       "Challenges": 14,
-      "Chat": 60,
+      "Chat": 61,
       "ChecklistTemplates": 9,
-      "Common": 167,
-      "Gamification": 33,
-      "Goals": 38,
-      "Habits": 81,
+      "Common": 185,
+      "Gamification": 38,
+      "Goals": 54,
+      "Habits": 87,
       "Marketing": 6,
-      "Notifications": 16,
-      "Profile": 38,
-      "Referrals": 12,
-      "Social": 32,
+      "Notifications": 19,
+      "Profile": 40,
+      "Referrals": 13,
+      "Social": 35,
       "Subscriptions": 18,
       "Support": 4,
       "Tags": 14,
@@ -3111,9 +3156,7 @@
           "AccountabilityPairHabit",
           "Habit",
           "Notification",
-          "User",
-          "UserAchievement",
-          "XpAwardLog"
+          "User"
         ]
       },
       {
@@ -3142,8 +3185,7 @@
           "Friendship",
           "Habit",
           "Notification",
-          "User",
-          "UserAchievement"
+          "User"
         ]
       },
       {
@@ -3194,8 +3236,7 @@
           "InviteAccountabilityBuddyCommand",
           "InviteAccountabilityBuddyCommandHandler",
           "Notification",
-          "User",
-          "UserAchievement"
+          "User"
         ]
       },
       {
@@ -3324,6 +3365,11 @@
         ]
       },
       {
+        "testClass": "MetricsCardBuilderTests",
+        "file": "tests/Orbit.Application.Tests/Chat/MetricsCardBuilderTests.cs",
+        "references": []
+      },
+      {
         "testClass": "PromptHabitIndexTests",
         "file": "tests/Orbit.Application.Tests/Chat/PromptHabitIndexTests.cs",
         "references": [
@@ -3367,8 +3413,8 @@
         "testClass": "BulkLogHabitsToolTests",
         "file": "tests/Orbit.Application.Tests/Chat/Tools/BulkLogHabitsToolTests.cs",
         "references": [
-          "Habit",
-          "HabitLog"
+          "BulkLogHabitsCommand",
+          "Habit"
         ]
       },
       {
@@ -3512,7 +3558,8 @@
         "testClass": "GoalReviewToolTests",
         "file": "tests/Orbit.Application.Tests/Chat/Tools/GoalReviewToolTests.cs",
         "references": [
-          "Goal"
+          "Goal",
+          "Habit"
         ]
       },
       {
@@ -3533,7 +3580,8 @@
         "file": "tests/Orbit.Application.Tests/Chat/Tools/LinkHabitsToGoalToolTests.cs",
         "references": [
           "Goal",
-          "Habit"
+          "Habit",
+          "LinkHabitsToGoalCommand"
         ]
       },
       {
@@ -3541,7 +3589,7 @@
         "file": "tests/Orbit.Application.Tests/Chat/Tools/LogHabitToolTests.cs",
         "references": [
           "Habit",
-          "HabitLog"
+          "LogHabitCommand"
         ]
       },
       {
@@ -3562,7 +3610,8 @@
         "testClass": "MoveHabitToolTests",
         "file": "tests/Orbit.Application.Tests/Chat/Tools/MoveHabitToolTests.cs",
         "references": [
-          "Habit"
+          "Habit",
+          "MoveHabitParentCommand"
         ]
       },
       {
@@ -3679,6 +3728,20 @@
         "references": []
       },
       {
+        "testClass": "ApiKeyCreationChallengeFlowTests",
+        "file": "tests/Orbit.Application.Tests/Commands/ApiKeys/ApiKeyCreationChallengeFlowTests.cs",
+        "references": [
+          "ApiKey",
+          "ConfirmApiKeyCreationChallengeCommand",
+          "ConfirmApiKeyCreationChallengeCommandHandler",
+          "CreateApiKeyCommand",
+          "CreateApiKeyCommandHandler",
+          "RequestApiKeyCreationChallengeCommand",
+          "RequestApiKeyCreationChallengeCommandHandler",
+          "User"
+        ]
+      },
+      {
         "testClass": "CreateApiKeyCommandHandlerTests",
         "file": "tests/Orbit.Application.Tests/Commands/ApiKeys/CreateApiKeyCommandHandlerTests.cs",
         "references": [
@@ -3695,6 +3758,11 @@
           "RevokeApiKeyCommand",
           "RevokeApiKeyCommandHandler"
         ]
+      },
+      {
+        "testClass": "SendApiKeyCreationCodeEmailJobTests",
+        "file": "tests/Orbit.Application.Tests/Commands/ApiKeys/SendApiKeyCreationCodeEmailJobTests.cs",
+        "references": []
       },
       {
         "testClass": "AuthCommandHandlerTests",
@@ -3874,9 +3942,7 @@
           "Habit",
           "JoinChallengeCommand",
           "JoinChallengeCommandHandler",
-          "User",
-          "UserAchievement",
-          "XpAwardLog"
+          "User"
         ]
       },
       {
@@ -3904,6 +3970,7 @@
         "file": "tests/Orbit.Application.Tests/Commands/Chat/ProcessUserChatCommandHandlerTests.cs",
         "references": [
           "ChecklistTemplate",
+          "GetRecapQuery",
           "Goal",
           "Habit",
           "ProcessUserChatCommand",
@@ -3937,6 +4004,17 @@
           "ChecklistTemplate",
           "DeleteChecklistTemplateCommand",
           "DeleteChecklistTemplateCommandHandler"
+        ]
+      },
+      {
+        "testClass": "RepairStreakCommandHandlerTests",
+        "file": "tests/Orbit.Application.Tests/Commands/Gamification/RepairStreakCommandHandlerTests.cs",
+        "references": [
+          "GetStreakInfoQuery",
+          "RepairStreakCommand",
+          "RepairStreakCommandHandler",
+          "StreakFreeze",
+          "User"
         ]
       },
       {
@@ -4012,6 +4090,7 @@
         "references": [
           "Goal",
           "GoalProgressLog",
+          "Habit",
           "UpdateGoalProgressCommand",
           "UpdateGoalProgressCommandHandler"
         ]
@@ -4042,6 +4121,7 @@
         "references": [
           "BulkDeleteHabitsCommand",
           "BulkDeleteHabitsCommandHandler",
+          "Goal",
           "Habit"
         ]
       },
@@ -4051,8 +4131,13 @@
         "references": [
           "BulkLogHabitsCommand",
           "BulkLogHabitsCommandHandler",
+          "Goal",
           "Habit",
-          "HabitLog"
+          "HabitLog",
+          "Notification",
+          "User",
+          "UserAchievement",
+          "XpAwardLog"
         ]
       },
       {
@@ -4092,6 +4177,7 @@
         "references": [
           "DeleteHabitCommand",
           "DeleteHabitCommandHandler",
+          "Goal",
           "Habit"
         ]
       },
@@ -4164,6 +4250,7 @@
         "testClass": "RestoreHabitCommandHandlerTests",
         "file": "tests/Orbit.Application.Tests/Commands/Habits/RestoreHabitCommandHandlerTests.cs",
         "references": [
+          "Goal",
           "Habit",
           "RestoreHabitCommand",
           "RestoreHabitCommandHandler"
@@ -4738,6 +4825,13 @@
         "references": []
       },
       {
+        "testClass": "HabitCeilingLockTests",
+        "file": "tests/Orbit.Application.Tests/Common/HabitCeilingLockTests.cs",
+        "references": [
+          "Habit"
+        ]
+      },
+      {
         "testClass": "LocaleHelperTests",
         "file": "tests/Orbit.Application.Tests/Common/LocaleHelperTests.cs",
         "references": []
@@ -4754,6 +4848,7 @@
         "testClass": "PayGateServiceTests",
         "file": "tests/Orbit.Application.Tests/Common/PayGateServiceTests.cs",
         "references": [
+          "Goal",
           "Habit",
           "User"
         ]
@@ -4766,6 +4861,11 @@
       {
         "testClass": "StripeSettingsTests",
         "file": "tests/Orbit.Application.Tests/Common/StripeSettingsTests.cs",
+        "references": []
+      },
+      {
+        "testClass": "SubscriptionLapseReasonExtensionsTests",
+        "file": "tests/Orbit.Application.Tests/Common/SubscriptionLapseReasonExtensionsTests.cs",
         "references": []
       },
       {
@@ -4808,9 +4908,6 @@
         "testClass": "AchievementProgressServiceTests",
         "file": "tests/Orbit.Application.Tests/Gamification/AchievementProgressServiceTests.cs",
         "references": [
-          "BlockedUser",
-          "Cheer",
-          "Friendship",
           "Goal",
           "Habit",
           "HabitLog",
@@ -4848,6 +4945,11 @@
         "references": [
           "Habit"
         ]
+      },
+      {
+        "testClass": "NotificationUrlsTests",
+        "file": "tests/Orbit.Application.Tests/Notifications/NotificationUrlsTests.cs",
+        "references": []
       },
       {
         "testClass": "GetApiKeysQueryHandlerTests",
@@ -4929,6 +5031,26 @@
         ]
       },
       {
+        "testClass": "ClosedMonthPeriodRangeTests",
+        "file": "tests/Orbit.Application.Tests/Queries/Gamification/ClosedMonthPeriodRangeTests.cs",
+        "references": []
+      },
+      {
+        "testClass": "ClosedMonthRecapResetRaceTests",
+        "file": "tests/Orbit.Application.Tests/Queries/Gamification/ClosedMonthRecapResetRaceTests.cs",
+        "references": [
+          "ClosedMonthRecap",
+          "GetOrCreateReferralCodeCommand",
+          "GetRecapQuery",
+          "GetRecapQueryHandler",
+          "Goal",
+          "Habit",
+          "ResetAccountCommand",
+          "ResetAccountCommandHandler",
+          "User"
+        ]
+      },
+      {
         "testClass": "GetAchievementsQueryHandlerTests",
         "file": "tests/Orbit.Application.Tests/Queries/Gamification/GetAchievementsQueryHandlerTests.cs",
         "references": [
@@ -4952,10 +5074,13 @@
         "testClass": "GetRecapQueryHandlerTests",
         "file": "tests/Orbit.Application.Tests/Queries/Gamification/GetRecapQueryHandlerTests.cs",
         "references": [
+          "ClosedMonthRecap",
           "GetOrCreateReferralCodeCommand",
           "GetRecapQuery",
           "GetRecapQueryHandler",
-          "Habit"
+          "Goal",
+          "Habit",
+          "User"
         ]
       },
       {
@@ -5054,7 +5179,8 @@
         "references": [
           "GetGoalsQuery",
           "GetGoalsQueryHandler",
-          "Goal"
+          "Goal",
+          "Habit"
         ]
       },
       {
@@ -5161,6 +5287,8 @@
         "testClass": "GetHabitWidgetQueryHandlerTests",
         "file": "tests/Orbit.Application.Tests/Queries/Habits/GetHabitWidgetQueryHandlerTests.cs",
         "references": [
+          "GetHabitScheduleQuery",
+          "GetHabitScheduleQueryHandler",
           "GetHabitWidgetQuery",
           "GetHabitWidgetQueryHandler",
           "Habit",
@@ -5347,6 +5475,19 @@
           "ChallengeParticipant",
           "ChallengeParticipantHabit",
           "HabitLog",
+          "User"
+        ]
+      },
+      {
+        "testClass": "FoundingAchievementResetRaceTests",
+        "file": "tests/Orbit.Application.Tests/Services/FoundingAchievementResetRaceTests.cs",
+        "references": [
+          "Goal",
+          "Habit",
+          "HabitLog",
+          "Notification",
+          "ResetAccountCommand",
+          "ResetAccountCommandHandler",
           "User",
           "UserAchievement",
           "XpAwardLog"
@@ -5378,7 +5519,7 @@
         ]
       },
       {
-        "testClass": "StreakGoalReadSyncerTests",
+        "testClass": "GoalProgressReadSyncerTests",
         "file": "tests/Orbit.Application.Tests/Services/Goals/StreakGoalReadSyncerTests.cs",
         "references": [
           "Goal",
@@ -5479,9 +5620,7 @@
           "RemoveFriendCommandHandler",
           "SendFriendRequestCommand",
           "SendFriendRequestCommandHandler",
-          "User",
-          "UserAchievement",
-          "XpAwardLog"
+          "User"
         ]
       },
       {
@@ -5553,9 +5692,7 @@
           "Notification",
           "SendCheerCommand",
           "SendCheerCommandHandler",
-          "User",
-          "UserAchievement",
-          "XpAwardLog"
+          "User"
         ]
       },
       {
@@ -5597,6 +5734,14 @@
         "file": "tests/Orbit.Application.Tests/Validators/AcceptFriendRequestCommandValidatorTests.cs",
         "references": [
           "AcceptFriendRequestCommand"
+        ]
+      },
+      {
+        "testClass": "ApiKeyCreationChallengeCommandValidatorTests",
+        "file": "tests/Orbit.Application.Tests/Validators/ApiKeyCreationChallengeCommandValidatorTests.cs",
+        "references": [
+          "ConfirmApiKeyCreationChallengeCommand",
+          "RequestApiKeyCreationChallengeCommand"
         ]
       },
       {
@@ -6061,6 +6206,13 @@
         ]
       },
       {
+        "testClass": "RepairStreakCommandValidatorTests",
+        "file": "tests/Orbit.Application.Tests/Validators/RepairStreakCommandValidatorTests.cs",
+        "references": [
+          "RepairStreakCommand"
+        ]
+      },
+      {
         "testClass": "RestoreGoalCommandValidatorTests",
         "file": "tests/Orbit.Application.Tests/Validators/RestoreGoalCommandValidatorTests.cs",
         "references": [
@@ -6318,6 +6470,13 @@
         ]
       },
       {
+        "testClass": "ClosedMonthRecapTests",
+        "file": "tests/Orbit.Domain.Tests/Entities/ClosedMonthRecapTests.cs",
+        "references": [
+          "ClosedMonthRecap"
+        ]
+      },
+      {
         "testClass": "ContentBlockTests",
         "file": "tests/Orbit.Domain.Tests/Entities/ContentBlockTests.cs",
         "references": [
@@ -6570,8 +6729,10 @@
         "testClass": "ApiKeysControllerTests",
         "file": "tests/Orbit.Infrastructure.Tests/Controllers/ApiKeysControllerTests.cs",
         "references": [
+          "ConfirmApiKeyCreationChallengeCommand",
           "CreateApiKeyCommand",
           "GetApiKeysQuery",
+          "RequestApiKeyCreationChallengeCommand",
           "RevokeApiKeyCommand",
           "User"
         ]
@@ -6678,6 +6839,7 @@
           "GetGamificationProfileQuery",
           "GetRecapQuery",
           "GetStreakInfoQuery",
+          "RepairStreakCommand",
           "User"
         ]
       },
@@ -7067,6 +7229,7 @@
           "BlockedUser",
           "ChecklistTemplate",
           "Cheer",
+          "ClosedMonthRecap",
           "FriendFeedEvent",
           "Friendship",
           "Goal",
@@ -7079,12 +7242,12 @@
           "PushSubscription",
           "Referral",
           "Report",
-          "SentStreakFreezeAlert",
           "StreakFreeze",
           "Tag",
           "User",
           "UserAchievement",
-          "UserFact"
+          "UserFact",
+          "XpAwardLog"
         ]
       },
       {
@@ -7095,6 +7258,14 @@
           "ApplyOnboardingCommandHandler",
           "Goal",
           "Habit",
+          "User"
+        ]
+      },
+      {
+        "testClass": "ClosedMonthRecapStoreTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Persistence/ClosedMonthRecapStoreTests.cs",
+        "references": [
+          "ClosedMonthRecap",
           "User"
         ]
       },
@@ -7120,6 +7291,17 @@
           "Goal",
           "GoalProgressLog",
           "Notification"
+        ]
+      },
+      {
+        "testClass": "FoundingAchievementReaderTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Persistence/FoundingAchievementReaderTests.cs",
+        "references": [
+          "Goal",
+          "Habit",
+          "User",
+          "UserAchievement",
+          "XpAwardLog"
         ]
       },
       {
@@ -7173,6 +7355,7 @@
           "ChallengeParticipantHabit",
           "ChecklistTemplate",
           "Cheer",
+          "ClosedMonthRecap",
           "ContentBlock",
           "DistributedRateLimitBucket",
           "FriendFeedEvent",
@@ -7193,7 +7376,6 @@
           "SentProactiveCheckin",
           "SentReminder",
           "SentSlipAlert",
-          "SentStreakFreezeAlert",
           "StreakFreeze",
           "Tag",
           "User",
@@ -7278,7 +7460,6 @@
           "LogHabitCommand",
           "ProcessedRequest",
           "SentProactiveCheckin",
-          "SentStreakFreezeAlert",
           "Tag",
           "User"
         ]
@@ -7319,7 +7500,6 @@
         "references": [
           "ApiKey",
           "AppFeatureFlag",
-          "Goal",
           "User"
         ]
       },
@@ -7409,14 +7589,16 @@
         "testClass": "AiUsageSummaryServiceGenerationTests",
         "file": "tests/Orbit.Infrastructure.Tests/Services/AiUsageSummaryServiceGenerationTests.cs",
         "references": [
-          "AiUsageDaily"
+          "AiUsageDaily",
+          "User"
         ]
       },
       {
         "testClass": "AiUsageSummaryServiceTests",
         "file": "tests/Orbit.Infrastructure.Tests/Services/AiUsageSummaryServiceTests.cs",
         "references": [
-          "AiUsageDaily"
+          "AiUsageDaily",
+          "User"
         ]
       },
       {
@@ -7504,6 +7686,26 @@
           "AppFeatureFlag",
           "Habit",
           "User"
+        ]
+      },
+      {
+        "testClass": "GoalCompletionServiceTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Services/GoalCompletionServiceTests.cs",
+        "references": [
+          "Goal",
+          "GoalProgressLog",
+          "Habit",
+          "HabitLog",
+          "LinkGoalsToHabitCommand",
+          "LinkGoalsToHabitCommandHandler",
+          "LinkHabitsToGoalCommand",
+          "LinkHabitsToGoalCommandHandler",
+          "Notification",
+          "UpdateGoalProgressCommand",
+          "UpdateGoalProgressCommandHandler",
+          "User",
+          "UserAchievement",
+          "XpAwardLog"
         ]
       },
       {
@@ -7662,6 +7864,7 @@
         "testClass": "PushNotificationServiceTests",
         "file": "tests/Orbit.Infrastructure.Tests/Services/PushNotificationServiceTests.cs",
         "references": [
+          "Notification",
           "PushSubscription",
           "User"
         ]
@@ -7725,9 +7928,7 @@
         "testClass": "StreakFreezeAutoActivationServiceTests",
         "file": "tests/Orbit.Infrastructure.Tests/Services/StreakFreezeAutoActivationServiceTests.cs",
         "references": [
-          "AppFeatureFlag",
           "Habit",
-          "SentStreakFreezeAlert",
           "StreakFreeze",
           "User"
         ]
@@ -7738,7 +7939,11 @@
         "references": [
           "Goal",
           "Habit",
-          "User"
+          "HabitLog",
+          "Notification",
+          "User",
+          "UserAchievement",
+          "XpAwardLog"
         ]
       },
       {

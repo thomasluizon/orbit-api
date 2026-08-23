@@ -11,7 +11,6 @@ namespace Orbit.Application.Tests.Queries.Goals;
 public class GetGoalByIdQueryHandlerTests
 {
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
-    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly GetGoalByIdQueryHandler _handler;
 
@@ -21,9 +20,7 @@ public class GetGoalByIdQueryHandlerTests
 
     public GetGoalByIdQueryHandlerTests()
     {
-        _handler = new GetGoalByIdQueryHandler(_goalRepo, _payGate, _userDateService);
-        _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Orbit.Domain.Common.Result.Success());
+        _handler = new GetGoalByIdQueryHandler(_goalRepo, _userDateService);
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
     }
 
@@ -133,20 +130,6 @@ public class GetGoalByIdQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_PaywalledUser_ReturnsPayGateFailure()
-    {
-        _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Orbit.Domain.Common.Result.PayGateFailure("Goals are a Pro feature"));
-
-        var query = new GetGoalByIdQuery(UserId, GoalId);
-
-        var result = await _handler.Handle(query, CancellationToken.None);
-
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be(Orbit.Domain.Common.Result.PayGateErrorCode);
-    }
-
-    [Fact]
     public async Task Handle_WithBadHabitLinkedStreakGoal_ReturnsFreshCurrentValueWithoutPersistingCompletion()
     {
         var goal = Goal.Create(new Goal.CreateGoalParams(
@@ -165,5 +148,25 @@ public class GetGoalByIdQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.CurrentValue.Should().Be(2);
         goal.Status.Should().Be(GoalStatus.Active);
+    }
+
+    [Fact]
+    public async Task Handle_LinkedStandardAtTarget_RefreshesValueAndLeavesCompletionForHostedSweep()
+    {
+        var goal = Goal.Create(UserId, "Exercise twice", 2, "sessions").Value;
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Exercise", FrequencyUnit.Day, 2, DueDate: Today, IsFlexible: true)).Value;
+        habit.Log(Today);
+        habit.Log(Today);
+        goal.AddHabit(habit);
+        ArrangeGoal(goal);
+
+        var result = await _handler.Handle(new GetGoalByIdQuery(UserId, GoalId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.CurrentValue.Should().Be(2);
+        result.Value.IsProgressDerived.Should().BeTrue();
+        goal.Status.Should().Be(GoalStatus.Active);
+        goal.CompletedAtUtc.Should().BeNull();
     }
 }

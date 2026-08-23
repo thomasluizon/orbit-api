@@ -13,7 +13,7 @@ derived_from:
 
 # XP, Levels, and Achievements
 
-Gamification rewards consistency with experience points (XP), levels, and achievements. **All of gamification — XP, levels, and achievements — is a Pro feature.** On the free plan no XP is earned and no achievements unlock.
+Gamification rewards consistency with experience points (XP), levels, and achievements. Achievements are available on both free and Pro plans.
 
 ## Earning XP
 

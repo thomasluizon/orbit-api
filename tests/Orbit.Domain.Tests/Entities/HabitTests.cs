@@ -1460,6 +1460,28 @@ public class HabitTests
     }
 
     [Fact]
+    public void RemoveAllGoals_RemovesBothSidesAndRestoresManualGoalProgress()
+    {
+        var habit = CreateValidHabit();
+        var firstGoal = Goal.Create(ValidUserId, "Fitness", 10, "workouts").Value;
+        var secondGoal = Goal.Create(ValidUserId, "Health", 10, "sessions").Value;
+        habit.AddGoal(firstGoal);
+        habit.AddGoal(secondGoal);
+        firstGoal.SyncStandardProgress(3);
+        secondGoal.SyncStandardProgress(4);
+
+        habit.RemoveAllGoals();
+
+        habit.Goals.Should().BeEmpty();
+        firstGoal.Habits.Should().BeEmpty();
+        secondGoal.Habits.Should().BeEmpty();
+        firstGoal.CurrentValue.Should().Be(0);
+        secondGoal.CurrentValue.Should().Be(0);
+        firstGoal.IsProgressDerived.Should().BeFalse();
+        secondGoal.IsProgressDerived.Should().BeFalse();
+    }
+
+    [Fact]
     public void SetPosition_SetsValue()
     {
         var habit = CreateValidHabit();

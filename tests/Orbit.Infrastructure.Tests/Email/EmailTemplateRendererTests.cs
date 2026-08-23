@@ -46,6 +46,16 @@ public class EmailTemplateRendererTests
         ["footer"] = "The Orbit Team",
     };
 
+    private static Dictionary<string, string> ApiKeyCreationTokens() => new()
+    {
+        ["heading"] = "Create an API key",
+        ["intro"] = "You requested to create an Orbit API key.",
+        ["codeLabel"] = "Use the code below to confirm:",
+        ["code"] = "654321",
+        ["warning"] = "If you didn't request this, no API key will be created.",
+        ["footer"] = "The Orbit Team",
+    };
+
     private static Dictionary<string, string> WaitlistConfirmationTokens() => new()
     {
         ["heading"] = "Confirm your waitlist spot",
@@ -150,6 +160,7 @@ public class EmailTemplateRendererTests
     [InlineData("VerificationCode")]
     [InlineData("Welcome")]
     [InlineData("AccountDeletion")]
+    [InlineData("ApiKeyCreation")]
     [InlineData("WaitlistConfirmation")]
     [InlineData("Support")]
     public void AllEmbeddedTemplates_LoadAndRenderWithoutLeftoverTokens(string emailName)
@@ -159,6 +170,7 @@ public class EmailTemplateRendererTests
             "VerificationCode" => VerificationCodeTokens(),
             "Welcome" => WelcomeTokens(),
             "AccountDeletion" => AccountDeletionTokens(),
+            "ApiKeyCreation" => ApiKeyCreationTokens(),
             "WaitlistConfirmation" => WaitlistConfirmationTokens(),
             _ => SupportTokens(),
         };

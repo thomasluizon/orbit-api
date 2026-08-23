@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
@@ -35,6 +36,19 @@ public class AppConfigServiceTests
     }
 
     [Fact]
+    public async Task FreeMaxHabits_MissingRow_ReturnsAbuseGuardDefault()
+    {
+        await using var dbContext = NewDbContext();
+        var service = Create(dbContext);
+
+        var value = await service.GetAsync(
+            AppConfigKeys.FreeMaxHabits,
+            AppConstants.DefaultFreeMaxHabits);
+
+        value.Should().Be(1000);
+    }
+
+    [Fact]
     public async Task GetAsync_IntValue_ParsesFromStore()
     {
         await using var dbContext = NewDbContext();
@@ -56,6 +70,20 @@ public class AppConfigServiceTests
         var value = await service.GetAsync("feature_on", false);
 
         value.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ApiKeyCreationStepUp_SeedDefaultsOff()
+    {
+        await using var dbContext = NewDbContext();
+        await dbContext.Database.EnsureCreatedAsync();
+        var service = Create(dbContext);
+
+        var value = await service.GetAsync(
+            AppConfigKeys.RequireApiKeyCreationStepUp,
+            true);
+
+        value.Should().BeFalse();
     }
 
     [Fact]

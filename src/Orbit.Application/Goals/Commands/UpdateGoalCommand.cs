@@ -1,8 +1,8 @@
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging;
 using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -19,21 +19,15 @@ public record UpdateGoalCommand(
     string Unit,
     DateOnly? Deadline) : IRequest<Result>, IConcurrencyRetryable;
 
-public partial class UpdateGoalCommandHandler(
+public class UpdateGoalCommandHandler(
     GoalRepositories repos,
-    IPayGateService payGate,
     IUserDateService userDateService,
-    IGamificationService gamificationService,
+    IGoalCompletionService goalCompletionService,
     IUnitOfWork unitOfWork,
-    IMemoryCache cache,
-    ILogger<UpdateGoalCommandHandler> logger) : IRequestHandler<UpdateGoalCommand, Result>
+    IMemoryCache cache) : IRequestHandler<UpdateGoalCommand, Result>
 {
     public async Task<Result> Handle(UpdateGoalCommand request, CancellationToken cancellationToken)
     {
-        var gateCheck = await payGate.CanAccessGoals(request.UserId, cancellationToken);
-        if (gateCheck.IsFailure)
-            return gateCheck;
-
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         if (request.Deadline is { } deadline && deadline < today)
             return Result.Failure(ErrorMessages.DeadlineInPast);
@@ -55,28 +49,14 @@ public partial class UpdateGoalCommandHandler(
             await repos.ProgressLogs.AddAsync(progressLog, cancellationToken);
         }
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-
         if (result.Value == GoalEditTransition.Completed)
-            await ProcessGoalCompletionSafeAsync(request.UserId, cancellationToken);
+            await goalCompletionService.SaveCompletedGoalAsync(request.UserId, goal.Id, cancellationToken);
+        else
+            await unitOfWork.SaveChangesAsync(cancellationToken);
 
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
         return Result.Success();
     }
 
-    private async Task ProcessGoalCompletionSafeAsync(Guid userId, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await gamificationService.ProcessGoalCompleted(userId, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            LogGamificationGoalCompletionFailed(logger, ex, userId);
-        }
-    }
-
-    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Gamification processing failed for goal completion by user {UserId}")]
-    private static partial void LogGamificationGoalCompletionFailed(ILogger logger, Exception ex, Guid userId);
 }

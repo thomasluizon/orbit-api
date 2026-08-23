@@ -123,6 +123,19 @@ public class AgentCatalogServiceTests
     }
 
     [Fact]
+    public void StreakRepair_IsCatalogedAsPersonInitiatedMutationWithoutAgentTool()
+    {
+        var capability = _catalogService.GetCapability(Orbit.Domain.Models.AgentCapabilityIds.GamificationRepair);
+
+        capability.Should().NotBeNull();
+        capability!.IsMutation.Should().BeTrue();
+        capability.RiskClass.Should().Be(Orbit.Domain.Models.AgentRiskClass.Low);
+        capability.ChatToolNames.Should().BeNullOrEmpty();
+        capability.McpToolNames.Should().BeNullOrEmpty();
+        capability.ControllerActionKeys.Should().ContainSingle("GamificationController.RepairStreak");
+    }
+
+    [Fact]
     public void RequiredAppSurfaces_ArePresent()
     {
         var surfaceIds = _catalogService.GetSurfaces()
@@ -140,6 +153,7 @@ public class AgentCatalogServiceTests
             "goals",
             "advanced-api",
             "onboarding-auth",
+            "progress",
             "gamification",
             "referrals",
             "subscriptions",

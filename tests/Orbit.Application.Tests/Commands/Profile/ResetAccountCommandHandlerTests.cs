@@ -71,7 +71,17 @@ public class ResetAccountCommandHandlerTests
         await _unitOfWork.Received(1).ExecuteInTransactionAsync(
             Arg.Any<Func<CancellationToken, Task>>(),
             Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).AcquireAdvisoryLockAsync(
+            $"closed-month-recap:{UserId}",
+            Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        Received.InOrder(() =>
+        {
+            _unitOfWork.AcquireAdvisoryLockAsync(
+                $"closed-month-recap:{UserId}",
+                Arg.Any<CancellationToken>());
+            _accountResetRepo.DeleteAllUserDataAsync(UserId, Arg.Any<CancellationToken>());
+        });
     }
 
     [Fact]
