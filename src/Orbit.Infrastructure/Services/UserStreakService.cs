@@ -68,18 +68,38 @@ public class UserStreakService(
         if (user is null)
             return null;
 
-        if (missedDate.DayNumber != userToday.DayNumber - 1)
-            return StreakRepairEvaluation.Unavailable(missedDate);
-
         var lookbackStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
-        var (completionDateSet, freezeDateSet, contributingHabits) =
+        var (completionDateSet, freezeDateSet, eligibleHabits) =
             await LoadStreakDataAsync(userId, lookbackStart, cancellationToken);
 
-        if (user.StreakFreezesAccumulated <= 0
-            || !contributingHabits.Any(habit => habit.FrequencyUnit is not null))
+        return EvaluateRepair(
+            user,
+            userToday,
+            missedDate,
+            eligibleHabits,
+            completionDateSet,
+            freezeDateSet);
+    }
+
+    internal static StreakRepairEvaluation EvaluateRepair(
+        User user,
+        DateOnly userToday,
+        DateOnly missedDate,
+        IReadOnlyCollection<Habit> eligibleHabits,
+        HashSet<DateOnly> completionDateSet,
+        HashSet<DateOnly> freezeDateSet)
+    {
+        if (missedDate.DayNumber != userToday.DayNumber - 1
+            || user.StreakFreezesAccumulated <= 0)
         {
             return StreakRepairEvaluation.Unavailable(missedDate);
         }
+
+        var contributingHabits = GetContributingHabits(eligibleHabits);
+        if (!contributingHabits.Any(habit => habit.FrequencyUnit is not null))
+            return StreakRepairEvaluation.Unavailable(missedDate);
+
+        var lookbackStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
 
         var userTimeZone = TimeZoneHelper.FindTimeZone(user.TimeZone, userId: user.Id);
         var expectedDates = HabitScheduleService.GetUnionScheduledDatesForStreak(
@@ -117,7 +137,7 @@ public class UserStreakService(
             new UserStreakState(repairedStreak, repairedLongestStreak, repairedLastActiveDate));
     }
 
-    private async Task<(HashSet<DateOnly> CompletionDates, HashSet<DateOnly> FreezeDates, List<Habit> ContributingHabits)>
+    private async Task<(HashSet<DateOnly> CompletionDates, HashSet<DateOnly> FreezeDates, List<Habit> EligibleHabits)>
         LoadStreakDataAsync(Guid userId, DateOnly lookbackStart, CancellationToken cancellationToken)
     {
         var allHabits = await repos.Habits.FindAsync(h => h.UserId == userId, cancellationToken);
@@ -140,12 +160,11 @@ public class UserStreakService(
             .Select(freeze => freeze.UsedOnDate)
             .ToHashSet();
 
-        var contributingHabits = allHabits
-            .Where(h => !h.IsDeleted && !h.IsBadHabit && !h.IsGeneral && !h.IsFlexible)
-            .Where(h => !(h.FrequencyUnit is null && h.IsCompleted))
+        var eligibleHabits = allHabits
+            .Where(habit => !habit.IsDeleted && !habit.IsBadHabit)
             .ToList();
 
-        return (completionDateSet, freezeDateSet, contributingHabits);
+        return (completionDateSet, freezeDateSet, eligibleHabits);
     }
 
     private async Task<UserStreakState> CalculateStateAsync(
@@ -155,8 +174,9 @@ public class UserStreakService(
     {
         var userToday = await userDateService.GetUserTodayAsync(userId, cancellationToken);
         var lookbackStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
-        var (completionDateSet, freezeDateSet, contributingHabits) =
+        var (completionDateSet, freezeDateSet, eligibleHabits) =
             await LoadStreakDataAsync(userId, lookbackStart, cancellationToken);
+        var contributingHabits = GetContributingHabits(eligibleHabits);
 
         if (!contributingHabits.Any(habit => habit.FrequencyUnit is not null))
             return CalendarFallback(completionDateSet, freezeDateSet);
@@ -179,6 +199,12 @@ public class UserStreakService(
 
         return new UserStreakState(currentStreak, longestStreak, lastActiveDate);
     }
+
+    private static List<Habit> GetContributingHabits(IReadOnlyCollection<Habit> eligibleHabits) =>
+        eligibleHabits
+            .Where(habit => !habit.IsGeneral && !habit.IsFlexible)
+            .Where(habit => !(habit.FrequencyUnit is null && habit.IsCompleted))
+            .ToList();
 
     private static int ComputeLongestStreak(
         HashSet<DateOnly> expectedDates,

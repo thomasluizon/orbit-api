@@ -83,6 +83,17 @@ public class UserDateServiceTests
     }
 
     [Fact]
+    public async Task GetUserTodayAsync_WithLoadedTimezone_DoesNotReadRepository()
+    {
+        var result = await _sut.GetUserTodayAsync("Pacific/Kiritimati", UserId);
+
+        result.Should().NotBe(default);
+        await _userRepo.DidNotReceive().GetByIdAsync(
+            Arg.Any<Guid>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task GetUserWeekStartDayAsync_AfterInvalidation_RereadsFromRepository()
     {
         var user = User.Create("Test", "test@test.com").Value;

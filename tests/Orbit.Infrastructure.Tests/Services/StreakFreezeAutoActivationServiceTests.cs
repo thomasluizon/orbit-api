@@ -4,13 +4,12 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
-using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
-using Orbit.Domain.Models;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
+using Orbit.Infrastructure.Tests.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
@@ -46,10 +45,8 @@ public class StreakFreezeAutoActivationServiceTests
         await using var dbContext = CreateDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
         var userDateService = Substitute.For<IUserDateService>();
-        userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
-        var user = CreateEligibleProUser();
-        dbContext.Users.Add(user);
-        await dbContext.SaveChangesAsync();
+        ConfigureToday(userDateService, Today);
+        var user = await SeedEligibleUserAsync(dbContext, Today);
         var service = CreateService(dbContext, pushService, userDateService);
 
         await service.ActivateMissedDayFreezes(CancellationToken.None);
@@ -73,10 +70,8 @@ public class StreakFreezeAutoActivationServiceTests
         await using var dbContext = CreateDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
         var userDateService = Substitute.For<IUserDateService>();
-        userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
-        var user = CreateEligibleProUser();
-        dbContext.Users.Add(user);
-        await dbContext.SaveChangesAsync();
+        ConfigureToday(userDateService, Today);
+        await SeedEligibleUserAsync(dbContext, Today);
         var service = CreateService(dbContext, pushService, userDateService);
 
         await service.ActivateMissedDayFreezes(CancellationToken.None);
@@ -98,11 +93,10 @@ public class StreakFreezeAutoActivationServiceTests
         await using var dbContext = CreateDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
         var userDateService = Substitute.For<IUserDateService>();
-        userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
+        ConfigureToday(userDateService, Today);
         var user = CreateEligibleProUser();
         user.StartTrial(Instant.UtcDateTime.AddDays(-1));
-        dbContext.Users.Add(user);
-        await dbContext.SaveChangesAsync();
+        await SeedEligibleUserAsync(dbContext, Today, user);
         var service = CreateService(dbContext, pushService, userDateService);
 
         await service.ActivateMissedDayFreezes(CancellationToken.None);
@@ -123,11 +117,9 @@ public class StreakFreezeAutoActivationServiceTests
         await using var dbContext = CreateDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
         var userDateService = Substitute.For<IUserDateService>();
-        userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>())
-            .Returns(new DateOnly(2026, 6, 5));
-        var user = CreateEligibleProUser();
-        dbContext.Users.Add(user);
-        await dbContext.SaveChangesAsync();
+        var localToday = new DateOnly(2026, 6, 5);
+        ConfigureToday(userDateService, localToday);
+        await SeedEligibleUserAsync(dbContext, localToday);
         var service = CreateService(dbContext, pushService, userDateService);
 
         await service.ActivateMissedDayFreezes(CancellationToken.None);
@@ -135,6 +127,7 @@ public class StreakFreezeAutoActivationServiceTests
         (await dbContext.StreakFreezes.AsNoTracking().SingleAsync()).UsedOnDate
             .Should().Be(new DateOnly(2026, 6, 4));
         await userDateService.Received(1).GetUserTodayAsync(
+            Arg.Any<string?>(),
             UserId,
             Arg.Any<CancellationToken>());
     }
@@ -145,7 +138,7 @@ public class StreakFreezeAutoActivationServiceTests
         await using var dbContext = CreateDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
         var userDateService = Substitute.For<IUserDateService>();
-        userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
+        ConfigureToday(userDateService, Today);
         var user = CreateEligibleProUser();
         user.SetStreakState(1, 10, Today);
         var habit = Habit.Create(new HabitCreateParams(
@@ -171,15 +164,7 @@ public class StreakFreezeAutoActivationServiceTests
         dbContext.Users.Add(user);
         dbContext.Habits.Add(habit);
         await dbContext.SaveChangesAsync();
-        var streakService = new UserStreakService(
-            new UserStreakRepositories(
-                new GenericRepository<User>(dbContext),
-                new GenericRepository<Habit>(dbContext),
-                new GenericRepository<HabitLog>(dbContext),
-                new GenericRepository<StreakFreeze>(dbContext)),
-            userDateService,
-            Substitute.For<IFriendFeedEventEmitter>());
-        var service = CreateService(dbContext, pushService, userDateService, streakService);
+        var service = CreateService(dbContext, pushService, userDateService);
 
         await service.ActivateMissedDayFreezes(CancellationToken.None);
 
@@ -194,23 +179,30 @@ public class StreakFreezeAutoActivationServiceTests
         await using var dbContext = CreateDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
         var userDateService = Substitute.For<IUserDateService>();
-        userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
-        var streakService = Substitute.For<IUserStreakService>();
-        streakService.EvaluateRepairAsync(
-                UserId,
-                Today,
-                new DateOnly(2026, 6, 3),
-                Arg.Any<CancellationToken>())
-            .Returns(StreakRepairEvaluation.Unavailable(new DateOnly(2026, 6, 3)));
+        ConfigureToday(userDateService, Today);
         var user = CreateEligibleProUser();
+        var habit = CreateDailyHabit(UserId, Today.AddDays(-6));
+        foreach (var date in new[] { Today.AddDays(-5), Today.AddDays(-4), Today })
+            habit.Log(date, advanceDueDate: false);
         dbContext.Users.Add(user);
+        dbContext.Habits.Add(habit);
         await dbContext.SaveChangesAsync();
-        var service = CreateService(dbContext, pushService, userDateService, streakService);
+        var service = CreateService(dbContext, pushService, userDateService);
 
         await service.ActivateMissedDayFreezes(CancellationToken.None);
 
         (await dbContext.StreakFreezes.AsNoTracking().CountAsync()).Should().Be(0);
         user.StreakFreezesAccumulated.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ActivateMissedDayFreezes_QueryCount_IsInvariantToCandidateVolume()
+    {
+        var small = await CountActivationQueriesAsync(candidateCount: 2);
+        var large = await CountActivationQueriesAsync(candidateCount: 20);
+
+        large.Should().Be(small);
+        large.Should().BeLessThanOrEqualTo(5);
     }
 
     private static User CreateEligibleProUser()
@@ -222,6 +214,78 @@ public class StreakFreezeAutoActivationServiceTests
         return user;
     }
 
+    private static async Task<User> SeedEligibleUserAsync(
+        OrbitDbContext dbContext,
+        DateOnly today,
+        User? user = null)
+    {
+        user ??= CreateEligibleProUser();
+        var habit = CreateDailyHabit(user.Id, today.AddDays(-6));
+        foreach (var offset in new[] { -5, -4, -3, -2 })
+            habit.Log(today.AddDays(offset), advanceDueDate: false);
+
+        dbContext.Users.Add(user);
+        dbContext.Habits.Add(habit);
+        await dbContext.SaveChangesAsync();
+        return user;
+    }
+
+    private static Habit CreateDailyHabit(Guid userId, DateOnly dueDate)
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            userId,
+            "Run",
+            FrequencyUnit.Day,
+            1,
+            DueDate: dueDate)).Value;
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
+            habit,
+            dueDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+        return habit;
+    }
+
+    private static void ConfigureToday(IUserDateService userDateService, DateOnly today) =>
+        userDateService.GetUserTodayAsync(
+                Arg.Any<string?>(),
+                Arg.Any<Guid>(),
+                Arg.Any<CancellationToken>())
+            .Returns(today);
+
+    private static async Task<int> CountActivationQueriesAsync(int candidateCount)
+    {
+        var counter = new CountingDbCommandInterceptor();
+        using var factory = new SqliteOrbitDbContextFactory(counter);
+        var dbContext = factory.Context;
+        for (var index = 0; index < candidateCount; index++)
+        {
+            var userId = Guid.NewGuid();
+            var user = User.Create("Query User", $"query-{userId:N}@example.com").Value;
+            typeof(User).GetProperty(nameof(User.Id))!.SetValue(user, userId);
+            user.SetStreakState(10, 10, Today.AddDays(-3));
+            user.AwardStreakFreezeIfEligible();
+
+            var habit = CreateDailyHabit(userId, Today.AddDays(-6));
+            foreach (var date in new[] { Today.AddDays(-5), Today.AddDays(-4), Today })
+                habit.Log(date, advanceDueDate: false);
+
+            dbContext.Users.Add(user);
+            dbContext.Habits.Add(habit);
+        }
+        await dbContext.SaveChangesAsync();
+        dbContext.ChangeTracker.Clear();
+
+        var userDateService = Substitute.For<IUserDateService>();
+        ConfigureToday(userDateService, Today);
+        var service = CreateService(
+            dbContext,
+            Substitute.For<IPushNotificationService>(),
+            userDateService);
+
+        counter.Reset();
+        await service.ActivateMissedDayFreezes(CancellationToken.None);
+        return counter.CommandCount;
+    }
+
     private static OrbitDbContext CreateDbContext() =>
         new(new DbContextOptionsBuilder<OrbitDbContext>()
             .UseInMemoryDatabase($"StreakFreezeAutoActivationServiceTests_{Guid.NewGuid()}")
@@ -230,37 +294,16 @@ public class StreakFreezeAutoActivationServiceTests
     private static StreakFreezeAutoActivationService CreateService(
         OrbitDbContext dbContext,
         IPushNotificationService pushService,
-        IUserDateService userDateService,
-        IUserStreakService? userStreakService = null)
+        IUserDateService userDateService)
     {
-        userStreakService ??= CreateAvailableRepairService();
         var serviceProvider = new ServiceCollection()
             .AddSingleton(dbContext)
             .AddSingleton(pushService)
             .AddSingleton(userDateService)
-            .AddSingleton(userStreakService)
             .BuildServiceProvider();
         return new StreakFreezeAutoActivationService(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<StreakFreezeAutoActivationService>.Instance,
             new ConfigurationBuilder().Build());
-    }
-
-    private static IUserStreakService CreateAvailableRepairService()
-    {
-        var service = Substitute.For<IUserStreakService>();
-        service.EvaluateRepairAsync(
-                Arg.Any<Guid>(),
-                Arg.Any<DateOnly>(),
-                Arg.Any<DateOnly>(),
-                Arg.Any<CancellationToken>())
-            .Returns(call =>
-            {
-                var missedDate = call.ArgAt<DateOnly>(2);
-                return StreakRepairEvaluation.Available(
-                    missedDate,
-                    new UserStreakState(10, 10, missedDate));
-            });
-        return service;
     }
 }

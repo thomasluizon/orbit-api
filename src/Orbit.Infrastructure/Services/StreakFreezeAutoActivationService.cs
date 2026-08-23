@@ -50,7 +50,6 @@ public partial class StreakFreezeAutoActivationService(
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
         var pushService = scope.ServiceProvider.GetRequiredService<IPushNotificationService>();
         var userDateService = scope.ServiceProvider.GetRequiredService<IUserDateService>();
-        var userStreakService = scope.ServiceProvider.GetRequiredService<IUserStreakService>();
 
         var candidates = await dbContext.Users
             .Where(user => user.CurrentStreak > 0
@@ -67,16 +66,19 @@ public partial class StreakFreezeAutoActivationService(
                 cancellationToken);
 
         var candidateIds = candidates.Select(user => user.Id).ToList();
+        var repairBatch = await LoadRepairBatchAsync(
+            candidates,
+            dbContext,
+            userDateService,
+            cancellationToken);
         var staged = new List<StagedFreeze>(candidates.Count);
         foreach (var user in candidates)
         {
-            var stagedFreeze = await StageFreezeAsync(
+            var stagedFreeze = StageFreeze(
                 user,
                 gamificationFreeTierEnabled,
                 dbContext,
-                userDateService,
-                userStreakService,
-                cancellationToken);
+                repairBatch);
             if (stagedFreeze is not null)
                 staged.Add(stagedFreeze);
         }
@@ -95,33 +97,38 @@ public partial class StreakFreezeAutoActivationService(
             candidateIds,
             gamificationFreeTierEnabled,
             pushService,
-            userDateService,
-            userStreakService,
+            repairBatch,
             dbContext,
             cancellationToken);
     }
 
     private sealed record StagedFreeze(User User, DateOnly MissedDate, string Title, string Body);
 
-    private async Task<StagedFreeze?> StageFreezeAsync(
+    private sealed record RepairBatch(
+        IReadOnlyDictionary<Guid, DateOnly> UserTodayById,
+        IReadOnlyDictionary<Guid, List<Habit>> EligibleHabitsByUser,
+        IReadOnlyDictionary<Guid, HashSet<DateOnly>> CompletionDatesByUser,
+        IReadOnlyDictionary<Guid, HashSet<DateOnly>> FreezeDatesByUser);
+
+    private static StagedFreeze? StageFreeze(
         User user,
         bool gamificationFreeTierEnabled,
         OrbitDbContext dbContext,
-        IUserDateService userDateService,
-        IUserStreakService userStreakService,
-        CancellationToken cancellationToken)
+        RepairBatch repairBatch)
     {
         if (!user.HasProAccess && !gamificationFreeTierEnabled)
             return null;
 
-        var userToday = await userDateService.GetUserTodayAsync(user.Id, cancellationToken);
+        var userToday = repairBatch.UserTodayById[user.Id];
         var missedDate = DateOnly.FromDayNumber(userToday.DayNumber - 1);
-        var repair = await userStreakService.EvaluateRepairAsync(
-            user.Id,
+        var repair = UserStreakService.EvaluateRepair(
+            user,
             userToday,
             missedDate,
-            cancellationToken);
-        if (repair?.IsAvailable != true)
+            repairBatch.EligibleHabitsByUser.GetValueOrDefault(user.Id) ?? [],
+            repairBatch.CompletionDatesByUser.GetValueOrDefault(user.Id) ?? [],
+            repairBatch.FreezeDatesByUser.GetValueOrDefault(user.Id) ?? []);
+        if (!repair.IsAvailable)
             return null;
 
         var consume = user.ConsumeStreakFreeze();
@@ -134,6 +141,75 @@ public partial class StreakFreezeAutoActivationService(
         dbContext.Notifications.Add(Notification.Create(user.Id, title, body, StreakUrl));
 
         return new StagedFreeze(user, missedDate, title, body);
+    }
+
+    private static async Task<RepairBatch> LoadRepairBatchAsync(
+        List<User> candidates,
+        OrbitDbContext dbContext,
+        IUserDateService userDateService,
+        CancellationToken cancellationToken)
+    {
+        var userTodayById = new Dictionary<Guid, DateOnly>(candidates.Count);
+        foreach (var user in candidates)
+        {
+            userTodayById[user.Id] = await userDateService.GetUserTodayAsync(
+                user.TimeZone,
+                user.Id,
+                cancellationToken);
+        }
+
+        var candidateIds = candidates.Select(user => user.Id).ToList();
+        var lookbackStart = userTodayById.Values
+            .Min()
+            .AddDays(-AppConstants.MaxStreakLookbackDays);
+        var eligibleHabits = await dbContext.Habits
+            .AsNoTracking()
+            .Where(habit => candidateIds.Contains(habit.UserId)
+                && !habit.IsDeleted
+                && !habit.IsBadHabit)
+            .ToListAsync(cancellationToken);
+        var eligibleHabitsByUser = eligibleHabits
+            .GroupBy(habit => habit.UserId)
+            .ToDictionary(group => group.Key, group => group.ToList());
+
+        var ownerByHabitId = eligibleHabits.ToDictionary(habit => habit.Id, habit => habit.UserId);
+        var eligibleHabitIds = ownerByHabitId.Keys.ToList();
+        var logs = eligibleHabitIds.Count == 0
+            ? []
+            : await dbContext.HabitLogs
+                .AsNoTracking()
+                .Where(log => eligibleHabitIds.Contains(log.HabitId)
+                    && log.Value > 0
+                    && log.Date >= lookbackStart)
+                .ToListAsync(cancellationToken);
+        var completionDatesByUser = new Dictionary<Guid, HashSet<DateOnly>>();
+        foreach (var log in logs)
+        {
+            var userId = ownerByHabitId[log.HabitId];
+            if (!completionDatesByUser.TryGetValue(userId, out var dates))
+            {
+                dates = [];
+                completionDatesByUser[userId] = dates;
+            }
+            dates.Add(log.Date);
+        }
+
+        var freezes = await dbContext.StreakFreezes
+            .AsNoTracking()
+            .Where(freeze => candidateIds.Contains(freeze.UserId)
+                && freeze.UsedOnDate >= lookbackStart)
+            .ToListAsync(cancellationToken);
+        var freezeDatesByUser = freezes
+            .GroupBy(freeze => freeze.UserId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(freeze => freeze.UsedOnDate).ToHashSet());
+
+        return new RepairBatch(
+            userTodayById,
+            eligibleHabitsByUser,
+            completionDatesByUser,
+            freezeDatesByUser);
     }
 
     private static async Task<bool> TrySaveBatchAsync(
@@ -191,8 +267,7 @@ public partial class StreakFreezeAutoActivationService(
         List<Guid> candidateIds,
         bool gamificationFreeTierEnabled,
         IPushNotificationService pushService,
-        IUserDateService userDateService,
-        IUserStreakService userStreakService,
+        RepairBatch repairBatch,
         OrbitDbContext dbContext,
         CancellationToken cancellationToken)
     {
@@ -202,13 +277,11 @@ public partial class StreakFreezeAutoActivationService(
 
         foreach (var user in users)
         {
-            var staged = await StageFreezeAsync(
+            var staged = StageFreeze(
                 user,
                 gamificationFreeTierEnabled,
                 dbContext,
-                userDateService,
-                userStreakService,
-                cancellationToken);
+                repairBatch);
             if (staged is null)
                 continue;
 
