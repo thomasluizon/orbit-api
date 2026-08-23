@@ -58,7 +58,9 @@ public class ApplyOnboardingCommandHandlerTests
 
     private static User CreateProUser()
     {
-        return User.Create("Test User", "test@example.com").Value;
+        var user = User.Create("Test User", "test@example.com").Value;
+        user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddYears(1), SubscriptionInterval.Monthly);
+        return user;
     }
 
     private static User CreateFreeUser()
@@ -170,6 +172,26 @@ public class ApplyOnboardingCommandHandlerTests
     public async Task Apply_FreeUserOverCap_TrimsToAllowance()
     {
         var user = CreateFreeUser();
+        SetupUser(user);
+        _habitRepo.CountAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(AppConstants.DefaultFreeMaxHabits - 1);
+
+        var command = new ApplyOnboardingCommand(
+            UserId, [Habit("One"), Habit("Two"), Habit("Three")], null, null, null, null);
+
+        var result = await CreateHandler().Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Applied.Should().BeTrue();
+        result.Value.CreatedHabitCount.Should().Be(1);
+        await _habitRepo.Received(1).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+        user.HasCompletedOnboarding.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Apply_ProUserOverCap_TrimsToSameAllowance()
+    {
+        var user = CreateProUser();
         SetupUser(user);
         _habitRepo.CountAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(AppConstants.DefaultFreeMaxHabits - 1);

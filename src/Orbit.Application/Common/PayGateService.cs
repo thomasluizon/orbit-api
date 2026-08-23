@@ -16,15 +16,12 @@ public class PayGateService(
         if (user is null)
             return Result.Failure(ErrorMessages.UserNotFound);
 
-        if (user.HasProAccess)
-            return Result.Success();
-
         var maxHabits = await appConfig.GetAsync(AppConfigKeys.FreeMaxHabits, AppConstants.DefaultFreeMaxHabits, ct);
         var activeHabitCount = await habitRepository.CountAsync(
             h => h.UserId == userId && h.ParentHabitId == null && !h.IsCompleted, ct);
 
         if (activeHabitCount + count > maxHabits)
-            return Result.PayGateFailure($"You've reached the {maxHabits} habit limit on the free plan. Upgrade to Pro for unlimited habits.");
+            return Result.PayGateFailure($"You've reached the {maxHabits} habit limit.");
 
         return Result.Success();
     }

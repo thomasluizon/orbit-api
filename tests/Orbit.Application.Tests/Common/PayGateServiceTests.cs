@@ -23,7 +23,11 @@ public class PayGateServiceTests
     {
         _sut = new PayGateService(_habitRepo, _userRepo, _appConfig);
 
-        _appConfig.GetAsync("FreeMaxHabits", 10, Arg.Any<CancellationToken>()).Returns(10);
+        _appConfig.GetAsync(
+                AppConfigKeys.FreeMaxHabits,
+                AppConstants.DefaultFreeMaxHabits,
+                Arg.Any<CancellationToken>())
+            .Returns(AppConstants.DefaultFreeMaxHabits);
         _appConfig.GetAsync("SubHabitsProOnly", true, Arg.Any<CancellationToken>()).Returns(true);
         _appConfig.GetAsync("FreeAiMessagesPerMonth", 20, Arg.Any<CancellationToken>()).Returns(20);
         _appConfig.GetAsync("ProAiMessagesPerMonth", 500, Arg.Any<CancellationToken>()).Returns(500);
@@ -69,24 +73,30 @@ public class PayGateServiceTests
     }
 
     [Fact]
-    public async Task CanCreateHabits_ProUser_AlwaysSuccess()
+    public async Task CanCreateHabits_ProUserAtLimit_PayGateFailure()
     {
         var user = CreateProUser();
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _habitRepo.CountAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(AppConstants.DefaultFreeMaxHabits);
 
         var result = await _sut.CanCreateHabits(UserId);
 
-        result.IsSuccess.Should().BeTrue();
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("PAY_GATE");
+        result.Error.Should().Be("You've reached the 1000 habit limit.");
     }
 
     [Fact]
-    public async Task CanCreateHabits_FreeUser_UnderLimit_Success()
+    public async Task CanCreateHabits_FreeUserAt999_AllowsOneMore()
     {
         var user = CreateFreeUser();
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
         _habitRepo.CountAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(0);
+            .Returns(AppConstants.DefaultFreeMaxHabits - 1);
 
         var result = await _sut.CanCreateHabits(UserId);
 
@@ -130,21 +140,38 @@ public class PayGateServiceTests
     }
 
     [Fact]
-    public async Task CanCreateHabits_FreeUser_AtLimit_PayGateFailure()
+    public async Task CanCreateHabits_FreeUserAtLimit_PayGateFailureWithoutUpsell()
     {
         var user = CreateFreeUser();
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
         _habitRepo.CountAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(10);
+            .Returns(AppConstants.DefaultFreeMaxHabits);
 
         var result = await _sut.CanCreateHabits(UserId);
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be("PAY_GATE");
-        result.Error.Should().Be(
-            "You've reached the 10 habit limit on the free plan. Upgrade to Pro for unlimited habits.");
+        result.Error.Should().Be("You've reached the 1000 habit limit.");
+    }
+
+    [Fact]
+    public async Task CanCreateHabits_FreeUserAt998_CreatingFiveFails()
+    {
+        var user = CreateFreeUser();
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _habitRepo.CountAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(AppConstants.DefaultFreeMaxHabits - 2);
+
+        var result = await _sut.CanCreateHabits(UserId, 5);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("PAY_GATE");
+        result.Error.Should().Be("You've reached the 1000 habit limit.");
     }
 
     [Fact]
@@ -233,7 +260,7 @@ public class PayGateServiceTests
         _habitRepo.CountAsync(
                 Arg.Any<Expression<Func<Habit, bool>>>(),
                 Arg.Any<CancellationToken>())
-            .Returns(10);
+            .Returns(AppConstants.DefaultFreeMaxHabits);
     }
 
     [Fact]
@@ -638,22 +665,6 @@ public class PayGateServiceTests
         var limit = await _sut.GetAiMessageLimit(UserId);
 
         limit.Should().Be(25);
-    }
-
-    [Fact]
-    public async Task CanCreateHabits_FreeUser_BulkCreate_ExceedsLimit_PayGateFailure()
-    {
-        var user = CreateFreeUser();
-        user.StartTrial(DateTime.UtcNow.AddDays(-1));
-        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-
-        _habitRepo.CountAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(8);
-
-        var result = await _sut.CanCreateHabits(UserId, 3);
-
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be("PAY_GATE");
     }
 
     [Fact]
