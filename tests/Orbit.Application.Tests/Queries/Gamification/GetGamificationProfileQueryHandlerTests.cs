@@ -271,7 +271,7 @@ public class GetGamificationProfileQueryHandlerTests
 
         var result = await _handler.Handle(new GetGamificationProfileQuery(UserId), CancellationToken.None);
 
-        result.Value.AchievementsTotal.Should().Be(32);
+        result.Value.AchievementsTotal.Should().Be(33);
         result.Value.AchievementsEarned.Should().Be(1);
         result.Value.Achievements.Should().HaveCount(33);
         var retired = result.Value.Achievements.Single(a => a.Id == AchievementDefinitions.BattleBuddy);
@@ -279,6 +279,28 @@ public class GetGamificationProfileQueryHandlerTests
         retired.EarnedAtUtc.Should().NotBeNull();
         retired.Name.Should().Be("Battle Buddy");
         retired.Description.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task Handle_AllActiveAndRetiredAchievementEarned_ReportsEqualEarnedAndTotalCounts()
+    {
+        var user = CreateProUser();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        var earned = AchievementDefinitions.Active
+            .Select(definition => UserAchievement.Create(UserId, definition.Id))
+            .Append(UserAchievement.Create(UserId, AchievementDefinitions.BattleBuddy))
+            .ToList();
+        _achievementRepo.FindAsync(
+                Arg.Any<Expression<Func<UserAchievement, bool>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(earned);
+
+        var result = await _handler.Handle(new GetGamificationProfileQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AchievementsEarned.Should().Be(33);
+        result.Value.AchievementsTotal.Should().Be(33);
+        result.Value.AchievementsEarned.Should().BeLessThanOrEqualTo(result.Value.AchievementsTotal);
     }
 
     [Fact]

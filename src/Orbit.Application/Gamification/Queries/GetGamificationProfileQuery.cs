@@ -78,7 +78,7 @@ public class GetGamificationProfileQueryHandler(
             nextLevelXpRequired,
             xpToNext,
             achievementsEarned,
-            AchievementDefinitions.Active.Count,
+            achievements.Count,
             achievements,
             userAchievements,
             user.CurrentStreak,
