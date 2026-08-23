@@ -253,12 +253,12 @@ public class ProcessUserChatCommandHandlerTests
     private PayGateService CreateRealPayGate(IGenericRepository<User> userRepository)
     {
         var appConfig = Substitute.For<IAppConfigService>();
-        appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerMonth, AppConstants.DefaultFreeAiMessages, Arg.Any<CancellationToken>())
-            .Returns(20);
-        appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerMonth, AppConstants.DefaultProAiMessages, Arg.Any<CancellationToken>())
-            .Returns(500);
+        appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerDay, AppConstants.DefaultFreeAiMessages, Arg.Any<CancellationToken>())
+            .Returns(5);
+        appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerDay, AppConstants.DefaultProAiMessages, Arg.Any<CancellationToken>())
+            .Returns(50);
 
-        return new PayGateService(_habitRepo, userRepository, appConfig);
+        return new PayGateService(_habitRepo, userRepository, appConfig, _userDateService);
     }
 
     private static readonly AiConversationContext TestConversationContext = new()
@@ -378,7 +378,7 @@ public class ProcessUserChatCommandHandlerTests
     public async Task Handle_TenConcurrentRequestsWithOneMessageRemaining_OnlyOneCallsAi()
     {
         const int requestCount = 10;
-        var persistence = new StaleSnapshotQuotaStore(initialCount: 19, requestCount);
+        var persistence = new StaleSnapshotQuotaStore(initialCount: 4, requestCount);
         SetupAiResponse(new AiResponse { TextMessage = "Reserved response", ToolCalls = null });
         var command = new ProcessUserChatCommand(UserId, "Hello AI");
         var handlers = Enumerable.Range(0, requestCount)
@@ -397,7 +397,7 @@ public class ProcessUserChatCommandHandlerTests
 
         results.Should().ContainSingle(result => result.IsSuccess);
         results.Count(result => result.IsFailure && result.ErrorCode == Result.PayGateErrorCode).Should().Be(requestCount - 1);
-        persistence.PersistedCount.Should().Be(20);
+        persistence.PersistedCount.Should().Be(5);
         persistence.InitialSnapshotCount.Should().Be(requestCount);
         persistence.DistinctInitialSnapshotCount.Should().Be(requestCount);
         persistence.ConcurrencyFailureCount.Should().Be(requestCount - 1);
@@ -428,8 +428,8 @@ public class ProcessUserChatCommandHandlerTests
     {
         var user = User.Create("Thomas", "thomas@test.com").Value;
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
-        for (var i = 0; i < 19; i++)
-            user.IncrementAiMessageCount();
+        for (var i = 0; i < 4; i++)
+            user.IncrementAiMessageCount(Today);
 
         _aiIntentService.SendWithToolsAsync(
                 Arg.Any<AiToolRequest>(),
@@ -437,7 +437,7 @@ public class ProcessUserChatCommandHandlerTests
                 Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
-                user.AiMessagesUsedThisMonth.Should().Be(20);
+                user.AiMessagesUsedToday.Should().Be(5);
                 return Result.Failure<AiResponse>("AI service unavailable");
             });
         var handler = CreateHandler(CreateRealPayGate(user));
@@ -448,7 +448,7 @@ public class ProcessUserChatCommandHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be("AI service unavailable");
-        user.AiMessagesUsedThisMonth.Should().Be(20);
+        user.AiMessagesUsedToday.Should().Be(5);
     }
 
     [Fact]
@@ -2263,10 +2263,10 @@ public class ProcessUserChatCommandHandlerTests
                             throw new DbUpdateConcurrencyException("The quota snapshot is stale.");
                         }
 
-                        if (trackedUser.AiMessagesUsedThisMonth == _persistedCount)
+                        if (trackedUser.AiMessagesUsedToday == _persistedCount)
                             return 0;
 
-                        _persistedCount = trackedUser.AiMessagesUsedThisMonth;
+                        _persistedCount = trackedUser.AiMessagesUsedToday;
                         _version++;
                         trackedVersion = _version;
                         return 1;
@@ -2281,7 +2281,7 @@ public class ProcessUserChatCommandHandlerTests
             var user = User.Create("Thomas", "thomas@test.com").Value;
             user.StartTrial(DateTime.UtcNow.AddDays(-1));
             for (var i = 0; i < messageCount; i++)
-                user.IncrementAiMessageCount();
+                user.IncrementAiMessageCount(Today);
             return user;
         }
     }

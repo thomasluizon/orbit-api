@@ -14,19 +14,22 @@ public class PayGateServiceTests
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IAppConfigService _appConfig = Substitute.For<IAppConfigService>();
+    private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly PayGateService _sut;
 
     private static readonly Guid UserId = Guid.NewGuid();
+    private static readonly DateOnly Today = new(2026, 8, 5);
     private static readonly DateOnly ReactivationToday = new(2026, 8, 5);
 
     public PayGateServiceTests()
     {
-        _sut = new PayGateService(_habitRepo, _userRepo, _appConfig);
+        _sut = new PayGateService(_habitRepo, _userRepo, _appConfig, _userDateService);
 
         _appConfig.GetAsync("FreeMaxHabits", 10, Arg.Any<CancellationToken>()).Returns(10);
         _appConfig.GetAsync("SubHabitsProOnly", true, Arg.Any<CancellationToken>()).Returns(true);
-        _appConfig.GetAsync("FreeAiMessagesPerMonth", 20, Arg.Any<CancellationToken>()).Returns(20);
-        _appConfig.GetAsync("ProAiMessagesPerMonth", 500, Arg.Any<CancellationToken>()).Returns(500);
+        _appConfig.GetAsync("FreeAiMessagesPerDay", 5, Arg.Any<CancellationToken>()).Returns(5);
+        _appConfig.GetAsync("ProAiMessagesPerDay", 50, Arg.Any<CancellationToken>()).Returns(50);
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
         _appConfig.GetAsync("DailySummaryProOnly", true, Arg.Any<CancellationToken>()).Returns(true);
         _appConfig.GetAsync("RetrospectiveProOnly", true, Arg.Any<CancellationToken>()).Returns(true);
         _appConfig.GetAsync("GoalsProOnly", true, Arg.Any<CancellationToken>()).Returns(true);
@@ -261,6 +264,21 @@ public class PayGateServiceTests
     }
 
     [Fact]
+    public async Task CanSendAiMessage_ProUserAtDailyLimit_PayGateFailure()
+    {
+        var user = CreateProUser();
+        for (var i = 0; i < 50; i++)
+            user.IncrementAiMessageCount(Today);
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+
+        var result = await _sut.CanSendAiMessage(UserId);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("PAY_GATE");
+        result.Error.Should().Be("You've reached your daily AI message limit (50).");
+    }
+
+    [Fact]
     public async Task CanCreateSubHabits_ConfigDisabled_FreeUserAllowed()
     {
         var user = CreateFreeUser();
@@ -290,14 +308,16 @@ public class PayGateServiceTests
     {
         var user = CreateFreeUser();
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
-        for (int i = 0; i < 20; i++)
-            user.IncrementAiMessageCount();
+        for (int i = 0; i < 5; i++)
+            user.IncrementAiMessageCount(Today);
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
         var result = await _sut.CanSendAiMessage(UserId);
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be("PAY_GATE");
+        result.Error.Should().Be(
+            "You've reached your daily AI message limit (5). Upgrade to Pro for 50 messages per day.");
     }
 
     [Fact]
@@ -305,8 +325,8 @@ public class PayGateServiceTests
     {
         var user = CreateFreeUser();
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
-        for (int i = 0; i < 20; i++)
-            user.IncrementAiMessageCount();
+        for (int i = 0; i < 5; i++)
+            user.IncrementAiMessageCount(Today);
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
         await WithEnvironment("Production", user.Email, async () =>
@@ -321,8 +341,8 @@ public class PayGateServiceTests
     {
         var user = CreateFreeUser();
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
-        for (int i = 0; i < 20; i++)
-            user.IncrementAiMessageCount();
+        for (int i = 0; i < 5; i++)
+            user.IncrementAiMessageCount(Today);
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
         await WithEnvironment("Production", "not-the-smoke@example.com", async () =>
@@ -338,8 +358,8 @@ public class PayGateServiceTests
     {
         var user = CreateFreeUser();
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
-        for (int i = 0; i < 20; i++)
-            user.IncrementAiMessageCount();
+        for (int i = 0; i < 5; i++)
+            user.IncrementAiMessageCount(Today);
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
         await WithEnvironment("Development", user.Email, async () =>
@@ -382,7 +402,7 @@ public class PayGateServiceTests
 
         var limit = await _sut.GetAiMessageLimit(UserId);
 
-        limit.Should().Be(500);
+        limit.Should().Be(50);
     }
 
     [Fact]
@@ -394,17 +414,28 @@ public class PayGateServiceTests
 
         var limit = await _sut.GetAiMessageLimit(UserId);
 
-        limit.Should().Be(20);
+        limit.Should().Be(5);
     }
 
     [Fact]
-    public async Task GetAiMessageLimit_UserNotFound_ReturnsDefault20()
+    public async Task GetAiMessageLimit_UserNotFound_ReturnsDefaultFreeDailyLimit()
     {
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns((User?)null);
 
         var limit = await _sut.GetAiMessageLimit(UserId);
 
-        limit.Should().Be(20);
+        limit.Should().Be(5);
+    }
+
+    [Fact]
+    public async Task GetAiMessageLimit_ActiveTrial_ReturnsProDailyLimit()
+    {
+        var user = CreateFreeUser();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+
+        var limit = await _sut.GetAiMessageLimit(UserId);
+
+        limit.Should().Be(50);
     }
 
     [Fact]
@@ -613,31 +644,32 @@ public class PayGateServiceTests
     }
 
     [Fact]
-    public async Task CanSendAiMessage_WithAdRewardBonus_IncreasedLimit()
+    public async Task CanSendAiMessage_WithAdRewardBonus_StillUsesConfiguredLimit()
     {
         var user = CreateFreeUser();
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
-        for (int i = 0; i < 20; i++)
-            user.IncrementAiMessageCount();
-        user.GrantAdReward(DateOnly.FromDateTime(DateTime.UtcNow), 5);
+        for (int i = 0; i < 5; i++)
+            user.IncrementAiMessageCount(Today);
+        user.GrantAdReward(Today, 15);
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
         var result = await _sut.CanSendAiMessage(UserId);
 
-        result.IsSuccess.Should().BeTrue();
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("PAY_GATE");
     }
 
     [Fact]
-    public async Task GetAiMessageLimit_WithAdRewardBonus_IncludesBonus()
+    public async Task GetAiMessageLimit_WithAdRewardBonus_IgnoresBonus()
     {
         var user = CreateFreeUser();
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
-        user.GrantAdReward(DateOnly.FromDateTime(DateTime.UtcNow), 5);
+        user.GrantAdReward(Today, 15);
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
         var limit = await _sut.GetAiMessageLimit(UserId);
 
-        limit.Should().Be(25);
+        limit.Should().Be(5);
     }
 
     [Fact]

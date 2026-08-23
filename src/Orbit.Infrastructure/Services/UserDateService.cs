@@ -8,7 +8,8 @@ namespace Orbit.Infrastructure.Services;
 
 public class UserDateService(
     IGenericRepository<User> userRepository,
-    IDistributedCache cache) : IUserDateService
+    IDistributedCache cache,
+    TimeProvider timeProvider) : IUserDateService
 {
     private static readonly DistributedCacheEntryOptions CacheEntryOptions = new()
     {
@@ -32,7 +33,7 @@ public class UserDateService(
     {
         cancellationToken.ThrowIfCancellationRequested();
         var timeZone = TimeZoneHelper.FindTimeZone(timeZoneId, userId: userId);
-        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, timeZone));
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(timeProvider.GetUtcNow().UtcDateTime, timeZone));
         return Task.FromResult(today);
     }
 

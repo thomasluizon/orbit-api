@@ -67,7 +67,7 @@ public class GetProfileQueryHandlerTests
     {
         var user = CreateTestUser("John Doe");
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(20);
+        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(50);
         _streakFreezeRepo.FindAsync(
             Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
             Arg.Any<CancellationToken>())
@@ -97,8 +97,8 @@ public class GetProfileQueryHandlerTests
             user.IsTrialActive,
             user.TrialEndsAt,
             user.PlanExpiresAt,
-            AiMessagesUsed = user.AiMessagesUsedThisMonth,
-            AiMessagesLimit = 20,
+            AiMessagesUsed = user.AiMessagesUsedToday,
+            AiMessagesLimit = 50,
             user.HasImportedCalendar,
             user.HasSeenImportPrompt,
             HasGoogleConnection = false,
@@ -182,7 +182,7 @@ public class GetProfileQueryHandlerTests
         user.MarkFirstHabitCreated();
         user.MarkAstraUsed();
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(20);
+        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(5);
         StubFreezeRepoEmpty();
 
         var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
@@ -200,7 +200,7 @@ public class GetProfileQueryHandlerTests
         var user = CreateTestUser();
         user.SetStreakState(5, 12, Today);
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(20);
+        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(5);
         _streakFreezeRepo.FindAsync(
             Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
             Arg.Any<CancellationToken>())
@@ -238,7 +238,7 @@ public class GetProfileQueryHandlerTests
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
 
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(20);
+        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(5);
         _streakFreezeRepo.FindAsync(
             Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
             Arg.Any<CancellationToken>())
@@ -251,6 +251,7 @@ public class GetProfileQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Plan.Should().Be("free");
         result.Value.HasProAccess.Should().BeFalse();
+        result.Value.AiMessagesLimit.Should().Be(5);
     }
 
     [Fact]
@@ -260,7 +261,7 @@ public class GetProfileQueryHandlerTests
         user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddYears(1));
 
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(500);
+        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(50);
         _streakFreezeRepo.FindAsync(
             Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
             Arg.Any<CancellationToken>())
@@ -273,6 +274,7 @@ public class GetProfileQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Plan.Should().Be("pro");
         result.Value.HasProAccess.Should().BeTrue();
+        result.Value.AiMessagesLimit.Should().Be(50);
     }
 
     [Fact]

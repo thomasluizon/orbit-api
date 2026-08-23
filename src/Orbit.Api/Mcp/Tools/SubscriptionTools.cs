@@ -43,7 +43,7 @@ public class SubscriptionTools(
         return $"Plan: {(u.HasProAccess ? "Pro" : "Free")}\n" +
                (u.IsTrialActive ? $"Trial active, ends: {u.TrialEndsAt:yyyy-MM-dd}\n" : "") +
                (u.PlanExpiresAt is not null ? $"Plan expires: {u.PlanExpiresAt:yyyy-MM-dd}\n" : "") +
-               $"AI Messages: {u.AiMessagesUsedThisMonth}/{aiLimit}\n" +
+               $"Daily AI Messages: {u.AiMessagesUsedToday}/{aiLimit}\n" +
                (u.IsLifetimePro ? "Lifetime Pro: Yes\n" : "") +
                (u.SubscriptionInterval is not null ? $"Billing: {u.SubscriptionInterval.ToString()!.ToLowerInvariant()}" : "");
     }

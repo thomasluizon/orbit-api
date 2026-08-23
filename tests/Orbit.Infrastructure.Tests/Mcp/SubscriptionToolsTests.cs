@@ -66,7 +66,7 @@ public class SubscriptionToolsTests
         var result = await _tools.GetSubscriptionStatus(_user);
 
         result.Should().Contain("Plan: Pro");
-        result.Should().Contain("AI Messages: 0/5");
+        result.Should().Contain("Daily AI Messages: 0/5");
     }
 
     [Fact]
@@ -94,7 +94,7 @@ public class SubscriptionToolsTests
 
         var result = await _tools.GetSubscriptionStatus(_user);
 
-        result.Should().Contain("AI Messages: 0/50");
+        result.Should().Contain("Daily AI Messages: 0/50");
     }
 
     [Fact]

@@ -18,9 +18,7 @@ Orbit has a free plan and a Pro plan. The free plan is fully usable for daily ha
 ## Limits on the free plan
 
 - **Habits** are capped at **10** top-level habits. Sub-habits, completed habits, and soft-deleted habits don't count toward the cap. Pro removes the cap.
-- **AI messages** are capped at **20** per month. Pro raises this to **500** per month.
-
-Both plans can also earn a small bonus of extra AI messages from ad rewards, added on top of the plan limit.
+- **AI messages** are capped at **5** per day. Pro raises this to **50** per day.
 
 ## What Pro unlocks
 
