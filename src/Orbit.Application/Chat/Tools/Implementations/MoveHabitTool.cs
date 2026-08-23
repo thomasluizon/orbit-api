@@ -1,10 +1,13 @@
 using System.Text.Json;
+using MediatR;
+using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class MoveHabitTool(
+    IMediator mediator,
     IGenericRepository<Habit> habitRepository) : IAiTool
 {
     public string Name => "move_habit";
@@ -36,58 +39,13 @@ public class MoveHabitTool(
         if (args.TryGetProperty("new_parent_id", out var parentEl)
             && parentEl.ValueKind == JsonValueKind.String
             && Guid.TryParse(parentEl.GetString(), out var parsedParentId))
-        {
-            var parent = await habitRepository.FindOneTrackedAsync(
-                h => h.Id == parsedParentId && h.UserId == userId,
-                cancellationToken: ct);
-
-            if (parent is null)
-                return new ToolResult(false, Error: $"New parent habit {parsedParentId} not found.");
-
-            if (parsedParentId == habitId)
-                return new ToolResult(false, Error: "A habit cannot be its own parent.");
-
-            if (await WouldCreateCycleAsync(habitId, parsedParentId, userId, ct))
-                return new ToolResult(false, Error: "Cannot move habit: this would create a circular parent chain.");
-
             newParentId = parsedParentId;
-        }
 
-        habit.SetParentHabitId(newParentId);
+        var result = await mediator.Send(
+            new MoveHabitParentCommand(userId, habitId, newParentId), ct);
+        if (result.IsFailure)
+            return ToolResult.FromFailure(result);
 
         return new ToolResult(true, EntityId: habit.Id.ToString(), EntityName: habit.Title);
-    }
-
-    /// <summary>
-    /// Walks up the ancestor chain of <paramref name="candidateParentId"/> and returns true
-    /// if <paramref name="habitId"/> appears anywhere in that chain, which would create a cycle.
-    /// </summary>
-    private async Task<bool> WouldCreateCycleAsync(Guid habitId, Guid candidateParentId, Guid userId, CancellationToken ct)
-    {
-        var visited = new HashSet<Guid>();
-        var current = candidateParentId;
-
-        while (true)
-        {
-            if (!visited.Add(current))
-                break;
-            var ancestors = await habitRepository.FindAsync(
-                h => h.Id == current && h.UserId == userId,
-                ct);
-            var ancestor = ancestors.Count > 0 ? ancestors[0] : null;
-
-            if (ancestor is null)
-                break;
-
-            if (ancestor.ParentHabitId is null)
-                break;
-
-            if (ancestor.ParentHabitId.Value == habitId)
-                return true;
-
-            current = ancestor.ParentHabitId.Value;
-        }
-
-        return false;
     }
 }

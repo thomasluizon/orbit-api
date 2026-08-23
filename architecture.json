@@ -2932,7 +2932,7 @@
       "Common": 184,
       "Gamification": 38,
       "Goals": 54,
-      "Habits": 86,
+      "Habits": 87,
       "Marketing": 6,
       "Notifications": 19,
       "Profile": 40,
@@ -3610,7 +3610,8 @@
         "testClass": "MoveHabitToolTests",
         "file": "tests/Orbit.Application.Tests/Chat/Tools/MoveHabitToolTests.cs",
         "references": [
-          "Habit"
+          "Habit",
+          "MoveHabitParentCommand"
         ]
       },
       {

@@ -39,7 +39,7 @@ public class ChatToolMetadataTests
         var goalReviewTool = new GoalReviewTool(Repo<Goal>(), userDateService, goalProgressReadSyncer);
         var linkHabitsTool = new LinkHabitsToGoalTool(Substitute.For<IMediator>(), Repo<Goal>());
         var logHabitTool = new LogHabitTool(Substitute.For<IMediator>(), Repo<Habit>(), userDateService);
-        var moveHabitTool = new MoveHabitTool(Repo<Habit>());
+        var moveHabitTool = new MoveHabitTool(mediator, Repo<Habit>());
         var queryGoalsTool = new QueryGoalsTool(Repo<Goal>(), userDateService, goalProgressReadSyncer);
         var queryHabitsTool = new QueryHabitsTool(Repo<Habit>(), Repo<User>());
         var skipHabitTool = new SkipHabitTool(Repo<Habit>(), Repo<HabitLog>(), userDateService);
