@@ -51,4 +51,28 @@ public class PostHogProductAnalyticsTests
 
         arguments[^1].Should().BeNull();
     }
+
+    [Fact]
+    public void CaptureUserEvent_WithEventProperties_PreservesMetricDimensions()
+    {
+        _analytics.CaptureUserEvent(
+            Guid.NewGuid(),
+            "streak_repair_spent",
+            "Pro",
+            new Dictionary<string, object>
+            {
+                ["missed_date"] = "2026-08-21",
+                ["remaining_bank"] = 1
+            });
+
+        var arguments = _postHogClient.ReceivedCalls()
+            .Single(call => call.GetMethodInfo().Name == nameof(IPostHogClient.Capture))
+            .GetArguments();
+        var properties = arguments[2].Should().BeAssignableTo<Dictionary<string, object>>().Subject;
+
+        properties["missed_date"].Should().Be("2026-08-21");
+        properties["remaining_bank"].Should().Be(1);
+        properties.Should().ContainKey("$set");
+        properties.Should().ContainKey("$unset");
+    }
 }

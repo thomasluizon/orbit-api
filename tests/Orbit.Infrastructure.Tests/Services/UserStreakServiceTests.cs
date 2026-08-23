@@ -1,9 +1,5 @@
-using System.Data.Common;
 using FluentAssertions;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
-using Orbit.Application.Common;
 using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -20,17 +16,12 @@ public class UserStreakServiceTests
     private readonly IGenericRepository<StreakFreeze> _streakFreezeRepository = Substitute.For<IGenericRepository<StreakFreeze>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IFriendFeedEventEmitter _feedEmitter = Substitute.For<IFriendFeedEventEmitter>();
-    private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
-    private readonly IFeatureFlagService _featureFlagService = Substitute.For<IFeatureFlagService>();
-
     private readonly UserStreakService _sut;
 
     private static readonly Guid UserId = Guid.NewGuid();
 
     public UserStreakServiceTests()
     {
-        _featureFlagService.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(new List<string>());
         _sut = new UserStreakService(
             new UserStreakRepositories(
                 _userRepository,
@@ -38,15 +29,8 @@ public class UserStreakServiceTests
                 _habitLogRepository,
                 _streakFreezeRepository),
             _userDateService,
-            _feedEmitter,
-            _unitOfWork,
-            _featureFlagService,
-            NullLogger<UserStreakService>.Instance);
+            _feedEmitter);
     }
-
-    private void EnableGamificationFreeTier() =>
-        _featureFlagService.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(new List<string> { FeatureFlagKeys.GamificationFreeTier });
 
     /// <summary>
     /// Grants banked streak freezes directly, bypassing the milestone-award path so a recalc scenario
@@ -284,12 +268,11 @@ public class UserStreakServiceTests
     }
 
     [Fact]
-    public async Task RecalculateAsync_RecentMissedDay_WithBankedFreeze_AppliesFreezeAndPreservesStreak()
+    public async Task EvaluateRepairAsync_RecentScheduledMissWithBankedFreeze_ReturnsRepairedState()
     {
         var user = User.Create("Thomas", "thomas@test.com").Value;
         user.SetStreakState(5, 5, new DateOnly(2026, 4, 5));
         SetBankedFreezes(user, 1);
-        EnableGamificationFreeTier();
 
         var completions = new[]
         {
@@ -302,62 +285,31 @@ public class UserStreakServiceTests
         SetupHabits(new List<Habit> { habit });
         SetupFreezes(new List<StreakFreeze>());
 
-        var result = await _sut.RecalculateAsync(UserId, cancellationToken: CancellationToken.None);
+        var result = await _sut.EvaluateRepairAsync(
+            UserId, new DateOnly(2026, 4, 7), new DateOnly(2026, 4, 6), CancellationToken.None);
 
         result.Should().NotBeNull();
-        result!.CurrentStreak.Should().Be(5);
-        result.LastActiveDate.Should().Be(new DateOnly(2026, 4, 6));
-        user.CurrentStreak.Should().Be(5);
-        user.StreakFreezesAccumulated.Should().Be(0);
-        await _streakFreezeRepository.Received(1).AddAsync(
-            Arg.Is<StreakFreeze>(f => f.UserId == user.Id && f.UsedOnDate == new DateOnly(2026, 4, 6)),
-            Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task RecalculateAsync_RunTwice_ConsumesFreezeOnceAndKeepsStreakStable()
-    {
-        var user = User.Create("Thomas", "thomas@test.com").Value;
-        user.SetStreakState(5, 5, new DateOnly(2026, 4, 5));
-        SetBankedFreezes(user, 1);
-        EnableGamificationFreeTier();
-
-        var completions = new[]
-        {
-            new DateOnly(2026, 4, 1), new DateOnly(2026, 4, 2), new DateOnly(2026, 4, 3),
-            new DateOnly(2026, 4, 4), new DateOnly(2026, 4, 5)
-        };
-        var habit = CreateDailyHabitLoggedOn(completions, new DateOnly(2026, 4, 1));
-
-        SetupUser(user, new DateOnly(2026, 4, 7));
-        SetupHabits(new List<Habit> { habit });
-        SetupFreezes(new List<StreakFreeze>());
-
-        var first = await _sut.RecalculateAsync(UserId, cancellationToken: CancellationToken.None);
-
-        SetupFreezes(new List<StreakFreeze> { StreakFreeze.Create(UserId, new DateOnly(2026, 4, 6)) });
-
-        var second = await _sut.RecalculateAsync(UserId, cancellationToken: CancellationToken.None);
-
-        first!.CurrentStreak.Should().Be(5);
-        second!.CurrentStreak.Should().Be(5);
-        user.StreakFreezesAccumulated.Should().Be(0);
-        await _streakFreezeRepository.Received(1).AddAsync(
+        result!.IsAvailable.Should().BeTrue();
+        result.MissedDate.Should().Be(new DateOnly(2026, 4, 6));
+        result.RepairedState!.CurrentStreak.Should().Be(5);
+        result.RepairedState.LongestStreak.Should().Be(5);
+        result.RepairedState.LastActiveDate.Should().Be(new DateOnly(2026, 4, 6));
+        user.StreakFreezesAccumulated.Should().Be(1);
+        await _streakFreezeRepository.DidNotReceive().AddAsync(
             Arg.Any<StreakFreeze>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task RecalculateAsync_GapTooLargeForOneFreeze_BreaksStreakWithoutConsuming()
+    public async Task RecalculateAsync_RecentMissWithBankedFreeze_DoesNotSpendFreeze()
     {
         var user = User.Create("Thomas", "thomas@test.com").Value;
-        user.SetStreakState(4, 4, new DateOnly(2026, 4, 4));
+        user.SetStreakState(5, 5, new DateOnly(2026, 4, 5));
         SetBankedFreezes(user, 1);
-        EnableGamificationFreeTier();
 
         var completions = new[]
         {
-            new DateOnly(2026, 4, 1), new DateOnly(2026, 4, 2),
-            new DateOnly(2026, 4, 3), new DateOnly(2026, 4, 4)
+            new DateOnly(2026, 4, 1), new DateOnly(2026, 4, 2), new DateOnly(2026, 4, 3),
+            new DateOnly(2026, 4, 4), new DateOnly(2026, 4, 5)
         };
         var habit = CreateDailyHabitLoggedOn(completions, new DateOnly(2026, 4, 1));
 
@@ -374,7 +326,32 @@ public class UserStreakServiceTests
     }
 
     [Fact]
-    public async Task RecalculateAsync_RecentMissedDay_NoBankedFreeze_BreaksStreak()
+    public async Task EvaluateRepairAsync_GapTooLargeForOneFreeze_IsUnavailable()
+    {
+        var user = User.Create("Thomas", "thomas@test.com").Value;
+        user.SetStreakState(4, 4, new DateOnly(2026, 4, 4));
+        SetBankedFreezes(user, 1);
+
+        var completions = new[]
+        {
+            new DateOnly(2026, 4, 1), new DateOnly(2026, 4, 2),
+            new DateOnly(2026, 4, 3), new DateOnly(2026, 4, 4)
+        };
+        var habit = CreateDailyHabitLoggedOn(completions, new DateOnly(2026, 4, 1));
+
+        SetupUser(user, new DateOnly(2026, 4, 7));
+        SetupHabits(new List<Habit> { habit });
+        SetupFreezes(new List<StreakFreeze>());
+
+        var result = await _sut.EvaluateRepairAsync(
+            UserId, new DateOnly(2026, 4, 7), new DateOnly(2026, 4, 6), CancellationToken.None);
+
+        result!.IsAvailable.Should().BeFalse();
+        user.StreakFreezesAccumulated.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task EvaluateRepairAsync_NoBankedFreeze_IsUnavailable()
     {
         var user = User.Create("Thomas", "thomas@test.com").Value;
         user.SetStreakState(5, 5, new DateOnly(2026, 4, 5));
@@ -391,26 +368,24 @@ public class UserStreakServiceTests
         SetupHabits(new List<Habit> { habit });
         SetupFreezes(new List<StreakFreeze>());
 
-        var result = await _sut.RecalculateAsync(UserId, cancellationToken: CancellationToken.None);
+        var result = await _sut.EvaluateRepairAsync(
+            UserId, new DateOnly(2026, 4, 7), new DateOnly(2026, 4, 6), CancellationToken.None);
 
-        result!.CurrentStreak.Should().Be(0);
+        result!.IsAvailable.Should().BeFalse();
         user.StreakFreezesAccumulated.Should().Be(0);
-        await _streakFreezeRepository.DidNotReceive().AddAsync(
-            Arg.Any<StreakFreeze>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task RecalculateAsync_ConcurrentFreezeInsertConflict_PreservesStreakConsumesOnceAndDoesNotThrow()
+    public async Task EvaluateRepairAsync_CompletionAlreadyCoversYesterday_IsUnavailable()
     {
         var user = User.Create("Thomas", "thomas@test.com").Value;
-        user.SetStreakState(5, 5, new DateOnly(2026, 4, 5));
+        user.SetStreakState(6, 6, new DateOnly(2026, 4, 6));
         SetBankedFreezes(user, 1);
-        EnableGamificationFreeTier();
 
         var completions = new[]
         {
             new DateOnly(2026, 4, 1), new DateOnly(2026, 4, 2), new DateOnly(2026, 4, 3),
-            new DateOnly(2026, 4, 4), new DateOnly(2026, 4, 5)
+            new DateOnly(2026, 4, 4), new DateOnly(2026, 4, 5), new DateOnly(2026, 4, 6)
         };
         var habit = CreateDailyHabitLoggedOn(completions, new DateOnly(2026, 4, 1));
 
@@ -418,29 +393,20 @@ public class UserStreakServiceTests
         SetupHabits(new List<Habit> { habit });
         SetupFreezes(new List<StreakFreeze>());
 
-        var uniqueViolation = new DbUpdateException("duplicate freeze", new UniqueViolationDbException());
-        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
-            .Returns(Task.FromException<int>(uniqueViolation));
-
-        var result = await _sut.RecalculateAsync(UserId, cancellationToken: CancellationToken.None);
+        var result = await _sut.EvaluateRepairAsync(
+            UserId, new DateOnly(2026, 4, 7), new DateOnly(2026, 4, 6), CancellationToken.None);
 
         result.Should().NotBeNull();
-        result!.CurrentStreak.Should().Be(5);
-        result.LastActiveDate.Should().Be(new DateOnly(2026, 4, 6));
-        user.StreakFreezesAccumulated.Should().Be(0);
-        await _streakFreezeRepository.Received(1).AddAsync(
-            Arg.Is<StreakFreeze>(f => f.UsedOnDate == new DateOnly(2026, 4, 6)),
-            Arg.Any<CancellationToken>());
-        _unitOfWork.Received(1).DiscardChanges();
+        result!.IsAvailable.Should().BeFalse();
+        user.StreakFreezesAccumulated.Should().Be(1);
     }
 
     [Fact]
-    public async Task RecalculateAsync_MonthlyFreezeCapReached_BreaksStreakWithoutConsuming()
+    public async Task EvaluateRepairAsync_MonthlyFreezeCapReached_IsUnavailable()
     {
         var user = User.Create("Thomas", "thomas@test.com").Value;
         user.SetStreakState(5, 5, new DateOnly(2026, 4, 5));
         SetBankedFreezes(user, 1);
-        EnableGamificationFreeTier();
 
         var completions = new[]
         {
@@ -458,16 +424,10 @@ public class UserStreakServiceTests
             StreakFreeze.Create(UserId, new DateOnly(2026, 4, 3))
         });
 
-        var result = await _sut.RecalculateAsync(UserId, cancellationToken: CancellationToken.None);
+        var result = await _sut.EvaluateRepairAsync(
+            UserId, new DateOnly(2026, 4, 7), new DateOnly(2026, 4, 6), CancellationToken.None);
 
-        result!.CurrentStreak.Should().Be(0);
+        result!.IsAvailable.Should().BeFalse();
         user.StreakFreezesAccumulated.Should().Be(1);
-        await _streakFreezeRepository.DidNotReceive().AddAsync(
-            Arg.Any<StreakFreeze>(), Arg.Any<CancellationToken>());
-    }
-
-    private sealed class UniqueViolationDbException : DbException
-    {
-        public override string SqlState => "23505";
     }
 }

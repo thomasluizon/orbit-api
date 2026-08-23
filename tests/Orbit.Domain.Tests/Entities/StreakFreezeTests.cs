@@ -6,10 +6,10 @@ namespace Orbit.Domain.Tests.Entities;
 public class StreakFreezeTests
 {
     [Fact]
-    public void Create_SetsProperties()
+    public void Create_ValidValues_SetsRepairDate()
     {
         var userId = Guid.NewGuid();
-        var date = new DateOnly(2026, 3, 30);
+        var date = new DateOnly(2026, 8, 21);
 
         var freeze = StreakFreeze.Create(userId, date);
 
@@ -20,14 +20,30 @@ public class StreakFreezeTests
     }
 
     [Fact]
+    public void Create_EmptyUserId_Throws()
+    {
+        var act = () => StreakFreeze.Create(Guid.Empty, new DateOnly(2026, 8, 21));
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void Create_MissingDate_Throws()
+    {
+        var act = () => StreakFreeze.Create(Guid.NewGuid(), DateOnly.MinValue);
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
     public void Create_DifferentInstances_HaveDifferentIds()
     {
         var userId = Guid.NewGuid();
-        var date = new DateOnly(2026, 3, 30);
+        var date = new DateOnly(2026, 8, 21);
 
-        var freeze1 = StreakFreeze.Create(userId, date);
-        var freeze2 = StreakFreeze.Create(userId, date);
+        var first = StreakFreeze.Create(userId, date);
+        var second = StreakFreeze.Create(userId, date);
 
-        freeze1.Id.Should().NotBe(freeze2.Id);
+        first.Id.Should().NotBe(second.Id);
     }
 }

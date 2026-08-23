@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification.Queries;
@@ -16,7 +17,7 @@ public class GetStreakInfoQueryHandlerTests
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IUserStreakService _userStreakService = Substitute.For<IUserStreakService>();
     private readonly IFeatureFlagService _featureFlagService = Substitute.For<IFeatureFlagService>();
-    private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
+    private readonly IProductAnalytics _productAnalytics = Substitute.For<IProductAnalytics>();
     private readonly GetStreakInfoQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -27,18 +28,33 @@ public class GetStreakInfoQueryHandlerTests
         _featureFlagService.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Array.Empty<string>());
         _handler = new GetStreakInfoQueryHandler(
-            _userRepo, _streakFreezeRepo, _userDateService, _userStreakService, _featureFlagService, _unitOfWork);
+            _userRepo,
+            _streakFreezeRepo,
+            _userDateService,
+            _userStreakService,
+            _featureFlagService,
+            _productAnalytics,
+            NullLogger<GetStreakInfoQueryHandler>.Instance);
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
+        _userStreakService.EvaluateRepairAsync(
+            UserId,
+            Today,
+            Today.AddDays(-1),
+            Arg.Any<CancellationToken>())
+            .Returns(StreakRepairEvaluation.Unavailable(Today.AddDays(-1)));
     }
 
     private static User CreateTestUser()
     {
-        return User.Create("Test User", "test@example.com").Value;
+        var user = User.Create("Test User", "test@example.com").Value;
+        typeof(User).GetProperty(nameof(User.Id))!.SetValue(user, UserId);
+        return user;
     }
 
     private static User CreateFreeUser()
     {
         var user = User.Create("Test User", "test@example.com").Value;
+        typeof(User).GetProperty(nameof(User.Id))!.SetValue(user, UserId);
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
         return user;
     }
@@ -76,6 +92,9 @@ public class GetStreakInfoQueryHandlerTests
         result.Value.CanEarnMore.Should().BeTrue();
         result.Value.IsFrozenToday.Should().BeFalse();
         result.Value.RecentFreezeDates.Should().BeEmpty();
+        result.Value.IsRepairAvailable.Should().BeFalse();
+        result.Value.RepairDate.Should().BeNull();
+        result.Value.RepairsRemainingThisMonth.Should().Be(0);
     }
 
     [Fact]
@@ -100,7 +119,10 @@ public class GetStreakInfoQueryHandlerTests
         result.Value.CurrentStreak.Should().Be(11);
         result.Value.LongestStreak.Should().Be(43);
         result.Value.LastActiveDate.Should().Be(Today);
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _userStreakService.Received(1).RecalculateAsync(
+            UserId,
+            awardFreezeIfEligible: false,
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -219,5 +241,40 @@ public class GetStreakInfoQueryHandlerTests
         var result = await _handler.Handle(new GetStreakInfoQuery(UserId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_RepairAvailable_AppendsRepairFieldsAndCapturesOffer()
+    {
+        var user = CreateTestUser();
+        user.SetStreakState(7, 7, Today.AddDays(-2));
+        user.AwardStreakFreezeIfEligible();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _streakFreezeRepo.FindAsync(
+            Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<StreakFreeze>().AsReadOnly());
+        _userStreakService.EvaluateRepairAsync(
+            UserId,
+            Today,
+            Today.AddDays(-1),
+            Arg.Any<CancellationToken>())
+            .Returns(StreakRepairEvaluation.Available(
+                Today.AddDays(-1),
+                new UserStreakState(7, 7, Today.AddDays(-1))));
+
+        var result = await _handler.Handle(new GetStreakInfoQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.IsRepairAvailable.Should().BeTrue();
+        result.Value.RepairDate.Should().Be(Today.AddDays(-1));
+        result.Value.RepairsRemainingThisMonth.Should().Be(1);
+        _productAnalytics.Received(1).CaptureUserEvent(
+            UserId,
+            "streak_repair_offered",
+            user.Plan.ToString(),
+            Arg.Is<IReadOnlyDictionary<string, object>>(properties =>
+                (string)properties["missed_date"] == "2026-04-02"
+                && (int)properties["remaining_bank"] == 1));
     }
 }

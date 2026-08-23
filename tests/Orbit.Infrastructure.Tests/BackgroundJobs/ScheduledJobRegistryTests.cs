@@ -4,10 +4,12 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.BackgroundJobs;
+using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
 
@@ -49,9 +51,9 @@ public class ScheduledJobRegistryTests
     }
 
     [Fact]
-    public void AllElevenRecurringSchedulers_AreRegisteredAsJobs()
+    public void AllTwelveRecurringSchedulers_AreRegisteredAsJobs()
     {
-        BuildAll().Should().HaveCount(11);
+        BuildAll().Should().HaveCount(12);
     }
 
     [Fact]
@@ -75,14 +77,15 @@ public class ScheduledJobRegistryTests
         new ReminderSchedulerService(ScopeFactory(), NullLogger<ReminderSchedulerService>.Instance, EmptyConfiguration),
         new GoalDeadlineNotificationService(ScopeFactory(), NullLogger<GoalDeadlineNotificationService>.Instance, EmptyConfiguration),
         new SlipAlertSchedulerService(ScopeFactory(), NullLogger<SlipAlertSchedulerService>.Instance, EmptyConfiguration),
+        new ProactiveCheckinSchedulerService(ScopeFactory(), NullLogger<ProactiveCheckinSchedulerService>.Instance, EmptyConfiguration),
         new AccountDeletionService(ScopeFactory(), NullLogger<AccountDeletionService>.Instance, EmptyConfiguration),
         new HabitDueDateAdvancementService(ScopeFactory(), NullLogger<HabitDueDateAdvancementService>.Instance, EmptyConfiguration),
         new StreakGoalSyncService(ScopeFactory(), NullLogger<StreakGoalSyncService>.Instance, EmptyConfiguration),
-        new StreakFreezeAutoActivationService(ScopeFactory(), NullLogger<StreakFreezeAutoActivationService>.Instance, EmptyConfiguration),
         new SyncCleanupService(ScopeFactory(), NullLogger<SyncCleanupService>.Instance),
         new PlayNotificationCleanupService(ScopeFactory(), NullLogger<PlayNotificationCleanupService>.Instance),
         new CalendarAutoSyncService(ScopeFactory(), NullLogger<CalendarAutoSyncService>.Instance, EmptyConfiguration, TimeProvider.System),
         new OpenAiBatchPollerService(ScopeFactory(), NullLogger<OpenAiBatchPollerService>.Instance, EmptyConfiguration, new MemoryCache(new MemoryCacheOptions())),
+        new AiUsageSummaryService(ScopeFactory(), NullLogger<AiUsageSummaryService>.Instance, EmptyConfiguration, Options.Create(new AiSettings())),
     ];
 
     private static IServiceScopeFactory ScopeFactory() => Substitute.For<IServiceScopeFactory>();

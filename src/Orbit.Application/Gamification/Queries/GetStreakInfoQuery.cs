@@ -1,4 +1,6 @@
+using System.Globalization;
 using MediatR;
+using Microsoft.Extensions.Logging;
 using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -20,7 +22,10 @@ public record StreakInfoResponse(
     int MaxStreakFreezesAccumulated,
     int DaysUntilNextFreeze,
     int FreezesAvailableToUse,
-    bool CanEarnMore);
+    bool CanEarnMore,
+    bool IsRepairAvailable,
+    DateOnly? RepairDate,
+    int RepairsRemainingThisMonth);
 
 public record GetStreakInfoQuery(Guid UserId) : IRequest<Result<StreakInfoResponse>>, IConcurrencyRetryable;
 
@@ -30,7 +35,8 @@ public class GetStreakInfoQueryHandler(
     IUserDateService userDateService,
     IUserStreakService userStreakService,
     IFeatureFlagService featureFlagService,
-    IUnitOfWork unitOfWork) : IRequestHandler<GetStreakInfoQuery, Result<StreakInfoResponse>>
+    IProductAnalytics productAnalytics,
+    ILogger<GetStreakInfoQueryHandler> logger) : IRequestHandler<GetStreakInfoQuery, Result<StreakInfoResponse>>
 {
     public async Task<Result<StreakInfoResponse>> Handle(GetStreakInfoQuery request, CancellationToken cancellationToken)
     {
@@ -45,8 +51,6 @@ public class GetStreakInfoQueryHandler(
 
         var recalculatedStreak = await userStreakService.RecalculateAsync(
             request.UserId, awardFreezeIfEligible: false, cancellationToken);
-        if (recalculatedStreak is not null)
-            await unitOfWork.SaveChangesAsync(cancellationToken);
 
         var currentStreak = recalculatedStreak?.CurrentStreak ?? user.CurrentStreak;
         var longestStreak = recalculatedStreak?.LongestStreak ?? user.LongestStreak;
@@ -81,6 +85,27 @@ public class GetStreakInfoQueryHandler(
         }
 
         var canEarnMore = user.StreakFreezesAccumulated < AppConstants.MaxStreakFreezesAccumulated;
+        var repair = await userStreakService.EvaluateRepairAsync(
+            request.UserId,
+            today,
+            today.AddDays(-1),
+            cancellationToken);
+        var isRepairAvailable = repair?.IsAvailable == true;
+        DateOnly? repairDate = isRepairAvailable ? repair!.MissedDate : null;
+
+        if (isRepairAvailable)
+        {
+            AnalyticsCapture.SafeCaptureUserEvent(
+                productAnalytics,
+                logger,
+                user,
+                "streak_repair_offered",
+                new Dictionary<string, object>
+                {
+                    ["missed_date"] = repairDate!.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                    ["remaining_bank"] = user.StreakFreezesAccumulated
+                });
+        }
 
         var recentFreezeDates = recentFreezes
             .Select(sf => sf.UsedOnDate)
@@ -100,6 +125,9 @@ public class GetStreakInfoQueryHandler(
             AppConstants.MaxStreakFreezesAccumulated,
             daysUntilNextFreeze,
             freezesAvailableToUse,
-            canEarnMore));
+            canEarnMore,
+            isRepairAvailable,
+            repairDate,
+            freezesAvailableToUse));
     }
 }

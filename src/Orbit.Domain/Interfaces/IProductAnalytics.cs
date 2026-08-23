@@ -8,4 +8,9 @@ namespace Orbit.Domain.Interfaces;
 public interface IProductAnalytics
 {
     void CaptureUserEvent(Guid userId, string eventName, string plan);
+    void CaptureUserEvent(
+        Guid userId,
+        string eventName,
+        string plan,
+        IReadOnlyDictionary<string, object> properties);
 }

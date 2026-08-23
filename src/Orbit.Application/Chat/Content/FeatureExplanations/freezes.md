@@ -3,11 +3,11 @@ key: freezes
 display_name: Streak Freezes
 related_capabilities: [gamification.read]
 related_surfaces: [gamification]
-version: 1
+version: 2
 derived_from:
   - src/Orbit.Domain/Entities/User.cs AwardStreakFreezeIfEligible
-  - src/Orbit.Domain/Entities/User.cs ApplyStreakFreeze
-  - src/Orbit.Infrastructure/Services/StreakFreezeAutoActivationService.cs ProcessUserAsync
+  - src/Orbit.Domain/Entities/User.cs ConsumeStreakFreeze
+  - src/Orbit.Application/Gamification/Commands/RepairStreakCommand.cs Handle
   - src/Orbit.Application/Common/AppConstants.cs MaxStreakFreezesAccumulated
 ---
 
@@ -21,6 +21,6 @@ You earn **1 freeze for every 7 streak-days** (`StreakDaysPerFreeze` = 7). You c
 
 ## How freezes are used
 
-Freezes are **automatic** — there's nothing to tap. When you miss a day on your streak, a banked freeze is spent for you to bridge the gap, so the next completion continues the run instead of starting over. A freeze only **preserves** the streak across a missed day; it does not extend or increase it.
+When a repair is available after you miss a scheduled day, Orbit shows the missed date and lets you choose whether to spend one banked freeze. A freeze only **preserves** the streak across the missed day; it does not extend or increase it.
 
-A freeze is spent automatically only when there's a streak worth protecting and you actually missed the day. It won't be used if your current streak is 0, if you already completed a habit that day, or if you've run out of banked freezes. At most **one** freeze is spent per day, and at most **3** are spent per calendar month (`MaxStreakFreezesPerMonth` = 3) — beyond that, a missed day breaks the streak as usual.
+A repair is offered only for local yesterday when it was scheduled, remains incomplete and unfrozen, and covering it restores a streak that would otherwise be broken. At most **one** freeze is spent per day, and at most **3** are spent per calendar month (`MaxStreakFreezesPerMonth` = 3). Logging the repaired day later does not refund the freeze.

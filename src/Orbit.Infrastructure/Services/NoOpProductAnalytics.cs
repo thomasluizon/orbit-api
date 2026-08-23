@@ -11,4 +11,12 @@ public sealed class NoOpProductAnalytics : IProductAnalytics
     public void CaptureUserEvent(Guid userId, string eventName, string plan)
     {
     }
+
+    public void CaptureUserEvent(
+        Guid userId,
+        string eventName,
+        string plan,
+        IReadOnlyDictionary<string, object> properties)
+    {
+    }
 }

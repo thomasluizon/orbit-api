@@ -286,7 +286,6 @@ public class OrbitDbContextTests
             (typeof(Tag), nameof(Tag.UserId), typeof(User), DeleteBehavior.Cascade),
             (typeof(PushSubscription), nameof(PushSubscription.UserId), typeof(User), DeleteBehavior.Cascade),
             (typeof(SentProactiveCheckin), nameof(SentProactiveCheckin.UserId), typeof(User), DeleteBehavior.Cascade),
-            (typeof(SentStreakFreezeAlert), nameof(SentStreakFreezeAlert.UserId), typeof(User), DeleteBehavior.Cascade),
             (typeof(ProcessedRequest), nameof(ProcessedRequest.UserId), typeof(User), DeleteBehavior.Cascade),
             (typeof(AiFactExtractionBatch), nameof(AiFactExtractionBatch.UserId), typeof(User), DeleteBehavior.Cascade),
             (typeof(PendingClarification), nameof(PendingClarification.UserId), typeof(User), DeleteBehavior.Cascade),
@@ -344,7 +343,6 @@ public class OrbitDbContextTests
             }),
             (typeof(SentSlipAlert), new[] { nameof(SentSlipAlert.HabitId), nameof(SentSlipAlert.WeekStart) }),
             (typeof(SentProactiveCheckin), new[] { nameof(SentProactiveCheckin.UserId), nameof(SentProactiveCheckin.Date) }),
-            (typeof(SentStreakFreezeAlert), new[] { nameof(SentStreakFreezeAlert.UserId), nameof(SentStreakFreezeAlert.FrozenDate) }),
             (typeof(ProcessedPlayNotification), new[] { nameof(ProcessedPlayNotification.MessageId) }),
             (typeof(ProcessedStripeEvent), new[] { nameof(ProcessedStripeEvent.EventId) }),
             (typeof(ProcessedRequest), new[]
