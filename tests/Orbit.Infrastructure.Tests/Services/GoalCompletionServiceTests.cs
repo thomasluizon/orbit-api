@@ -21,6 +21,28 @@ public class GoalCompletionServiceTests
     private static readonly DateOnly Today = new(2026, 8, 23);
 
     [Fact]
+    public async Task SaveCompletedGoal_AmbiguousCommitReplay_DoesNotAwardTwice()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var dbContext = factory.Context;
+        var user = User.Create("Replay User", "replay@example.com").Value;
+        var goal = Goal.Create(user.Id, "Replay-safe goal", 1, "session").Value;
+        dbContext.AddRange(user, goal);
+        await dbContext.SaveChangesAsync();
+
+        goal.MarkCompleted().IsSuccess.Should().BeTrue();
+        var gamification = Substitute.For<IGamificationService>();
+        var unitOfWork = new AmbiguousCommitReplayUnitOfWork(CreateUnitOfWork(dbContext));
+        var service = CreateCompletionService(dbContext, gamification, unitOfWork);
+
+        await service.SaveCompletedGoalAsync(user.Id, goal.Id);
+
+        var persistedGoal = await dbContext.Goals.AsNoTracking().SingleAsync(g => g.Id == goal.Id);
+        persistedGoal.Status.Should().Be(GoalStatus.Completed);
+        await gamification.Received(1).ProcessGoalCompleted(user.Id, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task LinkGoalsToHabit_TwoGoalsComplete_PersistsEachBeforeItsAward()
     {
         using var factory = new SqliteOrbitDbContextFactory();
@@ -196,5 +218,34 @@ public class GoalCompletionServiceTests
         var userDateService = Substitute.For<IUserDateService>();
         userDateService.GetUserTodayAsync(userId, Arg.Any<CancellationToken>()).Returns(Today);
         return userDateService;
+    }
+
+    private sealed class AmbiguousCommitReplayUnitOfWork(IUnitOfWork inner) : IUnitOfWork
+    {
+        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) =>
+            inner.SaveChangesAsync(cancellationToken);
+
+        public async Task ExecuteInTransactionAsync(
+            Func<CancellationToken, Task> operation,
+            CancellationToken cancellationToken = default)
+        {
+            await inner.ExecuteInTransactionAsync(operation, cancellationToken);
+            inner.ResetTracking();
+            await inner.ExecuteInTransactionAsync(operation, cancellationToken);
+        }
+
+        public Task<T> ExecuteInTransactionAsync<T>(
+            Func<CancellationToken, Task<T>> operation,
+            CancellationToken cancellationToken = default) =>
+            inner.ExecuteInTransactionAsync(operation, cancellationToken);
+
+        public Task AcquireAdvisoryLockAsync(string key, CancellationToken cancellationToken = default) =>
+            inner.AcquireAdvisoryLockAsync(key, cancellationToken);
+
+        public void DiscardChanges() => inner.DiscardChanges();
+
+        public void ResetTracking() => inner.ResetTracking();
+
+        public void Dispose() => inner.Dispose();
     }
 }

@@ -45,6 +45,12 @@ public sealed class GoalCompletionService(
     {
         return unitOfWork.ExecuteInTransactionAsync(async transactionToken =>
         {
+            var wasAlreadyCompleted = await goalRepository.AnyAsync(
+                g => g.Id == goalId && g.UserId == userId && g.Status == GoalStatus.Completed,
+                transactionToken);
+            if (wasAlreadyCompleted)
+                return;
+
             await unitOfWork.SaveChangesAsync(transactionToken);
             await AwardCompletedGoalAsync(userId, goalId, transactionToken);
         }, cancellationToken);
