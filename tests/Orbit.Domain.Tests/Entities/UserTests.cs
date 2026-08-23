@@ -294,12 +294,15 @@ public class UserTests
         var user = CreateValidUser();
         user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddDays(30));
 
-        user.CancelStripeSubscription();
+        var beforeCancellation = DateTime.UtcNow;
+        user.CancelStripeSubscription(SubscriptionLapseReason.Canceled);
 
         user.Plan.Should().Be(UserPlan.Free);
         user.StripeSubscriptionId.Should().BeNull();
         user.PlanExpiresAt.Should().BeNull();
         user.SubscriptionSource.Should().BeNull();
+        user.SubscriptionLapseReason.Should().Be(SubscriptionLapseReason.Canceled);
+        user.SubscriptionEndedAtUtc.Should().BeOnOrAfter(beforeCancellation);
     }
 
     [Fact]
@@ -346,12 +349,14 @@ public class UserTests
         var user = CreateValidUser();
         user.SetPlaySubscription("play_token_123", DateTime.UtcNow.AddDays(30), SubscriptionInterval.Monthly);
 
-        user.CancelPlaySubscription();
+        user.CancelPlaySubscription(SubscriptionLapseReason.Expired);
 
         user.Plan.Should().Be(UserPlan.Free);
         user.PlayPurchaseToken.Should().BeNull();
         user.SubscriptionSource.Should().BeNull();
         user.SubscriptionInterval.Should().BeNull();
+        user.SubscriptionLapseReason.Should().Be(SubscriptionLapseReason.Expired);
+        user.SubscriptionEndedAtUtc.Should().NotBeNull();
     }
 
     [Fact]
@@ -362,7 +367,7 @@ public class UserTests
         user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddMonths(6));
         user.SetPlaySubscription("play_token_123", playExpiry, SubscriptionInterval.Monthly);
 
-        user.CancelStripeSubscription();
+        user.CancelStripeSubscription(SubscriptionLapseReason.Canceled);
 
         user.StripeSubscriptionId.Should().BeNull();
         user.Plan.Should().Be(UserPlan.Pro);
@@ -370,6 +375,8 @@ public class UserTests
         user.PlayPurchaseToken.Should().Be("play_token_123");
         user.SubscriptionSource.Should().Be(SubscriptionSource.GooglePlay);
         user.PlanExpiresAt.Should().Be(playExpiry);
+        user.SubscriptionLapseReason.Should().BeNull();
+        user.SubscriptionEndedAtUtc.Should().BeNull();
     }
 
     [Fact]
@@ -379,12 +386,13 @@ public class UserTests
         user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddMonths(6));
         user.LinkPlayPurchaseToken("play_token_123");
 
-        user.CancelStripeSubscription();
+        user.CancelStripeSubscription(SubscriptionLapseReason.PaymentFailed);
 
         user.Plan.Should().Be(UserPlan.Free);
         user.StripeSubscriptionId.Should().BeNull();
         user.SubscriptionSource.Should().BeNull();
         user.PlayPurchaseToken.Should().Be("play_token_123");
+        user.SubscriptionLapseReason.Should().Be(SubscriptionLapseReason.PaymentFailed);
     }
 
     [Fact]
@@ -395,7 +403,7 @@ public class UserTests
         user.SetPlaySubscription("play_token_123", DateTime.UtcNow.AddDays(20), SubscriptionInterval.Monthly);
         user.SetStripeSubscription("sub_123", stripeExpiry);
 
-        user.CancelPlaySubscription();
+        user.CancelPlaySubscription(SubscriptionLapseReason.Expired);
 
         user.PlayPurchaseToken.Should().BeNull();
         user.Plan.Should().Be(UserPlan.Pro);
@@ -403,6 +411,32 @@ public class UserTests
         user.StripeSubscriptionId.Should().Be("sub_123");
         user.SubscriptionSource.Should().Be(SubscriptionSource.Stripe);
         user.PlanExpiresAt.Should().Be(stripeExpiry);
+        user.SubscriptionLapseReason.Should().BeNull();
+        user.SubscriptionEndedAtUtc.Should().BeNull();
+    }
+
+    [Fact]
+    public void SetStripeSubscription_AfterPaymentFailure_ClearsPendingLapse()
+    {
+        var user = CreateValidUser();
+        user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddDays(30));
+        user.RecordSubscriptionLapseReason(
+            SubscriptionSource.Stripe, SubscriptionLapseReason.PaymentFailed);
+
+        user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddDays(30));
+
+        user.SubscriptionLapseReason.Should().BeNull();
+        user.SubscriptionEndedAtUtc.Should().BeNull();
+    }
+
+    [Fact]
+    public void CancelStripeSubscription_InvalidReason_Throws()
+    {
+        var user = CreateValidUser();
+
+        var act = () => user.CancelStripeSubscription((SubscriptionLapseReason)999);
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
     }
 
     [Fact]

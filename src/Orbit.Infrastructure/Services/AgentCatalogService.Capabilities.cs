@@ -868,7 +868,13 @@ public partial class AgentCatalogService
                 featureFlagKeys: ["api_keys"],
                 chatTools: ["manage_api_keys"],
                 mcpTools: ["manage_api_keys"],
-                controllerActions: ["ApiKeysController.CreateApiKey", "ApiKeysController.RevokeApiKey"])
+                controllerActions:
+                [
+                    "ApiKeysController.CreateApiKey",
+                    "ApiKeysController.RequestCreationChallenge",
+                    "ApiKeysController.ConfirmCreationChallenge",
+                    "ApiKeysController.RevokeApiKey"
+                ])
         ];
     }
 
