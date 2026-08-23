@@ -15,8 +15,8 @@ public interface IAchievementEligibilityReconciliationService
 }
 
 /// <summary>
-/// Reconciles active one-time achievements that existing free users could satisfy while achievement
-/// earning was unavailable to them. Eligibility is derived from persisted state, and only missing
+/// Reconciles active one-time achievements that existing users could satisfy while achievement earning
+/// was unavailable to free accounts. Eligibility is derived from persisted state, and only missing
 /// achievement ids are sent through <see cref="IGamificationService.TryGrantAchievementsAsync"/>.
 /// </summary>
 public sealed class AchievementEligibilityReconciliationService(
@@ -39,18 +39,16 @@ public sealed class AchievementEligibilityReconciliationService(
     public async Task<AchievementEligibilityReconciliationResult> ReconcileAllAsync(
         CancellationToken cancellationToken = default)
     {
-        var users = (await userRepository.GetAllAsync(cancellationToken))
-            .Where(user => !user.HasProAccess)
-            .ToList();
+        var users = (await userRepository.GetAllAsync(cancellationToken)).ToList();
 
         if (users.Count == 0)
             return new AchievementEligibilityReconciliationResult(0, 0);
 
         var userIds = users.Select(user => user.Id).ToList();
-        var habits = await habitRepository.FindAsync(
+        var habits = await habitRepository.FindTrackedIgnoringFiltersAsync(
             habit => userIds.Contains(habit.UserId),
             cancellationToken);
-        var goals = await goalRepository.FindAsync(
+        var goals = await goalRepository.FindTrackedIgnoringFiltersAsync(
             goal => userIds.Contains(goal.UserId),
             cancellationToken);
         var earnedAchievements = await achievementRepository.FindAsync(
@@ -66,7 +64,7 @@ public sealed class AchievementEligibilityReconciliationService(
 
         if (completionHabitIds.Count > 0)
         {
-            var positiveLogs = await habitLogRepository.FindAsync(
+            var positiveLogs = await habitLogRepository.FindTrackedIgnoringFiltersAsync(
                 log => completionHabitIds.Contains(log.HabitId) && log.Value > 0,
                 cancellationToken);
             completedHabitOwnerIds = positiveLogs

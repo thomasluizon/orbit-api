@@ -204,7 +204,7 @@ public sealed class AchievementEligibilityReconciliationServiceTests
     }
 
     [Fact]
-    public async Task ReconcileAll_ProAccount_IsUntouched()
+    public async Task ReconcileAll_ProAccountWithCompletedChecklist_ReconcilesPersistedEligibility()
     {
         var user = User.Create("Pro User", "pro@example.com").Value;
         user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddYears(1));
@@ -213,10 +213,47 @@ public sealed class AchievementEligibilityReconciliationServiceTests
 
         var result = await _sut.ReconcileAllAsync();
 
-        result.Should().Be(new AchievementEligibilityReconciliationResult(0, 0));
-        await _gamificationService.DidNotReceive().TryGrantAchievementsAsync(
-            Arg.Any<Guid>(),
-            Arg.Any<IReadOnlyList<string>>(),
+        result.Should().Be(new AchievementEligibilityReconciliationResult(1, 1));
+        await _gamificationService.Received(1).TryGrantAchievementsAsync(
+            user.Id,
+            Arg.Is<IReadOnlyList<string>>(ids => ids.SequenceEqual(new[] { AchievementDefinitions.OnboardingComplete })),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReconcileAll_SoftDeletedMilestoneRecords_RemainHistoricalEligibilityEvidence()
+    {
+        var user = CreateFreeUser();
+        var habit = CreateHabit(user.Id);
+        habit.Log(Today, advanceDueDate: false);
+        var log = habit.Logs.Single();
+        log.SoftDelete();
+        habit.SoftDelete();
+        var goal = CreateGoal(user.Id, completed: true);
+        goal.SoftDelete();
+        ArrangePersistedState([user], [habit], [log], [goal], []);
+
+        var result = await _sut.ReconcileAllAsync();
+
+        result.Should().Be(new AchievementEligibilityReconciliationResult(1, 4));
+        await _gamificationService.Received(1).TryGrantAchievementsAsync(
+            user.Id,
+            Arg.Is<IReadOnlyList<string>>(ids => ids.SequenceEqual(new[]
+            {
+                AchievementDefinitions.Liftoff,
+                AchievementDefinitions.FirstOrbit,
+                AchievementDefinitions.MissionControl,
+                AchievementDefinitions.GoalCrusher
+            })),
+            Arg.Any<CancellationToken>());
+        await _habitRepository.Received(1).FindTrackedIgnoringFiltersAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>());
+        await _habitLogRepository.Received(1).FindTrackedIgnoringFiltersAsync(
+            Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<CancellationToken>());
+        await _goalRepository.Received(1).FindTrackedIgnoringFiltersAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -228,15 +265,15 @@ public sealed class AchievementEligibilityReconciliationServiceTests
         IReadOnlyCollection<UserAchievement> achievements)
     {
         _userRepository.GetAllAsync(Arg.Any<CancellationToken>()).Returns(users.ToList());
-        _habitRepository.FindAsync(
+        _habitRepository.FindTrackedIgnoringFiltersAsync(
                 Arg.Any<Expression<Func<Habit, bool>>>(),
                 Arg.Any<CancellationToken>())
             .Returns(habits.ToList());
-        _habitLogRepository.FindAsync(
+        _habitLogRepository.FindTrackedIgnoringFiltersAsync(
                 Arg.Any<Expression<Func<HabitLog, bool>>>(),
                 Arg.Any<CancellationToken>())
             .Returns(habitLogs.ToList());
-        _goalRepository.FindAsync(
+        _goalRepository.FindTrackedIgnoringFiltersAsync(
                 Arg.Any<Expression<Func<Goal, bool>>>(),
                 Arg.Any<CancellationToken>())
             .Returns(goals.ToList());
