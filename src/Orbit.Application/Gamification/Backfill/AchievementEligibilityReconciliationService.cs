@@ -50,7 +50,7 @@ public sealed class AchievementEligibilityReconciliationService(
         var users = activeUsers
             .Where(user => user.HasProAccess || unlockedFreeUserIds.Contains(user.Id))
             .ToList();
-        var accountsDeferred = freeUsers.Count - unlockedFreeUserIds.Count;
+        var accountsDeferred = freeUsers.Count(user => !unlockedFreeUserIds.Contains(user.Id));
 
         if (users.Count == 0)
             return new AchievementEligibilityReconciliationResult(0, 0, accountsDeferred);

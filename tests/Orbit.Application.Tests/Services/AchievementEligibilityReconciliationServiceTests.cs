@@ -288,6 +288,69 @@ public sealed class AchievementEligibilityReconciliationServiceTests
     }
 
     [Fact]
+    public async Task ReconcileAll_UnlockedProIdAndLockedFreeAccount_CountsOnlyLockedFreeAccountAsDeferred()
+    {
+        var proUser = User.Create("Pro User", "pro@example.com").Value;
+        proUser.SetStripeSubscription("sub_123", DateTime.UtcNow.AddYears(1));
+        var lockedFreeUser = CreateFreeUser();
+        ArrangePersistedState([proUser, lockedFreeUser], [], [], [], []);
+        _featureFlagService.GetUserIdsWithEnabledKeyAsync(
+                FeatureFlagKeys.GamificationFreeTier,
+                Arg.Any<IReadOnlyCollection<User>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new HashSet<Guid> { proUser.Id });
+
+        var result = await _sut.ReconcileAllAsync();
+
+        result.Should().Be(new AchievementEligibilityReconciliationResult(0, 0, 1));
+        await _featureFlagService.Received(1).GetUserIdsWithEnabledKeyAsync(
+            FeatureFlagKeys.GamificationFreeTier,
+            Arg.Is<IReadOnlyCollection<User>>(users => users.Count == 1 && users.Single().Id == lockedFreeUser.Id),
+            Arg.Any<CancellationToken>());
+        await _gamificationService.DidNotReceive().TryGrantAchievementsAsync(
+            Arg.Any<Guid>(),
+            Arg.Any<IReadOnlyList<string>>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReconcileAll_DeferredAccountUnlocksLater_GrantsOnNextRun()
+    {
+        var user = CreateFreeUser();
+        user.CompleteOnboardingChecklist();
+        ArrangePersistedState([user], [], [], [], []);
+        var flagReads = 0;
+        _featureFlagService.GetUserIdsWithEnabledKeyAsync(
+                FeatureFlagKeys.GamificationFreeTier,
+                Arg.Any<IReadOnlyCollection<User>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                flagReads++;
+                return Task.FromResult<IReadOnlySet<Guid>>(flagReads == 1
+                    ? new HashSet<Guid>()
+                    : new HashSet<Guid> { user.Id });
+            });
+
+        var deferred = await _sut.ReconcileAllAsync();
+        var reconciled = await _sut.ReconcileAllAsync();
+
+        deferred.Should().Be(new AchievementEligibilityReconciliationResult(0, 0, 1));
+        reconciled.Should().Be(new AchievementEligibilityReconciliationResult(1, 1));
+        await _featureFlagService.Received(2).GetUserIdsWithEnabledKeyAsync(
+            FeatureFlagKeys.GamificationFreeTier,
+            Arg.Is<IReadOnlyCollection<User>>(users => users.Count == 1 && users.Single().Id == user.Id),
+            Arg.Any<CancellationToken>());
+        await _featureFlagService.DidNotReceive().GetEnabledKeysForUserAsync(
+            Arg.Any<Guid>(),
+            Arg.Any<CancellationToken>());
+        await _gamificationService.Received(1).TryGrantAchievementsAsync(
+            user.Id,
+            Arg.Is<IReadOnlyList<string>>(ids => ids.SequenceEqual(new[] { AchievementDefinitions.OnboardingComplete })),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task ReconcileAll_SoftDeletedMilestoneRecords_RemainHistoricalEligibilityEvidence()
     {
         var user = CreateFreeUser();

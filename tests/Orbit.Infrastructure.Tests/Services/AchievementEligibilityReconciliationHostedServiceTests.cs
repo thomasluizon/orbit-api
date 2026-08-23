@@ -148,6 +148,9 @@ public sealed class AchievementEligibilityReconciliationHostedServiceTests : IDi
         _reconciliationState.IsComplete.Should().BeTrue();
         await using var verify = CreateContext(_dbName);
         (await verify.AppConfigs.CountAsync(config => config.Key == CompletionKey)).Should().Be(1);
+        (await sut.RunReconciliationAsync(CancellationToken.None)).Should().Be(ReconciliationRunStatus.Complete);
+        attempts.Should().Be(2);
+        await _reconciliationService.Received(2).ReconcileAllAsync(Arg.Any<CancellationToken>());
         await sut.StopAsync(CancellationToken.None);
     }
 
