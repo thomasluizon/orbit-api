@@ -233,8 +233,6 @@ public sealed partial class AiIntentService(
         var firstTokenLogged = false;
         ChatTokenUsage? streamedUsage = null;
 
-        IncludeUsage(options);
-
         await foreach (var update in aiClient.ChatClient.CompleteChatStreamingAsync(messages, options, cancellationToken))
         {
             if (update.Usage is not null)
@@ -451,11 +449,6 @@ public sealed partial class AiIntentService(
 
     private static int GetReportedTokenCount(ChatTokenUsage? usage) =>
         usage is null ? 0 : usage.InputTokenCount + usage.OutputTokenCount;
-
-#pragma warning disable SCME0001
-    private static void IncludeUsage(ChatCompletionOptions options) =>
-        options.Patch.Set("$.stream_options.include_usage"u8, true);
-#pragma warning restore SCME0001
 
     private async Task RecordChatUsageAsync(
         ChatTokenUsage? usage,
