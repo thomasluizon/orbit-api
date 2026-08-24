@@ -156,16 +156,24 @@ public partial class ProcessUserChatCommandHandler
             ClientContext: clientContext);
     }
 
-    private static MetricsDirectiveStreamFilter? BuildAiStreamFilter(Func<ChatStreamEvent, Task>? streamSink)
+    private static ResponseDirectiveStreamFilter? BuildAiStreamFilter(Func<ChatStreamEvent, Task>? streamSink)
     {
         if (streamSink is null)
             return null;
 
-        return new MetricsDirectiveStreamFilter(streamSink);
+        return new ResponseDirectiveStreamFilter(streamSink);
     }
 
-    private sealed class MetricsDirectiveStreamFilter(Func<ChatStreamEvent, Task> streamSink)
+    private sealed class ResponseDirectiveStreamFilter(Func<ChatStreamEvent, Task> streamSink)
     {
+        private static readonly string[] Directives =
+        [
+            "[[orbit:habits:today]]",
+            "[[orbit:habits:all]]",
+            "[[orbit:goals]]",
+            MetricsCardBuilder.Directive
+        ];
+
         private string _pending = string.Empty;
 
         public async Task HandleAsync(AiStreamEvent aiEvent)
@@ -187,11 +195,11 @@ public partial class ProcessUserChatCommandHandler
         {
             while (_pending.Length > 0)
             {
-                var directiveIndex = _pending.IndexOf(MetricsCardBuilder.Directive, StringComparison.OrdinalIgnoreCase);
+                var (directiveIndex, directiveLength) = FindDirective(_pending);
                 if (directiveIndex >= 0)
                 {
                     await EmitAsync(_pending[..directiveIndex]);
-                    _pending = _pending[(directiveIndex + MetricsCardBuilder.Directive.Length)..];
+                    _pending = _pending[(directiveIndex + directiveLength)..];
                     continue;
                 }
 
@@ -213,14 +221,40 @@ public partial class ProcessUserChatCommandHandler
 
         private static int DirectivePrefixSuffixLength(string text)
         {
-            var maximumLength = Math.Min(text.Length, MetricsCardBuilder.Directive.Length - 1);
-            for (var length = maximumLength; length > 0; length--)
+            var retainedCharacters = 0;
+
+            foreach (var directive in Directives)
             {
-                if (text.EndsWith(MetricsCardBuilder.Directive[..length], StringComparison.OrdinalIgnoreCase))
-                    return length;
+                var maximumLength = Math.Min(text.Length, directive.Length - 1);
+                for (var length = maximumLength; length > retainedCharacters; length--)
+                {
+                    if (!text.EndsWith(directive[..length], StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    retainedCharacters = length;
+                    break;
+                }
             }
 
-            return 0;
+            return retainedCharacters;
+        }
+
+        private static (int Index, int Length) FindDirective(string text)
+        {
+            var earliestIndex = -1;
+            var matchedLength = 0;
+
+            foreach (var directive in Directives)
+            {
+                var index = text.IndexOf(directive, StringComparison.OrdinalIgnoreCase);
+                if (index < 0 || earliestIndex >= 0 && index >= earliestIndex)
+                    continue;
+
+                earliestIndex = index;
+                matchedLength = directive.Length;
+            }
+
+            return (earliestIndex, matchedLength);
         }
     }
 

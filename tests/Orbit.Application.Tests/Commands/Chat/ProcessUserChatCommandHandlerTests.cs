@@ -603,7 +603,7 @@ public class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_MetricsAndHabitDirectives_ReturnsBothCards()
+    public async Task Handle_StreamedMetricsAndHabitDirectives_StripsBothAndReturnsBothCards()
     {
         SetupUserAndPayGate();
         _habitRepo.FindAsync(
@@ -611,25 +611,39 @@ public class ProcessUserChatCommandHandlerTests
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(new List<Habit> { CreateHabit("Meditate") }.AsReadOnly());
-        SetupAiResponse(new AiResponse
-        {
-            TextMessage = "Here is today and your week:\n[[orbit:habits:today]]\n[[orbit:metrics]]",
-            ToolCalls = null
-        });
+        const string responseText = "Here is today and your week:\n[[orbit:habits:today]]\n[[orbit:metrics]]";
+        _aiIntentService.SendWithToolsAsync(
+            Arg.Any<AiToolRequest>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(async callInfo =>
+            {
+                var sink = callInfo.ArgAt<Func<AiStreamEvent, Task>?>(1);
+                await sink!(AiStreamEvent.Delta(responseText));
+                return Result.Success(new AiResponse { TextMessage = responseText });
+            });
         SetupRecap(Metrics(totalScheduled: 1));
+        var streamEvents = new List<ChatStreamEvent>();
         var handler = CreateHandler();
 
         var result = await handler.Handle(
             new ProcessUserChatCommand(
                 UserId,
                 "Show today and my progress",
-                ClientContext: new AgentClientContext(SupportsHabitListCard: true, SupportsMetricsCard: true)),
+                ClientContext: new AgentClientContext(SupportsHabitListCard: true, SupportsMetricsCard: true),
+                StreamSink: streamEvent =>
+                {
+                    streamEvents.Add(streamEvent);
+                    return Task.CompletedTask;
+                }),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.AiMessage.Should().Be("Here is today and your week:");
         result.Value.HabitList.Should().NotBeNull();
         result.Value.MetricsCard.Should().NotBeNull();
+        string.Concat(streamEvents.Where(streamEvent => streamEvent.Type == "delta").Select(streamEvent => streamEvent.Text))
+            .Should().Be("Here is today and your week:\n\n");
     }
 
     [Fact]
@@ -969,11 +983,14 @@ public class ProcessUserChatCommandHandlerTests
         streamEvents[^1].Type.Should().Be("reset");
     }
 
-    [Fact]
-    public async Task Handle_StreamedMetricsDirectiveAcrossChunks_NeverEmitsToken()
+    [Theory]
+    [InlineData("[[orbit:habits:today]]")]
+    [InlineData("[[orbit:habits:all]]")]
+    [InlineData("[[orbit:goals]]")]
+    [InlineData("[[orbit:metrics]]")]
+    public async Task Handle_StreamedDirective_NeverEmitsToken(string directive)
     {
         SetupUserAndPayGate();
-        SetupRecap(Metrics(totalScheduled: 1));
         _aiIntentService.SendWithToolsAsync(
             Arg.Any<AiToolRequest>(),
             Arg.Any<Func<AiStreamEvent, Task>?>(),
@@ -981,9 +998,8 @@ public class ProcessUserChatCommandHandlerTests
             .Returns(async callInfo =>
             {
                 var sink = callInfo.ArgAt<Func<AiStreamEvent, Task>?>(1);
-                await sink!(AiStreamEvent.Delta("Your week:\n[[orbit:met"));
-                await sink(AiStreamEvent.Delta("rics]]"));
-                return Result.Success(new AiResponse { TextMessage = "Your week:\n[[orbit:metrics]]" });
+                await sink!(AiStreamEvent.Delta($"Ready:\n{directive}"));
+                return Result.Success(new AiResponse { TextMessage = $"Ready:\n{directive}" });
             });
         var streamEvents = new List<ChatStreamEvent>();
         var handler = CreateHandler();
@@ -991,8 +1007,7 @@ public class ProcessUserChatCommandHandlerTests
         var result = await handler.Handle(
             new ProcessUserChatCommand(
                 UserId,
-                "How did my week go?",
-                ClientContext: new AgentClientContext(SupportsMetricsCard: true),
+                "Show me",
                 StreamSink: streamEvent =>
                 {
                     streamEvents.Add(streamEvent);
@@ -1002,10 +1017,120 @@ public class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         string.Concat(streamEvents.Where(streamEvent => streamEvent.Type == "delta").Select(streamEvent => streamEvent.Text))
-            .Should().Be("Your week:\n");
-        streamEvents
-            .Where(streamEvent => streamEvent.Text?.Contains("orbit:metrics", StringComparison.OrdinalIgnoreCase) == true)
-            .Should().BeEmpty();
+            .Should().Be("Ready:\n");
+    }
+
+    [Fact]
+    public async Task Handle_StreamedHabitDirectiveAcrossChunks_StripsTokenAndReturnsCard()
+    {
+        SetupUserAndPayGate();
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { CreateHabit("Meditate") }.AsReadOnly());
+        _aiIntentService.SendWithToolsAsync(
+            Arg.Any<AiToolRequest>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(async callInfo =>
+            {
+                var sink = callInfo.ArgAt<Func<AiStreamEvent, Task>?>(1);
+                await sink!(AiStreamEvent.Delta("Your habits:\n[[orbit:habi"));
+                await sink(AiStreamEvent.Delta("ts:today]]"));
+                return Result.Success(new AiResponse { TextMessage = "Your habits:\n[[orbit:habits:today]]" });
+            });
+        var streamEvents = new List<ChatStreamEvent>();
+        var handler = CreateHandler();
+
+        var result = await handler.Handle(
+            new ProcessUserChatCommand(
+                UserId,
+                "Show today's habits",
+                ClientContext: new AgentClientContext(SupportsHabitListCard: true),
+                StreamSink: streamEvent =>
+                {
+                    streamEvents.Add(streamEvent);
+                    return Task.CompletedTask;
+                }),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        string.Concat(streamEvents.Where(streamEvent => streamEvent.Type == "delta").Select(streamEvent => streamEvent.Text))
+            .Should().Be("Your habits:\n");
+        result.Value.AiMessage.Should().Be("Your habits:");
+        result.Value.HabitList.Should().NotBeNull();
+        result.Value.HabitList!.Scope.Should().Be("today");
+    }
+
+    [Fact]
+    public async Task Handle_StreamedUppercaseHabitDirective_IsRemoved()
+    {
+        SetupUserAndPayGate();
+        const string directive = "[[ORBIT:HABITS:ALL]]";
+        _aiIntentService.SendWithToolsAsync(
+            Arg.Any<AiToolRequest>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(async callInfo =>
+            {
+                var sink = callInfo.ArgAt<Func<AiStreamEvent, Task>?>(1);
+                await sink!(AiStreamEvent.Delta($"All habits:\n{directive}"));
+                return Result.Success(new AiResponse { TextMessage = $"All habits:\n{directive}" });
+            });
+        var streamEvents = new List<ChatStreamEvent>();
+        var handler = CreateHandler();
+
+        var result = await handler.Handle(
+            new ProcessUserChatCommand(
+                UserId,
+                "Show all habits",
+                StreamSink: streamEvent =>
+                {
+                    streamEvents.Add(streamEvent);
+                    return Task.CompletedTask;
+                }),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        string.Concat(streamEvents.Where(streamEvent => streamEvent.Type == "delta").Select(streamEvent => streamEvent.Text))
+            .Should().Be("All habits:\n");
+    }
+
+    [Fact]
+    public async Task Handle_StreamedReplyWithoutDirective_PreservesDeltas()
+    {
+        SetupUserAndPayGate();
+        string[] chunks = ["Hello, ", "world!"];
+        _aiIntentService.SendWithToolsAsync(
+            Arg.Any<AiToolRequest>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(async callInfo =>
+            {
+                var sink = callInfo.ArgAt<Func<AiStreamEvent, Task>?>(1);
+                foreach (var chunk in chunks)
+                    await sink!(AiStreamEvent.Delta(chunk));
+
+                return Result.Success(new AiResponse { TextMessage = string.Concat(chunks) });
+            });
+        var streamEvents = new List<ChatStreamEvent>();
+        var handler = CreateHandler();
+
+        var result = await handler.Handle(
+            new ProcessUserChatCommand(
+                UserId,
+                "Hello",
+                StreamSink: streamEvent =>
+                {
+                    streamEvents.Add(streamEvent);
+                    return Task.CompletedTask;
+                }),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        streamEvents.Where(streamEvent => streamEvent.Type == "delta").Select(streamEvent => streamEvent.Text)
+            .Should().Equal(chunks);
     }
 
     [Fact]
