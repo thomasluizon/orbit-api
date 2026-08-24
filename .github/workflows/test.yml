@@ -3,6 +3,8 @@ name: API Tests
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
 
 permissions:
   contents: read
@@ -96,6 +98,8 @@ jobs:
   migration-guard:
     name: Guard Migrations
     runs-on: ubuntu-latest
+    # Diffs HEAD against github.base_ref, which is empty on a push event.
+    if: github.event_name == 'pull_request'
 
     steps:
       - uses: actions/checkout@v7
@@ -163,6 +167,8 @@ jobs:
   openapi-breaking:
     name: OpenAPI Breaking-Change Gate
     runs-on: ubuntu-latest
+    # Diffs HEAD against github.base_ref, which is empty on a push event.
+    if: github.event_name == 'pull_request'
 
     steps:
       - uses: actions/checkout@v7

@@ -338,6 +338,21 @@ public class AiIntentServiceStreamingTests
             .Select(i => new ChatHistoryMessage(i % 2 == 0 ? "user" : "assistant", $"message {i}"))
             .ToList();
 
+    [Fact]
+    public async Task SendWithToolsAsync_Streaming_RequestsUsageInStreamOptions()
+    {
+        var handler = new SseHandler(RoleChunk() + ContentChunk("hi") + FinishChunk("stop") + Done());
+        var (service, sink) = BuildService(handler);
+
+        var result = await service.SendWithToolsAsync(new AiToolRequest("hello", "system", []), streamSink: sink.Handle);
+
+        result.IsSuccess.Should().BeTrue();
+        using var request = JsonDocument.Parse(handler.LastRequestBody!);
+        request.RootElement.TryGetProperty("stream_options", out var streamOptions).Should().BeTrue(
+            "the SDK emits stream_options for a streamed round; if a future version stops, per-user token accounting silently records nothing");
+        streamOptions.GetProperty("include_usage").GetBoolean().Should().BeTrue();
+    }
+
     private static (AiIntentService Service, CollectingSink Sink) BuildService(
         HttpMessageHandler handler,
         IAiUsageRecorder? usageRecorder = null)
