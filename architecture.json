@@ -2934,7 +2934,7 @@
       "Goals": 54,
       "Habits": 87,
       "Marketing": 6,
-      "Notifications": 19,
+      "Notifications": 20,
       "Profile": 40,
       "Referrals": 13,
       "Social": 35,
@@ -7777,6 +7777,15 @@
         "testClass": "PendingAgentOperationStoreTests",
         "file": "tests/Orbit.Infrastructure.Tests/Services/PendingAgentOperationStoreTests.cs",
         "references": [
+          "User"
+        ]
+      },
+      {
+        "testClass": "PeriodCloseNotificationServiceTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Services/PeriodCloseNotificationServiceTests.cs",
+        "references": [
+          "Habit",
+          "PushSubscription",
           "User"
         ]
       },

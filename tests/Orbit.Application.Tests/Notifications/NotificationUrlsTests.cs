@@ -36,4 +36,12 @@ public class NotificationUrlsTests
         member.Should().NotBeNullOrWhiteSpace();
         actual.Should().Be(expected);
     }
+
+    [Fact]
+    public void WrappedClosedMonth_CarriesAddressablePeriod()
+    {
+        var url = NotificationUrls.WrappedClosedMonth(2026, 2);
+
+        url.Should().Be("/progress?wrapped=month&year=2026&month=2");
+    }
 }

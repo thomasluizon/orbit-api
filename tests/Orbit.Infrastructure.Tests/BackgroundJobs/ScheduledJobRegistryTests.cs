@@ -54,9 +54,9 @@ public class ScheduledJobRegistryTests
     }
 
     [Fact]
-    public void AllFourteenRecurringSchedulers_AreRegisteredAsJobs()
+    public void AllFifteenRecurringSchedulers_AreRegisteredAsJobs()
     {
-        BuildAll().Should().HaveCount(14);
+        BuildAll().Should().HaveCount(15);
     }
 
     [Theory]
@@ -96,6 +96,43 @@ public class ScheduledJobRegistryTests
             .Should().Be(expectedRegistered);
     }
 
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("true", true)]
+    [InlineData("false", false)]
+    public void InProcessRegistration_RespectsDefaultOffPeriodCloseFlag(
+        string? configuredValue,
+        bool expectedRegistered)
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Configuration["BackgroundServices:PeriodCloseNotificationEnabled"] = configuredValue;
+
+        OrbitServiceCollectionExtensions.AddInProcessSchedulers(builder);
+
+        builder.Services.Any(descriptor =>
+            descriptor.ServiceType == typeof(IHostedService)
+            && descriptor.ImplementationType == typeof(PeriodCloseNotificationService))
+            .Should().Be(expectedRegistered);
+    }
+
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("true", true)]
+    [InlineData("false", false)]
+    public void DurableRegistration_RespectsDefaultOffPeriodCloseFlag(
+        string? configuredValue,
+        bool expectedRegistered)
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Configuration["BackgroundServices:PeriodCloseNotificationEnabled"] = configuredValue;
+
+        OrbitServiceCollectionExtensions.AddDurableRecurringJobs(builder);
+
+        builder.Services.Any(descriptor =>
+            descriptor.ServiceType == typeof(PeriodCloseNotificationService))
+            .Should().Be(expectedRegistered);
+    }
+
     [Fact]
     public async Task RunAsync_ExecutesUnderlyingScan_WithoutDoubleRunningSideEffects()
     {
@@ -116,6 +153,7 @@ public class ScheduledJobRegistryTests
     [
         new ReminderSchedulerService(ScopeFactory(), NullLogger<ReminderSchedulerService>.Instance, EmptyConfiguration),
         new GoalDeadlineNotificationService(ScopeFactory(), NullLogger<GoalDeadlineNotificationService>.Instance, EmptyConfiguration),
+        new PeriodCloseNotificationService(ScopeFactory(), NullLogger<PeriodCloseNotificationService>.Instance, EmptyConfiguration),
         new SlipAlertSchedulerService(ScopeFactory(), NullLogger<SlipAlertSchedulerService>.Instance, EmptyConfiguration),
         new ProactiveCheckinSchedulerService(ScopeFactory(), NullLogger<ProactiveCheckinSchedulerService>.Instance, EmptyConfiguration),
         new AccountDeletionService(ScopeFactory(), NullLogger<AccountDeletionService>.Instance, EmptyConfiguration),
