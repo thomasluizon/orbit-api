@@ -26,13 +26,21 @@ public partial class PushNotificationService(
         string title,
         string body,
         string? url = null,
+        CancellationToken cancellationToken = default) =>
+        await TrySendToUserAsync(userId, title, body, url, cancellationToken);
+
+    public async Task<bool> TrySendToUserAsync(
+        Guid userId,
+        string title,
+        string body,
+        string? url = null,
         CancellationToken cancellationToken = default)
     {
         var subscriptions = await dbContext.PushSubscriptions
             .Where(s => s.UserId == userId)
             .ToListAsync(cancellationToken);
 
-        if (subscriptions.Count == 0) return;
+        if (subscriptions.Count == 0) return false;
 
         var safeTitle = SanitizeForDelivery(title, MaxTitleBytes);
         var safeBody = SanitizeForDelivery(body, MaxBodyBytes);
@@ -41,21 +49,24 @@ public partial class PushNotificationService(
         var webPushSubs = subscriptions.Where(s => s.Transport == PushTransport.WebPush).ToList();
 
         var staleSubscriptions = new List<Domain.Entities.PushSubscription>();
+        var delivered = false;
 
         if (fcmSubs.Count > 0)
-            await SendFcm(fcmSubs, safeTitle, safeBody, url, staleSubscriptions, cancellationToken);
+            delivered |= await SendFcm(fcmSubs, safeTitle, safeBody, url, staleSubscriptions, cancellationToken);
 
         if (webPushSubs.Count > 0)
-            await SendWebPush(webPushSubs, safeTitle, safeBody, url, staleSubscriptions, cancellationToken);
+            delivered |= await SendWebPush(webPushSubs, safeTitle, safeBody, url, staleSubscriptions, cancellationToken);
 
         if (staleSubscriptions.Count > 0)
         {
             dbContext.PushSubscriptions.RemoveRange(staleSubscriptions);
             await dbContext.SaveChangesAsync(cancellationToken);
         }
+
+        return delivered;
     }
 
-    private async Task SendFcm(
+    private async Task<bool> SendFcm(
         List<Domain.Entities.PushSubscription> subs,
         string title, string body, string? url,
         List<Domain.Entities.PushSubscription> staleSubscriptions,
@@ -65,10 +76,11 @@ public partial class PushNotificationService(
         {
             if (logger.IsEnabled(LogLevel.Warning))
                 LogFcmNotInitialized(logger, subs.Count);
-            return;
+            return false;
         }
 
         const int FcmBatchSize = 500;
+        var delivered = false;
         for (int offset = 0; offset < subs.Count; offset += FcmBatchSize)
         {
             var chunk = subs.Skip(offset).Take(FcmBatchSize).ToList();
@@ -86,25 +98,32 @@ public partial class PushNotificationService(
                 if (logger.IsEnabled(LogLevel.Warning))
                     LogFcmPushFailed(logger, ex, "batch");
                 foreach (var sub in chunk)
-                    await SendFcmToSubscription(sub, title, body, url, staleSubscriptions, ct);
+                    delivered |= await SendFcmToSubscription(sub, title, body, url, staleSubscriptions, ct);
                 continue;
             }
 
-            RecordBatchOutcomes(response, chunk, staleSubscriptions);
+            delivered |= RecordBatchOutcomes(response, chunk, staleSubscriptions);
         }
+
+        return delivered;
     }
 
-    private void RecordBatchOutcomes(
+    private bool RecordBatchOutcomes(
         BatchResponse response,
         List<Domain.Entities.PushSubscription> chunk,
         List<Domain.Entities.PushSubscription> staleSubscriptions)
     {
+        var delivered = false;
         for (int i = 0; i < response.Responses.Count; i++)
         {
             var resp = response.Responses[i];
             var sub = chunk[i];
             var tokenPreview = sub.Endpoint[..Math.Min(20, sub.Endpoint.Length)] + "...";
-            if (resp.IsSuccess) continue;
+            if (resp.IsSuccess)
+            {
+                delivered = true;
+                continue;
+            }
 
             if (resp.Exception is FirebaseMessagingException fme && IsStaleFcmError(fme.MessagingErrorCode))
             {
@@ -117,9 +136,11 @@ public partial class PushNotificationService(
                 LogFcmPushFailed(logger, resp.Exception, tokenPreview);
             }
         }
+
+        return delivered;
     }
 
-    private async Task SendFcmToSubscription(
+    private async Task<bool> SendFcmToSubscription(
         Domain.Entities.PushSubscription sub,
         string title, string body, string? url,
         List<Domain.Entities.PushSubscription> staleSubscriptions,
@@ -132,21 +153,24 @@ public partial class PushNotificationService(
             await FirebaseMessaging.DefaultInstance!.SendAsync(message, ct);
             if (logger.IsEnabled(LogLevel.Debug))
                 LogFcmPushSent(logger, tokenPreview);
+            return true;
         }
         catch (FirebaseMessagingException ex) when (IsStaleFcmError(ex.MessagingErrorCode))
         {
             if (logger.IsEnabled(LogLevel.Debug))
                 LogFcmTokenStale(logger, tokenPreview);
             staleSubscriptions.Add(sub);
+            return false;
         }
         catch (Exception ex)
         {
             if (logger.IsEnabled(LogLevel.Warning))
                 LogFcmPushFailed(logger, ex, tokenPreview);
+            return false;
         }
     }
 
-    private async Task SendWebPush(
+    private async Task<bool> SendWebPush(
         List<Domain.Entities.PushSubscription> subs,
         string title, string body, string? url,
         List<Domain.Entities.PushSubscription> staleSubscriptions,
@@ -162,11 +186,13 @@ public partial class PushNotificationService(
         var payload = CreateWebPushPayload(title, body, url);
         var message = new PushMessage(payload) { TimeToLive = 3600 };
 
+        var delivered = false;
         foreach (var sub in subs)
-            await SendWebPushToSubscription(client, sub, message, staleSubscriptions, ct);
+            delivered |= await SendWebPushToSubscription(client, sub, message, staleSubscriptions, ct);
+        return delivered;
     }
 
-    private async Task SendWebPushToSubscription(
+    private async Task<bool> SendWebPushToSubscription(
         PushServiceClient client,
         Domain.Entities.PushSubscription sub,
         PushMessage message,
@@ -191,11 +217,14 @@ public partial class PushNotificationService(
             var outcome = await TryDeliverWebPushAsync(client, pushSub, sub, message, attempt, MaxRetries, ct);
             if (outcome == WebPushAttemptOutcome.Stale)
                 staleSubscriptions.Add(sub);
+            if (outcome == WebPushAttemptOutcome.Delivered)
+                return true;
             if (outcome != WebPushAttemptOutcome.Retry)
-                return;
+                return false;
 
             await Task.Delay(BaseDelayMs << attempt, ct);
         }
+        return false;
     }
 
     private enum WebPushAttemptOutcome { Delivered, Stale, GaveUp, Retry }

@@ -84,8 +84,9 @@ public sealed class PushNotificationServiceTests : IDisposable
         var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Created));
         var service = CreateService(handler);
 
-        await service.SendToUserAsync(Guid.NewGuid(), "Title", "Body");
+        var delivered = await service.TrySendToUserAsync(Guid.NewGuid(), "Title", "Body");
 
+        delivered.Should().BeFalse();
         handler.CallCount.Should().Be(0);
     }
 
@@ -99,8 +100,9 @@ public sealed class PushNotificationServiceTests : IDisposable
         var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Created));
         var service = CreateService(handler);
 
-        await service.SendToUserAsync(_userId, "Title", "Body");
+        var delivered = await service.TrySendToUserAsync(_userId, "Title", "Body");
 
+        delivered.Should().BeFalse();
         handler.CallCount.Should().Be(0);
         (await _dbContext.PushSubscriptions.CountAsync()).Should().Be(1);
     }
@@ -113,8 +115,9 @@ public sealed class PushNotificationServiceTests : IDisposable
         var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Created));
         var service = CreateService(handler);
 
-        await service.SendToUserAsync(_userId, "Title", "Body", "/habits");
+        var delivered = await service.TrySendToUserAsync(_userId, "Title", "Body", "/habits");
 
+        delivered.Should().BeTrue();
         handler.CallCount.Should().Be(1);
         (await _dbContext.PushSubscriptions.CountAsync()).Should().Be(1);
     }
@@ -129,8 +132,9 @@ public sealed class PushNotificationServiceTests : IDisposable
         var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(deadStatus));
         var service = CreateService(handler);
 
-        await service.SendToUserAsync(_userId, "Title", "Body");
+        var delivered = await service.TrySendToUserAsync(_userId, "Title", "Body");
 
+        delivered.Should().BeFalse();
         (await _dbContext.PushSubscriptions.CountAsync()).Should().Be(0);
     }
 
@@ -142,9 +146,10 @@ public sealed class PushNotificationServiceTests : IDisposable
         var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError));
         var service = CreateService(handler);
 
-        var act = () => service.SendToUserAsync(_userId, "Title", "Body");
+        var delivered = await service.TrySendToUserAsync(_userId, "Title", "Body");
 
-        await act.Should().NotThrowAsync();
+        delivered.Should().BeFalse();
+        handler.CallCount.Should().Be(3);
         (await _dbContext.PushSubscriptions.CountAsync()).Should().Be(1);
     }
 
@@ -162,8 +167,9 @@ public sealed class PushNotificationServiceTests : IDisposable
                 : new HttpResponseMessage(HttpStatusCode.Created));
         var service = CreateService(handler);
 
-        await service.SendToUserAsync(_userId, "Title", "Body");
+        var delivered = await service.TrySendToUserAsync(_userId, "Title", "Body");
 
+        delivered.Should().BeTrue();
         var remaining = await _dbContext.PushSubscriptions.Select(s => s.Endpoint).ToListAsync();
         remaining.Should().ContainSingle().Which.Should().Be(liveEndpoint);
     }

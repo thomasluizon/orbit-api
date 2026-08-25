@@ -182,7 +182,13 @@ public partial class PeriodCloseNotificationService(
 
         try
         {
-            await pushService.SendToUserAsync(user.Id, title, body, url, cancellationToken);
+            var delivered = await pushService.TrySendToUserAsync(user.Id, title, body, url, cancellationToken);
+            if (!delivered)
+            {
+                await RemoveNotificationAfterPushFailureAsync(notification, dbContext);
+                LogNotificationNotDelivered(logger, user.Id, year, month);
+                return;
+            }
         }
         catch
         {
@@ -251,4 +257,7 @@ public partial class PeriodCloseNotificationService(
 
     [LoggerMessage(EventId = 8, Level = LogLevel.Error, Message = "Failed to release closed month notification claim {DedupeKey} for user {UserId} after push failure")]
     private static partial void LogNotificationReleaseFailed(ILogger logger, Guid userId, string dedupeKey, Exception ex);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Warning, Message = "No push delivery succeeded for user {UserId} and closed period {Year}-{Month}")]
+    private static partial void LogNotificationNotDelivered(ILogger logger, Guid userId, int year, int month);
 }

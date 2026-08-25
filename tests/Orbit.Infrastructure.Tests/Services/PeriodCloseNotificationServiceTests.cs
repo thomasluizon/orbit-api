@@ -23,7 +23,7 @@ public class PeriodCloseNotificationServiceTests
     {
         await using var dbContext = CreateDbContext();
         var user = await SeedUserAsync(dbContext, withActivity: true, withSubscription: true);
-        var pushService = Substitute.For<IPushNotificationService>();
+        var pushService = CreatePushService();
         var userDateService = Substitute.For<IUserDateService>();
         ConfigureToday(userDateService, FirstDayAfterClosedMonth);
         var service = CreateService(dbContext, pushService, userDateService);
@@ -37,7 +37,7 @@ public class PeriodCloseNotificationServiceTests
         notification.Body.Should().Be("January is closed - see how your month went.");
         notification.Url.Should().Be(expectedUrl);
         notification.DedupeKey.Should().Be(PeriodCloseNotificationService.BuildDedupeKey(user.Id, 2026, 1));
-        await pushService.Received(1).SendToUserAsync(
+        await pushService.Received(1).TrySendToUserAsync(
             user.Id,
             notification.Title,
             notification.Body,
@@ -50,7 +50,7 @@ public class PeriodCloseNotificationServiceTests
     {
         await using var dbContext = CreateDbContext();
         var user = await SeedUserAsync(dbContext, withActivity: true, withSubscription: true);
-        var pushService = Substitute.For<IPushNotificationService>();
+        var pushService = CreatePushService();
         var userDateService = Substitute.For<IUserDateService>();
         ConfigureToday(userDateService, FirstDayAfterClosedMonth);
         var service = CreateService(dbContext, pushService, userDateService);
@@ -59,7 +59,7 @@ public class PeriodCloseNotificationServiceTests
         await service.CheckAndSendNotificationsAsync(CancellationToken.None);
 
         (await dbContext.Notifications.CountAsync()).Should().Be(1);
-        await pushService.Received(1).SendToUserAsync(
+        await pushService.Received(1).TrySendToUserAsync(
             user.Id,
             Arg.Any<string>(),
             Arg.Any<string>(),
@@ -68,20 +68,18 @@ public class PeriodCloseNotificationServiceTests
     }
 
     [Fact]
-    public async Task CheckAndSendNotifications_PushThrows_ReleasesClaimForNextRun()
+    public async Task CheckAndSendNotifications_NoSuccessfulDelivery_ReleasesClaimForNextRun()
     {
         await using var dbContext = CreateDbContext();
         var user = await SeedUserAsync(dbContext, withActivity: true, withSubscription: true);
-        var pushService = Substitute.For<IPushNotificationService>();
-        pushService.SendToUserAsync(
+        var pushService = CreatePushService();
+        pushService.TrySendToUserAsync(
                 user.Id,
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string?>(),
                 Arg.Any<CancellationToken>())
-            .Returns(
-                Task.FromException(new InvalidOperationException("push transport unavailable")),
-                Task.CompletedTask);
+            .Returns(false, true);
         var userDateService = Substitute.For<IUserDateService>();
         ConfigureToday(userDateService, FirstDayAfterClosedMonth);
         var service = CreateService(dbContext, pushService, userDateService);
@@ -93,7 +91,41 @@ public class PeriodCloseNotificationServiceTests
         await service.CheckAndSendNotificationsAsync(CancellationToken.None);
 
         (await dbContext.Notifications.CountAsync()).Should().Be(1);
-        await pushService.Received(2).SendToUserAsync(
+        await pushService.Received(2).TrySendToUserAsync(
+            user.Id,
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CheckAndSendNotifications_PushThrows_ReleasesClaimForNextRun()
+    {
+        await using var dbContext = CreateDbContext();
+        var user = await SeedUserAsync(dbContext, withActivity: true, withSubscription: true);
+        var pushService = CreatePushService();
+        pushService.TrySendToUserAsync(
+                user.Id,
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromException<bool>(new InvalidOperationException("push transport unavailable")),
+                Task.FromResult(true));
+        var userDateService = Substitute.For<IUserDateService>();
+        ConfigureToday(userDateService, FirstDayAfterClosedMonth);
+        var service = CreateService(dbContext, pushService, userDateService);
+
+        await service.CheckAndSendNotificationsAsync(CancellationToken.None);
+
+        (await dbContext.Notifications.CountAsync()).Should().Be(0);
+
+        await service.CheckAndSendNotificationsAsync(CancellationToken.None);
+
+        (await dbContext.Notifications.CountAsync()).Should().Be(1);
+        await pushService.Received(2).TrySendToUserAsync(
             user.Id,
             Arg.Any<string>(),
             Arg.Any<string>(),
@@ -106,16 +138,16 @@ public class PeriodCloseNotificationServiceTests
     {
         await using var dbContext = CreateDbContext();
         var user = await SeedUserAsync(dbContext, withActivity: true, withSubscription: true);
-        var pushService = Substitute.For<IPushNotificationService>();
-        pushService.SendToUserAsync(
+        var pushService = CreatePushService();
+        pushService.TrySendToUserAsync(
                 user.Id,
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string?>(),
                 Arg.Any<CancellationToken>())
             .Returns(
-                Task.FromCanceled(new CancellationToken(canceled: true)),
-                Task.CompletedTask);
+                Task.FromCanceled<bool>(new CancellationToken(canceled: true)),
+                Task.FromResult(true));
         var userDateService = Substitute.For<IUserDateService>();
         ConfigureToday(userDateService, FirstDayAfterClosedMonth);
         var service = CreateService(dbContext, pushService, userDateService);
@@ -127,7 +159,7 @@ public class PeriodCloseNotificationServiceTests
         await service.CheckAndSendNotificationsAsync(CancellationToken.None);
 
         (await dbContext.Notifications.CountAsync()).Should().Be(1);
-        await pushService.Received(2).SendToUserAsync(
+        await pushService.Received(2).TrySendToUserAsync(
             user.Id,
             Arg.Any<string>(),
             Arg.Any<string>(),
@@ -140,7 +172,7 @@ public class PeriodCloseNotificationServiceTests
     {
         await using var dbContext = CreateDbContext();
         await SeedUserAsync(dbContext, withActivity: false, withSubscription: true);
-        var pushService = Substitute.For<IPushNotificationService>();
+        var pushService = CreatePushService();
         var userDateService = Substitute.For<IUserDateService>();
         ConfigureToday(userDateService, FirstDayAfterClosedMonth);
         var service = CreateService(dbContext, pushService, userDateService);
@@ -148,7 +180,7 @@ public class PeriodCloseNotificationServiceTests
         await service.CheckAndSendNotificationsAsync(CancellationToken.None);
 
         (await dbContext.Notifications.CountAsync()).Should().Be(0);
-        await pushService.DidNotReceive().SendToUserAsync(
+        await pushService.DidNotReceive().TrySendToUserAsync(
             Arg.Any<Guid>(),
             Arg.Any<string>(),
             Arg.Any<string>(),
@@ -177,7 +209,7 @@ public class PeriodCloseNotificationServiceTests
             [firstUser.Id] = FirstDayAfterClosedMonth,
             [secondUser.Id] = FirstDayAfterClosedMonth.AddDays(-1)
         };
-        var pushService = Substitute.For<IPushNotificationService>();
+        var pushService = CreatePushService();
         var userDateService = Substitute.For<IUserDateService>();
         userDateService.GetUserTodayAsync(
                 Arg.Any<string?>(),
@@ -188,13 +220,13 @@ public class PeriodCloseNotificationServiceTests
 
         await service.CheckAndSendNotificationsAsync(CancellationToken.None);
 
-        await pushService.Received(1).SendToUserAsync(
+        await pushService.Received(1).TrySendToUserAsync(
             firstUser.Id,
             Arg.Any<string>(),
             Arg.Any<string>(),
             Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
-        await pushService.DidNotReceive().SendToUserAsync(
+        await pushService.DidNotReceive().TrySendToUserAsync(
             secondUser.Id,
             Arg.Any<string>(),
             Arg.Any<string>(),
@@ -205,7 +237,7 @@ public class PeriodCloseNotificationServiceTests
         localDates[secondUser.Id] = FirstDayAfterClosedMonth;
         await service.CheckAndSendNotificationsAsync(CancellationToken.None);
 
-        await pushService.Received(1).SendToUserAsync(
+        await pushService.Received(1).TrySendToUserAsync(
             secondUser.Id,
             Arg.Any<string>(),
             Arg.Any<string>(),
@@ -219,7 +251,7 @@ public class PeriodCloseNotificationServiceTests
     {
         await using var dbContext = CreateDbContext();
         await SeedUserAsync(dbContext, withActivity: true, withSubscription: false);
-        var pushService = Substitute.For<IPushNotificationService>();
+        var pushService = CreatePushService();
         var userDateService = Substitute.For<IUserDateService>();
         ConfigureToday(userDateService, FirstDayAfterClosedMonth);
         var service = CreateService(dbContext, pushService, userDateService);
@@ -231,7 +263,7 @@ public class PeriodCloseNotificationServiceTests
             Arg.Any<string?>(),
             Arg.Any<Guid>(),
             Arg.Any<CancellationToken>());
-        await pushService.DidNotReceive().SendToUserAsync(
+        await pushService.DidNotReceive().TrySendToUserAsync(
             Arg.Any<Guid>(),
             Arg.Any<string>(),
             Arg.Any<string>(),
@@ -264,6 +296,19 @@ public class PeriodCloseNotificationServiceTests
                 Arg.Any<Guid>(),
                 Arg.Any<CancellationToken>())
             .Returns(today);
+
+    private static IPushNotificationService CreatePushService()
+    {
+        var pushService = Substitute.For<IPushNotificationService>();
+        pushService.TrySendToUserAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(true);
+        return pushService;
+    }
 
     private static async Task<User> SeedUserAsync(
         OrbitDbContext dbContext,
