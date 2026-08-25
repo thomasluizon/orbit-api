@@ -180,9 +180,34 @@ public partial class PeriodCloseNotificationService(
             return;
         }
 
-        await pushService.SendToUserAsync(user.Id, title, body, url, cancellationToken);
+        try
+        {
+            await pushService.SendToUserAsync(user.Id, title, body, url, cancellationToken);
+        }
+        catch
+        {
+            await RemoveNotificationAfterPushFailureAsync(notification, dbContext);
+            throw;
+        }
+
         if (logger.IsEnabled(LogLevel.Debug))
             LogNotificationSent(logger, user.Id, year, month);
+    }
+
+    private async Task RemoveNotificationAfterPushFailureAsync(
+        Notification notification,
+        OrbitDbContext dbContext)
+    {
+        try
+        {
+            dbContext.Notifications.Remove(notification);
+            await dbContext.SaveChangesAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            dbContext.Entry(notification).State = EntityState.Detached;
+            LogNotificationReleaseFailed(logger, notification.UserId, notification.DedupeKey!, ex);
+        }
     }
 
     internal static string BuildDedupeKey(Guid userId, int year, int month) =>
@@ -223,4 +248,7 @@ public partial class PeriodCloseNotificationService(
 
     [LoggerMessage(EventId = 7, Level = LogLevel.Error, Message = "Failed to process closed month notification for user {UserId} and period {Year}-{Month}")]
     private static partial void LogUserProcessingFailed(ILogger logger, Guid userId, int year, int month, Exception ex);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Error, Message = "Failed to release closed month notification claim {DedupeKey} for user {UserId} after push failure")]
+    private static partial void LogNotificationReleaseFailed(ILogger logger, Guid userId, string dedupeKey, Exception ex);
 }
