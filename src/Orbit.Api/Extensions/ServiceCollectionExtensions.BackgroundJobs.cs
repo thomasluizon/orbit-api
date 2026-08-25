@@ -42,6 +42,8 @@ public static partial class ServiceCollectionExtensions
     {
         builder.Services.AddHostedService<ReminderSchedulerService>();
         builder.Services.AddHostedService<GoalDeadlineNotificationService>();
+        if (IsPeriodCloseNotificationEnabled(builder.Configuration))
+            builder.Services.AddHostedService<PeriodCloseNotificationService>();
         builder.Services.AddHostedService<SlipAlertSchedulerService>();
         builder.Services.AddHostedService<ProactiveCheckinSchedulerService>();
         builder.Services.AddHostedService<AccountDeletionService>();
@@ -93,6 +95,8 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddSingleton<ScheduledJobRunner>();
         AddScheduledJob<ReminderSchedulerService>(builder);
         AddScheduledJob<GoalDeadlineNotificationService>(builder);
+        if (IsPeriodCloseNotificationEnabled(builder.Configuration))
+            AddScheduledJob<PeriodCloseNotificationService>(builder);
         AddScheduledJob<SlipAlertSchedulerService>(builder);
         AddScheduledJob<ProactiveCheckinSchedulerService>(builder);
         AddScheduledJob<AccountDeletionService>(builder);
@@ -122,4 +126,7 @@ public static partial class ServiceCollectionExtensions
     /// </summary>
     internal static bool IsStreakFreezeAutoActivationEnabled(IConfiguration configuration) =>
         configuration.GetValue("BackgroundServices:StreakFreezeAutoActivationEnabled", true);
+
+    internal static bool IsPeriodCloseNotificationEnabled(IConfiguration configuration) =>
+        configuration.GetValue("BackgroundServices:PeriodCloseNotificationEnabled", false);
 }
