@@ -136,7 +136,7 @@ public sealed class EmailChallengeService(IMemoryCache cache, TimeProvider timeP
 
     private static AppError InvalidCodeError(EmailChallengeOperation operation, int attemptsRemaining) => operation switch
     {
-        EmailChallengeOperation.AccountDeletion => ErrorMessages.InvalidDeletionCode,
+        EmailChallengeOperation.AccountDeletion => ErrorMessages.InvalidDeletionCode.Format(attemptsRemaining),
         EmailChallengeOperation.ApiKeyCreation => ErrorMessages.InvalidApiKeyCreationCode.Format(attemptsRemaining),
         _ => throw new ArgumentOutOfRangeException(nameof(operation)),
     };

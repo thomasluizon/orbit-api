@@ -111,6 +111,7 @@ public class ApiKeyCreationChallengeFlowTests
 
         exhausted.IsFailure.Should().BeTrue();
         exhausted.ErrorCode.Should().Be(ErrorCodes.TooManyAttempts);
+        exhausted.Error.Should().Be("Too many attempts. Try again in 15 minutes");
     }
 
     [Fact]

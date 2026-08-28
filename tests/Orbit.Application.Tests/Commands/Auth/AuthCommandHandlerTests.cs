@@ -114,7 +114,7 @@ public class AuthCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Too many attempts");
+        result.Error.Should().Be("Too many attempts. Try again in 15 minutes");
     }
 
     [Fact]

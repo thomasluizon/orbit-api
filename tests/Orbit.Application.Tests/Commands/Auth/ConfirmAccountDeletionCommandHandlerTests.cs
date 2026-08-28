@@ -4,6 +4,7 @@ using NSubstitute;
 using Orbit.Application.Auth.Commands;
 using Orbit.Application.Auth.Services;
 using Orbit.Application.Behaviors;
+using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
@@ -191,7 +192,7 @@ public class ConfirmAccountDeletionCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Invalid");
+        result.Error.Should().Be("Invalid code. Remaining attempts: 2");
         user.IsDeactivated.Should().BeFalse();
         user.ScheduledDeletionAt.Should().BeNull();
         _cache.TryGetValue($"delete-attempts:{TestEmail}", out int attempts).Should().BeTrue();
@@ -208,14 +209,14 @@ public class ConfirmAccountDeletionCommandHandlerTests
         {
             SetupDeletionCode(TestEmail, "123456");
             var wrong = await _handler.Handle(new ConfirmAccountDeletionCommand(UserId, "999999"), CancellationToken.None);
-            wrong.Error.Should().Contain("Invalid");
+            wrong.Error.Should().Be($"Invalid code. Remaining attempts: {AppConstants.MaxVerificationAttempts - attempt - 1}");
         }
 
         SetupDeletionCode(TestEmail, "123456");
         var result = await _handler.Handle(new ConfirmAccountDeletionCommand(UserId, "123456"), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Too many attempts");
+        result.Error.Should().Be("Too many attempts. Try again in 15 minutes");
         user.IsDeactivated.Should().BeFalse();
     }
 
@@ -259,7 +260,7 @@ public class ConfirmAccountDeletionCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Too many attempts");
+        result.Error.Should().Be("Too many attempts. Try again in 15 minutes");
         user.IsDeactivated.Should().BeFalse();
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
