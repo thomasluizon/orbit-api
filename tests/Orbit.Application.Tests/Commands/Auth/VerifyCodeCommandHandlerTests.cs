@@ -110,7 +110,7 @@ public class VerifyCodeCommandHandlerTests
         var result = await _handler.Handle(new VerifyCodeCommand(TestEmail, "123456"), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Too many attempts");
+        result.Error.Should().Be("Too many attempts. Try again in 15 minutes");
         result.ErrorCode.Should().Be("TOO_MANY_ATTEMPTS");
     }
 

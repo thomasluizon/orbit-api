@@ -61,9 +61,9 @@ public static class ErrorMessages
     public static readonly AppError CodeRequestCooldown = new(ErrorCodes.CodeRequestCooldown, "Please wait before requesting a new code");
     public static readonly AppError VerificationCodeExpired = new(ErrorCodes.CodeExpired, "Verification code expired or not found");
     public static readonly AppError DeletionCodeExpired = new(ErrorCodes.CodeExpired, "Deletion code expired or not found");
-    public static readonly AppError TooManyCodeAttempts = new(ErrorCodes.TooManyAttempts, "Too many attempts. Please request a new code");
+    public static readonly AppError TooManyCodeAttempts = new(ErrorCodes.TooManyAttempts, $"Too many attempts. Try again in {AppConstants.VerificationAttemptWindowMinutes} minutes");
     public static readonly AppError InvalidVerificationCode = new(ErrorCodes.InvalidVerificationCode, "Invalid verification code");
-    public static readonly AppError InvalidDeletionCode = new(ErrorCodes.InvalidVerificationCode, "Invalid code");
+    public static readonly AppError InvalidDeletionCode = new(ErrorCodes.InvalidVerificationCode, "Invalid code. Remaining attempts: {0}");
     public static readonly AppError ApiKeyCreationCodeExpired = new(ErrorCodes.CodeExpired, "API key creation code expired or not found");
     public static readonly AppError InvalidApiKeyCreationCode = new(ErrorCodes.InvalidVerificationCode, "Invalid code. Remaining attempts: {0}");
     public static readonly AppError InvalidGoogleToken = new(ErrorCodes.InvalidGoogleToken, "Invalid or expired Google sign-in token");
