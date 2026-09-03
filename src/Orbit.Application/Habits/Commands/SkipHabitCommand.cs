@@ -32,7 +32,7 @@ public class SkipHabitCommandHandler(
     public async Task<Result> Handle(SkipHabitCommand request, CancellationToken cancellationToken)
     {
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-        var loggableWindowStart = today.AddDays(-AppConstants.DefaultOverdueWindowDays);
+        var loggableWindowStart = today.AddDays(-AppConstants.MaxRangeDays);
 
         var habit = await repos.Habits.FindOneTrackedAsync(
             h => h.Id == request.HabitId,

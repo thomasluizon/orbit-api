@@ -19,7 +19,7 @@ internal static class BulkHabitLoader
         CancellationToken cancellationToken)
     {
         var idSet = habitIds.ToHashSet();
-        var windowStart = today.AddDays(-AppConstants.DefaultOverdueWindowDays);
+        var windowStart = today.AddDays(-AppConstants.MaxRangeDays);
         var habits = await habitRepository.FindTrackedAsync(
             h => idSet.Contains(h.Id) && h.UserId == userId,
             q => q.Include(h => h.Logs.Where(l => l.Date >= windowStart))

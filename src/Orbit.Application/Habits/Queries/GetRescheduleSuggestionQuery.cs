@@ -25,8 +25,6 @@ public class GetRescheduleSuggestionQueryHandler(
     IMemoryCache cache,
     IUserDateService userDateService) : IRequestHandler<GetRescheduleSuggestionQuery, Result<RescheduleSuggestionResponse>>
 {
-    private const int LogHistoryWindowDays = 60;
-
     public async Task<Result<RescheduleSuggestionResponse>> Handle(
         GetRescheduleSuggestionQuery request,
         CancellationToken cancellationToken)
@@ -43,7 +41,7 @@ public class GetRescheduleSuggestionQueryHandler(
 
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
-        var logWindowStart = userToday.AddDays(-LogHistoryWindowDays);
+        var logWindowStart = userToday.AddDays(-AppConstants.MaxRangeDays);
         var habits = await habitRepository.FindAsync(
             h => h.Id == request.HabitId && h.UserId == request.UserId,
             q => q.Include(h => h.Logs.Where(l => l.Date >= logWindowStart && l.Date <= userToday)),

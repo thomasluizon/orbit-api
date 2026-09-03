@@ -450,6 +450,54 @@ public class LogHabitCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_CadenceEditWithEveryActiveOccurrenceResolved_RejectsOffScheduleToday()
+    {
+        var anchor = new DateOnly(2025, 1, 6);
+        var inactiveDueDate = anchor.AddDays(7);
+        var resolvedActiveDay = anchor.AddDays(14);
+        var offScheduleToday = resolvedActiveDay.AddDays(1);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId,
+            "Alternating",
+            FrequencyUnit.Day,
+            1,
+            DueDate: anchor,
+            Days: [DayOfWeek.Monday])).Value;
+        habit.AdvanceDueDate(anchor.AddDays(6), weekStartDay: 1);
+        var update = habit.Update(new HabitUpdateParams(
+            habit.Title,
+            habit.Description,
+            habit.FrequencyUnit,
+            habit.FrequencyQuantity,
+            habit.Days.ToList(),
+            habit.IsBadHabit,
+            DueDate: null,
+            UserToday: inactiveDueDate.AddDays(1),
+            IntervalWeeks: 2));
+        update.IsSuccess.Should().BeTrue();
+        habit.DueDate.Should().Be(inactiveDueDate);
+        habit.Log(resolvedActiveDay, advanceDueDate: false).IsSuccess.Should().BeTrue();
+
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(offScheduleToday);
+        _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(1);
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(habit);
+
+        var result = await _handler.Handle(
+            new LogHabitCommand(UserId, habit.Id),
+            CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.NotScheduledOnDate);
+        await _habitLogRepo.DidNotReceive().AddAsync(
+            Arg.Any<HabitLog>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_GamificationProcessing_CalledOnLog()
     {
         var habit = CreateTestHabit();

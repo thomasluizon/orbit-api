@@ -268,7 +268,7 @@ public partial class LogHabitCommandHandler(
 
     private Task<Habit?> LoadLoggableHabitAsync(Guid habitId, DateOnly today, CancellationToken cancellationToken)
     {
-        var loggableWindowStart = today.AddDays(-AppConstants.DefaultOverdueWindowDays);
+        var loggableWindowStart = today.AddDays(-AppConstants.MaxRangeDays);
         return repos.HabitRepository.FindOneTrackedAsync(
             h => h.Id == habitId,
             q => q.Include(h => h.Logs.Where(l => l.Date >= loggableWindowStart))

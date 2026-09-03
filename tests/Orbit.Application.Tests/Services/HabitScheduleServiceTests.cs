@@ -755,8 +755,22 @@ public class HabitScheduleServiceTests
     public void HasMissedPastOccurrence_DailyHabitAllLogged_ReturnsFalse()
     {
         var habit = CreateHabit(FrequencyUnit.Day, 1, dueDate: Anchor);
-        habit.Log(Anchor);
-        habit.Log(Anchor.AddDays(1));
+        habit.Log(Anchor, advanceDueDate: false);
+        habit.Log(Anchor.AddDays(1), advanceDueDate: false);
+        var today = Anchor.AddDays(2);
+
+        HabitScheduleService.HasMissedPastOccurrence(habit, today, weekStartDay: 1).Should().BeFalse();
+    }
+
+    [Fact]
+    public void HasMissedPastOccurrence_DailyHabitAllSkipped_ReturnsFalse()
+    {
+        var habit = CreateHabit(FrequencyUnit.Day, 1, dueDate: Anchor);
+        var logs = (List<HabitLog>)typeof(Habit)
+            .GetField("_logs", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .GetValue(habit)!;
+        logs.Add(HabitLog.Create(habit.Id, Anchor, 0));
+        logs.Add(HabitLog.Create(habit.Id, Anchor.AddDays(1), 0));
         var today = Anchor.AddDays(2);
 
         HabitScheduleService.HasMissedPastOccurrence(habit, today, weekStartDay: 1).Should().BeFalse();

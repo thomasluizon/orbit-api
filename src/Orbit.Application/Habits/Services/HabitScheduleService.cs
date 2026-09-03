@@ -340,11 +340,9 @@ public static class HabitScheduleService
     /// <summary>
     /// True when a recurring, non-flexible, non-bad habit has an unresolved past
     /// occurrence, meaning its <see cref="Habit.DueDate"/> has fallen before today and the current
-    /// cadence schedules an occurrence within the bounded schedule horizon ending before today.
-    /// This is the single overdue signal shared by the schedule query and the
-    /// log/skip commands. It relies on DueDate resting on the oldest unresolved
-    /// occurrence: the background advancement service no longer rolls non-bad
-    /// recurring habits forward, and Log/Skip advance DueDate past today on resolve.
+    /// cadence schedules an occurrence without a completion or skip log within the bounded
+    /// schedule horizon ending before today. This is the single overdue signal shared by the
+    /// schedule query and the log/skip commands.
     /// </summary>
     public static bool HasMissedPastOccurrence(Habit habit, DateOnly today, int weekStartDay)
     {
@@ -353,7 +351,8 @@ public static class HabitScheduleService
         if (habit.DueDate >= today)
             return false;
         if ((!habit.EndDate.HasValue || habit.DueDate <= habit.EndDate.Value)
-            && IsHabitDueOnDate(habit, habit.DueDate, weekStartDay))
+            && IsHabitDueOnDate(habit, habit.DueDate, weekStartDay)
+            && !IsOccurrenceResolved(habit, habit.DueDate))
             return true;
 
         var latestOccurrence = today.AddDays(-1);
@@ -362,19 +361,26 @@ public static class HabitScheduleService
 
         var earliestOccurrence = habit.DueDate;
         var boundedStart = latestOccurrence.AddDays(-Math.Min(
-            AppConstants.MaxRangeDays,
+            AppConstants.MaxRangeDays - 1,
             latestOccurrence.DayNumber));
         if (earliestOccurrence < boundedStart)
             earliestOccurrence = boundedStart;
 
         for (var date = earliestOccurrence; date <= latestOccurrence; date = date.AddDays(1))
         {
-            if (IsHabitDueOnDate(habit, date, weekStartDay))
+            if (IsHabitDueOnDate(habit, date, weekStartDay)
+                && !IsOccurrenceResolved(habit, date))
                 return true;
         }
 
         return false;
     }
+
+    private static bool IsOccurrenceResolved(Habit habit, DateOnly date) =>
+        habit.Logs.Any(log =>
+            !log.IsDeleted
+            && log.Date == date
+            && (log.Value == 0 || log.Value > 0));
 
     /// <summary>
     /// True when the habit has an active completion log (Value &gt; 0) on any date within

@@ -199,7 +199,9 @@ public class GetHabitScheduleQueryHandler(
             cancellationToken,
             weekStartDay);
 
-        var overdueLookbackDays = request.IncludeOverdue ? 31 : AppConstants.DefaultOverdueWindowDays;
+        var overdueLookbackDays = request.IncludeOverdue
+            ? AppConstants.MaxRangeDays
+            : AppConstants.DefaultOverdueWindowDays;
         var logFrom = (request.DateFrom ?? today).AddDays(-overdueLookbackDays);
         var logTo = request.DateTo ?? today;
         var allHabits = await LoadScheduleHabits(

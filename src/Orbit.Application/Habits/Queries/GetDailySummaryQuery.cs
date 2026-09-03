@@ -71,10 +71,13 @@ public class GetDailySummaryQueryHandler(
             return Result.Success(new DailySummaryResponse(cached.Summary, string.Empty, FromCache: true));
         }
 
+        var overdueLogFrom = userToday.AddDays(-AppConstants.MaxRangeDays);
+        var logFrom = request.DateFrom < overdueLogFrom ? request.DateFrom : overdueLogFrom;
+        var logTo = request.DateTo > userToday ? request.DateTo : userToday;
         var habits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId && !h.IsGeneral,
             q => q
-                .Include(h => h.Logs.Where(l => l.Date >= request.DateFrom && l.Date <= request.DateTo))
+                .Include(h => h.Logs.Where(l => l.Date >= logFrom && l.Date <= logTo))
                 .Include(h => h.Goals),
             cancellationToken);
 
