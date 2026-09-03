@@ -133,6 +133,36 @@ public class UpdateHabitCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_LegacyPayloadWithoutIntervalWeeks_PreservesInterval()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId,
+            "Alternating week habit",
+            FrequencyUnit.Day,
+            1,
+            DueDate: Today,
+            IntervalWeeks: 2)).Value;
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(habit);
+
+        var command = new UpdateHabitCommand(
+            UserId,
+            habit.Id,
+            "Updated title",
+            habit.Description,
+            habit.FrequencyUnit,
+            habit.FrequencyQuantity);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        habit.IntervalWeeks.Should().Be(2);
+    }
+
+    [Fact]
     public async Task Handle_HabitNotFound_ReturnsFailure()
     {
         _habitRepo.FindOneTrackedAsync(

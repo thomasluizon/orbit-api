@@ -102,7 +102,7 @@ public class UpdateHabitCommandHandler(
             ScheduledReminders: opts.ScheduledReminders,
             Emoji: request.Emoji,
             UserToday: today,
-            IntervalWeeks: request.IntervalWeeks);
+            IntervalWeeks: request.IntervalWeeks ?? habit.IntervalWeeks);
 
         return Result.Success(new UpdateState(habit, update, opts, today));
     }
