@@ -295,6 +295,7 @@ public class LogHabitCommandHandlerTests
         var retrospectiveService = Substitute.For<IRetrospectiveService>();
         var freshNarrative = new RetrospectiveNarrative("Fresh", "", "", "");
         payGate.CanUseRetrospective(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(1);
         retrospectiveService.GenerateRetrospectiveAsync(
             Arg.Any<List<Habit>>(),
             dateFrom,

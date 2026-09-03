@@ -893,7 +893,7 @@ public class AiSummaryServiceTests
             .GetMethod("BuildHabitSection", PrivateStatic)!;
         return (string)method.Invoke(null,
             [scheduledHabits, Today, Today, userToday ?? Today,
-             lastBadHabitSlipDates ?? new Dictionary<Guid, DateOnly>()])!;
+             lastBadHabitSlipDates ?? new Dictionary<Guid, DateOnly>(), 1])!;
     }
 
     private static List<Habit> InvokeSelectScheduledHabits(
@@ -901,6 +901,6 @@ public class AiSummaryServiceTests
     {
         var method = typeof(AiSummaryService)
             .GetMethod("SelectScheduledHabits", PrivateStatic)!;
-        return (List<Habit>)method.Invoke(null, [allHabits, userToday, userToday, userToday])!;
+        return (List<Habit>)method.Invoke(null, [allHabits, userToday, userToday, userToday, 1])!;
     }
 }
