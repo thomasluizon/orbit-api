@@ -78,8 +78,8 @@ public class GetHabitFullDetailQueryHandler(
             habit,
             allRootLogs,
             userToday,
-            userTimeZone,
-            user.WeekStartDay);
+            user.WeekStartDay,
+            userTimeZone);
 
         var cutoff = userToday.AddDays(-DefaultLookbackDays);
         var logs = allRootLogs

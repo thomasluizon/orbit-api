@@ -35,8 +35,8 @@ public class GetHabitMetricsQueryHandler(
         return Result.Success(HabitMetricsCalculator.Calculate(
             habit,
             today,
-            userTimeZone,
-            user.WeekStartDay));
+            user.WeekStartDay,
+            userTimeZone));
 
     }
 }

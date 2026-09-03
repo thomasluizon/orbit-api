@@ -137,7 +137,7 @@ public partial class GoalDeadlineNotificationService(
             var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
             var userToday = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
 
-            var readValue = GoalProgressSyncService.ComputeReadValue(goal, userToday);
+            var readValue = GoalProgressSyncService.ComputeReadValue(goal, userToday, user.WeekStartDay);
             if (readValue.HasValue)
                 freshValues[goal.Id] = readValue.Value;
         }

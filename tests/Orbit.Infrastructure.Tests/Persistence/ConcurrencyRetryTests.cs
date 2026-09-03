@@ -349,17 +349,19 @@ public class ConcurrencyRetryTests
     {
         var goalRepository = new GenericRepository<Goal>(context);
         var unitOfWork = new UnitOfWork(context, new DatabaseConnectionSettings());
+        var userDateService = StubToday(new DateOnly(2026, 3, 20));
         var completionService = new GoalCompletionService(
             goalRepository,
             Substitute.For<IGamificationService>(),
-            unitOfWork);
+            unitOfWork,
+            userDateService);
         return new UpdateGoalProgressCommandHandler(
             new GoalRepositories(
                 goalRepository,
                 new GenericRepository<GoalProgressLog>(context)),
             completionService,
             unitOfWork,
-            StubToday(new DateOnly(2026, 3, 20)),
+            userDateService,
             new MemoryCache(new MemoryCacheOptions()));
     }
 
@@ -375,6 +377,7 @@ public class ConcurrencyRetryTests
     {
         var service = Substitute.For<IUserDateService>();
         service.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(today);
+        service.GetUserWeekStartDayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(1);
         return service;
     }
 

@@ -258,8 +258,8 @@ public class HabitScheduleServiceTests
         var metrics = HabitMetricsCalculator.Calculate(
             habit,
             anchor.AddDays(20),
-            TimeZoneInfo.Utc,
-            weekStartDay: 1);
+            weekStartDay: 1,
+            TimeZoneInfo.Utc);
         metrics.CurrentStreak.Should().Be(1);
     }
 

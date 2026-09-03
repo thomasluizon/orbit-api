@@ -76,7 +76,7 @@ public class QueryHabitsTool(
         if (results.Count == 0)
             return new ToolResult(true, EntityName: "No habits found matching the given filters.");
 
-        var output = BuildOutput(results, allHabits, today, includeMetrics, includeSubs);
+        var output = BuildOutput(results, allHabits, today, user.WeekStartDay, includeMetrics, includeSubs);
         return new ToolResult(true, EntityName: output);
     }
 
@@ -178,7 +178,13 @@ public class QueryHabitsTool(
     }
 
 #pragma warning disable CA1859 // IReadOnlyList<Habit> is intentional -- matches repository interface return type
-    private static string BuildOutput(List<Habit> results, IReadOnlyList<Habit> allHabits, DateOnly today, bool includeMetrics, bool includeSubs)
+    private static string BuildOutput(
+        List<Habit> results,
+        IReadOnlyList<Habit> allHabits,
+        DateOnly today,
+        int weekStartDay,
+        bool includeMetrics,
+        bool includeSubs)
 #pragma warning restore CA1859
     {
         var sb = new StringBuilder();
@@ -188,7 +194,12 @@ public class QueryHabitsTool(
         var suffixes = SiblingTitleDisambiguator.ComputeSuffixes(results);
         foreach (var habit in results)
         {
-            sb.AppendLine(BuildHabitLine(habit, today, includeMetrics, suffixes.GetValueOrDefault(habit.Id, string.Empty)));
+            sb.AppendLine(BuildHabitLine(
+                habit,
+                today,
+                weekStartDay,
+                includeMetrics,
+                suffixes.GetValueOrDefault(habit.Id, string.Empty)));
 
             if (includeSubs)
                 AppendChildren(sb, allHabits, habit.Id, today, includeMetrics, 1);
@@ -197,16 +208,21 @@ public class QueryHabitsTool(
         return sb.ToString();
     }
 
-    private static string BuildHabitLine(Habit habit, DateOnly today, bool includeMetrics, string dupSuffix)
+    private static string BuildHabitLine(
+        Habit habit,
+        DateOnly today,
+        int weekStartDay,
+        bool includeMetrics,
+        string dupSuffix)
     {
         var freqLabel = FormatFrequencyLabel(habit);
-        var labels = BuildLabels(habit, today, includeMetrics);
+        var labels = BuildLabels(habit, today, weekStartDay, includeMetrics);
         var labelStr = labels.Count > 0 ? $" [{string.Join(" | ", labels)}]" : "";
         var emojiLabel = string.IsNullOrWhiteSpace(habit.Emoji) ? "No emoji" : $"Emoji: {habit.Emoji}";
         return $"- \"{habit.Title}\"{dupSuffix} | ID: {habit.Id} | {emojiLabel} | {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{labelStr}";
     }
 
-    private static List<string> BuildLabels(Habit habit, DateOnly today, bool includeMetrics)
+    private static List<string> BuildLabels(Habit habit, DateOnly today, int weekStartDay, bool includeMetrics)
     {
         var labels = new List<string>();
         var isCompleted = GetResponseCompletion(habit, today);
@@ -217,7 +233,7 @@ public class QueryHabitsTool(
         if (isCompleted) labels.Add("COMPLETED");
         if (habit.Tags.Count > 0) labels.Add($"Tags: {string.Join(", ", habit.Tags.Select(t => t.Name))}");
 
-        AddMetricLabels(labels, habit, today, includeMetrics);
+        AddMetricLabels(labels, habit, today, weekStartDay, includeMetrics);
 
         if (habit.ChecklistItems.Count > 0)
             labels.Add($"Checklist: {habit.ChecklistItems.Count(i => i.IsChecked)}/{habit.ChecklistItems.Count}");
@@ -233,10 +249,15 @@ public class QueryHabitsTool(
             ? HabitScheduleService.HasCompletedLogInRange(habit, today, today)
             : habit.IsCompleted;
 
-    private static void AddMetricLabels(List<string> labels, Habit habit, DateOnly today, bool includeMetrics)
+    private static void AddMetricLabels(
+        List<string> labels,
+        Habit habit,
+        DateOnly today,
+        int weekStartDay,
+        bool includeMetrics)
     {
         if (!includeMetrics) return;
-        var metrics = HabitMetricsCalculator.Calculate(habit, today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, today, weekStartDay);
         if (metrics.CurrentStreak > 0) labels.Add($"Streak: {metrics.CurrentStreak}d");
         if (metrics.WeeklyCompletionRate > 0) labels.Add($"Week: {metrics.WeeklyCompletionRate:F0}%");
         if (metrics.TotalCompletions > 0) labels.Add($"Total: {metrics.TotalCompletions}");

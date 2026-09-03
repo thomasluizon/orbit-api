@@ -19,6 +19,7 @@ public class GetGoalMetricsQueryHandler(
     public async Task<Result<GoalMetrics>> Handle(GetGoalMetricsQuery request, CancellationToken cancellationToken)
     {
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var weekStartDay = await userDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
         var freshValues = await goalProgressReadSyncer.ComputeFreshValuesAsync(
             request.UserId,
             userToday,
@@ -38,7 +39,7 @@ public class GetGoalMetricsQueryHandler(
         if (freshValues.TryGetValue(goal.Id, out var freshValue))
             GoalProgressSyncService.ApplyReadValue(goal, freshValue);
 
-        var metrics = GoalMetricsCalculator.Calculate(goal, userToday);
+        var metrics = GoalMetricsCalculator.Calculate(goal, userToday, weekStartDay);
         return Result.Success(metrics);
     }
 }

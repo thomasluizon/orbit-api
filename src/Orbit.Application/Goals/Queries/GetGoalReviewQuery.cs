@@ -36,6 +36,7 @@ public class GetGoalReviewQueryHandler(
             return Result.Success(new GoalReviewResponse(cached, FromCache: true));
 
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var weekStartDay = await userDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
         var freshValues = await goalProgressReadSyncer.ComputeFreshValuesAsync(
             request.UserId,
             userToday,
@@ -57,7 +58,7 @@ public class GetGoalReviewQueryHandler(
             if (freshValues.TryGetValue(goal.Id, out var freshValue))
                 GoalProgressSyncService.ApplyReadValue(goal, freshValue);
 
-        var goalsContext = BuildGoalsContext(goalList, userToday);
+        var goalsContext = BuildGoalsContext(goalList, userToday, weekStartDay);
 
         var result = await goalReviewService.GenerateReviewAsync(
             goalsContext,
@@ -75,13 +76,13 @@ public class GetGoalReviewQueryHandler(
         return Result.Success(new GoalReviewResponse(result.Value, FromCache: false));
     }
 
-    private static string BuildGoalsContext(List<Goal> goals, DateOnly userToday)
+    private static string BuildGoalsContext(List<Goal> goals, DateOnly userToday, int weekStartDay)
     {
         var lines = new List<string>();
 
         foreach (var goal in goals)
         {
-            var metrics = GoalMetricsCalculator.Calculate(goal, userToday);
+            var metrics = GoalMetricsCalculator.Calculate(goal, userToday, weekStartDay);
             lines.Add($"Goal: \"{goal.Title}\" | {goal.CurrentValue}/{goal.TargetValue} {goal.Unit} ({metrics.ProgressPercentage}%)");
             lines.Add($"  Status: {metrics.TrackingStatus} | Velocity: {metrics.VelocityPerDay} {goal.Unit}/day");
 

@@ -57,7 +57,7 @@ public class XpAwardLogBackfillService(
             return false;
 
         var rows = new List<XpAwardLog>();
-        await AppendHabitLogRowsAsync(userId, user.TimeZone, rows, ct);
+        await AppendHabitLogRowsAsync(userId, user.TimeZone, user.WeekStartDay, rows, ct);
         await AppendGoalCompletionRowsAsync(userId, rows, ct);
         await AppendAchievementRowsAsync(userId, rows, ct);
 
@@ -76,7 +76,12 @@ public class XpAwardLogBackfillService(
         return true;
     }
 
-    private async Task AppendHabitLogRowsAsync(Guid userId, string? timeZone, List<XpAwardLog> rows, CancellationToken ct)
+    private async Task AppendHabitLogRowsAsync(
+        Guid userId,
+        string? timeZone,
+        int weekStartDay,
+        List<XpAwardLog> rows,
+        CancellationToken ct)
     {
         var habits = await habitRepository.FindAsync(
             h => h.UserId == userId && !h.IsBadHabit,
@@ -94,7 +99,7 @@ public class XpAwardLogBackfillService(
 
             foreach (var log in completions)
             {
-                var streak = HabitMetricsCalculator.Calculate(habit, log.Date, userTimeZone).CurrentStreak;
+                var streak = HabitMetricsCalculator.Calculate(habit, log.Date, weekStartDay, userTimeZone).CurrentStreak;
                 var awardedAtUtc = log.Date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
                 rows.Add(XpAwardLog.Create(userId, HabitLogBaseXp + streak, XpAwardSource.HabitLog, log.Id, awardedAtUtc));
             }

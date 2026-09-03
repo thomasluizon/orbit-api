@@ -11,6 +11,7 @@ namespace Orbit.Application.Tests.Services.Goals;
 public class GoalProgressReadSyncerTests
 {
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
+    private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly GoalProgressReadSyncer _syncer;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -18,7 +19,8 @@ public class GoalProgressReadSyncerTests
 
     public GoalProgressReadSyncerTests()
     {
-        _syncer = new GoalProgressReadSyncer(_goalRepo);
+        _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(1);
+        _syncer = new GoalProgressReadSyncer(_goalRepo, _userDateService);
     }
 
     private static Goal CreateBadHabitStreakGoal(decimal target)

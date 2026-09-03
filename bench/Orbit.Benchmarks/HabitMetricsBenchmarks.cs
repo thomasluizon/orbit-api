@@ -26,5 +26,5 @@ public class HabitMetricsBenchmarks
 
     [Benchmark]
     public HabitMetrics Calculate_OneYearDailyHabit() =>
-        HabitMetricsCalculator.Calculate(_habit, _today, TimeZoneInfo.Utc);
+        HabitMetricsCalculator.Calculate(_habit, _today, weekStartDay: 1, TimeZoneInfo.Utc);
 }

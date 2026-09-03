@@ -28,7 +28,7 @@ public class GoalMetricsCalculatorTests
     {
         var goal = CreateGoal(targetValue: 100);
 
-        var metrics = GoalMetricsCalculator.Calculate(goal, Today);
+        var metrics = GoalMetricsCalculator.Calculate(goal, Today, 1);
 
         metrics.ProgressPercentage.Should().Be(0);
     }
@@ -39,7 +39,7 @@ public class GoalMetricsCalculatorTests
         var goal = CreateGoal(targetValue: 100);
         goal.UpdateProgress(50);
 
-        var metrics = GoalMetricsCalculator.Calculate(goal, Today);
+        var metrics = GoalMetricsCalculator.Calculate(goal, Today, 1);
 
         metrics.ProgressPercentage.Should().Be(50);
     }
@@ -50,7 +50,7 @@ public class GoalMetricsCalculatorTests
         var goal = CreateGoal(targetValue: 100);
         goal.UpdateProgress(100);
 
-        var metrics = GoalMetricsCalculator.Calculate(goal, Today);
+        var metrics = GoalMetricsCalculator.Calculate(goal, Today, 1);
 
         metrics.ProgressPercentage.Should().Be(100);
     }
@@ -61,7 +61,7 @@ public class GoalMetricsCalculatorTests
         var goal = CreateGoal(targetValue: 100);
         goal.UpdateProgress(150);
 
-        var metrics = GoalMetricsCalculator.Calculate(goal, Today);
+        var metrics = GoalMetricsCalculator.Calculate(goal, Today, 1);
 
         metrics.ProgressPercentage.Should().Be(100);
     }
@@ -72,7 +72,7 @@ public class GoalMetricsCalculatorTests
         var deadline = Today.AddDays(10);
         var goal = CreateGoal(deadline: deadline);
 
-        var metrics = GoalMetricsCalculator.Calculate(goal, Today);
+        var metrics = GoalMetricsCalculator.Calculate(goal, Today, 1);
 
         metrics.DaysToDeadline.Should().Be(10);
     }
@@ -83,7 +83,7 @@ public class GoalMetricsCalculatorTests
         var deadline = Today.AddDays(-5);
         var goal = CreateGoal(deadline: deadline);
 
-        var metrics = GoalMetricsCalculator.Calculate(goal, Today);
+        var metrics = GoalMetricsCalculator.Calculate(goal, Today, 1);
 
         metrics.DaysToDeadline.Should().Be(-5);
     }
@@ -93,7 +93,7 @@ public class GoalMetricsCalculatorTests
     {
         var goal = CreateGoal(deadline: null);
 
-        var metrics = GoalMetricsCalculator.Calculate(goal, Today);
+        var metrics = GoalMetricsCalculator.Calculate(goal, Today, 1);
 
         metrics.DaysToDeadline.Should().BeNull();
     }
@@ -103,7 +103,7 @@ public class GoalMetricsCalculatorTests
     {
         var goal = CreateGoal(targetValue: 10, deadline: Today.AddDays(30));
         goal.UpdateProgress(10);
-        var metrics = GoalMetricsCalculator.Calculate(goal, Today);
+        var metrics = GoalMetricsCalculator.Calculate(goal, Today, 1);
 
         metrics.TrackingStatus.Should().Be("completed");
     }
@@ -113,7 +113,7 @@ public class GoalMetricsCalculatorTests
     {
         var goal = CreateGoal(deadline: null);
 
-        var metrics = GoalMetricsCalculator.Calculate(goal, Today);
+        var metrics = GoalMetricsCalculator.Calculate(goal, Today, 1);
 
         metrics.TrackingStatus.Should().Be("no_deadline");
     }
@@ -123,7 +123,7 @@ public class GoalMetricsCalculatorTests
     {
         var goal = CreateGoal(deadline: Today.AddDays(-1));
 
-        var metrics = GoalMetricsCalculator.Calculate(goal, Today);
+        var metrics = GoalMetricsCalculator.Calculate(goal, Today, 1);
 
         metrics.TrackingStatus.Should().Be("behind");
     }
@@ -133,7 +133,7 @@ public class GoalMetricsCalculatorTests
     {
         var goal = CreateGoal(targetValue: 100, deadline: Today.AddDays(5));
         goal.UpdateProgress(30);
-        var metrics = GoalMetricsCalculator.Calculate(goal, Today);
+        var metrics = GoalMetricsCalculator.Calculate(goal, Today, 1);
 
         metrics.TrackingStatus.Should().Be("at_risk");
     }
@@ -143,7 +143,7 @@ public class GoalMetricsCalculatorTests
     {
         var goal = CreateGoal(targetValue: 100, deadline: Today.AddDays(5));
         goal.UpdateProgress(80);
-        var metrics = GoalMetricsCalculator.Calculate(goal, Today);
+        var metrics = GoalMetricsCalculator.Calculate(goal, Today, 1);
 
         metrics.TrackingStatus.Should().Be("on_track");
     }
@@ -154,7 +154,7 @@ public class GoalMetricsCalculatorTests
         var goal = CreateGoal(targetValue: 100);
         goal.UpdateProgress(50);
 
-        var metrics = GoalMetricsCalculator.Calculate(goal, Today);
+        var metrics = GoalMetricsCalculator.Calculate(goal, Today, 1);
 
         metrics.VelocityPerDay.Should().BeGreaterThan(0);
     }
@@ -164,7 +164,7 @@ public class GoalMetricsCalculatorTests
     {
         var goal = CreateGoal(targetValue: 100);
 
-        var metrics = GoalMetricsCalculator.Calculate(goal, Today);
+        var metrics = GoalMetricsCalculator.Calculate(goal, Today, 1);
 
         metrics.ProjectedCompletionDate.Should().BeNull();
     }
@@ -175,7 +175,7 @@ public class GoalMetricsCalculatorTests
         var goal = CreateGoal(targetValue: 100);
         goal.UpdateProgress(50);
 
-        var metrics = GoalMetricsCalculator.Calculate(goal, Today);
+        var metrics = GoalMetricsCalculator.Calculate(goal, Today, 1);
 
         metrics.ProjectedCompletionDate.Should().NotBeNull();
         metrics.ProjectedCompletionDate!.Value.Should().BeOnOrAfter(Today);
@@ -186,7 +186,7 @@ public class GoalMetricsCalculatorTests
     {
         var goal = CreateGoal();
 
-        var metrics = GoalMetricsCalculator.Calculate(goal, Today);
+        var metrics = GoalMetricsCalculator.Calculate(goal, Today, 1);
 
         metrics.HabitAdherence.Should().BeEmpty();
     }
@@ -195,7 +195,7 @@ public class GoalMetricsCalculatorTests
     public void Calculate_ZeroTargetValue_ProgressIsZero()
     {
         var goal = CreateGoal(targetValue: 1);
-        var metrics = GoalMetricsCalculator.Calculate(goal, Today);
+        var metrics = GoalMetricsCalculator.Calculate(goal, Today, 1);
         metrics.ProgressPercentage.Should().Be(0);
     }
 }

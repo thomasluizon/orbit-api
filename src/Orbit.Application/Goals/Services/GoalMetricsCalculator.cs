@@ -7,7 +7,7 @@ namespace Orbit.Application.Goals.Services;
 
 public static class GoalMetricsCalculator
 {
-    public static GoalMetrics Calculate(Goal goal, DateOnly userToday)
+    public static GoalMetrics Calculate(Goal goal, DateOnly userToday, int weekStartDay)
     {
         var progressPercentage = goal.TargetValue > 0
             ? Math.Min(100, Math.Round(goal.CurrentValue / goal.TargetValue * 100, 1))
@@ -33,7 +33,7 @@ public static class GoalMetricsCalculator
 
         var habitAdherence = goal.Habits.Select(h =>
         {
-            var metrics = HabitMetricsCalculator.Calculate(h, userToday);
+            var metrics = HabitMetricsCalculator.Calculate(h, userToday, weekStartDay);
             return new LinkedHabitAdherence(
                 h.Id, h.Title,
                 metrics.WeeklyCompletionRate,

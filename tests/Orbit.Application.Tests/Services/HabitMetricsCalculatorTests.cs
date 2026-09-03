@@ -68,7 +68,7 @@ public class HabitMetricsCalculatorTests
             ValidUserId, "Test", FrequencyUnit.Day, 1,
             DueDate: Today)).Value;
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.CurrentStreak.Should().Be(0);
         metrics.LongestStreak.Should().Be(0);
@@ -83,7 +83,7 @@ public class HabitMetricsCalculatorTests
     {
         var habit = CreateDailyHabitWithLogs([Today]);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.TotalCompletions.Should().Be(1);
         metrics.LastCompletedDate.Should().Be(Today);
@@ -95,7 +95,7 @@ public class HabitMetricsCalculatorTests
     {
         var habit = CreateDailyHabitWithLogs([Today]);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.CurrentStreak.Should().Be(1);
         metrics.LongestStreak.Should().Be(1);
@@ -108,7 +108,7 @@ public class HabitMetricsCalculatorTests
             ValidUserId, "Test", FrequencyUnit.Day, 1,
             DueDate: Today)).Value;
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.CurrentStreak.Should().Be(0);
     }
@@ -118,7 +118,7 @@ public class HabitMetricsCalculatorTests
     {
         var habit = CreateDailyHabitWithLogs([Today.AddDays(-100)]);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.CurrentStreak.Should().Be(0);
         metrics.TotalCompletions.Should().Be(1);
@@ -129,7 +129,7 @@ public class HabitMetricsCalculatorTests
     {
         var habit = CreateDailyHabitWithLogs([Today]);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.WeeklyCompletionRate.Should().Be(100);
     }
@@ -141,7 +141,7 @@ public class HabitMetricsCalculatorTests
             ValidUserId, "Test", FrequencyUnit.Day, 1,
             DueDate: Today)).Value;
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.WeeklyCompletionRate.Should().Be(0);
     }
@@ -151,7 +151,7 @@ public class HabitMetricsCalculatorTests
     {
         var habit = CreateDailyHabitWithLogs([Today.AddDays(-20)]);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.WeeklyCompletionRate.Should().Be(0);
     }
@@ -168,7 +168,7 @@ public class HabitMetricsCalculatorTests
         };
         var habit = CreateDailyHabitWithLogs(logDates);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.TotalCompletions.Should().Be(4);
     }
@@ -184,7 +184,7 @@ public class HabitMetricsCalculatorTests
         };
         var habit = CreateDailyHabitWithLogs(logDates);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.LastCompletedDate.Should().Be(Today.AddDays(-1));
     }
@@ -196,7 +196,7 @@ public class HabitMetricsCalculatorTests
             ValidUserId, "Test", FrequencyUnit.Day, 1,
             DueDate: Today)).Value;
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.LastCompletedDate.Should().BeNull();
     }
@@ -206,7 +206,7 @@ public class HabitMetricsCalculatorTests
     {
         var habit = CreateOneTimeHabit();
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.TotalCompletions.Should().Be(0);
         metrics.CurrentStreak.Should().Be(0);
@@ -219,7 +219,7 @@ public class HabitMetricsCalculatorTests
             ValidUserId, "Smoking", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today)).Value;
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.CurrentStreak.Should().BeGreaterThanOrEqualTo(1);
     }
@@ -232,7 +232,7 @@ public class HabitMetricsCalculatorTests
             IsBadHabit: true, DueDate: Today)).Value;
         habit.Log(Today, advanceDueDate: false);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.CurrentStreak.Should().Be(0);
     }
@@ -244,7 +244,7 @@ public class HabitMetricsCalculatorTests
             ValidUserId, "Junk Food", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today)).Value;
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.WeeklyCompletionRate.Should().Be(100);
     }
@@ -256,7 +256,7 @@ public class HabitMetricsCalculatorTests
             ValidUserId, "No caffeine", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today.AddDays(5))).Value;
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.CurrentStreak.Should().Be(0);
         metrics.LongestStreak.Should().Be(0);
@@ -271,7 +271,7 @@ public class HabitMetricsCalculatorTests
             ValidUserId, "Morning walk", FrequencyUnit.Day, 1,
             DueDate: Today.AddDays(5))).Value;
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.CurrentStreak.Should().Be(0);
         metrics.LongestStreak.Should().Be(0);
@@ -287,7 +287,7 @@ public class HabitMetricsCalculatorTests
             IsBadHabit: true, DueDate: Today.AddDays(5))).Value;
         typeof(Habit).GetProperty(nameof(Habit.ScheduledStartDate))!.SetValue(habit, null);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.CurrentStreak.Should().Be(0);
         metrics.LongestStreak.Should().Be(0);
@@ -304,7 +304,7 @@ public class HabitMetricsCalculatorTests
         habit.Log(Today, advanceDueDate: false);
         typeof(Habit).GetProperty(nameof(Habit.ScheduledStartDate))!.SetValue(habit, null);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.CurrentStreak.Should().Be(0);
         metrics.LongestStreak.Should().Be(0);
@@ -326,7 +326,7 @@ public class HabitMetricsCalculatorTests
             .SetValue(habit, Today.AddDays(-5).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
         typeof(Habit).GetProperty(nameof(Habit.ScheduledStartDate))!.SetValue(habit, null);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.CurrentStreak.Should().Be(0);
         metrics.LongestStreak.Should().Be(0);
@@ -341,7 +341,7 @@ public class HabitMetricsCalculatorTests
             ValidUserId, "No caffeine", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today)).Value;
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.CurrentStreak.Should().Be(1);
         metrics.LongestStreak.Should().Be(1);
@@ -367,7 +367,7 @@ public class HabitMetricsCalculatorTests
             newStart,
             UserToday: Today));
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, newStart);
+        var metrics = HabitMetricsCalculator.Calculate(habit, newStart, 1);
 
         habit.ScheduledStartDate.Should().Be(newStart);
         metrics.CurrentStreak.Should().Be(1);
@@ -392,7 +392,7 @@ public class HabitMetricsCalculatorTests
             newStart,
             UserToday: Today));
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today.AddDays(3));
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today.AddDays(3), 1);
 
         habit.ScheduledStartDate.Should().Be(newStart);
         metrics.CurrentStreak.Should().Be(0);
@@ -419,7 +419,7 @@ public class HabitMetricsCalculatorTests
             newStart,
             UserToday: Today));
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         habit.ScheduledStartDate.Should().Be(newStart);
         metrics.CurrentStreak.Should().Be(2);
@@ -444,7 +444,7 @@ public class HabitMetricsCalculatorTests
             newStart,
             UserToday: Today));
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today.AddDays(1));
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today.AddDays(1), 1);
 
         habit.ScheduledStartDate.Should().Be(newStart);
         metrics.CurrentStreak.Should().Be(0);
@@ -465,7 +465,7 @@ public class HabitMetricsCalculatorTests
         typeof(Habit).GetProperty(nameof(Habit.ScheduledStartDate))!.SetValue(habit, null);
         habit.CatchUpDueDate(Today);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.CurrentStreak.Should().Be(6);
         metrics.LongestStreak.Should().Be(6);
@@ -484,7 +484,7 @@ public class HabitMetricsCalculatorTests
             .SetValue(habit, createdDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
         typeof(Habit).GetProperty(nameof(Habit.ScheduledStartDate))!.SetValue(habit, null);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.CurrentStreak.Should().Be(1);
         metrics.LongestStreak.Should().Be(1);
@@ -504,7 +504,7 @@ public class HabitMetricsCalculatorTests
             .SetValue(habit, Today.AddDays(-5).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
         typeof(Habit).GetProperty(nameof(Habit.ScheduledStartDate))!.SetValue(habit, null);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, evaluationDate);
+        var metrics = HabitMetricsCalculator.Calculate(habit, evaluationDate, 1);
 
         metrics.CurrentStreak.Should().Be(2);
         metrics.LongestStreak.Should().Be(2);
@@ -523,7 +523,7 @@ public class HabitMetricsCalculatorTests
         typeof(Habit).GetProperty(nameof(Habit.ScheduledStartDate))!.SetValue(habit, null);
 
         var logResult = habit.Log(Today);
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         logResult.IsSuccess.Should().BeTrue();
         habit.ScheduledStartDate.Should().Be(Today);
@@ -546,7 +546,7 @@ public class HabitMetricsCalculatorTests
         typeof(Habit).GetProperty(nameof(Habit.ScheduledStartDate))!.SetValue(habit, null);
 
         habit.CatchUpDueDate(Today);
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         habit.DueDate.Should().BeAfter(Today);
         habit.ScheduledStartDate.Should().Be(scheduledStart);
@@ -567,7 +567,7 @@ public class HabitMetricsCalculatorTests
             .SetValue(habit, Today.AddDays(-5).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
         typeof(Habit).GetProperty(nameof(Habit.ScheduledStartDate))!.SetValue(habit, null);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.CurrentStreak.Should().Be(0);
         metrics.LongestStreak.Should().Be(0);
@@ -584,7 +584,7 @@ public class HabitMetricsCalculatorTests
             DueDate: yesterday)).Value;
         habit.Log(yesterday, advanceDueDate: false);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.CurrentStreak.Should().Be(1);
         metrics.LongestStreak.Should().Be(1);
@@ -608,7 +608,7 @@ public class HabitMetricsCalculatorTests
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
             .SetValue(habit, startDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.CurrentStreak.Should().Be(4);
         metrics.LongestStreak.Should().Be(4);
@@ -624,7 +624,7 @@ public class HabitMetricsCalculatorTests
             IsBadHabit: true, DueDate: Today.AddDays(5))).Value;
         habit.Log(Today, advanceDueDate: false);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.CurrentStreak.Should().Be(0);
         metrics.LongestStreak.Should().Be(0);
@@ -640,7 +640,7 @@ public class HabitMetricsCalculatorTests
             IsBadHabit: true, DueDate: Today)).Value;
         habit.Log(Today, advanceDueDate: false);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.WeeklyCompletionRate.Should().Be(0);
     }
@@ -650,7 +650,7 @@ public class HabitMetricsCalculatorTests
     {
         var habit = CreateWeeklyHabitWithLogs([Today]);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.TotalCompletions.Should().Be(1);
         metrics.CurrentStreak.Should().BeGreaterThanOrEqualTo(1);
@@ -661,7 +661,7 @@ public class HabitMetricsCalculatorTests
     {
         var habit = CreateDailyHabitWithLogs([Today]);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today, TimeZoneInfo.Utc);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1, TimeZoneInfo.Utc);
 
         metrics.TotalCompletions.Should().Be(1);
     }
@@ -671,7 +671,7 @@ public class HabitMetricsCalculatorTests
     {
         var habit = CreateDailyHabitWithLogs([Today]);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today, null);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1, null);
 
         metrics.TotalCompletions.Should().Be(1);
     }
@@ -691,7 +691,7 @@ public class HabitMetricsCalculatorTests
     {
         var habit = CreateDailyHabitWithLogs([Today]);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.CurrentStreak.Should().BeGreaterThanOrEqualTo(0);
         metrics.LongestStreak.Should().BeGreaterThanOrEqualTo(0);
@@ -712,7 +712,7 @@ public class HabitMetricsCalculatorTests
 
         habit.Log(Today, advanceDueDate: false);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.TotalCompletions.Should().Be(1);
         metrics.CurrentStreak.Should().BeGreaterThanOrEqualTo(1);
@@ -728,7 +728,7 @@ public class HabitMetricsCalculatorTests
             1,
             DueDate: Today)).Value;
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.CurrentStreak.Should().Be(0);
     }
@@ -745,7 +745,7 @@ public class HabitMetricsCalculatorTests
 
         habit.Log(Today, advanceDueDate: false);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.TotalCompletions.Should().Be(1);
         metrics.CurrentStreak.Should().Be(1);
@@ -763,7 +763,7 @@ public class HabitMetricsCalculatorTests
 
         habit.Log(Today, advanceDueDate: false);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.TotalCompletions.Should().Be(1);
         metrics.CurrentStreak.Should().Be(1);
@@ -782,7 +782,7 @@ public class HabitMetricsCalculatorTests
 
         habit.Log(Today, advanceDueDate: false);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.TotalCompletions.Should().Be(1);
     }
@@ -799,7 +799,7 @@ public class HabitMetricsCalculatorTests
 
         habit.Log(Today, advanceDueDate: false);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.LongestStreak.Should().BeGreaterThanOrEqualTo(metrics.CurrentStreak);
     }
@@ -815,7 +815,7 @@ public class HabitMetricsCalculatorTests
             DueDate: Today)).Value;
 
         habit.Log(Today);
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.TotalCompletions.Should().Be(1);
         metrics.CurrentStreak.Should().Be(1);
@@ -828,7 +828,7 @@ public class HabitMetricsCalculatorTests
             ValidUserId, "Smoking", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today)).Value;
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.LongestStreak.Should().Be(metrics.CurrentStreak);
     }
@@ -839,7 +839,7 @@ public class HabitMetricsCalculatorTests
         var habit = CreateDailyHabitWithLogs([Today]);
         var tz = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today, tz);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1, tz);
 
         metrics.TotalCompletions.Should().Be(1);
     }
@@ -864,7 +864,7 @@ public class HabitMetricsCalculatorTests
             1,
             DueDate: Today)).Value;
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.MonthlyCompletionRate.Should().Be(0);
     }
@@ -880,7 +880,7 @@ public class HabitMetricsCalculatorTests
             DueDate: Today)).Value;
         habit.Log(Today, advanceDueDate: false);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.MonthlyCompletionRate.Should().Be(100);
     }
@@ -894,7 +894,7 @@ public class HabitMetricsCalculatorTests
         for (var day = 0; day < 500; day++)
             habit.Log(Today.AddDays(-day), advanceDueDate: false);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.CurrentStreak.Should().Be(500);
         metrics.LongestStreak.Should().Be(500);
@@ -914,7 +914,7 @@ public class HabitMetricsCalculatorTests
         habit.Log(Today);
         habit.Log(Today);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
         metrics.TotalCompletions.Should().Be(1);
     }

@@ -606,7 +606,7 @@ public class BulkLogHabitsCommandHandlerTests
             habitRepo,
             habitLogRepo,
             new BulkLogServices(userDateService, userStreakService, gamification),
-            new GoalCompletionService(goalRepo, gamification, unitOfWork),
+            new GoalCompletionService(goalRepo, gamification, unitOfWork, userDateService),
             unitOfWork,
             cache,
             Substitute.For<ILogger<BulkLogHabitsCommandHandler>>());

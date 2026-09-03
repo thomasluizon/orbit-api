@@ -13,18 +13,18 @@ public static class HabitMetricsCalculator
     public static HabitMetrics Calculate(
         Habit habit,
         DateOnly today,
-        TimeZoneInfo? userTimeZone = null,
-        int weekStartDay = 1)
+        int weekStartDay,
+        TimeZoneInfo? userTimeZone = null)
     {
-        return Calculate(habit, habit.Logs, today, userTimeZone, weekStartDay);
+        return Calculate(habit, habit.Logs, today, weekStartDay, userTimeZone);
     }
 
     public static HabitMetrics Calculate(
         Habit habit,
         IReadOnlyCollection<HabitLog> logs,
         DateOnly today,
-        TimeZoneInfo? userTimeZone = null,
-        int weekStartDay = 1)
+        int weekStartDay,
+        TimeZoneInfo? userTimeZone = null)
     {
         var logDates = logs.Where(l => l.Value > 0).Select(l => l.Date).Distinct().ToHashSet();
         var expectedDates = GenerateExpectedDates(habit, logs, today, userTimeZone, weekStartDay).ToList();
