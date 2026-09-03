@@ -129,6 +129,73 @@ public class CreateHabitToolTests
     }
 
     [Fact]
+    public async Task WithInlineSubHabitExplicitCadence_DoesNotInheritParentInterval()
+    {
+        var addedHabits = new List<Habit>();
+        _habitRepo.AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                addedHabits.Add(call.Arg<Habit>());
+                return Task.CompletedTask;
+            });
+
+        var result = await Execute("""
+        {
+            "title": "Alternating routine",
+            "frequency_unit": "Day",
+            "frequency_quantity": 1,
+            "interval_weeks": 2,
+            "sub_habits": [
+                {
+                    "title": "Weekly Child",
+                    "frequency_unit": "Week",
+                    "frequency_quantity": 1
+                }
+            ]
+        }
+        """);
+
+        result.Success.Should().BeTrue();
+        var child = addedHabits.Single(habit => habit.ParentHabitId is not null);
+        child.FrequencyUnit.Should().Be(FrequencyUnit.Week);
+        child.FrequencyQuantity.Should().Be(1);
+        child.IntervalWeeks.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task WithInlineSubHabitIntervalOverride_UsesExplicitInterval()
+    {
+        var addedHabits = new List<Habit>();
+        _habitRepo.AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                addedHabits.Add(call.Arg<Habit>());
+                return Task.CompletedTask;
+            });
+
+        var result = await Execute("""
+        {
+            "title": "Alternating routine",
+            "frequency_unit": "Day",
+            "frequency_quantity": 1,
+            "interval_weeks": 2,
+            "sub_habits": [
+                {
+                    "title": "Weekly Child",
+                    "frequency_unit": "Week",
+                    "frequency_quantity": 1,
+                    "interval_weeks": 1
+                }
+            ]
+        }
+        """);
+
+        result.Success.Should().BeTrue();
+        addedHabits.Single(habit => habit.ParentHabitId is not null)
+            .IntervalWeeks.Should().Be(1);
+    }
+
+    [Fact]
     public async Task InvalidFrequencyUnit_CreatesOneTimeTask()
     {
         var result = await Execute("""{"title": "Task", "frequency_unit": "InvalidUnit"}""");

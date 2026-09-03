@@ -76,6 +76,16 @@ public class CreateSubHabitCommandValidatorTests
         result.ShouldNotHaveValidationErrorFor(x => x.FrequencyQuantity);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(AppConstants.MaxIntervalWeeks + 1)]
+    public void Validate_InvalidIntervalWeeks_HasError(int intervalWeeks)
+    {
+        var result = _validator.TestValidate(ValidCommand() with { IntervalWeeks = intervalWeeks });
+
+        result.ShouldHaveValidationErrorFor(x => x.IntervalWeeks);
+    }
+
     [Fact]
     public void Validate_DaysWithQtyNot1_HasError()
     {

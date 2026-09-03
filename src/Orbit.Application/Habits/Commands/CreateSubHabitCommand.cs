@@ -9,8 +9,8 @@ using Orbit.Domain.Interfaces;
 namespace Orbit.Application.Habits.Commands;
 
 /// <param name="InheritParentFrequency">
-/// When true and <see cref="FrequencyUnit"/>/<see cref="FrequencyQuantity"/> are unset, the child
-/// inherits the parent's cadence instead of becoming a one-time task, including its week interval.
+/// When true, unset cadence fields inherit from the parent. The parent's week interval is inherited
+/// only when the child supplies no cadence field of its own.
 /// Only the AI chat tool (which treats an unspecified frequency as "match the parent") opts into
 /// this; the REST API always sends the user's explicit choice, where an unset frequency means the
 /// user picked "one-time".
@@ -27,7 +27,8 @@ public record CreateSubHabitCommand(
     HabitCommandOptions? Options = null,
     IReadOnlyList<Guid>? TagIds = null,
     string? Emoji = null,
-    bool InheritParentFrequency = false) : IRequest<Result<Guid>>;
+    bool InheritParentFrequency = false,
+    int? IntervalWeeks = null) : IRequest<Result<Guid>>;
 
 public class CreateSubHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -71,12 +72,19 @@ public class CreateSubHabitCommandHandler(
 
         var frequencyUnit = request.FrequencyUnit;
         var frequencyQuantity = request.FrequencyQuantity;
-        int? intervalWeeks = null;
+        var intervalWeeks = request.IntervalWeeks;
+        var days = opts.Days;
+        var hasExplicitCadence = frequencyUnit is not null
+            || frequencyQuantity is not null
+            || intervalWeeks is not null
+            || days is not null;
         if (request.InheritParentFrequency)
         {
             frequencyUnit ??= parent.FrequencyUnit;
             frequencyQuantity ??= parent.FrequencyQuantity;
-            intervalWeeks = parent.IntervalWeeks;
+            days ??= parent.Days.ToList();
+            if (!hasExplicitCadence)
+                intervalWeeks = parent.IntervalWeeks;
         }
 
         var childResult = Habit.Create(new HabitCreateParams(
@@ -87,7 +95,7 @@ public class CreateSubHabitCommandHandler(
             childDueDate,
             request.Description,
             Emoji: request.Emoji,
-            Days: opts.Days,
+            Days: days,
             IsBadHabit: request.IsBadHabit,
             DueTime: opts.DueTime,
             DueEndTime: opts.DueEndTime,

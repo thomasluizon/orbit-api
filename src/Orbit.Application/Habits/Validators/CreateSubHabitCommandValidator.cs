@@ -26,6 +26,8 @@ public class CreateSubHabitCommandValidator : AbstractValidator<CreateSubHabitCo
             .GreaterThan(0)
             .When(x => x.FrequencyQuantity is not null);
 
+        SharedHabitRules.AddIntervalWeeksRules(RuleFor(x => x.IntervalWeeks));
+
         SharedHabitRules.AddDaysRules(this,
             x => x.Options != null ? x.Options.Days : null,
             x => x.FrequencyQuantity,
