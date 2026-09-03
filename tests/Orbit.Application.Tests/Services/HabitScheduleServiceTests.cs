@@ -796,6 +796,23 @@ public class HabitScheduleServiceTests
     }
 
     [Fact]
+    public void HasMissedPastOccurrence_AncientEndedHabitWithoutActiveOccurrence_ReturnsFalse()
+    {
+        var anchor = new DateOnly(100, 1, 4);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Ancient", FrequencyUnit.Day, 1, DueDate: anchor,
+            Days: [DayOfWeek.Monday])).Value;
+        habit.AdvanceDueDate(anchor.AddDays(6), weekStartDay: 1);
+        habit.Update(new HabitUpdateParams(
+            habit.Title, habit.Description, habit.FrequencyUnit, habit.FrequencyQuantity,
+            habit.Days.ToList(), habit.IsBadHabit, DueDate: null,
+            EndDate: anchor.AddDays(13), IntervalWeeks: 2));
+
+        HabitScheduleService.HasMissedPastOccurrence(
+            habit, new DateOnly(9999, 12, 31), weekStartDay: 1).Should().BeFalse();
+    }
+
+    [Fact]
     public void GetScheduledDates_WeeklyHabit_ReturnsCorrectDates()
     {
         var habit = CreateHabit(FrequencyUnit.Week, 1, dueDate: Anchor);

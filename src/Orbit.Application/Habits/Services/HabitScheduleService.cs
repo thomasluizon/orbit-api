@@ -340,7 +340,7 @@ public static class HabitScheduleService
     /// <summary>
     /// True when a recurring, non-flexible, non-bad habit has an unresolved past
     /// occurrence, meaning its <see cref="Habit.DueDate"/> has fallen before today and the current
-    /// cadence schedules an occurrence between that parked date and today.
+    /// cadence schedules an occurrence within the bounded schedule horizon ending before today.
     /// This is the single overdue signal shared by the schedule query and the
     /// log/skip commands. It relies on DueDate resting on the oldest unresolved
     /// occurrence: the background advancement service no longer rolls non-bad
@@ -350,8 +350,21 @@ public static class HabitScheduleService
     {
         if (habit.FrequencyUnit is null || habit.IsBadHabit || habit.IsFlexible)
             return false;
+        if (habit.DueDate >= today)
+            return false;
 
-        for (var date = habit.DueDate; date < today; date = date.AddDays(1))
+        var latestOccurrence = today.AddDays(-1);
+        if (habit.EndDate.HasValue && habit.EndDate.Value < latestOccurrence)
+            latestOccurrence = habit.EndDate.Value;
+
+        var earliestOccurrence = habit.DueDate;
+        var boundedStart = latestOccurrence.AddDays(-Math.Min(
+            AppConstants.MaxRangeDays,
+            latestOccurrence.DayNumber));
+        if (earliestOccurrence < boundedStart)
+            earliestOccurrence = boundedStart;
+
+        for (var date = earliestOccurrence; date <= latestOccurrence; date = date.AddDays(1))
         {
             if (IsHabitDueOnDate(habit, date, weekStartDay))
                 return true;
