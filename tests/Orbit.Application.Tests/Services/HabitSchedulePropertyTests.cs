@@ -41,7 +41,7 @@ public class HabitSchedulePropertyTests
         var habit = recurring.Habit;
         var reference = habit.DueDate.AddDays(rawOffset % 401);
 
-        HabitScheduleService.HasMissedPastOccurrence(habit, reference)
+        HabitScheduleService.HasMissedPastOccurrence(habit, reference, weekStartDay: 1)
             .Should().Be(habit.DueDate < reference);
     }
 
@@ -55,7 +55,7 @@ public class HabitSchedulePropertyTests
     public void BadHabit_IsNeverOverdueOrMissed(BadHabit bad, DateOnly reference)
     {
         HabitScheduleService.IsOverdueOnDate(bad.Habit, reference).Should().BeFalse();
-        HabitScheduleService.HasMissedPastOccurrence(bad.Habit, reference).Should().BeFalse();
+        HabitScheduleService.HasMissedPastOccurrence(bad.Habit, reference, weekStartDay: 1).Should().BeFalse();
     }
 
     [Property]

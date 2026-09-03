@@ -730,7 +730,7 @@ public class HabitScheduleServiceTests
     {
         var habit = CreateHabit(null, null, dueDate: Anchor);
 
-        HabitScheduleService.HasMissedPastOccurrence(habit, Anchor.AddDays(5)).Should().BeFalse();
+        HabitScheduleService.HasMissedPastOccurrence(habit, Anchor.AddDays(5), weekStartDay: 1).Should().BeFalse();
     }
 
     [Fact]
@@ -739,7 +739,7 @@ public class HabitScheduleServiceTests
         var habit = Habit.Create(new HabitCreateParams(
             UserId, "Bad", FrequencyUnit.Day, 1, IsBadHabit: true, DueDate: Anchor)).Value;
 
-        HabitScheduleService.HasMissedPastOccurrence(habit, Anchor.AddDays(5)).Should().BeFalse();
+        HabitScheduleService.HasMissedPastOccurrence(habit, Anchor.AddDays(5), weekStartDay: 1).Should().BeFalse();
     }
 
     [Fact]
@@ -748,7 +748,7 @@ public class HabitScheduleServiceTests
         var habit = CreateHabit(FrequencyUnit.Day, 1, dueDate: Anchor);
         var today = Anchor.AddDays(3);
 
-        HabitScheduleService.HasMissedPastOccurrence(habit, today).Should().BeTrue();
+        HabitScheduleService.HasMissedPastOccurrence(habit, today, weekStartDay: 1).Should().BeTrue();
     }
 
     [Fact]
@@ -759,7 +759,7 @@ public class HabitScheduleServiceTests
         habit.Log(Anchor.AddDays(1));
         var today = Anchor.AddDays(2);
 
-        HabitScheduleService.HasMissedPastOccurrence(habit, today).Should().BeFalse();
+        HabitScheduleService.HasMissedPastOccurrence(habit, today, weekStartDay: 1).Should().BeFalse();
     }
 
     [Fact]
@@ -767,7 +767,7 @@ public class HabitScheduleServiceTests
     {
         var habit = CreateHabit(FrequencyUnit.Day, 1, dueDate: Anchor);
 
-        HabitScheduleService.HasMissedPastOccurrence(habit, Anchor).Should().BeFalse();
+        HabitScheduleService.HasMissedPastOccurrence(habit, Anchor, weekStartDay: 1).Should().BeFalse();
     }
 
     [Fact]
@@ -775,7 +775,7 @@ public class HabitScheduleServiceTests
     {
         var habit = CreateHabit(FrequencyUnit.Week, 1, dueDate: Anchor.AddDays(7));
 
-        HabitScheduleService.HasMissedPastOccurrence(habit, Anchor).Should().BeFalse();
+        HabitScheduleService.HasMissedPastOccurrence(habit, Anchor, weekStartDay: 1).Should().BeFalse();
     }
 
     [Fact]
@@ -784,7 +784,7 @@ public class HabitScheduleServiceTests
         var habit = Habit.Create(new HabitCreateParams(
             UserId, "Flex", FrequencyUnit.Week, 3, IsFlexible: true, DueDate: Anchor)).Value;
 
-        HabitScheduleService.HasMissedPastOccurrence(habit, Anchor.AddDays(10)).Should().BeFalse();
+        HabitScheduleService.HasMissedPastOccurrence(habit, Anchor.AddDays(10), weekStartDay: 1).Should().BeFalse();
     }
 
     [Fact]
@@ -792,7 +792,7 @@ public class HabitScheduleServiceTests
     {
         var habit = CreateHabit(FrequencyUnit.Week, 1, dueDate: Anchor);
         var today = Anchor.AddDays(14);
-        HabitScheduleService.HasMissedPastOccurrence(habit, today).Should().BeTrue();
+        HabitScheduleService.HasMissedPastOccurrence(habit, today, weekStartDay: 1).Should().BeTrue();
     }
 
     [Fact]

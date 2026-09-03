@@ -129,7 +129,7 @@ public partial class LogHabitCommandHandler(
         {
             var isOverdue = !habit.IsFlexible
                 && targetDate == today
-                && HabitScheduleService.HasMissedPastOccurrence(habit, today);
+                && HabitScheduleService.HasMissedPastOccurrence(habit, today, weekStartDay);
             if (!isOverdue)
                 return Result.Failure(ErrorMessages.NotScheduledOnDate);
         }

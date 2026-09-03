@@ -103,7 +103,7 @@ public class BulkSkipHabitsCommandHandler(
         {
             var isOverdue = !habit.IsFlexible
                 && targetDate == today
-                && HabitScheduleService.HasMissedPastOccurrence(habit, today);
+                && HabitScheduleService.HasMissedPastOccurrence(habit, today, weekStartDay);
             if (!isOverdue)
                 return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
                     Error: ErrorMessages.NotScheduledOnDate.Message, ErrorCode: ErrorMessages.NotScheduledOnDate.Code);

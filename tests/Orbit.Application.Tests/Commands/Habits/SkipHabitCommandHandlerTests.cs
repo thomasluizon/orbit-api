@@ -87,6 +87,44 @@ public class SkipHabitCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_IntervalChangedAfterAdvancement_RejectsInactiveWeekUntilNextActiveWeek()
+    {
+        var anchor = new DateOnly(2025, 1, 6);
+        var inactiveDueDate = anchor.AddDays(7);
+        var inactiveToday = inactiveDueDate.AddDays(1);
+        var nextActiveWeek = anchor.AddDays(14);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Alternating", FrequencyUnit.Day, 1, DueDate: anchor)).Value;
+        habit.AdvanceDueDate(anchor.AddDays(6), weekStartDay: 1);
+        var update = habit.Update(new HabitUpdateParams(
+            habit.Title,
+            habit.Description,
+            habit.FrequencyUnit,
+            habit.FrequencyQuantity,
+            habit.Days.ToList(),
+            habit.IsBadHabit,
+            DueDate: null,
+            UserToday: inactiveToday,
+            IntervalWeeks: 2));
+        update.IsSuccess.Should().BeTrue();
+        habit.DueDate.Should().Be(inactiveDueDate);
+
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(inactiveToday, nextActiveWeek);
+        _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(1);
+        SetupHabitFound(habit);
+
+        var inactiveResult = await _handler.Handle(
+            new SkipHabitCommand(UserId, habit.Id), CancellationToken.None);
+        var activeResult = await _handler.Handle(
+            new SkipHabitCommand(UserId, habit.Id), CancellationToken.None);
+
+        inactiveResult.IsFailure.Should().BeTrue();
+        inactiveResult.ErrorCode.Should().Be(ErrorCodes.NotScheduledOnDate);
+        activeResult.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Handle_HabitNotFound_ReturnsFailure()
     {
         _habitRepo.FindOneTrackedAsync(
