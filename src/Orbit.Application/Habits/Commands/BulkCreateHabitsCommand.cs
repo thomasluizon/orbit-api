@@ -182,21 +182,36 @@ public partial class BulkCreateHabitsCommandHandler(
                 var subPositionCursor = 0;
                 foreach (var subItem in item.SubHabits)
                 {
+                    var hasExplicitCadence = subItem.FrequencyUnit is not null
+                        || subItem.FrequencyQuantity is not null
+                        || subItem.IntervalWeeks is not null
+                        || subItem.Days is not null;
+                    var childFrequencyUnit = subItem.FrequencyUnit ?? item.FrequencyUnit;
+                    var childFrequencyQuantity = subItem.FrequencyQuantity ?? item.FrequencyQuantity;
+                    var childDays = subItem.Days;
+                    if (childDays is null
+                        && childFrequencyUnit == FrequencyUnit.Day
+                        && childFrequencyQuantity == 1)
+                    {
+                        childDays = item.Days;
+                    }
+
                     var childResult = Habit.Create(new HabitCreateParams(
                         userId,
                         subItem.Title,
-                        subItem.FrequencyUnit ?? item.FrequencyUnit,
-                        subItem.FrequencyQuantity ?? item.FrequencyQuantity,
+                        childFrequencyUnit,
+                        childFrequencyQuantity,
                         subItem.DueDate ?? item.DueDate ?? userToday,
                         subItem.Description,
                         Emoji: subItem.Emoji,
-                        Days: subItem.Days ?? item.Days,
+                        Days: childDays,
                         IsBadHabit: subItem.IsBadHabit,
                         ParentHabitId: parentHabit.Id,
                         IsGeneral: item.IsGeneral,
                         IsFlexible: subItem.IsFlexible,
                         Position: subPositionCursor++,
-                        IntervalWeeks: subItem.IntervalWeeks ?? item.IntervalWeeks));
+                        IntervalWeeks: subItem.IntervalWeeks
+                            ?? (hasExplicitCadence ? null : item.IntervalWeeks)));
 
                     if (childResult.IsFailure)
                     {

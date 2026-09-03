@@ -127,6 +127,7 @@ public class BulkCreateHabitsCommandHandlerTests
                 null,
                 FrequencyUnit.Day,
                 1,
+                Days: [DayOfWeek.Monday],
                 DueDate: Today,
                 SubHabits: [new("Child", null, null, null)],
                 IntervalWeeks: 2)
@@ -145,6 +146,50 @@ public class BulkCreateHabitsCommandHandlerTests
         var childDates = HabitScheduleService.GetScheduledDates(child, Today, rangeEnd, weekStartDay: 1);
         childDates.Should().Equal(parentDates);
         childDates.Should().NotContain(Today.AddDays(3));
+    }
+
+    [Fact]
+    public async Task Handle_WithExplicitWeeklySubHabit_DoesNotInheritParentInterval()
+    {
+        var addedHabits = new List<Habit>();
+        _habitRepo.AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                addedHabits.Add(call.Arg<Habit>());
+                return Task.CompletedTask;
+            });
+        var items = new List<BulkHabitItem>
+        {
+            new(
+                "Alternating routine",
+                null,
+                FrequencyUnit.Day,
+                1,
+                Days: [DayOfWeek.Monday],
+                DueDate: Today,
+                SubHabits:
+                [
+                    new(
+                        "Weekly child",
+                        null,
+                        FrequencyUnit.Week,
+                        1,
+                        DueDate: Today)
+                ],
+                IntervalWeeks: 2)
+        };
+
+        var result = await _handler.Handle(
+            new BulkCreateHabitsCommand(UserId, items),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var parent = addedHabits.Single(habit => habit.ParentHabitId is null);
+        var child = addedHabits.Single(habit => habit.ParentHabitId == parent.Id);
+        child.FrequencyUnit.Should().Be(FrequencyUnit.Week);
+        child.FrequencyQuantity.Should().Be(1);
+        child.Days.Should().BeEmpty();
+        child.IntervalWeeks.Should().BeNull();
     }
 
     [Fact]
