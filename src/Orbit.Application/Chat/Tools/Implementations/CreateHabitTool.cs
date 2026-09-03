@@ -274,14 +274,16 @@ public class CreateHabitTool(
             || subFrequencyQuantity is not null
             || subIntervalWeeks is not null
             || subDays is not null;
-        if (subDays is null)
+        var frequencyUnit = subFrequencyUnit ?? parentFreqUnit;
+        var frequencyQuantity = subFrequencyQuantity ?? (subFrequencyUnit is not null ? 1 : parentFreqQty);
+        if (subDays is null && frequencyUnit == FrequencyUnit.Day && frequencyQuantity == 1)
             subDays = parentDays;
 
         return Habit.Create(new HabitCreateParams(
             userId,
             JsonArgumentParser.GetOptionalString(sub, TitleProperty) ?? "Untitled",
-            subFrequencyUnit ?? parentFreqUnit,
-            subFrequencyQuantity ?? (subFrequencyUnit is not null ? 1 : parentFreqQty),
+            frequencyUnit,
+            frequencyQuantity,
             JsonArgumentParser.ParseDateOnly(sub, "due_date") ?? parentDueDate,
             JsonArgumentParser.GetOptionalString(sub, "description"),
             Days: subDays,

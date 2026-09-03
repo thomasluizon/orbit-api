@@ -145,6 +145,7 @@ public class CreateHabitToolTests
             "frequency_unit": "Day",
             "frequency_quantity": 1,
             "interval_weeks": 2,
+            "days": ["Monday"],
             "sub_habits": [
                 {
                     "title": "Weekly Child",
@@ -159,6 +160,7 @@ public class CreateHabitToolTests
         var child = addedHabits.Single(habit => habit.ParentHabitId is not null);
         child.FrequencyUnit.Should().Be(FrequencyUnit.Week);
         child.FrequencyQuantity.Should().Be(1);
+        child.Days.Should().BeEmpty();
         child.IntervalWeeks.Should().BeNull();
     }
 

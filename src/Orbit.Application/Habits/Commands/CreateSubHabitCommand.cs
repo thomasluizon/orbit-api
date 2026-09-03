@@ -82,7 +82,8 @@ public class CreateSubHabitCommandHandler(
         {
             frequencyUnit ??= parent.FrequencyUnit;
             frequencyQuantity ??= parent.FrequencyQuantity;
-            days ??= parent.Days.ToList();
+            if (days is null && frequencyUnit == FrequencyUnit.Day && frequencyQuantity == 1)
+                days = parent.Days.ToList();
             if (!hasExplicitCadence)
                 intervalWeeks = parent.IntervalWeeks;
         }

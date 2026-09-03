@@ -207,6 +207,7 @@ public class CreateSubHabitCommandHandlerTests
     {
         var parent = Habit.Create(new HabitCreateParams(
             UserId, "Parent Habit", FrequencyUnit.Day, 1, DueDate: Today,
+            Days: [DayOfWeek.Monday],
             IntervalWeeks: 2)).Value;
         Habit? child = null;
         _habitRepo.AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>())
@@ -235,6 +236,7 @@ public class CreateSubHabitCommandHandlerTests
         child.Should().NotBeNull();
         child!.FrequencyUnit.Should().Be(FrequencyUnit.Week);
         child.FrequencyQuantity.Should().Be(1);
+        child.Days.Should().BeEmpty();
         child.IntervalWeeks.Should().BeNull();
     }
 
