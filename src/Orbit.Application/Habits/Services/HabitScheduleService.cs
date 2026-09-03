@@ -352,6 +352,9 @@ public static class HabitScheduleService
             return false;
         if (habit.DueDate >= today)
             return false;
+        if ((!habit.EndDate.HasValue || habit.DueDate <= habit.EndDate.Value)
+            && IsHabitDueOnDate(habit, habit.DueDate, weekStartDay))
+            return true;
 
         var latestOccurrence = today.AddDays(-1);
         if (habit.EndDate.HasValue && habit.EndDate.Value < latestOccurrence)

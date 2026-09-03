@@ -361,6 +361,30 @@ public class LogHabitCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_EveryTwoYearsDueMoreThanOneYearAgo_LogsOverdueOccurrence()
+    {
+        var dueDate = new DateOnly(2025, 1, 6);
+        var today = new DateOnly(2026, 7, 1);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Biennial", FrequencyUnit.Year, 2, DueDate: dueDate)).Value;
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(today);
+        _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(1);
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(habit);
+
+        var result = await _handler.Handle(
+            new LogHabitCommand(UserId, habit.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _habitLogRepo.Received(1).AddAsync(
+            Arg.Is<HabitLog>(log => log.Date == today),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_NotScheduledOnDate_ReturnsFailure()
     {
         var habit = Habit.Create(new HabitCreateParams(
