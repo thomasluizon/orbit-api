@@ -918,4 +918,122 @@ public class HabitMetricsCalculatorTests
 
         metrics.TotalCompletions.Should().Be(1);
     }
+
+    [Fact]
+    public void Calculate_FlexibleDay_UsesDailyWindowsForExactMetrics()
+    {
+        var start = new DateOnly(2026, 3, 7);
+        var evaluationDate = new DateOnly(2026, 3, 10);
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId,
+            "Daily flexibility",
+            FrequencyUnit.Day,
+            1,
+            DueDate: start,
+            IsFlexible: true)).Value;
+        foreach (var date in Enumerable.Range(0, 4).Select(start.AddDays))
+            habit.Log(date, advanceDueDate: false);
+
+        var metrics = HabitMetricsCalculator.Calculate(habit, evaluationDate, 1);
+
+        metrics.CurrentStreak.Should().Be(4);
+        metrics.LongestStreak.Should().Be(4);
+        metrics.WeeklyCompletionRate.Should().Be(100);
+        metrics.MonthlyCompletionRate.Should().Be(100);
+    }
+
+    [Fact]
+    public void Calculate_FlexibleMonth_UsesMonthlyWindowsForExactMetrics()
+    {
+        var start = new DateOnly(2026, 1, 10);
+        var evaluationDate = new DateOnly(2026, 4, 20);
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId,
+            "Monthly flexibility",
+            FrequencyUnit.Month,
+            2,
+            DueDate: start,
+            IsFlexible: true)).Value;
+        foreach (var date in new[]
+        {
+            new DateOnly(2026, 1, 15),
+            new DateOnly(2026, 1, 20),
+            new DateOnly(2026, 2, 5),
+            new DateOnly(2026, 2, 25),
+            new DateOnly(2026, 3, 1),
+            new DateOnly(2026, 4, 2),
+            new DateOnly(2026, 4, 3)
+        })
+        {
+            habit.Log(date, advanceDueDate: false);
+        }
+
+        var metrics = HabitMetricsCalculator.Calculate(habit, evaluationDate, 1);
+
+        metrics.CurrentStreak.Should().Be(1);
+        metrics.LongestStreak.Should().Be(2);
+        metrics.WeeklyCompletionRate.Should().Be(100);
+        metrics.MonthlyCompletionRate.Should().Be(50);
+    }
+
+    [Fact]
+    public void Calculate_FlexibleYear_UsesYearlyWindowsForExactMetrics()
+    {
+        var start = new DateOnly(2023, 3, 1);
+        var evaluationDate = new DateOnly(2026, 6, 15);
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId,
+            "Yearly flexibility",
+            FrequencyUnit.Year,
+            2,
+            DueDate: start,
+            IsFlexible: true)).Value;
+        foreach (var date in new[]
+        {
+            new DateOnly(2023, 4, 1),
+            new DateOnly(2023, 9, 1),
+            new DateOnly(2024, 2, 1),
+            new DateOnly(2024, 8, 1),
+            new DateOnly(2025, 5, 1),
+            new DateOnly(2026, 1, 1),
+            new DateOnly(2026, 6, 1)
+        })
+        {
+            habit.Log(date, advanceDueDate: false);
+        }
+
+        var metrics = HabitMetricsCalculator.Calculate(habit, evaluationDate, 1);
+
+        metrics.CurrentStreak.Should().Be(1);
+        metrics.LongestStreak.Should().Be(2);
+        metrics.WeeklyCompletionRate.Should().Be(100);
+        metrics.MonthlyCompletionRate.Should().Be(100);
+    }
+
+    [Fact]
+    public void Calculate_FlexibleMonth_FiltersCompletionsByIntervalWeek()
+    {
+        var start = new DateOnly(2026, 3, 1);
+        var evaluationDate = new DateOnly(2026, 3, 31);
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId,
+            "Interval month",
+            FrequencyUnit.Month,
+            1,
+            DueDate: start,
+            IsFlexible: true,
+            IntervalWeeks: 2)).Value;
+        habit.Log(new DateOnly(2026, 3, 10), advanceDueDate: false);
+
+        var inactiveMetrics = HabitMetricsCalculator.Calculate(habit, evaluationDate, 0);
+
+        inactiveMetrics.CurrentStreak.Should().Be(0);
+        inactiveMetrics.MonthlyCompletionRate.Should().Be(0);
+
+        habit.Log(new DateOnly(2026, 3, 16), advanceDueDate: false);
+        var activeMetrics = HabitMetricsCalculator.Calculate(habit, evaluationDate, 0);
+
+        activeMetrics.CurrentStreak.Should().Be(1);
+        activeMetrics.MonthlyCompletionRate.Should().Be(100);
+    }
 }
