@@ -5553,7 +5553,8 @@
         "testClass": "HabitScheduleServiceTests",
         "file": "tests/Orbit.Application.Tests/Services/HabitScheduleServiceTests.cs",
         "references": [
-          "Habit"
+          "Habit",
+          "HabitLog"
         ]
       },
       {
