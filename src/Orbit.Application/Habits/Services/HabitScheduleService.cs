@@ -339,8 +339,8 @@ public static class HabitScheduleService
 
     /// <summary>
     /// True when a recurring, non-flexible, non-bad habit has an unresolved past
-    /// occurrence, meaning its <see cref="Habit.DueDate"/> has fallen before today and remains
-    /// active under the current interval and week-start settings.
+    /// occurrence, meaning its <see cref="Habit.DueDate"/> has fallen before today and the current
+    /// cadence schedules an occurrence between that parked date and today.
     /// This is the single overdue signal shared by the schedule query and the
     /// log/skip commands. It relies on DueDate resting on the oldest unresolved
     /// occurrence: the background advancement service no longer rolls non-bad
@@ -351,8 +351,13 @@ public static class HabitScheduleService
         if (habit.FrequencyUnit is null || habit.IsBadHabit || habit.IsFlexible)
             return false;
 
-        return habit.DueDate < today
-            && IsActiveIntervalWeek(habit, habit.DueDate, weekStartDay);
+        for (var date = habit.DueDate; date < today; date = date.AddDays(1))
+        {
+            if (IsHabitDueOnDate(habit, date, weekStartDay))
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>

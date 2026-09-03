@@ -382,14 +382,16 @@ public class LogHabitCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_IntervalChangedAfterAdvancement_RejectsInactiveWeekUntilNextActiveWeek()
+    public async Task Handle_IntervalChangedAfterAdvancement_RejectsInactiveWeekThenAllowsMissedActiveDay()
     {
         var anchor = new DateOnly(2025, 1, 6);
         var inactiveDueDate = anchor.AddDays(7);
         var inactiveToday = inactiveDueDate.AddDays(1);
-        var nextActiveWeek = anchor.AddDays(14);
+        var missedActiveDay = anchor.AddDays(14);
+        var catchUpDay = missedActiveDay.AddDays(1);
         var habit = Habit.Create(new HabitCreateParams(
-            UserId, "Alternating", FrequencyUnit.Day, 1, DueDate: anchor)).Value;
+            UserId, "Alternating", FrequencyUnit.Day, 1, DueDate: anchor,
+            Days: [DayOfWeek.Monday])).Value;
         habit.AdvanceDueDate(anchor.AddDays(6), weekStartDay: 1);
         var update = habit.Update(new HabitUpdateParams(
             habit.Title,
@@ -405,7 +407,7 @@ public class LogHabitCommandHandlerTests
         habit.DueDate.Should().Be(inactiveDueDate);
 
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>())
-            .Returns(inactiveToday, nextActiveWeek);
+            .Returns(inactiveToday, catchUpDay);
         _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(1);
         _habitRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
