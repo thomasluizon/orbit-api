@@ -308,6 +308,7 @@ public class LogHabitCommandHandlerTests
             payGate,
             retrospectiveService,
             _userStreakService,
+            _userDateService,
             _cache);
 
         await _handler.Handle(new LogHabitCommand(UserId, habit.Id), CancellationToken.None);

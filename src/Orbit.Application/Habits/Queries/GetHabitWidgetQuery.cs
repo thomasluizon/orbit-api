@@ -46,18 +46,19 @@ public class GetHabitWidgetQueryHandler(
             unitOfWork,
             request.UserId,
             today,
-            cancellationToken);
+            cancellationToken,
+            user.WeekStartDay);
 
         var habits = await LoadWidgetHabits(request.UserId, today, cancellationToken);
         var lookup = habits.ToLookup(h => h.ParentHabitId);
-        var todayItems = BuildItems(lookup, today);
+        var todayItems = BuildItems(lookup, today, user.WeekStartDay);
 
         var selectedOffset = 0;
         var selectedItems = todayItems;
         if (ShouldShowTomorrow(todayItems))
         {
             var tomorrow = today.AddDays(1);
-            var tomorrowItems = BuildItems(lookup, tomorrow);
+            var tomorrowItems = BuildItems(lookup, tomorrow, user.WeekStartDay);
             if (tomorrowItems.Count > 0)
             {
                 selectedOffset = 1;
@@ -95,37 +96,52 @@ public class GetHabitWidgetQueryHandler(
         return todayItems.Count == 0 || todayItems.All(item => item.IsCompleted);
     }
 
-    private static List<HabitWidgetItem> BuildItems(ILookup<Guid?, Habit> lookup, DateOnly date)
+    private static List<HabitWidgetItem> BuildItems(
+        ILookup<Guid?, Habit> lookup,
+        DateOnly date,
+        int weekStartDay)
     {
         return lookup[null]
             .OrderBy(h => h.Position ?? int.MaxValue)
             .ThenBy(h => h.CreatedAtUtc)
-            .Where(h => IsVisibleOnWidget(h, lookup, date))
-            .Select(h => MapItem(h, lookup, date))
+            .Where(h => IsVisibleOnWidget(h, lookup, date, weekStartDay))
+            .Select(h => MapItem(h, lookup, date, weekStartDay))
             .ToList();
     }
 
-    private static bool IsVisibleOnWidget(Habit habit, ILookup<Guid?, Habit> lookup, DateOnly date)
+    private static bool IsVisibleOnWidget(
+        Habit habit,
+        ILookup<Guid?, Habit> lookup,
+        DateOnly date,
+        int weekStartDay)
     {
-        var scheduledDates = HabitScheduleService.GetScheduledDates(habit, date, date);
+        var scheduledDates = HabitScheduleService.GetScheduledDates(habit, date, date, weekStartDay);
         return scheduledDates.Count > 0
-            || (!habit.IsCompleted && HabitScheduleService.IsOverdueOnDate(habit, date))
+            || (!habit.IsCompleted && HabitScheduleService.IsOverdueOnDate(habit, date, weekStartDay))
             || IsLoggedOnDate(habit, date)
-            || HasVisibleDescendant(habit.Id, lookup, date);
+            || HasVisibleDescendant(habit.Id, lookup, date, weekStartDay);
     }
 
-    private static bool HasVisibleDescendant(Guid parentId, ILookup<Guid?, Habit> lookup, DateOnly date)
+    private static bool HasVisibleDescendant(
+        Guid parentId,
+        ILookup<Guid?, Habit> lookup,
+        DateOnly date,
+        int weekStartDay)
     {
-        return lookup[parentId].Any(child => IsVisibleOnWidget(child, lookup, date));
+        return lookup[parentId].Any(child => IsVisibleOnWidget(child, lookup, date, weekStartDay));
     }
 
-    private static HabitWidgetItem MapItem(Habit habit, ILookup<Guid?, Habit> lookup, DateOnly date)
+    private static HabitWidgetItem MapItem(
+        Habit habit,
+        ILookup<Guid?, Habit> lookup,
+        DateOnly date,
+        int weekStartDay)
     {
         var children = lookup[habit.Id]
             .OrderBy(h => h.Position ?? int.MaxValue)
             .ThenBy(h => h.CreatedAtUtc)
-            .Where(h => IsVisibleOnWidget(h, lookup, date))
-            .Select(h => MapItem(h, lookup, date))
+            .Where(h => IsVisibleOnWidget(h, lookup, date, weekStartDay))
+            .Select(h => MapItem(h, lookup, date, weekStartDay))
             .ToList();
         var isCompleted = habit.IsCompleted || IsLoggedOnDate(habit, date) || (children.Count > 0 && children.All(c => c.IsCompleted));
 
@@ -133,7 +149,7 @@ public class GetHabitWidgetQueryHandler(
             habit.Id,
             habit.Title,
             isCompleted,
-            !isCompleted && HabitScheduleService.IsOverdueOnDate(habit, date),
+            !isCompleted && HabitScheduleService.IsOverdueOnDate(habit, date, weekStartDay),
             habit.DueTime,
             habit.ChecklistItems.Count(item => item.IsChecked),
             habit.ChecklistItems.Count,

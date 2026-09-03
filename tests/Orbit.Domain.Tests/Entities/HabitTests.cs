@@ -1346,6 +1346,58 @@ public class HabitTests
     }
 
     [Fact]
+    public void Create_ZeroIntervalWeeks_Fails()
+    {
+        var result = Habit.Create(new HabitCreateParams(
+            ValidUserId,
+            "Run",
+            FrequencyUnit.Day,
+            1,
+            new DateOnly(2025, 1, 7),
+            Days: [DayOfWeek.Tuesday],
+            IntervalWeeks: 0));
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("INTERVAL_WEEKS_INVALID");
+    }
+
+    [Fact]
+    public void AdvanceDueDate_FixedInterval_SkipsInactiveWeek()
+    {
+        var tuesday = new DateOnly(2025, 1, 7);
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId,
+            "Run",
+            FrequencyUnit.Day,
+            1,
+            tuesday,
+            Days: [DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday],
+            IntervalWeeks: 2)).Value;
+
+        habit.AdvanceDueDate(tuesday.AddDays(2), weekStartDay: 1);
+
+        habit.DueDate.Should().Be(tuesday.AddDays(14));
+    }
+
+    [Fact]
+    public void Update_ZeroIntervalWeeks_Fails()
+    {
+        var habit = CreateValidHabit();
+        var result = habit.Update(new HabitUpdateParams(
+            habit.Title,
+            habit.Description,
+            habit.FrequencyUnit,
+            habit.FrequencyQuantity,
+            habit.Days.ToList(),
+            habit.IsBadHabit,
+            habit.DueDate,
+            IntervalWeeks: 0));
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("INTERVAL_WEEKS_INVALID");
+    }
+
+    [Fact]
     public void SkipFlexible_FlexibleHabit_CreatesSkipLog()
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -1355,7 +1407,8 @@ public class HabitTests
         var result = habit.SkipFlexible(today);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Value.Should().Be(0);        habit.Logs.Should().HaveCount(1);
+        result.Value.Value.Should().Be(0);
+        habit.Logs.Should().HaveCount(1);
     }
 
     [Fact]

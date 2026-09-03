@@ -99,9 +99,11 @@ public class BulkSkipHabitsCommandHandler(
             return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
                 Error: ErrorMessages.HabitNotYetDue.Message, ErrorCode: ErrorMessages.HabitNotYetDue.Code);
 
-        if (!habit.IsFlexible && !HabitScheduleService.IsHabitDueOnDate(habit, targetDate))
+        if (!HabitScheduleService.IsHabitDueOnDate(habit, targetDate, weekStartDay))
         {
-            var isOverdue = targetDate == today && HabitScheduleService.HasMissedPastOccurrence(habit, today);
+            var isOverdue = !habit.IsFlexible
+                && targetDate == today
+                && HabitScheduleService.HasMissedPastOccurrence(habit, today);
             if (!isOverdue)
                 return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
                     Error: ErrorMessages.NotScheduledOnDate.Message, ErrorCode: ErrorMessages.NotScheduledOnDate.Code);
@@ -110,7 +112,7 @@ public class BulkSkipHabitsCommandHandler(
         if (habit.IsFlexible)
             return await SkipFlexibleAsync(index, habitId, habit, targetDate, weekStartDay, cancellationToken);
 
-        habit.AdvanceDueDate(targetDate);
+        habit.AdvanceDueDate(targetDate, weekStartDay);
         return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Success, HabitId: habitId);
     }
 

@@ -84,6 +84,17 @@ public class CreateHabitToolTests
     }
 
     [Fact]
+    public async Task WithIntervalWeeks_CreatesAlternatingWeekHabit()
+    {
+        var result = await Execute("""{"title": "Exercise", "frequency_unit": "Day", "frequency_quantity": 1, "interval_weeks": 2}""");
+
+        result.Success.Should().BeTrue();
+        await _habitRepo.Received(1).AddAsync(
+            Arg.Is<Habit>(habit => habit.IntervalWeeks == 2),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task InvalidFrequencyUnit_CreatesOneTimeTask()
     {
         var result = await Execute("""{"title": "Task", "frequency_unit": "InvalidUnit"}""");

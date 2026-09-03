@@ -29,7 +29,8 @@ public static class RetrospectiveMetricsCalculator
         DateOnly dateFrom,
         DateOnly dateTo,
         int currentStreak,
-        int bestStreak)
+        int bestStreak,
+        int weekStartDay = 1)
     {
         return Compute(
             habits,
@@ -37,7 +38,7 @@ public static class RetrospectiveMetricsCalculator
             dateTo,
             currentStreak,
             bestStreak,
-            habit => HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo));
+            habit => HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo, weekStartDay));
     }
 
     /// <summary>
@@ -50,7 +51,8 @@ public static class RetrospectiveMetricsCalculator
         DateOnly dateTo,
         int currentStreak,
         int bestStreak,
-        TimeZoneInfo userTimeZone)
+        TimeZoneInfo userTimeZone,
+        int weekStartDay = 1)
     {
         return Compute(
             habits,
@@ -62,7 +64,8 @@ public static class RetrospectiveMetricsCalculator
                 habit,
                 dateFrom,
                 dateTo,
-                userTimeZone));
+                userTimeZone,
+                weekStartDay));
     }
 
     private static RetrospectiveMetrics Compute(

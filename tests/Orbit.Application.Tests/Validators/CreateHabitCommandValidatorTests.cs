@@ -89,6 +89,14 @@ public class CreateHabitCommandValidatorTests
     }
 
     [Fact]
+    public void Validate_ZeroIntervalWeeks_HasError()
+    {
+        var result = _validator.TestValidate(ValidCommand() with { IntervalWeeks = 0 });
+
+        result.ShouldHaveValidationErrorFor(x => x.IntervalWeeks);
+    }
+
+    [Fact]
     public void Validate_NullFrequencyQty_NoError()
     {
         var command = ValidCommand() with { FrequencyUnit = null, FrequencyQuantity = null };

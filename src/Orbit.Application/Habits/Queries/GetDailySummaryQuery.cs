@@ -95,7 +95,8 @@ public class GetDailySummaryQueryHandler(
                 currentLocalTime,
                 user.CurrentStreak,
                 user.StreakFreezesAccumulated,
-                lastBadHabitSlipDates),
+                lastBadHabitSlipDates,
+                user.WeekStartDay),
             cancellationToken);
 
         if (summaryResult.IsFailure)

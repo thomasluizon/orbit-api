@@ -28,7 +28,8 @@ public record HabitChildResponse(
     IReadOnlyList<ChecklistItem> ChecklistItems,
     bool IsOverdue,
     IReadOnlyList<HabitChildResponse> Children,
-    string? Emoji = null);
+    string? Emoji = null,
+    int? IntervalWeeks = null);
 
 public record HabitDetailResponse(
     Guid Id,
@@ -52,7 +53,8 @@ public record HabitDetailResponse(
     IReadOnlyList<ChecklistItem> ChecklistItems,
     DateTime CreatedAtUtc,
     IReadOnlyList<HabitChildResponse> Children,
-    string? Emoji = null);
+    string? Emoji = null,
+    int? IntervalWeeks = null);
 
 public record GetHabitByIdQuery(Guid UserId, Guid HabitId) : IRequest<Result<HabitDetailResponse>>;
 
@@ -73,12 +75,13 @@ public class GetHabitByIdQueryHandler(
             return Result.Failure<HabitDetailResponse>(ErrorMessages.HabitNotFound);
 
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var weekStartDay = await userDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
         var descendantLogsByHabitId = await HabitDetailDescendantLogLoader.LoadAsync(
             habitLogRepository,
             habit,
             userToday,
             cancellationToken);
-        var children = HabitDetailChildMapper.MapChildren(habit, userToday, descendantLogsByHabitId);
+        var children = HabitDetailChildMapper.MapChildren(habit, userToday, weekStartDay, descendantLogsByHabitId);
         var isCompleted = habit.IsCompleted;
         if (habit.IsGeneral)
         {
@@ -113,7 +116,8 @@ public class GetHabitByIdQueryHandler(
             habit.ChecklistItems,
             habit.CreatedAtUtc,
             children,
-            Emoji: habit.Emoji));
+            Emoji: habit.Emoji,
+            IntervalWeeks: habit.IntervalWeeks));
     }
 }
 
@@ -158,16 +162,18 @@ internal static class HabitDetailChildMapper
     public static List<HabitChildResponse> MapChildren(
         Habit parent,
         DateOnly userToday,
+        int weekStartDay,
         IReadOnlyDictionary<Guid, IReadOnlyCollection<HabitLog>>? descendantLogsByHabitId = null) =>
         parent.Children
             .OrderBy(c => c.Position ?? int.MaxValue)
             .ThenBy(c => c.CreatedAtUtc)
-            .Select(c => MapChild(c, userToday, descendantLogsByHabitId))
+            .Select(c => MapChild(c, userToday, weekStartDay, descendantLogsByHabitId))
             .ToList();
 
     private static HabitChildResponse MapChild(
         Habit child,
         DateOnly userToday,
+        int weekStartDay,
         IReadOnlyDictionary<Guid, IReadOnlyCollection<HabitLog>>? descendantLogsByHabitId) => new(
         child.Id,
         child.Title,
@@ -175,7 +181,7 @@ internal static class HabitDetailChildMapper
         child.FrequencyUnit,
         child.FrequencyQuantity,
         child.IsBadHabit,
-        GetResponseCompletion(child, userToday, descendantLogsByHabitId),
+        GetResponseCompletion(child, userToday, weekStartDay, descendantLogsByHabitId),
         child.IsGeneral,
         child.IsFlexible,
         child.Days.ToList(),
@@ -185,13 +191,15 @@ internal static class HabitDetailChildMapper
         child.EndDate,
         child.Position,
         child.ChecklistItems,
-        DetermineOverdueStatus(child, userToday, descendantLogsByHabitId),
-        MapChildren(child, userToday, descendantLogsByHabitId),
-        Emoji: child.Emoji);
+        DetermineOverdueStatus(child, userToday, weekStartDay, descendantLogsByHabitId),
+        MapChildren(child, userToday, weekStartDay, descendantLogsByHabitId),
+        Emoji: child.Emoji,
+        IntervalWeeks: child.IntervalWeeks);
 
     private static bool GetResponseCompletion(
         Habit habit,
         DateOnly userToday,
+        int weekStartDay,
         IReadOnlyDictionary<Guid, IReadOnlyCollection<HabitLog>>? descendantLogsByHabitId)
     {
         if (!habit.IsGeneral)
@@ -206,6 +214,7 @@ internal static class HabitDetailChildMapper
     private static bool DetermineOverdueStatus(
         Habit habit,
         DateOnly userToday,
+        int weekStartDay,
         IReadOnlyDictionary<Guid, IReadOnlyCollection<HabitLog>>? descendantLogsByHabitId)
     {
         if (habit.IsCompleted || habit.IsFlexible || habit.IsBadHabit)
@@ -217,15 +226,16 @@ internal static class HabitDetailChildMapper
                 && (!habit.EndDate.HasValue || habit.EndDate.Value >= userToday);
         }
 
-        if (HabitScheduleService.GetScheduledDates(habit, userToday, userToday).Contains(userToday))
+        if (HabitScheduleService.GetScheduledDates(habit, userToday, userToday, weekStartDay).Contains(userToday))
             return false;
 
-        return HasMissedRecentOccurrence(habit, userToday, descendantLogsByHabitId);
+        return HasMissedRecentOccurrence(habit, userToday, weekStartDay, descendantLogsByHabitId);
     }
 
     private static bool HasMissedRecentOccurrence(
         Habit habit,
         DateOnly userToday,
+        int weekStartDay,
         IReadOnlyDictionary<Guid, IReadOnlyCollection<HabitLog>>? descendantLogsByHabitId)
     {
         var qty = habit.FrequencyQuantity ?? 1;
@@ -235,7 +245,11 @@ internal static class HabitDetailChildMapper
         if (habit.DueDate > lookbackStart)
             lookbackStart = habit.DueDate;
 
-        var pastDates = HabitScheduleService.GetScheduledDates(habit, lookbackStart, userToday.AddDays(-1));
+        var pastDates = HabitScheduleService.GetScheduledDates(
+            habit,
+            lookbackStart,
+            userToday.AddDays(-1),
+            weekStartDay);
         var logDates = GetLogs(habit, descendantLogsByHabitId).Select(l => l.Date).ToHashSet();
 
         return pastDates.Any(d => !logDates.Contains(d));

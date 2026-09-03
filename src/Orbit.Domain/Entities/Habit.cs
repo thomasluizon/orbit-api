@@ -28,7 +28,8 @@ public record HabitCreateParams(
     IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null,
     int? Position = null,
     string? GoogleEventId = null,
-    string? Emoji = null);
+    string? Emoji = null,
+    int? IntervalWeeks = null);
 
 public record HabitUpdateParams(
     string Title,
@@ -50,7 +51,8 @@ public record HabitUpdateParams(
     bool? ClearEndDate = null,
     IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null,
     string? Emoji = null,
-    DateOnly? UserToday = null);
+    DateOnly? UserToday = null,
+    int? IntervalWeeks = null);
 
 public class Habit : Entity, ITimestamped, ISoftDeletable
 {
@@ -60,6 +62,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     public string? Emoji { get; private set; }
     public FrequencyUnit? FrequencyUnit { get; private set; }
     public int? FrequencyQuantity { get; private set; }
+    public int? IntervalWeeks { get; private set; }
     public bool IsBadHabit { get; private set; }
     public bool IsCompleted { get; private set; }
     public DateOnly DueDate { get; private set; }
@@ -118,7 +121,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             return Result.Failure<Habit>(emojiValidation);
 
         var scheduleValidation = HabitInvariants.ValidateScheduleOptions(
-            p.IsGeneral, p.IsFlexible, p.IsBadHabit, p.FrequencyUnit, p.FrequencyQuantity, p.Days);
+            p.IsGeneral, p.IsFlexible, p.IsBadHabit, p.FrequencyUnit, p.FrequencyQuantity, p.Days, p.IntervalWeeks);
         if (scheduleValidation is not null)
             return Result.Failure<Habit>(scheduleValidation);
 
@@ -143,6 +146,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             Emoji = HabitInvariants.NormalizeEmoji(p.Emoji),
             FrequencyUnit = p.FrequencyUnit,
             FrequencyQuantity = p.FrequencyQuantity,
+            IntervalWeeks = p.IntervalWeeks,
             Days = p.IsFlexible ? [] : (p.Days?.ToList() ?? []),
             IsBadHabit = p.IsBadHabit,
             IsGeneral = p.IsGeneral,
@@ -167,7 +171,11 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         });
     }
 
-    public Result<HabitLog> Log(DateOnly date, string? note = null, bool advanceDueDate = true)
+    public Result<HabitLog> Log(
+        DateOnly date,
+        string? note = null,
+        bool advanceDueDate = true,
+        int weekStartDay = 1)
     {
         if (IsCompleted && !IsGeneral)
             return Result.Failure<HabitLog>(DomainErrors.CannotLogCompletedHabit);
@@ -184,7 +192,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         }
         else if (FrequencyUnit is not null && !IsFlexible && advanceDueDate)
         {
-            AdvanceDueDate(date);
+            AdvanceDueDate(date, weekStartDay);
 
             if (ChecklistItems.Count > 0)
                 ChecklistItems = ChecklistItems.Select(i => i with { IsChecked = false }).ToList();
@@ -194,14 +202,14 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         return Result.Success(log);
     }
 
-    public void AdvanceDueDate(DateOnly today)
+    public void AdvanceDueDate(DateOnly today, int weekStartDay = 1)
     {
         CaptureLegacyScheduledStart();
 
         do
         {
             var prev = DueDate;
-            DueDate = AdvanceDueDateByOneStep();
+            DueDate = AdvanceDueDateByOneStep(weekStartDay);
             if (DueDate == prev) break;
         } while (DueDate <= today);
 
@@ -217,7 +225,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     /// Advances DueDate to the nearest scheduled date on or after today, without going past it.
     /// Used by background service to keep DueDate current for recurring habits.
     /// </summary>
-    public void CatchUpDueDate(DateOnly today)
+    public void CatchUpDueDate(DateOnly today, int weekStartDay = 1)
     {
         if (DueDate < today && !IsCompleted)
             CaptureLegacyScheduledStart();
@@ -225,7 +233,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         while (DueDate < today && !IsCompleted)
         {
             var prev = DueDate;
-            DueDate = AdvanceDueDateByOneStep();
+            DueDate = AdvanceDueDateByOneStep(weekStartDay);
             if (DueDate == prev) break;
 
             if (EndDate.HasValue && DueDate > EndDate.Value)
@@ -248,17 +256,29 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     /// Advances DueDate by one frequency step, re-anchoring for monthly/yearly drift
     /// and snapping to the next matching day-of-week if Days are set.
     /// </summary>
-    private DateOnly AdvanceDueDateByOneStep()
+    private DateOnly AdvanceDueDateByOneStep(int weekStartDay)
     {
-        var originalDay = OriginalDayOfMonth ?? DueDate.Day;
+        var next = AdvanceFrom(DueDate);
+        var anchor = ScheduledStartDate ?? DueDate;
+        var intervalWeeks = IntervalWeeks ?? 1;
+
+        while (intervalWeeks > 1 && !IsInActiveWeek(next, anchor, intervalWeeks, weekStartDay))
+            next = AdvanceFrom(next);
+
+        return next;
+    }
+
+    private DateOnly AdvanceFrom(DateOnly current)
+    {
+        var originalDay = OriginalDayOfMonth ?? current.Day;
 
         var next = (FrequencyUnit, FrequencyQuantity) switch
         {
-            (Enums.FrequencyUnit.Day, var q) => DueDate.AddDays(q!.Value),
-            (Enums.FrequencyUnit.Week, var q) => DueDate.AddDays(7 * q!.Value),
-            (Enums.FrequencyUnit.Month, var q) => DueDate.AddMonths(q!.Value),
-            (Enums.FrequencyUnit.Year, var q) => DueDate.AddYears(q!.Value),
-            _ => DueDate
+            (Enums.FrequencyUnit.Day, var q) => current.AddDays(q!.Value),
+            (Enums.FrequencyUnit.Week, var q) => current.AddDays(7 * q!.Value),
+            (Enums.FrequencyUnit.Month, var q) => current.AddMonths(q!.Value),
+            (Enums.FrequencyUnit.Year, var q) => current.AddYears(q!.Value),
+            _ => current
         };
 
         if (FrequencyUnit is Enums.FrequencyUnit.Month or Enums.FrequencyUnit.Year)
@@ -275,6 +295,24 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         }
 
         return next;
+    }
+
+    private static bool IsInActiveWeek(
+        DateOnly target,
+        DateOnly anchor,
+        int intervalWeeks,
+        int weekStartDay)
+    {
+        var targetWeekStart = GetWeekStart(target, weekStartDay);
+        var anchorWeekStart = GetWeekStart(anchor, weekStartDay);
+        var weekDiff = (targetWeekStart.DayNumber - anchorWeekStart.DayNumber) / 7;
+        return ((weekDiff % intervalWeeks) + intervalWeeks) % intervalWeeks == 0;
+    }
+
+    private static DateOnly GetWeekStart(DateOnly date, int weekStartDay)
+    {
+        var daysToStart = ((int)date.DayOfWeek - weekStartDay + 7) % 7;
+        return date.AddDays(-daysToStart);
     }
 
     /// <summary>
@@ -345,7 +383,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         var effectiveIsFlexible = p.IsFlexible ?? IsFlexible;
 
         var scheduleValidation = HabitInvariants.ValidateScheduleOptions(
-            effectiveIsGeneral, effectiveIsFlexible, p.IsBadHabit, p.FrequencyUnit, p.FrequencyQuantity, p.Days);
+            effectiveIsGeneral, effectiveIsFlexible, p.IsBadHabit, p.FrequencyUnit, p.FrequencyQuantity, p.Days, p.IntervalWeeks);
         if (scheduleValidation is not null)
             return scheduleValidation;
 
@@ -376,6 +414,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         Emoji = HabitInvariants.NormalizeEmoji(p.Emoji);
         FrequencyUnit = p.FrequencyUnit;
         FrequencyQuantity = p.FrequencyQuantity;
+        IntervalWeeks = p.IntervalWeeks;
         Days = effectiveIsFlexible ? [] : (p.Days?.ToList() ?? []);
         IsBadHabit = p.IsBadHabit;
         DueTime = p.DueTime;

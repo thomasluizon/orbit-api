@@ -39,7 +39,13 @@ public class GetCalendarMonthQueryHandler(
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var weekStartDay = await userDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
 
-        await HabitScheduleService.AdvanceStaleBadHabitDueDates(habitRepository, unitOfWork, request.UserId, today, cancellationToken);
+        await HabitScheduleService.AdvanceStaleBadHabitDueDates(
+            habitRepository,
+            unitOfWork,
+            request.UserId,
+            today,
+            cancellationToken,
+            weekStartDay);
 
         var allHabits = await LoadHabitsWithLogs(request, cancellationToken);
         var lookup = allHabits.ToLookup(h => h.ParentHabitId);
@@ -76,12 +82,14 @@ public class GetCalendarMonthQueryHandler(
         var habitItems = new List<HabitScheduleItem>();
         foreach (var habit in topLevel)
         {
-            if (habit.IsFlexible && !HabitScheduleService.IsFlexibleHabitDueOnDate(habit, dateFrom, habit.Logs, ctx.WeekStartDay))
+            var scheduledDates = HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo, ctx.WeekStartDay);
+            if (habit.IsFlexible
+                && !scheduledDates.Any(date =>
+                    HabitScheduleService.IsFlexibleHabitDueOnDate(habit, date, habit.Logs, ctx.WeekStartDay)))
                 continue;
 
-            var scheduledDates = HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo);
-            var isOverdue = DetermineOverdueStatus(habit, dateFrom, scheduledDates);
-            var hasDescendantDue = HasAnyDescendantDue(habit.Id, lookup, dateFrom, dateTo);
+            var isOverdue = DetermineOverdueStatus(habit, dateFrom, scheduledDates, ctx.WeekStartDay);
+            var hasDescendantDue = HasAnyDescendantDue(habit.Id, lookup, dateFrom, dateTo, ctx.WeekStartDay);
 
             if (scheduledDates.Count > 0 || isOverdue || hasDescendantDue)
                 habitItems.Add(MapToScheduleItem(habit, scheduledDates, isOverdue, ctx));
@@ -93,7 +101,10 @@ public class GetCalendarMonthQueryHandler(
     /// Determines whether a habit is overdue based on its type and schedule.
     /// </summary>
     private static bool DetermineOverdueStatus(
-        Habit habit, DateOnly dateFrom, List<DateOnly> scheduledDates)
+        Habit habit,
+        DateOnly dateFrom,
+        List<DateOnly> scheduledDates,
+        int weekStartDay)
     {
         if (habit.IsFlexible || habit.IsBadHabit)
             return false;
@@ -108,19 +119,23 @@ public class GetCalendarMonthQueryHandler(
         if (scheduledDates.Contains(dateFrom))
             return false;
 
-        return HasMissedRecentOccurrence(habit, dateFrom);
+        return HasMissedRecentOccurrence(habit, dateFrom, weekStartDay);
     }
 
     /// <summary>
     /// Checks whether a recurring habit has any missed occurrence in its lookback window.
     /// </summary>
-    private static bool HasMissedRecentOccurrence(Habit habit, DateOnly dateFrom)
+    private static bool HasMissedRecentOccurrence(Habit habit, DateOnly dateFrom, int weekStartDay)
     {
         var qty = habit.FrequencyQuantity ?? 1;
         var lookbackDays = HabitScheduleService.GetLookbackDays(habit.FrequencyUnit, qty);
         var lookbackStart = dateFrom.AddDays(-lookbackDays);
         if (habit.DueDate > lookbackStart) lookbackStart = habit.DueDate;
-        var pastDates = HabitScheduleService.GetScheduledDates(habit, lookbackStart, dateFrom.AddDays(-1));
+        var pastDates = HabitScheduleService.GetScheduledDates(
+            habit,
+            lookbackStart,
+            dateFrom.AddDays(-1),
+            weekStartDay);
         var logDates = habit.Logs.Select(l => l.Date).ToHashSet();
         return pastDates.Any(d => !logDates.Contains(d));
     }
@@ -152,7 +167,12 @@ public class GetCalendarMonthQueryHandler(
             .ToList();
 
         var instances = (ctx.DateFrom.HasValue && ctx.DateTo.HasValue && ctx.UserToday.HasValue)
-            ? HabitScheduleService.GetInstances(habit, ctx.DateFrom.Value, ctx.DateTo.Value, ctx.UserToday.Value)
+            ? HabitScheduleService.GetInstances(
+                habit,
+                ctx.DateFrom.Value,
+                ctx.DateTo.Value,
+                ctx.UserToday.Value,
+                weekStartDay: ctx.WeekStartDay)
             : [];
 
         var isLoggedInRange = ctx.DateFrom.HasValue && ctx.DateTo.HasValue &&
@@ -173,13 +193,17 @@ public class GetCalendarMonthQueryHandler(
             habit.Goals.Select(g => new LinkedGoalDto(g.Id, g.Title)).ToList(),
             children, children.Count > 0,
             flexibleTarget, flexibleCompleted, isLoggedInRange, instances,
-            Emoji: habit.Emoji);
+            Emoji: habit.Emoji,
+            IntervalWeeks: habit.IntervalWeeks);
     }
 
     private static (int? Target, int? Completed) CalculateFlexibleProgress(
         Habit habit, DateOnly? referenceDate, int weekStartDay)
     {
         if (!habit.IsFlexible || !referenceDate.HasValue)
+            return (null, null);
+
+        if (!HabitScheduleService.IsActiveIntervalWeek(habit, referenceDate.Value, weekStartDay))
             return (null, null);
 
         var totalTarget = habit.FrequencyQuantity ?? 1;
@@ -197,10 +221,10 @@ public class GetCalendarMonthQueryHandler(
             .Select(c => MapChildItem(c, ctx))
             .ToList();
         var scheduledDates = (ctx.DateFrom.HasValue && ctx.DateTo.HasValue)
-            ? HabitScheduleService.GetScheduledDates(child, ctx.DateFrom.Value, ctx.DateTo.Value)
+            ? HabitScheduleService.GetScheduledDates(child, ctx.DateFrom.Value, ctx.DateTo.Value, ctx.WeekStartDay)
             : [];
         var isOverdue = ctx.DateFrom.HasValue
-            && DetermineOverdueStatus(child, ctx.DateFrom.Value, scheduledDates);
+            && DetermineOverdueStatus(child, ctx.DateFrom.Value, scheduledDates, ctx.WeekStartDay);
 
         var isLoggedInRange = ctx.DateFrom.HasValue && ctx.DateTo.HasValue &&
             child.Logs.Any(l => l.Date >= ctx.DateFrom.Value && l.Date <= ctx.DateTo.Value && l.Value > 0);
@@ -214,7 +238,12 @@ public class GetCalendarMonthQueryHandler(
         }
 
         var instances = (ctx.DateFrom.HasValue && ctx.DateTo.HasValue && ctx.UserToday.HasValue)
-            ? HabitScheduleService.GetInstances(child, ctx.DateFrom.Value, ctx.DateTo.Value, ctx.UserToday.Value)
+            ? HabitScheduleService.GetInstances(
+                child,
+                ctx.DateFrom.Value,
+                ctx.DateTo.Value,
+                ctx.UserToday.Value,
+                weekStartDay: ctx.WeekStartDay)
             : [];
 
         return new HabitScheduleChildItem(
@@ -226,17 +255,23 @@ public class GetCalendarMonthQueryHandler(
             child.Tags.Select(t => new HabitTagItem(t.Id, t.Name, t.Color)).ToList(),
             grandchildren, grandchildren.Count > 0,
             flexTarget, flexCompleted, isLoggedInRange, instances,
-            Emoji: child.Emoji);
+            Emoji: child.Emoji,
+            IntervalWeeks: child.IntervalWeeks);
     }
 
-    private static bool HasAnyDescendantDue(Guid parentId, ILookup<Guid?, Habit> lookup, DateOnly dateFrom, DateOnly dateTo)
+    private static bool HasAnyDescendantDue(
+        Guid parentId,
+        ILookup<Guid?, Habit> lookup,
+        DateOnly dateFrom,
+        DateOnly dateTo,
+        int weekStartDay)
     {
         foreach (var child in lookup[parentId])
         {
-            var childDates = HabitScheduleService.GetScheduledDates(child, dateFrom, dateTo);
-            var childIsOverdue = DetermineOverdueStatus(child, dateFrom, childDates);
+            var childDates = HabitScheduleService.GetScheduledDates(child, dateFrom, dateTo, weekStartDay);
+            var childIsOverdue = DetermineOverdueStatus(child, dateFrom, childDates, weekStartDay);
             if (childDates.Count > 0 || childIsOverdue) return true;
-            if (HasAnyDescendantDue(child.Id, lookup, dateFrom, dateTo)) return true;
+            if (HasAnyDescendantDue(child.Id, lookup, dateFrom, dateTo, weekStartDay)) return true;
         }
         return false;
     }

@@ -68,20 +68,22 @@ internal static class HabitScheduleFilters
         foreach (var habit in topLevel)
         {
             var hasCompletedLogInRange = HabitScheduleService.HasCompletedLogInRange(habit, dateFrom, dateTo);
+            var scheduledDates = HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo, weekStartDay);
 
             if (habit.IsFlexible
                 && !hasCompletedLogInRange
-                && !HabitScheduleService.IsFlexibleHabitDueOnDate(habit, dateFrom, habit.Logs, weekStartDay))
+                && !scheduledDates.Any(date =>
+                    HabitScheduleService.IsFlexibleHabitDueOnDate(habit, date, habit.Logs, weekStartDay)))
                 continue;
 
-            var scheduledDates = HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo);
-            var isOverdue = DetermineOverdueStatus(habit, dateFrom, includeOverdue);
+            var isOverdue = DetermineOverdueStatus(habit, dateFrom, includeOverdue, weekStartDay);
             var hasDescendantDue = HasAnyDescendantDue(
                 habit.Id,
                 lookup,
                 dateFrom,
                 dateTo,
-                includeOverdue);
+                includeOverdue,
+                weekStartDay);
 
             if (scheduledDates.Count > 0 || isOverdue || hasDescendantDue || hasCompletedLogInRange)
                 filtered.Add((habit, scheduledDates, isOverdue));
@@ -96,14 +98,19 @@ internal static class HabitScheduleFilters
     /// <see cref="HabitScheduleService.IsOverdueOnDate"/> so the schedule query and the
     /// daily summary share a single definition of "overdue".
     /// </summary>
-    private static bool DetermineOverdueStatus(Habit habit, DateOnly dateFrom, bool includeOverdue) =>
-        includeOverdue && HabitScheduleService.IsOverdueOnDate(habit, dateFrom);
+    private static bool DetermineOverdueStatus(
+        Habit habit,
+        DateOnly dateFrom,
+        bool includeOverdue,
+        int weekStartDay) =>
+        includeOverdue && HabitScheduleService.IsOverdueOnDate(habit, dateFrom, weekStartDay);
 
     internal static IEnumerable<Habit> ApplyCommonFilters(
         IEnumerable<Habit> topLevel,
         GetHabitScheduleQuery request,
         ILookup<Guid?, Habit> lookup,
-        DateOnly? userToday = null)
+        DateOnly? userToday = null,
+        int weekStartDay = 1)
     {
         if (!string.IsNullOrWhiteSpace(request.Search))
             topLevel = ApplySearchFilter(
@@ -112,7 +119,8 @@ internal static class HabitScheduleFilters
                 request.DateFrom,
                 request.DateTo,
                 request.IncludeOverdue,
-                lookup);
+                lookup,
+                weekStartDay);
 
         if (request.IsCompleted.HasValue)
             topLevel = topLevel.Where(h =>
@@ -130,9 +138,10 @@ internal static class HabitScheduleFilters
         DateOnly? dateFrom,
         DateOnly? dateTo,
         bool includeOverdue,
-        ILookup<Guid?, Habit> lookup)
+        ILookup<Guid?, Habit> lookup,
+        int weekStartDay)
     {
-        return topLevel.Where(h => MatchesSearch(h, term, lookup, dateFrom, dateTo, includeOverdue));
+        return topLevel.Where(h => MatchesSearch(h, term, lookup, dateFrom, dateTo, includeOverdue, weekStartDay));
     }
 
     private static bool MatchesSearch(
@@ -141,12 +150,13 @@ internal static class HabitScheduleFilters
         ILookup<Guid?, Habit> lookup,
         DateOnly? dateFrom,
         DateOnly? dateTo,
-        bool includeOverdue)
+        bool includeOverdue,
+        int weekStartDay)
     {
         if (FuzzyMatcher.FuzzyContains(h.Title, term)) return true;
         if (h.Description != null && FuzzyMatcher.FuzzyContains(h.Description, term)) return true;
         if (h.Tags.Any(t => FuzzyMatcher.FuzzyContains(t.Name, term))) return true;
-        return HasDescendantMatchingSearch(h.Id, lookup, term, dateFrom, dateTo, includeOverdue);
+        return HasDescendantMatchingSearch(h.Id, lookup, term, dateFrom, dateTo, includeOverdue, weekStartDay);
     }
 
     private static bool HasDescendantMatchingSearch(
@@ -155,13 +165,14 @@ internal static class HabitScheduleFilters
         string term,
         DateOnly? dateFrom,
         DateOnly? dateTo,
-        bool includeOverdue)
+        bool includeOverdue,
+        int weekStartDay)
     {
         foreach (var child in lookup[parentId])
         {
-            if (!IsChildRelevantForSearch(child, dateFrom, dateTo, includeOverdue)) continue;
+            if (!IsChildRelevantForSearch(child, dateFrom, dateTo, includeOverdue, weekStartDay)) continue;
             if (FuzzyMatcher.FuzzyContains(child.Title, term)) return true;
-            if (HasDescendantMatchingSearch(child.Id, lookup, term, dateFrom, dateTo, includeOverdue))
+            if (HasDescendantMatchingSearch(child.Id, lookup, term, dateFrom, dateTo, includeOverdue, weekStartDay))
                 return true;
         }
         return false;
@@ -171,13 +182,14 @@ internal static class HabitScheduleFilters
         Habit child,
         DateOnly? dateFrom,
         DateOnly? dateTo,
-        bool includeOverdue)
+        bool includeOverdue,
+        int weekStartDay)
     {
         if (child.IsCompleted) return false;
         if (!dateFrom.HasValue || !dateTo.HasValue) return true;
 
-        var scheduledDates = HabitScheduleService.GetScheduledDates(child, dateFrom.Value, dateTo.Value);
-        var isOverdue = DetermineOverdueStatus(child, dateFrom.Value, includeOverdue);
+        var scheduledDates = HabitScheduleService.GetScheduledDates(child, dateFrom.Value, dateTo.Value, weekStartDay);
+        var isOverdue = DetermineOverdueStatus(child, dateFrom.Value, includeOverdue, weekStartDay);
 
         return scheduledDates.Count > 0 || isOverdue;
     }
@@ -210,7 +222,12 @@ internal static class HabitScheduleFilters
         var (flexibleTarget, flexibleCompleted) = CalculateFlexibleProgress(h, ctx.ReferenceDate, ctx.WeekStartDay);
 
         var instances = ctx.DateFrom.HasValue && ctx.DateTo.HasValue && ctx.UserToday.HasValue
-            ? HabitScheduleService.GetInstances(h, ctx.DateFrom.Value, ctx.DateTo.Value, ctx.UserToday.Value)
+            ? HabitScheduleService.GetInstances(
+                h,
+                ctx.DateFrom.Value,
+                ctx.DateTo.Value,
+                ctx.UserToday.Value,
+                weekStartDay: ctx.WeekStartDay)
             : [];
 
         var isLoggedInRange = ctx.DateFrom.HasValue
@@ -230,13 +247,17 @@ internal static class HabitScheduleFilters
             flexibleTarget, flexibleCompleted,
             isLoggedInRange, instances,
             ComputeSearchMatches(h, ctx),
-            Emoji: h.Emoji);
+            Emoji: h.Emoji,
+            IntervalWeeks: h.IntervalWeeks);
     }
 
     private static (int? Target, int? Completed) CalculateFlexibleProgress(
         Habit h, DateOnly? referenceDate, int weekStartDay)
     {
         if (!h.IsFlexible || !referenceDate.HasValue)
+            return (null, null);
+
+        if (!HabitScheduleService.IsActiveIntervalWeek(h, referenceDate.Value, weekStartDay))
             return (null, null);
 
         var totalTarget = h.FrequencyQuantity ?? 1;
@@ -274,7 +295,8 @@ internal static class HabitScheduleFilters
                 var childIsOverdue = DetermineOverdueStatus(
                     child,
                     ctx.DateFrom.Value,
-                    ctx.IncludeOverdue);
+                    ctx.IncludeOverdue,
+                    ctx.WeekStartDay);
 
                 if (childScheduledDates.Count == 0 && !childIsOverdue)
                     continue;
@@ -290,18 +312,19 @@ internal static class HabitScheduleFilters
         ILookup<Guid?, Habit> lookup,
         DateOnly dateFrom,
         DateOnly dateTo,
-        bool includeOverdue)
+        bool includeOverdue,
+        int weekStartDay)
     {
         foreach (var child in lookup[parentId])
         {
-            var scheduledDates = HabitScheduleService.GetScheduledDates(child, dateFrom, dateTo);
-            var isOverdue = DetermineOverdueStatus(child, dateFrom, includeOverdue);
+            var scheduledDates = HabitScheduleService.GetScheduledDates(child, dateFrom, dateTo, weekStartDay);
+            var isOverdue = DetermineOverdueStatus(child, dateFrom, includeOverdue, weekStartDay);
 
             if (scheduledDates.Count > 0 || isOverdue)
                 return true;
             if (child.Logs.Any(l => l.Date >= dateFrom && l.Date <= dateTo))
                 return true;
-            if (HasAnyDescendantDue(child.Id, lookup, dateFrom, dateTo, includeOverdue))
+            if (HasAnyDescendantDue(child.Id, lookup, dateFrom, dateTo, includeOverdue, weekStartDay))
                 return true;
         }
         return false;
@@ -319,12 +342,12 @@ internal static class HabitScheduleFilters
                 .Where(c =>
                 {
                     var scheduledDates = ctx.GetScheduledDates(c);
-                    var isOverdue = DetermineOverdueStatus(c, df, ctx.IncludeOverdue);
+                    var isOverdue = DetermineOverdueStatus(c, df, ctx.IncludeOverdue, ctx.WeekStartDay);
 
                     return scheduledDates.Count > 0
                         || c.IsCompleted
                         || isOverdue
-                        || HasAnyDescendantDue(c.Id, ctx.ChildLookup, df, dt, ctx.IncludeOverdue)
+                        || HasAnyDescendantDue(c.Id, ctx.ChildLookup, df, dt, ctx.IncludeOverdue, ctx.WeekStartDay)
                         || c.Logs.Any(l => l.Date >= df && l.Date <= dt);
                 });
         }
@@ -345,10 +368,15 @@ internal static class HabitScheduleFilters
             ? ctx.GetScheduledDates(c)
             : [];
         var isOverdue = ctx.DateFrom.HasValue
-            && DetermineOverdueStatus(c, ctx.DateFrom.Value, ctx.IncludeOverdue);
+            && DetermineOverdueStatus(c, ctx.DateFrom.Value, ctx.IncludeOverdue, ctx.WeekStartDay);
 
         var instances = ctx.DateFrom.HasValue && ctx.DateTo.HasValue && ctx.UserToday.HasValue
-            ? HabitScheduleService.GetInstances(c, ctx.DateFrom.Value, ctx.DateTo.Value, ctx.UserToday.Value)
+            ? HabitScheduleService.GetInstances(
+                c,
+                ctx.DateFrom.Value,
+                ctx.DateTo.Value,
+                ctx.UserToday.Value,
+                weekStartDay: ctx.WeekStartDay)
             : [];
 
         return new HabitScheduleChildItem(
@@ -362,7 +390,8 @@ internal static class HabitScheduleFilters
             HasSubHabits(c.Id, ctx.ChildLookup), ft, fc, isLoggedInRange,
             instances,
             ComputeSearchMatches(c, ctx),
-            Emoji: c.Emoji);
+            Emoji: c.Emoji,
+            IntervalWeeks: c.IntervalWeeks);
     }
 
     private static bool GetResponseCompletion(Habit habit, DateOnly? userToday)

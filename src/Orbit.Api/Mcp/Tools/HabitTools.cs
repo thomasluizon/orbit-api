@@ -113,6 +113,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         [Description("Whether this is a general habit with no schedule")] bool isGeneral = false,
         [Description("Whether this is a flexible frequency habit")] bool isFlexible = false,
         [Description("Due time in HH:mm format")] string? dueTime = null,
+        [Description("Repeat interval in weeks. Omit for every week.")] int? intervalWeeks = null,
         CancellationToken cancellationToken = default)
     {
         var result = await executorBridge.ExecuteAsync(user, "create_habit", new
@@ -125,7 +126,8 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
             is_bad_habit = isBadHabit,
             is_general = isGeneral,
             is_flexible = isFlexible,
-            due_time = dueTime
+            due_time = dueTime,
+            interval_weeks = intervalWeeks
         }, confirmationToken: null, cancellationToken);
 
         if (!result.Succeeded)
@@ -147,6 +149,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         [Description("New frequency quantity")] int? frequencyQuantity = null,
         [Description("New due date in YYYY-MM-DD format")] string? dueDate = null,
         [Description("New due time in HH:mm format")] string? dueTime = null,
+        [Description("New repeat interval in weeks. Use 1 for every week.")] int? intervalWeeks = null,
         CancellationToken cancellationToken = default)
     {
         var result = await executorBridge.ExecuteAsync(user, "update_habit", new
@@ -157,7 +160,8 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
             frequency_unit = frequencyUnit,
             frequency_quantity = frequencyQuantity,
             due_date = dueDate,
-            due_time = dueTime
+            due_time = dueTime,
+            interval_weeks = intervalWeeks
         }, confirmationToken: null, cancellationToken);
 
         return result.Succeeded ? $"Updated habit {habitId}" : result.Message;

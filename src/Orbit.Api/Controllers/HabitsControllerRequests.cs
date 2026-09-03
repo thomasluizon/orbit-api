@@ -26,7 +26,8 @@ public partial class HabitsController
         DateOnly? EndDate = null,
         bool IsFlexible = false,
         IReadOnlyList<Guid>? GoalIds = null,
-        string? Emoji = null);
+        string? Emoji = null,
+        int? IntervalWeeks = null);
 
     public record UpdateHabitRequest(
         string Title,
@@ -48,7 +49,8 @@ public partial class HabitsController
         bool? ClearEndDate = null,
         bool? IsFlexible = null,
         IReadOnlyList<Guid>? GoalIds = null,
-        string? Emoji = null);
+        string? Emoji = null,
+        int? IntervalWeeks = null);
 
     public record UpdateChecklistRequest(IReadOnlyList<ChecklistItem> ChecklistItems);
 

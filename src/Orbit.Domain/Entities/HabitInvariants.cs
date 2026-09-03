@@ -15,7 +15,8 @@ internal static class HabitInvariants
     public static AppError? ValidateScheduleOptions(
         bool isGeneral, bool isFlexible, bool isBadHabit,
         FrequencyUnit? frequencyUnit, int? frequencyQuantity,
-        IReadOnlyList<System.DayOfWeek>? days)
+        IReadOnlyList<System.DayOfWeek>? days,
+        int? intervalWeeks)
     {
         if (isGeneral && (frequencyUnit is not null || frequencyQuantity is not null))
             return DomainErrors.GeneralHabitHasFrequency;
@@ -25,6 +26,9 @@ internal static class HabitInvariants
 
         if (frequencyQuantity is not null && frequencyQuantity <= 0)
             return DomainErrors.FrequencyQuantityInvalid;
+
+        if (intervalWeeks is not null && intervalWeeks <= 0)
+            return DomainErrors.IntervalWeeksInvalid;
 
         if (isFlexible && frequencyUnit is null)
             return DomainErrors.FlexibleNeedsFrequencyUnit;

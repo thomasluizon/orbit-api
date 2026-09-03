@@ -72,7 +72,7 @@ public class SkipHabitTool(
         if (!habit.IsFlexible && habit.DueDate > targetDate)
             return new ToolResult(false, Error: "Cannot skip a habit that is not yet due.");
 
-        if (!habit.IsFlexible && !HabitScheduleService.IsHabitDueOnDate(habit, targetDate))
+        if (!HabitScheduleService.IsHabitDueOnDate(habit, targetDate, weekStartDay))
             return new ToolResult(false, Error: "Habit is not scheduled on this date.");
 
         if (habit.IsFlexible)
@@ -89,7 +89,7 @@ public class SkipHabitTool(
         }
         else
         {
-            habit.AdvanceDueDate(targetDate);
+            habit.AdvanceDueDate(targetDate, weekStartDay);
         }
 
         return new ToolResult(true, EntityId: habit.Id.ToString(), EntityName: habit.Title);

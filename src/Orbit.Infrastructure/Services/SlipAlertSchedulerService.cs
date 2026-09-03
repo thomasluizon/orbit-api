@@ -121,6 +121,7 @@ public partial class SlipAlertSchedulerService(
         var userTimeNow = TimeOnly.FromDateTime(userNow);
 
         if (habit.EndDate.HasValue && habit.EndDate.Value < userToday) return;
+        if (!HabitScheduleService.IsActiveIntervalWeek(habit, userToday, user.WeekStartDay)) return;
 
         var weekStart = WeekMath.WeekStart(userToday, user.WeekStartDay);
         var sentWeeks = ctx.SentWeeksByHabit.GetValueOrDefault(habit.Id) ?? [];

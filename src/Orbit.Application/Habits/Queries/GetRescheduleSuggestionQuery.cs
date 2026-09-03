@@ -53,7 +53,7 @@ public class GetRescheduleSuggestionQueryHandler(
         if (habit is null)
             return Result.Failure<RescheduleSuggestionResponse>(ErrorMessages.HabitNotFound);
 
-        if (!HabitScheduleService.IsOverdueOnDate(habit, userToday))
+        if (!HabitScheduleService.IsOverdueOnDate(habit, userToday, user.WeekStartDay))
             return Result.Failure<RescheduleSuggestionResponse>(ErrorMessages.HabitNotOverdue);
 
         var cacheKey = CacheKey(request.HabitId, habit.DueDate, effectiveLanguage);

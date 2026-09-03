@@ -51,7 +51,11 @@ public class GetHabitFullDetailQueryHandler(
             habit,
             userToday,
             cancellationToken);
-        var children = HabitDetailChildMapper.MapChildren(habit, userToday, descendantLogsByHabitId);
+        var children = HabitDetailChildMapper.MapChildren(
+            habit,
+            userToday,
+            user.WeekStartDay,
+            descendantLogsByHabitId);
         var allRootLogs = await habitLogRepository.FindAsync(
             l => l.HabitId == request.HabitId,
             cancellationToken);
@@ -67,9 +71,15 @@ public class GetHabitFullDetailQueryHandler(
             habit.Days.ToList(), habit.Position,
             habit.ReminderEnabled, habit.ReminderTimes, habit.ScheduledReminders,
             habit.ChecklistItems, habit.CreatedAtUtc, children,
-            Emoji: habit.Emoji);
+            Emoji: habit.Emoji,
+            IntervalWeeks: habit.IntervalWeeks);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, allRootLogs, userToday, userTimeZone);
+        var metrics = HabitMetricsCalculator.Calculate(
+            habit,
+            allRootLogs,
+            userToday,
+            userTimeZone,
+            user.WeekStartDay);
 
         var cutoff = userToday.AddDays(-DefaultLookbackDays);
         var logs = allRootLogs

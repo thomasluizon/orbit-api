@@ -47,7 +47,8 @@ public record HabitScheduleItem(
     bool IsLoggedInRange,
     IReadOnlyList<HabitInstanceItem> Instances,
     IReadOnlyList<SearchMatchField>? SearchMatches = null,
-    string? Emoji = null);
+    string? Emoji = null,
+    int? IntervalWeeks = null);
 
 public record HabitScheduleChildItem(
     Guid Id,
@@ -76,7 +77,8 @@ public record HabitScheduleChildItem(
     bool IsLoggedInRange,
     IReadOnlyList<HabitInstanceItem> Instances,
     IReadOnlyList<SearchMatchField>? SearchMatches = null,
-    string? Emoji = null);
+    string? Emoji = null,
+    int? IntervalWeeks = null);
 
 public record GetHabitScheduleQuery(
     Guid UserId,
@@ -115,11 +117,11 @@ internal record ScheduleMapContext(
     public List<DateOnly> GetScheduledDates(Habit habit)
     {
         if (ScheduledDatesCache is null || !DateFrom.HasValue || !DateTo.HasValue)
-            return HabitScheduleService.GetScheduledDates(habit, DateFrom ?? default, DateTo ?? default);
+            return HabitScheduleService.GetScheduledDates(habit, DateFrom ?? default, DateTo ?? default, WeekStartDay);
 
         if (!ScheduledDatesCache.TryGetValue(habit.Id, out var dates))
         {
-            dates = HabitScheduleService.GetScheduledDates(habit, DateFrom.Value, DateTo.Value);
+            dates = HabitScheduleService.GetScheduledDates(habit, DateFrom.Value, DateTo.Value, WeekStartDay);
             ScheduledDatesCache[habit.Id] = dates;
         }
         return dates;
@@ -159,7 +161,7 @@ public class GetHabitScheduleQueryHandler(
             .OrderBy(h => h.Position ?? int.MaxValue)
             .ThenBy(h => h.CreatedAtUtc);
 
-        topLevel = HabitScheduleFilters.ApplyCommonFilters(topLevel, request, lookup, completionDate);
+        topLevel = HabitScheduleFilters.ApplyCommonFilters(topLevel, request, lookup, completionDate, weekStartDay);
 
         var filtered = topLevel.ToList();
 
@@ -189,7 +191,13 @@ public class GetHabitScheduleQueryHandler(
     {
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var weekStartDay = await userDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
-        await HabitScheduleService.AdvanceStaleBadHabitDueDates(habitRepository, unitOfWork, request.UserId, today, cancellationToken);
+        await HabitScheduleService.AdvanceStaleBadHabitDueDates(
+            habitRepository,
+            unitOfWork,
+            request.UserId,
+            today,
+            cancellationToken,
+            weekStartDay);
 
         var overdueLookbackDays = request.IncludeOverdue ? 31 : AppConstants.DefaultOverdueWindowDays;
         var logFrom = (request.DateFrom ?? today).AddDays(-overdueLookbackDays);
@@ -208,7 +216,7 @@ public class GetHabitScheduleQueryHandler(
             .OrderBy(h => h.Position ?? int.MaxValue)
             .ThenBy(h => h.CreatedAtUtc);
 
-        topLevel = HabitScheduleFilters.ApplyCommonFilters(topLevel, request, lookup);
+        topLevel = HabitScheduleFilters.ApplyCommonFilters(topLevel, request, lookup, weekStartDay: weekStartDay);
         topLevel = HabitScheduleFilters.ApplyFrequencyUnitFilter(topLevel, request.FrequencyUnitFilter);
 
         if (!request.DateFrom.HasValue || !request.DateTo.HasValue)

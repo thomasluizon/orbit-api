@@ -38,6 +38,7 @@ public class UpdateHabitTool(
                 @enum = JsonSchemaTypes.FrequencyUnitEnum
             },
             frequency_quantity = new { type = JsonSchemaTypes.Integer, description = "New frequency quantity" },
+            interval_weeks = new { type = JsonSchemaTypes.Integer, description = "New repeat interval in weeks. Set to 1 for every week. Minimum 1." },
             days = new
             {
                 type = JsonSchemaTypes.Array,
@@ -151,6 +152,7 @@ public class UpdateHabitTool(
         var title = ResolveTitle(args, habit);
         var description = ResolveDescription(args, habit);
         var (frequencyUnit, frequencyQuantity) = ResolveFrequency(args, habit);
+        var intervalWeeks = ResolveIntervalWeeks(args, habit);
         var days = ResolveDays(args, habit);
         var isBadHabit = ResolveBoolField(args, "is_bad_habit", habit.IsBadHabit);
         var dueDate = ResolveDueDate(args, habit);
@@ -176,7 +178,8 @@ public class UpdateHabitTool(
             ClearEndDate: clearEndDate,
             ScheduledReminders: scheduledReminders,
             Emoji: ResolveEmoji(args, habit),
-            UserToday: today);
+            UserToday: today,
+            IntervalWeeks: intervalWeeks);
     }
 
     private static string ResolveTitle(JsonElement args, Habit habit) =>
@@ -220,6 +223,11 @@ public class UpdateHabitTool(
         JsonArgumentParser.PropertyExists(args, "days")
             ? JsonArgumentParser.ParseDays(args)
             : habit.Days.ToList();
+
+    private static int? ResolveIntervalWeeks(JsonElement args, Habit habit) =>
+        JsonArgumentParser.PropertyExists(args, "interval_weeks")
+            ? JsonArgumentParser.GetOptionalInt(args, "interval_weeks") ?? habit.IntervalWeeks
+            : habit.IntervalWeeks;
 
     private static bool ResolveBoolField(JsonElement args, string prop, bool currentValue) =>
         JsonArgumentParser.PropertyExists(args, prop)

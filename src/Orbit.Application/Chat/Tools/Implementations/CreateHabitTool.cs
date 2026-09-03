@@ -42,6 +42,7 @@ public class CreateHabitTool(
                 @enum = JsonSchemaTypes.FrequencyUnitEnum
             },
             frequency_quantity = new { type = JsonSchemaTypes.Integer, description = "How often (e.g. every 2 days). Defaults to 1." },
+            interval_weeks = new { type = JsonSchemaTypes.Integer, description = "Repeat interval in weeks. Omit for every week. Minimum 1." },
             days = new
             {
                 type = JsonSchemaTypes.Array,
@@ -220,7 +221,8 @@ public class CreateHabitTool(
             IsFlexible: JsonArgumentParser.GetOptionalBool(args, "is_flexible") ?? false,
             EndDate: JsonArgumentParser.ParseDateOnly(args, "end_date"),
             ScheduledReminders: scheduledReminders,
-            Emoji: JsonArgumentParser.GetOptionalString(args, "emoji")));
+            Emoji: JsonArgumentParser.GetOptionalString(args, "emoji"),
+            IntervalWeeks: JsonArgumentParser.GetOptionalInt(args, "interval_weeks")));
     }
 
     private async Task<ToolResult?> CreateInlineSubHabitsAsync(

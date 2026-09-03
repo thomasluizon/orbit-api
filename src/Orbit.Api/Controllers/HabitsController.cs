@@ -212,7 +212,8 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
                 IsFlexible: request.IsFlexible),
             TagIds: request.TagIds,
             GoalIds: request.GoalIds,
-            Emoji: request.Emoji);
+            Emoji: request.Emoji,
+            IntervalWeeks: request.IntervalWeeks);
 
         var result = await mediator.Send(command, cancellationToken);
 
@@ -308,7 +309,8 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
                 EndDate: request.EndDate,
                 IsFlexible: request.IsFlexible),
             GoalIds: request.GoalIds,
-            Emoji: request.Emoji);
+            Emoji: request.Emoji,
+            IntervalWeeks: request.IntervalWeeks);
 
         var result = await mediator.Send(command, cancellationToken);
 

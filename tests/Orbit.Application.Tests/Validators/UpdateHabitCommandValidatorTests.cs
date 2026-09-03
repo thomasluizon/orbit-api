@@ -82,6 +82,14 @@ public class UpdateHabitCommandValidatorTests
     }
 
     [Fact]
+    public void Validate_ZeroIntervalWeeks_HasError()
+    {
+        var result = _validator.TestValidate(ValidCommand() with { IntervalWeeks = 0 });
+
+        result.ShouldHaveValidationErrorFor(x => x.IntervalWeeks);
+    }
+
+    [Fact]
     public void Validate_DaysWithQtyNot1_HasError()
     {
         var command = ValidCommand() with

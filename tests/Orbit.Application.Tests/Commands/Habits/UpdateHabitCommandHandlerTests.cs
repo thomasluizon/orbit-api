@@ -108,6 +108,31 @@ public class UpdateHabitCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_WithIntervalWeeks_UpdatesInterval()
+    {
+        var habit = CreateTestHabit();
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(habit);
+
+        var command = new UpdateHabitCommand(
+            UserId,
+            habit.Id,
+            habit.Title,
+            habit.Description,
+            habit.FrequencyUnit,
+            habit.FrequencyQuantity,
+            IntervalWeeks: 3);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        habit.IntervalWeeks.Should().Be(3);
+    }
+
+    [Fact]
     public async Task Handle_HabitNotFound_ReturnsFailure()
     {
         _habitRepo.FindOneTrackedAsync(

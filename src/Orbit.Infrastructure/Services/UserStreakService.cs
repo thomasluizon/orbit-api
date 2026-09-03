@@ -103,7 +103,11 @@ public class UserStreakService(
 
         var userTimeZone = TimeZoneHelper.FindTimeZone(user.TimeZone, userId: user.Id);
         var expectedDates = HabitScheduleService.GetUnionScheduledDatesForStreak(
-            contributingHabits, lookbackStart, userToday, userTimeZone);
+            contributingHabits,
+            lookbackStart,
+            userToday,
+            userTimeZone,
+            user.WeekStartDay);
 
         if (!expectedDates.Contains(missedDate)
             || completionDateSet.Contains(missedDate)
@@ -186,7 +190,8 @@ public class UserStreakService(
             contributingHabits,
             lookbackStart,
             userToday,
-            userTimeZone);
+            userTimeZone,
+            user.WeekStartDay);
         var (currentStreak, lastActiveDate) = HabitScheduleService.ComputeStreakAsOf(
             expectedDates,
             completionDateSet,

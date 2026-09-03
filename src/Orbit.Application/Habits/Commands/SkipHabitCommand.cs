@@ -53,11 +53,11 @@ public class SkipHabitCommandHandler(
 
         var targetDate = request.Date ?? today;
 
-        var validationError = ValidateSkipTarget(habit, targetDate, today);
+        var weekStartDay = await userDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
+        var validationError = ValidateSkipTarget(habit, targetDate, today, weekStartDay);
         if (validationError is not null)
             return validationError;
 
-        var weekStartDay = await userDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
         var skipError = await ApplySkip(habit, targetDate, weekStartDay, cancellationToken);
         if (skipError is not null)
             return skipError;
@@ -86,7 +86,11 @@ public class SkipHabitCommandHandler(
         return Result.Success();
     }
 
-    private static Result? ValidateSkipTarget(Habit habit, DateOnly targetDate, DateOnly today)
+    private static Result? ValidateSkipTarget(
+        Habit habit,
+        DateOnly targetDate,
+        DateOnly today,
+        int weekStartDay)
     {
         if (targetDate > today)
             return Result.Failure(ErrorMessages.CannotSkipFutureDate);
@@ -97,9 +101,11 @@ public class SkipHabitCommandHandler(
         if (!habit.IsFlexible && habit.DueDate > targetDate)
             return Result.Failure(ErrorMessages.HabitNotYetDue);
 
-        if (!habit.IsFlexible && !HabitScheduleService.IsHabitDueOnDate(habit, targetDate))
+        if (!HabitScheduleService.IsHabitDueOnDate(habit, targetDate, weekStartDay))
         {
-            var isOverdue = targetDate == today && HabitScheduleService.HasMissedPastOccurrence(habit, today);
+            var isOverdue = !habit.IsFlexible
+                && targetDate == today
+                && HabitScheduleService.HasMissedPastOccurrence(habit, today);
             if (!isOverdue)
                 return Result.Failure(ErrorMessages.NotScheduledOnDate);
         }
@@ -123,7 +129,7 @@ public class SkipHabitCommandHandler(
         }
         else
         {
-            habit.AdvanceDueDate(targetDate);
+            habit.AdvanceDueDate(targetDate, weekStartDay);
         }
 
         return null;

@@ -17,6 +17,7 @@ public class GetRetrospectiveQueryHandlerTests
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IRetrospectiveService _retroService = Substitute.For<IRetrospectiveService>();
     private readonly IUserStreakService _streakService = Substitute.For<IUserStreakService>();
+    private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly GetRetrospectiveQueryHandler _handler;
 
@@ -29,7 +30,14 @@ public class GetRetrospectiveQueryHandlerTests
 
     public GetRetrospectiveQueryHandlerTests()
     {
-        _handler = new GetRetrospectiveQueryHandler(_habitRepo, _payGate, _retroService, _streakService, _cache);
+        _handler = new GetRetrospectiveQueryHandler(
+            _habitRepo,
+            _payGate,
+            _retroService,
+            _streakService,
+            _userDateService,
+            _cache);
+        _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(1);
         _payGate.CanUseRetrospective(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
         _streakService.RecalculateAsync(UserId, false, Arg.Any<CancellationToken>())
             .Returns(new UserStreakState(4, 9, DateTo));

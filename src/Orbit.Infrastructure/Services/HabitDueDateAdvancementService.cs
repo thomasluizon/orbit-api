@@ -100,7 +100,7 @@ public partial class HabitDueDateAdvancementService(
 
             if (!ShouldAdvanceForUserToday(habit, userToday)) continue;
 
-            habit.CatchUpDueDate(userToday);
+            habit.CatchUpDueDate(userToday, user.WeekStartDay);
             advanced++;
         }
 

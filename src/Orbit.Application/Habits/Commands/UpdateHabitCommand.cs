@@ -23,7 +23,8 @@ public record UpdateHabitCommand(
     bool? ClearEndDate = null,
     UpdateHabitCommandOptions? Options = null,
     IReadOnlyList<Guid>? GoalIds = null,
-    string? Emoji = null) : IRequest<Result>;
+    string? Emoji = null,
+    int? IntervalWeeks = null) : IRequest<Result>;
 
 public class UpdateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -100,7 +101,8 @@ public class UpdateHabitCommandHandler(
             ClearEndDate: request.ClearEndDate,
             ScheduledReminders: opts.ScheduledReminders,
             Emoji: request.Emoji,
-            UserToday: today);
+            UserToday: today,
+            IntervalWeeks: request.IntervalWeeks);
 
         return Result.Success(new UpdateState(habit, update, opts, today));
     }
