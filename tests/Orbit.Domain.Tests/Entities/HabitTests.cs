@@ -1345,8 +1345,10 @@ public class HabitTests
         habit.DueDate.Should().BeAfter(monday);
     }
 
-    [Fact]
-    public void Create_ZeroIntervalWeeks_Fails()
+    [Theory]
+    [InlineData(null)]
+    [InlineData(DomainConstants.MaxIntervalWeeks)]
+    public void Create_ValidIntervalWeeks_Succeeds(int? intervalWeeks)
     {
         var result = Habit.Create(new HabitCreateParams(
             ValidUserId,
@@ -1355,7 +1357,25 @@ public class HabitTests
             1,
             new DateOnly(2025, 1, 7),
             Days: [DayOfWeek.Tuesday],
-            IntervalWeeks: 0));
+            IntervalWeeks: intervalWeeks));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.IntervalWeeks.Should().Be(intervalWeeks);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(DomainConstants.MaxIntervalWeeks + 1)]
+    public void Create_InvalidIntervalWeeks_Fails(int intervalWeeks)
+    {
+        var result = Habit.Create(new HabitCreateParams(
+            ValidUserId,
+            "Run",
+            FrequencyUnit.Day,
+            1,
+            new DateOnly(2025, 1, 7),
+            Days: [DayOfWeek.Tuesday],
+            IntervalWeeks: intervalWeeks));
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be("INTERVAL_WEEKS_INVALID");
@@ -1379,8 +1399,10 @@ public class HabitTests
         habit.DueDate.Should().Be(tuesday.AddDays(14));
     }
 
-    [Fact]
-    public void Update_ZeroIntervalWeeks_Fails()
+    [Theory]
+    [InlineData(null)]
+    [InlineData(DomainConstants.MaxIntervalWeeks)]
+    public void Update_ValidIntervalWeeks_Succeeds(int? intervalWeeks)
     {
         var habit = CreateValidHabit();
         var result = habit.Update(new HabitUpdateParams(
@@ -1391,7 +1413,27 @@ public class HabitTests
             habit.Days.ToList(),
             habit.IsBadHabit,
             habit.DueDate,
-            IntervalWeeks: 0));
+            IntervalWeeks: intervalWeeks));
+
+        result.IsSuccess.Should().BeTrue();
+        habit.IntervalWeeks.Should().Be(intervalWeeks);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(DomainConstants.MaxIntervalWeeks + 1)]
+    public void Update_InvalidIntervalWeeks_Fails(int intervalWeeks)
+    {
+        var habit = CreateValidHabit();
+        var result = habit.Update(new HabitUpdateParams(
+            habit.Title,
+            habit.Description,
+            habit.FrequencyUnit,
+            habit.FrequencyQuantity,
+            habit.Days.ToList(),
+            habit.IsBadHabit,
+            habit.DueDate,
+            IntervalWeeks: intervalWeeks));
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be("INTERVAL_WEEKS_INVALID");

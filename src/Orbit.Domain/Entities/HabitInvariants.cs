@@ -27,7 +27,7 @@ internal static class HabitInvariants
         if (frequencyQuantity is not null && frequencyQuantity <= 0)
             return DomainErrors.FrequencyQuantityInvalid;
 
-        if (intervalWeeks is not null && intervalWeeks <= 0)
+        if (intervalWeeks is < 1 or > DomainConstants.MaxIntervalWeeks)
             return DomainErrors.IntervalWeeksInvalid;
 
         if (isFlexible && frequencyUnit is null)

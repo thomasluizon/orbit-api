@@ -34,7 +34,7 @@ public static class SharedHabitRules
 
     public static void AddIntervalWeeksRules<T>(IRuleBuilder<T, int?> rule)
     {
-        rule.GreaterThanOrEqualTo(1);
+        rule.InclusiveBetween(1, AppConstants.MaxIntervalWeeks);
     }
 
     public static void AddDaysRules<T>(

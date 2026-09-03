@@ -33,6 +33,7 @@ public static class AppConstants
     public const int MaxScheduledReminders = DomainConstants.MaxScheduledReminders;
     public const int MaxReminderTimes = DomainConstants.MaxReminderTimes;
     public const int MaxReminderMinutesBefore = DomainConstants.MaxReminderMinutesBefore;
+    public const int MaxIntervalWeeks = DomainConstants.MaxIntervalWeeks;
     public const int MaxPushSubscriptionsPerUser = 5;
     public const int MaxNotificationsReturned = 50;
     public const int MaxChecklistItems = 50;
