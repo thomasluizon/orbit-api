@@ -242,7 +242,15 @@ public class CreateHabitTool(
 
         foreach (var sub in subEl.EnumerateArray())
         {
-            var childResult = BuildChildHabit(sub, userId, parent.Id, parentFreqUnit, parentFreqQty, parentDays, parentDueDate);
+            var childResult = BuildChildHabit(
+                sub,
+                userId,
+                parent.Id,
+                parentFreqUnit,
+                parentFreqQty,
+                parentDays,
+                parentDueDate,
+                parent.IntervalWeeks);
             if (childResult.IsFailure)
                 return ToolResult.FromFailure(childResult);
 
@@ -255,7 +263,7 @@ public class CreateHabitTool(
     private static Domain.Common.Result<Habit> BuildChildHabit(
         JsonElement sub, Guid userId, Guid parentId,
         FrequencyUnit? parentFreqUnit, int? parentFreqQty,
-        List<DayOfWeek>? parentDays, DateOnly parentDueDate)
+        List<DayOfWeek>? parentDays, DateOnly parentDueDate, int? parentIntervalWeeks)
     {
         var subDays = JsonArgumentParser.ParseDays(sub);
         if (subDays is null || subDays.Count == 0)
@@ -272,7 +280,8 @@ public class CreateHabitTool(
             IsBadHabit: JsonArgumentParser.GetOptionalBool(sub, "is_bad_habit") ?? false,
             ParentHabitId: parentId,
             Emoji: JsonArgumentParser.GetOptionalString(sub, "emoji"),
-            ChecklistItems: JsonArgumentParser.ParseChecklistItems(sub)));
+            ChecklistItems: JsonArgumentParser.ParseChecklistItems(sub),
+            IntervalWeeks: parentIntervalWeeks));
     }
 
     private async Task AssignTagsFromArgsAsync(JsonElement args, Habit habit, Guid userId, CancellationToken ct)

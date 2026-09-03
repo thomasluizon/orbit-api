@@ -5,6 +5,7 @@ using NSubstitute;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Common;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -92,6 +93,39 @@ public class CreateHabitToolTests
         await _habitRepo.Received(1).AddAsync(
             Arg.Is<Habit>(habit => habit.IntervalWeeks == 2),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task WithInlineSubHabit_InheritsParentIntervalSchedule()
+    {
+        var addedHabits = new List<Habit>();
+        _habitRepo.AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                addedHabits.Add(call.Arg<Habit>());
+                return Task.CompletedTask;
+            });
+
+        var result = await Execute("""
+        {
+            "title": "Alternating routine",
+            "frequency_unit": "Day",
+            "frequency_quantity": 1,
+            "interval_weeks": 2,
+            "sub_habits": [{"title": "Child"}]
+        }
+        """);
+
+        result.Success.Should().BeTrue();
+        var parent = addedHabits.Single(habit => habit.ParentHabitId is null);
+        var child = addedHabits.Single(habit => habit.ParentHabitId == parent.Id);
+        child.IntervalWeeks.Should().Be(parent.IntervalWeeks).And.Be(2);
+
+        var rangeEnd = Today.AddDays(20);
+        var parentDates = HabitScheduleService.GetScheduledDates(parent, Today, rangeEnd, weekStartDay: 1);
+        var childDates = HabitScheduleService.GetScheduledDates(child, Today, rangeEnd, weekStartDay: 1);
+        childDates.Should().Equal(parentDates);
+        childDates.Should().NotContain(Today.AddDays(3));
     }
 
     [Fact]

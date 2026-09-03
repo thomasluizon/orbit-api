@@ -10,9 +10,10 @@ namespace Orbit.Application.Habits.Commands;
 
 /// <param name="InheritParentFrequency">
 /// When true and <see cref="FrequencyUnit"/>/<see cref="FrequencyQuantity"/> are unset, the child
-/// inherits the parent's cadence instead of becoming a one-time task. Only the AI chat tool (which
-/// treats an unspecified frequency as "match the parent") opts into this; the REST API always sends
-/// the user's explicit choice, where an unset frequency means the user picked "one-time".
+/// inherits the parent's cadence instead of becoming a one-time task, including its week interval.
+/// Only the AI chat tool (which treats an unspecified frequency as "match the parent") opts into
+/// this; the REST API always sends the user's explicit choice, where an unset frequency means the
+/// user picked "one-time".
 /// </param>
 public record CreateSubHabitCommand(
     Guid UserId,
@@ -70,10 +71,12 @@ public class CreateSubHabitCommandHandler(
 
         var frequencyUnit = request.FrequencyUnit;
         var frequencyQuantity = request.FrequencyQuantity;
+        int? intervalWeeks = null;
         if (request.InheritParentFrequency)
         {
             frequencyUnit ??= parent.FrequencyUnit;
             frequencyQuantity ??= parent.FrequencyQuantity;
+            intervalWeeks = parent.IntervalWeeks;
         }
 
         var childResult = Habit.Create(new HabitCreateParams(
@@ -97,7 +100,8 @@ public class CreateSubHabitCommandHandler(
             IsFlexible: opts.IsFlexible,
             EndDate: opts.EndDate,
             ScheduledReminders: opts.ScheduledReminders,
-            Position: nextPosition));
+            Position: nextPosition,
+            IntervalWeeks: intervalWeeks));
 
         if (childResult.IsFailure)
             return childResult.PropagateError<Guid>();

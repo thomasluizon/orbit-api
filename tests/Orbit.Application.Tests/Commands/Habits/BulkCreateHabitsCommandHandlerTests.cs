@@ -7,6 +7,7 @@ using NSubstitute;
 using Orbit.Application.Calendar.Queries;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -107,6 +108,43 @@ public class BulkCreateHabitsCommandHandlerTests
         result.Value.Results[0].Status.Should().Be(BulkItemStatus.Success);
         await _habitRepo.Received(3).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
         await _payGate.Received(1).CanCreateSubHabits(UserId, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WithSubHabits_InheritsParentIntervalSchedule()
+    {
+        var addedHabits = new List<Habit>();
+        _habitRepo.AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                addedHabits.Add(call.Arg<Habit>());
+                return Task.CompletedTask;
+            });
+        var items = new List<BulkHabitItem>
+        {
+            new(
+                "Alternating routine",
+                null,
+                FrequencyUnit.Day,
+                1,
+                DueDate: Today,
+                SubHabits: [new("Child", null, null, null)],
+                IntervalWeeks: 2)
+        };
+
+        var result = await _handler.Handle(
+            new BulkCreateHabitsCommand(UserId, items), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var parent = addedHabits.Single(habit => habit.ParentHabitId is null);
+        var child = addedHabits.Single(habit => habit.ParentHabitId == parent.Id);
+        child.IntervalWeeks.Should().Be(parent.IntervalWeeks).And.Be(2);
+
+        var rangeEnd = Today.AddDays(20);
+        var parentDates = HabitScheduleService.GetScheduledDates(parent, Today, rangeEnd, weekStartDay: 1);
+        var childDates = HabitScheduleService.GetScheduledDates(child, Today, rangeEnd, weekStartDay: 1);
+        childDates.Should().Equal(parentDates);
+        childDates.Should().NotContain(Today.AddDays(3));
     }
 
     [Fact]
