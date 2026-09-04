@@ -104,6 +104,8 @@ public partial class ProcessUserChatCommandHandler(
     private const int MaxToolIterations = 5;
     private const string UnsupportedByPolicyReason = "unsupported_by_policy";
     private const string DescribeFeatureToolName = "describe_feature";
+    private const string EnglishToolFailureMessage = "I couldn't complete that. Please try again.";
+    private const string PortugueseToolFailureMessage = "Não consegui concluir isso. Tente novamente.";
 
     private const int MaxSupportMessageLength = 5000;
 
@@ -119,6 +121,7 @@ public partial class ProcessUserChatCommandHandler(
             return contextResult.PropagateError<ChatResponse>();
 
         var context = contextResult.Value;
+        var userLanguage = GetUserLanguage(context.User);
         var aiStreamFilter = BuildAiStreamFilter(request.StreamSink);
         Func<AiStreamEvent, Task>? aiStreamSink = aiStreamFilter is null
             ? null
@@ -143,9 +146,17 @@ public partial class ProcessUserChatCommandHandler(
 
         var executionResults = new ToolExecutionAccumulator();
         var actionsStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var toolLoopResult = await RunToolCallLoopAsync(response.Value, request, executionResults, aiStreamSink, cancellationToken);
+        var toolLoopResult = await RunToolCallLoopAsync(
+            response.Value,
+            request,
+            executionResults,
+            userLanguage,
+            aiStreamSink,
+            cancellationToken);
         var aiResponse = toolLoopResult.FinalResponse;
         var iterations = toolLoopResult.Iterations;
+        if (toolLoopResult.HadToolFailure)
+            executionResults.SanitizeFailedActions(ToolFailureMessage(userLanguage));
         if (aiStreamFilter is not null)
             await aiStreamFilter.FlushAsync();
         actionsStopwatch.Stop();
@@ -211,6 +222,8 @@ public partial class ProcessUserChatCommandHandler(
             goalList,
             metricsCard));
     }
+
+    private static string? GetUserLanguage(User? user) => user?.Language;
 
     private async Task<(string? AiMessage, HabitListCard? HabitList, GoalListCard? GoalList, MetricsCard? MetricsCard)> BuildResponseCardsAsync(
         string? aiMessage,

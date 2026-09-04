@@ -160,6 +160,18 @@ public class SystemPromptBuilderTests
     }
 
     [Fact]
+    public void BuildStatic_IncludesToolFailuresAfterClarificationGuidance()
+    {
+        var builder = new SystemPromptBuilder();
+
+        var staticPrompt = builder.BuildStatic(new PromptBuildRequest(Array.Empty<Habit>(), Array.Empty<UserFact>()));
+
+        staticPrompt.Should().Contain("Tool Failures");
+        staticPrompt.IndexOf("Tool Failures", StringComparison.Ordinal)
+            .Should().BeGreaterThan(staticPrompt.IndexOf("Clarification Cards", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void BuildStatic_OrdersEncouragingToneAfterIdentityAndBeforeRules()
     {
         var builder = new SystemPromptBuilder();

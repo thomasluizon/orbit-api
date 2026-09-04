@@ -7877,6 +7877,15 @@
         ]
       },
       {
+        "testClass": "ToolFailureSectionTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Services/PromptSectionTests.cs",
+        "references": [
+          "Goal",
+          "Habit",
+          "UserFact"
+        ]
+      },
+      {
         "testClass": "PushNotificationServiceTests",
         "file": "tests/Orbit.Infrastructure.Tests/Services/PushNotificationServiceTests.cs",
         "references": [

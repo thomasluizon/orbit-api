@@ -30,6 +30,15 @@ public partial class ProcessUserChatCommandHandler
         /// </summary>
         public IReadOnlyList<string> RelatedSurfaces => _relatedSurfaces;
 
+        public void SanitizeFailedActions(string error)
+        {
+            for (var index = 0; index < ActionResults.Count; index++)
+            {
+                if (ActionResults[index].Status == ActionStatus.Failed)
+                    ActionResults[index] = ActionResults[index] with { Error = error };
+            }
+        }
+
         public void Add(
             string toolName,
             ActionResult? actionResult,

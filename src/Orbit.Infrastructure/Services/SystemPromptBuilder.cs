@@ -20,6 +20,7 @@ public class SystemPromptBuilder : ISystemPromptBuilder
             new GlobalRulesSection(),
             new StructuringStrategySection(),
             new ClarificationGuidanceSection(),
+            new ToolFailureSection(),
         ];
         _dynamicSections =
         [

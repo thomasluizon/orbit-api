@@ -233,6 +233,49 @@ public class StructuringStrategySectionTests
     }
 }
 
+public class ToolFailureSectionTests
+{
+    [Fact]
+    public void Order_Is270()
+    {
+        new ToolFailureSection().Order.Should().Be(270);
+    }
+
+    [Fact]
+    public void ShouldInclude_AlwaysTrue()
+    {
+        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+
+        new ToolFailureSection().ShouldInclude(ctx).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Build_DefinesTerminalFailureRules()
+    {
+        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+
+        var result = new ToolFailureSection().Build(ctx);
+
+        result.Should().Contain("Tool Failures");
+        result.Should().Contain("NEVER retry a rejected tool call");
+        result.Should().Contain("NEVER turn the rejection into a question");
+        result.Should().Contain("user's own words and language");
+        result.Should().Contain("ask the user to resolve it");
+        result.Should().ContainAll("frequency_unit", "frequency_quantity", "days", "is_flexible");
+    }
+
+    [Fact]
+    public void Build_PreservesClarificationForAmbiguousRequests()
+    {
+        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+
+        var result = new ToolFailureSection().Build(ctx);
+
+        result.Should().Contain("do not replace the NeedsClarification flow");
+        result.Should().Contain("genuinely ambiguous request");
+    }
+}
+
 public class TodayDateSectionTests
 {
     [Fact]

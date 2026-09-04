@@ -14,6 +14,7 @@ public partial class ProcessUserChatCommandHandler
         AiResponse initialResponse,
         ProcessUserChatCommand request,
         ToolExecutionAccumulator executionResults,
+        string? language,
         Func<AiStreamEvent, Task>? aiStreamSink,
         CancellationToken cancellationToken)
     {
@@ -21,6 +22,7 @@ public partial class ProcessUserChatCommandHandler
         var iteration = 0;
         long totalReportedTokens = initialResponse.ReportedTokenCount;
         var tokenBudgetExceeded = totalReportedTokens > AppConstants.MaxAiRequestTotalTokens;
+        var hadToolFailure = false;
 
         if (tokenBudgetExceeded)
         {
@@ -37,19 +39,26 @@ public partial class ProcessUserChatCommandHandler
             if (request.StreamSink is not null)
                 await request.StreamSink(ChatStreamEvent.Round(iteration));
 
-            var continueResponse = await ProcessToolCallsAsync(
+            var roundResult = await ProcessToolCallsAsync(
                 aiResponse,
                 request,
                 executionResults,
                 iteration,
+                language,
                 aiStreamSink,
                 cancellationToken);
 
-            if (continueResponse is null)
+            if (roundResult is null)
                 break;
 
-            aiResponse = continueResponse;
-            totalReportedTokens += continueResponse.ReportedTokenCount;
+            aiResponse = roundResult.Response;
+            if (roundResult.HadToolFailure)
+            {
+                hadToolFailure = true;
+                break;
+            }
+
+            totalReportedTokens += roundResult.Response.ReportedTokenCount;
             tokenBudgetExceeded = totalReportedTokens > AppConstants.MaxAiRequestTotalTokens;
             if (tokenBudgetExceeded)
             {
@@ -61,23 +70,29 @@ public partial class ProcessUserChatCommandHandler
             }
         }
 
-        return new ToolLoopResult(aiResponse, iteration, tokenBudgetExceeded);
+        return new ToolLoopResult(
+            aiResponse,
+            iteration,
+            tokenBudgetExceeded,
+            hadToolFailure);
     }
 
     private sealed record ToolLoopResult(
         AiResponse FinalResponse,
         int Iterations,
-        bool TokenBudgetExceeded);
+        bool TokenBudgetExceeded,
+        bool HadToolFailure);
 
     /// <summary>
     /// Processes one iteration of AI tool calls: orders them, executes each, and sends results
     /// back to the AI. Returns the next AI response, or null if continuation failed.
     /// </summary>
-    private async Task<AiResponse?> ProcessToolCallsAsync(
+    private async Task<ToolRoundResult?> ProcessToolCallsAsync(
         AiResponse aiResponse,
         ProcessUserChatCommand request,
         ToolExecutionAccumulator executionResults,
         int iteration,
+        string? language,
         Func<AiStreamEvent, Task>? aiStreamSink,
         CancellationToken cancellationToken)
     {
@@ -90,12 +105,24 @@ public partial class ProcessUserChatCommandHandler
         var outcomesByCallId = await ExecuteToolCallsAsync(orderedCalls, request, cancellationToken);
 
         var toolResults = new List<AiToolCallResult>(orderedCalls.Count);
+        var hadToolFailure = false;
         foreach (var call in orderedCalls)
         {
             var outcome = outcomesByCallId[call.Id];
             toolResults.Add(outcome.ToolResult);
-            executionResults.Add(call.Name, outcome.ActionResult, outcome.OperationResult, outcome.PolicyDenial, outcome.PendingOperation);
+            executionResults.Add(
+                call.Name,
+                outcome.ActionResult,
+                outcome.OperationResult,
+                outcome.PolicyDenial,
+                outcome.PendingOperation);
+
+            if (outcome.OperationResult?.Status == AgentOperationStatus.Failed)
+                hadToolFailure = true;
         }
+
+        if (hadToolFailure)
+            return new ToolRoundResult(MessageResponse(language), HadToolFailure: true);
 
         var continueResult = await ai.IntentService.ContinueWithToolResultsAsync(aiResponse.ConversationContext!, toolResults, aiStreamSink, cancellationToken);
         if (continueResult.IsFailure)
@@ -104,8 +131,22 @@ public partial class ProcessUserChatCommandHandler
             return null;
         }
 
-        return continueResult.Value;
+        return new ToolRoundResult(continueResult.Value);
     }
+
+    private sealed record ToolRoundResult(
+        AiResponse Response,
+        bool HadToolFailure = false);
+
+    private static AiResponse MessageResponse(string? language) => new()
+    {
+        TextMessage = ToolFailureMessage(language)
+    };
+
+    private static string ToolFailureMessage(string? language) =>
+        LocaleHelper.IsPortuguese(language)
+            ? PortugueseToolFailureMessage
+            : EnglishToolFailureMessage;
 
     /// <summary>
     /// Executes a round's tool calls, dispatching the read-only subset concurrently (each on its
