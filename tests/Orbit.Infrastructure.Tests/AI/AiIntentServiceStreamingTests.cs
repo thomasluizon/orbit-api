@@ -40,7 +40,7 @@ public class AiIntentServiceStreamingTests
     {
         var body = RoleChunk()
             + ToolCallStartChunk(0, "call_1", "create_habit")
-            + ToolCallArgsChunk(0, """{"title":""")
+            + ToolCallArgsChunk(0, """{"retry_of":"r1","title":""")
             + ToolCallArgsChunk(0, """ "Read more"}""")
             + FinishChunk("tool_calls")
             + Done();
@@ -54,6 +54,7 @@ public class AiIntentServiceStreamingTests
         var toolCall = result.Value.ToolCalls!.Single();
         toolCall.Name.Should().Be("create_habit");
         toolCall.Id.Should().Be("call_1");
+        toolCall.Args.GetProperty("retry_of").GetString().Should().Be("r1");
         toolCall.Args.GetProperty("title").GetString().Should().Be("Read more");
         sink.Events.Should().BeEmpty();
     }
