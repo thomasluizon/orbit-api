@@ -104,8 +104,10 @@ public partial class ProcessUserChatCommandHandler(
     private const int MaxToolIterations = 5;
     private const string UnsupportedByPolicyReason = "unsupported_by_policy";
     private const string DescribeFeatureToolName = "describe_feature";
-    private const string ToolFailureMessageKey = "chat.toolFailure.couldNotComplete";
-    private const string ToolFailureRecoveredMessageKey = "chat.toolFailure.recovered";
+    private const string EnglishToolFailureMessage = "I couldn't complete that. Please try again.";
+    private const string PortugueseToolFailureMessage = "Não consegui concluir isso. Tente novamente.";
+    private const string EnglishToolRecoveredMessage = "Done. I completed that for you.";
+    private const string PortugueseToolRecoveredMessage = "Pronto. Concluí isso para você.";
 
     private const int MaxSupportMessageLength = 5000;
 
@@ -150,6 +152,7 @@ public partial class ProcessUserChatCommandHandler(
             initialTurn.Value.Request,
             request,
             executionResults,
+            context.User?.Language,
             aiStreamSink,
             cancellationToken);
         var aiResponse = toolLoopResult.FinalResponse;
@@ -174,7 +177,8 @@ public partial class ProcessUserChatCommandHandler(
         aiMessage = SanitizeToolFailureMessage(
             aiMessage,
             toolLoopResult,
-            initialTurn.Value.Request.ToolDeclarations);
+            initialTurn.Value.Request.ToolDeclarations,
+            context.User?.Language);
 
         if (faqMatch is { } faqToCache
             && !string.IsNullOrWhiteSpace(aiMessage)

@@ -15,6 +15,7 @@ public partial class ProcessUserChatCommandHandler
         AiToolRequest originalAiRequest,
         ProcessUserChatCommand request,
         ToolExecutionAccumulator executionResults,
+        string? language,
         Func<AiStreamEvent, Task>? aiStreamSink,
         CancellationToken cancellationToken)
     {
@@ -52,6 +53,7 @@ public partial class ProcessUserChatCommandHandler
                 successfulCalls,
                 isRetryRound,
                 iteration,
+                language,
                 aiStreamSink,
                 cancellationToken);
 
@@ -69,9 +71,7 @@ public partial class ProcessUserChatCommandHandler
                 retrySucceeded = roundResult.RetrySucceeded;
                 if (aiResponse.HasToolCalls)
                 {
-                    aiResponse = MessageResponse(retrySucceeded
-                        ? ToolFailureRecoveredMessageKey
-                        : ToolFailureMessageKey);
+                    aiResponse = MessageResponse(language, retrySucceeded);
                 }
                 break;
             }
@@ -116,6 +116,7 @@ public partial class ProcessUserChatCommandHandler
         List<SuccessfulToolCall> successfulCalls,
         bool isRetryRound,
         int iteration,
+        string? language,
         Func<AiStreamEvent, Task>? aiStreamSink,
         CancellationToken cancellationToken)
     {
@@ -126,13 +127,13 @@ public partial class ProcessUserChatCommandHandler
             .ToList();
 
         if (isRetryRound && orderedCalls.Any(call => IsIdenticalRejectedCall(call, rejectedCalls)))
-            return new ToolRoundResult(MessageResponse(ToolFailureMessageKey), RetrySucceeded: false);
+            return new ToolRoundResult(MessageResponse(language), RetrySucceeded: false);
 
         var retryPlan = isRetryRound
             ? BuildRetryExecutionPlan(orderedCalls, rejectedCalls, successfulCalls)
             : orderedCalls.Select(call => new RetryToolCall(call, null)).ToList();
         if (retryPlan is null)
-            return new ToolRoundResult(MessageResponse(ToolFailureMessageKey), RetrySucceeded: false);
+            return new ToolRoundResult(MessageResponse(language), RetrySucceeded: false);
 
         var callsToExecute = retryPlan
             .Where(planned => planned.SuccessfulCall is null)
@@ -185,12 +186,12 @@ public partial class ProcessUserChatCommandHandler
         if (isRetryRound)
         {
             if (retryableFailures.Count > 0)
-                return new ToolRoundResult(MessageResponse(ToolFailureMessageKey), RetrySucceeded: false);
+                return new ToolRoundResult(MessageResponse(language), RetrySucceeded: false);
 
             var retryContinuation = await ai.IntentService.ContinueWithToolResultsAsync(
                 aiResponse.ConversationContext!, toolResults, streamSink: null, cancellationToken);
             if (retryContinuation.IsFailure || retryContinuation.Value.HasToolCalls)
-                return new ToolRoundResult(MessageResponse(ToolFailureRecoveredMessageKey), RetrySucceeded: true);
+                return new ToolRoundResult(MessageResponse(language, recovered: true), RetrySucceeded: true);
 
             return new ToolRoundResult(retryContinuation.Value, RetrySucceeded: true);
         }
@@ -212,7 +213,7 @@ public partial class ProcessUserChatCommandHandler
             if (retryResponse.IsFailure || !retryResponse.Value.HasToolCalls)
             {
                 return new ToolRoundResult(
-                    MessageResponse(ToolFailureMessageKey),
+                    MessageResponse(language),
                     StartedRecovery: true,
                     RetrySucceeded: false);
             }
@@ -245,7 +246,18 @@ public partial class ProcessUserChatCommandHandler
 
     private sealed record RetryToolCall(AiToolCall Call, SuccessfulToolCall? SuccessfulCall);
 
-    private static AiResponse MessageResponse(string messageKey) => new() { TextMessage = messageKey };
+    private static AiResponse MessageResponse(string? language, bool recovered = false) => new()
+    {
+        TextMessage = ToolFailureMessage(language, recovered)
+    };
+
+    private static string ToolFailureMessage(string? language, bool recovered)
+    {
+        if (LocaleHelper.IsPortuguese(language))
+            return recovered ? PortugueseToolRecoveredMessage : PortugueseToolFailureMessage;
+
+        return recovered ? EnglishToolRecoveredMessage : EnglishToolFailureMessage;
+    }
 
     private static bool IsIdenticalRejectedCall(AiToolCall call, IReadOnlyList<RejectedToolCall> rejectedCalls)
     {
@@ -438,7 +450,8 @@ public partial class ProcessUserChatCommandHandler
     private static string? SanitizeToolFailureMessage(
         string? message,
         ToolLoopResult toolLoopResult,
-        IReadOnlyList<object> toolDeclarations)
+        IReadOnlyList<object> toolDeclarations,
+        string? language)
     {
         if (!toolLoopResult.HadToolFailure
             || !ContainsInternalToolVocabulary(message, toolDeclarations))
@@ -446,9 +459,7 @@ public partial class ProcessUserChatCommandHandler
             return message;
         }
 
-        return toolLoopResult.RetrySucceeded
-            ? ToolFailureRecoveredMessageKey
-            : ToolFailureMessageKey;
+        return ToolFailureMessage(language, toolLoopResult.RetrySucceeded);
     }
 
     private static void CollectToolArgumentNames(JsonElement element, HashSet<string> argumentNames)
