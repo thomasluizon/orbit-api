@@ -420,7 +420,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         DueTime = p.DueTime;
         DueEndTime = p.DueEndTime;
 
-        if (p.DueDate is not null)
+        if (p.DueDate is not null && p.DueDate.Value != DueDate)
         {
             DueDate = p.DueDate.Value;
             ScheduledStartDate = DueDate;

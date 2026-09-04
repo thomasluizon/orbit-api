@@ -1400,6 +1400,36 @@ public class HabitTests
     }
 
     [Fact]
+    public void Update_AdvancedIntervalHabitWithUnchangedDueDate_PreservesScheduledStartDate()
+    {
+        var originalDueDate = new DateOnly(2025, 1, 6);
+        var currentDueDate = originalDueDate.AddDays(14);
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId,
+            "Run",
+            FrequencyUnit.Week,
+            2,
+            originalDueDate,
+            IntervalWeeks: 2)).Value;
+        habit.AdvanceDueDate(originalDueDate, weekStartDay: 1);
+
+        var result = habit.Update(new HabitUpdateParams(
+            habit.Title,
+            habit.Description,
+            habit.FrequencyUnit,
+            habit.FrequencyQuantity,
+            habit.Days.ToList(),
+            habit.IsBadHabit,
+            currentDueDate,
+            UserToday: originalDueDate.AddDays(1),
+            IntervalWeeks: 2));
+
+        result.IsSuccess.Should().BeTrue();
+        habit.DueDate.Should().Be(currentDueDate);
+        habit.ScheduledStartDate.Should().Be(originalDueDate);
+    }
+
+    [Fact]
     public void AdvanceDueDate_BiweeklyHabitRescheduledByOneWeek_RebasesIntervalPhase()
     {
         var originalDueDate = new DateOnly(2025, 1, 6);
