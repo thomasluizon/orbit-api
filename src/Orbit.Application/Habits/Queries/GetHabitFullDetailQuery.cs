@@ -31,7 +31,8 @@ public class GetHabitFullDetailQueryHandler(
     {
         var habits = await habitRepository.FindAsync(
             h => h.Id == request.HabitId && h.UserId == request.UserId,
-            q => q.Include(h => h.Children).ThenInclude(c => c.Children),
+            q => q.Include(h => h.Children).ThenInclude(c => c.Children)
+                  .Include(h => h.Goals),
             cancellationToken);
 
         var habit = habits.Count > 0 ? habits[0] : null;
@@ -72,7 +73,11 @@ public class GetHabitFullDetailQueryHandler(
             habit.ReminderEnabled, habit.ReminderTimes, habit.ScheduledReminders,
             habit.ChecklistItems, habit.CreatedAtUtc, children,
             Emoji: habit.Emoji,
-            IntervalWeeks: habit.IntervalWeeks);
+            IntervalWeeks: habit.IntervalWeeks,
+            LinkedGoals: habit.ParentHabitId.HasValue
+                ? habit.Goals.Select(goal => new LinkedGoalDto(goal.Id, goal.Title)).ToList()
+                : null,
+            SlipAlertEnabled: habit.ParentHabitId.HasValue ? habit.SlipAlertEnabled : null);
 
         var metrics = HabitMetricsCalculator.Calculate(
             habit,
