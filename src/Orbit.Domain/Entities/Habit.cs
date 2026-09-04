@@ -408,6 +408,12 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     private void ApplyRequiredUpdates(HabitUpdateParams p)
     {
         var effectiveIsFlexible = p.IsFlexible ?? IsFlexible;
+        var effectiveDays = effectiveIsFlexible ? [] : (p.Days?.ToList() ?? []);
+        var effectiveDueDate = p.DueDate ?? DueDate;
+        var recurrencePhaseChanged = FrequencyUnit != p.FrequencyUnit
+            || FrequencyQuantity != p.FrequencyQuantity
+            || IntervalWeeks != p.IntervalWeeks
+            || !Days.ToHashSet().SetEquals(effectiveDays);
 
         Title = p.Title.Trim();
         Description = p.Description?.Trim();
@@ -415,15 +421,15 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         FrequencyUnit = p.FrequencyUnit;
         FrequencyQuantity = p.FrequencyQuantity;
         IntervalWeeks = p.IntervalWeeks;
-        Days = effectiveIsFlexible ? [] : (p.Days?.ToList() ?? []);
+        Days = effectiveDays;
         IsBadHabit = p.IsBadHabit;
         DueTime = p.DueTime;
         DueEndTime = p.DueEndTime;
 
-        if (p.DueDate is not null && p.DueDate.Value != DueDate)
+        if (effectiveDueDate != DueDate || recurrencePhaseChanged)
         {
-            DueDate = p.DueDate.Value;
-            ScheduledStartDate = DueDate;
+            DueDate = effectiveDueDate;
+            ScheduledStartDate = effectiveDueDate;
         }
 
         if (FrequencyUnit is Enums.FrequencyUnit.Month or Enums.FrequencyUnit.Year)
