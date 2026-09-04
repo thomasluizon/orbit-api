@@ -1731,6 +1731,157 @@ public class ProcessUserChatCommandHandlerTests
         result.Value.Actions.Should().OnlyContain(action => action.Status == ActionStatus.Success);
     }
 
+    [Fact]
+    public async Task Handle_RecoveryOnlyRepeatsSuccessfulSibling_DoesNotReportSuccess()
+    {
+        SetupUserAndPayGate();
+        var adaptationExecutions = 0;
+        var maintenanceExecutions = 0;
+        var tool = CreateSequencedTool("create_habit", args =>
+        {
+            var title = args.GetProperty("title").GetString()!;
+            if (title.Contains("Adaptação", StringComparison.Ordinal))
+                adaptationExecutions++;
+            if (title.Contains("Manutenção", StringComparison.Ordinal))
+                maintenanceExecutions++;
+
+            return title.Contains("Manutenção", StringComparison.Ordinal)
+                ? new ToolResult(false, Error: "Days can only be set when frequency quantity is 1.")
+                : new ToolResult(true, EntityId: Guid.NewGuid().ToString(), EntityName: title);
+        });
+        var handler = CreateHandler(tool);
+        var initialResponse = new AiResponse
+        {
+            ToolCalls =
+            [
+                new AiToolCall("create_habit", "call_adaptation", ParseArguments(ProductionAdaptationArguments)),
+                new AiToolCall("create_habit", "call_maintenance", ParseArguments(ProductionMaintenanceRejectedArguments))
+            ],
+            ConversationContext = TestConversationContext
+        };
+        var repeatedSuccess = ToolResponse(
+            "create_habit",
+            "call_repeated_adaptation",
+            ProductionAdaptationArguments);
+
+        SetupRecoveryResponses(initialResponse, repeatedSuccess);
+        SetupContinuationByResult("Recovery failed.", "Recovery succeeded.");
+
+        var result = await handler.Handle(
+            new ProcessUserChatCommand(UserId, "Create both protocol habits."),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        adaptationExecutions.Should().Be(1);
+        maintenanceExecutions.Should().Be(1);
+        result.Value.AiMessage.Should().Be(EnglishToolFailureMessage);
+        result.Value.Actions.Should().ContainSingle(action => action.Status == ActionStatus.Failed);
+    }
+
+    [Fact]
+    public async Task Handle_RecoveryMatchesCompletedMutationTwice_RejectsRetryPlan()
+    {
+        SetupUserAndPayGate();
+        var adaptationExecutions = 0;
+        var maintenanceExecutions = 0;
+        var tool = CreateSequencedTool("create_habit", args =>
+        {
+            var title = args.GetProperty("title").GetString()!;
+            if (title.Contains("Adaptação", StringComparison.Ordinal))
+                adaptationExecutions++;
+            if (title.Contains("Manutenção", StringComparison.Ordinal))
+                maintenanceExecutions++;
+
+            var frequencyUnit = args.GetProperty("frequency_unit").GetString();
+            if (title.Contains("Manutenção", StringComparison.Ordinal) && frequencyUnit == "Week")
+                return new ToolResult(false, Error: "Days can only be set when frequency quantity is 1.");
+
+            return new ToolResult(true, EntityId: Guid.NewGuid().ToString(), EntityName: title);
+        });
+        var handler = CreateHandler(tool);
+        var initialResponse = new AiResponse
+        {
+            ToolCalls =
+            [
+                new AiToolCall("create_habit", "call_adaptation", ParseArguments(ProductionAdaptationArguments)),
+                new AiToolCall("create_habit", "call_maintenance", ParseArguments(ProductionMaintenanceRejectedArguments))
+            ],
+            ConversationContext = TestConversationContext
+        };
+        const string changedSuccessfulArguments = """
+            {"title":"Perspirex Strong Semana 1 Adaptação revisada","description":"Descrição alterada.","emoji":"🧴","frequency_unit":"Day","frequency_quantity":1,"due_date":"2026-09-08","end_date":"2026-09-15","due_time":"21:30"}
+            """;
+        var retryResponse = new AiResponse
+        {
+            ToolCalls =
+            [
+                new AiToolCall("create_habit", "call_changed_adaptation", ParseArguments(changedSuccessfulArguments)),
+                new AiToolCall("create_habit", "call_duplicate_adaptation", ParseArguments(ProductionAdaptationArguments)),
+                new AiToolCall("create_habit", "call_retry_maintenance", ParseArguments(ProductionMaintenanceRetryArguments))
+            ],
+            ConversationContext = TestConversationContext
+        };
+
+        SetupRecoveryResponses(initialResponse, retryResponse);
+        SetupContinuationByResult("Recovery failed.", "Recovery succeeded.");
+
+        var result = await handler.Handle(
+            new ProcessUserChatCommand(UserId, "Create both protocol habits."),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        adaptationExecutions.Should().Be(1);
+        maintenanceExecutions.Should().Be(1);
+        result.Value.AiMessage.Should().Be(EnglishToolFailureMessage);
+    }
+
+    [Fact]
+    public async Task Handle_UnconsumedRecoveryFailure_SerializesSanitizedActionError()
+    {
+        SetupUserAndPayGate();
+        var tool = CreateSequencedTool("create_habit", args =>
+        {
+            var title = args.GetProperty("title").GetString()!;
+            return title.Contains("Manutenção", StringComparison.Ordinal)
+                ? new ToolResult(false, Error: "Days can only be set when frequency quantity is 1.")
+                : new ToolResult(true, EntityId: Guid.NewGuid().ToString(), EntityName: title);
+        });
+        var handler = CreateHandler(tool);
+        var initialResponse = new AiResponse
+        {
+            ToolCalls =
+            [
+                new AiToolCall("create_habit", "call_adaptation", ParseArguments(ProductionAdaptationArguments)),
+                new AiToolCall("create_habit", "call_maintenance", ParseArguments(ProductionMaintenanceRejectedArguments))
+            ],
+            ConversationContext = TestConversationContext
+        };
+        var repeatedSuccess = ToolResponse(
+            "create_habit",
+            "call_repeated_adaptation",
+            ProductionAdaptationArguments);
+
+        SetupRecoveryResponses(initialResponse, repeatedSuccess);
+        SetupContinuationByResult("Recovery failed.", "Recovery succeeded.");
+
+        var result = await handler.Handle(
+            new ProcessUserChatCommand(UserId, "Create both protocol habits."),
+            CancellationToken.None);
+        using var payload = JsonDocument.Parse(JsonSerializer.Serialize(result.Value));
+        var actionErrors = payload.RootElement
+            .GetProperty("Actions")
+            .EnumerateArray()
+            .Select(action => action.GetProperty("Error"))
+            .Where(error => error.ValueKind == JsonValueKind.String)
+            .Select(error => error.GetString())
+            .ToList();
+
+        result.IsSuccess.Should().BeTrue();
+        actionErrors.Should().Contain(EnglishToolFailureMessage);
+        actionErrors.Should().NotContain(error =>
+            error!.Contains("Days can only be set when frequency quantity is 1", StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData("en", EnglishToolRecoveredMessage)]
     [InlineData("pt-BR", PortugueseToolRecoveredMessage)]

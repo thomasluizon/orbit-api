@@ -266,22 +266,30 @@ public partial class ProcessUserChatCommandHandler
             && JsonValuesEqual(rejected.Arguments, call.Args));
     }
 
+    /// <summary>
+    /// Builds a recovery plan that enforces the invariant that every mutation requested by the user
+    /// is attempted exactly once and every reported outcome matches that attempt. Completed mutations
+    /// are consumed at most once, and a plan is rejected while any original failure remains unmatched.
+    /// </summary>
     private static List<RetryToolCall>? BuildRetryExecutionPlan(
         IReadOnlyList<AiToolCall> calls,
         IReadOnlyList<RejectedToolCall> rejectedCalls,
         IReadOnlyList<SuccessfulToolCall> successfulCalls)
     {
         var unmatchedFailures = rejectedCalls.ToList();
+        var unmatchedSuccesses = successfulCalls.ToList();
         var plan = new List<RetryToolCall>(calls.Count);
 
         foreach (var call in calls)
         {
-            var matchingSuccess = successfulCalls
-                .Where(success => string.Equals(success.Name, call.Name, StringComparison.Ordinal))
-                .Select(success => new
+            var matchingSuccess = unmatchedSuccesses
+                .Select((success, index) => new
                 {
                     Call = success,
-                    Score = MutationIdentityScore(success.Arguments, call.Args)
+                    Index = index,
+                    Score = string.Equals(success.Name, call.Name, StringComparison.Ordinal)
+                        ? MutationIdentityScore(success.Arguments, call.Args)
+                        : 0d
                 })
                 .OrderByDescending(match => match.Score)
                 .FirstOrDefault();
@@ -300,6 +308,7 @@ public partial class ProcessUserChatCommandHandler
             if (matchingSuccess is { Score: >= 0.5 }
                 && (matchingFailure is null || matchingSuccess.Score >= matchingFailure.Score))
             {
+                unmatchedSuccesses.RemoveAt(matchingSuccess.Index);
                 plan.Add(new RetryToolCall(call, matchingSuccess.Call));
                 continue;
             }
@@ -321,7 +330,7 @@ public partial class ProcessUserChatCommandHandler
             plan.Add(new RetryToolCall(call, null));
         }
 
-        return plan;
+        return unmatchedFailures.Count == 0 ? plan : null;
     }
 
     private static double MutationIdentityScore(JsonElement left, JsonElement right)
