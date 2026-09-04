@@ -111,6 +111,26 @@ public class AiIntentServiceStreamingTests
     }
 
     [Fact]
+    public async Task SendWithToolsAsync_FailureRecovery_UsesOriginalMessageAndControlledFailureContext()
+    {
+        var handler = new JsonHandler(BufferedCompletion);
+        var (service, _) = BuildService(handler);
+        var request = new AiToolRequest(
+            "Create my maintenance habit every Thursday.",
+            "system",
+            [],
+            PriorToolFailures: [new AiToolFailure("create_habit", "Rejected schedule shape.")]);
+
+        var result = await service.SendWithToolsAsync(request);
+
+        result.IsSuccess.Should().BeTrue();
+        handler.LastRequestBody.Should().Contain("single recovery attempt");
+        handler.LastRequestBody.Should().Contain("Rejected schedule shape.");
+        handler.LastRequestBody.Should().Contain("Create my maintenance habit every Thursday.");
+        handler.LastRequestBody.Should().NotContain("Tuesday");
+    }
+
+    [Fact]
     public async Task SendWithToolsAsync_BufferedRound_RecordsUsageForUser()
     {
         var userId = Guid.NewGuid();

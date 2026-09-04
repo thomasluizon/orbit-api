@@ -12,6 +12,7 @@ public partial class ProcessUserChatCommandHandler
 {
     private async Task<ToolLoopResult> RunToolCallLoopAsync(
         AiResponse initialResponse,
+        AiToolRequest originalAiRequest,
         ProcessUserChatCommand request,
         ToolExecutionAccumulator executionResults,
         Func<AiStreamEvent, Task>? aiStreamSink,
@@ -21,6 +22,10 @@ public partial class ProcessUserChatCommandHandler
         var iteration = 0;
         long totalReportedTokens = initialResponse.ReportedTokenCount;
         var tokenBudgetExceeded = totalReportedTokens > AppConstants.MaxAiRequestTotalTokens;
+        var rejectedCalls = new List<RejectedToolCall>();
+        var isRetryRound = false;
+        var hadToolFailure = false;
+        var retrySucceeded = false;
 
         if (tokenBudgetExceeded)
         {
@@ -37,19 +42,39 @@ public partial class ProcessUserChatCommandHandler
             if (request.StreamSink is not null)
                 await request.StreamSink(ChatStreamEvent.Round(iteration));
 
-            var continueResponse = await ProcessToolCallsAsync(
+            var roundResult = await ProcessToolCallsAsync(
                 aiResponse,
+                originalAiRequest,
                 request,
                 executionResults,
+                rejectedCalls,
+                isRetryRound,
                 iteration,
                 aiStreamSink,
                 cancellationToken);
 
-            if (continueResponse is null)
+            if (roundResult is null)
                 break;
 
-            aiResponse = continueResponse;
-            totalReportedTokens += continueResponse.ReportedTokenCount;
+            aiResponse = roundResult.Response;
+            if (roundResult.StartedRecovery)
+            {
+                hadToolFailure = true;
+                isRetryRound = true;
+            }
+            else if (isRetryRound)
+            {
+                retrySucceeded = roundResult.RetrySucceeded;
+                if (aiResponse.HasToolCalls)
+                {
+                    aiResponse = MessageResponse(retrySucceeded
+                        ? ToolFailureRecoveredMessageKey
+                        : ToolFailureMessageKey);
+                }
+                break;
+            }
+
+            totalReportedTokens += roundResult.Response.ReportedTokenCount;
             tokenBudgetExceeded = totalReportedTokens > AppConstants.MaxAiRequestTotalTokens;
             if (tokenBudgetExceeded)
             {
@@ -61,22 +86,32 @@ public partial class ProcessUserChatCommandHandler
             }
         }
 
-        return new ToolLoopResult(aiResponse, iteration, tokenBudgetExceeded);
+        return new ToolLoopResult(
+            aiResponse,
+            iteration,
+            tokenBudgetExceeded,
+            hadToolFailure,
+            retrySucceeded);
     }
 
     private sealed record ToolLoopResult(
         AiResponse FinalResponse,
         int Iterations,
-        bool TokenBudgetExceeded);
+        bool TokenBudgetExceeded,
+        bool HadToolFailure,
+        bool RetrySucceeded);
 
     /// <summary>
     /// Processes one iteration of AI tool calls: orders them, executes each, and sends results
     /// back to the AI. Returns the next AI response, or null if continuation failed.
     /// </summary>
-    private async Task<AiResponse?> ProcessToolCallsAsync(
+    private async Task<ToolRoundResult?> ProcessToolCallsAsync(
         AiResponse aiResponse,
+        AiToolRequest originalAiRequest,
         ProcessUserChatCommand request,
         ToolExecutionAccumulator executionResults,
+        List<RejectedToolCall> rejectedCalls,
+        bool isRetryRound,
         int iteration,
         Func<AiStreamEvent, Task>? aiStreamSink,
         CancellationToken cancellationToken)
@@ -87,14 +122,62 @@ public partial class ProcessUserChatCommandHandler
             .OrderBy(c => ai.ToolRegistry.GetTool(c.Name)?.Order ?? int.MaxValue)
             .ToList();
 
+        if (isRetryRound && orderedCalls.Any(call => IsIdenticalRejectedCall(call, rejectedCalls)))
+            return new ToolRoundResult(MessageResponse(ToolFailureMessageKey), RetrySucceeded: false);
+
         var outcomesByCallId = await ExecuteToolCallsAsync(orderedCalls, request, cancellationToken);
 
         var toolResults = new List<AiToolCallResult>(orderedCalls.Count);
+        var retryableFailures = new List<RejectedToolCall>();
         foreach (var call in orderedCalls)
         {
             var outcome = outcomesByCallId[call.Id];
             toolResults.Add(outcome.ToolResult);
-            executionResults.Add(call.Name, outcome.ActionResult, outcome.OperationResult, outcome.PolicyDenial, outcome.PendingOperation);
+            executionResults.Add(
+                call.Name,
+                outcome.ActionResult,
+                outcome.OperationResult,
+                outcome.PolicyDenial,
+                outcome.PendingOperation,
+                isRetryRound);
+
+            if (outcome.OperationResult?.Status == AgentOperationStatus.Failed)
+                retryableFailures.Add(new RejectedToolCall(call.Name, call.Args.Clone(), outcome.ToolResult.Error));
+        }
+
+        if (isRetryRound)
+        {
+            if (retryableFailures.Count > 0)
+                return new ToolRoundResult(MessageResponse(ToolFailureMessageKey), RetrySucceeded: false);
+
+            var retryContinuation = await ai.IntentService.ContinueWithToolResultsAsync(
+                aiResponse.ConversationContext!, toolResults, streamSink: null, cancellationToken);
+            if (retryContinuation.IsFailure || retryContinuation.Value.HasToolCalls)
+                return new ToolRoundResult(MessageResponse(ToolFailureRecoveredMessageKey), RetrySucceeded: true);
+
+            return new ToolRoundResult(retryContinuation.Value, RetrySucceeded: true);
+        }
+
+        if (retryableFailures.Count > 0)
+        {
+            rejectedCalls.AddRange(retryableFailures);
+            var retryRequest = originalAiRequest with
+            {
+                PriorToolFailures = retryableFailures
+                    .Select(failure => new AiToolFailure(failure.Name, failure.Error))
+                    .ToList()
+            };
+            var retryResponse = await ai.IntentService.SendWithToolsAsync(
+                retryRequest, streamSink: null, cancellationToken);
+            if (retryResponse.IsFailure || !retryResponse.Value.HasToolCalls)
+            {
+                return new ToolRoundResult(
+                    MessageResponse(ToolFailureMessageKey),
+                    StartedRecovery: true,
+                    RetrySucceeded: false);
+            }
+
+            return new ToolRoundResult(retryResponse.Value, StartedRecovery: true);
         }
 
         var continueResult = await ai.IntentService.ContinueWithToolResultsAsync(aiResponse.ConversationContext!, toolResults, aiStreamSink, cancellationToken);
@@ -104,8 +187,136 @@ public partial class ProcessUserChatCommandHandler
             return null;
         }
 
-        return continueResult.Value;
+        return new ToolRoundResult(continueResult.Value);
     }
+
+    private sealed record ToolRoundResult(
+        AiResponse Response,
+        bool StartedRecovery = false,
+        bool RetrySucceeded = false);
+
+    private sealed record RejectedToolCall(string Name, JsonElement Arguments, string? Error);
+
+    private static AiResponse MessageResponse(string messageKey) => new() { TextMessage = messageKey };
+
+    private static bool IsIdenticalRejectedCall(AiToolCall call, IReadOnlyList<RejectedToolCall> rejectedCalls)
+    {
+        return rejectedCalls.Any(rejected =>
+            string.Equals(rejected.Name, call.Name, StringComparison.Ordinal)
+            && JsonValuesEqual(rejected.Arguments, call.Args));
+    }
+
+    private static bool JsonValuesEqual(JsonElement left, JsonElement right)
+    {
+        if (left.ValueKind != right.ValueKind)
+            return false;
+
+        return left.ValueKind switch
+        {
+            JsonValueKind.Object => JsonObjectsEqual(left, right),
+            JsonValueKind.Array => JsonArraysEqual(left, right),
+            JsonValueKind.String => left.GetString() == right.GetString(),
+            JsonValueKind.Number => left.GetRawText() == right.GetRawText(),
+            JsonValueKind.True or JsonValueKind.False or JsonValueKind.Null => true,
+            _ => left.GetRawText() == right.GetRawText()
+        };
+    }
+
+    private static bool JsonObjectsEqual(JsonElement left, JsonElement right)
+    {
+        var leftProperties = left.EnumerateObject().ToList();
+        var rightProperties = right.EnumerateObject().ToList();
+        if (leftProperties.Count != rightProperties.Count)
+            return false;
+
+        return leftProperties.All(leftProperty =>
+            right.TryGetProperty(leftProperty.Name, out var rightValue)
+            && JsonValuesEqual(leftProperty.Value, rightValue));
+    }
+
+    private static bool JsonArraysEqual(JsonElement left, JsonElement right)
+    {
+        var leftItems = left.EnumerateArray().ToList();
+        var rightItems = right.EnumerateArray().ToList();
+        return leftItems.Count == rightItems.Count
+            && leftItems.Zip(rightItems).All(pair => JsonValuesEqual(pair.First, pair.Second));
+    }
+
+    private static bool ContainsInternalToolVocabulary(string? message, IReadOnlyList<object> toolDeclarations)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            return false;
+
+        if (message.Contains("frequência diária", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var argumentNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var declaration in toolDeclarations)
+            CollectToolArgumentNames(JsonSerializer.SerializeToElement(declaration), argumentNames);
+
+        return argumentNames.Any(name => ContainsIdentifier(message, name));
+    }
+
+    private static string? SanitizeToolFailureMessage(
+        string? message,
+        ToolLoopResult toolLoopResult,
+        IReadOnlyList<object> toolDeclarations)
+    {
+        if (!toolLoopResult.HadToolFailure
+            || !ContainsInternalToolVocabulary(message, toolDeclarations))
+        {
+            return message;
+        }
+
+        return toolLoopResult.RetrySucceeded
+            ? ToolFailureRecoveredMessageKey
+            : ToolFailureMessageKey;
+    }
+
+    private static void CollectToolArgumentNames(JsonElement element, HashSet<string> argumentNames)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                if (property.NameEquals("properties") && property.Value.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var argument in property.Value.EnumerateObject())
+                        argumentNames.Add(argument.Name);
+                }
+
+                CollectToolArgumentNames(property.Value, argumentNames);
+            }
+        }
+        else if (element.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in element.EnumerateArray())
+                CollectToolArgumentNames(item, argumentNames);
+        }
+    }
+
+    private static bool ContainsIdentifier(string text, string identifier)
+    {
+        var searchStart = 0;
+        while (searchStart < text.Length)
+        {
+            var index = text.IndexOf(identifier, searchStart, StringComparison.OrdinalIgnoreCase);
+            if (index < 0)
+                return false;
+
+            var end = index + identifier.Length;
+            var hasLeftBoundary = index == 0 || !IsIdentifierCharacter(text[index - 1]);
+            var hasRightBoundary = end == text.Length || !IsIdentifierCharacter(text[end]);
+            if (hasLeftBoundary && hasRightBoundary)
+                return true;
+
+            searchStart = index + 1;
+        }
+
+        return false;
+    }
+
+    private static bool IsIdentifierCharacter(char value) => char.IsLetterOrDigit(value) || value == '_';
 
     /// <summary>
     /// Executes a round's tool calls, dispatching the read-only subset concurrently (each on its

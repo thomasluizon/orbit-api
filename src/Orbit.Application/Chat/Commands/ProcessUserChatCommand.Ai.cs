@@ -12,7 +12,7 @@ namespace Orbit.Application.Chat.Commands;
 
 public partial class ProcessUserChatCommandHandler
 {
-    private async Task<Result<AiResponse>> RequestInitialAiResponseAsync(
+    private async Task<Result<InitialAiTurn>> RequestInitialAiResponseAsync(
         ProcessUserChatCommand request,
         ChatContext context,
         Func<AiStreamEvent, Task>? aiStreamSink,
@@ -77,20 +77,27 @@ public partial class ProcessUserChatCommandHandler
             execution.UnitOfWork,
             cancellationToken);
         if (reservation.IsFailure)
-            return reservation.PropagateError<AiResponse>();
+            return reservation.PropagateError<InitialAiTurn>();
 
-        return await ai.IntentService.SendWithToolsAsync(
-            new AiToolRequest(
-                request.Message,
-                systemPrompt,
-                toolDeclarations,
-                request.UserId,
-                request.ImageData,
-                request.ImageMimeType,
-                request.History),
+        var aiRequest = new AiToolRequest(
+            request.Message,
+            systemPrompt,
+            toolDeclarations,
+            request.UserId,
+            request.ImageData,
+            request.ImageMimeType,
+            request.History);
+        var response = await ai.IntentService.SendWithToolsAsync(
+            aiRequest,
             aiStreamSink,
             cancellationToken);
+
+        return response.IsFailure
+            ? response.PropagateError<InitialAiTurn>()
+            : Result.Success(new InitialAiTurn(aiRequest, response.Value));
     }
+
+    private sealed record InitialAiTurn(AiToolRequest Request, AiResponse Response);
 
     private static string BuildConversationText(ProcessUserChatCommand request)
     {

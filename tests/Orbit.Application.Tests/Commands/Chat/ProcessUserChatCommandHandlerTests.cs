@@ -53,6 +53,19 @@ public class ProcessUserChatCommandHandlerTests
     private static readonly string[] ExpectedOrderedToolNames = new[] { "assign_tags", "create_habit", "delete_habit" };
     private static readonly string[] GamificationTodaySurfaces = new[] { "gamification", "today" };
     private static readonly string[] HabitsSurfaces = new[] { "habits" };
+    private const string ToolFailureMessageKey = "chat.toolFailure.couldNotComplete";
+    private const string ProductionAdaptationArguments = """
+        {"title":"Perspirex Strong - Semana 1 (Adaptação)","description":"Passe TODO DIA À NOITE, bem antes de ir dormir. As duas axilas devem estar 100% secas. Passe o roll-on 2 vezes pra cima e 2 vezes pra baixo na axila. Deixe secar uns segundos e vista a camisa. Acordou: Lave a axila com água e sabão no banho da manhã.","emoji":"🧴","frequency_unit":"Day","frequency_quantity":1,"due_date":"2026-09-08","end_date":"2026-09-14","due_time":"21:00"}
+        """;
+    private const string ProductionMaintenanceRejectedArguments = """
+        {"title":"Perspirex Strong - Semana 2 em diante (Manutenção)","description":"Passe apenas DOMINGO À NOITE e QUARTA À NOITE. Hora e jeito: à noite, axila 100% seca, 2 passadas pra cima e 2 pra baixo. Acordou: Lave a axila com água e sabão no banho da manhã.","emoji":"🧴","frequency_unit":"Week","frequency_quantity":1,"days":["Sunday","Wednesday"],"due_date":"2026-09-15"}
+        """;
+    private const string ProductionMaintenanceSecondRejectedArguments = """
+        {"title":"Perspirex Strong - Semana 2 (Manutenção)","emoji":"🧴","frequency_unit":"Week","frequency_quantity":1,"days":["Wednesday","Sunday"],"due_date":"2026-09-15"}
+        """;
+    private const string ProductionMaintenanceRetryArguments = """
+        {"title":"Perspirex Strong - Semana 2 (Manutenção)","emoji":"🧴","frequency_unit":"Day","frequency_quantity":1,"days":["Wednesday","Sunday"],"due_date":"2026-09-15"}
+        """;
 
     private static Habit CreateHabit(string title, bool isCompleted = false)
     {
@@ -272,6 +285,82 @@ public class ProcessUserChatCommandHandlerTests
         _aiIntentService.SendWithToolsAsync(
             Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(response));
+    }
+
+    private void SetupRecoveryResponses(AiResponse initialResponse, AiResponse retryResponse)
+    {
+        var callCount = 0;
+        _aiIntentService.SendWithToolsAsync(
+                Arg.Any<AiToolRequest>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ => Result.Success(callCount++ == 0 ? initialResponse : retryResponse));
+    }
+
+    private void SetupContinuationByResult(string failureText, string successText)
+    {
+        _aiIntentService.ContinueWithToolResultsAsync(
+                Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                var results = callInfo.ArgAt<IReadOnlyList<AiToolCallResult>>(1);
+                return Result.Success(new AiResponse
+                {
+                    TextMessage = results.All(result => result.Success) ? successText : failureText
+                });
+            });
+    }
+
+    private void SetupContinuationText(string text)
+    {
+        _aiIntentService.ContinueWithToolResultsAsync(
+                Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = text }));
+    }
+
+    private static AiResponse ToolResponse(string name, string callId, string arguments)
+    {
+        return new AiResponse
+        {
+            ToolCalls = [new AiToolCall(name, callId, ParseArguments(arguments))],
+            ConversationContext = TestConversationContext
+        };
+    }
+
+    private static JsonElement ParseArguments(string arguments) =>
+        JsonSerializer.Deserialize<JsonElement>(arguments);
+
+    private static IAiTool CreateFailingTool(string name, string error)
+    {
+        return CreateSequencedTool(name, _ => new ToolResult(false, Error: error));
+    }
+
+    private static IAiTool CreateSequencedTool(string name, Func<JsonElement, ToolResult> execute)
+    {
+        var tool = Substitute.For<IAiTool>();
+        tool.Name.Returns(name);
+        tool.Description.Returns($"{name} description");
+        tool.IsReadOnly.Returns(false);
+        tool.GetParameterSchema().Returns(new
+        {
+            type = "object",
+            properties = new
+            {
+                frequency_unit = new { type = "string" },
+                frequency_quantity = new { type = "integer" },
+                days = new { type = "array" },
+                is_flexible = new { type = "boolean" }
+            }
+        });
+        tool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(callInfo => execute(callInfo.ArgAt<JsonElement>(0)));
+        return tool;
     }
 
     private void SetupAiFailure(string error)
@@ -1305,6 +1394,279 @@ public class ProcessUserChatCommandHandlerTests
         result.Value.Actions.Should().HaveCount(1);
         result.Value.Actions[0].Status.Should().Be(ActionStatus.Failed);
         result.Value.Actions[0].Error.Should().Be("Habit not found.");
+    }
+
+    [Fact]
+    public async Task Handle_ProductionCreateHabitFailure_DoesNotExposeToolSchemaArguments()
+    {
+        SetupUserAndPayGate();
+        var tool = CreateFailingTool("create_habit", "Days can only be set when frequency quantity is 1.");
+        var handler = CreateHandler(tool);
+        var initialResponse = ToolResponse("create_habit", "call_1", ProductionMaintenanceRejectedArguments);
+        const string leakedQuestion = "O agendamento usa frequency_unit e frequency_quantity com frequência diária 1. Quais days você prefere? is_flexible?";
+
+        SetupRecoveryResponses(initialResponse, new AiResponse { TextMessage = leakedQuestion });
+        SetupContinuationText(leakedQuestion);
+
+        var result = await handler.Handle(
+            new ProcessUserChatCommand(UserId, "Crie a manutenção toda quarta e domingo."),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessage.Should().NotContainAny(
+            "frequency_unit", "frequency_quantity", "frequência diária", "days", "is_flexible");
+    }
+
+    [Fact]
+    public async Task Handle_ExplicitWeekdaysCreateHabitFailure_RetriesInsteadOfAskingQuestion()
+    {
+        SetupUserAndPayGate();
+        var attempts = 0;
+        var tool = CreateSequencedTool("create_habit", _ => ++attempts == 1
+            ? new ToolResult(false, Error: "Days can only be set when frequency quantity is 1.")
+            : new ToolResult(true, EntityId: Guid.NewGuid().ToString(), EntityName: "Maintenance habit"));
+        var handler = CreateHandler(tool);
+        var initialResponse = ToolResponse("create_habit", "call_1", ProductionMaintenanceRejectedArguments);
+        var retryResponse = ToolResponse("create_habit", "call_2", ProductionMaintenanceRetryArguments);
+
+        SetupRecoveryResponses(initialResponse, retryResponse);
+        SetupContinuationByResult("Você prefere outra frequência?", "Hábito criado.");
+
+        var result = await handler.Handle(
+            new ProcessUserChatCommand(UserId, "Crie a manutenção toda quarta e domingo."),
+            CancellationToken.None);
+
+        attempts.Should().Be(2);
+        result.Value.AiMessage.Should().Be("Hábito criado.");
+        result.Value.AiMessage.Should().NotContain("?");
+        result.Value.Actions.Should().ContainSingle(action => action.Status == ActionStatus.Success);
+        result.Value.Actions.Should().NotContain(action => action.Status == ActionStatus.Failed);
+    }
+
+    [Fact]
+    public async Task Handle_ToolFailureRetry_UsesOriginalUserMessageAndThursdaySchedule()
+    {
+        SetupUserAndPayGate();
+        const string originalMessage = "Create my maintenance habit every Thursday.";
+        const string rejectedArguments = """
+            {"title":"Maintenance","frequency_unit":"Week","frequency_quantity":1,"days":["Thursday"],"due_date":"2026-09-15"}
+            """;
+        const string correctRetryArguments = """
+            {"title":"Maintenance","frequency_unit":"Day","frequency_quantity":1,"days":["Thursday"],"due_date":"2026-09-15"}
+            """;
+        const string driftedRetryArguments = """
+            {"title":"Maintenance","frequency_unit":"Day","frequency_quantity":1,"days":["Tuesday"],"due_date":"2026-09-15"}
+            """;
+        var dispatchedArguments = new List<string>();
+        var attempts = 0;
+        var tool = CreateSequencedTool("create_habit", args =>
+        {
+            dispatchedArguments.Add(args.GetRawText());
+            return ++attempts == 1
+                ? new ToolResult(false, Error: "Rejected schedule shape.")
+                : new ToolResult(true, EntityId: Guid.NewGuid().ToString(), EntityName: "Maintenance");
+        });
+        var handler = CreateHandler(tool);
+        var initialResponse = ToolResponse("create_habit", "call_1", rejectedArguments);
+        var correctRetry = ToolResponse("create_habit", "call_2", correctRetryArguments);
+        var driftedRetry = ToolResponse("create_habit", "call_legacy", driftedRetryArguments);
+        var sentRequests = new List<AiToolRequest>();
+
+        _aiIntentService.SendWithToolsAsync(
+                Arg.Do<AiToolRequest>(sentRequests.Add),
+                Arg.Any<Func<AiStreamEvent, Task>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ => Result.Success(sentRequests.Count == 1 ? initialResponse : correctRetry));
+        _aiIntentService.ContinueWithToolResultsAsync(
+                Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Result.Success(driftedRetry), Result.Success(new AiResponse { TextMessage = "Created." }));
+
+        var result = await handler.Handle(
+            new ProcessUserChatCommand(UserId, originalMessage),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        sentRequests.Should().HaveCount(2);
+        sentRequests[1].UserMessage.Should().Be(originalMessage);
+        dispatchedArguments.Should().HaveCount(2);
+        dispatchedArguments[1].Should().Contain("Thursday");
+        dispatchedArguments[1].Should().NotContain("Tuesday");
+    }
+
+    [Fact]
+    public async Task Handle_SecondToolRejection_StopsAfterSingleRetry()
+    {
+        SetupUserAndPayGate();
+        var attempts = 0;
+        var tool = CreateSequencedTool("create_habit", _ =>
+        {
+            attempts++;
+            return new ToolResult(false, Error: "Rejected schedule shape.");
+        });
+        var handler = CreateHandler(tool);
+        var initialResponse = ToolResponse("create_habit", "call_1", ProductionMaintenanceRejectedArguments);
+        var retryResponse = ToolResponse("create_habit", "call_2", ProductionMaintenanceSecondRejectedArguments);
+        var forbiddenThirdAttempt = ToolResponse("create_habit", "call_3", ProductionMaintenanceRetryArguments);
+
+        SetupRecoveryResponses(initialResponse, retryResponse);
+        _aiIntentService.ContinueWithToolResultsAsync(
+                Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Result.Success(retryResponse), Result.Success(forbiddenThirdAttempt), Result.Success(new AiResponse { TextMessage = "Done." }));
+
+        var result = await handler.Handle(
+            new ProcessUserChatCommand(UserId, "Create the maintenance habit every Wednesday and Sunday."),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        attempts.Should().Be(2);
+        result.Value.AiMessage.Should().Be(ToolFailureMessageKey);
+    }
+
+    [Fact]
+    public async Task Handle_IdenticalRejectedPayload_DoesNotExecuteItAgain()
+    {
+        SetupUserAndPayGate();
+        var attempts = 0;
+        var tool = CreateSequencedTool("create_habit", _ =>
+        {
+            attempts++;
+            return new ToolResult(false, Error: "Rejected schedule shape.");
+        });
+        var handler = CreateHandler(tool);
+        var initialResponse = ToolResponse("create_habit", "call_1", ProductionMaintenanceRejectedArguments);
+        var identicalRetry = ToolResponse("create_habit", "call_2", ProductionMaintenanceRejectedArguments);
+
+        SetupRecoveryResponses(initialResponse, identicalRetry);
+        _aiIntentService.ContinueWithToolResultsAsync(
+                Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Result.Success(identicalRetry), Result.Success(new AiResponse { TextMessage = "Done." }));
+
+        var result = await handler.Handle(
+            new ProcessUserChatCommand(UserId, "Create the maintenance habit every Wednesday and Sunday."),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        attempts.Should().Be(1);
+        result.Value.AiMessage.Should().Be(ToolFailureMessageKey);
+    }
+
+    [Fact]
+    public async Task Handle_AmbiguousHabitRequest_PreservesNeedsClarificationCard()
+    {
+        SetupUserAndPayGate();
+        var clarificationId = Guid.NewGuid();
+        var quickActions = new List<QuickAction>
+        {
+            new("habits.clarification.quickAction.daily", """{"frequency_unit":"Day","frequency_quantity":1}""")
+        };
+        var clarification = new NeedsClarificationPayload(
+            "habits.clarification.questionFallback",
+            "frequency_unit",
+            quickActions);
+        var tool = CreateSequencedTool("create_habit", _ =>
+            new ToolResult(true, EntityName: "Correr", Payload: clarification));
+        var handler = CreateHandler(tool);
+        _pendingClarificationStore.CreateAsync(
+                UserId,
+                "create_habit",
+                Arg.Any<string>(),
+                "frequency_unit",
+                clarification.Question,
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(clarificationId);
+        SetupAiResponse(ToolResponse("create_habit", "call_1", """{"title":"Hábito de correr"}"""));
+        _aiIntentService.ContinueWithToolResultsAsync(
+                Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = null }));
+
+        var result = await handler.Handle(
+            new ProcessUserChatCommand(UserId, "Cria um hábito de correr"),
+            CancellationToken.None);
+
+        result.Value.Actions.Should().ContainSingle();
+        result.Value.Actions[0].Should().BeEquivalentTo(new ActionResult(
+            "CreateHabit",
+            ActionStatus.NeedsClarification,
+            EntityName: "create_habit",
+            ClarificationRequest: new ClarificationRequest(
+                clarification.Question,
+                clarificationId,
+                clarification.MissingArgumentKey,
+                quickActions)));
+    }
+
+    [Fact]
+    public async Task Handle_EnglishToolFailure_DoesNotExposeToolSchemaArguments()
+    {
+        SetupUserAndPayGate();
+        var tool = CreateFailingTool("create_habit", "frequency_unit rejected frequency_quantity with days and is_flexible.");
+        var handler = CreateHandler(tool);
+        var initialResponse = ToolResponse("create_habit", "call_1", ProductionMaintenanceRejectedArguments);
+        const string leakedQuestion = "The frequency_unit and frequency_quantity conflict with days. Should is_flexible change?";
+
+        SetupRecoveryResponses(initialResponse, new AiResponse { TextMessage = leakedQuestion });
+        SetupContinuationText(leakedQuestion);
+
+        var result = await handler.Handle(
+            new ProcessUserChatCommand(UserId, "Create the maintenance habit every Wednesday and Sunday."),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessage.Should().NotContainAny(
+            "frequency_unit", "frequency_quantity", "days", "is_flexible");
+    }
+
+    [Fact]
+    public async Task Handle_TwoHabitProtocol_RetrySucceedsWithoutFailureAction()
+    {
+        SetupUserAndPayGate();
+        var tool = CreateSequencedTool("create_habit", args =>
+        {
+            var frequencyUnit = args.GetProperty("frequency_unit").GetString();
+            if (frequencyUnit == "Week")
+                return new ToolResult(false, Error: "Days can only be set when frequency quantity is 1.");
+
+            return new ToolResult(
+                true,
+                EntityId: Guid.NewGuid().ToString(),
+                EntityName: args.GetProperty("title").GetString());
+        });
+        var handler = CreateHandler(tool);
+        var initialResponse = new AiResponse
+        {
+            ToolCalls =
+            [
+                new AiToolCall("create_habit", "call_adaptation", ParseArguments(ProductionAdaptationArguments)),
+                new AiToolCall("create_habit", "call_maintenance", ParseArguments(ProductionMaintenanceRejectedArguments))
+            ],
+            ConversationContext = TestConversationContext
+        };
+        var retryResponse = ToolResponse("create_habit", "call_retry", ProductionMaintenanceRetryArguments);
+
+        SetupRecoveryResponses(initialResponse, retryResponse);
+        SetupContinuationByResult("Qual frequência você prefere?", "Os dois hábitos foram criados.");
+
+        var result = await handler.Handle(
+            new ProcessUserChatCommand(UserId, "Crie os dois hábitos do protocolo, incluindo a manutenção quarta e domingo."),
+            CancellationToken.None);
+
+        result.Value.AiMessage.Should().Be("Os dois hábitos foram criados.");
+        result.Value.AiMessage.Should().NotContain("?");
+        result.Value.Actions.Should().HaveCount(2);
+        result.Value.Actions.Should().OnlyContain(action => action.Status == ActionStatus.Success);
     }
 
     [Fact]

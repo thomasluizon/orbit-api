@@ -7,8 +7,9 @@ public record AiToolCall(string Name, string Id, JsonElement Args);
 /// <summary>
 /// A single tool-enabled AI turn: the user message, system prompt, and tool declarations plus the
 /// optional per-request routing (<see cref="UserId"/>), multimodal (<see cref="ImageData"/> /
-/// <see cref="ImageMimeType"/>), and prior <see cref="History"/> inputs. Bundled so the streaming
-/// sink and cancellation token stay as the only standalone arguments to SendWithToolsAsync.
+/// <see cref="ImageMimeType"/>), prior <see cref="History"/>, and tool failure recovery inputs.
+/// Bundled so the streaming sink and cancellation token stay as the only standalone arguments to
+/// SendWithToolsAsync.
 /// </summary>
 public sealed record AiToolRequest(
     string UserMessage,
@@ -17,7 +18,10 @@ public sealed record AiToolRequest(
     Guid UserId = default,
     byte[]? ImageData = null,
     string? ImageMimeType = null,
-    IReadOnlyList<ChatHistoryMessage>? History = null);
+    IReadOnlyList<ChatHistoryMessage>? History = null,
+    IReadOnlyList<AiToolFailure>? PriorToolFailures = null);
+
+public sealed record AiToolFailure(string ToolName, string? Error);
 
 public record AiToolCallResult(
     string Name,

@@ -35,12 +35,25 @@ public partial class ProcessUserChatCommandHandler
             ActionResult? actionResult,
             AgentOperationResult? operationResult,
             AgentPolicyDenial? policyDenial,
-            PendingAgentOperation? pendingOperation)
+            PendingAgentOperation? pendingOperation,
+            bool isToolFailureRetry = false)
         {
             _calledToolNames.Add(toolName);
 
             if (actionResult is not null)
-                ActionResults.Add(actionResult);
+            {
+                if (isToolFailureRetry && actionResult.Status == ActionStatus.Success)
+                {
+                    var failedActionIndex = ActionResults.FindLastIndex(existing =>
+                        existing.Status == ActionStatus.Failed
+                        && string.Equals(existing.Type, actionResult.Type, StringComparison.Ordinal));
+                    if (failedActionIndex >= 0)
+                        ActionResults.RemoveAt(failedActionIndex);
+                }
+
+                if (!isToolFailureRetry || actionResult.Status != ActionStatus.Failed)
+                    ActionResults.Add(actionResult);
+            }
 
             if (operationResult is not null)
             {

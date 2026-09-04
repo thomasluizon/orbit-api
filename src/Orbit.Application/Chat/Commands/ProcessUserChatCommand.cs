@@ -104,6 +104,8 @@ public partial class ProcessUserChatCommandHandler(
     private const int MaxToolIterations = 5;
     private const string UnsupportedByPolicyReason = "unsupported_by_policy";
     private const string DescribeFeatureToolName = "describe_feature";
+    private const string ToolFailureMessageKey = "chat.toolFailure.couldNotComplete";
+    private const string ToolFailureRecoveredMessageKey = "chat.toolFailure.recovered";
 
     private const int MaxSupportMessageLength = 5000;
 
@@ -134,16 +136,22 @@ public partial class ProcessUserChatCommandHandler(
             && ChatIntentRouter.IsNoToolTurn(request.Message);
 
         var aiStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var response = await RequestInitialAiResponseAsync(request, context, aiStreamSink, skipTools, cancellationToken);
+        var initialTurn = await RequestInitialAiResponseAsync(request, context, aiStreamSink, skipTools, cancellationToken);
         aiStopwatch.Stop();
         LogAiIntentServiceCompleted(logger, aiStopwatch.ElapsedMilliseconds);
 
-        if (response.IsFailure)
-            return response.PropagateError<ChatResponse>();
+        if (initialTurn.IsFailure)
+            return initialTurn.PropagateError<ChatResponse>();
 
         var executionResults = new ToolExecutionAccumulator();
         var actionsStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var toolLoopResult = await RunToolCallLoopAsync(response.Value, request, executionResults, aiStreamSink, cancellationToken);
+        var toolLoopResult = await RunToolCallLoopAsync(
+            initialTurn.Value.Response,
+            initialTurn.Value.Request,
+            request,
+            executionResults,
+            aiStreamSink,
+            cancellationToken);
         var aiResponse = toolLoopResult.FinalResponse;
         var iterations = toolLoopResult.Iterations;
         if (aiStreamFilter is not null)
@@ -162,6 +170,11 @@ public partial class ProcessUserChatCommandHandler(
 
         var (aiMessage, habitList, goalList, metricsCard) = await BuildResponseCardsAsync(
             StripJsonWrapper(aiResponse.TextMessage), request, context, cancellationToken);
+
+        aiMessage = SanitizeToolFailureMessage(
+            aiMessage,
+            toolLoopResult,
+            initialTurn.Value.Request.ToolDeclarations);
 
         if (faqMatch is { } faqToCache
             && !string.IsNullOrWhiteSpace(aiMessage)
