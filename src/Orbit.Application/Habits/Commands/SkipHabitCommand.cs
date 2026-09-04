@@ -36,7 +36,9 @@ public class SkipHabitCommandHandler(
 
         var habit = await repos.Habits.FindOneTrackedAsync(
             h => h.Id == request.HabitId,
-            q => q.Include(h => h.Logs.Where(l => l.Date >= loggableWindowStart)).Include(h => h.Goals),
+            q => q.Include(h => h.Logs.Where(l => l.Date >= loggableWindowStart))
+                  .Include(h => h.Goals)
+                  .AsSplitQuery(),
             cancellationToken);
 
         if (habit is null)

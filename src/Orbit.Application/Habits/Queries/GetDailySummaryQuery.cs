@@ -78,7 +78,8 @@ public class GetDailySummaryQueryHandler(
             h => h.UserId == request.UserId && !h.IsGeneral,
             q => q
                 .Include(h => h.Logs.Where(l => l.Date >= logFrom && l.Date <= logTo))
-                .Include(h => h.Goals),
+                .Include(h => h.Goals)
+                .AsSplitQuery(),
             cancellationToken);
 
         var summaryHabits = habits

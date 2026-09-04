@@ -52,7 +52,7 @@ internal static class HabitScheduleFilters
         if (includeGoals)
             query = query.Include(h => h.Goals);
 
-        return query;
+        return query.AsSplitQuery();
     }
 
     internal static List<(Habit habit, List<DateOnly> scheduledDates, bool isOverdue)> FilterScheduledHabits(

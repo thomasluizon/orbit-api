@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Primitives;
 using NSubstitute;
@@ -7,6 +8,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.Persistence;
 using System.Linq.Expressions;
 
 namespace Orbit.Application.Tests.Queries.Habits;
@@ -63,6 +65,37 @@ public class GetDailySummaryQueryHandlerTests
         result.Value.Summary.Should().Be("Test summary content");
         result.Value.Insight.Should().BeEmpty();
         result.Value.FromCache.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_MultipleCollectionIncludes_UsesSplitQuery()
+    {
+        Func<IQueryable<Habit>, IQueryable<Habit>>? queryBuilder = null;
+        var user = CreateTestUser();
+        _payGate.CanUseDailySummary(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _habitRepo.FindAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Do<Func<IQueryable<Habit>, IQueryable<Habit>>?>(builder => queryBuilder = builder),
+                Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<Habit>());
+        _summaryService.GenerateSummaryAsync(
+                Arg.Any<IEnumerable<Habit>>(),
+                Arg.Any<DailySummaryContext>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new DailySummaryContent("Summary", string.Empty)));
+
+        await _handler.Handle(
+            new GetDailySummaryQuery(UserId, Today, Today, "en"),
+            CancellationToken.None);
+
+        var options = new DbContextOptionsBuilder<OrbitDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var context = new OrbitDbContext(options);
+        var shapedQuery = queryBuilder!(context.Habits);
+
+        shapedQuery.Expression.ToString().Should().Contain(nameof(RelationalQueryableExtensions.AsSplitQuery));
     }
 
     [Fact]
