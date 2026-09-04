@@ -19,9 +19,12 @@ public sealed record AiToolRequest(
     byte[]? ImageData = null,
     string? ImageMimeType = null,
     IReadOnlyList<ChatHistoryMessage>? History = null,
-    IReadOnlyList<AiToolFailure>? PriorToolFailures = null);
+    IReadOnlyList<AiToolFailure>? PriorToolFailures = null,
+    IReadOnlyList<AiToolSuccess>? PriorToolSuccesses = null);
 
 public sealed record AiToolFailure(string ToolName, string? Error);
+
+public sealed record AiToolSuccess(string ToolName, string? EntityId, string? EntityName);
 
 public record AiToolCallResult(
     string Name,

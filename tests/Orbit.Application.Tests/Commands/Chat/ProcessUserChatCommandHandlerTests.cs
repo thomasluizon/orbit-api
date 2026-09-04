@@ -1670,6 +1670,62 @@ public class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_ToolFailureRecoveryRepeatsSuccessfulSibling_DoesNotExecuteSiblingAgain()
+    {
+        SetupUserAndPayGate();
+        var adaptationExecutions = 0;
+        var maintenanceExecutions = 0;
+        var tool = CreateSequencedTool("create_habit", args =>
+        {
+            var title = args.GetProperty("title").GetString()!;
+            if (title.Contains("Adaptação", StringComparison.Ordinal))
+                adaptationExecutions++;
+            if (title.Contains("Manutenção", StringComparison.Ordinal))
+                maintenanceExecutions++;
+            var frequencyUnit = args.GetProperty("frequency_unit").GetString();
+            if (title.Contains("Manutenção", StringComparison.Ordinal) && frequencyUnit == "Week")
+                return new ToolResult(false, Error: "Days can only be set when frequency quantity is 1.");
+
+            return new ToolResult(true, EntityId: Guid.NewGuid().ToString(), EntityName: title);
+        });
+        var handler = CreateHandler(tool);
+        var initialResponse = new AiResponse
+        {
+            ToolCalls =
+            [
+                new AiToolCall("create_habit", "call_adaptation", ParseArguments(ProductionAdaptationArguments)),
+                new AiToolCall("create_habit", "call_maintenance", ParseArguments(ProductionMaintenanceRejectedArguments))
+            ],
+            ConversationContext = TestConversationContext
+        };
+        var repeatedSuccessfulArguments = """
+            {"title":"Perspirex Strong - Semana 1 (Adaptação)","description":"Descrição alterada pelo modelo.","emoji":"🧴","frequency_unit":"Day","frequency_quantity":1,"due_date":"2026-09-08","end_date":"2026-09-15","due_time":"21:30"}
+            """;
+        var retryResponse = new AiResponse
+        {
+            ToolCalls =
+            [
+                new AiToolCall("create_habit", "call_repeated_adaptation", ParseArguments(repeatedSuccessfulArguments)),
+                new AiToolCall("create_habit", "call_retry_maintenance", ParseArguments(ProductionMaintenanceRetryArguments))
+            ],
+            ConversationContext = TestConversationContext
+        };
+
+        SetupRecoveryResponses(initialResponse, retryResponse);
+        SetupContinuationByResult("Não consegui criar os hábitos.", "Os dois hábitos foram criados.");
+
+        var result = await handler.Handle(
+            new ProcessUserChatCommand(UserId, "Crie os dois hábitos do protocolo, incluindo a manutenção quarta e domingo."),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        adaptationExecutions.Should().Be(1);
+        maintenanceExecutions.Should().Be(2);
+        result.Value.Actions.Should().HaveCount(2);
+        result.Value.Actions.Should().OnlyContain(action => action.Status == ActionStatus.Success);
+    }
+
+    [Fact]
     public async Task Handle_DestructiveToolWithoutConfirmation_ReturnsPendingOperation()
     {
         SetupUserAndPayGate();

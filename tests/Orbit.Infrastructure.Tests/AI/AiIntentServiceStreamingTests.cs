@@ -119,13 +119,16 @@ public class AiIntentServiceStreamingTests
             "Create my maintenance habit every Thursday.",
             "system",
             [],
-            PriorToolFailures: [new AiToolFailure("create_habit", "Rejected schedule shape.")]);
+            PriorToolFailures: [new AiToolFailure("create_habit", "Rejected schedule shape.")],
+            PriorToolSuccesses: [new AiToolSuccess("create_habit", "habit-123", "Morning walk")]);
 
         var result = await service.SendWithToolsAsync(request);
 
         result.IsSuccess.Should().BeTrue();
         handler.LastRequestBody.Should().Contain("single recovery attempt");
         handler.LastRequestBody.Should().Contain("Rejected schedule shape.");
+        handler.LastRequestBody.Should().Contain("Completed operations");
+        handler.LastRequestBody.Should().Contain("Morning walk");
         handler.LastRequestBody.Should().Contain("Create my maintenance habit every Thursday.");
         handler.LastRequestBody.Should().NotContain("Tuesday");
     }

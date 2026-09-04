@@ -23,6 +23,7 @@ public partial class ProcessUserChatCommandHandler
         long totalReportedTokens = initialResponse.ReportedTokenCount;
         var tokenBudgetExceeded = totalReportedTokens > AppConstants.MaxAiRequestTotalTokens;
         var rejectedCalls = new List<RejectedToolCall>();
+        var successfulCalls = new List<SuccessfulToolCall>();
         var isRetryRound = false;
         var hadToolFailure = false;
         var retrySucceeded = false;
@@ -48,6 +49,7 @@ public partial class ProcessUserChatCommandHandler
                 request,
                 executionResults,
                 rejectedCalls,
+                successfulCalls,
                 isRetryRound,
                 iteration,
                 aiStreamSink,
@@ -111,6 +113,7 @@ public partial class ProcessUserChatCommandHandler
         ProcessUserChatCommand request,
         ToolExecutionAccumulator executionResults,
         List<RejectedToolCall> rejectedCalls,
+        List<SuccessfulToolCall> successfulCalls,
         bool isRetryRound,
         int iteration,
         Func<AiStreamEvent, Task>? aiStreamSink,
@@ -125,12 +128,35 @@ public partial class ProcessUserChatCommandHandler
         if (isRetryRound && orderedCalls.Any(call => IsIdenticalRejectedCall(call, rejectedCalls)))
             return new ToolRoundResult(MessageResponse(ToolFailureMessageKey), RetrySucceeded: false);
 
-        var outcomesByCallId = await ExecuteToolCallsAsync(orderedCalls, request, cancellationToken);
+        var retryPlan = isRetryRound
+            ? BuildRetryExecutionPlan(orderedCalls, rejectedCalls, successfulCalls)
+            : orderedCalls.Select(call => new RetryToolCall(call, null)).ToList();
+        if (retryPlan is null)
+            return new ToolRoundResult(MessageResponse(ToolFailureMessageKey), RetrySucceeded: false);
+
+        var callsToExecute = retryPlan
+            .Where(planned => planned.SuccessfulCall is null)
+            .Select(planned => planned.Call)
+            .ToList();
+        var outcomesByCallId = await ExecuteToolCallsAsync(callsToExecute, request, cancellationToken);
 
         var toolResults = new List<AiToolCallResult>(orderedCalls.Count);
         var retryableFailures = new List<RejectedToolCall>();
-        foreach (var call in orderedCalls)
+        foreach (var plannedCall in retryPlan)
         {
+            var call = plannedCall.Call;
+            if (plannedCall.SuccessfulCall is { } successfulCall)
+            {
+                toolResults.Add(new AiToolCallResult(
+                    call.Name,
+                    call.Id,
+                    true,
+                    successfulCall.EntityId,
+                    successfulCall.EntityName,
+                    null));
+                continue;
+            }
+
             var outcome = outcomesByCallId[call.Id];
             toolResults.Add(outcome.ToolResult);
             executionResults.Add(
@@ -143,6 +169,17 @@ public partial class ProcessUserChatCommandHandler
 
             if (outcome.OperationResult?.Status == AgentOperationStatus.Failed)
                 retryableFailures.Add(new RejectedToolCall(call.Name, call.Args.Clone(), outcome.ToolResult.Error));
+
+            if (!isRetryRound
+                && ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly == false
+                && outcome.ActionResult?.Status == ActionStatus.Success)
+            {
+                successfulCalls.Add(new SuccessfulToolCall(
+                    call.Name,
+                    call.Args.Clone(),
+                    outcome.ToolResult.EntityId,
+                    outcome.ToolResult.EntityName));
+            }
         }
 
         if (isRetryRound)
@@ -165,6 +202,9 @@ public partial class ProcessUserChatCommandHandler
             {
                 PriorToolFailures = retryableFailures
                     .Select(failure => new AiToolFailure(failure.Name, failure.Error))
+                    .ToList(),
+                PriorToolSuccesses = successfulCalls
+                    .Select(success => new AiToolSuccess(success.Name, success.EntityId, success.EntityName))
                     .ToList()
             };
             var retryResponse = await ai.IntentService.SendWithToolsAsync(
@@ -197,6 +237,14 @@ public partial class ProcessUserChatCommandHandler
 
     private sealed record RejectedToolCall(string Name, JsonElement Arguments, string? Error);
 
+    private sealed record SuccessfulToolCall(
+        string Name,
+        JsonElement Arguments,
+        string? EntityId,
+        string? EntityName);
+
+    private sealed record RetryToolCall(AiToolCall Call, SuccessfulToolCall? SuccessfulCall);
+
     private static AiResponse MessageResponse(string messageKey) => new() { TextMessage = messageKey };
 
     private static bool IsIdenticalRejectedCall(AiToolCall call, IReadOnlyList<RejectedToolCall> rejectedCalls)
@@ -204,6 +252,136 @@ public partial class ProcessUserChatCommandHandler
         return rejectedCalls.Any(rejected =>
             string.Equals(rejected.Name, call.Name, StringComparison.Ordinal)
             && JsonValuesEqual(rejected.Arguments, call.Args));
+    }
+
+    private static List<RetryToolCall>? BuildRetryExecutionPlan(
+        IReadOnlyList<AiToolCall> calls,
+        IReadOnlyList<RejectedToolCall> rejectedCalls,
+        IReadOnlyList<SuccessfulToolCall> successfulCalls)
+    {
+        var unmatchedFailures = rejectedCalls.ToList();
+        var plan = new List<RetryToolCall>(calls.Count);
+
+        foreach (var call in calls)
+        {
+            var matchingSuccess = successfulCalls
+                .Where(success => string.Equals(success.Name, call.Name, StringComparison.Ordinal))
+                .Select(success => new
+                {
+                    Call = success,
+                    Score = MutationIdentityScore(success.Arguments, call.Args)
+                })
+                .OrderByDescending(match => match.Score)
+                .FirstOrDefault();
+            var matchingFailure = unmatchedFailures
+                .Select((failure, index) => new
+                {
+                    Call = failure,
+                    Index = index,
+                    Score = string.Equals(failure.Name, call.Name, StringComparison.Ordinal)
+                        ? MutationIdentityScore(failure.Arguments, call.Args)
+                        : 0d
+                })
+                .OrderByDescending(match => match.Score)
+                .FirstOrDefault();
+
+            if (matchingSuccess is { Score: >= 0.5 }
+                && (matchingFailure is null || matchingSuccess.Score >= matchingFailure.Score))
+            {
+                plan.Add(new RetryToolCall(call, matchingSuccess.Call));
+                continue;
+            }
+
+            var failureIndex = matchingFailure is { Score: >= 0.5 }
+                ? matchingFailure.Index
+                : -1;
+            if (failureIndex < 0
+                && !successfulCalls.Any(success => string.Equals(success.Name, call.Name, StringComparison.Ordinal)))
+            {
+                failureIndex = unmatchedFailures.FindIndex(failure =>
+                    string.Equals(failure.Name, call.Name, StringComparison.Ordinal));
+            }
+
+            if (failureIndex < 0)
+                return null;
+
+            unmatchedFailures.RemoveAt(failureIndex);
+            plan.Add(new RetryToolCall(call, null));
+        }
+
+        return plan;
+    }
+
+    private static double MutationIdentityScore(JsonElement left, JsonElement right)
+    {
+        if (left.ValueKind != JsonValueKind.Object || right.ValueKind != JsonValueKind.Object)
+            return JsonValuesEqual(left, right) ? 1d : 0d;
+
+        var leftIdentities = left.EnumerateObject()
+            .Where(property => IsMutationIdentityProperty(property.Name))
+            .ToDictionary(property => property.Name, property => property.Value, StringComparer.OrdinalIgnoreCase);
+        var rightIdentities = right.EnumerateObject()
+            .Where(property => IsMutationIdentityProperty(property.Name))
+            .ToDictionary(property => property.Name, property => property.Value, StringComparer.OrdinalIgnoreCase);
+
+        return leftIdentities
+            .Where(identity => rightIdentities.ContainsKey(identity.Key))
+            .Select(identity => IdentityValueScore(identity.Key, identity.Value, rightIdentities[identity.Key]))
+            .DefaultIfEmpty(0d)
+            .Max();
+    }
+
+    private static bool IsMutationIdentityProperty(string propertyName)
+    {
+        return propertyName.Equals("id", StringComparison.OrdinalIgnoreCase)
+            || propertyName.EndsWith("_id", StringComparison.OrdinalIgnoreCase)
+            || propertyName.EndsWith("_ids", StringComparison.OrdinalIgnoreCase)
+            || propertyName.Equals("title", StringComparison.OrdinalIgnoreCase)
+            || propertyName.Equals("name", StringComparison.OrdinalIgnoreCase)
+            || propertyName.Equals("email", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeIdentityValue(JsonElement value)
+    {
+        if (value.ValueKind != JsonValueKind.String)
+            return value.GetRawText();
+
+        return string.Concat((value.GetString() ?? string.Empty)
+            .Where(char.IsLetterOrDigit)
+            .Select(char.ToUpperInvariant));
+    }
+
+    private static double IdentityValueScore(string propertyName, JsonElement left, JsonElement right)
+    {
+        if (left.ValueKind != JsonValueKind.String || right.ValueKind != JsonValueKind.String)
+            return JsonValuesEqual(left, right) ? 1d : 0d;
+
+        if (!propertyName.Equals("title", StringComparison.OrdinalIgnoreCase)
+            && !propertyName.Equals("name", StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Equals(
+                NormalizeIdentityValue(left),
+                NormalizeIdentityValue(right),
+                StringComparison.Ordinal) ? 1d : 0d;
+        }
+
+        var leftTokens = IdentityTokens(left.GetString());
+        var rightTokens = IdentityTokens(right.GetString());
+        if (leftTokens.Count == 0 || rightTokens.Count == 0)
+            return 0d;
+
+        var intersectionCount = leftTokens.Intersect(rightTokens).Count();
+        var unionCount = leftTokens.Union(rightTokens).Count();
+        return (double)intersectionCount / unionCount;
+    }
+
+    private static HashSet<string> IdentityTokens(string? value)
+    {
+        return (value ?? string.Empty)
+            .Split([' ', '-', '(', ')', '[', ']', '/', '\\', '_', ':'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(token => string.Concat(token.Where(char.IsLetterOrDigit)).ToUpperInvariant())
+            .Where(token => token.Length > 0)
+            .ToHashSet(StringComparer.Ordinal);
     }
 
     private static bool JsonValuesEqual(JsonElement left, JsonElement right)
