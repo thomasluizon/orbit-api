@@ -182,7 +182,7 @@ public partial class GamificationService(
         var previousLevel = user.Level;
         var newAchievements = new List<(UserAchievement Entity, AchievementDefinition Definition)>();
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, today, context.UserTimeZone);
+        var metrics = HabitMetricsCalculator.Calculate(habit, today, user.WeekStartDay, context.UserTimeZone);
 
         var xpEarned = habit.IsBadHabit
             ? 0

@@ -20,7 +20,9 @@ public record DailySummaryContext(
     TimeOnly? CurrentLocalTime,
     int CurrentStreak,
     int StreakFreezesAccumulated,
-    IReadOnlyDictionary<Guid, DateOnly> LastBadHabitSlipDates);
+    IReadOnlyDictionary<Guid, DateOnly> LastBadHabitSlipDates,
+    int WeekStartDay = 1,
+    IReadOnlySet<Guid>? ResolvedDueDateHabitIds = null);
 
 public interface ISummaryService
 {

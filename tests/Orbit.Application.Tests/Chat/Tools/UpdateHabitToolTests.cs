@@ -131,6 +131,18 @@ public class UpdateHabitToolTests
     }
 
     [Fact]
+    public async Task UpdateIntervalWeeks_ChangesInterval()
+    {
+        var habit = CreateHabit("Exercise", FrequencyUnit.Day, 1);
+        SetupHabitFound(habit);
+
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "interval_weeks": 3}""");
+
+        result.Success.Should().BeTrue();
+        habit.IntervalWeeks.Should().Be(3);
+    }
+
+    [Fact]
     public async Task PartialUpdate_OnlyChangesProvidedFields()
     {
         var habit = CreateHabit("Read", FrequencyUnit.Week, 2);

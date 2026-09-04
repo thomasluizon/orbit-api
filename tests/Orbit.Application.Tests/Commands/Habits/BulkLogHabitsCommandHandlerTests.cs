@@ -127,6 +127,31 @@ public class BulkLogHabitsCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_IntervalChangedAfterAdvancement_LogsDayAfterMissedActiveOccurrence()
+    {
+        var anchor = new DateOnly(2025, 1, 6);
+        var catchUpDay = anchor.AddDays(15);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Alternating", FrequencyUnit.Day, 1, DueDate: anchor,
+            Days: [DayOfWeek.Monday])).Value;
+        habit.AdvanceDueDate(anchor.AddDays(6), weekStartDay: 1);
+        habit.Update(new HabitUpdateParams(
+            habit.Title, habit.Description, habit.FrequencyUnit, habit.FrequencyQuantity,
+            habit.Days.ToList(), habit.IsBadHabit, DueDate: null,
+            UserToday: anchor.AddDays(8), IntervalWeeks: 2));
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(catchUpDay);
+        _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(1);
+        SetupHabitsForUser([habit]);
+
+        var result = await _handler.Handle(
+            new BulkLogHabitsCommand(UserId, [new BulkLogItem(habit.Id)]),
+            CancellationToken.None);
+
+        result.Value.Results.Should().ContainSingle(r => r.Status == BulkItemStatus.Success);
+        await _habitLogRepo.Received(1).AddAsync(Arg.Any<HabitLog>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_NotScheduledNotOverdue_ReportsFailedItem()
     {
         var habit = Habit.Create(new HabitCreateParams(UserId, "Future", FrequencyUnit.Week, 1, DueDate: Today.AddDays(3))).Value;
@@ -581,7 +606,7 @@ public class BulkLogHabitsCommandHandlerTests
             habitRepo,
             habitLogRepo,
             new BulkLogServices(userDateService, userStreakService, gamification),
-            new GoalCompletionService(goalRepo, gamification, unitOfWork),
+            new GoalCompletionService(goalRepo, gamification, unitOfWork, userDateService),
             unitOfWork,
             cache,
             Substitute.For<ILogger<BulkLogHabitsCommandHandler>>());

@@ -31,7 +31,7 @@ public static class GoalStreakSyncService
         return syncedDate is null || syncedDate < userToday;
     }
 
-    public static int? CalculateCurrentStreak(Goal goal, DateOnly userToday)
+    public static int? CalculateCurrentStreak(Goal goal, DateOnly userToday, int weekStartDay)
     {
         if (!IsActiveStreakGoal(goal))
             return null;
@@ -41,7 +41,7 @@ public static class GoalStreakSyncService
             return null;
 
         return linkedHabits
-            .Select(habit => HabitMetricsCalculator.Calculate(habit, userToday).CurrentStreak)
+            .Select(habit => HabitMetricsCalculator.Calculate(habit, userToday, weekStartDay).CurrentStreak)
             .Min();
     }
 
@@ -52,7 +52,7 @@ public static class GoalStreakSyncService
     /// null when the goal is not an active streak goal (the caller keeps its current value). Read
     /// paths use this to surface the fresh streak while leaving completion to the write paths.
     /// </summary>
-    public static int? ComputeReadValue(Goal goal, DateOnly userToday)
+    public static int? ComputeReadValue(Goal goal, DateOnly userToday, int weekStartDay)
     {
         if (!IsActiveStreakGoal(goal))
             return null;
@@ -60,15 +60,15 @@ public static class GoalStreakSyncService
         if (goal.Habits.Count == 0)
             return 0;
 
-        return CalculateCurrentStreak(goal, userToday);
+        return CalculateCurrentStreak(goal, userToday, weekStartDay);
     }
 
-    public static StreakSyncOutcome SyncCurrentStreak(Goal goal, DateOnly userToday)
+    public static StreakSyncOutcome SyncCurrentStreak(Goal goal, DateOnly userToday, int weekStartDay)
     {
         if (IsActiveStreakGoal(goal) && goal.Habits.Count == 0)
             return new StreakSyncOutcome(Synced: goal.ResetStreakProgress(), JustCompleted: false);
 
-        var currentStreak = CalculateCurrentStreak(goal, userToday);
+        var currentStreak = CalculateCurrentStreak(goal, userToday, weekStartDay);
         if (!currentStreak.HasValue)
             return StreakSyncOutcome.NotSynced;
 
@@ -76,12 +76,12 @@ public static class GoalStreakSyncService
         return new StreakSyncOutcome(Synced: true, JustCompleted: result.IsSuccess && result.Value);
     }
 
-    public static StreakSyncOutcome SyncCurrentStreakIfNeeded(Goal goal, DateOnly userToday)
+    public static StreakSyncOutcome SyncCurrentStreakIfNeeded(Goal goal, DateOnly userToday, int weekStartDay)
     {
         if (!NeedsPassiveSync(goal, userToday))
             return StreakSyncOutcome.NotSynced;
 
-        return SyncCurrentStreak(goal, userToday);
+        return SyncCurrentStreak(goal, userToday, weekStartDay);
     }
 
     /// <summary>
@@ -90,9 +90,9 @@ public static class GoalStreakSyncService
     /// active streak goal. The caller must pass an instance that will not be saved — completion and
     /// gamification stay solely on the write paths and the hosted sweep.
     /// </summary>
-    public static void ApplyReadValue(Goal goal, DateOnly userToday)
+    public static void ApplyReadValue(Goal goal, DateOnly userToday, int weekStartDay)
     {
-        var readValue = ComputeReadValue(goal, userToday);
+        var readValue = ComputeReadValue(goal, userToday, weekStartDay);
         if (readValue.HasValue)
             goal.SyncStreakProgress(readValue.Value, allowCompletion: false);
     }

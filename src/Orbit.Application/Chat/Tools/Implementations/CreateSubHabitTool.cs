@@ -32,6 +32,7 @@ public class CreateSubHabitTool(
                 @enum = JsonSchemaTypes.FrequencyUnitEnum
             },
             frequency_quantity = new { type = JsonSchemaTypes.Integer, description = "Override parent frequency quantity" },
+            interval_weeks = new { type = JsonSchemaTypes.Integer, description = "Override parent repeat interval in weeks. Minimum 1." },
             days = new
             {
                 type = JsonSchemaTypes.Array,
@@ -76,7 +77,7 @@ public class CreateSubHabitTool(
 
         var title = titleEl.GetString() ?? string.Empty;
 
-        var (frequencyUnit, frequencyQuantity) = ParseScheduleOptions(args);
+        var (frequencyUnit, frequencyQuantity, intervalWeeks) = ParseScheduleOptions(args);
         var days = JsonArgumentParser.ParseDays(args);
         var (dueTime, dueEndTime) = ParseTimeOptions(args);
         var (isBadHabit, reminderEnabled, slipAlertEnabled, isFlexible) = ParseBooleanFlags(args);
@@ -100,6 +101,7 @@ public class CreateSubHabitTool(
                 DueDate: dueDate,
                 Emoji: emoji,
                 InheritParentFrequency: true,
+                IntervalWeeks: intervalWeeks,
                 Options: new Orbit.Application.Habits.Commands.HabitCommandOptions(
                     Days: days,
                     DueTime: dueTime,
@@ -116,7 +118,7 @@ public class CreateSubHabitTool(
         return new ToolResult(true, EntityId: result.Value.ToString(), EntityName: title);
     }
 
-    private static (FrequencyUnit? Unit, int? Quantity) ParseScheduleOptions(JsonElement args)
+    private static (FrequencyUnit? Unit, int? Quantity, int? IntervalWeeks) ParseScheduleOptions(JsonElement args)
     {
         FrequencyUnit? frequencyUnit = null;
         if (args.TryGetProperty("frequency_unit", out var fuEl) && fuEl.ValueKind == JsonValueKind.String
@@ -130,7 +132,7 @@ public class CreateSubHabitTool(
             frequencyQuantity = fqEl.GetInt32();
         frequencyQuantity ??= frequencyUnit is not null ? 1 : null;
 
-        return (frequencyUnit, frequencyQuantity);
+        return (frequencyUnit, frequencyQuantity, JsonArgumentParser.GetOptionalInt(args, "interval_weeks"));
     }
 
     private static (TimeOnly? DueTime, TimeOnly? DueEndTime) ParseTimeOptions(JsonElement args)

@@ -147,7 +147,8 @@ public class BulkUpdateHabitEmojisTool(
             IsFlexible: habit.IsFlexible,
             EndDate: habit.EndDate,
             ScheduledReminders: habit.ScheduledReminders,
-            Emoji: emoji));
+            Emoji: emoji,
+            IntervalWeeks: habit.IntervalWeeks));
     }
 
     private static string InferEmoji(Habit habit)

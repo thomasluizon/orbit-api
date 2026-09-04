@@ -46,10 +46,16 @@ public partial class BulkLogHabitsCommandHandler(
     public async Task<Result<BulkLogResult>> Handle(BulkLogHabitsCommand request, CancellationToken cancellationToken)
     {
         var today = await services.UserDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var weekStartDay = await services.UserDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
         var results = new List<BulkLogItemResult>();
 
         var habitMap = await BulkHabitLoader.LoadHabitsWithRecentLogsAsync(
             habitRepository, request.Items.Select(i => i.HabitId), request.UserId, today, cancellationToken);
+        var dueDateResolution = await HabitDueDateResolutionLoader.LoadAsync(
+            habitLogRepository,
+            habitMap.Values,
+            today.AddDays(-AppConstants.MaxRangeDays),
+            cancellationToken);
 
         await unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
@@ -60,7 +66,15 @@ public partial class BulkLogHabitsCommandHandler(
 
                 try
                 {
-                    results.Add(await ProcessLogItem(i, item.HabitId, targetDate, today, habitMap, ct));
+                    results.Add(await ProcessLogItem(
+                        i,
+                        item.HabitId,
+                        targetDate,
+                        today,
+                        weekStartDay,
+                        habitMap,
+                        dueDateResolution,
+                        ct));
                 }
                 catch (Exception ex)
                 {
@@ -108,8 +122,10 @@ public partial class BulkLogHabitsCommandHandler(
     }
 
     private async Task<BulkLogItemResult> ProcessLogItem(
-        int index, Guid habitId, DateOnly targetDate, DateOnly today,
-        Dictionary<Guid, Habit> habitMap, CancellationToken cancellationToken)
+        int index, Guid habitId, DateOnly targetDate, DateOnly today, int weekStartDay,
+        Dictionary<Guid, Habit> habitMap,
+        IReadOnlySet<Guid> dueDateResolution,
+        CancellationToken cancellationToken)
     {
         if (targetDate > today)
             return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
@@ -123,10 +139,16 @@ public partial class BulkLogHabitsCommandHandler(
             return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
                 Error: ErrorMessages.HabitNotFound.Message, ErrorCode: ErrorMessages.HabitNotFound.Code);
 
-        if (habit.FrequencyUnit is not null && !habit.IsFlexible
-            && !HabitScheduleService.IsHabitDueOnDate(habit, targetDate))
+        if (habit.FrequencyUnit is not null
+            && !HabitScheduleService.IsHabitDueOnDate(habit, targetDate, weekStartDay))
         {
-            var isOverdue = targetDate == today && HabitScheduleService.HasMissedPastOccurrence(habit, today);
+            var isOverdue = !habit.IsFlexible
+                && targetDate == today
+                && HabitScheduleService.HasMissedPastOccurrence(
+                    habit,
+                    today,
+                    weekStartDay,
+                    dueDateResolution.Contains(habit.Id));
             if (!isOverdue)
                 return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
                     Error: ErrorMessages.NotScheduledOnDate.Message, ErrorCode: ErrorMessages.NotScheduledOnDate.Code);
@@ -136,7 +158,10 @@ public partial class BulkLogHabitsCommandHandler(
             return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Success, HabitId: habitId);
 
         var shouldAdvanceDueDate = targetDate >= today;
-        var logResult = habit.Log(targetDate, advanceDueDate: shouldAdvanceDueDate);
+        var logResult = habit.Log(
+            targetDate,
+            advanceDueDate: shouldAdvanceDueDate,
+            weekStartDay: weekStartDay);
         if (logResult.IsFailure)
             return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
                 Error: logResult.Error, ErrorCode: logResult.ErrorCode);

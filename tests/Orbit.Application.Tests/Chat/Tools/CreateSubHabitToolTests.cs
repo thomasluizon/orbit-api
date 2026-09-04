@@ -93,6 +93,31 @@ public class CreateSubHabitToolTests
     }
 
     [Fact]
+    public async Task WithIntervalOverride_SendsExplicitInterval()
+    {
+        _mediator.Send(Arg.Any<CreateSubHabitCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(Guid.NewGuid()));
+
+        var result = await Execute($$$"""
+        {
+            "parent_habit_id": "{{{ParentId}}}",
+            "title": "Weekly Child",
+            "frequency_unit": "Week",
+            "frequency_quantity": 1,
+            "interval_weeks": 1
+        }
+        """);
+
+        result.Success.Should().BeTrue();
+        await _mediator.Received(1).Send(
+            Arg.Is<CreateSubHabitCommand>(cmd =>
+                cmd.FrequencyUnit == Domain.Enums.FrequencyUnit.Week &&
+                cmd.FrequencyQuantity == 1 &&
+                cmd.IntervalWeeks == 1),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task WithEmoji_SendsCommandWithEmoji()
     {
         var newId = Guid.NewGuid();

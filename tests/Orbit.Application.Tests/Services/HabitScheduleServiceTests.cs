@@ -17,7 +17,8 @@ public class HabitScheduleServiceTests
         int? qty,
         DateOnly? dueDate = null,
         IReadOnlyList<DayOfWeek>? days = null,
-        bool isFlexible = false)
+        bool isFlexible = false,
+        int? intervalWeeks = null)
     {
         var result = Habit.Create(new HabitCreateParams(
             UserId,
@@ -26,7 +27,8 @@ public class HabitScheduleServiceTests
             qty,
             DueDate: dueDate ?? Anchor,
             Days: days,
-            IsFlexible: isFlexible));
+            IsFlexible: isFlexible,
+            IntervalWeeks: intervalWeeks));
 
         return result.Value;
     }
@@ -178,6 +180,116 @@ public class HabitScheduleServiceTests
         var result = HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 1, 7));
 
         result.Should().BeFalse();
+    }
+
+    [Fact]
+    public void GetScheduledDates_FixedThreeDayInterval_AlternatesWholeWeeks()
+    {
+        var anchor = new DateOnly(2025, 1, 7);
+        var habit = CreateHabit(
+            FrequencyUnit.Day,
+            1,
+            anchor,
+            [DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday],
+            intervalWeeks: 2);
+
+        var dates = HabitScheduleService.GetScheduledDates(
+            habit,
+            anchor,
+            anchor.AddDays(16),
+            weekStartDay: 1);
+
+        dates.Should().Equal(
+            anchor,
+            anchor.AddDays(1),
+            anchor.AddDays(2),
+            anchor.AddDays(14),
+            anchor.AddDays(15),
+            anchor.AddDays(16));
+    }
+
+    [Fact]
+    public void IsHabitDueOnDate_IntervalParity_RespectsSundayAndMondayWeekStarts()
+    {
+        var sundayAnchor = new DateOnly(2025, 1, 5);
+        var monday = sundayAnchor.AddDays(1);
+        var habit = CreateHabit(
+            FrequencyUnit.Day,
+            1,
+            sundayAnchor,
+            [DayOfWeek.Sunday, DayOfWeek.Monday],
+            intervalWeeks: 2);
+
+        HabitScheduleService.IsHabitDueOnDate(habit, monday, weekStartDay: 0).Should().BeTrue();
+        HabitScheduleService.IsHabitDueOnDate(habit, monday, weekStartDay: 1).Should().BeFalse();
+    }
+
+    [Fact]
+    public void FlexibleHabit_ThreeWeekInterval_IsInactiveForTwoWeeksAndKeepsCompletedStreak()
+    {
+        var anchor = new DateOnly(2025, 1, 6);
+        var habit = CreateHabit(
+            FrequencyUnit.Week,
+            3,
+            anchor,
+            isFlexible: true,
+            intervalWeeks: 3);
+
+        habit.Log(anchor, advanceDueDate: false).IsSuccess.Should().BeTrue();
+        habit.Log(anchor.AddDays(1), advanceDueDate: false).IsSuccess.Should().BeTrue();
+        habit.Log(anchor.AddDays(2), advanceDueDate: false).IsSuccess.Should().BeTrue();
+
+        HabitScheduleService.IsFlexibleHabitDueOnDate(
+            habit,
+            anchor.AddDays(7),
+            habit.Logs,
+            weekStartDay: 1).Should().BeFalse();
+        HabitScheduleService.IsFlexibleHabitDueOnDate(
+            habit,
+            anchor.AddDays(14),
+            habit.Logs,
+            weekStartDay: 1).Should().BeFalse();
+        HabitScheduleService.IsFlexibleHabitDueOnDate(
+            habit,
+            anchor.AddDays(21),
+            habit.Logs,
+            weekStartDay: 1).Should().BeTrue();
+
+        var metrics = HabitMetricsCalculator.Calculate(
+            habit,
+            anchor.AddDays(20),
+            weekStartDay: 1,
+            TimeZoneInfo.Utc);
+        metrics.CurrentStreak.Should().Be(1);
+    }
+
+    [Fact]
+    public void GetScheduledDates_NullInterval_MatchesLegacyFixturesAcrossNinetyDays()
+    {
+        var fixtures = new[]
+        {
+            CreateHabit(FrequencyUnit.Day, 1),
+            CreateHabit(FrequencyUnit.Day, 2),
+            CreateHabit(FrequencyUnit.Day, 1, days: [DayOfWeek.Monday, DayOfWeek.Wednesday, DayOfWeek.Friday]),
+            CreateHabit(FrequencyUnit.Week, 2),
+            CreateHabit(FrequencyUnit.Month, 1),
+            CreateHabit(FrequencyUnit.Year, 1),
+            CreateHabit(FrequencyUnit.Week, 3, isFlexible: true)
+        };
+
+        foreach (var habit in fixtures)
+        {
+            habit.IntervalWeeks.Should().BeNull();
+            var actual = HabitScheduleService.GetScheduledDates(
+                habit,
+                Anchor,
+                Anchor.AddDays(89),
+                weekStartDay: 1);
+            var legacy = GetLegacyScheduledDates(habit, Anchor, Anchor.AddDays(89));
+
+            System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(actual)
+                .Should().Equal(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(legacy));
+        }
     }
 
     [Fact]
@@ -618,7 +730,7 @@ public class HabitScheduleServiceTests
     {
         var habit = CreateHabit(null, null, dueDate: Anchor);
 
-        HabitScheduleService.HasMissedPastOccurrence(habit, Anchor.AddDays(5)).Should().BeFalse();
+        HabitScheduleService.HasMissedPastOccurrence(habit, Anchor.AddDays(5), weekStartDay: 1).Should().BeFalse();
     }
 
     [Fact]
@@ -627,7 +739,7 @@ public class HabitScheduleServiceTests
         var habit = Habit.Create(new HabitCreateParams(
             UserId, "Bad", FrequencyUnit.Day, 1, IsBadHabit: true, DueDate: Anchor)).Value;
 
-        HabitScheduleService.HasMissedPastOccurrence(habit, Anchor.AddDays(5)).Should().BeFalse();
+        HabitScheduleService.HasMissedPastOccurrence(habit, Anchor.AddDays(5), weekStartDay: 1).Should().BeFalse();
     }
 
     [Fact]
@@ -636,18 +748,32 @@ public class HabitScheduleServiceTests
         var habit = CreateHabit(FrequencyUnit.Day, 1, dueDate: Anchor);
         var today = Anchor.AddDays(3);
 
-        HabitScheduleService.HasMissedPastOccurrence(habit, today).Should().BeTrue();
+        HabitScheduleService.HasMissedPastOccurrence(habit, today, weekStartDay: 1).Should().BeTrue();
     }
 
     [Fact]
     public void HasMissedPastOccurrence_DailyHabitAllLogged_ReturnsFalse()
     {
         var habit = CreateHabit(FrequencyUnit.Day, 1, dueDate: Anchor);
-        habit.Log(Anchor);
-        habit.Log(Anchor.AddDays(1));
+        habit.Log(Anchor, advanceDueDate: false);
+        habit.Log(Anchor.AddDays(1), advanceDueDate: false);
         var today = Anchor.AddDays(2);
 
-        HabitScheduleService.HasMissedPastOccurrence(habit, today).Should().BeFalse();
+        HabitScheduleService.HasMissedPastOccurrence(habit, today, weekStartDay: 1).Should().BeFalse();
+    }
+
+    [Fact]
+    public void HasMissedPastOccurrence_DailyHabitAllSkipped_ReturnsFalse()
+    {
+        var habit = CreateHabit(FrequencyUnit.Day, 1, dueDate: Anchor);
+        var logs = (List<HabitLog>)typeof(Habit)
+            .GetField("_logs", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .GetValue(habit)!;
+        logs.Add(HabitLog.Create(habit.Id, Anchor, 0));
+        logs.Add(HabitLog.Create(habit.Id, Anchor.AddDays(1), 0));
+        var today = Anchor.AddDays(2);
+
+        HabitScheduleService.HasMissedPastOccurrence(habit, today, weekStartDay: 1).Should().BeFalse();
     }
 
     [Fact]
@@ -655,7 +781,7 @@ public class HabitScheduleServiceTests
     {
         var habit = CreateHabit(FrequencyUnit.Day, 1, dueDate: Anchor);
 
-        HabitScheduleService.HasMissedPastOccurrence(habit, Anchor).Should().BeFalse();
+        HabitScheduleService.HasMissedPastOccurrence(habit, Anchor, weekStartDay: 1).Should().BeFalse();
     }
 
     [Fact]
@@ -663,7 +789,7 @@ public class HabitScheduleServiceTests
     {
         var habit = CreateHabit(FrequencyUnit.Week, 1, dueDate: Anchor.AddDays(7));
 
-        HabitScheduleService.HasMissedPastOccurrence(habit, Anchor).Should().BeFalse();
+        HabitScheduleService.HasMissedPastOccurrence(habit, Anchor, weekStartDay: 1).Should().BeFalse();
     }
 
     [Fact]
@@ -672,7 +798,7 @@ public class HabitScheduleServiceTests
         var habit = Habit.Create(new HabitCreateParams(
             UserId, "Flex", FrequencyUnit.Week, 3, IsFlexible: true, DueDate: Anchor)).Value;
 
-        HabitScheduleService.HasMissedPastOccurrence(habit, Anchor.AddDays(10)).Should().BeFalse();
+        HabitScheduleService.HasMissedPastOccurrence(habit, Anchor.AddDays(10), weekStartDay: 1).Should().BeFalse();
     }
 
     [Fact]
@@ -680,7 +806,22 @@ public class HabitScheduleServiceTests
     {
         var habit = CreateHabit(FrequencyUnit.Week, 1, dueDate: Anchor);
         var today = Anchor.AddDays(14);
-        HabitScheduleService.HasMissedPastOccurrence(habit, today).Should().BeTrue();
+        HabitScheduleService.HasMissedPastOccurrence(habit, today, weekStartDay: 1).Should().BeTrue();
+    }
+
+    [Fact]
+    public void HasMissedPastOccurrence_AncientEndedHabitWithoutActiveOccurrence_ReturnsFalse()
+    {
+        var anchor = new DateOnly(100, 1, 4);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Ancient", FrequencyUnit.Day, 1, DueDate: anchor,
+            Days: [DayOfWeek.Monday])).Value;
+        habit.AdvanceDueDate(anchor.AddDays(6), weekStartDay: 1);
+        typeof(Habit).GetProperty(nameof(Habit.IntervalWeeks))!.SetValue(habit, 2);
+        typeof(Habit).GetProperty(nameof(Habit.EndDate))!.SetValue(habit, anchor.AddDays(13));
+
+        HabitScheduleService.HasMissedPastOccurrence(
+            habit, new DateOnly(9999, 12, 31), weekStartDay: 1).Should().BeFalse();
     }
 
     [Fact]
@@ -1068,6 +1209,68 @@ public class HabitScheduleServiceTests
         habit.DueDate.Should().Be(today);
         HabitScheduleService.IsHabitDueOnDate(habit, today).Should().BeTrue();
     }
+
+    private static List<DateOnly> GetLegacyScheduledDates(Habit habit, DateOnly from, DateOnly to)
+    {
+        var dates = new List<DateOnly>();
+        for (var target = from; target <= to; target = target.AddDays(1))
+        {
+            if (habit.EndDate.HasValue && target > habit.EndDate.Value)
+                continue;
+            if (habit.IsFlexible)
+            {
+                if (habit.FrequencyUnit is not null && target >= habit.DueDate)
+                    dates.Add(target);
+                continue;
+            }
+            if (habit.FrequencyUnit is null)
+            {
+                if (target == habit.DueDate)
+                    dates.Add(target);
+                continue;
+            }
+            if (target < habit.DueDate)
+                continue;
+            if (habit.Days.Count > 0 && !habit.Days.Contains(target.DayOfWeek))
+                continue;
+
+            var quantity = habit.FrequencyQuantity ?? 1;
+            var matches = habit.FrequencyUnit switch
+            {
+                FrequencyUnit.Day => quantity == 1
+                    || LegacyTrueMod(target.DayNumber - habit.DueDate.DayNumber, quantity) == 0,
+                FrequencyUnit.Week => target.DayOfWeek == habit.DueDate.DayOfWeek
+                    && LegacyTrueMod((target.DayNumber - habit.DueDate.DayNumber) / 7, quantity) == 0,
+                FrequencyUnit.Month => target.Day == Math.Min(
+                        habit.DueDate.Day,
+                        DateTime.DaysInMonth(target.Year, target.Month))
+                    && LegacyTrueMod(
+                        (target.Year - habit.DueDate.Year) * 12 + target.Month - habit.DueDate.Month,
+                        quantity) == 0,
+                FrequencyUnit.Year => IsLegacyYearlyMatch(target, habit.DueDate, quantity),
+                _ => false
+            };
+            if (matches)
+                dates.Add(target);
+        }
+        return dates;
+    }
+
+    private static bool IsLegacyYearlyMatch(DateOnly target, DateOnly anchor, int quantity)
+    {
+        if (LegacyTrueMod(target.Year - anchor.Year, quantity) != 0)
+            return false;
+        if (target.Month == anchor.Month && target.Day == anchor.Day)
+            return true;
+        return anchor.Month == 2
+            && anchor.Day == 29
+            && target.Month == 2
+            && target.Day == 28
+            && !DateTime.IsLeapYear(target.Year);
+    }
+
+    private static int LegacyTrueMod(int value, int modulus) =>
+        ((value % modulus) + modulus) % modulus;
 
     private static (IGenericRepository<Habit> Repo, IUnitOfWork UnitOfWork) SetupRepositoryReturning(params Habit[] habits)
     {

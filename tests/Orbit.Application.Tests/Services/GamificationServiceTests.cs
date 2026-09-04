@@ -664,6 +664,49 @@ public class GamificationServiceTests
     }
 
     [Fact]
+    public async Task ProcessHabitLogged_SundayStartInterval_PersistsOwnerBoundaryStreakReward()
+    {
+        var user = CreateProUser();
+        user.SetWeekStartDay(0).IsSuccess.Should().BeTrue();
+        var initialXp = user.TotalXp;
+        SetupUserLookup(user);
+        SetupEarnedAchievements(
+            AchievementDefinitions.Liftoff,
+            AchievementDefinitions.LegendaryVolume,
+            AchievementDefinitions.PerfectDay,
+            AchievementDefinitions.PerfectWeek,
+            AchievementDefinitions.PerfectMonth,
+            AchievementDefinitions.EarlyBird,
+            AchievementDefinitions.NightOwl,
+            AchievementDefinitions.Comeback,
+            AchievementDefinitions.BadHabitBreaker);
+
+        var anchor = new DateOnly(2026, 3, 1);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId,
+            "Biweekly Friday",
+            FrequencyUnit.Day,
+            1,
+            anchor,
+            Days: [DayOfWeek.Friday],
+            IntervalWeeks: 2)).Value;
+        habit.Log(new DateOnly(2026, 3, 6), advanceDueDate: false);
+        habit.Log(Today, advanceDueDate: false);
+        SetupHabitWithLogs(habit);
+        SetupUserHabits(habit);
+        SetupHabitLogs();
+
+        await _sut.ProcessHabitLogged(UserId, habit.Id);
+
+        user.TotalXp.Should().Be(initialXp + 12);
+        await _xpAwardLogRepo.Received(1).AddAsync(
+            Arg.Is<XpAwardLog>(award =>
+                award.Source == XpAwardSource.HabitLog
+                && award.Amount == 12),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task ProcessHabitLogged_BadHabit_NoXpNoAchievementsNoLevelNoStreak()
     {
         var user = CreateProUser();

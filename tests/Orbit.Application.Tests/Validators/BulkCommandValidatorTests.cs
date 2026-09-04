@@ -78,6 +78,21 @@ public class BulkCreateHabitsCommandValidatorTests
 
         result.ShouldNotHaveAnyValidationErrors();
     }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(AppConstants.MaxIntervalWeeks + 1)]
+    public void BulkCreate_InvalidIntervalWeeks_HasError(int intervalWeeks)
+    {
+        var command = ValidCommand() with
+        {
+            Habits = [new BulkHabitItem("Habit", null, FrequencyUnit.Day, 1, IntervalWeeks: intervalWeeks)]
+        };
+
+        var result = _validator.TestValidate(command);
+
+        result.ShouldHaveValidationErrorFor("Habits[0].IntervalWeeks");
+    }
 }
 
 public class BulkDeleteHabitsCommandValidatorTests

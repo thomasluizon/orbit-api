@@ -35,7 +35,8 @@ public record BulkHabitItem(
     IReadOnlyList<ChecklistItem>? ChecklistItems = null,
     string? GoogleEventId = null,
     string? Emoji = null,
-    IReadOnlyList<string>? Tags = null);
+    IReadOnlyList<string>? Tags = null,
+    int? IntervalWeeks = null);
 
 public record BulkCreateResult(IReadOnlyList<BulkCreateItemResult> Results);
 
@@ -158,7 +159,8 @@ public partial class BulkCreateHabitsCommandHandler(
                 ScheduledReminders: item.ScheduledReminders,
                 ChecklistItems: item.ChecklistItems,
                 Position: rootPosition,
-                GoogleEventId: item.GoogleEventId));
+                GoogleEventId: item.GoogleEventId,
+                IntervalWeeks: item.IntervalWeeks));
 
             if (habitResult.IsFailure)
             {
@@ -180,20 +182,36 @@ public partial class BulkCreateHabitsCommandHandler(
                 var subPositionCursor = 0;
                 foreach (var subItem in item.SubHabits)
                 {
+                    var hasExplicitCadence = subItem.FrequencyUnit is not null
+                        || subItem.FrequencyQuantity is not null
+                        || subItem.IntervalWeeks is not null
+                        || subItem.Days is not null;
+                    var childFrequencyUnit = subItem.FrequencyUnit ?? item.FrequencyUnit;
+                    var childFrequencyQuantity = subItem.FrequencyQuantity ?? item.FrequencyQuantity;
+                    var childDays = subItem.Days;
+                    if (childDays is null
+                        && childFrequencyUnit == FrequencyUnit.Day
+                        && childFrequencyQuantity == 1)
+                    {
+                        childDays = item.Days;
+                    }
+
                     var childResult = Habit.Create(new HabitCreateParams(
                         userId,
                         subItem.Title,
-                        subItem.FrequencyUnit ?? item.FrequencyUnit,
-                        subItem.FrequencyQuantity ?? item.FrequencyQuantity,
+                        childFrequencyUnit,
+                        childFrequencyQuantity,
                         subItem.DueDate ?? item.DueDate ?? userToday,
                         subItem.Description,
                         Emoji: subItem.Emoji,
-                        Days: subItem.Days ?? item.Days,
+                        Days: childDays,
                         IsBadHabit: subItem.IsBadHabit,
                         ParentHabitId: parentHabit.Id,
                         IsGeneral: item.IsGeneral,
                         IsFlexible: subItem.IsFlexible,
-                        Position: subPositionCursor++));
+                        Position: subPositionCursor++,
+                        IntervalWeeks: subItem.IntervalWeeks
+                            ?? (hasExplicitCadence ? null : item.IntervalWeeks)));
 
                     if (childResult.IsFailure)
                     {

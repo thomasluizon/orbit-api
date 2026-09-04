@@ -352,7 +352,7 @@ public class AiRetrospectiveServiceTests
     {
         var method = typeof(AiRetrospectiveService)
             .GetMethod("BuildRetrospectivePrompt", PrivateStatic)!;
-        return (string)method.Invoke(null, [habits, dateFrom, dateTo, period, language])!;
+        return (string)method.Invoke(null, [habits, dateFrom, dateTo, period, language, 1])!;
     }
 
     private static void InvokeAppendParentHabitLine(
@@ -370,7 +370,7 @@ public class AiRetrospectiveServiceTests
     {
         var method = typeof(AiRetrospectiveService)
             .GetMethod("BuildHabitBreakdown", PrivateStatic)!;
-        return ((string, int, int, int))method.Invoke(null, [habits, dateFrom, dateTo, totalDays])!;
+        return ((string, int, int, int))method.Invoke(null, [habits, dateFrom, dateTo, totalDays, 1])!;
     }
 
     private static RetrospectiveNarrative InvokeParseNarrative(string text, string language)

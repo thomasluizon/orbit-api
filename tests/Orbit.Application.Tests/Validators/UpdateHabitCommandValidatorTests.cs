@@ -1,4 +1,5 @@
 using FluentValidation.TestHelper;
+using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
 using Orbit.Application.Habits.Validators;
 using Orbit.Domain.Enums;
@@ -79,6 +80,26 @@ public class UpdateHabitCommandValidatorTests
         var result = _validator.TestValidate(command);
 
         result.ShouldHaveValidationErrorFor(x => x.FrequencyQuantity);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(AppConstants.MaxIntervalWeeks)]
+    public void Validate_ValidIntervalWeeks_NoError(int? intervalWeeks)
+    {
+        var result = _validator.TestValidate(ValidCommand() with { IntervalWeeks = intervalWeeks });
+
+        result.ShouldNotHaveValidationErrorFor(x => x.IntervalWeeks);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(AppConstants.MaxIntervalWeeks + 1)]
+    public void Validate_InvalidIntervalWeeks_HasError(int intervalWeeks)
+    {
+        var result = _validator.TestValidate(ValidCommand() with { IntervalWeeks = intervalWeeks });
+
+        result.ShouldHaveValidationErrorFor(x => x.IntervalWeeks);
     }
 
     [Fact]

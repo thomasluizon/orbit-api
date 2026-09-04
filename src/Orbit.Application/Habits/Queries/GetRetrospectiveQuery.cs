@@ -51,6 +51,7 @@ public class GetRetrospectiveQueryHandler(
     IPayGateService payGate,
     IRetrospectiveService retrospectiveService,
     IUserStreakService userStreakService,
+    IUserDateService userDateService,
     IMemoryCache cache) : IRequestHandler<GetRetrospectiveQuery, Result<RetrospectiveResponse>>
 {
     public async Task<Result<RetrospectiveResponse>> Handle(
@@ -82,13 +83,15 @@ public class GetRetrospectiveQueryHandler(
 
         var streakState = await userStreakService.RecalculateAsync(
             request.UserId, awardFreezeIfEligible: false, cancellationToken);
+        var weekStartDay = await userDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
 
         var metrics = RetrospectiveMetricsCalculator.Compute(
             habitList,
             request.DateFrom,
             request.DateTo,
             streakState?.CurrentStreak ?? 0,
-            streakState?.LongestStreak ?? 0);
+            streakState?.LongestStreak ?? 0,
+            weekStartDay);
 
         if (metrics.TotalCompletions == 0 && metrics.BadHabitSlips == 0)
             return Result.Failure<RetrospectiveResponse>(ErrorMessages.NoHabitsForPeriod);
@@ -99,7 +102,8 @@ public class GetRetrospectiveQueryHandler(
             request.DateTo,
             request.Period,
             request.Language,
-            cancellationToken);
+            cancellationToken,
+            weekStartDay);
 
         if (narrativeResult.IsFailure)
             return narrativeResult.PropagateError<RetrospectiveResponse>();

@@ -109,7 +109,9 @@ public static class AchievementChecks
 
         if (eligibleHabits.Count == 0) return;
 
-        var scheduledToday = eligibleHabits.Where(h => HabitScheduleService.IsHabitDueOnDate(h, today)).ToList();
+        var scheduledToday = eligibleHabits
+            .Where(h => HabitScheduleService.IsHabitDueOnDate(h, today, user.WeekStartDay))
+            .ToList();
         if (scheduledToday.Count == 0) return;
 
         var allDone = scheduledToday.All(h => h.Logs.Any(l => l.Date == today));
@@ -133,7 +135,9 @@ public static class AchievementChecks
         var consecutivePerfectDays = 0;
         for (var day = today; day >= today.AddDays(-PerfectStreakWindowDays); day = day.AddDays(-1))
         {
-            var scheduledForDay = eligibleHabits.Where(h => HabitScheduleService.IsHabitDueOnDate(h, day)).ToList();
+            var scheduledForDay = eligibleHabits
+                .Where(h => HabitScheduleService.IsHabitDueOnDate(h, day, user.WeekStartDay))
+                .ToList();
             if (scheduledForDay.Count == 0)
             {
                 if (day != today) consecutivePerfectDays++;

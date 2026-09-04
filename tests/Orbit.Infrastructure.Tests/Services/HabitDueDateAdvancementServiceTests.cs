@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -56,7 +57,7 @@ public class HabitDueDateAdvancementServiceTests
     [Fact]
     public void CatchUpDueDate_WeeklyHabit_PastDue_AdvancesByWeeks()
     {
-        var startDate = Today.AddDays(-21);        var habit = CreateRecurringHabit(FrequencyUnit.Week, 1, startDate);
+        var startDate = Today.AddDays(-21); var habit = CreateRecurringHabit(FrequencyUnit.Week, 1, startDate);
 
         habit.CatchUpDueDate(Today);
 
@@ -160,7 +161,7 @@ public class HabitDueDateAdvancementServiceTests
     [Fact]
     public void CatchUpDueDate_EveryTwoWeeks_AdvancesCorrectly()
     {
-        var startDate = Today.AddDays(-28);        var habit = CreateRecurringHabit(FrequencyUnit.Week, 2, startDate);
+        var startDate = Today.AddDays(-28); var habit = CreateRecurringHabit(FrequencyUnit.Week, 2, startDate);
 
         habit.CatchUpDueDate(Today);
 
@@ -170,7 +171,7 @@ public class HabitDueDateAdvancementServiceTests
     [Fact]
     public void CatchUpDueDate_EveryThreeMonths_AdvancesCorrectly()
     {
-        var startDate = Today.AddMonths(-9);        var habit = CreateRecurringHabit(FrequencyUnit.Month, 3, startDate);
+        var startDate = Today.AddMonths(-9); var habit = CreateRecurringHabit(FrequencyUnit.Month, 3, startDate);
 
         habit.CatchUpDueDate(Today);
 
@@ -279,6 +280,82 @@ public class HabitDueDateAdvancementServiceTests
         reloadedNonBad.DueDate.Should().BeBefore(Today);
     }
 
+    [Fact]
+    public async Task AdvanceStaleDueDates_UnsatisfiableHabit_DoesNotBlockValidHabit()
+    {
+        await using var dbContext = CreateInMemoryDbContext();
+        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var anchor = Today.AddDays(-35);
+        var unsatisfiableHabit = Habit.Create(new HabitCreateParams(
+            user.Id,
+            "Unsatisfiable",
+            FrequencyUnit.Week,
+            1,
+            anchor,
+            IsBadHabit: true)).Value;
+        unsatisfiableHabit.AdvanceDueDate(anchor, weekStartDay: user.WeekStartDay);
+        typeof(Habit).GetProperty(nameof(Habit.FrequencyQuantity))!.SetValue(unsatisfiableHabit, 2);
+        typeof(Habit).GetProperty(nameof(Habit.IntervalWeeks))!.SetValue(unsatisfiableHabit, 2);
+        var unsatisfiableDueDate = unsatisfiableHabit.DueDate;
+        var validHabit = Habit.Create(new HabitCreateParams(
+            user.Id,
+            "Valid",
+            FrequencyUnit.Day,
+            1,
+            anchor,
+            IsBadHabit: true)).Value;
+        dbContext.Users.Add(user);
+        dbContext.Habits.AddRange(unsatisfiableHabit, validHabit);
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext, new ThrowOnSkippedLogger());
+
+        var act = () => service.AdvanceStaleDueDates(CancellationToken.None);
+
+        await act.Should().NotThrowAsync();
+        unsatisfiableHabit.DueDate.Should().Be(unsatisfiableDueDate);
+        validHabit.DueDate.Should().BeOnOrAfter(Today);
+    }
+
+    [Fact]
+    public async Task AdvanceStaleDueDates_SundayStartBoundaryHabit_SavesValidSibling()
+    {
+        await using var dbContext = CreateInMemoryDbContext();
+        var user = User.Create("Thomas", "thomas@test.com").Value;
+        user.SetWeekStartDay(0).IsSuccess.Should().BeTrue();
+        var boundaryHabit = Habit.Create(new HabitCreateParams(
+            user.Id,
+            "Boundary",
+            FrequencyUnit.Day,
+            1,
+            DateOnly.MinValue,
+            IsBadHabit: true,
+            IntervalWeeks: 2)).Value;
+        var validDueDate = Today.AddDays(-3);
+        var validHabit = Habit.Create(new HabitCreateParams(
+            user.Id,
+            "Valid",
+            FrequencyUnit.Day,
+            1,
+            validDueDate,
+            IsBadHabit: true)).Value;
+        dbContext.Users.Add(user);
+        dbContext.Habits.AddRange(boundaryHabit, validHabit);
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext);
+
+        var act = () => service.AdvanceStaleDueDates(CancellationToken.None);
+
+        await act.Should().NotThrowAsync();
+        var reloadedBoundary = await dbContext.Habits.AsNoTracking()
+            .SingleAsync(h => h.Id == boundaryHabit.Id);
+        var reloadedValid = await dbContext.Habits.AsNoTracking()
+            .SingleAsync(h => h.Id == validHabit.Id);
+        reloadedBoundary.DueDate.Should().Be(DateOnly.MinValue);
+        reloadedValid.DueDate.Should().BeOnOrAfter(Today);
+    }
+
     private static OrbitDbContext CreateInMemoryDbContext()
     {
         var options = new DbContextOptionsBuilder<OrbitDbContext>()
@@ -287,7 +364,9 @@ public class HabitDueDateAdvancementServiceTests
         return new OrbitDbContext(options);
     }
 
-    private static HabitDueDateAdvancementService CreateService(OrbitDbContext dbContext)
+    private static HabitDueDateAdvancementService CreateService(
+        OrbitDbContext dbContext,
+        ILogger<HabitDueDateAdvancementService>? logger = null)
     {
         var serviceProvider = new ServiceCollection()
             .AddSingleton(dbContext)
@@ -295,8 +374,26 @@ public class HabitDueDateAdvancementServiceTests
         var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
         return new HabitDueDateAdvancementService(
             scopeFactory,
-            NullLogger<HabitDueDateAdvancementService>.Instance,
+            logger ?? NullLogger<HabitDueDateAdvancementService>.Instance,
             new ConfigurationBuilder().Build());
+    }
+
+    private sealed class ThrowOnSkippedLogger : ILogger<HabitDueDateAdvancementService>
+    {
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (eventId.Id == 5)
+                throw new InvalidOperationException("Simulated per row failure");
+        }
     }
 
     [Fact]

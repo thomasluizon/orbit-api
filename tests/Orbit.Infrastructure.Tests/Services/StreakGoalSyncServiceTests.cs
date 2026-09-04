@@ -384,10 +384,12 @@ public class StreakGoalSyncServiceTests
         unitOfWork ??= CreateUnitOfWork(dbContext);
         var userDateService = Substitute.For<IUserDateService>();
         userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
+        userDateService.GetUserWeekStartDayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(1);
         var goalCompletionService = new GoalCompletionService(
             new GenericRepository<Goal>(dbContext),
             gamificationService,
-            unitOfWork);
+            unitOfWork,
+            userDateService);
         var serviceProvider = new ServiceCollection()
             .AddSingleton(dbContext)
             .AddSingleton(gamificationService)

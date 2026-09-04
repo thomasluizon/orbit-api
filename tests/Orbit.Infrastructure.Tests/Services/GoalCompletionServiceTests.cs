@@ -146,6 +146,54 @@ public class GoalCompletionServiceTests
     }
 
     [Fact]
+    public async Task SyncDerivedGoals_SundayStartInterval_PersistsOwnerBoundaryStreak()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var dbContext = factory.Context;
+        var user = User.Create("Sunday User", "sunday@example.com").Value;
+        user.SetWeekStartDay(0).IsSuccess.Should().BeTrue();
+        var anchor = new DateOnly(2026, 8, 10);
+        var evaluationDate = new DateOnly(2026, 9, 6);
+        var habitResult = Habit.Create(new HabitCreateParams(
+            user.Id,
+            "Biweekly Friday",
+            FrequencyUnit.Day,
+            1,
+            anchor,
+            Days: [DayOfWeek.Sunday],
+            IntervalWeeks: 2));
+        habitResult.IsSuccess.Should().BeTrue(habitResult.Error);
+        var habit = habitResult.Value;
+        habit.Log(new DateOnly(2026, 8, 23), advanceDueDate: false);
+        habit.Log(evaluationDate, advanceDueDate: false);
+        var goalResult = Goal.Create(new Goal.CreateGoalParams(
+            user.Id,
+            "Two active weeks",
+            3,
+            "weeks",
+            Type: GoalType.Streak));
+        goalResult.IsSuccess.Should().BeTrue(goalResult.Error);
+        var goal = goalResult.Value;
+        goal.AddHabit(habit);
+        dbContext.AddRange(user, habit, goal);
+        await dbContext.SaveChangesAsync();
+        dbContext.ChangeTracker.Clear();
+
+        var unitOfWork = CreateUnitOfWork(dbContext);
+        var service = CreateCompletionService(
+            dbContext,
+            Substitute.For<IGamificationService>(),
+            unitOfWork,
+            weekStartDay: 0);
+
+        var updates = await service.SyncDerivedGoalsAsync(user.Id, [goal.Id], evaluationDate);
+
+        updates.Should().ContainSingle(update => update.CurrentValue == 2);
+        var persistedGoal = await dbContext.Goals.AsNoTracking().SingleAsync(candidate => candidate.Id == goal.Id);
+        persistedGoal.CurrentValue.Should().Be(2);
+    }
+
+    [Fact]
     public async Task LinkGoalsToHabit_TwoGoalsComplete_PersistsEachBeforeItsAward()
     {
         using var factory = new SqliteOrbitDbContextFactory();
@@ -298,8 +346,17 @@ public class GoalCompletionServiceTests
     private static IGoalCompletionService CreateCompletionService(
         OrbitDbContext dbContext,
         IGamificationService gamification,
-        IUnitOfWork unitOfWork) =>
-        new GoalCompletionService(new GenericRepository<Goal>(dbContext), gamification, unitOfWork);
+        IUnitOfWork unitOfWork,
+        int weekStartDay = 1)
+    {
+        var userDateService = Substitute.For<IUserDateService>();
+        userDateService.GetUserWeekStartDayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(weekStartDay);
+        return new GoalCompletionService(
+            new GenericRepository<Goal>(dbContext),
+            gamification,
+            unitOfWork,
+            userDateService);
+    }
 
     private static IUnitOfWork CreateUnitOfWork(OrbitDbContext dbContext) =>
         new UnitOfWork(dbContext, new DatabaseConnectionSettings());
@@ -426,7 +483,7 @@ public class GoalCompletionServiceTests
                         cancellationToken);
                 var habit = goal.Habits.Single();
                 habit.Unlog(Today).IsSuccess.Should().BeTrue();
-                GoalProgressSyncService.SyncCurrentProgress(goal, Today).Synced.Should().BeTrue();
+                GoalProgressSyncService.SyncCurrentProgress(goal, Today, 1).Synced.Should().BeTrue();
                 await dbContext.SaveChangesAsync(cancellationToken);
                 dbContext.ChangeTracker.Clear();
             }

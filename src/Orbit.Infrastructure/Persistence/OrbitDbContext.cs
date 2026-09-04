@@ -761,6 +761,7 @@ public class OrbitDbContext : DbContext
             entity.HasOne<User>().WithMany().HasForeignKey(h => h.UserId).OnDelete(DeleteBehavior.Cascade);
 
             entity.Property(h => h.GoogleEventId).HasMaxLength(1024);
+            entity.Property(h => h.IntervalWeeks).HasColumnType("integer");
             entity.HasIndex(h => new { h.UserId, h.GoogleEventId })
                 .HasFilter("\"GoogleEventId\" IS NOT NULL AND \"IsDeleted\" = FALSE")
                 .IsUnique();

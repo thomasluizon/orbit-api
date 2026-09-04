@@ -20,12 +20,13 @@ public sealed partial class AiRetrospectiveService(
         DateOnly dateTo,
         string period,
         string language,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        int weekStartDay = 1)
     {
         if (habits.Count == 0)
             return Result.Failure<RetrospectiveNarrative>(ErrorMessages.NoHabitsForPeriod);
 
-        var prompt = BuildRetrospectivePrompt(habits, dateFrom, dateTo, period, language);
+        var prompt = BuildRetrospectivePrompt(habits, dateFrom, dateTo, period, language, weekStartDay);
 
         if (logger.IsEnabled(LogLevel.Debug))
             LogGeneratingRetrospective(logger, period, dateFrom, dateTo, language);
@@ -143,7 +144,8 @@ public sealed partial class AiRetrospectiveService(
         DateOnly dateFrom,
         DateOnly dateTo,
         string period,
-        string language)
+        string language,
+        int weekStartDay)
     {
         var languageName = LocaleHelper.GetAiLanguageName(language);
 
@@ -151,7 +153,7 @@ public sealed partial class AiRetrospectiveService(
 
         var totalDays = dateTo.DayNumber - dateFrom.DayNumber + 1;
         var (habitSection, totalMet, totalScheduled, badHabitSlips) =
-            BuildHabitBreakdown(habits, dateFrom, dateTo, totalDays);
+            BuildHabitBreakdown(habits, dateFrom, dateTo, totalDays, weekStartDay);
 
         var overallRate = totalScheduled > 0 ? (int)Math.Round(100.0 * totalMet / totalScheduled) : 0;
 
@@ -184,7 +186,7 @@ public sealed partial class AiRetrospectiveService(
     }
 
     private static (string HabitSection, int TotalMet, int TotalScheduled, int BadHabitSlips) BuildHabitBreakdown(
-        List<Habit> habits, DateOnly dateFrom, DateOnly dateTo, int totalDays)
+        List<Habit> habits, DateOnly dateFrom, DateOnly dateTo, int totalDays, int weekStartDay)
     {
         var habitLines = new List<string>();
         var totalMet = 0;
@@ -193,14 +195,14 @@ public sealed partial class AiRetrospectiveService(
 
         foreach (var habit in habits.Where(h => h.ParentHabitId is null))
         {
-            var scheduledCount = HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo).Count;
+            var scheduledCount = HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo, weekStartDay).Count;
             var completedCount = habit.Logs.Count(l => l.Date >= dateFrom && l.Date <= dateTo && l.Value > 0);
 
             if (scheduledCount == 0 && completedCount == 0)
                 continue;
 
             AppendParentHabitLine(habitLines, habit, scheduledCount, completedCount, totalDays, ref badHabitSlips);
-            AppendChildHabitLines(habitLines, habits, habit.Id, dateFrom, dateTo);
+            AppendChildHabitLines(habitLines, habits, habit.Id, dateFrom, dateTo, weekStartDay);
 
             if (habit.IsBadHabit)
                 continue;
@@ -229,12 +231,12 @@ public sealed partial class AiRetrospectiveService(
     }
 
     private static void AppendChildHabitLines(
-        List<string> lines, List<Habit> allHabits, Guid parentId, DateOnly dateFrom, DateOnly dateTo)
+        List<string> lines, List<Habit> allHabits, Guid parentId, DateOnly dateFrom, DateOnly dateTo, int weekStartDay)
     {
         foreach (var child in allHabits.Where(h => h.ParentHabitId == parentId))
         {
             var childLogs = child.Logs.Count(l => l.Date >= dateFrom && l.Date <= dateTo && l.Value > 0);
-            var childScheduled = HabitScheduleService.GetScheduledDates(child, dateFrom, dateTo).Count;
+            var childScheduled = HabitScheduleService.GetScheduledDates(child, dateFrom, dateTo, weekStartDay).Count;
             var childMet = Math.Min(childLogs, childScheduled);
             var childRate = childScheduled > 0 ? (int)Math.Round(100.0 * childMet / childScheduled) : 0;
             lines.Add($"  - {child.Title}: {childMet}/{childScheduled} ({childRate}%)");

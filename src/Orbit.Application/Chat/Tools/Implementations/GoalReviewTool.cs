@@ -28,6 +28,7 @@ public class GoalReviewTool(
             return ToolResult.FromFailure(gateCheck);
 
         var userToday = await userDateService.GetUserTodayAsync(userId, ct);
+        var weekStartDay = await userDateService.GetUserWeekStartDayAsync(userId, ct);
         var freshValues = await goalProgressReadSyncer.ComputeFreshValuesAsync(userId, userToday, ct);
         var streakWindowStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
 
@@ -45,7 +46,7 @@ public class GoalReviewTool(
             if (freshValues.TryGetValue(goal.Id, out var freshValue))
                 GoalProgressSyncService.ApplyReadValue(goal, freshValue);
 
-            var m = GoalMetricsCalculator.Calculate(goal, userToday);
+            var m = GoalMetricsCalculator.Calculate(goal, userToday, weekStartDay);
             sb.AppendLine($"Goal: \"{goal.Title}\" | {goal.CurrentValue}/{goal.TargetValue} {goal.Unit} ({m.ProgressPercentage}%)");
             sb.AppendLine($"  Status: {m.TrackingStatus} | Velocity: {m.VelocityPerDay} {goal.Unit}/day");
             if (m.ProjectedCompletionDate.HasValue)

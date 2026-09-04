@@ -11,7 +11,7 @@ namespace Orbit.Application.Goals.Queries;
 /// <see cref="GoalDetailDto"/>. Callers that also need goal metrics reuse <see cref="Goal"/> and
 /// <see cref="UserToday"/> rather than reloading.
 /// </summary>
-internal record GoalDetailResult(Goal Goal, DateOnly UserToday, GoalDetailDto Dto);
+internal record GoalDetailResult(Goal Goal, DateOnly UserToday, int WeekStartDay, GoalDetailDto Dto);
 
 /// <summary>
 /// Loads a single owner-scoped goal with its progress logs and windowed habit logs, applies the
@@ -28,6 +28,7 @@ internal static class GoalDetailLoader
         CancellationToken cancellationToken)
     {
         var userToday = await userDateService.GetUserTodayAsync(userId, cancellationToken);
+        var weekStartDay = await userDateService.GetUserWeekStartDayAsync(userId, cancellationToken);
         var goals = await goalRepository.FindAsync(
             g => g.Id == goalId && g.UserId == userId,
             q => q.Include(g => g.ProgressLogs)
@@ -38,7 +39,7 @@ internal static class GoalDetailLoader
         if (goal is null)
             return null;
 
-        GoalProgressSyncService.ApplyReadValue(goal, userToday);
+        GoalProgressSyncService.ApplyReadValue(goal, userToday, weekStartDay);
 
         var progressPercentage = goal.TargetValue > 0
             ? Math.Min(100, Math.Round(goal.CurrentValue / goal.TargetValue * 100, 1))
@@ -59,6 +60,6 @@ internal static class GoalDetailLoader
             goal.CompletedAtUtc, progressPercentage, progressHistory, linkedHabits,
             goal.IsProgressDerived);
 
-        return new GoalDetailResult(goal, userToday, dto);
+        return new GoalDetailResult(goal, userToday, weekStartDay, dto);
     }
 }

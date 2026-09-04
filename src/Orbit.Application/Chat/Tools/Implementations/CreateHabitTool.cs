@@ -42,6 +42,7 @@ public class CreateHabitTool(
                 @enum = JsonSchemaTypes.FrequencyUnitEnum
             },
             frequency_quantity = new { type = JsonSchemaTypes.Integer, description = "How often (e.g. every 2 days). Defaults to 1." },
+            interval_weeks = new { type = JsonSchemaTypes.Integer, description = "Repeat interval in weeks. Omit for every week. Minimum 1." },
             days = new
             {
                 type = JsonSchemaTypes.Array,
@@ -117,6 +118,7 @@ public class CreateHabitTool(
                         emoji = new { type = JsonSchemaTypes.String, description = "Emoji used as the sub-habit icon. Pick a relevant emoji when clear.", nullable = true },
                         frequency_unit = new { type = JsonSchemaTypes.String, @enum = JsonSchemaTypes.FrequencyUnitEnum },
                         frequency_quantity = new { type = JsonSchemaTypes.Integer },
+                        interval_weeks = new { type = JsonSchemaTypes.Integer, description = "Repeat interval in weeks. Minimum 1." },
                         days = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String } },
                         due_date = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD" },
                         is_bad_habit = new { type = JsonSchemaTypes.Boolean },
@@ -220,7 +222,8 @@ public class CreateHabitTool(
             IsFlexible: JsonArgumentParser.GetOptionalBool(args, "is_flexible") ?? false,
             EndDate: JsonArgumentParser.ParseDateOnly(args, "end_date"),
             ScheduledReminders: scheduledReminders,
-            Emoji: JsonArgumentParser.GetOptionalString(args, "emoji")));
+            Emoji: JsonArgumentParser.GetOptionalString(args, "emoji"),
+            IntervalWeeks: JsonArgumentParser.GetOptionalInt(args, "interval_weeks")));
     }
 
     private async Task<ToolResult?> CreateInlineSubHabitsAsync(
@@ -240,7 +243,15 @@ public class CreateHabitTool(
 
         foreach (var sub in subEl.EnumerateArray())
         {
-            var childResult = BuildChildHabit(sub, userId, parent.Id, parentFreqUnit, parentFreqQty, parentDays, parentDueDate);
+            var childResult = BuildChildHabit(
+                sub,
+                userId,
+                parent.Id,
+                parentFreqUnit,
+                parentFreqQty,
+                parentDays,
+                parentDueDate,
+                parent.IntervalWeeks);
             if (childResult.IsFailure)
                 return ToolResult.FromFailure(childResult);
 
@@ -253,24 +264,34 @@ public class CreateHabitTool(
     private static Domain.Common.Result<Habit> BuildChildHabit(
         JsonElement sub, Guid userId, Guid parentId,
         FrequencyUnit? parentFreqUnit, int? parentFreqQty,
-        List<DayOfWeek>? parentDays, DateOnly parentDueDate)
+        List<DayOfWeek>? parentDays, DateOnly parentDueDate, int? parentIntervalWeeks)
     {
+        var subFrequencyUnit = JsonArgumentParser.ParseFrequencyUnit(sub);
+        var subFrequencyQuantity = JsonArgumentParser.GetOptionalInt(sub, "frequency_quantity");
+        var subIntervalWeeks = JsonArgumentParser.GetOptionalInt(sub, "interval_weeks");
         var subDays = JsonArgumentParser.ParseDays(sub);
-        if (subDays is null || subDays.Count == 0)
+        var hasExplicitCadence = subFrequencyUnit is not null
+            || subFrequencyQuantity is not null
+            || subIntervalWeeks is not null
+            || subDays is not null;
+        var frequencyUnit = subFrequencyUnit ?? parentFreqUnit;
+        var frequencyQuantity = subFrequencyQuantity ?? (subFrequencyUnit is not null ? 1 : parentFreqQty);
+        if (subDays is null && frequencyUnit == FrequencyUnit.Day && frequencyQuantity == 1)
             subDays = parentDays;
 
         return Habit.Create(new HabitCreateParams(
             userId,
             JsonArgumentParser.GetOptionalString(sub, TitleProperty) ?? "Untitled",
-            JsonArgumentParser.ParseFrequencyUnit(sub) ?? parentFreqUnit,
-            JsonArgumentParser.GetOptionalInt(sub, "frequency_quantity") ?? parentFreqQty,
+            frequencyUnit,
+            frequencyQuantity,
             JsonArgumentParser.ParseDateOnly(sub, "due_date") ?? parentDueDate,
             JsonArgumentParser.GetOptionalString(sub, "description"),
             Days: subDays,
             IsBadHabit: JsonArgumentParser.GetOptionalBool(sub, "is_bad_habit") ?? false,
             ParentHabitId: parentId,
             Emoji: JsonArgumentParser.GetOptionalString(sub, "emoji"),
-            ChecklistItems: JsonArgumentParser.ParseChecklistItems(sub)));
+            ChecklistItems: JsonArgumentParser.ParseChecklistItems(sub),
+            IntervalWeeks: subIntervalWeeks ?? (hasExplicitCadence ? null : parentIntervalWeeks)));
     }
 
     private async Task AssignTagsFromArgsAsync(JsonElement args, Habit habit, Guid userId, CancellationToken ct)

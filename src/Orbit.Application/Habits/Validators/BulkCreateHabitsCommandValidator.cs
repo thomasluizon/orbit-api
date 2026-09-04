@@ -32,6 +32,8 @@ public class BulkCreateHabitsCommandValidator : AbstractValidator<BulkCreateHabi
                 .WithMessage("Frequency quantity is required when frequency unit is set")
                 .When(h => h.FrequencyUnit is not null);
 
+            SharedHabitRules.AddIntervalWeeksRules(habit.RuleFor(h => h.IntervalWeeks));
+
             habit.RuleFor(h => h.Tags)
                 .Must(tags => tags!.Count <= AppConstants.MaxTagsPerHabit)
                 .WithMessage($"Cannot assign more than {AppConstants.MaxTagsPerHabit} tags per habit")

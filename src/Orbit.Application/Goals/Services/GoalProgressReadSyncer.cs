@@ -11,11 +11,14 @@ public interface IGoalProgressReadSyncer
     Task<IReadOnlyDictionary<Guid, int>> ComputeFreshValuesAsync(Guid userId, DateOnly userToday, CancellationToken cancellationToken);
 }
 
-public class GoalProgressReadSyncer(IGenericRepository<Goal> goalRepository) : IGoalProgressReadSyncer
+public class GoalProgressReadSyncer(
+    IGenericRepository<Goal> goalRepository,
+    IUserDateService userDateService) : IGoalProgressReadSyncer
 {
     public async Task<IReadOnlyDictionary<Guid, int>> ComputeFreshValuesAsync(
         Guid userId, DateOnly userToday, CancellationToken cancellationToken)
     {
+        var weekStartDay = await userDateService.GetUserWeekStartDayAsync(userId, cancellationToken);
         var candidates = await goalRepository.FindAsync(
             g => g.UserId == userId
                  && g.Status == GoalStatus.Active
@@ -42,7 +45,7 @@ public class GoalProgressReadSyncer(IGenericRepository<Goal> goalRepository) : I
         var freshValues = new Dictionary<Guid, int>();
         foreach (var goal in goals)
         {
-            var readValue = GoalProgressSyncService.ComputeReadValue(goal, userToday);
+            var readValue = GoalProgressSyncService.ComputeReadValue(goal, userToday, weekStartDay);
             if (readValue.HasValue)
                 freshValues[goal.Id] = readValue.Value;
         }

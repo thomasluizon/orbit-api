@@ -186,7 +186,8 @@ public class ExportUserDataQueryHandler(
             habit.Days.Select(d => d.ToString()).ToList(),
             habit.ChecklistItems.ToList(),
             habit.CreatedAtUtc,
-            logs);
+            logs,
+            habit.IntervalWeeks);
     }
 
     private static ExportedGoal MapGoal(

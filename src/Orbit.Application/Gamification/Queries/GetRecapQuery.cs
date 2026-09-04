@@ -63,14 +63,20 @@ public class GetRecapQueryHandler(
             return Result.Failure<RecapResponse>(ErrorMessages.RecapMonthBeforeAccount);
 
         if (isClosedMonth)
-            return await HandleClosedMonthAsync(request, userTimeZone, cancellationToken);
+            return await HandleClosedMonthAsync(request, userTimeZone, user.WeekStartDay, cancellationToken);
 
-        return await BuildResponseAsync(request, userTimeZone, isClosedMonth: false, cancellationToken);
+        return await BuildResponseAsync(
+            request,
+            userTimeZone,
+            user.WeekStartDay,
+            isClosedMonth: false,
+            cancellationToken);
     }
 
     private async Task<Result<RecapResponse>> HandleClosedMonthAsync(
         GetRecapQuery request,
         TimeZoneInfo userTimeZone,
+        int weekStartDay,
         CancellationToken cancellationToken)
     {
         var storedResponse = await closedMonthRecapStore.FindResponseJsonAsync(
@@ -100,6 +106,7 @@ public class GetRecapQueryHandler(
                 var result = await BuildResponseAsync(
                     request,
                     userTimeZone,
+                    weekStartDay,
                     isClosedMonth: true,
                     transactionToken);
                 if (result.IsFailure)
@@ -137,6 +144,7 @@ public class GetRecapQueryHandler(
     private async Task<Result<RecapResponse>> BuildResponseAsync(
         GetRecapQuery request,
         TimeZoneInfo userTimeZone,
+        int weekStartDay,
         bool isClosedMonth,
         CancellationToken cancellationToken)
     {
@@ -149,7 +157,13 @@ public class GetRecapQueryHandler(
         var streakState = await userStreakService.RecalculateAsync(
             request.UserId, awardFreezeIfEligible: false, cancellationToken);
 
-        var metrics = ComputeMetrics(request, habits, streakState, userTimeZone, isClosedMonth);
+        var metrics = ComputeMetrics(
+            request,
+            habits,
+            streakState,
+            userTimeZone,
+            weekStartDay,
+            isClosedMonth);
         var goalCompletions = await CountGoalCompletionsAsync(request, userTimeZone, cancellationToken);
 
         var shareDeepLink = isClosedMonth
@@ -207,6 +221,7 @@ public class GetRecapQueryHandler(
         IReadOnlyList<Habit> habits,
         UserStreakState? streakState,
         TimeZoneInfo userTimeZone,
+        int weekStartDay,
         bool isClosedMonth)
     {
         return isClosedMonth
@@ -216,13 +231,15 @@ public class GetRecapQueryHandler(
                 request.DateTo,
                 streakState?.CurrentStreak ?? 0,
                 streakState?.LongestStreak ?? 0,
-                userTimeZone)
+                userTimeZone,
+                weekStartDay)
             : RetrospectiveMetricsCalculator.Compute(
                 habits.ToList(),
                 request.DateFrom,
                 request.DateTo,
                 streakState?.CurrentStreak ?? 0,
-                streakState?.LongestStreak ?? 0);
+                streakState?.LongestStreak ?? 0,
+                weekStartDay);
     }
 
     private async Task<int> CountGoalCompletionsAsync(

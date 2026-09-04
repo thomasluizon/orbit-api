@@ -75,6 +75,25 @@ public class CreateHabitCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_WithIntervalWeeks_PersistsInterval()
+    {
+        var command = new CreateHabitCommand(
+            UserId,
+            "Run",
+            null,
+            FrequencyUnit.Day,
+            1,
+            IntervalWeeks: 2);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _habitRepo.Received(1).AddAsync(
+            Arg.Is<Habit>(habit => habit.IntervalWeeks == 2),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_ValidCommand_FiresOnboardingHabitCreatedSignal()
     {
         var command = new CreateHabitCommand(UserId, "Read", null, FrequencyUnit.Day, 1);

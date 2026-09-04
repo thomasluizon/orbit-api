@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Application.Habits.Commands;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -156,7 +157,21 @@ public class CreateSubHabitCommandHandlerTests
     [Fact]
     public async Task Handle_InheritParentFrequencyWithNoOverride_UsesParentCadence()
     {
-        var parent = CreateParentHabit();
+        var parent = Habit.Create(new HabitCreateParams(
+            UserId,
+            "Parent Habit",
+            FrequencyUnit.Day,
+            1,
+            DueDate: Today,
+            Days: [DayOfWeek.Monday],
+            IntervalWeeks: 2)).Value;
+        Habit? child = null;
+        _habitRepo.AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                child = call.Arg<Habit>();
+                return Task.CompletedTask;
+            });
         _habitRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
@@ -174,9 +189,55 @@ public class CreateSubHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _habitRepo.Received(1).AddAsync(
-            Arg.Is<Habit>(h => h.FrequencyUnit == FrequencyUnit.Day && h.FrequencyQuantity == 1),
-            Arg.Any<CancellationToken>());
+        child.Should().NotBeNull();
+        child!.FrequencyUnit.Should().Be(FrequencyUnit.Day);
+        child.FrequencyQuantity.Should().Be(1);
+        child.Days.Should().Equal(parent.Days);
+        child.IntervalWeeks.Should().Be(parent.IntervalWeeks).And.Be(2);
+
+        var rangeEnd = Today.AddDays(20);
+        var parentDates = HabitScheduleService.GetScheduledDates(parent, Today, rangeEnd, weekStartDay: 1);
+        var childDates = HabitScheduleService.GetScheduledDates(child, Today, rangeEnd, weekStartDay: 1);
+        childDates.Should().Equal(parentDates);
+        childDates.Should().NotContain(Today.AddDays(3));
+    }
+
+    [Fact]
+    public async Task Handle_ExplicitWeeklyCadenceUnderBiweeklyParent_DoesNotInheritInterval()
+    {
+        var parent = Habit.Create(new HabitCreateParams(
+            UserId, "Parent Habit", FrequencyUnit.Day, 1, DueDate: Today,
+            Days: [DayOfWeek.Monday],
+            IntervalWeeks: 2)).Value;
+        Habit? child = null;
+        _habitRepo.AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                child = call.Arg<Habit>();
+                return Task.CompletedTask;
+            });
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(parent);
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { parent }.AsReadOnly());
+
+        var result = await _handler.Handle(new CreateSubHabitCommand(
+            UserId, parent.Id, "Weekly Child", null,
+            FrequencyUnit: FrequencyUnit.Week,
+            FrequencyQuantity: 1,
+            InheritParentFrequency: true), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        child.Should().NotBeNull();
+        child!.FrequencyUnit.Should().Be(FrequencyUnit.Week);
+        child.FrequencyQuantity.Should().Be(1);
+        child.Days.Should().BeEmpty();
+        child.IntervalWeeks.Should().BeNull();
     }
 
     [Fact]

@@ -92,16 +92,29 @@ public partial class HabitDueDateAdvancementService(
         var advanced = 0;
         foreach (var habit in habits)
         {
-            if (!users.TryGetValue(habit.UserId, out var user)) continue;
+            try
+            {
+                if (!users.TryGetValue(habit.UserId, out var user)) continue;
 
-            var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
-            var userNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
-            var userToday = DateOnly.FromDateTime(userNow);
+                var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
+                var userNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+                var userToday = DateOnly.FromDateTime(userNow);
 
-            if (!ShouldAdvanceForUserToday(habit, userToday)) continue;
+                if (!ShouldAdvanceForUserToday(habit, userToday)) continue;
 
-            habit.CatchUpDueDate(userToday);
-            advanced++;
+                var result = habit.CatchUpDueDate(userToday, user.WeekStartDay);
+                if (result.IsFailure)
+                {
+                    LogHabitSkipped(logger, habit.Id, result.ErrorCode);
+                    continue;
+                }
+
+                advanced++;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                LogHabitUnexpectedError(logger, ex, habit.Id);
+            }
         }
 
         if (advanced > 0)
@@ -123,5 +136,11 @@ public partial class HabitDueDateAdvancementService(
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "Advanced DueDate for {Count} bad habits")]
     private static partial void LogDueDatesAdvanced(ILogger logger, int count);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Skipped due date advancement for habit {HabitId}: {ErrorCode}")]
+    private static partial void LogHabitSkipped(ILogger logger, Guid habitId, string? errorCode);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "Skipped due date advancement for habit {HabitId} after unexpected error")]
+    private static partial void LogHabitUnexpectedError(ILogger logger, Exception ex, Guid habitId);
 
 }

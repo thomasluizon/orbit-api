@@ -32,7 +32,11 @@ public class GetHabitMetricsQueryHandler(
             ? TimeZoneInfo.FindSystemTimeZoneById(user.TimeZone)
             : TimeZoneInfo.Utc;
         var today = HabitMetricsCalculator.GetUserToday(user);
-        return Result.Success(HabitMetricsCalculator.Calculate(habit, today, userTimeZone));
+        return Result.Success(HabitMetricsCalculator.Calculate(
+            habit,
+            today,
+            user.WeekStartDay,
+            userTimeZone));
 
     }
 }

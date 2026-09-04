@@ -2723,7 +2723,7 @@
       "Common": 36,
       "Gamification": 31,
       "Goals": 35,
-      "Habits": 74,
+      "Habits": 75,
       "Marketing": 4,
       "Notifications": 13,
       "Profile": 37,
@@ -2929,10 +2929,10 @@
       "Challenges": 14,
       "Chat": 61,
       "ChecklistTemplates": 9,
-      "Common": 186,
+      "Common": 187,
       "Gamification": 38,
       "Goals": 54,
-      "Habits": 87,
+      "Habits": 88,
       "Marketing": 6,
       "Notifications": 20,
       "Profile": 40,
@@ -5270,6 +5270,7 @@
           "GetHabitScheduleQuery",
           "GetHabitScheduleQueryHandler",
           "Habit",
+          "HabitLog",
           "Tag"
         ]
       },
@@ -5292,6 +5293,7 @@
           "GetHabitWidgetQuery",
           "GetHabitWidgetQueryHandler",
           "Habit",
+          "HabitLog",
           "User"
         ]
       },
@@ -5302,6 +5304,7 @@
           "GetRescheduleSuggestionQuery",
           "GetRescheduleSuggestionQueryHandler",
           "Habit",
+          "HabitLog",
           "User"
         ]
       },
@@ -5553,7 +5556,8 @@
         "testClass": "HabitScheduleServiceTests",
         "file": "tests/Orbit.Application.Tests/Services/HabitScheduleServiceTests.cs",
         "references": [
-          "Habit"
+          "Habit",
+          "HabitLog"
         ]
       },
       {

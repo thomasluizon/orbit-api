@@ -32,11 +32,13 @@ public class SkipHabitCommandHandler(
     public async Task<Result> Handle(SkipHabitCommand request, CancellationToken cancellationToken)
     {
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-        var loggableWindowStart = today.AddDays(-AppConstants.DefaultOverdueWindowDays);
+        var loggableWindowStart = today.AddDays(-AppConstants.MaxRangeDays);
 
         var habit = await repos.Habits.FindOneTrackedAsync(
             h => h.Id == request.HabitId,
-            q => q.Include(h => h.Logs.Where(l => l.Date >= loggableWindowStart)).Include(h => h.Goals),
+            q => q.Include(h => h.Logs.Where(l => l.Date >= loggableWindowStart))
+                  .Include(h => h.Goals)
+                  .AsSplitQuery(),
             cancellationToken);
 
         if (habit is null)
@@ -53,11 +55,21 @@ public class SkipHabitCommandHandler(
 
         var targetDate = request.Date ?? today;
 
-        var validationError = ValidateSkipTarget(habit, targetDate, today);
+        var weekStartDay = await userDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
+        var dueDateResolution = await HabitDueDateResolutionLoader.LoadAsync(
+            repos.HabitLogs,
+            [habit],
+            loggableWindowStart,
+            cancellationToken);
+        var validationError = ValidateSkipTarget(
+            habit,
+            targetDate,
+            today,
+            weekStartDay,
+            dueDateResolution.Contains(habit.Id));
         if (validationError is not null)
             return validationError;
 
-        var weekStartDay = await userDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
         var skipError = await ApplySkip(habit, targetDate, weekStartDay, cancellationToken);
         if (skipError is not null)
             return skipError;
@@ -86,7 +98,12 @@ public class SkipHabitCommandHandler(
         return Result.Success();
     }
 
-    private static Result? ValidateSkipTarget(Habit habit, DateOnly targetDate, DateOnly today)
+    private static Result? ValidateSkipTarget(
+        Habit habit,
+        DateOnly targetDate,
+        DateOnly today,
+        int weekStartDay,
+        bool dueDateResolved)
     {
         if (targetDate > today)
             return Result.Failure(ErrorMessages.CannotSkipFutureDate);
@@ -97,9 +114,15 @@ public class SkipHabitCommandHandler(
         if (!habit.IsFlexible && habit.DueDate > targetDate)
             return Result.Failure(ErrorMessages.HabitNotYetDue);
 
-        if (!habit.IsFlexible && !HabitScheduleService.IsHabitDueOnDate(habit, targetDate))
+        if (!HabitScheduleService.IsHabitDueOnDate(habit, targetDate, weekStartDay))
         {
-            var isOverdue = targetDate == today && HabitScheduleService.HasMissedPastOccurrence(habit, today);
+            var isOverdue = !habit.IsFlexible
+                && targetDate == today
+                && HabitScheduleService.HasMissedPastOccurrence(
+                    habit,
+                    today,
+                    weekStartDay,
+                    dueDateResolved);
             if (!isOverdue)
                 return Result.Failure(ErrorMessages.NotScheduledOnDate);
         }
@@ -123,7 +146,7 @@ public class SkipHabitCommandHandler(
         }
         else
         {
-            habit.AdvanceDueDate(targetDate);
+            habit.AdvanceDueDate(targetDate, weekStartDay);
         }
 
         return null;

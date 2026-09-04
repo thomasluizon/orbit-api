@@ -73,8 +73,19 @@ public partial class LogHabitCommandHandler(
             return Result.Failure<LogHabitResponse>(ErrorMessages.HabitNotOwned);
 
         var targetDate = request.Date ?? today;
+        var weekStartDay = await services.UserDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
+        var dueDateResolution = await HabitDueDateResolutionLoader.LoadAsync(
+            repos.HabitLogRepository,
+            [habit],
+            today.AddDays(-AppConstants.MaxRangeDays),
+            cancellationToken);
 
-        var dateValidation = ValidateTargetDate(habit, targetDate, today);
+        var dateValidation = ValidateTargetDate(
+            habit,
+            targetDate,
+            today,
+            weekStartDay,
+            dueDateResolution.Contains(habit.Id));
         if (dateValidation.IsFailure)
             return dateValidation.PropagateError<LogHabitResponse>();
 
@@ -93,7 +104,7 @@ public partial class LogHabitCommandHandler(
                 cancellationToken);
         }
 
-        return await HandleLogAsync(habit, request, targetDate, today, user, cancellationToken);
+        return await HandleLogAsync(habit, request, targetDate, today, weekStartDay, user, cancellationToken);
     }
 
     private async Task<Result<Habit>> PrepareUnlogAsync(
@@ -111,7 +122,12 @@ public partial class LogHabitCommandHandler(
         return Result.Success(habit);
     }
 
-    private static Result ValidateTargetDate(Habit habit, DateOnly targetDate, DateOnly today)
+    private static Result ValidateTargetDate(
+        Habit habit,
+        DateOnly targetDate,
+        DateOnly today,
+        int weekStartDay,
+        bool dueDateResolved)
     {
         if (targetDate > today && habit.FrequencyUnit is not null)
             return Result.Failure(ErrorMessages.CannotLogFutureDate);
@@ -119,10 +135,16 @@ public partial class LogHabitCommandHandler(
         if (targetDate < today.AddDays(-AppConstants.DefaultOverdueWindowDays))
             return Result.Failure(ErrorMessages.BeyondOverdueWindow);
 
-        if (habit.FrequencyUnit is not null && !habit.IsFlexible
-            && !HabitScheduleService.IsHabitDueOnDate(habit, targetDate))
+        if (habit.FrequencyUnit is not null
+            && !HabitScheduleService.IsHabitDueOnDate(habit, targetDate, weekStartDay))
         {
-            var isOverdue = targetDate == today && HabitScheduleService.HasMissedPastOccurrence(habit, today);
+            var isOverdue = !habit.IsFlexible
+                && targetDate == today
+                && HabitScheduleService.HasMissedPastOccurrence(
+                    habit,
+                    today,
+                    weekStartDay,
+                    dueDateResolved);
             if (!isOverdue)
                 return Result.Failure(ErrorMessages.NotScheduledOnDate);
         }
@@ -185,7 +207,7 @@ public partial class LogHabitCommandHandler(
     }
 
     private async Task<Result<LogHabitResponse>> HandleLogAsync(
-        Habit habit, LogHabitCommand request, DateOnly targetDate, DateOnly today,
+        Habit habit, LogHabitCommand request, DateOnly targetDate, DateOnly today, int weekStartDay,
         User? user, CancellationToken cancellationToken)
     {
         var isFirstCompletionToday = user is not null
@@ -199,7 +221,10 @@ public partial class LogHabitCommandHandler(
         var attempt = 1;
         while (true)
         {
-            var logResult = habit.Log(targetDate, advanceDueDate: shouldAdvanceDueDate);
+            var logResult = habit.Log(
+                targetDate,
+                advanceDueDate: shouldAdvanceDueDate,
+                weekStartDay: weekStartDay);
             if (logResult.IsFailure)
                 return logResult.PropagateError<LogHabitResponse>();
             logEntity = logResult.Value;
@@ -258,7 +283,7 @@ public partial class LogHabitCommandHandler(
 
     private Task<Habit?> LoadLoggableHabitAsync(Guid habitId, DateOnly today, CancellationToken cancellationToken)
     {
-        var loggableWindowStart = today.AddDays(-AppConstants.DefaultOverdueWindowDays);
+        var loggableWindowStart = today.AddDays(-AppConstants.MaxRangeDays);
         return repos.HabitRepository.FindOneTrackedAsync(
             h => h.Id == habitId,
             q => q.Include(h => h.Logs.Where(l => l.Date >= loggableWindowStart))

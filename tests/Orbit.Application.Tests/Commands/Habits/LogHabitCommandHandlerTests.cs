@@ -295,6 +295,7 @@ public class LogHabitCommandHandlerTests
         var retrospectiveService = Substitute.For<IRetrospectiveService>();
         var freshNarrative = new RetrospectiveNarrative("Fresh", "", "", "");
         payGate.CanUseRetrospective(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(1);
         retrospectiveService.GenerateRetrospectiveAsync(
             Arg.Any<List<Habit>>(),
             dateFrom,
@@ -308,6 +309,7 @@ public class LogHabitCommandHandlerTests
             payGate,
             retrospectiveService,
             _userStreakService,
+            _userDateService,
             _cache);
 
         await _handler.Handle(new LogHabitCommand(UserId, habit.Id), CancellationToken.None);
@@ -359,6 +361,30 @@ public class LogHabitCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_EveryTwoYearsDueMoreThanOneYearAgo_LogsOverdueOccurrence()
+    {
+        var dueDate = new DateOnly(2025, 1, 6);
+        var today = new DateOnly(2026, 7, 1);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Biennial", FrequencyUnit.Year, 2, DueDate: dueDate)).Value;
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(today);
+        _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(1);
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(habit);
+
+        var result = await _handler.Handle(
+            new LogHabitCommand(UserId, habit.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _habitLogRepo.Received(1).AddAsync(
+            Arg.Is<HabitLog>(log => log.Date == today),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_NotScheduledOnDate_ReturnsFailure()
     {
         var habit = Habit.Create(new HabitCreateParams(
@@ -377,6 +403,111 @@ public class LogHabitCommandHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be("Habit is not scheduled on this date.");
+    }
+
+    [Fact]
+    public async Task Handle_IntervalChangedAfterAdvancement_RejectsInactiveWeekThenAllowsMissedActiveDay()
+    {
+        var anchor = new DateOnly(2025, 1, 6);
+        var inactiveDueDate = anchor.AddDays(7);
+        var inactiveToday = inactiveDueDate.AddDays(1);
+        var missedActiveDay = anchor.AddDays(14);
+        var catchUpDay = missedActiveDay.AddDays(1);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Alternating", FrequencyUnit.Day, 1, DueDate: anchor,
+            Days: [DayOfWeek.Monday])).Value;
+        habit.AdvanceDueDate(anchor.AddDays(6), weekStartDay: 1);
+        typeof(Habit).GetProperty(nameof(Habit.IntervalWeeks))!.SetValue(habit, 2);
+        habit.DueDate.Should().Be(inactiveDueDate);
+
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(inactiveToday, catchUpDay);
+        _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(1);
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(habit);
+
+        var inactiveResult = await _handler.Handle(
+            new LogHabitCommand(UserId, habit.Id), CancellationToken.None);
+        var activeResult = await _handler.Handle(
+            new LogHabitCommand(UserId, habit.Id), CancellationToken.None);
+
+        inactiveResult.IsFailure.Should().BeTrue();
+        inactiveResult.ErrorCode.Should().Be(ErrorCodes.NotScheduledOnDate);
+        activeResult.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_CadenceEditWithEveryActiveOccurrenceResolved_RejectsOffScheduleToday()
+    {
+        var anchor = new DateOnly(2025, 1, 6);
+        var inactiveDueDate = anchor.AddDays(7);
+        var resolvedActiveDay = anchor.AddDays(14);
+        var offScheduleToday = resolvedActiveDay.AddDays(1);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId,
+            "Alternating",
+            FrequencyUnit.Day,
+            1,
+            DueDate: anchor,
+            Days: [DayOfWeek.Monday])).Value;
+        habit.AdvanceDueDate(anchor.AddDays(6), weekStartDay: 1);
+        typeof(Habit).GetProperty(nameof(Habit.IntervalWeeks))!.SetValue(habit, 2);
+        habit.DueDate.Should().Be(inactiveDueDate);
+        habit.Log(resolvedActiveDay, advanceDueDate: false).IsSuccess.Should().BeTrue();
+
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(offScheduleToday);
+        _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(1);
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(habit);
+
+        var result = await _handler.Handle(
+            new LogHabitCommand(UserId, habit.Id),
+            CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.NotScheduledOnDate);
+        await _habitLogRepo.DidNotReceive().AddAsync(
+            Arg.Any<HabitLog>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ResolvedMultiYearDueDateOutsideLoadedWindow_RejectsOffScheduleToday()
+    {
+        var oldDueDate = Today.AddYears(-2);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId,
+            "Renew passport",
+            FrequencyUnit.Year,
+            3,
+            oldDueDate)).Value;
+        var resolvedDueDate = HabitLog.Create(habit.Id, oldDueDate, 1);
+        _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(1);
+        _habitRepo.FindOneTrackedAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(habit);
+        _habitLogRepo.FindAsync(
+                Arg.Any<Expression<Func<HabitLog, bool>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns([resolvedDueDate]);
+
+        var result = await _handler.Handle(
+            new LogHabitCommand(UserId, habit.Id),
+            CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.NotScheduledOnDate);
+        await _habitLogRepo.DidNotReceive().AddAsync(
+            Arg.Any<HabitLog>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

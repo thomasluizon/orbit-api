@@ -158,7 +158,7 @@ public class AchievementProgressServiceTests
             .Returns(new List<HabitLog>());
         StubCounts();
 
-        var badHabitRawStreak = HabitMetricsCalculator.Calculate(badHabit, Today).CurrentStreak;
+        var badHabitRawStreak = HabitMetricsCalculator.Calculate(badHabit, Today, 1).CurrentStreak;
 
         var metrics = await _service.LoadAsync(user, new HashSet<string>(), CancellationToken.None);
 

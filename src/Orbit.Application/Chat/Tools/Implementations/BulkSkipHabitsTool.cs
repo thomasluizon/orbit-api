@@ -44,6 +44,9 @@ public class BulkSkipHabitsTool(
         if (!habit.IsFlexible && habit.DueDate > targetDate)
             return false;
 
+        if (!HabitScheduleService.IsHabitDueOnDate(habit, targetDate, weekStartDay))
+            return false;
+
         if (habit.IsFlexible)
         {
             var remaining = HabitScheduleService.GetRemainingCompletions(habit, targetDate, habit.Logs, weekStartDay);
@@ -58,7 +61,7 @@ public class BulkSkipHabitsTool(
         }
         else
         {
-            habit.AdvanceDueDate(targetDate);
+            habit.AdvanceDueDate(targetDate, weekStartDay);
         }
 
         return true;

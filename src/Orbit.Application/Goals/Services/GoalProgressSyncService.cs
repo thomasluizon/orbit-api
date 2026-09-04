@@ -10,7 +10,7 @@ public readonly record struct GoalProgressSyncOutcome(bool Synced, bool JustComp
 
 public static class GoalProgressSyncService
 {
-    public static int? ComputeReadValue(Goal goal, DateOnly userToday)
+    public static int? ComputeReadValue(Goal goal, DateOnly userToday, int weekStartDay)
     {
         if (goal.Status != GoalStatus.Active)
             return null;
@@ -18,19 +18,19 @@ public static class GoalProgressSyncService
         return goal.Type switch
         {
             GoalType.Standard when goal.HasActiveLinkedHabits => CalculateStandardCompletions(goal),
-            GoalType.Streak => GoalStreakSyncService.ComputeReadValue(goal, userToday),
+            GoalType.Streak => GoalStreakSyncService.ComputeReadValue(goal, userToday, weekStartDay),
             _ => null
         };
     }
 
-    public static GoalProgressSyncOutcome SyncCurrentProgress(Goal goal, DateOnly userToday)
+    public static GoalProgressSyncOutcome SyncCurrentProgress(Goal goal, DateOnly userToday, int weekStartDay)
     {
         if (goal.Status != GoalStatus.Active)
             return GoalProgressSyncOutcome.NotSynced;
 
         if (goal.Type == GoalType.Streak)
         {
-            var streakOutcome = GoalStreakSyncService.SyncCurrentStreak(goal, userToday);
+            var streakOutcome = GoalStreakSyncService.SyncCurrentStreak(goal, userToday, weekStartDay);
             return new GoalProgressSyncOutcome(streakOutcome.Synced, streakOutcome.JustCompleted);
         }
 
@@ -41,9 +41,9 @@ public static class GoalProgressSyncService
         return new GoalProgressSyncOutcome(Synced: result.IsSuccess, JustCompleted: result.IsSuccess && result.Value);
     }
 
-    public static void ApplyReadValue(Goal goal, DateOnly userToday)
+    public static void ApplyReadValue(Goal goal, DateOnly userToday, int weekStartDay)
     {
-        var readValue = ComputeReadValue(goal, userToday);
+        var readValue = ComputeReadValue(goal, userToday, weekStartDay);
         if (!readValue.HasValue)
             return;
 

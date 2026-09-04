@@ -142,10 +142,15 @@ public class HabitToolsTests
 
         AgentExecuteOperationRequest request = null!;
         string result = string.Empty;
-        request = await CapturedRequestAsync(async () => result = await _tools.CreateHabit(_user, "New Habit", "2026-04-01"));
+        request = await CapturedRequestAsync(async () => result = await _tools.CreateHabit(
+            _user,
+            "New Habit",
+            "2026-04-01",
+            intervalWeeks: 2));
 
         request.OperationId.Should().Be("create_habit");
         request.Surface.Should().Be(AgentExecutionSurface.Mcp);
+        request.Arguments.GetProperty("interval_weeks").GetInt32().Should().Be(2);
         result.Should().Contain("Created habit 'New Habit'");
         result.Should().Contain(newId.ToString());
     }
@@ -179,10 +184,15 @@ public class HabitToolsTests
 
         AgentExecuteOperationRequest request = null!;
         string result = string.Empty;
-        request = await CapturedRequestAsync(async () => result = await _tools.UpdateHabit(_user, habitId.ToString(), "Updated Title"));
+        request = await CapturedRequestAsync(async () => result = await _tools.UpdateHabit(
+            _user,
+            habitId.ToString(),
+            "Updated Title",
+            intervalWeeks: 3));
 
         request.OperationId.Should().Be("update_habit");
         request.Surface.Should().Be(AgentExecutionSurface.Mcp);
+        request.Arguments.GetProperty("interval_weeks").GetInt32().Should().Be(3);
         result.Should().Contain("Updated habit");
     }
 

@@ -80,7 +80,7 @@ public class BulkCreateHabitsToolTests
 
         var result = await Execute("""
             {"habits": [
-              {"title": "Morning routine", "frequency_unit": "day", "frequency_quantity": 1,
+              {"title": "Morning routine", "frequency_unit": "day", "frequency_quantity": 1, "interval_weeks": 2,
                "sub_habits": [{"title": "Make bed"}, {"description": "child missing title"}]},
               {"title": "Gym", "is_bad_habit": false}
             ]}
@@ -90,6 +90,7 @@ public class BulkCreateHabitsToolTests
         result.EntityName.Should().Be("1/2 habits created");
         result.Payload.Should().BeOfType<BulkCreateResult>();
         captured!.Habits.Should().HaveCount(2);
+        captured.Habits[0].IntervalWeeks.Should().Be(2);
         captured.Habits[0].SubHabits.Should().ContainSingle().Which.Title.Should().Be("Make bed");
     }
 

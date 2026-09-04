@@ -32,6 +32,11 @@ public static class SharedHabitRules
         rule.GreaterThan(0);
     }
 
+    public static void AddIntervalWeeksRules<T>(IRuleBuilder<T, int?> rule)
+    {
+        rule.InclusiveBetween(1, AppConstants.MaxIntervalWeeks);
+    }
+
     public static void AddDaysRules<T>(
         AbstractValidator<T> validator,
         System.Linq.Expressions.Expression<Func<T, IReadOnlyList<System.DayOfWeek>?>> daysExpr,

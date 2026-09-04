@@ -87,7 +87,8 @@ public class BulkCreateHabitsTool(
             IsFlexible: JsonArgumentParser.GetOptionalBool(el, "is_flexible") ?? false,
             ChecklistItems: JsonArgumentParser.ParseChecklistItems(el),
             SubHabits: subHabits,
-            Emoji: JsonArgumentParser.GetOptionalString(el, "emoji"));
+            Emoji: JsonArgumentParser.GetOptionalString(el, "emoji"),
+            IntervalWeeks: JsonArgumentParser.GetOptionalInt(el, "interval_weeks"));
     }
 
     private static object HabitItemSchema(bool includeSubHabits)
@@ -99,6 +100,7 @@ public class BulkCreateHabitsTool(
             ["emoji"] = new { type = JsonSchemaTypes.String, description = "Emoji icon. Pick a relevant one when clear.", nullable = true },
             ["frequency_unit"] = new { type = JsonSchemaTypes.String, description = "Recurrence unit. Omit for one-time tasks.", nullable = true, @enum = JsonSchemaTypes.FrequencyUnitEnum },
             ["frequency_quantity"] = new { type = JsonSchemaTypes.Integer, description = "How often. Defaults to 1." },
+            ["interval_weeks"] = new { type = JsonSchemaTypes.Integer, description = "Repeat interval in weeks. Omit for every week. Minimum 1." },
             ["days"] = new { type = JsonSchemaTypes.Array, description = "Specific weekdays. Only when frequency_quantity is 1.", items = new { type = JsonSchemaTypes.String } },
             ["due_date"] = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD. Defaults to today." },
             ["end_date"] = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD. Optional end date.", nullable = true },

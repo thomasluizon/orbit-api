@@ -66,7 +66,11 @@ public class GetStreakHistoryQueryHandler(
 
         var userTimeZone = TimeZoneHelper.FindTimeZone(user.TimeZone, userId: user.Id);
         var expectedDates = HabitScheduleService.GetUnionScheduledDatesForStreak(
-            allHabits, seedFrom, request.DateTo, userTimeZone);
+            allHabits,
+            seedFrom,
+            request.DateTo,
+            userTimeZone,
+            user.WeekStartDay);
 
         var series = HabitScheduleService.BuildStreakSeries(
             expectedDates, completionDates, freezeDates, seedFrom, request.DateFrom, request.DateTo);

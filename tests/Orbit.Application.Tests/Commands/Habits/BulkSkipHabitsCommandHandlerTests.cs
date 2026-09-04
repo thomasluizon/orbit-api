@@ -84,6 +84,31 @@ public class BulkSkipHabitsCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_IntervalChangedAfterAdvancement_SkipsDayAfterMissedActiveOccurrence()
+    {
+        var anchor = new DateOnly(2025, 1, 6);
+        var catchUpDay = anchor.AddDays(15);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Alternating", FrequencyUnit.Day, 1, DueDate: anchor,
+            Days: [DayOfWeek.Monday])).Value;
+        habit.AdvanceDueDate(anchor.AddDays(6), weekStartDay: 1);
+        habit.Update(new HabitUpdateParams(
+            habit.Title, habit.Description, habit.FrequencyUnit, habit.FrequencyQuantity,
+            habit.Days.ToList(), habit.IsBadHabit, DueDate: null,
+            UserToday: anchor.AddDays(8), IntervalWeeks: 2));
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(catchUpDay);
+        _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(1);
+        SetupHabitsForUser([habit]);
+
+        var result = await _handler.Handle(
+            new BulkSkipHabitsCommand(UserId, [new BulkSkipItem(habit.Id)]),
+            CancellationToken.None);
+
+        result.Value.Results.Should().ContainSingle(r => r.Status == BulkItemStatus.Success);
+        habit.DueDate.Should().BeAfter(catchUpDay);
+    }
+
+    [Fact]
     public async Task Handle_OneTimeTask_PostponesToTomorrow()
     {
         var habit = Habit.Create(new HabitCreateParams(UserId, "Task", null, null, DueDate: Today)).Value;

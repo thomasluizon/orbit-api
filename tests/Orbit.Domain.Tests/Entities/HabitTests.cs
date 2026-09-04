@@ -1212,7 +1212,7 @@ public class HabitTests
     [Fact]
     public void CatchUpDueDate_Weekly_AdvancesToNextWeek()
     {
-        var start = new DateOnly(2025, 1, 6);        var habit = CreateValidHabit(frequencyUnit: FrequencyUnit.Week, frequencyQuantity: 1, dueDate: start);
+        var start = new DateOnly(2025, 1, 6); var habit = CreateValidHabit(frequencyUnit: FrequencyUnit.Week, frequencyQuantity: 1, dueDate: start);
         var today = new DateOnly(2025, 1, 20);
 
         habit.CatchUpDueDate(today);
@@ -1280,7 +1280,7 @@ public class HabitTests
     [Fact]
     public void AdvanceDueDate_Weekly_AdvancesBy7Days()
     {
-        var start = new DateOnly(2025, 1, 6);        var habit = CreateValidHabit(frequencyUnit: FrequencyUnit.Week, frequencyQuantity: 1, dueDate: start);
+        var start = new DateOnly(2025, 1, 6); var habit = CreateValidHabit(frequencyUnit: FrequencyUnit.Week, frequencyQuantity: 1, dueDate: start);
 
         habit.AdvanceDueDate(start);
 
@@ -1345,6 +1345,271 @@ public class HabitTests
         habit.DueDate.Should().BeAfter(monday);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData(DomainConstants.MaxIntervalWeeks)]
+    public void Create_ValidIntervalWeeks_Succeeds(int? intervalWeeks)
+    {
+        var result = Habit.Create(new HabitCreateParams(
+            ValidUserId,
+            "Run",
+            FrequencyUnit.Day,
+            1,
+            new DateOnly(2025, 1, 7),
+            Days: [DayOfWeek.Tuesday],
+            IntervalWeeks: intervalWeeks));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.IntervalWeeks.Should().Be(intervalWeeks);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(DomainConstants.MaxIntervalWeeks + 1)]
+    public void Create_InvalidIntervalWeeks_Fails(int intervalWeeks)
+    {
+        var result = Habit.Create(new HabitCreateParams(
+            ValidUserId,
+            "Run",
+            FrequencyUnit.Day,
+            1,
+            new DateOnly(2025, 1, 7),
+            Days: [DayOfWeek.Tuesday],
+            IntervalWeeks: intervalWeeks));
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("INTERVAL_WEEKS_INVALID");
+    }
+
+    [Fact]
+    public void AdvanceDueDate_FixedInterval_SkipsInactiveWeek()
+    {
+        var tuesday = new DateOnly(2025, 1, 7);
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId,
+            "Run",
+            FrequencyUnit.Day,
+            1,
+            tuesday,
+            Days: [DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday],
+            IntervalWeeks: 2)).Value;
+
+        habit.AdvanceDueDate(tuesday.AddDays(2), weekStartDay: 1);
+
+        habit.DueDate.Should().Be(tuesday.AddDays(14));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DueDateAdvancement_DisjointRecurrencePhases_ReturnsFailureWithoutChangingDueDate(bool catchUp)
+    {
+        var anchor = new DateOnly(2025, 1, 6);
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId,
+            "Run",
+            FrequencyUnit.Week,
+            1,
+            anchor)).Value;
+        habit.AdvanceDueDate(anchor, weekStartDay: 1);
+        typeof(Habit).GetProperty(nameof(Habit.FrequencyQuantity))!.SetValue(habit, 2);
+        typeof(Habit).GetProperty(nameof(Habit.IntervalWeeks))!.SetValue(habit, 2);
+        var dueDateBeforeAttempt = habit.DueDate;
+        var methodName = catchUp ? nameof(Habit.CatchUpDueDate) : nameof(Habit.AdvanceDueDate);
+        var method = typeof(Habit).GetMethod(methodName, [typeof(DateOnly), typeof(int)])!;
+        object? rawResult = null;
+
+        var act = () => rawResult = method.Invoke(
+            habit,
+            [catchUp ? dueDateBeforeAttempt.AddDays(1) : dueDateBeforeAttempt, 1]);
+
+        act.Should().NotThrow();
+        var result = rawResult.Should().BeOfType<Result>().Subject;
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("RECURRENCE_SCHEDULE_UNSATISFIABLE");
+        habit.DueDate.Should().Be(dueDateBeforeAttempt);
+    }
+
+    [Fact]
+    public void CatchUpDueDate_SundayStartAtDateOnlyMinValue_ReturnsFailureWithoutChangingDueDate()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId,
+            "Run",
+            FrequencyUnit.Day,
+            1,
+            DateOnly.MinValue,
+            IntervalWeeks: 2)).Value;
+
+        var act = () => habit.CatchUpDueDate(DateOnly.MinValue.AddDays(1), weekStartDay: 0);
+
+        var result = act.Should().NotThrow().Which;
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("RECURRENCE_SCHEDULE_UNSATISFIABLE");
+        habit.DueDate.Should().Be(DateOnly.MinValue);
+    }
+
+    [Fact]
+    public void Update_AdvancedIntervalHabitWithUnchangedDueDate_PreservesScheduledStartDate()
+    {
+        var originalDueDate = new DateOnly(2025, 1, 6);
+        var currentDueDate = originalDueDate.AddDays(14);
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId,
+            "Run",
+            FrequencyUnit.Week,
+            2,
+            originalDueDate,
+            IntervalWeeks: 2)).Value;
+        habit.AdvanceDueDate(originalDueDate, weekStartDay: 1);
+
+        var result = habit.Update(new HabitUpdateParams(
+            habit.Title,
+            habit.Description,
+            habit.FrequencyUnit,
+            habit.FrequencyQuantity,
+            habit.Days.ToList(),
+            habit.IsBadHabit,
+            currentDueDate,
+            UserToday: originalDueDate.AddDays(1),
+            IntervalWeeks: 2));
+
+        result.IsSuccess.Should().BeTrue();
+        habit.DueDate.Should().Be(currentDueDate);
+        habit.ScheduledStartDate.Should().Be(originalDueDate);
+    }
+
+    [Fact]
+    public void Update_AdvancedHabitWithChangedCadenceAndUnchangedDueDate_RebasesScheduledStartDate()
+    {
+        var originalDueDate = new DateOnly(2025, 1, 6);
+        var currentDueDate = originalDueDate.AddDays(7);
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId,
+            "Run",
+            FrequencyUnit.Week,
+            1,
+            originalDueDate)).Value;
+        habit.AdvanceDueDate(originalDueDate, weekStartDay: 1);
+
+        var result = habit.Update(new HabitUpdateParams(
+            habit.Title,
+            habit.Description,
+            FrequencyUnit.Week,
+            2,
+            habit.Days.ToList(),
+            habit.IsBadHabit,
+            currentDueDate,
+            UserToday: originalDueDate.AddDays(1),
+            IntervalWeeks: 2));
+
+        result.IsSuccess.Should().BeTrue();
+        habit.DueDate.Should().Be(currentDueDate);
+        habit.ScheduledStartDate.Should().Be(currentDueDate);
+
+        habit.AdvanceDueDate(currentDueDate, weekStartDay: 1);
+
+        habit.DueDate.Should().Be(currentDueDate.AddDays(14));
+    }
+
+    [Fact]
+    public void AdvanceDueDate_BiweeklyHabitRescheduledByOneWeek_RebasesIntervalPhase()
+    {
+        var originalDueDate = new DateOnly(2025, 1, 6);
+        var rescheduledDueDate = originalDueDate.AddDays(7);
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId,
+            "Run",
+            FrequencyUnit.Week,
+            2,
+            originalDueDate,
+            IntervalWeeks: 2)).Value;
+
+        var result = habit.Update(new HabitUpdateParams(
+            habit.Title,
+            habit.Description,
+            habit.FrequencyUnit,
+            habit.FrequencyQuantity,
+            habit.Days.ToList(),
+            habit.IsBadHabit,
+            rescheduledDueDate,
+            UserToday: originalDueDate.AddDays(1),
+            IntervalWeeks: 2));
+        habit.AdvanceDueDate(rescheduledDueDate, weekStartDay: 1);
+
+        result.IsSuccess.Should().BeTrue();
+        habit.ScheduledStartDate.Should().Be(rescheduledDueDate);
+        habit.DueDate.Should().Be(rescheduledDueDate.AddDays(14));
+    }
+
+    [Fact]
+    public void CatchUpDueDate_BiweeklyHabitRescheduledByOneWeek_RebasesIntervalPhase()
+    {
+        var originalDueDate = new DateOnly(2025, 1, 6);
+        var rescheduledDueDate = originalDueDate.AddDays(7);
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId,
+            "Run",
+            FrequencyUnit.Week,
+            2,
+            originalDueDate,
+            IntervalWeeks: 2)).Value;
+        habit.Update(new HabitUpdateParams(
+            habit.Title,
+            habit.Description,
+            habit.FrequencyUnit,
+            habit.FrequencyQuantity,
+            habit.Days.ToList(),
+            habit.IsBadHabit,
+            rescheduledDueDate,
+            UserToday: originalDueDate.AddDays(1),
+            IntervalWeeks: 2));
+
+        habit.CatchUpDueDate(rescheduledDueDate.AddDays(1), weekStartDay: 1);
+
+        habit.DueDate.Should().Be(rescheduledDueDate.AddDays(14));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(DomainConstants.MaxIntervalWeeks)]
+    public void Update_ValidIntervalWeeks_Succeeds(int? intervalWeeks)
+    {
+        var habit = CreateValidHabit();
+        var result = habit.Update(new HabitUpdateParams(
+            habit.Title,
+            habit.Description,
+            habit.FrequencyUnit,
+            habit.FrequencyQuantity,
+            habit.Days.ToList(),
+            habit.IsBadHabit,
+            habit.DueDate,
+            IntervalWeeks: intervalWeeks));
+
+        result.IsSuccess.Should().BeTrue();
+        habit.IntervalWeeks.Should().Be(intervalWeeks);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(DomainConstants.MaxIntervalWeeks + 1)]
+    public void Update_InvalidIntervalWeeks_Fails(int intervalWeeks)
+    {
+        var habit = CreateValidHabit();
+        var result = habit.Update(new HabitUpdateParams(
+            habit.Title,
+            habit.Description,
+            habit.FrequencyUnit,
+            habit.FrequencyQuantity,
+            habit.Days.ToList(),
+            habit.IsBadHabit,
+            habit.DueDate,
+            IntervalWeeks: intervalWeeks));
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("INTERVAL_WEEKS_INVALID");
+    }
+
     [Fact]
     public void SkipFlexible_FlexibleHabit_CreatesSkipLog()
     {
@@ -1355,7 +1620,8 @@ public class HabitTests
         var result = habit.SkipFlexible(today);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Value.Should().Be(0);        habit.Logs.Should().HaveCount(1);
+        result.Value.Value.Should().Be(0);
+        habit.Logs.Should().HaveCount(1);
     }
 
     [Fact]
@@ -1394,7 +1660,8 @@ public class HabitTests
         }
 
         habit.Logs.Should().HaveCount(5);
-        habit.DueDate.Should().Be(today);    }
+        habit.DueDate.Should().Be(today);
+    }
 
     [Fact]
     public void Log_RecurringWithChecklist_ResetsChecklist()

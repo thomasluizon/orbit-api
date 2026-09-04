@@ -127,7 +127,7 @@ public partial class ReminderSchedulerService(
         var userToday = DateOnly.FromDateTime(userNow);
         var userTimeNow = TimeOnly.FromDateTime(userNow);
 
-        if (!HabitScheduleService.IsHabitDueOnDate(habit, userToday)) return;
+        if (!HabitScheduleService.IsHabitDueOnDate(habit, userToday, user.WeekStartDay)) return;
         if (loggedHabitDates.Contains((habit.Id, userToday))) return;
 
         foreach (var minutesBefore in habit.ReminderTimes)
@@ -213,8 +213,8 @@ public partial class ReminderSchedulerService(
         var userTomorrow = userToday.AddDays(1);
         var userTimeNow = TimeOnly.FromDateTime(userNow);
 
-        var isDueToday = HabitScheduleService.IsHabitDueOnDate(habit, userToday);
-        var isDueTomorrow = HabitScheduleService.IsHabitDueOnDate(habit, userTomorrow);
+        var isDueToday = HabitScheduleService.IsHabitDueOnDate(habit, userToday, user.WeekStartDay);
+        var isDueTomorrow = HabitScheduleService.IsHabitDueOnDate(habit, userTomorrow, user.WeekStartDay);
 
         foreach (var sr in habit.ScheduledReminders)
         {

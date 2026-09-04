@@ -27,7 +27,7 @@ public class GetGoalDetailQueryHandler(
         if (loaded is null)
             return Result.Failure<GoalDetailWithMetricsResponse>(ErrorMessages.GoalNotFound);
 
-        var goalMetrics = GoalMetricsCalculator.Calculate(loaded.Goal, loaded.UserToday);
+        var goalMetrics = GoalMetricsCalculator.Calculate(loaded.Goal, loaded.UserToday, loaded.WeekStartDay);
 
         return Result.Success(new GoalDetailWithMetricsResponse(loaded.Dto, goalMetrics));
     }

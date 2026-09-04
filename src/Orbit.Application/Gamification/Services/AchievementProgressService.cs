@@ -47,7 +47,7 @@ public class AchievementProgressService(
         var goodHabits = habits.Where(h => !h.IsBadHabit).ToList();
         var maxCurrentStreak = goodHabits.Count == 0
             ? 0
-            : goodHabits.Max(h => HabitMetricsCalculator.Calculate(h, today, userTimeZone).CurrentStreak);
+            : goodHabits.Max(h => HabitMetricsCalculator.Calculate(h, today, user.WeekStartDay, userTimeZone).CurrentStreak);
 
         var totalCompletionCutoff = today.AddDays(-TotalCompletionWindowDays);
         var totalCompletions = habitIds.Count == 0

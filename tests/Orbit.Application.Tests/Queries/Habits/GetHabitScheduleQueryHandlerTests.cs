@@ -12,6 +12,7 @@ namespace Orbit.Application.Tests.Queries.Habits;
 public class GetHabitScheduleQueryHandlerTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
+    private readonly IGenericRepository<HabitLog> _habitLogRepo = Substitute.For<IGenericRepository<HabitLog>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly GetHabitScheduleQueryHandler _handler;
@@ -21,7 +22,11 @@ public class GetHabitScheduleQueryHandlerTests
 
     public GetHabitScheduleQueryHandlerTests()
     {
-        _handler = new GetHabitScheduleQueryHandler(_habitRepo, _userDateService, _unitOfWork);
+        _handler = new GetHabitScheduleQueryHandler(
+            _habitRepo,
+            _habitLogRepo,
+            _userDateService,
+            _unitOfWork);
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
     }
 

@@ -1,3 +1,4 @@
+using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Models;
@@ -9,24 +10,39 @@ public static class HabitMetricsCalculator
     // Horizon must exceed the largest streak-achievement target (1000-day StreakImmortal) or those achievements can never hit 100%. https://github.com/thomasluizon/orbit-api/pull/419
     private const int MaxStreakHorizonDays = 1100;
 
-    public static HabitMetrics Calculate(Habit habit, DateOnly today, TimeZoneInfo? userTimeZone = null)
+    public static HabitMetrics Calculate(
+        Habit habit,
+        DateOnly today,
+        int weekStartDay,
+        TimeZoneInfo? userTimeZone = null)
     {
-        return Calculate(habit, habit.Logs, today, userTimeZone);
+        return Calculate(habit, habit.Logs, today, weekStartDay, userTimeZone);
     }
 
     public static HabitMetrics Calculate(
         Habit habit,
         IReadOnlyCollection<HabitLog> logs,
         DateOnly today,
+        int weekStartDay,
         TimeZoneInfo? userTimeZone = null)
     {
         var logDates = logs.Where(l => l.Value > 0).Select(l => l.Date).Distinct().ToHashSet();
-        var expectedDates = GenerateExpectedDates(habit, logs, today, userTimeZone).ToList();
+        var habitStartDate = ResolveHabitStartDate(habit, logs, userTimeZone);
+        var expectedDates = GenerateExpectedDates(habit, today, habitStartDate, weekStartDay).ToList();
+        var streakCompletionDates = habit.IsFlexible
+            ? GenerateCompletedFlexibleWindowDates(
+                habit,
+                logs,
+                expectedDates,
+                today,
+                habitStartDate,
+                weekStartDay)
+            : logDates;
 
-        var currentStreak = CalculateCurrentStreak(habit, expectedDates, logDates, today);
-        var longestStreak = CalculateLongestStreak(habit, expectedDates, logDates);
-        var weeklyCompletionRate = CalculateCompletionRate(habit, expectedDates, logDates, today, 7);
-        var monthlyCompletionRate = CalculateCompletionRate(habit, expectedDates, logDates, today, 30);
+        var currentStreak = CalculateCurrentStreak(habit, expectedDates, streakCompletionDates, today);
+        var longestStreak = CalculateLongestStreak(habit, expectedDates, streakCompletionDates);
+        var weeklyCompletionRate = CalculateCompletionRate(habit, expectedDates, streakCompletionDates, today, 7);
+        var monthlyCompletionRate = CalculateCompletionRate(habit, expectedDates, streakCompletionDates, today, 30);
         var totalCompletions = logDates.Count;
         var lastCompletedDate = logDates.Count > 0 ? logDates.Max() : (DateOnly?)null;
 
@@ -51,22 +67,142 @@ public static class HabitMetricsCalculator
 
     private static List<DateOnly> GenerateExpectedDates(
         Habit habit,
-        IReadOnlyCollection<HabitLog> logs,
         DateOnly today,
-        TimeZoneInfo? userTimeZone = null)
+        DateOnly habitStartDate,
+        int weekStartDay)
     {
-        var tz = userTimeZone ?? TimeZoneInfo.Utc;
-        var createdDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(habit.CreatedAtUtc, tz));
-        var habitStartDate = habit.ScheduledStartDate
-            ?? ResolveLegacyStartDate(habit, logs, createdDate);
-
         if (habit.FrequencyUnit is null || habit.FrequencyQuantity is null)
             return [habitStartDate];
+
+        if (habit.IsFlexible)
+            return GenerateFlexibleWindowDates(habit, today, habitStartDate, weekStartDay);
+
+        if (habit.IntervalWeeks is > 1)
+            return GenerateIntervalExpectedDates(habit, today, habitStartDate, weekStartDay);
 
         if (habit.Days.Count > 0 && habit.FrequencyQuantity == 1)
             return GenerateDayFilteredDates(habit, today, habitStartDate);
 
         return GenerateFrequencyBasedDates(habit, today, habitStartDate);
+    }
+
+    private static List<DateOnly> GenerateIntervalExpectedDates(
+        Habit habit,
+        DateOnly today,
+        DateOnly startDate,
+        int weekStartDay)
+    {
+        var expectedDates = new List<DateOnly>();
+        var current = today;
+        var iterations = 0;
+
+        while (iterations < MaxStreakHorizonDays && current >= startDate)
+        {
+            if (HabitScheduleService.IsHabitDueOnDateForStreakLookback(
+                    habit,
+                    current,
+                    startDate,
+                    weekStartDay))
+            {
+                expectedDates.Add(current);
+            }
+
+            current = current.AddDays(-1);
+            iterations++;
+        }
+
+        return expectedDates;
+    }
+
+    private static List<DateOnly> GenerateFlexibleWindowDates(
+        Habit habit,
+        DateOnly today,
+        DateOnly startDate,
+        int weekStartDay)
+    {
+        var expectedDates = new List<DateOnly>();
+        var horizonStart = today.AddDays(-(MaxStreakHorizonDays - 1));
+        var firstDate = startDate > horizonStart ? startDate : horizonStart;
+        var cursor = today;
+
+        while (cursor >= firstDate)
+        {
+            var windowStart = HabitScheduleService.GetWindowStart(habit, cursor, weekStartDay);
+            var windowEnd = HabitScheduleService.GetWindowEnd(habit, cursor, weekStartDay);
+            if (windowEnd > today)
+                windowEnd = today;
+
+            var scanStart = windowStart > firstDate ? windowStart : firstDate;
+            if (HasActiveIntervalDate(habit, scanStart, windowEnd, weekStartDay, startDate))
+                expectedDates.Add(windowEnd);
+
+            cursor = windowStart.AddDays(-1);
+        }
+
+        return expectedDates;
+    }
+
+    private static HashSet<DateOnly> GenerateCompletedFlexibleWindowDates(
+        Habit habit,
+        IReadOnlyCollection<HabitLog> logs,
+        IReadOnlyCollection<DateOnly> windowMarkers,
+        DateOnly today,
+        DateOnly startDate,
+        int weekStartDay)
+    {
+        var completedWindows = new HashSet<DateOnly>();
+        var target = habit.FrequencyQuantity ?? 1;
+
+        foreach (var marker in windowMarkers)
+        {
+            var start = HabitScheduleService.GetWindowStart(habit, marker, weekStartDay);
+            if (start < startDate)
+                start = startDate;
+            var end = HabitScheduleService.GetWindowEnd(habit, marker, weekStartDay);
+            if (end > today)
+                end = today;
+            var completed = logs.Count(log =>
+                !log.IsDeleted
+                && log.Value > 0
+                && log.Date >= start
+                && log.Date <= end
+                && HabitScheduleService.IsActiveIntervalWeek(
+                    habit,
+                    log.Date,
+                    weekStartDay,
+                    startDate));
+            if (completed >= target)
+                completedWindows.Add(marker);
+        }
+
+        return completedWindows;
+    }
+
+    private static bool HasActiveIntervalDate(
+        Habit habit,
+        DateOnly start,
+        DateOnly end,
+        int weekStartDay,
+        DateOnly recurrenceAnchor)
+    {
+        for (var date = start; date <= end; date = date.AddDays(1))
+        {
+            if (HabitScheduleService.IsActiveIntervalWeek(habit, date, weekStartDay, recurrenceAnchor))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static DateOnly ResolveHabitStartDate(
+        Habit habit,
+        IReadOnlyCollection<HabitLog> logs,
+        TimeZoneInfo? userTimeZone)
+    {
+        var tz = userTimeZone ?? TimeZoneInfo.Utc;
+        var createdDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(habit.CreatedAtUtc, tz));
+        return habit.ScheduledStartDate
+            ?? ResolveLegacyStartDate(habit, logs, createdDate);
     }
 
     private static DateOnly ResolveLegacyStartDate(

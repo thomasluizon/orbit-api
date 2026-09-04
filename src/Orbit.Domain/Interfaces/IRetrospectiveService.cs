@@ -12,5 +12,6 @@ public interface IRetrospectiveService
         DateOnly dateTo,
         string period,
         string language,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        int weekStartDay = 1);
 }

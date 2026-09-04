@@ -39,7 +39,8 @@ public interface IGoalCompletionService
 public sealed class GoalCompletionService(
     IGenericRepository<Goal> goalRepository,
     IGamificationService gamificationService,
-    IUnitOfWork unitOfWork) : IGoalCompletionService
+    IUnitOfWork unitOfWork,
+    IUserDateService userDateService) : IGoalCompletionService
 {
     public Task SaveCompletedGoalAsync(
         Guid userId,
@@ -61,13 +62,14 @@ public sealed class GoalCompletionService(
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(goalIds);
+        var weekStartDay = await userDateService.GetUserWeekStartDayAsync(userId, cancellationToken);
 
         var candidateIds = goalIds.Distinct().ToList();
         if (passiveSync)
         {
             return candidateIds.Count == 0
                 ? []
-                : await SyncDerivedBatchAsync(userId, candidateIds, userToday, passiveSync, cancellationToken);
+                : await SyncDerivedBatchAsync(userId, candidateIds, userToday, weekStartDay, passiveSync, cancellationToken);
         }
 
         return await unitOfWork.ExecuteInTransactionAsync<IReadOnlyList<GoalCompletionUpdate>>(async transactionToken =>
@@ -76,7 +78,7 @@ public sealed class GoalCompletionService(
             if (candidateIds.Count == 0)
                 return [];
 
-            return await SyncDerivedBatchAsync(userId, candidateIds, userToday, passiveSync, transactionToken);
+            return await SyncDerivedBatchAsync(userId, candidateIds, userToday, weekStartDay, passiveSync, transactionToken);
         }, cancellationToken);
     }
 
@@ -84,6 +86,7 @@ public sealed class GoalCompletionService(
         Guid userId,
         IReadOnlyCollection<Guid> candidateIds,
         DateOnly userToday,
+        int weekStartDay,
         bool passiveSync,
         CancellationToken cancellationToken)
     {
@@ -92,7 +95,7 @@ public sealed class GoalCompletionService(
             query => query.Include(goal => goal.Habits).ThenInclude(habit => habit.Logs),
             cancellationToken);
         var snapshots = candidates
-            .Select(goal => CreateSnapshot(goal, userToday, passiveSync))
+            .Select(goal => CreateSnapshot(goal, userToday, weekStartDay, passiveSync))
             .Where(snapshot => snapshot.HasValue)
             .Select(snapshot => snapshot!.Value)
             .ToList();
@@ -125,7 +128,11 @@ public sealed class GoalCompletionService(
         bool WillComplete,
         DateTime GoalUpdatedAtUtc);
 
-    private static DerivedGoalSnapshot? CreateSnapshot(Goal goal, DateOnly userToday, bool passiveSync)
+    private static DerivedGoalSnapshot? CreateSnapshot(
+        Goal goal,
+        DateOnly userToday,
+        int weekStartDay,
+        bool passiveSync)
     {
         if (goal.Status != GoalStatus.Active)
             return null;
@@ -162,7 +169,7 @@ public sealed class GoalCompletionService(
                 : null;
         }
 
-        var currentStreak = GoalStreakSyncService.CalculateCurrentStreak(goal, userToday);
+        var currentStreak = GoalStreakSyncService.CalculateCurrentStreak(goal, userToday, weekStartDay);
         return currentStreak.HasValue
             ? new DerivedGoalSnapshot(
                 goal.Id,
