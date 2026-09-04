@@ -295,7 +295,11 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         var searchLimit = GetRecurrenceSearchLimit(intervalWeeks);
         for (var attempt = 0; attempt < searchLimit; attempt++)
         {
-            if (IsInActiveWeek(next, anchor, intervalWeeks, weekStartDay))
+            var activeWeek = IsInActiveWeek(next, anchor, intervalWeeks, weekStartDay);
+            if (activeWeek.IsFailure)
+                return Result.Failure<DateOnly>(DomainErrors.RecurrenceScheduleUnsatisfiable);
+
+            if (activeWeek.Value)
                 return Result.Success(next);
 
             advancement = AdvanceFrom(next);
@@ -361,22 +365,34 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         }
     }
 
-    private static bool IsInActiveWeek(
+    private static Result<bool> IsInActiveWeek(
         DateOnly target,
         DateOnly anchor,
         int intervalWeeks,
         int weekStartDay)
     {
         var targetWeekStart = GetWeekStart(target, weekStartDay);
+        if (targetWeekStart.IsFailure)
+            return Result.Failure<bool>(DomainErrors.RecurrenceScheduleUnsatisfiable);
+
         var anchorWeekStart = GetWeekStart(anchor, weekStartDay);
-        var weekDiff = (targetWeekStart.DayNumber - anchorWeekStart.DayNumber) / 7;
-        return ((weekDiff % intervalWeeks) + intervalWeeks) % intervalWeeks == 0;
+        if (anchorWeekStart.IsFailure)
+            return Result.Failure<bool>(DomainErrors.RecurrenceScheduleUnsatisfiable);
+
+        var weekDiff = (targetWeekStart.Value.DayNumber - anchorWeekStart.Value.DayNumber) / 7;
+        return Result.Success(((weekDiff % intervalWeeks) + intervalWeeks) % intervalWeeks == 0);
     }
 
-    private static DateOnly GetWeekStart(DateOnly date, int weekStartDay)
+    private static Result<DateOnly> GetWeekStart(DateOnly date, int weekStartDay)
     {
+        if (weekStartDay is < 0 or >= DaysInWeek)
+            return Result.Failure<DateOnly>(DomainErrors.RecurrenceScheduleUnsatisfiable);
+
         var daysToStart = ((int)date.DayOfWeek - weekStartDay + 7) % 7;
-        return date.AddDays(-daysToStart);
+        if (date.DayNumber < daysToStart)
+            return Result.Failure<DateOnly>(DomainErrors.RecurrenceScheduleUnsatisfiable);
+
+        return Result.Success(date.AddDays(-daysToStart));
     }
 
     /// <summary>

@@ -1212,7 +1212,7 @@ public class HabitTests
     [Fact]
     public void CatchUpDueDate_Weekly_AdvancesToNextWeek()
     {
-        var start = new DateOnly(2025, 1, 6);        var habit = CreateValidHabit(frequencyUnit: FrequencyUnit.Week, frequencyQuantity: 1, dueDate: start);
+        var start = new DateOnly(2025, 1, 6); var habit = CreateValidHabit(frequencyUnit: FrequencyUnit.Week, frequencyQuantity: 1, dueDate: start);
         var today = new DateOnly(2025, 1, 20);
 
         habit.CatchUpDueDate(today);
@@ -1280,7 +1280,7 @@ public class HabitTests
     [Fact]
     public void AdvanceDueDate_Weekly_AdvancesBy7Days()
     {
-        var start = new DateOnly(2025, 1, 6);        var habit = CreateValidHabit(frequencyUnit: FrequencyUnit.Week, frequencyQuantity: 1, dueDate: start);
+        var start = new DateOnly(2025, 1, 6); var habit = CreateValidHabit(frequencyUnit: FrequencyUnit.Week, frequencyQuantity: 1, dueDate: start);
 
         habit.AdvanceDueDate(start);
 
@@ -1428,6 +1428,25 @@ public class HabitTests
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be("RECURRENCE_SCHEDULE_UNSATISFIABLE");
         habit.DueDate.Should().Be(dueDateBeforeAttempt);
+    }
+
+    [Fact]
+    public void CatchUpDueDate_SundayStartAtDateOnlyMinValue_ReturnsFailureWithoutChangingDueDate()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId,
+            "Run",
+            FrequencyUnit.Day,
+            1,
+            DateOnly.MinValue,
+            IntervalWeeks: 2)).Value;
+
+        var act = () => habit.CatchUpDueDate(DateOnly.MinValue.AddDays(1), weekStartDay: 0);
+
+        var result = act.Should().NotThrow().Which;
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("RECURRENCE_SCHEDULE_UNSATISFIABLE");
+        habit.DueDate.Should().Be(DateOnly.MinValue);
     }
 
     [Fact]
@@ -1641,7 +1660,8 @@ public class HabitTests
         }
 
         habit.Logs.Should().HaveCount(5);
-        habit.DueDate.Should().Be(today);    }
+        habit.DueDate.Should().Be(today);
+    }
 
     [Fact]
     public void Log_RecurringWithChecklist_ResetsChecklist()
