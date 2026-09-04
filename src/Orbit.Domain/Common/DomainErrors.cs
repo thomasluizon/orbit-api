@@ -66,6 +66,7 @@ public static class DomainErrors
     public static readonly AppError GeneralHabitIsBadHabit = new("GENERAL_HABIT_IS_BAD", "General habits cannot be bad habits.");
     public static readonly AppError FrequencyQuantityInvalid = new("FREQUENCY_QUANTITY_INVALID", "Frequency quantity must be greater than 0.");
     public static readonly AppError IntervalWeeksInvalid = new("INTERVAL_WEEKS_INVALID", $"Interval weeks must be between 1 and {DomainConstants.MaxIntervalWeeks}.");
+    public static readonly AppError RecurrenceScheduleUnsatisfiable = new("RECURRENCE_SCHEDULE_UNSATISFIABLE", "No future date satisfies this recurrence schedule.");
     public static readonly AppError FlexibleNeedsFrequencyUnit = new("FLEXIBLE_NEEDS_FREQUENCY_UNIT", "Flexible habits must have a frequency unit.");
     public static readonly AppError FlexibleHasDays = new("FLEXIBLE_HAS_DAYS", "Flexible habits cannot have specific days set.");
     public static readonly AppError DaysRequireQuantityOne = new("DAYS_REQUIRE_QUANTITY_ONE", "Days can only be set when frequency quantity is 1.");

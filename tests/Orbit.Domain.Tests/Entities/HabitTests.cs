@@ -1399,6 +1399,37 @@ public class HabitTests
         habit.DueDate.Should().Be(tuesday.AddDays(14));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DueDateAdvancement_DisjointRecurrencePhases_ReturnsFailureWithoutChangingDueDate(bool catchUp)
+    {
+        var anchor = new DateOnly(2025, 1, 6);
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId,
+            "Run",
+            FrequencyUnit.Week,
+            1,
+            anchor)).Value;
+        habit.AdvanceDueDate(anchor, weekStartDay: 1);
+        typeof(Habit).GetProperty(nameof(Habit.FrequencyQuantity))!.SetValue(habit, 2);
+        typeof(Habit).GetProperty(nameof(Habit.IntervalWeeks))!.SetValue(habit, 2);
+        var dueDateBeforeAttempt = habit.DueDate;
+        var methodName = catchUp ? nameof(Habit.CatchUpDueDate) : nameof(Habit.AdvanceDueDate);
+        var method = typeof(Habit).GetMethod(methodName, [typeof(DateOnly), typeof(int)])!;
+        object? rawResult = null;
+
+        var act = () => rawResult = method.Invoke(
+            habit,
+            [catchUp ? dueDateBeforeAttempt.AddDays(1) : dueDateBeforeAttempt, 1]);
+
+        act.Should().NotThrow();
+        var result = rawResult.Should().BeOfType<Result>().Subject;
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("RECURRENCE_SCHEDULE_UNSATISFIABLE");
+        habit.DueDate.Should().Be(dueDateBeforeAttempt);
+    }
+
     [Fact]
     public void Update_AdvancedIntervalHabitWithUnchangedDueDate_PreservesScheduledStartDate()
     {

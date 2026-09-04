@@ -100,7 +100,13 @@ public partial class HabitDueDateAdvancementService(
 
             if (!ShouldAdvanceForUserToday(habit, userToday)) continue;
 
-            habit.CatchUpDueDate(userToday, user.WeekStartDay);
+            var result = habit.CatchUpDueDate(userToday, user.WeekStartDay);
+            if (result.IsFailure)
+            {
+                LogHabitSkipped(logger, habit.Id, result.ErrorCode);
+                continue;
+            }
+
             advanced++;
         }
 
@@ -123,5 +129,8 @@ public partial class HabitDueDateAdvancementService(
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "Advanced DueDate for {Count} bad habits")]
     private static partial void LogDueDatesAdvanced(ILogger logger, int count);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Skipped due date advancement for habit {HabitId}: {ErrorCode}")]
+    private static partial void LogHabitSkipped(ILogger logger, Guid habitId, string? errorCode);
 
 }

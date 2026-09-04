@@ -56,6 +56,10 @@ public record HabitUpdateParams(
 
 public class Habit : Entity, ITimestamped, ISoftDeletable
 {
+    private const int DaysInWeek = 7;
+    private const int YearsInGregorianCycle = 400;
+    private const int MonthsInGregorianCycle = YearsInGregorianCycle * 12;
+
     public Guid UserId { get; private set; }
     public string Title { get; private set; } = null!;
     public string? Description { get; private set; }
@@ -202,16 +206,23 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         return Result.Success(log);
     }
 
-    public void AdvanceDueDate(DateOnly today, int weekStartDay = 1)
+    public Result AdvanceDueDate(DateOnly today, int weekStartDay = 1)
     {
-        CaptureLegacyScheduledStart();
+        var candidate = DueDate;
+        var anchor = ScheduledStartDate ?? DueDate;
 
         do
         {
-            var prev = DueDate;
-            DueDate = AdvanceDueDateByOneStep(weekStartDay);
-            if (DueDate == prev) break;
-        } while (DueDate <= today);
+            var next = AdvanceDueDateByOneStep(candidate, anchor, weekStartDay);
+            if (next.IsFailure)
+                return Result.Failure(DomainErrors.RecurrenceScheduleUnsatisfiable);
+
+            if (next.Value == candidate) break;
+            candidate = next.Value;
+        } while (candidate <= today);
+
+        CaptureLegacyScheduledStart();
+        DueDate = candidate;
 
         if (EndDate.HasValue && DueDate > EndDate.Value)
         {
@@ -219,31 +230,41 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         }
 
         UpdatedAtUtc = DateTime.UtcNow;
+        return Result.Success();
     }
 
     /// <summary>
     /// Advances DueDate to the nearest scheduled date on or after today, without going past it.
     /// Used by background service to keep DueDate current for recurring habits.
     /// </summary>
-    public void CatchUpDueDate(DateOnly today, int weekStartDay = 1)
+    public Result CatchUpDueDate(DateOnly today, int weekStartDay = 1)
     {
-        if (DueDate < today && !IsCompleted)
-            CaptureLegacyScheduledStart();
+        var shouldAdvance = DueDate < today && !IsCompleted;
+        var candidate = DueDate;
+        var anchor = ScheduledStartDate ?? DueDate;
+        var shouldComplete = IsCompleted;
 
-        while (DueDate < today && !IsCompleted)
+        while (candidate < today && !shouldComplete)
         {
-            var prev = DueDate;
-            DueDate = AdvanceDueDateByOneStep(weekStartDay);
-            if (DueDate == prev) break;
+            var next = AdvanceDueDateByOneStep(candidate, anchor, weekStartDay);
+            if (next.IsFailure)
+                return Result.Failure(DomainErrors.RecurrenceScheduleUnsatisfiable);
 
-            if (EndDate.HasValue && DueDate > EndDate.Value)
-            {
-                IsCompleted = true;
-                break;
-            }
+            if (next.Value == candidate) break;
+            candidate = next.Value;
+
+            if (EndDate.HasValue && candidate > EndDate.Value)
+                shouldComplete = true;
         }
 
+        if (shouldAdvance)
+            CaptureLegacyScheduledStart();
+
+        DueDate = candidate;
+        IsCompleted = shouldComplete;
+
         UpdatedAtUtc = DateTime.UtcNow;
+        return Result.Success();
     }
 
     private void CaptureLegacyScheduledStart()
@@ -256,45 +277,88 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     /// Advances DueDate by one frequency step, re-anchoring for monthly/yearly drift
     /// and snapping to the next matching day-of-week if Days are set.
     /// </summary>
-    private DateOnly AdvanceDueDateByOneStep(int weekStartDay)
+    private Result<DateOnly> AdvanceDueDateByOneStep(
+        DateOnly current,
+        DateOnly anchor,
+        int weekStartDay)
     {
-        var next = AdvanceFrom(DueDate);
-        var anchor = ScheduledStartDate ?? DueDate;
+        var advancement = AdvanceFrom(current);
+        if (advancement.IsFailure)
+            return Result.Failure<DateOnly>(DomainErrors.RecurrenceScheduleUnsatisfiable);
+
+        var next = advancement.Value;
         var intervalWeeks = IntervalWeeks ?? 1;
 
-        while (intervalWeeks > 1 && !IsInActiveWeek(next, anchor, intervalWeeks, weekStartDay))
-            next = AdvanceFrom(next);
+        if (intervalWeeks <= 1)
+            return Result.Success(next);
 
-        return next;
+        var searchLimit = GetRecurrenceSearchLimit(intervalWeeks);
+        for (var attempt = 0; attempt < searchLimit; attempt++)
+        {
+            if (IsInActiveWeek(next, anchor, intervalWeeks, weekStartDay))
+                return Result.Success(next);
+
+            advancement = AdvanceFrom(next);
+            if (advancement.IsFailure || advancement.Value <= next)
+                return Result.Failure<DateOnly>(DomainErrors.RecurrenceScheduleUnsatisfiable);
+
+            next = advancement.Value;
+        }
+
+        return Result.Failure<DateOnly>(DomainErrors.RecurrenceScheduleUnsatisfiable);
     }
 
-    private DateOnly AdvanceFrom(DateOnly current)
+    private int GetRecurrenceSearchLimit(int intervalWeeks)
     {
-        var originalDay = OriginalDayOfMonth ?? current.Day;
-
-        var next = (FrequencyUnit, FrequencyQuantity) switch
+        var boundedInterval = Math.Min(intervalWeeks, DomainConstants.MaxIntervalWeeks);
+        return FrequencyUnit switch
         {
-            (Enums.FrequencyUnit.Day, var q) => current.AddDays(q!.Value),
-            (Enums.FrequencyUnit.Week, var q) => current.AddDays(7 * q!.Value),
-            (Enums.FrequencyUnit.Month, var q) => current.AddMonths(q!.Value),
-            (Enums.FrequencyUnit.Year, var q) => current.AddYears(q!.Value),
-            _ => current
+            Enums.FrequencyUnit.Day => DaysInWeek * boundedInterval,
+            Enums.FrequencyUnit.Week => boundedInterval,
+            Enums.FrequencyUnit.Month => MonthsInGregorianCycle * boundedInterval,
+            Enums.FrequencyUnit.Year => YearsInGregorianCycle * boundedInterval,
+            _ => 1
         };
+    }
 
-        if (FrequencyUnit is Enums.FrequencyUnit.Month or Enums.FrequencyUnit.Year)
+    private Result<DateOnly> AdvanceFrom(DateOnly current)
+    {
+        try
         {
-            var daysInTargetMonth = DateTime.DaysInMonth(next.Year, next.Month);
-            var correctedDay = Math.Min(originalDay, daysInTargetMonth);
-            next = new DateOnly(next.Year, next.Month, correctedDay);
-        }
+            var originalDay = OriginalDayOfMonth ?? current.Day;
 
-        if (Days.Count > 0)
+            var next = (FrequencyUnit, FrequencyQuantity) switch
+            {
+                (Enums.FrequencyUnit.Day, var q) => current.AddDays(q!.Value),
+                (Enums.FrequencyUnit.Week, var q) => current.AddDays(checked(DaysInWeek * q!.Value)),
+                (Enums.FrequencyUnit.Month, var q) => current.AddMonths(q!.Value),
+                (Enums.FrequencyUnit.Year, var q) => current.AddYears(q!.Value),
+                _ => current
+            };
+
+            if (FrequencyUnit is Enums.FrequencyUnit.Month or Enums.FrequencyUnit.Year)
+            {
+                var daysInTargetMonth = DateTime.DaysInMonth(next.Year, next.Month);
+                var correctedDay = Math.Min(originalDay, daysInTargetMonth);
+                next = new DateOnly(next.Year, next.Month, correctedDay);
+            }
+
+            if (Days.Count > 0)
+            {
+                while (!Days.Contains(next.DayOfWeek))
+                    next = next.AddDays(1);
+            }
+
+            return Result.Success(next);
+        }
+        catch (ArgumentOutOfRangeException)
         {
-            while (!Days.Contains(next.DayOfWeek))
-                next = next.AddDays(1);
+            return Result.Failure<DateOnly>(DomainErrors.RecurrenceScheduleUnsatisfiable);
         }
-
-        return next;
+        catch (OverflowException)
+        {
+            return Result.Failure<DateOnly>(DomainErrors.RecurrenceScheduleUnsatisfiable);
+        }
     }
 
     private static bool IsInActiveWeek(

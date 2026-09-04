@@ -279,6 +279,43 @@ public class HabitDueDateAdvancementServiceTests
         reloadedNonBad.DueDate.Should().BeBefore(Today);
     }
 
+    [Fact]
+    public async Task AdvanceStaleDueDates_UnsatisfiableHabit_DoesNotBlockValidHabit()
+    {
+        await using var dbContext = CreateInMemoryDbContext();
+        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var anchor = Today.AddDays(-35);
+        var unsatisfiableHabit = Habit.Create(new HabitCreateParams(
+            user.Id,
+            "Unsatisfiable",
+            FrequencyUnit.Week,
+            1,
+            anchor,
+            IsBadHabit: true)).Value;
+        unsatisfiableHabit.AdvanceDueDate(anchor, weekStartDay: user.WeekStartDay);
+        typeof(Habit).GetProperty(nameof(Habit.FrequencyQuantity))!.SetValue(unsatisfiableHabit, 2);
+        typeof(Habit).GetProperty(nameof(Habit.IntervalWeeks))!.SetValue(unsatisfiableHabit, 2);
+        var unsatisfiableDueDate = unsatisfiableHabit.DueDate;
+        var validHabit = Habit.Create(new HabitCreateParams(
+            user.Id,
+            "Valid",
+            FrequencyUnit.Day,
+            1,
+            anchor,
+            IsBadHabit: true)).Value;
+        dbContext.Users.Add(user);
+        dbContext.Habits.AddRange(unsatisfiableHabit, validHabit);
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext);
+
+        var act = () => service.AdvanceStaleDueDates(CancellationToken.None);
+
+        await act.Should().NotThrowAsync();
+        unsatisfiableHabit.DueDate.Should().Be(unsatisfiableDueDate);
+        validHabit.DueDate.Should().BeOnOrAfter(Today);
+    }
+
     private static OrbitDbContext CreateInMemoryDbContext()
     {
         var options = new DbContextOptionsBuilder<OrbitDbContext>()
