@@ -123,6 +123,7 @@ public partial class ProcessUserChatCommandHandler(
             return contextResult.PropagateError<ChatResponse>();
 
         var context = contextResult.Value;
+        var userLanguage = GetUserLanguage(context.User);
         var aiStreamFilter = BuildAiStreamFilter(request.StreamSink);
         Func<AiStreamEvent, Task>? aiStreamSink = aiStreamFilter is null
             ? null
@@ -152,11 +153,16 @@ public partial class ProcessUserChatCommandHandler(
             initialTurn.Value.Request,
             request,
             executionResults,
-            context.User?.Language,
+            userLanguage,
             aiStreamSink,
             cancellationToken);
         var aiResponse = toolLoopResult.FinalResponse;
         var iterations = toolLoopResult.Iterations;
+        executionResults.SanitizeFailedActions(
+            toolLoopResult.HadToolFailure,
+            toolLoopResult.RetrySucceeded,
+            ToolFailureMessage(userLanguage, recovered: false),
+            initialTurn.Value.Request.ToolDeclarations);
         if (aiStreamFilter is not null)
             await aiStreamFilter.FlushAsync();
         actionsStopwatch.Stop();
@@ -178,7 +184,7 @@ public partial class ProcessUserChatCommandHandler(
             aiMessage,
             toolLoopResult,
             initialTurn.Value.Request.ToolDeclarations,
-            context.User?.Language);
+            userLanguage);
 
         if (faqMatch is { } faqToCache
             && !string.IsNullOrWhiteSpace(aiMessage)
@@ -228,6 +234,8 @@ public partial class ProcessUserChatCommandHandler(
             goalList,
             metricsCard));
     }
+
+    private static string? GetUserLanguage(User? user) => user?.Language;
 
     private async Task<(string? AiMessage, HabitListCard? HabitList, GoalListCard? GoalList, MetricsCard? MetricsCard)> BuildResponseCardsAsync(
         string? aiMessage,

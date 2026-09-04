@@ -1419,6 +1419,9 @@ public class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.AiMessage.Should().Be(PortugueseToolFailureMessage);
+        result.Value.Actions.Should().ContainSingle();
+        result.Value.Actions[0].Error.Should().Be(PortugueseToolFailureMessage);
+        result.Value.Actions[0].Error.Should().NotContain("Days can only be set when frequency quantity is 1");
     }
 
     [Fact]

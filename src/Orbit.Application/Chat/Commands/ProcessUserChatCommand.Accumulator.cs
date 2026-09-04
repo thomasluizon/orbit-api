@@ -30,6 +30,25 @@ public partial class ProcessUserChatCommandHandler
         /// </summary>
         public IReadOnlyList<string> RelatedSurfaces => _relatedSurfaces;
 
+        public void SanitizeFailedActions(
+            bool hadToolFailure,
+            bool retrySucceeded,
+            string error,
+            IReadOnlyList<object> toolDeclarations)
+        {
+            if (!hadToolFailure || retrySucceeded)
+                return;
+
+            for (var index = 0; index < ActionResults.Count; index++)
+            {
+                if (ActionResults[index].Status == ActionStatus.Failed
+                    && ContainsInternalToolVocabulary(ActionResults[index].Error, toolDeclarations))
+                {
+                    ActionResults[index] = ActionResults[index] with { Error = error };
+                }
+            }
+        }
+
         public void Add(
             string toolName,
             ActionResult? actionResult,
