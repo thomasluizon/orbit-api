@@ -64,10 +64,13 @@ public class ProcessUserChatCommandHandlerTests
         {"title":"Perspirex Strong - Semana 2 em diante (Manutenção)","description":"Passe apenas DOMINGO À NOITE e QUARTA À NOITE. Hora e jeito: à noite, axila 100% seca, 2 passadas pra cima e 2 pra baixo. Acordou: Lave a axila com água e sabão no banho da manhã.","emoji":"🧴","frequency_unit":"Week","frequency_quantity":1,"days":["Sunday","Wednesday"],"due_date":"2026-09-15"}
         """;
     private const string ProductionMaintenanceSecondRejectedArguments = """
-        {"title":"Perspirex Strong - Semana 2 (Manutenção)","emoji":"🧴","frequency_unit":"Week","frequency_quantity":1,"days":["Wednesday","Sunday"],"due_date":"2026-09-15"}
+        {"retry_of":"r1","title":"Perspirex Strong - Semana 2 (Manutenção)","emoji":"🧴","frequency_unit":"Week","frequency_quantity":1,"days":["Wednesday","Sunday"],"due_date":"2026-09-15"}
         """;
     private const string ProductionMaintenanceRetryArguments = """
-        {"title":"Perspirex Strong - Semana 2 (Manutenção)","emoji":"🧴","frequency_unit":"Day","frequency_quantity":1,"days":["Wednesday","Sunday"],"due_date":"2026-09-15"}
+        {"retry_of":"r1","title":"Perspirex Strong - Semana 2 (Manutenção)","emoji":"🧴","frequency_unit":"Day","frequency_quantity":1,"days":["Wednesday","Sunday"],"due_date":"2026-09-15"}
+        """;
+    private const string ProductionMaintenanceIdenticalRetryArguments = """
+        {"retry_of":"r1","title":"Perspirex Strong - Semana 2 em diante (Manutenção)","description":"Passe apenas DOMINGO À NOITE e QUARTA À NOITE. Hora e jeito: à noite, axila 100% seca, 2 passadas pra cima e 2 pra baixo. Acordou: Lave a axila com água e sabão no banho da manhã.","emoji":"🧴","frequency_unit":"Week","frequency_quantity":1,"days":["Sunday","Wednesday"],"due_date":"2026-09-15"}
         """;
 
     private static Habit CreateHabit(string title, bool isCompleted = false)
@@ -1459,7 +1462,7 @@ public class ProcessUserChatCommandHandlerTests
             {"title":"Maintenance","frequency_unit":"Week","frequency_quantity":1,"days":["Thursday"],"due_date":"2026-09-15"}
             """;
         const string correctRetryArguments = """
-            {"title":"Maintenance","frequency_unit":"Day","frequency_quantity":1,"days":["Thursday"],"due_date":"2026-09-15"}
+            {"retry_of":"r1","title":"Maintenance","frequency_unit":"Day","frequency_quantity":1,"days":["Thursday"],"due_date":"2026-09-15"}
             """;
         const string driftedRetryArguments = """
             {"title":"Maintenance","frequency_unit":"Day","frequency_quantity":1,"days":["Tuesday"],"due_date":"2026-09-15"}
@@ -1498,9 +1501,12 @@ public class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         sentRequests.Should().HaveCount(2);
         sentRequests[1].UserMessage.Should().Be(originalMessage);
+        sentRequests[1].PriorToolFailures.Should().ContainSingle()
+            .Which.RetryId.Should().Be("r1");
         dispatchedArguments.Should().HaveCount(2);
         dispatchedArguments[1].Should().Contain("Thursday");
         dispatchedArguments[1].Should().NotContain("Tuesday");
+        dispatchedArguments[1].Should().NotContain("retry_of");
     }
 
     [Fact]
@@ -1547,7 +1553,7 @@ public class ProcessUserChatCommandHandlerTests
         });
         var handler = CreateHandler(tool);
         var initialResponse = ToolResponse("create_habit", "call_1", ProductionMaintenanceRejectedArguments);
-        var identicalRetry = ToolResponse("create_habit", "call_2", ProductionMaintenanceRejectedArguments);
+        var identicalRetry = ToolResponse("create_habit", "call_2", ProductionMaintenanceIdenticalRetryArguments);
 
         SetupRecoveryResponses(initialResponse, identicalRetry);
         _aiIntentService.ContinueWithToolResultsAsync(
@@ -1726,9 +1732,9 @@ public class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         adaptationExecutions.Should().Be(1);
-        maintenanceExecutions.Should().Be(2);
-        result.Value.Actions.Should().HaveCount(2);
-        result.Value.Actions.Should().OnlyContain(action => action.Status == ActionStatus.Success);
+        maintenanceExecutions.Should().Be(1);
+        result.Value.AiMessage.Should().Be(EnglishToolFailureMessage);
+        result.Value.Actions.Should().ContainSingle(action => action.Status == ActionStatus.Failed);
     }
 
     [Fact]
@@ -1800,7 +1806,7 @@ public class ProcessUserChatCommandHandlerTests
         var retryResponse = ToolResponse(
             "update_notifications",
             "call_mark_all_read",
-            """{"action":"mark_all_read"}""");
+            """{"retry_of":"unknown","action":"mark_all_read"}""");
 
         SetupRecoveryResponses(initialResponse, retryResponse);
         SetupContinuationByResult("Recovery failed.", "Recovery succeeded.");
@@ -1820,9 +1826,12 @@ public class ProcessUserChatCommandHandlerTests
     [InlineData("manage_api_keys", "{\"action\":\"revoke\",\"key_id\":\"d23bbcbf-3e97-44b7-9bc2-a6b8f715ce51\"}", "{\"action\":\"create\",\"name\":\"Phone\"}")]
     [InlineData("manage_account", "{\"action\":\"request_deletion\"}", "{\"action\":\"reset_account\"}")]
     [InlineData("manage_calendar_sync", "{\"action\":\"dismiss_suggestion\",\"suggestion_id\":\"d23bbcbf-3e97-44b7-9bc2-a6b8f715ce51\"}", "{\"action\":\"run_sync\"}")]
+    [InlineData("manage_calendar_sync", "{\"action\":\"set_auto_sync\",\"enabled\":true}", "{\"action\":\"set_auto_sync\",\"enabled\":false}")]
+    [InlineData("update_notifications", "{\"action\":\"subscribe_push\",\"endpoint\":\"https://push.example/old\",\"p256dh\":\"old-key\",\"auth\":\"old-auth\"}", "{\"action\":\"subscribe_push\",\"endpoint\":\"https://push.example/new\",\"p256dh\":\"new-key\",\"auth\":\"new-auth\"}")]
+    [InlineData("update_notifications", "{\"action\":\"unsubscribe_push\",\"endpoint\":\"https://push.example/old\"}", "{\"action\":\"unsubscribe_push\",\"endpoint\":\"https://push.example/new\"}")]
     [InlineData("update_profile_preferences", "{\"action\":\"set_timezone\",\"timezone\":\"Invalid\"}", "{\"action\":\"set_language\",\"language\":\"en\"}")]
     [InlineData("manage_subscription", "{\"action\":\"create_checkout\",\"interval\":\"weekly\"}", "{\"action\":\"create_portal\"}")]
-    public async Task Handle_RecoveryUsesDifferentMultiplexedAction_DoesNotConsumeOriginalFailure(
+    public async Task Handle_UnidentifiedRecoveryMutation_DoesNotConsumeOriginalFailure(
         string toolName,
         string failedArguments,
         string recoveryArguments)

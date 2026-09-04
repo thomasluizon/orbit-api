@@ -118,14 +118,27 @@ public class AiIntentServiceStreamingTests
         var request = new AiToolRequest(
             "Create my maintenance habit every Thursday.",
             "system",
-            [],
-            PriorToolFailures: [new AiToolFailure("create_habit", "Rejected schedule shape.")],
+            [new
+            {
+                name = "create_habit",
+                description = "Create a habit.",
+                parameters = new
+                {
+                    type = "object",
+                    properties = new { title = new { type = "string" } },
+                    required = new[] { "title" }
+                }
+            }],
+            PriorToolFailures: [new AiToolFailure("r1", "create_habit", "Rejected schedule shape.")],
             PriorToolSuccesses: [new AiToolSuccess("create_habit", "habit-123", "Morning walk")]);
 
         var result = await service.SendWithToolsAsync(request);
 
         result.IsSuccess.Should().BeTrue();
         handler.LastRequestBody.Should().Contain("single recovery attempt");
+        handler.LastRequestBody.Should().Contain("retry_of");
+        handler.LastRequestBody.Should().Contain("r1");
+        handler.LastRequestBody.Should().Contain("\"required\":[\"title\",\"retry_of\"]");
         handler.LastRequestBody.Should().Contain("Rejected schedule shape.");
         handler.LastRequestBody.Should().Contain("Completed operations");
         handler.LastRequestBody.Should().Contain("Morning walk");

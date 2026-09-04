@@ -22,7 +22,7 @@ public sealed record AiToolRequest(
     IReadOnlyList<AiToolFailure>? PriorToolFailures = null,
     IReadOnlyList<AiToolSuccess>? PriorToolSuccesses = null);
 
-public sealed record AiToolFailure(string ToolName, string? Error);
+public sealed record AiToolFailure(string RetryId, string ToolName, string? Error);
 
 public sealed record AiToolSuccess(string ToolName, string? EntityId, string? EntityName);
 
