@@ -316,13 +316,6 @@ public partial class ProcessUserChatCommandHandler
             var failureIndex = matchingFailure is { Score: >= 0.5 }
                 ? matchingFailure.Index
                 : -1;
-            if (failureIndex < 0
-                && !successfulCalls.Any(success => string.Equals(success.Name, call.Name, StringComparison.Ordinal)))
-            {
-                failureIndex = unmatchedFailures.FindIndex(failure =>
-                    string.Equals(failure.Name, call.Name, StringComparison.Ordinal));
-            }
-
             if (failureIndex < 0)
                 return null;
 
@@ -338,6 +331,14 @@ public partial class ProcessUserChatCommandHandler
         if (left.ValueKind != JsonValueKind.Object || right.ValueKind != JsonValueKind.Object)
             return JsonValuesEqual(left, right) ? 1d : 0d;
 
+        var leftAction = MutationAction(left);
+        var rightAction = MutationAction(right);
+        if (leftAction.HasValue != rightAction.HasValue
+            || leftAction.HasValue && !JsonValuesEqual(leftAction.Value, rightAction!.Value))
+        {
+            return 0d;
+        }
+
         var leftIdentities = left.EnumerateObject()
             .Where(property => IsMutationIdentityProperty(property.Name))
             .ToDictionary(property => property.Name, property => property.Value, StringComparer.OrdinalIgnoreCase);
@@ -345,11 +346,26 @@ public partial class ProcessUserChatCommandHandler
             .Where(property => IsMutationIdentityProperty(property.Name))
             .ToDictionary(property => property.Name, property => property.Value, StringComparer.OrdinalIgnoreCase);
 
-        return leftIdentities
+        var score = leftIdentities
             .Where(identity => rightIdentities.ContainsKey(identity.Key))
             .Select(identity => IdentityValueScore(identity.Key, identity.Value, rightIdentities[identity.Key]))
             .DefaultIfEmpty(0d)
             .Max();
+
+        return leftAction.HasValue && leftIdentities.Count == 0 && rightIdentities.Count == 0
+            ? 1d
+            : score;
+    }
+
+    private static JsonElement? MutationAction(JsonElement arguments)
+    {
+        foreach (var property in arguments.EnumerateObject())
+        {
+            if (property.Name.Equals("action", StringComparison.OrdinalIgnoreCase))
+                return property.Value;
+        }
+
+        return null;
     }
 
     private static bool IsMutationIdentityProperty(string propertyName)

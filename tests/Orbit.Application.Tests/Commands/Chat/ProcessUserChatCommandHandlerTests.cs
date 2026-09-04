@@ -1779,6 +1779,77 @@ public class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_RecoveryUsesDifferentNotificationAction_DoesNotConsumeOriginalFailure()
+    {
+        SetupUserAndPayGate();
+        var attemptedActions = new List<string>();
+        var tool = CreateSequencedTool("update_notifications", args =>
+        {
+            var action = args.GetProperty("action").GetString()!;
+            attemptedActions.Add(action);
+            return action == "mark_read"
+                ? new ToolResult(false, Error: "Notification not found.")
+                : new ToolResult(true, EntityId: UserId.ToString(), EntityName: "Marked all notifications as read");
+        });
+        var handler = CreateHandler(tool);
+        var notificationId = Guid.NewGuid();
+        var initialResponse = ToolResponse(
+            "update_notifications",
+            "call_mark_read",
+            $$"""{"action":"mark_read","notification_id":"{{notificationId}}"}""");
+        var retryResponse = ToolResponse(
+            "update_notifications",
+            "call_mark_all_read",
+            """{"action":"mark_all_read"}""");
+
+        SetupRecoveryResponses(initialResponse, retryResponse);
+        SetupContinuationByResult("Recovery failed.", "Recovery succeeded.");
+
+        var result = await handler.Handle(
+            new ProcessUserChatCommand(UserId, "Mark this notification as read."),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        attemptedActions.Should().Equal("mark_read");
+        result.Value.AiMessage.Should().Be(EnglishToolFailureMessage);
+        result.Value.Actions.Should().ContainSingle(action => action.Status == ActionStatus.Failed);
+    }
+
+    [Theory]
+    [InlineData("delete_notifications", "{\"action\":\"delete_one\",\"notification_id\":\"d23bbcbf-3e97-44b7-9bc2-a6b8f715ce51\"}", "{\"action\":\"delete_all\"}")]
+    [InlineData("manage_api_keys", "{\"action\":\"revoke\",\"key_id\":\"d23bbcbf-3e97-44b7-9bc2-a6b8f715ce51\"}", "{\"action\":\"create\",\"name\":\"Phone\"}")]
+    [InlineData("manage_account", "{\"action\":\"request_deletion\"}", "{\"action\":\"reset_account\"}")]
+    [InlineData("manage_calendar_sync", "{\"action\":\"dismiss_suggestion\",\"suggestion_id\":\"d23bbcbf-3e97-44b7-9bc2-a6b8f715ce51\"}", "{\"action\":\"run_sync\"}")]
+    [InlineData("update_profile_preferences", "{\"action\":\"set_timezone\",\"timezone\":\"Invalid\"}", "{\"action\":\"set_language\",\"language\":\"en\"}")]
+    [InlineData("manage_subscription", "{\"action\":\"create_checkout\",\"interval\":\"weekly\"}", "{\"action\":\"create_portal\"}")]
+    public async Task Handle_RecoveryUsesDifferentMultiplexedAction_DoesNotConsumeOriginalFailure(
+        string toolName,
+        string failedArguments,
+        string recoveryArguments)
+    {
+        SetupUserAndPayGate();
+        var executions = 0;
+        var tool = CreateSequencedTool(toolName, _ => ++executions == 1
+            ? new ToolResult(false, Error: "Mutation failed.")
+            : new ToolResult(true, EntityId: UserId.ToString(), EntityName: "Unrelated mutation completed"));
+        var handler = CreateHandler(tool);
+        var initialResponse = ToolResponse(toolName, "call_failed", failedArguments);
+        var retryResponse = ToolResponse(toolName, "call_unrelated", recoveryArguments);
+
+        SetupRecoveryResponses(initialResponse, retryResponse);
+        SetupContinuationByResult("Recovery failed.", "Recovery succeeded.");
+
+        var result = await handler.Handle(
+            new ProcessUserChatCommand(UserId, "Complete the requested mutation."),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        executions.Should().Be(1);
+        result.Value.AiMessage.Should().Be(EnglishToolFailureMessage);
+        result.Value.Actions.Should().ContainSingle(action => action.Status == ActionStatus.Failed);
+    }
+
+    [Fact]
     public async Task Handle_RecoveryMatchesCompletedMutationTwice_RejectsRetryPlan()
     {
         SetupUserAndPayGate();
