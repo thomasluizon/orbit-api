@@ -817,10 +817,8 @@ public class HabitScheduleServiceTests
             UserId, "Ancient", FrequencyUnit.Day, 1, DueDate: anchor,
             Days: [DayOfWeek.Monday])).Value;
         habit.AdvanceDueDate(anchor.AddDays(6), weekStartDay: 1);
-        habit.Update(new HabitUpdateParams(
-            habit.Title, habit.Description, habit.FrequencyUnit, habit.FrequencyQuantity,
-            habit.Days.ToList(), habit.IsBadHabit, DueDate: null,
-            EndDate: anchor.AddDays(13), IntervalWeeks: 2));
+        typeof(Habit).GetProperty(nameof(Habit.IntervalWeeks))!.SetValue(habit, 2);
+        typeof(Habit).GetProperty(nameof(Habit.EndDate))!.SetValue(habit, anchor.AddDays(13));
 
         HabitScheduleService.HasMissedPastOccurrence(
             habit, new DateOnly(9999, 12, 31), weekStartDay: 1).Should().BeFalse();

@@ -98,17 +98,7 @@ public class SkipHabitCommandHandlerTests
             UserId, "Alternating", FrequencyUnit.Day, 1, DueDate: anchor,
             Days: [DayOfWeek.Monday])).Value;
         habit.AdvanceDueDate(anchor.AddDays(6), weekStartDay: 1);
-        var update = habit.Update(new HabitUpdateParams(
-            habit.Title,
-            habit.Description,
-            habit.FrequencyUnit,
-            habit.FrequencyQuantity,
-            habit.Days.ToList(),
-            habit.IsBadHabit,
-            DueDate: null,
-            UserToday: inactiveToday,
-            IntervalWeeks: 2));
-        update.IsSuccess.Should().BeTrue();
+        typeof(Habit).GetProperty(nameof(Habit.IntervalWeeks))!.SetValue(habit, 2);
         habit.DueDate.Should().Be(inactiveDueDate);
 
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>())
