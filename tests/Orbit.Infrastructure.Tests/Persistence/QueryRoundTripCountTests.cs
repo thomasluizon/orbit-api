@@ -1,7 +1,10 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using NSubstitute;
+using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
+using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Persistence;
@@ -47,6 +50,16 @@ public class QueryRoundTripCountTests
 
         large.Should().Be(small);
         large.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task HabitDetailLoad_RoundTripCount_IsInvariantToChildVolume()
+    {
+        var small = await CountHabitDetailLoad(childCount: 2);
+        var large = await CountHabitDetailLoad(childCount: 25);
+
+        large.Should().Be(small);
+        large.Should().BeLessThanOrEqualTo(7);
     }
 
     private static async Task<int> CountRetrospectiveLoad(int habitCount)
@@ -95,6 +108,29 @@ public class QueryRoundTripCountTests
         return counter.CommandCount;
     }
 
+    private static async Task<int> CountHabitDetailLoad(int childCount)
+    {
+        var counter = new CountingDbCommandInterceptor();
+        using var factory = new SqliteOrbitDbContextFactory(counter);
+        var (userId, habitId) = await SeedDetailHabitGraph(factory.Context, childCount);
+        var userDateService = Substitute.For<IUserDateService>();
+        userDateService.GetUserTodayAsync(userId, Arg.Any<CancellationToken>()).Returns(DateTo);
+        var handler = new GetHabitFullDetailQueryHandler(
+            new GenericRepository<Habit>(factory.Context),
+            new GenericRepository<HabitLog>(factory.Context),
+            new GenericRepository<User>(factory.Context),
+            userDateService);
+
+        counter.Reset();
+        var result = await handler.Handle(
+            new GetHabitFullDetailQuery(userId, habitId),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Habit.LinkedGoals.Should().HaveCount(2);
+        return counter.CommandCount;
+    }
+
     private static async Task<Guid> SeedHabits(OrbitDbContext context, int habitCount, int logsPerHabit, bool withGoals)
     {
         var userId = Guid.NewGuid();
@@ -123,5 +159,52 @@ public class QueryRoundTripCountTests
         await context.SaveChangesAsync();
         context.ChangeTracker.Clear();
         return userId;
+    }
+
+    private static async Task<(Guid UserId, Guid HabitId)> SeedDetailHabitGraph(
+        OrbitDbContext context,
+        int childCount)
+    {
+        var userId = Guid.NewGuid();
+        var user = User.Create("Detail User", $"detail-{userId:N}@example.com").Value;
+        typeof(User).GetProperty("Id")!.SetValue(user, userId);
+        var parent = Habit.Create(new HabitCreateParams(
+            userId, "Parent", FrequencyUnit.Day, 1, DueDate: DateFrom)).Value;
+        var habit = Habit.Create(new HabitCreateParams(
+            userId,
+            "Nested Detail",
+            FrequencyUnit.Day,
+            1,
+            DueDate: DateFrom,
+            ParentHabitId: parent.Id,
+            SlipAlertEnabled: true)).Value;
+
+        context.Users.Add(user);
+        context.Habits.AddRange(parent, habit);
+        for (var goalIndex = 0; goalIndex < 2; goalIndex++)
+        {
+            var goal = Goal.Create(userId, $"Detail Goal {goalIndex}", 10m, "reps").Value;
+            context.Goals.Add(goal);
+            habit.AddGoal(goal);
+        }
+
+        for (var childIndex = 0; childIndex < childCount; childIndex++)
+        {
+            var child = Habit.Create(new HabitCreateParams(
+                userId,
+                $"Child {childIndex}",
+                FrequencyUnit.Day,
+                1,
+                DueDate: DateFrom,
+                ParentHabitId: habit.Id)).Value;
+            var childGoal = Goal.Create(userId, $"Child Goal {childIndex}", 10m, "reps").Value;
+            child.AddGoal(childGoal);
+            context.Habits.Add(child);
+            context.Goals.Add(childGoal);
+        }
+
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+        return (userId, habit.Id);
     }
 }

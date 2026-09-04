@@ -6,6 +6,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.ValueObjects;
+using System.Text.Json.Serialization;
 
 namespace Orbit.Application.Habits.Queries;
 
@@ -54,7 +55,11 @@ public record HabitDetailResponse(
     DateTime CreatedAtUtc,
     IReadOnlyList<HabitChildResponse> Children,
     string? Emoji = null,
-    int? IntervalWeeks = null);
+    int? IntervalWeeks = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<LinkedGoalDto>? LinkedGoals = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    bool? SlipAlertEnabled = null);
 
 public record GetHabitByIdQuery(Guid UserId, Guid HabitId) : IRequest<Result<HabitDetailResponse>>;
 
