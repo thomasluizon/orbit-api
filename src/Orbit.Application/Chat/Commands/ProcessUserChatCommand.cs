@@ -106,8 +106,6 @@ public partial class ProcessUserChatCommandHandler(
     private const string DescribeFeatureToolName = "describe_feature";
     private const string EnglishToolFailureMessage = "I couldn't complete that. Please try again.";
     private const string PortugueseToolFailureMessage = "Não consegui concluir isso. Tente novamente.";
-    private const string EnglishToolRecoveredMessage = "Done. I completed that for you.";
-    private const string PortugueseToolRecoveredMessage = "Pronto. Concluí isso para você.";
 
     private const int MaxSupportMessageLength = 5000;
 
@@ -139,18 +137,17 @@ public partial class ProcessUserChatCommandHandler(
             && ChatIntentRouter.IsNoToolTurn(request.Message);
 
         var aiStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var initialTurn = await RequestInitialAiResponseAsync(request, context, aiStreamSink, skipTools, cancellationToken);
+        var response = await RequestInitialAiResponseAsync(request, context, aiStreamSink, skipTools, cancellationToken);
         aiStopwatch.Stop();
         LogAiIntentServiceCompleted(logger, aiStopwatch.ElapsedMilliseconds);
 
-        if (initialTurn.IsFailure)
-            return initialTurn.PropagateError<ChatResponse>();
+        if (response.IsFailure)
+            return response.PropagateError<ChatResponse>();
 
         var executionResults = new ToolExecutionAccumulator();
         var actionsStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var toolLoopResult = await RunToolCallLoopAsync(
-            initialTurn.Value.Response,
-            initialTurn.Value.Request,
+            response.Value,
             request,
             executionResults,
             userLanguage,
@@ -158,11 +155,8 @@ public partial class ProcessUserChatCommandHandler(
             cancellationToken);
         var aiResponse = toolLoopResult.FinalResponse;
         var iterations = toolLoopResult.Iterations;
-        executionResults.SanitizeFailedActions(
-            toolLoopResult.HadToolFailure,
-            toolLoopResult.RetrySucceeded,
-            ToolFailureMessage(userLanguage, recovered: false),
-            initialTurn.Value.Request.ToolDeclarations);
+        if (toolLoopResult.HadToolFailure)
+            executionResults.SanitizeFailedActions(ToolFailureMessage(userLanguage));
         if (aiStreamFilter is not null)
             await aiStreamFilter.FlushAsync();
         actionsStopwatch.Stop();
@@ -179,12 +173,6 @@ public partial class ProcessUserChatCommandHandler(
 
         var (aiMessage, habitList, goalList, metricsCard) = await BuildResponseCardsAsync(
             StripJsonWrapper(aiResponse.TextMessage), request, context, cancellationToken);
-
-        aiMessage = SanitizeToolFailureMessage(
-            aiMessage,
-            toolLoopResult,
-            initialTurn.Value.Request.ToolDeclarations,
-            userLanguage);
 
         if (faqMatch is { } faqToCache
             && !string.IsNullOrWhiteSpace(aiMessage)

@@ -30,22 +30,12 @@ public partial class ProcessUserChatCommandHandler
         /// </summary>
         public IReadOnlyList<string> RelatedSurfaces => _relatedSurfaces;
 
-        public void SanitizeFailedActions(
-            bool hadToolFailure,
-            bool retrySucceeded,
-            string error,
-            IReadOnlyList<object> toolDeclarations)
+        public void SanitizeFailedActions(string error)
         {
-            if (!hadToolFailure || retrySucceeded)
-                return;
-
             for (var index = 0; index < ActionResults.Count; index++)
             {
-                if (ActionResults[index].Status == ActionStatus.Failed
-                    && ContainsInternalToolVocabulary(ActionResults[index].Error, toolDeclarations))
-                {
+                if (ActionResults[index].Status == ActionStatus.Failed)
                     ActionResults[index] = ActionResults[index] with { Error = error };
-                }
             }
         }
 
@@ -54,25 +44,12 @@ public partial class ProcessUserChatCommandHandler
             ActionResult? actionResult,
             AgentOperationResult? operationResult,
             AgentPolicyDenial? policyDenial,
-            PendingAgentOperation? pendingOperation,
-            bool isToolFailureRetry = false)
+            PendingAgentOperation? pendingOperation)
         {
             _calledToolNames.Add(toolName);
 
             if (actionResult is not null)
-            {
-                if (isToolFailureRetry && actionResult.Status == ActionStatus.Success)
-                {
-                    var failedActionIndex = ActionResults.FindLastIndex(existing =>
-                        existing.Status == ActionStatus.Failed
-                        && string.Equals(existing.Type, actionResult.Type, StringComparison.Ordinal));
-                    if (failedActionIndex >= 0)
-                        ActionResults.RemoveAt(failedActionIndex);
-                }
-
-                if (!isToolFailureRetry || actionResult.Status != ActionStatus.Failed)
-                    ActionResults.Add(actionResult);
-            }
+                ActionResults.Add(actionResult);
 
             if (operationResult is not null)
             {

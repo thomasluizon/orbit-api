@@ -250,17 +250,17 @@ public class ToolFailureSectionTests
     }
 
     [Fact]
-    public void Build_DefinesFailureRecoveryAndSingleRetryRules()
+    public void Build_DefinesTerminalFailureRules()
     {
         var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
 
         var result = new ToolFailureSection().Build(ctx);
 
-        result.Should().Contain("Tool Failure Recovery");
-        result.Should().Contain("NEVER turn a tool rejection into a question");
-        result.Should().Contain("ORIGINAL USER REQUEST");
-        result.Should().Contain("at most ONE retry");
-        result.Should().Contain("Never submit a payload identical");
+        result.Should().Contain("Tool Failures");
+        result.Should().Contain("NEVER retry a rejected tool call");
+        result.Should().Contain("NEVER turn the rejection into a question");
+        result.Should().Contain("user's own words and language");
+        result.Should().Contain("ask the user to resolve it");
         result.Should().ContainAll("frequency_unit", "frequency_quantity", "days", "is_flexible");
     }
 

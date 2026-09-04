@@ -40,7 +40,7 @@ public class AiIntentServiceStreamingTests
     {
         var body = RoleChunk()
             + ToolCallStartChunk(0, "call_1", "create_habit")
-            + ToolCallArgsChunk(0, """{"retry_of":"r1","title":""")
+            + ToolCallArgsChunk(0, """{"title":""")
             + ToolCallArgsChunk(0, """ "Read more"}""")
             + FinishChunk("tool_calls")
             + Done();
@@ -54,7 +54,6 @@ public class AiIntentServiceStreamingTests
         var toolCall = result.Value.ToolCalls!.Single();
         toolCall.Name.Should().Be("create_habit");
         toolCall.Id.Should().Be("call_1");
-        toolCall.Args.GetProperty("retry_of").GetString().Should().Be("r1");
         toolCall.Args.GetProperty("title").GetString().Should().Be("Read more");
         sink.Events.Should().BeEmpty();
     }
@@ -109,42 +108,6 @@ public class AiIntentServiceStreamingTests
         sink.Events.Should().BeEmpty();
         handler.LastRequestBody.Should().NotContain("\"stream\":true");
         handler.LastRequestBody.Should().NotContain("stream_options");
-    }
-
-    [Fact]
-    public async Task SendWithToolsAsync_FailureRecovery_UsesOriginalMessageAndControlledFailureContext()
-    {
-        var handler = new JsonHandler(BufferedCompletion);
-        var (service, _) = BuildService(handler);
-        var request = new AiToolRequest(
-            "Create my maintenance habit every Thursday.",
-            "system",
-            [new
-            {
-                name = "create_habit",
-                description = "Create a habit.",
-                parameters = new
-                {
-                    type = "object",
-                    properties = new { title = new { type = "string" } },
-                    required = new[] { "title" }
-                }
-            }],
-            PriorToolFailures: [new AiToolFailure("r1", "create_habit", "Rejected schedule shape.")],
-            PriorToolSuccesses: [new AiToolSuccess("create_habit", "habit-123", "Morning walk")]);
-
-        var result = await service.SendWithToolsAsync(request);
-
-        result.IsSuccess.Should().BeTrue();
-        handler.LastRequestBody.Should().Contain("single recovery attempt");
-        handler.LastRequestBody.Should().Contain("retry_of");
-        handler.LastRequestBody.Should().Contain("r1");
-        handler.LastRequestBody.Should().Contain("\"required\":[\"title\",\"retry_of\"]");
-        handler.LastRequestBody.Should().Contain("Rejected schedule shape.");
-        handler.LastRequestBody.Should().Contain("Completed operations");
-        handler.LastRequestBody.Should().Contain("Morning walk");
-        handler.LastRequestBody.Should().Contain("Create my maintenance habit every Thursday.");
-        handler.LastRequestBody.Should().NotContain("Tuesday");
     }
 
     [Fact]

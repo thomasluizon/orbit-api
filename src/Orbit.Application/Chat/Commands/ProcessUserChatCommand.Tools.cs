@@ -12,7 +12,6 @@ public partial class ProcessUserChatCommandHandler
 {
     private async Task<ToolLoopResult> RunToolCallLoopAsync(
         AiResponse initialResponse,
-        AiToolRequest originalAiRequest,
         ProcessUserChatCommand request,
         ToolExecutionAccumulator executionResults,
         string? language,
@@ -23,11 +22,7 @@ public partial class ProcessUserChatCommandHandler
         var iteration = 0;
         long totalReportedTokens = initialResponse.ReportedTokenCount;
         var tokenBudgetExceeded = totalReportedTokens > AppConstants.MaxAiRequestTotalTokens;
-        var rejectedCalls = new List<RejectedToolCall>();
-        var successfulCalls = new List<SuccessfulToolCall>();
-        var isRetryRound = false;
         var hadToolFailure = false;
-        var retrySucceeded = false;
 
         if (tokenBudgetExceeded)
         {
@@ -46,12 +41,8 @@ public partial class ProcessUserChatCommandHandler
 
             var roundResult = await ProcessToolCallsAsync(
                 aiResponse,
-                originalAiRequest,
                 request,
                 executionResults,
-                rejectedCalls,
-                successfulCalls,
-                isRetryRound,
                 iteration,
                 language,
                 aiStreamSink,
@@ -61,18 +52,9 @@ public partial class ProcessUserChatCommandHandler
                 break;
 
             aiResponse = roundResult.Response;
-            if (roundResult.StartedRecovery)
+            if (roundResult.HadToolFailure)
             {
                 hadToolFailure = true;
-                isRetryRound = true;
-            }
-            else if (isRetryRound)
-            {
-                retrySucceeded = roundResult.RetrySucceeded;
-                if (aiResponse.HasToolCalls)
-                {
-                    aiResponse = MessageResponse(language, retrySucceeded);
-                }
                 break;
             }
 
@@ -92,16 +74,14 @@ public partial class ProcessUserChatCommandHandler
             aiResponse,
             iteration,
             tokenBudgetExceeded,
-            hadToolFailure,
-            retrySucceeded);
+            hadToolFailure);
     }
 
     private sealed record ToolLoopResult(
         AiResponse FinalResponse,
         int Iterations,
         bool TokenBudgetExceeded,
-        bool HadToolFailure,
-        bool RetrySucceeded);
+        bool HadToolFailure);
 
     /// <summary>
     /// Processes one iteration of AI tool calls: orders them, executes each, and sends results
@@ -109,12 +89,8 @@ public partial class ProcessUserChatCommandHandler
     /// </summary>
     private async Task<ToolRoundResult?> ProcessToolCallsAsync(
         AiResponse aiResponse,
-        AiToolRequest originalAiRequest,
         ProcessUserChatCommand request,
         ToolExecutionAccumulator executionResults,
-        List<RejectedToolCall> rejectedCalls,
-        List<SuccessfulToolCall> successfulCalls,
-        bool isRetryRound,
         int iteration,
         string? language,
         Func<AiStreamEvent, Task>? aiStreamSink,
@@ -126,17 +102,11 @@ public partial class ProcessUserChatCommandHandler
             .OrderBy(c => ai.ToolRegistry.GetTool(c.Name)?.Order ?? int.MaxValue)
             .ToList();
 
-        var retryPlan = isRetryRound
-            ? BuildRetryExecutionPlan(orderedCalls, rejectedCalls)
-            : orderedCalls;
-        if (retryPlan is null)
-            return new ToolRoundResult(MessageResponse(language), RetrySucceeded: false);
+        var outcomesByCallId = await ExecuteToolCallsAsync(orderedCalls, request, cancellationToken);
 
-        var outcomesByCallId = await ExecuteToolCallsAsync(retryPlan, request, cancellationToken);
-
-        var toolResults = new List<AiToolCallResult>(retryPlan.Count);
-        var retryableFailures = new List<RejectedToolCall>();
-        foreach (var call in retryPlan)
+        var toolResults = new List<AiToolCallResult>(orderedCalls.Count);
+        var hadToolFailure = false;
+        foreach (var call in orderedCalls)
         {
             var outcome = outcomesByCallId[call.Id];
             toolResults.Add(outcome.ToolResult);
@@ -145,67 +115,14 @@ public partial class ProcessUserChatCommandHandler
                 outcome.ActionResult,
                 outcome.OperationResult,
                 outcome.PolicyDenial,
-                outcome.PendingOperation,
-                isRetryRound);
+                outcome.PendingOperation);
 
             if (outcome.OperationResult?.Status == AgentOperationStatus.Failed)
-            {
-                var retryId = $"r{rejectedCalls.Count + retryableFailures.Count + 1}";
-                retryableFailures.Add(new RejectedToolCall(
-                    retryId,
-                    call.Name,
-                    call.Args.Clone(),
-                    outcome.ToolResult.Error));
-            }
-
-            if (!isRetryRound
-                && ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly == false
-                && outcome.ActionResult?.Status == ActionStatus.Success)
-            {
-                successfulCalls.Add(new SuccessfulToolCall(
-                    call.Name,
-                    outcome.ToolResult.EntityId,
-                    outcome.ToolResult.EntityName));
-            }
+                hadToolFailure = true;
         }
 
-        if (isRetryRound)
-        {
-            if (retryableFailures.Count > 0)
-                return new ToolRoundResult(MessageResponse(language), RetrySucceeded: false);
-
-            var retryContinuation = await ai.IntentService.ContinueWithToolResultsAsync(
-                aiResponse.ConversationContext!, toolResults, streamSink: null, cancellationToken);
-            if (retryContinuation.IsFailure || retryContinuation.Value.HasToolCalls)
-                return new ToolRoundResult(MessageResponse(language, recovered: true), RetrySucceeded: true);
-
-            return new ToolRoundResult(retryContinuation.Value, RetrySucceeded: true);
-        }
-
-        if (retryableFailures.Count > 0)
-        {
-            rejectedCalls.AddRange(retryableFailures);
-            var retryRequest = originalAiRequest with
-            {
-                PriorToolFailures = retryableFailures
-                    .Select(failure => new AiToolFailure(failure.RetryId, failure.Name, failure.Error))
-                    .ToList(),
-                PriorToolSuccesses = successfulCalls
-                    .Select(success => new AiToolSuccess(success.Name, success.EntityId, success.EntityName))
-                    .ToList()
-            };
-            var retryResponse = await ai.IntentService.SendWithToolsAsync(
-                retryRequest, streamSink: null, cancellationToken);
-            if (retryResponse.IsFailure || !retryResponse.Value.HasToolCalls)
-            {
-                return new ToolRoundResult(
-                    MessageResponse(language),
-                    StartedRecovery: true,
-                    RetrySucceeded: false);
-            }
-
-            return new ToolRoundResult(retryResponse.Value, StartedRecovery: true);
-        }
+        if (hadToolFailure)
+            return new ToolRoundResult(MessageResponse(language), HadToolFailure: true);
 
         var continueResult = await ai.IntentService.ContinueWithToolResultsAsync(aiResponse.ConversationContext!, toolResults, aiStreamSink, cancellationToken);
         if (continueResult.IsFailure)
@@ -219,185 +136,17 @@ public partial class ProcessUserChatCommandHandler
 
     private sealed record ToolRoundResult(
         AiResponse Response,
-        bool StartedRecovery = false,
-        bool RetrySucceeded = false);
+        bool HadToolFailure = false);
 
-    private sealed record RejectedToolCall(
-        string RetryId,
-        string Name,
-        JsonElement Arguments,
-        string? Error);
-
-    private sealed record SuccessfulToolCall(
-        string Name,
-        string? EntityId,
-        string? EntityName);
-
-    private static AiResponse MessageResponse(string? language, bool recovered = false) => new()
+    private static AiResponse MessageResponse(string? language) => new()
     {
-        TextMessage = ToolFailureMessage(language, recovered)
+        TextMessage = ToolFailureMessage(language)
     };
 
-    private static string ToolFailureMessage(string? language, bool recovered)
-    {
-        if (LocaleHelper.IsPortuguese(language))
-            return recovered ? PortugueseToolRecoveredMessage : PortugueseToolFailureMessage;
-
-        return recovered ? EnglishToolRecoveredMessage : EnglishToolFailureMessage;
-    }
-
-    /// <summary>
-    /// Builds a recovery plan that enforces the invariant that every mutation requested by the user
-    /// is attempted exactly once and every reported outcome matches that attempt. Each recovery call
-    /// must name one unmatched failure exactly, and the transport-only identifier is removed before dispatch.
-    /// </summary>
-    private static List<AiToolCall>? BuildRetryExecutionPlan(
-        IReadOnlyList<AiToolCall> calls,
-        IReadOnlyList<RejectedToolCall> rejectedCalls)
-    {
-        var unmatchedFailures = rejectedCalls.ToList();
-        var plan = new List<AiToolCall>(calls.Count);
-
-        foreach (var call in calls)
-        {
-            if (call.Args.ValueKind != JsonValueKind.Object
-                || !call.Args.TryGetProperty("retry_of", out var retryOfElement)
-                || retryOfElement.ValueKind != JsonValueKind.String)
-            {
-                return null;
-            }
-
-            var retryOf = retryOfElement.GetString();
-            var failureIndex = unmatchedFailures.FindIndex(failure =>
-                string.Equals(failure.RetryId, retryOf, StringComparison.Ordinal)
-                && string.Equals(failure.Name, call.Name, StringComparison.Ordinal));
-            if (failureIndex < 0)
-                return null;
-
-            var dispatchArguments = JsonSerializer.SerializeToElement(
-                call.Args.EnumerateObject()
-                    .Where(property => !property.NameEquals("retry_of"))
-                    .ToDictionary(property => property.Name, property => property.Value.Clone(), StringComparer.Ordinal));
-            if (JsonValuesEqual(unmatchedFailures[failureIndex].Arguments, dispatchArguments))
-                return null;
-
-            unmatchedFailures.RemoveAt(failureIndex);
-            plan.Add(call with { Args = dispatchArguments });
-        }
-
-        return unmatchedFailures.Count == 0 ? plan : null;
-    }
-
-    private static bool JsonValuesEqual(JsonElement left, JsonElement right)
-    {
-        if (left.ValueKind != right.ValueKind)
-            return false;
-
-        return left.ValueKind switch
-        {
-            JsonValueKind.Object => JsonObjectsEqual(left, right),
-            JsonValueKind.Array => JsonArraysEqual(left, right),
-            JsonValueKind.String => left.GetString() == right.GetString(),
-            JsonValueKind.Number => left.GetRawText() == right.GetRawText(),
-            JsonValueKind.True or JsonValueKind.False or JsonValueKind.Null => true,
-            _ => left.GetRawText() == right.GetRawText()
-        };
-    }
-
-    private static bool JsonObjectsEqual(JsonElement left, JsonElement right)
-    {
-        var leftProperties = left.EnumerateObject().ToList();
-        var rightProperties = right.EnumerateObject().ToList();
-        if (leftProperties.Count != rightProperties.Count)
-            return false;
-
-        return leftProperties.All(leftProperty =>
-            right.TryGetProperty(leftProperty.Name, out var rightValue)
-            && JsonValuesEqual(leftProperty.Value, rightValue));
-    }
-
-    private static bool JsonArraysEqual(JsonElement left, JsonElement right)
-    {
-        var leftItems = left.EnumerateArray().ToList();
-        var rightItems = right.EnumerateArray().ToList();
-        return leftItems.Count == rightItems.Count
-            && leftItems.Zip(rightItems).All(pair => JsonValuesEqual(pair.First, pair.Second));
-    }
-
-    private static bool ContainsInternalToolVocabulary(string? message, IReadOnlyList<object> toolDeclarations)
-    {
-        if (string.IsNullOrWhiteSpace(message))
-            return false;
-
-        if (message.Contains("frequência diária", StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        var argumentNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var declaration in toolDeclarations)
-            CollectToolArgumentNames(JsonSerializer.SerializeToElement(declaration), argumentNames);
-
-        return argumentNames.Any(name => ContainsIdentifier(message, name));
-    }
-
-    private static string? SanitizeToolFailureMessage(
-        string? message,
-        ToolLoopResult toolLoopResult,
-        IReadOnlyList<object> toolDeclarations,
-        string? language)
-    {
-        if (!toolLoopResult.HadToolFailure
-            || !ContainsInternalToolVocabulary(message, toolDeclarations))
-        {
-            return message;
-        }
-
-        return ToolFailureMessage(language, toolLoopResult.RetrySucceeded);
-    }
-
-    private static void CollectToolArgumentNames(JsonElement element, HashSet<string> argumentNames)
-    {
-        if (element.ValueKind == JsonValueKind.Object)
-        {
-            foreach (var property in element.EnumerateObject())
-            {
-                if (property.NameEquals("properties") && property.Value.ValueKind == JsonValueKind.Object)
-                {
-                    foreach (var argument in property.Value.EnumerateObject())
-                        argumentNames.Add(argument.Name);
-                }
-
-                CollectToolArgumentNames(property.Value, argumentNames);
-            }
-        }
-        else if (element.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in element.EnumerateArray())
-                CollectToolArgumentNames(item, argumentNames);
-        }
-    }
-
-    private static bool ContainsIdentifier(string text, string identifier)
-    {
-        var searchStart = 0;
-        while (searchStart < text.Length)
-        {
-            var index = text.IndexOf(identifier, searchStart, StringComparison.OrdinalIgnoreCase);
-            if (index < 0)
-                return false;
-
-            var end = index + identifier.Length;
-            var hasLeftBoundary = index == 0 || !IsIdentifierCharacter(text[index - 1]);
-            var hasRightBoundary = end == text.Length || !IsIdentifierCharacter(text[end]);
-            if (hasLeftBoundary && hasRightBoundary)
-                return true;
-
-            searchStart = index + 1;
-        }
-
-        return false;
-    }
-
-    private static bool IsIdentifierCharacter(char value) => char.IsLetterOrDigit(value) || value == '_';
+    private static string ToolFailureMessage(string? language) =>
+        LocaleHelper.IsPortuguese(language)
+            ? PortugueseToolFailureMessage
+            : EnglishToolFailureMessage;
 
     /// <summary>
     /// Executes a round's tool calls, dispatching the read-only subset concurrently (each on its

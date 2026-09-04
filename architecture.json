@@ -3973,7 +3973,6 @@
           "GetRecapQuery",
           "Goal",
           "Habit",
-          "Notification",
           "ProcessUserChatCommand",
           "ProcessUserChatCommandHandler",
           "Tag",

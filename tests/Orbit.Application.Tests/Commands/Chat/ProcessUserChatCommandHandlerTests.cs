@@ -55,22 +55,11 @@ public class ProcessUserChatCommandHandlerTests
     private static readonly string[] HabitsSurfaces = new[] { "habits" };
     private const string EnglishToolFailureMessage = "I couldn't complete that. Please try again.";
     private const string PortugueseToolFailureMessage = "Não consegui concluir isso. Tente novamente.";
-    private const string EnglishToolRecoveredMessage = "Done. I completed that for you.";
-    private const string PortugueseToolRecoveredMessage = "Pronto. Concluí isso para você.";
     private const string ProductionAdaptationArguments = """
         {"title":"Perspirex Strong - Semana 1 (Adaptação)","description":"Passe TODO DIA À NOITE, bem antes de ir dormir. As duas axilas devem estar 100% secas. Passe o roll-on 2 vezes pra cima e 2 vezes pra baixo na axila. Deixe secar uns segundos e vista a camisa. Acordou: Lave a axila com água e sabão no banho da manhã.","emoji":"🧴","frequency_unit":"Day","frequency_quantity":1,"due_date":"2026-09-08","end_date":"2026-09-14","due_time":"21:00"}
         """;
     private const string ProductionMaintenanceRejectedArguments = """
         {"title":"Perspirex Strong - Semana 2 em diante (Manutenção)","description":"Passe apenas DOMINGO À NOITE e QUARTA À NOITE. Hora e jeito: à noite, axila 100% seca, 2 passadas pra cima e 2 pra baixo. Acordou: Lave a axila com água e sabão no banho da manhã.","emoji":"🧴","frequency_unit":"Week","frequency_quantity":1,"days":["Sunday","Wednesday"],"due_date":"2026-09-15"}
-        """;
-    private const string ProductionMaintenanceSecondRejectedArguments = """
-        {"retry_of":"r1","title":"Perspirex Strong - Semana 2 (Manutenção)","emoji":"🧴","frequency_unit":"Week","frequency_quantity":1,"days":["Wednesday","Sunday"],"due_date":"2026-09-15"}
-        """;
-    private const string ProductionMaintenanceRetryArguments = """
-        {"retry_of":"r1","title":"Perspirex Strong - Semana 2 (Manutenção)","emoji":"🧴","frequency_unit":"Day","frequency_quantity":1,"days":["Wednesday","Sunday"],"due_date":"2026-09-15"}
-        """;
-    private const string ProductionMaintenanceIdenticalRetryArguments = """
-        {"retry_of":"r1","title":"Perspirex Strong - Semana 2 em diante (Manutenção)","description":"Passe apenas DOMINGO À NOITE e QUARTA À NOITE. Hora e jeito: à noite, axila 100% seca, 2 passadas pra cima e 2 pra baixo. Acordou: Lave a axila com água e sabão no banho da manhã.","emoji":"🧴","frequency_unit":"Week","frequency_quantity":1,"days":["Sunday","Wednesday"],"due_date":"2026-09-15"}
         """;
 
     private static Habit CreateHabit(string title, bool isCompleted = false)
@@ -293,65 +282,20 @@ public class ProcessUserChatCommandHandlerTests
             .Returns(Result.Success(response));
     }
 
-    private void SetupRecoveryResponses(AiResponse initialResponse, AiResponse retryResponse)
+    private static AiResponse ToolResponse(string toolName, string callId, string arguments) => new()
     {
-        var callCount = 0;
-        _aiIntentService.SendWithToolsAsync(
-                Arg.Any<AiToolRequest>(),
-                Arg.Any<Func<AiStreamEvent, Task>?>(),
-                Arg.Any<CancellationToken>())
-            .Returns(_ => Result.Success(callCount++ == 0 ? initialResponse : retryResponse));
-    }
-
-    private void SetupContinuationByResult(string failureText, string successText)
-    {
-        _aiIntentService.ContinueWithToolResultsAsync(
-                Arg.Any<AiConversationContext>(),
-                Arg.Any<IReadOnlyList<AiToolCallResult>>(),
-                Arg.Any<Func<AiStreamEvent, Task>?>(),
-                Arg.Any<CancellationToken>())
-            .Returns(callInfo =>
-            {
-                var results = callInfo.ArgAt<IReadOnlyList<AiToolCallResult>>(1);
-                return Result.Success(new AiResponse
-                {
-                    TextMessage = results.All(result => result.Success) ? successText : failureText
-                });
-            });
-    }
-
-    private void SetupContinuationText(string text)
-    {
-        _aiIntentService.ContinueWithToolResultsAsync(
-                Arg.Any<AiConversationContext>(),
-                Arg.Any<IReadOnlyList<AiToolCallResult>>(),
-                Arg.Any<Func<AiStreamEvent, Task>?>(),
-                Arg.Any<CancellationToken>())
-            .Returns(Result.Success(new AiResponse { TextMessage = text }));
-    }
-
-    private static AiResponse ToolResponse(string name, string callId, string arguments)
-    {
-        return new AiResponse
-        {
-            ToolCalls = [new AiToolCall(name, callId, ParseArguments(arguments))],
-            ConversationContext = TestConversationContext
-        };
-    }
+        ToolCalls = [new AiToolCall(toolName, callId, ParseArguments(arguments))],
+        ConversationContext = TestConversationContext
+    };
 
     private static JsonElement ParseArguments(string arguments) =>
-        JsonSerializer.Deserialize<JsonElement>(arguments);
+        JsonDocument.Parse(arguments).RootElement.Clone();
 
-    private static IAiTool CreateFailingTool(string name, string error)
-    {
-        return CreateSequencedTool(name, _ => new ToolResult(false, Error: error));
-    }
-
-    private static IAiTool CreateSequencedTool(string name, Func<JsonElement, ToolResult> execute)
+    private static IAiTool CreateFailingCreateHabitTool(Action? onAttempt = null)
     {
         var tool = Substitute.For<IAiTool>();
-        tool.Name.Returns(name);
-        tool.Description.Returns($"{name} description");
+        tool.Name.Returns("create_habit");
+        tool.Description.Returns("Creates a habit");
         tool.IsReadOnly.Returns(false);
         tool.GetParameterSchema().Returns(new
         {
@@ -365,7 +309,11 @@ public class ProcessUserChatCommandHandlerTests
             }
         });
         tool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
-            .Returns(callInfo => execute(callInfo.ArgAt<JsonElement>(0)));
+            .Returns(_ =>
+            {
+                onAttempt?.Invoke();
+                return new ToolResult(false, Error: "Days can only be set when frequency quantity is 1.");
+            });
         return tool;
     }
 
@@ -1399,7 +1347,8 @@ public class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Actions.Should().HaveCount(1);
         result.Value.Actions[0].Status.Should().Be(ActionStatus.Failed);
-        result.Value.Actions[0].Error.Should().Be("Habit not found.");
+        result.Value.Actions[0].Error.Should().Be(EnglishToolFailureMessage);
+        result.Value.AiMessage.Should().Be(EnglishToolFailureMessage);
     }
 
     [Fact]
@@ -1408,13 +1357,9 @@ public class ProcessUserChatCommandHandlerTests
         var user = User.Create("Thomas", "thomas@test.com").Value;
         user.SetLanguage("pt-BR");
         SetupUserAndPayGate(user);
-        var tool = CreateFailingTool("create_habit", "Days can only be set when frequency quantity is 1.");
+        var tool = CreateFailingCreateHabitTool();
         var handler = CreateHandler(tool);
-        var initialResponse = ToolResponse("create_habit", "call_1", ProductionMaintenanceRejectedArguments);
-        const string leakedQuestion = "O agendamento usa frequency_unit e frequency_quantity com frequência diária 1. Quais days você prefere? is_flexible?";
-
-        SetupRecoveryResponses(initialResponse, new AiResponse { TextMessage = leakedQuestion });
-        SetupContinuationText(leakedQuestion);
+        SetupAiResponse(ToolResponse("create_habit", "call_1", ProductionMaintenanceRejectedArguments));
 
         var result = await handler.Handle(
             new ProcessUserChatCommand(UserId, "Crie a manutenção toda quarta e domingo."),
@@ -1422,146 +1367,31 @@ public class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.AiMessage.Should().Be(PortugueseToolFailureMessage);
+        result.Value.AiMessage.Should().NotContainAny(
+            "frequency_unit",
+            "frequency_quantity",
+            "days",
+            "is_flexible",
+            "frequência diária");
         result.Value.Actions.Should().ContainSingle();
         result.Value.Actions[0].Error.Should().Be(PortugueseToolFailureMessage);
         result.Value.Actions[0].Error.Should().NotContain("Days can only be set when frequency quantity is 1");
     }
 
-    [Fact]
-    public async Task Handle_ExplicitWeekdaysCreateHabitFailure_RetriesInsteadOfAskingQuestion()
+    [Theory]
+    [InlineData("en", EnglishToolFailureMessage)]
+    [InlineData("pt-BR", PortugueseToolFailureMessage)]
+    public async Task Handle_RejectedCreateHabit_AttemptsMutationOnceAndReturnsLocalizedFailure(
+        string language,
+        string expectedMessage)
     {
-        SetupUserAndPayGate();
+        var user = User.Create("Thomas", "thomas@test.com").Value;
+        user.SetLanguage(language);
+        SetupUserAndPayGate(user);
         var attempts = 0;
-        var tool = CreateSequencedTool("create_habit", _ => ++attempts == 1
-            ? new ToolResult(false, Error: "Days can only be set when frequency quantity is 1.")
-            : new ToolResult(true, EntityId: Guid.NewGuid().ToString(), EntityName: "Maintenance habit"));
+        var tool = CreateFailingCreateHabitTool(() => attempts++);
         var handler = CreateHandler(tool);
-        var initialResponse = ToolResponse("create_habit", "call_1", ProductionMaintenanceRejectedArguments);
-        var retryResponse = ToolResponse("create_habit", "call_2", ProductionMaintenanceRetryArguments);
-
-        SetupRecoveryResponses(initialResponse, retryResponse);
-        SetupContinuationByResult("Você prefere outra frequência?", "Hábito criado.");
-
-        var result = await handler.Handle(
-            new ProcessUserChatCommand(UserId, "Crie a manutenção toda quarta e domingo."),
-            CancellationToken.None);
-
-        attempts.Should().Be(2);
-        result.Value.AiMessage.Should().Be("Hábito criado.");
-        result.Value.AiMessage.Should().NotContain("?");
-        result.Value.Actions.Should().ContainSingle(action => action.Status == ActionStatus.Success);
-        result.Value.Actions.Should().NotContain(action => action.Status == ActionStatus.Failed);
-    }
-
-    [Fact]
-    public async Task Handle_ToolFailureRetry_UsesOriginalUserMessageAndThursdaySchedule()
-    {
-        SetupUserAndPayGate();
-        const string originalMessage = "Create my maintenance habit every Thursday.";
-        const string rejectedArguments = """
-            {"title":"Maintenance","frequency_unit":"Week","frequency_quantity":1,"days":["Thursday"],"due_date":"2026-09-15"}
-            """;
-        const string correctRetryArguments = """
-            {"retry_of":"r1","title":"Maintenance","frequency_unit":"Day","frequency_quantity":1,"days":["Thursday"],"due_date":"2026-09-15"}
-            """;
-        const string driftedRetryArguments = """
-            {"title":"Maintenance","frequency_unit":"Day","frequency_quantity":1,"days":["Tuesday"],"due_date":"2026-09-15"}
-            """;
-        var dispatchedArguments = new List<string>();
-        var attempts = 0;
-        var tool = CreateSequencedTool("create_habit", args =>
-        {
-            dispatchedArguments.Add(args.GetRawText());
-            return ++attempts == 1
-                ? new ToolResult(false, Error: "Rejected schedule shape.")
-                : new ToolResult(true, EntityId: Guid.NewGuid().ToString(), EntityName: "Maintenance");
-        });
-        var handler = CreateHandler(tool);
-        var initialResponse = ToolResponse("create_habit", "call_1", rejectedArguments);
-        var correctRetry = ToolResponse("create_habit", "call_2", correctRetryArguments);
-        var driftedRetry = ToolResponse("create_habit", "call_legacy", driftedRetryArguments);
-        var sentRequests = new List<AiToolRequest>();
-
-        _aiIntentService.SendWithToolsAsync(
-                Arg.Do<AiToolRequest>(sentRequests.Add),
-                Arg.Any<Func<AiStreamEvent, Task>?>(),
-                Arg.Any<CancellationToken>())
-            .Returns(_ => Result.Success(sentRequests.Count == 1 ? initialResponse : correctRetry));
-        _aiIntentService.ContinueWithToolResultsAsync(
-                Arg.Any<AiConversationContext>(),
-                Arg.Any<IReadOnlyList<AiToolCallResult>>(),
-                Arg.Any<Func<AiStreamEvent, Task>?>(),
-                Arg.Any<CancellationToken>())
-            .Returns(Result.Success(driftedRetry), Result.Success(new AiResponse { TextMessage = "Created." }));
-
-        var result = await handler.Handle(
-            new ProcessUserChatCommand(UserId, originalMessage),
-            CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        sentRequests.Should().HaveCount(2);
-        sentRequests[1].UserMessage.Should().Be(originalMessage);
-        sentRequests[1].PriorToolFailures.Should().ContainSingle()
-            .Which.RetryId.Should().Be("r1");
-        dispatchedArguments.Should().HaveCount(2);
-        dispatchedArguments[1].Should().Contain("Thursday");
-        dispatchedArguments[1].Should().NotContain("Tuesday");
-        dispatchedArguments[1].Should().NotContain("retry_of");
-    }
-
-    [Fact]
-    public async Task Handle_SecondToolRejection_StopsAfterSingleRetry()
-    {
-        SetupUserAndPayGate();
-        var attempts = 0;
-        var tool = CreateSequencedTool("create_habit", _ =>
-        {
-            attempts++;
-            return new ToolResult(false, Error: "Rejected schedule shape.");
-        });
-        var handler = CreateHandler(tool);
-        var initialResponse = ToolResponse("create_habit", "call_1", ProductionMaintenanceRejectedArguments);
-        var retryResponse = ToolResponse("create_habit", "call_2", ProductionMaintenanceSecondRejectedArguments);
-        var forbiddenThirdAttempt = ToolResponse("create_habit", "call_3", ProductionMaintenanceRetryArguments);
-
-        SetupRecoveryResponses(initialResponse, retryResponse);
-        _aiIntentService.ContinueWithToolResultsAsync(
-                Arg.Any<AiConversationContext>(),
-                Arg.Any<IReadOnlyList<AiToolCallResult>>(),
-                Arg.Any<Func<AiStreamEvent, Task>?>(),
-                Arg.Any<CancellationToken>())
-            .Returns(Result.Success(retryResponse), Result.Success(forbiddenThirdAttempt), Result.Success(new AiResponse { TextMessage = "Done." }));
-
-        var result = await handler.Handle(
-            new ProcessUserChatCommand(UserId, "Create the maintenance habit every Wednesday and Sunday."),
-            CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        attempts.Should().Be(2);
-        result.Value.AiMessage.Should().Be(EnglishToolFailureMessage);
-    }
-
-    [Fact]
-    public async Task Handle_IdenticalRejectedPayload_DoesNotExecuteItAgain()
-    {
-        SetupUserAndPayGate();
-        var attempts = 0;
-        var tool = CreateSequencedTool("create_habit", _ =>
-        {
-            attempts++;
-            return new ToolResult(false, Error: "Rejected schedule shape.");
-        });
-        var handler = CreateHandler(tool);
-        var initialResponse = ToolResponse("create_habit", "call_1", ProductionMaintenanceRejectedArguments);
-        var identicalRetry = ToolResponse("create_habit", "call_2", ProductionMaintenanceIdenticalRetryArguments);
-
-        SetupRecoveryResponses(initialResponse, identicalRetry);
-        _aiIntentService.ContinueWithToolResultsAsync(
-                Arg.Any<AiConversationContext>(),
-                Arg.Any<IReadOnlyList<AiToolCallResult>>(),
-                Arg.Any<Func<AiStreamEvent, Task>?>(),
-                Arg.Any<CancellationToken>())
-            .Returns(Result.Success(identicalRetry), Result.Success(new AiResponse { TextMessage = "Done." }));
+        SetupAiResponse(ToolResponse("create_habit", "call_1", ProductionMaintenanceRejectedArguments));
 
         var result = await handler.Handle(
             new ProcessUserChatCommand(UserId, "Create the maintenance habit every Wednesday and Sunday."),
@@ -1569,7 +1399,18 @@ public class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         attempts.Should().Be(1);
-        result.Value.AiMessage.Should().Be(EnglishToolFailureMessage);
+        result.Value.AiMessage.Should().Be(expectedMessage);
+        result.Value.Actions.Should().ContainSingle(action =>
+            action.Status == ActionStatus.Failed && action.Error == expectedMessage);
+        await _aiIntentService.Received(1).SendWithToolsAsync(
+            Arg.Any<AiToolRequest>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(),
+            Arg.Any<CancellationToken>());
+        await _aiIntentService.DidNotReceive().ContinueWithToolResultsAsync(
+            Arg.Any<AiConversationContext>(),
+            Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -1585,8 +1426,13 @@ public class ProcessUserChatCommandHandlerTests
             "habits.clarification.questionFallback",
             "frequency_unit",
             quickActions);
-        var tool = CreateSequencedTool("create_habit", _ =>
-            new ToolResult(true, EntityName: "Correr", Payload: clarification));
+        var tool = Substitute.For<IAiTool>();
+        tool.Name.Returns("create_habit");
+        tool.Description.Returns("Creates a habit");
+        tool.IsReadOnly.Returns(false);
+        tool.GetParameterSchema().Returns(new { type = "object" });
+        tool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(new ToolResult(true, EntityName: "Correr", Payload: clarification));
         var handler = CreateHandler(tool);
         _pendingClarificationStore.CreateAsync(
                 UserId,
@@ -1625,13 +1471,9 @@ public class ProcessUserChatCommandHandlerTests
     public async Task Handle_EnglishToolFailure_DoesNotExposeToolSchemaArguments()
     {
         SetupUserAndPayGate();
-        var tool = CreateFailingTool("create_habit", "frequency_unit rejected frequency_quantity with days and is_flexible.");
+        var tool = CreateFailingCreateHabitTool();
         var handler = CreateHandler(tool);
-        var initialResponse = ToolResponse("create_habit", "call_1", ProductionMaintenanceRejectedArguments);
-        const string leakedQuestion = "The frequency_unit and frequency_quantity conflict with days. Should is_flexible change?";
-
-        SetupRecoveryResponses(initialResponse, new AiResponse { TextMessage = leakedQuestion });
-        SetupContinuationText(leakedQuestion);
+        SetupAiResponse(ToolResponse("create_habit", "call_1", ProductionMaintenanceRejectedArguments));
 
         var result = await handler.Handle(
             new ProcessUserChatCommand(UserId, "Create the maintenance habit every Wednesday and Sunday."),
@@ -1639,25 +1481,43 @@ public class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.AiMessage.Should().Be(EnglishToolFailureMessage);
+        result.Value.AiMessage.Should().NotContainAny(
+            "frequency_unit",
+            "frequency_quantity",
+            "days",
+            "is_flexible");
+        result.Value.Actions.Should().ContainSingle(action => action.Error == EnglishToolFailureMessage);
     }
 
     [Fact]
-    public async Task Handle_TwoHabitProtocol_RetrySucceedsWithoutFailureAction()
+    public async Task Handle_ProductionTwoHabitFailure_PreservesSuccessfulSiblingAndSanitizesFailedAction()
     {
-        SetupUserAndPayGate();
-        var tool = CreateSequencedTool("create_habit", args =>
-        {
-            var frequencyUnit = args.GetProperty("frequency_unit").GetString();
-            if (frequencyUnit == "Week")
+        var user = User.Create("Thomas", "thomas@test.com").Value;
+        user.SetLanguage("pt-BR");
+        SetupUserAndPayGate(user);
+        var adaptationAttempts = 0;
+        var maintenanceAttempts = 0;
+        var tool = Substitute.For<IAiTool>();
+        tool.Name.Returns("create_habit");
+        tool.Description.Returns("Creates a habit");
+        tool.IsReadOnly.Returns(false);
+        tool.GetParameterSchema().Returns(new { type = "object" });
+        tool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                var arguments = callInfo.ArgAt<JsonElement>(0);
+                var title = arguments.GetProperty("title").GetString()!;
+                if (title.Contains("Adaptação", StringComparison.Ordinal))
+                {
+                    adaptationAttempts++;
+                    return new ToolResult(true, EntityId: Guid.NewGuid().ToString(), EntityName: title);
+                }
+
+                maintenanceAttempts++;
                 return new ToolResult(false, Error: "Days can only be set when frequency quantity is 1.");
-
-            return new ToolResult(
-                true,
-                EntityId: Guid.NewGuid().ToString(),
-                EntityName: args.GetProperty("title").GetString());
-        });
+            });
         var handler = CreateHandler(tool);
-        var initialResponse = new AiResponse
+        SetupAiResponse(new AiResponse
         {
             ToolCalls =
             [
@@ -1665,287 +1525,10 @@ public class ProcessUserChatCommandHandlerTests
                 new AiToolCall("create_habit", "call_maintenance", ParseArguments(ProductionMaintenanceRejectedArguments))
             ],
             ConversationContext = TestConversationContext
-        };
-        var retryResponse = ToolResponse("create_habit", "call_retry", ProductionMaintenanceRetryArguments);
-
-        SetupRecoveryResponses(initialResponse, retryResponse);
-        SetupContinuationByResult("Qual frequência você prefere?", "Os dois hábitos foram criados.");
-
-        var result = await handler.Handle(
-            new ProcessUserChatCommand(UserId, "Crie os dois hábitos do protocolo, incluindo a manutenção quarta e domingo."),
-            CancellationToken.None);
-
-        result.Value.AiMessage.Should().Be("Os dois hábitos foram criados.");
-        result.Value.AiMessage.Should().NotContain("?");
-        result.Value.Actions.Should().HaveCount(2);
-        result.Value.Actions.Should().OnlyContain(action => action.Status == ActionStatus.Success);
-    }
-
-    [Fact]
-    public async Task Handle_ToolFailureRecoveryRepeatsSuccessfulSibling_DoesNotExecuteSiblingAgain()
-    {
-        SetupUserAndPayGate();
-        var adaptationExecutions = 0;
-        var maintenanceExecutions = 0;
-        var tool = CreateSequencedTool("create_habit", args =>
-        {
-            var title = args.GetProperty("title").GetString()!;
-            if (title.Contains("Adaptação", StringComparison.Ordinal))
-                adaptationExecutions++;
-            if (title.Contains("Manutenção", StringComparison.Ordinal))
-                maintenanceExecutions++;
-            var frequencyUnit = args.GetProperty("frequency_unit").GetString();
-            if (title.Contains("Manutenção", StringComparison.Ordinal) && frequencyUnit == "Week")
-                return new ToolResult(false, Error: "Days can only be set when frequency quantity is 1.");
-
-            return new ToolResult(true, EntityId: Guid.NewGuid().ToString(), EntityName: title);
         });
-        var handler = CreateHandler(tool);
-        var initialResponse = new AiResponse
-        {
-            ToolCalls =
-            [
-                new AiToolCall("create_habit", "call_adaptation", ParseArguments(ProductionAdaptationArguments)),
-                new AiToolCall("create_habit", "call_maintenance", ParseArguments(ProductionMaintenanceRejectedArguments))
-            ],
-            ConversationContext = TestConversationContext
-        };
-        var repeatedSuccessfulArguments = """
-            {"title":"Perspirex Strong - Semana 1 (Adaptação)","description":"Descrição alterada pelo modelo.","emoji":"🧴","frequency_unit":"Day","frequency_quantity":1,"due_date":"2026-09-08","end_date":"2026-09-15","due_time":"21:30"}
-            """;
-        var retryResponse = new AiResponse
-        {
-            ToolCalls =
-            [
-                new AiToolCall("create_habit", "call_repeated_adaptation", ParseArguments(repeatedSuccessfulArguments)),
-                new AiToolCall("create_habit", "call_retry_maintenance", ParseArguments(ProductionMaintenanceRetryArguments))
-            ],
-            ConversationContext = TestConversationContext
-        };
-
-        SetupRecoveryResponses(initialResponse, retryResponse);
-        SetupContinuationByResult("Não consegui criar os hábitos.", "Os dois hábitos foram criados.");
 
         var result = await handler.Handle(
-            new ProcessUserChatCommand(UserId, "Crie os dois hábitos do protocolo, incluindo a manutenção quarta e domingo."),
-            CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        adaptationExecutions.Should().Be(1);
-        maintenanceExecutions.Should().Be(1);
-        result.Value.AiMessage.Should().Be(EnglishToolFailureMessage);
-        result.Value.Actions.Should().ContainSingle(action => action.Status == ActionStatus.Failed);
-    }
-
-    [Fact]
-    public async Task Handle_RecoveryOnlyRepeatsSuccessfulSibling_DoesNotReportSuccess()
-    {
-        SetupUserAndPayGate();
-        var adaptationExecutions = 0;
-        var maintenanceExecutions = 0;
-        var tool = CreateSequencedTool("create_habit", args =>
-        {
-            var title = args.GetProperty("title").GetString()!;
-            if (title.Contains("Adaptação", StringComparison.Ordinal))
-                adaptationExecutions++;
-            if (title.Contains("Manutenção", StringComparison.Ordinal))
-                maintenanceExecutions++;
-
-            return title.Contains("Manutenção", StringComparison.Ordinal)
-                ? new ToolResult(false, Error: "Days can only be set when frequency quantity is 1.")
-                : new ToolResult(true, EntityId: Guid.NewGuid().ToString(), EntityName: title);
-        });
-        var handler = CreateHandler(tool);
-        var initialResponse = new AiResponse
-        {
-            ToolCalls =
-            [
-                new AiToolCall("create_habit", "call_adaptation", ParseArguments(ProductionAdaptationArguments)),
-                new AiToolCall("create_habit", "call_maintenance", ParseArguments(ProductionMaintenanceRejectedArguments))
-            ],
-            ConversationContext = TestConversationContext
-        };
-        var repeatedSuccess = ToolResponse(
-            "create_habit",
-            "call_repeated_adaptation",
-            ProductionAdaptationArguments);
-
-        SetupRecoveryResponses(initialResponse, repeatedSuccess);
-        SetupContinuationByResult("Recovery failed.", "Recovery succeeded.");
-
-        var result = await handler.Handle(
-            new ProcessUserChatCommand(UserId, "Create both protocol habits."),
-            CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        adaptationExecutions.Should().Be(1);
-        maintenanceExecutions.Should().Be(1);
-        result.Value.AiMessage.Should().Be(EnglishToolFailureMessage);
-        result.Value.Actions.Should().ContainSingle(action => action.Status == ActionStatus.Failed);
-    }
-
-    [Fact]
-    public async Task Handle_RecoveryUsesDifferentNotificationAction_DoesNotConsumeOriginalFailure()
-    {
-        SetupUserAndPayGate();
-        var attemptedActions = new List<string>();
-        var tool = CreateSequencedTool("update_notifications", args =>
-        {
-            var action = args.GetProperty("action").GetString()!;
-            attemptedActions.Add(action);
-            return action == "mark_read"
-                ? new ToolResult(false, Error: "Notification not found.")
-                : new ToolResult(true, EntityId: UserId.ToString(), EntityName: "Marked all notifications as read");
-        });
-        var handler = CreateHandler(tool);
-        var notificationId = Guid.NewGuid();
-        var initialResponse = ToolResponse(
-            "update_notifications",
-            "call_mark_read",
-            $$"""{"action":"mark_read","notification_id":"{{notificationId}}"}""");
-        var retryResponse = ToolResponse(
-            "update_notifications",
-            "call_mark_all_read",
-            """{"retry_of":"unknown","action":"mark_all_read"}""");
-
-        SetupRecoveryResponses(initialResponse, retryResponse);
-        SetupContinuationByResult("Recovery failed.", "Recovery succeeded.");
-
-        var result = await handler.Handle(
-            new ProcessUserChatCommand(UserId, "Mark this notification as read."),
-            CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        attemptedActions.Should().Equal("mark_read");
-        result.Value.AiMessage.Should().Be(EnglishToolFailureMessage);
-        result.Value.Actions.Should().ContainSingle(action => action.Status == ActionStatus.Failed);
-    }
-
-    [Theory]
-    [InlineData("delete_notifications", "{\"action\":\"delete_one\",\"notification_id\":\"d23bbcbf-3e97-44b7-9bc2-a6b8f715ce51\"}", "{\"action\":\"delete_all\"}")]
-    [InlineData("manage_api_keys", "{\"action\":\"revoke\",\"key_id\":\"d23bbcbf-3e97-44b7-9bc2-a6b8f715ce51\"}", "{\"action\":\"create\",\"name\":\"Phone\"}")]
-    [InlineData("manage_account", "{\"action\":\"request_deletion\"}", "{\"action\":\"reset_account\"}")]
-    [InlineData("manage_calendar_sync", "{\"action\":\"dismiss_suggestion\",\"suggestion_id\":\"d23bbcbf-3e97-44b7-9bc2-a6b8f715ce51\"}", "{\"action\":\"run_sync\"}")]
-    [InlineData("manage_calendar_sync", "{\"action\":\"set_auto_sync\",\"enabled\":true}", "{\"action\":\"set_auto_sync\",\"enabled\":false}")]
-    [InlineData("update_notifications", "{\"action\":\"subscribe_push\",\"endpoint\":\"https://push.example/old\",\"p256dh\":\"old-key\",\"auth\":\"old-auth\"}", "{\"action\":\"subscribe_push\",\"endpoint\":\"https://push.example/new\",\"p256dh\":\"new-key\",\"auth\":\"new-auth\"}")]
-    [InlineData("update_notifications", "{\"action\":\"unsubscribe_push\",\"endpoint\":\"https://push.example/old\"}", "{\"action\":\"unsubscribe_push\",\"endpoint\":\"https://push.example/new\"}")]
-    [InlineData("update_profile_preferences", "{\"action\":\"set_timezone\",\"timezone\":\"Invalid\"}", "{\"action\":\"set_language\",\"language\":\"en\"}")]
-    [InlineData("manage_subscription", "{\"action\":\"create_checkout\",\"interval\":\"weekly\"}", "{\"action\":\"create_portal\"}")]
-    public async Task Handle_UnidentifiedRecoveryMutation_DoesNotConsumeOriginalFailure(
-        string toolName,
-        string failedArguments,
-        string recoveryArguments)
-    {
-        SetupUserAndPayGate();
-        var executions = 0;
-        var tool = CreateSequencedTool(toolName, _ => ++executions == 1
-            ? new ToolResult(false, Error: "Mutation failed.")
-            : new ToolResult(true, EntityId: UserId.ToString(), EntityName: "Unrelated mutation completed"));
-        var handler = CreateHandler(tool);
-        var initialResponse = ToolResponse(toolName, "call_failed", failedArguments);
-        var retryResponse = ToolResponse(toolName, "call_unrelated", recoveryArguments);
-
-        SetupRecoveryResponses(initialResponse, retryResponse);
-        SetupContinuationByResult("Recovery failed.", "Recovery succeeded.");
-
-        var result = await handler.Handle(
-            new ProcessUserChatCommand(UserId, "Complete the requested mutation."),
-            CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        executions.Should().Be(1);
-        result.Value.AiMessage.Should().Be(EnglishToolFailureMessage);
-        result.Value.Actions.Should().ContainSingle(action => action.Status == ActionStatus.Failed);
-    }
-
-    [Fact]
-    public async Task Handle_RecoveryMatchesCompletedMutationTwice_RejectsRetryPlan()
-    {
-        SetupUserAndPayGate();
-        var adaptationExecutions = 0;
-        var maintenanceExecutions = 0;
-        var tool = CreateSequencedTool("create_habit", args =>
-        {
-            var title = args.GetProperty("title").GetString()!;
-            if (title.Contains("Adaptação", StringComparison.Ordinal))
-                adaptationExecutions++;
-            if (title.Contains("Manutenção", StringComparison.Ordinal))
-                maintenanceExecutions++;
-
-            var frequencyUnit = args.GetProperty("frequency_unit").GetString();
-            if (title.Contains("Manutenção", StringComparison.Ordinal) && frequencyUnit == "Week")
-                return new ToolResult(false, Error: "Days can only be set when frequency quantity is 1.");
-
-            return new ToolResult(true, EntityId: Guid.NewGuid().ToString(), EntityName: title);
-        });
-        var handler = CreateHandler(tool);
-        var initialResponse = new AiResponse
-        {
-            ToolCalls =
-            [
-                new AiToolCall("create_habit", "call_adaptation", ParseArguments(ProductionAdaptationArguments)),
-                new AiToolCall("create_habit", "call_maintenance", ParseArguments(ProductionMaintenanceRejectedArguments))
-            ],
-            ConversationContext = TestConversationContext
-        };
-        const string changedSuccessfulArguments = """
-            {"title":"Perspirex Strong Semana 1 Adaptação revisada","description":"Descrição alterada.","emoji":"🧴","frequency_unit":"Day","frequency_quantity":1,"due_date":"2026-09-08","end_date":"2026-09-15","due_time":"21:30"}
-            """;
-        var retryResponse = new AiResponse
-        {
-            ToolCalls =
-            [
-                new AiToolCall("create_habit", "call_changed_adaptation", ParseArguments(changedSuccessfulArguments)),
-                new AiToolCall("create_habit", "call_duplicate_adaptation", ParseArguments(ProductionAdaptationArguments)),
-                new AiToolCall("create_habit", "call_retry_maintenance", ParseArguments(ProductionMaintenanceRetryArguments))
-            ],
-            ConversationContext = TestConversationContext
-        };
-
-        SetupRecoveryResponses(initialResponse, retryResponse);
-        SetupContinuationByResult("Recovery failed.", "Recovery succeeded.");
-
-        var result = await handler.Handle(
-            new ProcessUserChatCommand(UserId, "Create both protocol habits."),
-            CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        adaptationExecutions.Should().Be(1);
-        maintenanceExecutions.Should().Be(1);
-        result.Value.AiMessage.Should().Be(EnglishToolFailureMessage);
-    }
-
-    [Fact]
-    public async Task Handle_UnconsumedRecoveryFailure_SerializesSanitizedActionError()
-    {
-        SetupUserAndPayGate();
-        var tool = CreateSequencedTool("create_habit", args =>
-        {
-            var title = args.GetProperty("title").GetString()!;
-            return title.Contains("Manutenção", StringComparison.Ordinal)
-                ? new ToolResult(false, Error: "Days can only be set when frequency quantity is 1.")
-                : new ToolResult(true, EntityId: Guid.NewGuid().ToString(), EntityName: title);
-        });
-        var handler = CreateHandler(tool);
-        var initialResponse = new AiResponse
-        {
-            ToolCalls =
-            [
-                new AiToolCall("create_habit", "call_adaptation", ParseArguments(ProductionAdaptationArguments)),
-                new AiToolCall("create_habit", "call_maintenance", ParseArguments(ProductionMaintenanceRejectedArguments))
-            ],
-            ConversationContext = TestConversationContext
-        };
-        var repeatedSuccess = ToolResponse(
-            "create_habit",
-            "call_repeated_adaptation",
-            ProductionAdaptationArguments);
-
-        SetupRecoveryResponses(initialResponse, repeatedSuccess);
-        SetupContinuationByResult("Recovery failed.", "Recovery succeeded.");
-
-        var result = await handler.Handle(
-            new ProcessUserChatCommand(UserId, "Create both protocol habits."),
+            new ProcessUserChatCommand(UserId, "Crie os dois hábitos do protocolo."),
             CancellationToken.None);
         using var payload = JsonDocument.Parse(JsonSerializer.Serialize(result.Value));
         var actionErrors = payload.RootElement
@@ -1957,43 +1540,15 @@ public class ProcessUserChatCommandHandlerTests
             .ToList();
 
         result.IsSuccess.Should().BeTrue();
-        actionErrors.Should().Contain(EnglishToolFailureMessage);
+        adaptationAttempts.Should().Be(1);
+        maintenanceAttempts.Should().Be(1);
+        result.Value.AiMessage.Should().Be(PortugueseToolFailureMessage);
+        result.Value.Actions.Should().HaveCount(2);
+        result.Value.Actions.Should().ContainSingle(action => action.Status == ActionStatus.Success);
+        result.Value.Actions.Should().ContainSingle(action =>
+            action.Status == ActionStatus.Failed && action.Error == PortugueseToolFailureMessage);
         actionErrors.Should().NotContain(error =>
             error!.Contains("Days can only be set when frequency quantity is 1", StringComparison.Ordinal));
-    }
-
-    [Theory]
-    [InlineData("en", EnglishToolRecoveredMessage)]
-    [InlineData("pt-BR", PortugueseToolRecoveredMessage)]
-    public async Task Handle_SuccessfulRecoveryContinuationFailure_ReturnsLocalizedRecoveredMessage(
-        string language,
-        string expectedMessage)
-    {
-        var user = User.Create("Thomas", "thomas@test.com").Value;
-        user.SetLanguage(language);
-        SetupUserAndPayGate(user);
-        var attempts = 0;
-        var tool = CreateSequencedTool("create_habit", _ => ++attempts == 1
-            ? new ToolResult(false, Error: "Rejected schedule shape.")
-            : new ToolResult(true, EntityId: Guid.NewGuid().ToString(), EntityName: "Maintenance habit"));
-        var handler = CreateHandler(tool);
-        var initialResponse = ToolResponse("create_habit", "call_1", ProductionMaintenanceRejectedArguments);
-        var retryResponse = ToolResponse("create_habit", "call_2", ProductionMaintenanceRetryArguments);
-
-        SetupRecoveryResponses(initialResponse, retryResponse);
-        _aiIntentService.ContinueWithToolResultsAsync(
-                Arg.Any<AiConversationContext>(),
-                Arg.Any<IReadOnlyList<AiToolCallResult>>(),
-                Arg.Any<Func<AiStreamEvent, Task>?>(),
-                Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<AiResponse>("AI service temporarily unavailable"));
-
-        var result = await handler.Handle(
-            new ProcessUserChatCommand(UserId, "Create the maintenance habit every Wednesday and Sunday."),
-            CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        result.Value.AiMessage.Should().Be(expectedMessage);
     }
 
     [Fact]
@@ -2333,7 +1888,8 @@ public class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Actions.Should().HaveCount(1);
         result.Value.Actions[0].Status.Should().Be(ActionStatus.Failed);
-        result.Value.Actions[0].Error.Should().Be("An unexpected error occurred.");
+        result.Value.Actions[0].Error.Should().Be(EnglishToolFailureMessage);
+        result.Value.AiMessage.Should().Be(EnglishToolFailureMessage);
     }
 
     [Fact]

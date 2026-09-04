@@ -160,14 +160,14 @@ public class SystemPromptBuilderTests
     }
 
     [Fact]
-    public void BuildStatic_IncludesToolFailureRecoveryAfterClarificationGuidance()
+    public void BuildStatic_IncludesToolFailuresAfterClarificationGuidance()
     {
         var builder = new SystemPromptBuilder();
 
         var staticPrompt = builder.BuildStatic(new PromptBuildRequest(Array.Empty<Habit>(), Array.Empty<UserFact>()));
 
-        staticPrompt.Should().Contain("Tool Failure Recovery");
-        staticPrompt.IndexOf("Tool Failure Recovery", StringComparison.Ordinal)
+        staticPrompt.Should().Contain("Tool Failures");
+        staticPrompt.IndexOf("Tool Failures", StringComparison.Ordinal)
             .Should().BeGreaterThan(staticPrompt.IndexOf("Clarification Cards", StringComparison.Ordinal));
     }
 
