@@ -1399,6 +1399,64 @@ public class HabitTests
         habit.DueDate.Should().Be(tuesday.AddDays(14));
     }
 
+    [Fact]
+    public void AdvanceDueDate_BiweeklyHabitRescheduledByOneWeek_RebasesIntervalPhase()
+    {
+        var originalDueDate = new DateOnly(2025, 1, 6);
+        var rescheduledDueDate = originalDueDate.AddDays(7);
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId,
+            "Run",
+            FrequencyUnit.Week,
+            2,
+            originalDueDate,
+            IntervalWeeks: 2)).Value;
+
+        var result = habit.Update(new HabitUpdateParams(
+            habit.Title,
+            habit.Description,
+            habit.FrequencyUnit,
+            habit.FrequencyQuantity,
+            habit.Days.ToList(),
+            habit.IsBadHabit,
+            rescheduledDueDate,
+            UserToday: originalDueDate.AddDays(1),
+            IntervalWeeks: 2));
+        habit.AdvanceDueDate(rescheduledDueDate, weekStartDay: 1);
+
+        result.IsSuccess.Should().BeTrue();
+        habit.ScheduledStartDate.Should().Be(rescheduledDueDate);
+        habit.DueDate.Should().Be(rescheduledDueDate.AddDays(14));
+    }
+
+    [Fact]
+    public void CatchUpDueDate_BiweeklyHabitRescheduledByOneWeek_RebasesIntervalPhase()
+    {
+        var originalDueDate = new DateOnly(2025, 1, 6);
+        var rescheduledDueDate = originalDueDate.AddDays(7);
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId,
+            "Run",
+            FrequencyUnit.Week,
+            2,
+            originalDueDate,
+            IntervalWeeks: 2)).Value;
+        habit.Update(new HabitUpdateParams(
+            habit.Title,
+            habit.Description,
+            habit.FrequencyUnit,
+            habit.FrequencyQuantity,
+            habit.Days.ToList(),
+            habit.IsBadHabit,
+            rescheduledDueDate,
+            UserToday: originalDueDate.AddDays(1),
+            IntervalWeeks: 2));
+
+        habit.CatchUpDueDate(rescheduledDueDate.AddDays(1), weekStartDay: 1);
+
+        habit.DueDate.Should().Be(rescheduledDueDate.AddDays(14));
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData(DomainConstants.MaxIntervalWeeks)]

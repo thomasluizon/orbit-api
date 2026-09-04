@@ -422,15 +422,8 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
 
         if (p.DueDate is not null)
         {
-            var reschedulesUnstartedHabit = ScheduledStartDate.HasValue
-                && p.UserToday.HasValue
-                && ScheduledStartDate.Value >= p.UserToday.Value
-                && DueDate == ScheduledStartDate.Value
-                && p.DueDate.Value != DueDate;
-
             DueDate = p.DueDate.Value;
-            if (reschedulesUnstartedHabit)
-                ScheduledStartDate = DueDate;
+            ScheduledStartDate = DueDate;
         }
 
         if (FrequencyUnit is Enums.FrequencyUnit.Month or Enums.FrequencyUnit.Year)
