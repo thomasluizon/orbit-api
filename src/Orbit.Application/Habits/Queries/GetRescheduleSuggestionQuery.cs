@@ -19,6 +19,7 @@ public record GetRescheduleSuggestionQuery(
 
 public class GetRescheduleSuggestionQueryHandler(
     IGenericRepository<Habit> habitRepository,
+    IGenericRepository<HabitLog> habitLogRepository,
     IGenericRepository<User> userRepository,
     IPayGateService payGate,
     IRescheduleSuggestionService rescheduleService,
@@ -51,7 +52,16 @@ public class GetRescheduleSuggestionQueryHandler(
         if (habit is null)
             return Result.Failure<RescheduleSuggestionResponse>(ErrorMessages.HabitNotFound);
 
-        if (!HabitScheduleService.IsOverdueOnDate(habit, userToday, user.WeekStartDay))
+        var dueDateResolution = await HabitDueDateResolutionLoader.LoadAsync(
+            habitLogRepository,
+            [habit],
+            logWindowStart,
+            cancellationToken);
+        if (!HabitScheduleService.IsOverdueOnDate(
+                habit,
+                userToday,
+                user.WeekStartDay,
+                dueDateResolution.Contains(habit.Id)))
             return Result.Failure<RescheduleSuggestionResponse>(ErrorMessages.HabitNotOverdue);
 
         var cacheKey = CacheKey(request.HabitId, habit.DueDate, effectiveLanguage);

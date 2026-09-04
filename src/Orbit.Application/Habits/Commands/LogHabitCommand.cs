@@ -74,8 +74,18 @@ public partial class LogHabitCommandHandler(
 
         var targetDate = request.Date ?? today;
         var weekStartDay = await services.UserDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
+        var dueDateResolution = await HabitDueDateResolutionLoader.LoadAsync(
+            repos.HabitLogRepository,
+            [habit],
+            today.AddDays(-AppConstants.MaxRangeDays),
+            cancellationToken);
 
-        var dateValidation = ValidateTargetDate(habit, targetDate, today, weekStartDay);
+        var dateValidation = ValidateTargetDate(
+            habit,
+            targetDate,
+            today,
+            weekStartDay,
+            dueDateResolution.Contains(habit.Id));
         if (dateValidation.IsFailure)
             return dateValidation.PropagateError<LogHabitResponse>();
 
@@ -116,7 +126,8 @@ public partial class LogHabitCommandHandler(
         Habit habit,
         DateOnly targetDate,
         DateOnly today,
-        int weekStartDay)
+        int weekStartDay,
+        bool dueDateResolved)
     {
         if (targetDate > today && habit.FrequencyUnit is not null)
             return Result.Failure(ErrorMessages.CannotLogFutureDate);
@@ -129,7 +140,11 @@ public partial class LogHabitCommandHandler(
         {
             var isOverdue = !habit.IsFlexible
                 && targetDate == today
-                && HabitScheduleService.HasMissedPastOccurrence(habit, today, weekStartDay);
+                && HabitScheduleService.HasMissedPastOccurrence(
+                    habit,
+                    today,
+                    weekStartDay,
+                    dueDateResolved);
             if (!isOverdue)
                 return Result.Failure(ErrorMessages.NotScheduledOnDate);
         }

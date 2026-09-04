@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -85,6 +86,11 @@ public class GetDailySummaryQueryHandler(
         var summaryHabits = habits
             .Where(h => !HasSkipLogInRange(h, request.DateFrom, request.DateTo))
             .ToList();
+        var dueDateResolution = await HabitDueDateResolutionLoader.LoadAsync(
+            habitLogRepository,
+            summaryHabits,
+            logFrom,
+            cancellationToken);
 
         var lastBadHabitSlipDates = await LoadLastBadHabitSlipDates(
             summaryHabits, userToday, cancellationToken);
@@ -100,7 +106,8 @@ public class GetDailySummaryQueryHandler(
                 user.CurrentStreak,
                 user.StreakFreezesAccumulated,
                 lastBadHabitSlipDates,
-                user.WeekStartDay),
+                user.WeekStartDay,
+                dueDateResolution),
             cancellationToken);
 
         if (summaryResult.IsFailure)

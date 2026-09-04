@@ -24,7 +24,8 @@ public sealed partial class AiSummaryService(
             context.UserToday,
             context.DateFrom,
             context.DateTo,
-            context.WeekStartDay);
+            context.WeekStartDay,
+            context.ResolvedDueDateHabitIds);
 
         var prompt = BuildSummaryPrompt(scheduledHabits, context);
 
@@ -71,14 +72,21 @@ public sealed partial class AiSummaryService(
         DateOnly userToday,
         DateOnly dateFrom,
         DateOnly dateTo,
-        int weekStartDay)
+        int weekStartDay,
+        IReadOnlySet<Guid>? resolvedDueDateHabitIds)
     {
         var habitList = allHabits.ToList();
 
         var scheduledTopLevel = habitList
             .Where(h => h.ParentHabitId is null
-                         && !HasSkipLogInRange(h, dateFrom, dateTo)
-                         && IsRelevant(h, dateFrom, dateTo, userToday, weekStartDay))
+                          && !HasSkipLogInRange(h, dateFrom, dateTo)
+                          && IsRelevant(
+                              h,
+                              dateFrom,
+                              dateTo,
+                              userToday,
+                              weekStartDay,
+                              resolvedDueDateHabitIds))
             .ToList();
 
         var scheduledTopLevelIds = scheduledTopLevel.Select(h => h.Id).ToHashSet();
@@ -87,7 +95,13 @@ public sealed partial class AiSummaryService(
             .Where(h => h.ParentHabitId is not null
                         && scheduledTopLevelIds.Contains(h.ParentHabitId.Value)
                         && !HasSkipLogInRange(h, dateFrom, dateTo)
-                        && IsRelevant(h, dateFrom, dateTo, userToday, weekStartDay))
+                        && IsRelevant(
+                            h,
+                            dateFrom,
+                            dateTo,
+                            userToday,
+                            weekStartDay,
+                            resolvedDueDateHabitIds))
             .ToList();
 
         return scheduledTopLevel.Concat(children).ToList();
@@ -105,7 +119,8 @@ public sealed partial class AiSummaryService(
             context.DateTo,
             context.UserToday,
             context.LastBadHabitSlipDates,
-            context.WeekStartDay);
+            context.WeekStartDay,
+            context.ResolvedDueDateHabitIds);
 
         var goodHabits = scheduledHabits.Where(h => h.ParentHabitId is null && !h.IsBadHabit).ToList();
         var doneTotal = goodHabits.Count(h => IsDoneInRange(h, context.DateFrom, context.DateTo));
@@ -169,7 +184,8 @@ public sealed partial class AiSummaryService(
         DateOnly dateTo,
         DateOnly userToday,
         IReadOnlyDictionary<Guid, DateOnly> lastBadHabitSlipDates,
-        int weekStartDay)
+        int weekStartDay,
+        IReadOnlySet<Guid>? resolvedDueDateHabitIds)
     {
         var habitLines = new List<string>();
 
@@ -183,11 +199,11 @@ public sealed partial class AiSummaryService(
                 var status = IsDoneInRange(habit, dateFrom, dateTo) ? "done" : "pending";
                 habitLines.Add($"- {habit.Title} ({status}, {doneCount}/{children.Count} sub-tasks done) [{DescribeTiming(habit)}]");
                 foreach (var child in children)
-                    habitLines.Add($"  - {DescribeHabitLine(child, dateFrom, dateTo, userToday, lastBadHabitSlipDates, weekStartDay)}");
+                    habitLines.Add($"  - {DescribeHabitLine(child, dateFrom, dateTo, userToday, lastBadHabitSlipDates, weekStartDay, resolvedDueDateHabitIds)}");
             }
             else
             {
-                habitLines.Add($"- {DescribeHabitLine(habit, dateFrom, dateTo, userToday, lastBadHabitSlipDates, weekStartDay)}");
+                habitLines.Add($"- {DescribeHabitLine(habit, dateFrom, dateTo, userToday, lastBadHabitSlipDates, weekStartDay, resolvedDueDateHabitIds)}");
             }
 
             AppendGoalsLine(habitLines, habit);
@@ -199,7 +215,8 @@ public sealed partial class AiSummaryService(
     private static string DescribeHabitLine(
         Habit habit, DateOnly dateFrom, DateOnly dateTo, DateOnly userToday,
         IReadOnlyDictionary<Guid, DateOnly> lastBadHabitSlipDates,
-        int weekStartDay)
+        int weekStartDay,
+        IReadOnlySet<Guid>? resolvedDueDateHabitIds)
     {
         if (habit.IsBadHabit)
             return $"{habit.Title} ({DescribeBadHabitState(habit, dateFrom, dateTo, userToday, lastBadHabitSlipDates)}) [{DescribeTiming(habit)}]";
@@ -208,7 +225,13 @@ public sealed partial class AiSummaryService(
         if (IsDoneInRange(habit, dateFrom, dateTo))
             status = "done";
         else
-            status = HabitScheduleService.IsOverdueOnDate(habit, userToday, weekStartDay) ? "pending, overdue" : "pending";
+            status = HabitScheduleService.IsOverdueOnDate(
+                habit,
+                userToday,
+                weekStartDay,
+                resolvedDueDateHabitIds?.Contains(habit.Id) == true)
+                ? "pending, overdue"
+                : "pending";
         return $"{habit.Title} ({status}) [{DescribeTiming(habit)}]";
     }
 
@@ -253,11 +276,16 @@ public sealed partial class AiSummaryService(
         DateOnly dateFrom,
         DateOnly dateTo,
         DateOnly userToday,
-        int weekStartDay) =>
+        int weekStartDay,
+        IReadOnlySet<Guid>? resolvedDueDateHabitIds) =>
         IsDoneInRange(habit, dateFrom, dateTo)
         || (!habit.IsCompleted
             && (HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo, weekStartDay).Count > 0
-                || HabitScheduleService.IsOverdueOnDate(habit, userToday, weekStartDay)));
+                || HabitScheduleService.IsOverdueOnDate(
+                    habit,
+                    userToday,
+                    weekStartDay,
+                    resolvedDueDateHabitIds?.Contains(habit.Id) == true)));
 
     private static string BuildTimeContext(TimeOnly? currentLocalTime)
     {

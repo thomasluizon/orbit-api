@@ -498,6 +498,39 @@ public class LogHabitCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_ResolvedMultiYearDueDateOutsideLoadedWindow_RejectsOffScheduleToday()
+    {
+        var oldDueDate = Today.AddYears(-2);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId,
+            "Renew passport",
+            FrequencyUnit.Year,
+            3,
+            oldDueDate)).Value;
+        var resolvedDueDate = HabitLog.Create(habit.Id, oldDueDate, 1);
+        _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(1);
+        _habitRepo.FindOneTrackedAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(habit);
+        _habitLogRepo.FindAsync(
+                Arg.Any<Expression<Func<HabitLog, bool>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns([resolvedDueDate]);
+
+        var result = await _handler.Handle(
+            new LogHabitCommand(UserId, habit.Id),
+            CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.NotScheduledOnDate);
+        await _habitLogRepo.DidNotReceive().AddAsync(
+            Arg.Any<HabitLog>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_GamificationProcessing_CalledOnLog()
     {
         var habit = CreateTestHabit();

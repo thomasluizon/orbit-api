@@ -14,6 +14,7 @@ namespace Orbit.Application.Tests.Queries.Habits;
 public class GetRescheduleSuggestionQueryHandlerTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
+    private readonly IGenericRepository<HabitLog> _habitLogRepo = Substitute.For<IGenericRepository<HabitLog>>();
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IRescheduleSuggestionService _rescheduleService = Substitute.For<IRescheduleSuggestionService>();
@@ -29,7 +30,13 @@ public class GetRescheduleSuggestionQueryHandlerTests
     {
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
         _handler = new GetRescheduleSuggestionQueryHandler(
-            _habitRepo, _userRepo, _payGate, _rescheduleService, _cache, _userDateService);
+            _habitRepo,
+            _habitLogRepo,
+            _userRepo,
+            _payGate,
+            _rescheduleService,
+            _cache,
+            _userDateService);
     }
 
     private static User CreateTestUser() => User.Create("Test User", "test@example.com").Value;

@@ -108,7 +108,8 @@ internal record ScheduleMapContext(
     DateOnly? ReferenceDate = null,
     DateOnly? UserToday = null,
     string? Search = null,
-    Dictionary<Guid, List<DateOnly>>? ScheduledDatesCache = null)
+    Dictionary<Guid, List<DateOnly>>? ScheduledDatesCache = null,
+    IReadOnlySet<Guid>? DueDateResolution = null)
 {
     /// <summary>
     /// Returns cached scheduled dates for a habit, computing and caching on first access.
@@ -130,6 +131,7 @@ internal record ScheduleMapContext(
 
 public class GetHabitScheduleQueryHandler(
     IGenericRepository<Habit> habitRepository,
+    IGenericRepository<HabitLog> habitLogRepository,
     IUserDateService userDateService,
     IUnitOfWork unitOfWork) : IRequestHandler<GetHabitScheduleQuery, Result<PaginatedResponse<HabitScheduleItem>>>
 {
@@ -211,6 +213,11 @@ public class GetHabitScheduleQueryHandler(
             includeTags: HabitScheduleFilters.NeedsTagsForFiltering(request),
             includeGoals: false,
             cancellationToken);
+        var dueDateResolution = await HabitDueDateResolutionLoader.LoadAsync(
+            habitLogRepository,
+            allHabits,
+            logFrom,
+            cancellationToken);
 
         var lookup = allHabits.ToLookup(h => h.ParentHabitId);
 
@@ -218,19 +225,36 @@ public class GetHabitScheduleQueryHandler(
             .OrderBy(h => h.Position ?? int.MaxValue)
             .ThenBy(h => h.CreatedAtUtc);
 
-        topLevel = HabitScheduleFilters.ApplyCommonFilters(topLevel, request, lookup, weekStartDay: weekStartDay);
+        topLevel = HabitScheduleFilters.ApplyCommonFilters(
+            topLevel,
+            request,
+            lookup,
+            weekStartDay: weekStartDay,
+            dueDateResolution: dueDateResolution);
         topLevel = HabitScheduleFilters.ApplyFrequencyUnitFilter(topLevel, request.FrequencyUnitFilter);
 
         if (!request.DateFrom.HasValue || !request.DateTo.HasValue)
             return await BuildNonDateResponse(
-                topLevel, request, lookup, new HabitScheduleWindow(today, weekStartDay, logFrom, logTo), cancellationToken);
+                topLevel,
+                request,
+                lookup,
+                new HabitScheduleWindow(today, weekStartDay, logFrom, logTo),
+                dueDateResolution,
+                cancellationToken);
 
         var dateFrom = request.DateFrom.Value;
         var dateTo = request.DateTo.Value;
         if (dateTo.DayNumber - dateFrom.DayNumber > AppConstants.MaxInstanceHorizonDays)
             dateTo = dateFrom.AddDays(AppConstants.MaxInstanceHorizonDays);
 
-        var filtered = HabitScheduleFilters.FilterScheduledHabits(topLevel, dateFrom, dateTo, request.IncludeOverdue, lookup, weekStartDay);
+        var filtered = HabitScheduleFilters.FilterScheduledHabits(
+            topLevel,
+            dateFrom,
+            dateTo,
+            request.IncludeOverdue,
+            lookup,
+            weekStartDay,
+            dueDateResolution);
 
         var totalCount = filtered.Count;
         var totalPages = (int)Math.Ceiling((double)totalCount / request.PageSize);
@@ -261,7 +285,8 @@ public class GetHabitScheduleQueryHandler(
             ReferenceDate: dateFrom,
             UserToday: today,
             Search: request.Search,
-            ScheduledDatesCache: scheduledDatesCache);
+            ScheduledDatesCache: scheduledDatesCache,
+            DueDateResolution: dueDateResolution);
         var pagedHabitsById = pagedLookup.SelectMany(group => group).ToDictionary(h => h.Id);
         var pagedItems = pageItems
             .Select(x => HabitScheduleFilters.MapToScheduleItem(
@@ -337,6 +362,7 @@ public class GetHabitScheduleQueryHandler(
         GetHabitScheduleQuery request,
         ILookup<Guid?, Habit> lookup,
         HabitScheduleWindow window,
+        IReadOnlySet<Guid> dueDateResolution,
         CancellationToken cancellationToken)
     {
         var (today, weekStartDay, logFrom, logTo) = window;
@@ -365,7 +391,8 @@ public class GetHabitScheduleQueryHandler(
             IncludeOverdue: request.IncludeOverdue,
             ReferenceDate: today,
             UserToday: today,
-            Search: request.Search);
+            Search: request.Search,
+            DueDateResolution: dueDateResolution);
         var allPagedItems = pageHabits
             .Select(h => HabitScheduleFilters.MapToScheduleItem(
                 pagedHabitsById.TryGetValue(h.Id, out var hydratedHabit) ? hydratedHabit : h,

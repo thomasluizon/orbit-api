@@ -51,6 +51,11 @@ public partial class BulkLogHabitsCommandHandler(
 
         var habitMap = await BulkHabitLoader.LoadHabitsWithRecentLogsAsync(
             habitRepository, request.Items.Select(i => i.HabitId), request.UserId, today, cancellationToken);
+        var dueDateResolution = await HabitDueDateResolutionLoader.LoadAsync(
+            habitLogRepository,
+            habitMap.Values,
+            today.AddDays(-AppConstants.MaxRangeDays),
+            cancellationToken);
 
         await unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
@@ -68,6 +73,7 @@ public partial class BulkLogHabitsCommandHandler(
                         today,
                         weekStartDay,
                         habitMap,
+                        dueDateResolution,
                         ct));
                 }
                 catch (Exception ex)
@@ -117,7 +123,9 @@ public partial class BulkLogHabitsCommandHandler(
 
     private async Task<BulkLogItemResult> ProcessLogItem(
         int index, Guid habitId, DateOnly targetDate, DateOnly today, int weekStartDay,
-        Dictionary<Guid, Habit> habitMap, CancellationToken cancellationToken)
+        Dictionary<Guid, Habit> habitMap,
+        IReadOnlySet<Guid> dueDateResolution,
+        CancellationToken cancellationToken)
     {
         if (targetDate > today)
             return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
@@ -136,7 +144,11 @@ public partial class BulkLogHabitsCommandHandler(
         {
             var isOverdue = !habit.IsFlexible
                 && targetDate == today
-                && HabitScheduleService.HasMissedPastOccurrence(habit, today, weekStartDay);
+                && HabitScheduleService.HasMissedPastOccurrence(
+                    habit,
+                    today,
+                    weekStartDay,
+                    dueDateResolution.Contains(habit.Id));
             if (!isOverdue)
                 return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
                     Error: ErrorMessages.NotScheduledOnDate.Message, ErrorCode: ErrorMessages.NotScheduledOnDate.Code);

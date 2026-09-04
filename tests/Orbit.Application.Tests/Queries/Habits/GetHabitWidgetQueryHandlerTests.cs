@@ -12,6 +12,7 @@ namespace Orbit.Application.Tests.Queries.Habits;
 public class GetHabitWidgetQueryHandlerTests
 {
     private readonly IGenericRepository<Habit> _habitRepository = Substitute.For<IGenericRepository<Habit>>();
+    private readonly IGenericRepository<HabitLog> _habitLogRepository = Substitute.For<IGenericRepository<HabitLog>>();
     private readonly IGenericRepository<User> _userRepository = Substitute.For<IGenericRepository<User>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
@@ -22,7 +23,12 @@ public class GetHabitWidgetQueryHandlerTests
 
     public GetHabitWidgetQueryHandlerTests()
     {
-        _handler = new GetHabitWidgetQueryHandler(_habitRepository, _userRepository, _userDateService, _unitOfWork);
+        _handler = new GetHabitWidgetQueryHandler(
+            _habitRepository,
+            _habitLogRepository,
+            _userRepository,
+            _userDateService,
+            _unitOfWork);
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
         _userRepository.GetByIdAsync(UserId, Arg.Any<CancellationToken>())
             .Returns(User.Create("Orbit User", "orbit@example.com").Value);
@@ -67,6 +73,7 @@ public class GetHabitWidgetQueryHandlerTests
         SetupHabits(habit);
         var scheduleHandler = new GetHabitScheduleQueryHandler(
             _habitRepository,
+            _habitLogRepository,
             _userDateService,
             _unitOfWork);
 

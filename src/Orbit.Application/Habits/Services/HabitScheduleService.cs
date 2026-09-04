@@ -344,7 +344,11 @@ public static class HabitScheduleService
     /// schedule horizon ending before today. This is the single overdue signal shared by the
     /// schedule query and the log/skip commands.
     /// </summary>
-    public static bool HasMissedPastOccurrence(Habit habit, DateOnly today, int weekStartDay)
+    public static bool HasMissedPastOccurrence(
+        Habit habit,
+        DateOnly today,
+        int weekStartDay,
+        bool dueDateResolved = false)
     {
         if (habit.FrequencyUnit is null || habit.IsBadHabit || habit.IsFlexible)
             return false;
@@ -352,6 +356,7 @@ public static class HabitScheduleService
             return false;
         if ((!habit.EndDate.HasValue || habit.DueDate <= habit.EndDate.Value)
             && IsHabitDueOnDate(habit, habit.DueDate, weekStartDay)
+            && !dueDateResolved
             && !IsOccurrenceResolved(habit, habit.DueDate))
             return true;
 
@@ -406,7 +411,11 @@ public static class HabitScheduleService
     /// date. Flexible and bad habits are never overdue. This is the single overdue rule shared by
     /// the schedule query (<c>GetHabitScheduleQuery</c>) and the daily summary (<c>AiSummaryService</c>).
     /// </summary>
-    public static bool IsOverdueOnDate(Habit habit, DateOnly referenceDate, int weekStartDay = 1)
+    public static bool IsOverdueOnDate(
+        Habit habit,
+        DateOnly referenceDate,
+        int weekStartDay = 1,
+        bool dueDateResolved = false)
     {
         if (habit.IsFlexible || habit.IsBadHabit)
             return false;
@@ -419,7 +428,7 @@ public static class HabitScheduleService
         if (IsHabitDueOnDate(habit, referenceDate, weekStartDay))
             return false;
 
-        return HasMissedPastOccurrence(habit, referenceDate, weekStartDay);
+        return HasMissedPastOccurrence(habit, referenceDate, weekStartDay, dueDateResolved);
     }
 
     /// <summary>
