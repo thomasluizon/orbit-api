@@ -6,6 +6,7 @@ using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Text.Json;
 
 namespace Orbit.Application.Tests.Queries.Habits;
 
@@ -262,5 +263,114 @@ public class GetHabitFullDetailQueryHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Habit.IsCompleted.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_NestedHabitWithRelationships_ReturnsLinkedGoalsAndSlipAlertEnabled()
+    {
+        var parentId = Guid.NewGuid();
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId,
+            "Nested Habit",
+            FrequencyUnit.Day,
+            1,
+            DueDate: Today,
+            ParentHabitId: parentId,
+            SlipAlertEnabled: true)).Value;
+        var firstGoal = Goal.Create(UserId, "First Goal", 10, "times").Value;
+        var secondGoal = Goal.Create(UserId, "Second Goal", 20, "times").Value;
+        habit.AddGoal(firstGoal);
+        habit.AddGoal(secondGoal);
+        var user = CreateTestUser();
+
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { habit }.AsReadOnly());
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _habitLogRepo.FindAsync(
+            Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<HabitLog>().AsReadOnly());
+
+        var result = await _handler.Handle(
+            new GetHabitFullDetailQuery(UserId, habit.Id),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(
+            result.Value.Habit,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        json.RootElement.TryGetProperty("linkedGoals", out var linkedGoals).Should().BeTrue();
+        linkedGoals.EnumerateArray()
+            .Select(goal => (goal.GetProperty("id").GetGuid(), goal.GetProperty("title").GetString()))
+            .Should().BeEquivalentTo(new[]
+            {
+                (firstGoal.Id, firstGoal.Title),
+                (secondGoal.Id, secondGoal.Title)
+            });
+        json.RootElement.GetProperty("slipAlertEnabled").GetBoolean().Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_NestedHabitWithoutGoals_ReturnsEmptyLinkedGoals()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId,
+            "Nested Habit",
+            FrequencyUnit.Day,
+            1,
+            DueDate: Today,
+            ParentHabitId: Guid.NewGuid())).Value;
+        var user = CreateTestUser();
+
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { habit }.AsReadOnly());
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _habitLogRepo.FindAsync(
+            Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<HabitLog>().AsReadOnly());
+
+        var result = await _handler.Handle(
+            new GetHabitFullDetailQuery(UserId, habit.Id),
+            CancellationToken.None);
+
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(
+            result.Value.Habit,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        json.RootElement.GetProperty("linkedGoals").GetArrayLength().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Handle_TopLevelHabit_SerializesExistingContractOnly()
+    {
+        var habit = CreateTestHabit();
+        var user = CreateTestUser();
+
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { habit }.AsReadOnly());
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _habitLogRepo.FindAsync(
+            Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<HabitLog>().AsReadOnly());
+
+        var result = await _handler.Handle(
+            new GetHabitFullDetailQuery(UserId, habit.Id),
+            CancellationToken.None);
+
+        var json = JsonSerializer.Serialize(
+            result.Value.Habit,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        json.Should().NotContain("linkedGoals");
+        json.Should().NotContain("slipAlertEnabled");
     }
 }
