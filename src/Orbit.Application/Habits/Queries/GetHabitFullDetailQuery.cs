@@ -32,7 +32,8 @@ public class GetHabitFullDetailQueryHandler(
         var habits = await habitRepository.FindAsync(
             h => h.Id == request.HabitId && h.UserId == request.UserId,
             q => q.Include(h => h.Children).ThenInclude(c => c.Children)
-                  .Include(h => h.Goals),
+                  .Include(h => h.Goals)
+                  .AsSplitQuery(),
             cancellationToken);
 
         var habit = habits.Count > 0 ? habits[0] : null;
