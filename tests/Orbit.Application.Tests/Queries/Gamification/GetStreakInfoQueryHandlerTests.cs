@@ -42,6 +42,11 @@ public class GetStreakInfoQueryHandlerTests
             Today.AddDays(-1),
             Arg.Any<CancellationToken>())
             .Returns(StreakRepairEvaluation.Unavailable(Today.AddDays(-1)));
+        _userStreakService.GetRepairableGapDatesAsync(
+            UserId,
+            Today,
+            Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<DateOnly>());
     }
 
     private static User CreateTestUser()
@@ -97,6 +102,7 @@ public class GetStreakInfoQueryHandlerTests
         result.Value.RepairsRemainingThisMonth.Should().Be(0);
         result.Value.LastFreezeCoveredDate.Should().BeNull();
         result.Value.FreezeBankRemaining.Should().BeNull();
+        result.Value.RepairableGapDates.Should().BeEmpty();
     }
 
     [Fact]
@@ -269,6 +275,11 @@ public class GetStreakInfoQueryHandlerTests
             .Returns(StreakRepairEvaluation.Available(
                 Today.AddDays(-1),
                 new UserStreakState(7, 7, Today.AddDays(-1))));
+        _userStreakService.GetRepairableGapDatesAsync(
+            UserId,
+            Today,
+            Arg.Any<CancellationToken>())
+            .Returns([Today.AddDays(-2), Today.AddDays(-1)]);
 
         var result = await _handler.Handle(new GetStreakInfoQuery(UserId), CancellationToken.None);
 
@@ -276,6 +287,7 @@ public class GetStreakInfoQueryHandlerTests
         result.Value.IsRepairAvailable.Should().BeTrue();
         result.Value.RepairDate.Should().Be(Today.AddDays(-1));
         result.Value.RepairsRemainingThisMonth.Should().Be(1);
+        result.Value.RepairableGapDates.Should().Equal(Today.AddDays(-2), Today.AddDays(-1));
         _productAnalytics.Received(1).CaptureUserEvent(
             UserId,
             "streak_repair_offered",

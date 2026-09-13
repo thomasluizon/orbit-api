@@ -224,6 +224,44 @@ public class StreakGapRepairTests
     }
 
     [Fact]
+    public async Task RepairableGapDates_DailyTwoDayGap_ReturnsBothDays()
+    {
+        _user.SetStreakState(3, 3, _today.AddDays(-3));
+
+        var result = await _service.GetRepairableGapDatesAsync(_user.Id, _today);
+
+        result.Should().Equal(_today.AddDays(-2), _today.AddDays(-1));
+    }
+
+    [Fact]
+    public async Task RepairableGapDates_CompletionToday_ReturnsEarlierGap()
+    {
+        _user.SetStreakState(3, 3, _today.AddDays(-3));
+        _user.SetStreakState(1, 3, _today);
+        _habit.Log(_today, advanceDueDate: false);
+
+        var result = await _service.GetRepairableGapDatesAsync(_user.Id, _today);
+
+        result.Should().Equal(_today.AddDays(-2), _today.AddDays(-1));
+    }
+
+    [Fact]
+    public async Task RepairableGapDates_GapOpeningLookbackWindow_ReturnsEmpty()
+    {
+        var lookbackStart = _today.AddDays(-AppConstants.MaxStreakLookbackDays);
+        _habit = Habit.Create(new HabitCreateParams(_user.Id, "Window", FrequencyUnit.Day, 1,
+            DueDate: lookbackStart)).Value;
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(_habit,
+            lookbackStart.ToDateTime(new TimeOnly(12, 0), DateTimeKind.Utc));
+        _habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns([_habit]);
+        _logs.FindAsync(Arg.Any<Expression<Func<HabitLog, bool>>>(), Arg.Any<CancellationToken>()).Returns([]);
+
+        var result = await _service.GetRepairableGapDatesAsync(_user.Id, _today);
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task SelectionContainsCompletedDay_IsUnavailable()
     {
         _habit.Log(_today.AddDays(-2), advanceDueDate: false);
@@ -271,6 +309,43 @@ public class StreakGapRepairTests
         _habit = SetWeeklyHistory(priorOccurrences: 3, skipMostRecentCompletion: true);
 
         (await _service.EvaluateGapRepairAsync(_user.Id, _today, [_today.AddDays(-1)])).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RepairableGapDates_PrecedingOccurrenceIsMissed_ReturnsEmpty()
+    {
+        _habit = SetWeeklyHistory(priorOccurrences: 3, skipMostRecentCompletion: true);
+        _user.SetStreakState(2, 2, _today.AddDays(-8));
+
+        var result = await _service.GetRepairableGapDatesAsync(_user.Id, _today);
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task WeeklyTwoOccurrenceGap_ReturnedByQuery_SucceedsWhenEchoedToRepair()
+    {
+        _habit = SetWeeklyHistory(priorOccurrences: 3, skipMostRecentCompletion: true);
+        _user.SetStreakState(14, 14, _today.AddDays(-15));
+        _user.AwardStreakFreezeIfEligible();
+        _user.SetStreakState(0, 14, null);
+        _users.GetByIdAsync(_user.Id, Arg.Any<CancellationToken>()).Returns(_user);
+        var flags = Substitute.For<IFeatureFlagService>();
+        flags.GetEnabledKeysForUserAsync(_user.Id, Arg.Any<CancellationToken>()).Returns(Array.Empty<string>());
+        var queryHandler = new GetStreakInfoQueryHandler(_users, _freezes, _dateService, _service,
+            flags, Substitute.For<IProductAnalytics>(), NullLogger<GetStreakInfoQueryHandler>.Instance);
+
+        var info = await queryHandler.Handle(new GetStreakInfoQuery(_user.Id), CancellationToken.None);
+
+        info.IsSuccess.Should().BeTrue();
+        info.Value.RepairableGapDates.Should().Equal(_today.AddDays(-8), _today.AddDays(-1));
+        var (repairHandler, _) = BuildRepairHandler();
+        var repaired = await repairHandler.Handle(
+            new RepairStreakGapCommand(_user.Id, info.Value.RepairableGapDates!),
+            CancellationToken.None);
+        repaired.IsSuccess.Should().BeTrue();
+        _persistedFreezes.Select(freeze => freeze.UsedOnDate)
+            .Should().Equal(_today.AddDays(-8), _today.AddDays(-1));
     }
 
     /// <summary>
