@@ -65,10 +65,11 @@ public partial class GetCalendarSyncSuggestionsQueryHandler(
             .ToHashSet(StringComparer.Ordinal);
 
         var items = new List<CalendarSyncSuggestionItem>();
+        var timeZone = TimeZoneHelper.FindTimeZone(user.TimeZone);
         foreach (var suggestion in suggestions.OrderBy(s => s.StartDateUtc))
         {
             var item = TryBuildSuggestionItem(
-                suggestion, userToday, importedEventIds, importedLegacyKeys, selectedCalendars);
+                suggestion, userToday, importedEventIds, importedLegacyKeys, selectedCalendars, timeZone);
             if (item is not null)
                 items.Add(item);
         }
@@ -81,13 +82,15 @@ public partial class GetCalendarSyncSuggestionsQueryHandler(
         DateOnly userToday,
         HashSet<string> importedEventIds,
         HashSet<string> importedLegacyKeys,
-        HashSet<string>? selectedCalendars)
+        HashSet<string>? selectedCalendars,
+        TimeZoneInfo timeZone)
     {
-        if (DateOnly.FromDateTime(suggestion.StartDateUtc) < userToday) return null;
         if (importedEventIds.Contains(suggestion.GoogleEventId)) return null;
 
         var eventItem = DeserializeEvent(suggestion);
         if (eventItem is null) return null;
+        eventItem = eventItem.ProjectTo(timeZone);
+        if (ResolveStartDate(eventItem, suggestion.StartDateUtc, timeZone) < userToday) return null;
         if (selectedCalendars is not null
             && !string.IsNullOrEmpty(eventItem.CalendarId)
             && !selectedCalendars.Contains(eventItem.CalendarId)) return null;
@@ -101,6 +104,26 @@ public partial class GetCalendarSyncSuggestionsQueryHandler(
             suggestion.GoogleEventId,
             eventItem,
             suggestion.DiscoveredAtUtc);
+    }
+
+    private static DateOnly ResolveStartDate(
+        CalendarEventItem eventItem,
+        DateTime fallbackStartUtc,
+        TimeZoneInfo timeZone)
+    {
+        if (DateOnly.TryParse(
+                eventItem.StartDate,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var startDate))
+        {
+            return startDate;
+        }
+
+        var localStart = TimeZoneInfo.ConvertTimeFromUtc(
+            DateTime.SpecifyKind(fallbackStartUtc, DateTimeKind.Utc),
+            timeZone);
+        return DateOnly.FromDateTime(localStart);
     }
 
     private CalendarEventItem? DeserializeEvent(GoogleCalendarSyncSuggestion suggestion)

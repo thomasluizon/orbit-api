@@ -1,3 +1,4 @@
+using System.Globalization;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Behaviors;
@@ -21,7 +22,33 @@ public record CalendarEventItem(
     List<int> Reminders,
     DateTime? StartUtc = null,
     string CalendarId = "",
-    string CalendarName = "");
+    string CalendarName = "",
+    DateTime? EndUtc = null)
+{
+    internal CalendarEventItem ProjectTo(TimeZoneInfo timeZone)
+    {
+        if (StartTime is null || StartUtc is null)
+            return this;
+
+        var localStart = TimeZoneInfo.ConvertTimeFromUtc(
+            DateTime.SpecifyKind(StartUtc.Value, DateTimeKind.Utc),
+            timeZone);
+        var localEnd = EndUtc is { } endUtc
+            ? TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(endUtc, DateTimeKind.Utc), timeZone)
+            : (DateTime?)null;
+
+        return this with
+        {
+            StartDate = localStart.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            StartTime = localStart.ToString("HH:mm", CultureInfo.InvariantCulture),
+            EndTime = localEnd is { } sameDayEnd
+                && sameDayEnd.Date == localStart.Date
+                && sameDayEnd.TimeOfDay > localStart.TimeOfDay
+                ? sameDayEnd.ToString("HH:mm", CultureInfo.InvariantCulture)
+                : null
+        };
+    }
+}
 
 public record GetCalendarEventsQuery(Guid UserId) : IRequest<Result<List<CalendarEventItem>>>, IConcurrencyRetryable;
 
@@ -59,8 +86,10 @@ public partial class GetCalendarEventsQueryHandler(
                 accessToken, user.GetSelectedCalendarIds(), updatedMin: null, cancellationToken);
 
             var importedEventIds = await BuildImportedEventIdSet(request.UserId, cancellationToken);
+            var timeZone = TimeZoneHelper.FindTimeZone(user.TimeZone);
             var items = fetched
                 .Where(item => !importedEventIds.Contains(item.Id))
+                .Select(item => item.ProjectTo(timeZone))
                 .ToList();
 
             return Result.Success(items);

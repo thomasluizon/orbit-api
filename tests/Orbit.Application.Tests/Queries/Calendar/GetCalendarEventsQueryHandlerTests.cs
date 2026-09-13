@@ -40,6 +40,27 @@ public class GetCalendarEventsQueryHandlerTests
         return User.Create("Test User", "test@example.com").Value;
     }
 
+    private void StubSuccessfulFetch(User user, params CalendarEventItem[] items)
+    {
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _googleTokenService.GetValidAccessTokenAsync(user, Arg.Any<CancellationToken>())
+            .Returns("valid-access-token");
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit>().AsReadOnly());
+        _suggestionRepo.FindAsync(
+            Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<GoogleCalendarSyncSuggestion>().AsReadOnly());
+        _eventFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<IReadOnlyCollection<string>?>(),
+                Arg.Any<DateTime?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(items.ToList());
+    }
+
     [Fact]
     public async Task Handle_UserNotFound_ReturnsFailure()
     {
@@ -181,6 +202,180 @@ public class GetCalendarEventsQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().HaveCount(1);
         result.Value[0].Id.Should().Be("evt_new");
+    }
+
+    [Fact]
+    public async Task Handle_TimedTokyoEvent_ProjectsStartIntoSaoPauloTimezone()
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
+        StubSuccessfulFetch(
+            user,
+            new CalendarEventItem(
+                "evt_tokyo",
+                "Tokyo breakfast",
+                null,
+                "2026-04-15",
+                "08:00",
+                "09:00",
+                false,
+                null,
+                [],
+                StartUtc: new DateTime(2026, 4, 14, 23, 0, 0, DateTimeKind.Utc),
+                EndUtc: new DateTime(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc)));
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value[0].StartDate.Should().Be("2026-04-14");
+        result.Value[0].StartTime.Should().Be("20:00");
+        result.Value[0].EndTime.Should().Be("21:00");
+    }
+
+    [Fact]
+    public async Task Handle_TimedEventWithoutEndUtc_ProjectsStartAndOmitsEndTime()
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
+        StubSuccessfulFetch(
+            user,
+            new CalendarEventItem(
+                "evt_legacy",
+                "Legacy Tokyo breakfast",
+                null,
+                "2026-04-15",
+                "08:00",
+                "09:00",
+                false,
+                null,
+                [],
+                StartUtc: new DateTime(2026, 4, 14, 23, 0, 0, DateTimeKind.Utc)));
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value[0].StartDate.Should().Be("2026-04-14");
+        result.Value[0].StartTime.Should().Be("20:00");
+        result.Value[0].EndTime.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_TimedSaoPauloEvent_ProjectsIntoNextTokyoDay()
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone("Asia/Tokyo").IsSuccess.Should().BeTrue();
+        StubSuccessfulFetch(
+            user,
+            new CalendarEventItem(
+                "evt_sao_paulo",
+                "Late dinner",
+                null,
+                "2026-04-15",
+                "23:00",
+                "00:00",
+                false,
+                null,
+                [],
+                StartUtc: new DateTime(2026, 4, 16, 2, 0, 0, DateTimeKind.Utc),
+                EndUtc: new DateTime(2026, 4, 16, 3, 0, 0, DateTimeKind.Utc)));
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value[0].StartDate.Should().Be("2026-04-16");
+        result.Value[0].StartTime.Should().Be("11:00");
+        result.Value[0].EndTime.Should().Be("12:00");
+    }
+
+    [Theory]
+    [InlineData("America/Sao_Paulo")]
+    [InlineData("Asia/Tokyo")]
+    public async Task Handle_AllDayEvent_PreservesFloatingDateAndNullTimes(string timeZone)
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone(timeZone).IsSuccess.Should().BeTrue();
+        StubSuccessfulFetch(
+            user,
+            new CalendarEventItem(
+                "evt_all_day",
+                "Holiday",
+                null,
+                "2026-04-15",
+                null,
+                null,
+                false,
+                null,
+                [],
+                StartUtc: new DateTime(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc),
+                EndUtc: new DateTime(2026, 4, 16, 0, 0, 0, DateTimeKind.Utc)));
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value[0].StartDate.Should().Be("2026-04-15");
+        result.Value[0].StartTime.Should().BeNull();
+        result.Value[0].EndTime.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_UserWithoutTimezone_OmitsEndTimeWhenProjectionCrossesUtcMidnight()
+    {
+        var user = CreateTestUser();
+        StubSuccessfulFetch(
+            user,
+            new CalendarEventItem(
+                "evt_utc_fallback",
+                "Tokyo breakfast",
+                null,
+                "2026-04-15",
+                "08:00",
+                "09:00",
+                false,
+                null,
+                [],
+                StartUtc: new DateTime(2026, 4, 14, 23, 0, 0, DateTimeKind.Utc),
+                EndUtc: new DateTime(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc)));
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value[0].StartDate.Should().Be("2026-04-14");
+        result.Value[0].StartTime.Should().Be("23:00");
+        result.Value[0].EndTime.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_TimedEventCrossingRepeatedHour_OmitsDescendingEndTime()
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone("America/New_York").IsSuccess.Should().BeTrue();
+        StubSuccessfulFetch(
+            user,
+            new CalendarEventItem(
+                "evt_fall_back",
+                "Repeated hour",
+                null,
+                "2026-11-01",
+                "01:30",
+                "01:15",
+                false,
+                null,
+                [],
+                StartUtc: new DateTime(2026, 11, 1, 5, 30, 0, DateTimeKind.Utc),
+                EndUtc: new DateTime(2026, 11, 1, 6, 15, 0, DateTimeKind.Utc)));
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value[0].StartDate.Should().Be("2026-11-01");
+        result.Value[0].StartTime.Should().Be("01:30");
+        result.Value[0].EndTime.Should().BeNull();
     }
 
     [Fact]

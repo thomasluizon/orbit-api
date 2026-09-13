@@ -135,9 +135,10 @@ internal sealed partial class GoogleCalendarEventFetcher(
             isRecurring,
             rrule,
             BuildReminders(ev, startTime),
-            ResolveStartUtc(ev.Start),
+            ResolveUtc(ev.Start),
             calendarId,
-            calendarName);
+            calendarName,
+            ResolveUtc(ev.End));
     }
 
     private async Task<string?> ResolveRRule(
@@ -200,16 +201,16 @@ internal sealed partial class GoogleCalendarEventFetcher(
     private static string ResolveCalendarName(CalendarListEntry entry) =>
         entry.SummaryOverride ?? entry.Summary ?? string.Empty;
 
-    private static DateTime? ResolveStartUtc(EventDateTime? start)
+    private static DateTime? ResolveUtc(EventDateTime? value)
     {
-        if (start is null)
+        if (value is null)
             return null;
 
-        if (start.DateTimeDateTimeOffset is { } dto)
+        if (value.DateTimeDateTimeOffset is { } dto)
             return dto.UtcDateTime;
 
-        if (!string.IsNullOrWhiteSpace(start.Date)
-            && DateOnly.TryParse(start.Date, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var date))
+        if (!string.IsNullOrWhiteSpace(value.Date)
+            && DateOnly.TryParse(value.Date, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var date))
         {
             return date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
         }

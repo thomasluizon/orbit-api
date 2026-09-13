@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -155,6 +156,131 @@ public class GetCalendarSyncSuggestionsQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().ContainSingle();
         result.Value[0].GoogleEventId.Should().Be("gcal-future");
+    }
+
+    [Fact]
+    public async Task Handle_TimedSuggestion_ProjectsBeforeComparingWithUserToday()
+    {
+        var user = User.Create("Test", "test@example.com").Value;
+        user.SetTimeZone("Asia/Tokyo").IsSuccess.Should().BeTrue();
+        _userRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(user);
+        _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new DateOnly(2026, 4, 15));
+
+        var startUtc = new DateTime(2026, 4, 14, 15, 0, 0, DateTimeKind.Utc);
+        var eventItem = new CalendarEventItem(
+            "event-crossing-day",
+            "UTC afternoon",
+            null,
+            "2026-04-14",
+            "15:00",
+            "16:00",
+            false,
+            null,
+            [],
+            StartUtc: startUtc,
+            EndUtc: startUtc.AddHours(1));
+        var suggestion = GoogleCalendarSyncSuggestion.Create(
+            UserId,
+            "gcal-crossing-day",
+            eventItem.Title,
+            startUtc,
+            JsonSerializer.Serialize(eventItem),
+            startUtc);
+
+        _suggestionRepo.FindAsync(
+            Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<GoogleCalendarSyncSuggestion> { suggestion }.AsReadOnly());
+
+        var result = await _handler.Handle(new GetCalendarSyncSuggestionsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value[0].Event.StartDate.Should().Be("2026-04-15");
+        result.Value[0].Event.StartTime.Should().Be("00:00");
+        result.Value[0].Event.EndTime.Should().Be("01:00");
+    }
+
+    [Fact]
+    public async Task Handle_LegacyTimedSuggestionWithoutEndUtc_MatchesEventsQueryProjection()
+    {
+        var user = User.Create("Test", "test@example.com").Value;
+        user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
+        _userRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(user);
+
+        var startUtc = new DateTime(2026, 4, 14, 23, 0, 0, DateTimeKind.Utc);
+        var eventItem = new CalendarEventItem(
+            "event-legacy",
+            "Legacy Tokyo breakfast",
+            null,
+            "2026-04-15",
+            "08:00",
+            "09:00",
+            false,
+            null,
+            [],
+            StartUtc: startUtc);
+        var legacyJson = JsonNode.Parse(JsonSerializer.Serialize(eventItem))!.AsObject();
+        legacyJson.Remove(nameof(CalendarEventItem.EndUtc));
+        var suggestion = GoogleCalendarSyncSuggestion.Create(
+            UserId,
+            "gcal-legacy",
+            eventItem.Title,
+            startUtc,
+            legacyJson.ToJsonString(),
+            startUtc);
+
+        _suggestionRepo.FindAsync(
+            Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<GoogleCalendarSyncSuggestion> { suggestion }.AsReadOnly());
+
+        var result = await _handler.Handle(new GetCalendarSyncSuggestionsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value[0].Event.StartDate.Should().Be("2026-04-14");
+        result.Value[0].Event.StartTime.Should().Be("20:00");
+        result.Value[0].Event.EndTime.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_TimedSuggestionCrossingLocalMidnight_OmitsEndTime()
+    {
+        var startUtc = new DateTime(2026, 4, 14, 23, 0, 0, DateTimeKind.Utc);
+        var eventItem = new CalendarEventItem(
+            "event-overnight",
+            "Late event",
+            null,
+            "2026-04-14",
+            "23:00",
+            "00:00",
+            false,
+            null,
+            [],
+            StartUtc: startUtc,
+            EndUtc: startUtc.AddHours(1));
+        var suggestion = GoogleCalendarSyncSuggestion.Create(
+            UserId,
+            "gcal-overnight",
+            eventItem.Title,
+            startUtc,
+            JsonSerializer.Serialize(eventItem),
+            startUtc);
+
+        _suggestionRepo.FindAsync(
+            Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<GoogleCalendarSyncSuggestion> { suggestion }.AsReadOnly());
+
+        var result = await _handler.Handle(new GetCalendarSyncSuggestionsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value[0].Event.StartDate.Should().Be("2026-04-14");
+        result.Value[0].Event.StartTime.Should().Be("23:00");
+        result.Value[0].Event.EndTime.Should().BeNull();
     }
 
     [Fact]
