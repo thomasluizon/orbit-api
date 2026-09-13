@@ -350,6 +350,35 @@ public class GetCalendarEventsQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_TimedEventCrossingRepeatedHour_OmitsDescendingEndTime()
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone("America/New_York").IsSuccess.Should().BeTrue();
+        StubSuccessfulFetch(
+            user,
+            new CalendarEventItem(
+                "evt_fall_back",
+                "Repeated hour",
+                null,
+                "2026-11-01",
+                "01:30",
+                "01:15",
+                false,
+                null,
+                [],
+                StartUtc: new DateTime(2026, 11, 1, 5, 30, 0, DateTimeKind.Utc),
+                EndUtc: new DateTime(2026, 11, 1, 6, 15, 0, DateTimeKind.Utc)));
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value[0].StartDate.Should().Be("2026-11-01");
+        result.Value[0].StartTime.Should().Be("01:30");
+        result.Value[0].EndTime.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Handle_InvalidRefreshToken_MarksReconnectRequiredAndReturnsConnectionFailure()
     {
         var user = CreateTestUser();
