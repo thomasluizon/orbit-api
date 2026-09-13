@@ -41,7 +41,9 @@ public record CalendarEventItem(
         {
             StartDate = localStart.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             StartTime = localStart.ToString("HH:mm", CultureInfo.InvariantCulture),
-            EndTime = localEnd?.ToString("HH:mm", CultureInfo.InvariantCulture) ?? EndTime
+            EndTime = localEnd is { } sameDayEnd && sameDayEnd.Date == localStart.Date
+                ? sameDayEnd.ToString("HH:mm", CultureInfo.InvariantCulture)
+                : null
         };
     }
 }
