@@ -526,7 +526,7 @@ public class RunCalendarAutoSyncCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_Success_FallsBackToStartDateWhenNoUtcInstant()
+    public async Task Handle_Success_PersistsAllDayStartInstant()
     {
         var user = CreateEnabledProUser();
         StubUser(user);
@@ -536,7 +536,17 @@ public class RunCalendarAutoSyncCommandHandlerTests
         _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
             .Returns(new List<CalendarEventItem>
             {
-                new("evt_allday", "All day", null, "2026-04-12", null, null, false, null, [])
+                new(
+                    "evt_allday",
+                    "All day",
+                    null,
+                    "2026-04-12",
+                    null,
+                    null,
+                    false,
+                    null,
+                    [],
+                    StartUtc: new DateTime(2026, 4, 12, 0, 0, 0, DateTimeKind.Utc))
             });
 
         GoogleCalendarSyncSuggestion? captured = null;

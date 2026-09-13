@@ -237,7 +237,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
             if (created >= MaxSuggestionsPerTick) break;
             if (!reservedEventIds.Add(ev.Id)) continue;
 
-            var startDateUtc = ParseStartDateUtc(ev);
+            var startDateUtc = ResolveStartDateUtc(ev);
             var rawJson = JsonSerializer.Serialize(ev);
 
             var suggestion = GoogleCalendarSyncSuggestion.Create(
@@ -308,13 +308,10 @@ public partial class RunCalendarAutoSyncCommandHandler(
         return local.Hour >= QuietHoursStart && local.Hour < QuietHoursEnd;
     }
 
-    private static DateTime ParseStartDateUtc(CalendarEventItem ev)
+    private static DateTime ResolveStartDateUtc(CalendarEventItem ev)
     {
         if (ev.StartUtc is { } startUtc)
             return DateTime.SpecifyKind(startUtc, DateTimeKind.Utc);
-
-        if (DateOnly.TryParse(ev.StartDate, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var date))
-            return date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
 
         return DateTime.SpecifyKind(DateTime.MinValue, DateTimeKind.Utc);
     }

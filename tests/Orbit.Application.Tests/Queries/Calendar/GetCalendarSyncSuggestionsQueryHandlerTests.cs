@@ -158,6 +158,50 @@ public class GetCalendarSyncSuggestionsQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_TimedSuggestion_ProjectsBeforeComparingWithUserToday()
+    {
+        var user = User.Create("Test", "test@example.com").Value;
+        user.SetTimeZone("Asia/Tokyo").IsSuccess.Should().BeTrue();
+        _userRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(user);
+        _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new DateOnly(2026, 4, 15));
+
+        var startUtc = new DateTime(2026, 4, 14, 15, 0, 0, DateTimeKind.Utc);
+        var eventItem = new CalendarEventItem(
+            "event-crossing-day",
+            "UTC afternoon",
+            null,
+            "2026-04-14",
+            "15:00",
+            "16:00",
+            false,
+            null,
+            [],
+            StartUtc: startUtc,
+            EndUtc: startUtc.AddHours(1));
+        var suggestion = GoogleCalendarSyncSuggestion.Create(
+            UserId,
+            "gcal-crossing-day",
+            eventItem.Title,
+            startUtc,
+            JsonSerializer.Serialize(eventItem),
+            startUtc);
+
+        _suggestionRepo.FindAsync(
+            Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<GoogleCalendarSyncSuggestion> { suggestion }.AsReadOnly());
+
+        var result = await _handler.Handle(new GetCalendarSyncSuggestionsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value[0].Event.StartDate.Should().Be("2026-04-15");
+        result.Value[0].Event.StartTime.Should().Be("00:00");
+        result.Value[0].Event.EndTime.Should().Be("01:00");
+    }
+
+    [Fact]
     public async Task Handle_ExistingHabitGoogleEventId_ExcludesMatchingSuggestion()
     {
         var suggestion = CreateSuggestion("gcal-1", "Morning Yoga", "2026-04-15", "09:00");

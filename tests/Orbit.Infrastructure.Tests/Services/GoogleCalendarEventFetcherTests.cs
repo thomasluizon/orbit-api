@@ -111,6 +111,57 @@ public class GoogleCalendarEventFetcherTests
     }
 
     [Fact]
+    public async Task FetchAsync_TimedEvent_PreservesStartAndEndUtcInstants()
+    {
+        StubCalendars(Calendar("owned", "owner"));
+        StubEvents(
+            "owned",
+            new Event
+            {
+                Id = "tokyo-event",
+                Summary = "Tokyo breakfast",
+                Start = new EventDateTime
+                {
+                    DateTimeDateTimeOffset = new DateTimeOffset(2026, 4, 15, 8, 0, 0, TimeSpan.FromHours(9))
+                },
+                End = new EventDateTime
+                {
+                    DateTimeDateTimeOffset = new DateTimeOffset(2026, 4, 15, 9, 0, 0, TimeSpan.FromHours(9))
+                }
+            });
+
+        var result = await _fetcher.FetchAsync(Token, null, null, CancellationToken.None);
+
+        result.Should().ContainSingle();
+        result[0].StartUtc.Should().Be(new DateTime(2026, 4, 14, 23, 0, 0, DateTimeKind.Utc));
+        result[0].EndUtc.Should().Be(new DateTime(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc));
+    }
+
+    [Fact]
+    public async Task FetchAsync_AllDayEvent_PreservesFloatingDateWithNullTimes()
+    {
+        StubCalendars(Calendar("owned", "owner"));
+        StubEvents(
+            "owned",
+            new Event
+            {
+                Id = "all-day-event",
+                Summary = "Holiday",
+                Start = new EventDateTime { Date = "2026-04-15" },
+                End = new EventDateTime { Date = "2026-04-16" }
+            });
+
+        var result = await _fetcher.FetchAsync(Token, null, null, CancellationToken.None);
+
+        result.Should().ContainSingle();
+        result[0].StartDate.Should().Be("2026-04-15");
+        result[0].StartTime.Should().BeNull();
+        result[0].EndTime.Should().BeNull();
+        result[0].StartUtc.Should().Be(new DateTime(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc));
+        result[0].EndUtc.Should().Be(new DateTime(2026, 4, 16, 0, 0, 0, DateTimeKind.Utc));
+    }
+
+    [Fact]
     public async Task FetchAsync_ExplicitSelection_FetchesOnlyChosenCalendars()
     {
         StubCalendars(
