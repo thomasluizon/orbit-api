@@ -2,7 +2,7 @@ name: Mutation Testing
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, redesign/main]
   schedule:
     - cron: "0 6 * * *"
 
@@ -42,8 +42,8 @@ jobs:
       - name: Run Stryker (PR — changed in-scope files only)
         if: github.event_name == 'pull_request'
         run: |
-          git fetch origin main
-          dotnet stryker -f stryker-config.${{ matrix.project }}.json --since:origin/main
+          git fetch origin ${{ github.base_ref }}
+          dotnet stryker -f stryker-config.${{ matrix.project }}.json --since:origin/${{ github.base_ref }}
 
       - name: Run Stryker (nightly — full in-scope)
         if: github.event_name == 'schedule'
