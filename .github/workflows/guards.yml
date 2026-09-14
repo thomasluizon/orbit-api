@@ -13,7 +13,7 @@ name: Guards
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, redesign/main]
     types: [opened, synchronize, reopened, edited]
   push:
     branches: [main]
