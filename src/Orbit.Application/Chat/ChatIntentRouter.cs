@@ -39,8 +39,11 @@ public static class ChatIntentRouter
     /// True when the turn is a clearly-trivial social nicety that needs no tools. Conservative:
     /// any unrecognised, longer, or question-shaped message returns false (keep the full tool loop).
     /// </summary>
-    public static bool IsNoToolTurn(string message)
+    public static bool IsNoToolTurn(string message, bool hasEntryPointIntent = false)
     {
+        if (hasEntryPointIntent)
+            return false;
+
         if (string.IsNullOrWhiteSpace(message))
             return false;
 

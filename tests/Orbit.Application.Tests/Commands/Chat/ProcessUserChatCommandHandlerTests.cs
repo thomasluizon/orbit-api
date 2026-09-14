@@ -52,6 +52,7 @@ public class ProcessUserChatCommandHandlerTests
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly DateOnly Today = new(2026, 4, 3);
     private static readonly string[] ExpectedOrderedToolNames = new[] { "assign_tags", "create_habit", "delete_habit" };
+    private static readonly string[] SupportToolNames = new[] { "send_support_request" };
     private static readonly string[] GamificationTodaySurfaces = new[] { "gamification", "today" };
     private static readonly string[] HabitsSurfaces = new[] { "habits" };
     private const string EnglishToolFailureMessage = "I couldn't complete that. Please try again.";
@@ -364,6 +365,12 @@ public class ProcessUserChatCommandHandlerTests
 
     private static List<string> ToolNames(IReadOnlyList<object> declarations) =>
         declarations.Select(declaration => (string)declaration.GetType().GetProperty("name")!.GetValue(declaration)!).ToList();
+
+    private static AgentClientContext DeserializeClientContext(string json) =>
+        JsonSerializer.Deserialize<AgentClientContext>(
+            json,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+        ?? throw new InvalidOperationException("Client context deserialization returned null.");
 
     [Fact]
     public async Task Handle_PayGateBlocks_ReturnsPayGateError()
@@ -1225,6 +1232,121 @@ public class ProcessUserChatCommandHandlerTests
             Arg.Is<AiToolRequest>(request =>
                 ToolNames(request.ToolDeclarations).SequenceEqual(ExpectedOrderedToolNames)),
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_SupportEntryPointIntent_FirstTurnDeclaresSupportTool()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "I can help with that." });
+        var handler = CreateHandler(FakeTool("send_support_request"));
+        var clientContext = DeserializeClientContext("""{"entryPointIntent":"support"}""");
+
+        await handler.Handle(
+            new ProcessUserChatCommand(
+                UserId,
+                "my streak reset after I travelled",
+                ClientContext: clientContext),
+            CancellationToken.None);
+
+        await _aiIntentService.Received(1).SendWithToolsAsync(
+            Arg.Is<AiToolRequest>(request => ToolNames(request.ToolDeclarations).SequenceEqual(SupportToolNames)),
+            Arg.Any<Func<AiStreamEvent, Task>?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_SupportEntryPointIntent_TrivialMessageKeepsSupportTool()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "Hello." });
+        var handler = CreateHandler(FakeTool("send_support_request"));
+        var clientContext = DeserializeClientContext("""{"entryPointIntent":"support"}""");
+
+        await handler.Handle(
+            new ProcessUserChatCommand(UserId, "hello", ClientContext: clientContext),
+            CancellationToken.None);
+
+        await _aiIntentService.Received(1).SendWithToolsAsync(
+            Arg.Is<AiToolRequest>(request => ToolNames(request.ToolDeclarations).SequenceEqual(SupportToolNames)),
+            Arg.Any<Func<AiStreamEvent, Task>?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_NoEntryPointIntentWithoutPhrase_DoesNotDeclareSupportTool()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "I can help with that." });
+        var handler = CreateHandler(FakeTool("send_support_request"));
+
+        await handler.Handle(
+            new ProcessUserChatCommand(UserId, "my streak reset after I travelled"),
+            CancellationToken.None);
+
+        await _aiIntentService.Received(1).SendWithToolsAsync(
+            Arg.Is<AiToolRequest>(request => request.ToolDeclarations.Count == 0),
+            Arg.Any<Func<AiStreamEvent, Task>?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_NoEntryPointIntentWithPhrase_DeclaresSupportTool()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "I can help with that." });
+        var handler = CreateHandler(FakeTool("send_support_request"));
+
+        await handler.Handle(
+            new ProcessUserChatCommand(UserId, "Please contact the team about my streak"),
+            CancellationToken.None);
+
+        await _aiIntentService.Received(1).SendWithToolsAsync(
+            Arg.Is<AiToolRequest>(request => ToolNames(request.ToolDeclarations).SequenceEqual(SupportToolNames)),
+            Arg.Any<Func<AiStreamEvent, Task>?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_SupportEntryPointIntent_DoesNotDeclareUnrelatedExtendedTools()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "I can help with that." });
+        var handler = CreateHandler(
+            FakeTool("send_support_request"),
+            FakeTool("get_calendar_overview"),
+            FakeTool("manage_subscription"));
+        var clientContext = DeserializeClientContext("""{"entryPointIntent":"support"}""");
+
+        await handler.Handle(
+            new ProcessUserChatCommand(
+                UserId,
+                "my streak reset after I travelled",
+                ClientContext: clientContext),
+            CancellationToken.None);
+
+        await _aiIntentService.Received(1).SendWithToolsAsync(
+            Arg.Is<AiToolRequest>(request => ToolNames(request.ToolDeclarations).SequenceEqual(SupportToolNames)),
+            Arg.Any<Func<AiStreamEvent, Task>?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_UnknownEntryPointIntent_TrivialMessageDoesNotDeclareTools()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "Hello." });
+        var handler = CreateHandler(FakeTool("create_habit"));
+        var clientContext = DeserializeClientContext("""{"entryPointIntent":"unknown"}""");
+
+        await handler.Handle(
+            new ProcessUserChatCommand(UserId, "hello", ClientContext: clientContext),
+            CancellationToken.None);
+
+        await _aiIntentService.Received(1).SendWithToolsAsync(
+            Arg.Is<AiToolRequest>(request => request.ToolDeclarations.Count == 0),
+            Arg.Any<Func<AiStreamEvent, Task>?>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

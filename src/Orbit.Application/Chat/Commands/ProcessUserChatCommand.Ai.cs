@@ -55,7 +55,8 @@ public partial class ProcessUserChatCommandHandler
 
         var activeToolNames = ChatToolGroups.ResolveActiveToolNames(
             ai.ToolRegistry.GetAll().Select(t => t.Name),
-            BuildConversationText(request));
+            BuildConversationText(request),
+            GetEntryPointIntent(request));
 
         var toolDeclarations = skipTools
             ? new List<object>()
@@ -99,6 +100,9 @@ public partial class ProcessUserChatCommandHandler
 
         return request.Message + " " + string.Join(" ", request.History.Select(message => message.Content));
     }
+
+    private static string? GetEntryPointIntent(ProcessUserChatCommand request) =>
+        request.ClientContext?.EntryPointIntent;
 
     private sealed record AgentSnapshotInputs(
         IReadOnlyList<string> FeatureFlags,
