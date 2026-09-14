@@ -136,7 +136,9 @@ public partial class ProcessUserChatCommandHandler(
         var skipTools = request.ImageData is null
             && request.ConfirmationToken is null
             && (request.History is null || request.History.Count == 0)
-            && ChatIntentRouter.IsNoToolTurn(request.Message);
+            && ChatIntentRouter.IsNoToolTurn(
+                request.Message,
+                ChatToolGroups.IsKnownEntryPointIntent(GetEntryPointIntent(request)));
 
         var aiStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var response = await RequestInitialAiResponseAsync(request, context, aiStreamSink, skipTools, cancellationToken);

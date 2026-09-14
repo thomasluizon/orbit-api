@@ -35,4 +35,8 @@ public class ChatIntentRouterTests
     [InlineData("remind me at 8")]
     public void IsNoToolTurn_ActionableOrUnknownTurns_ReturnsFalse(string message)
         => ChatIntentRouter.IsNoToolTurn(message).Should().BeFalse();
+
+    [Fact]
+    public void IsNoToolTurn_TrivialTurnWithEntryPointIntent_ReturnsFalse()
+        => ChatIntentRouter.IsNoToolTurn("hello", hasEntryPointIntent: true).Should().BeFalse();
 }

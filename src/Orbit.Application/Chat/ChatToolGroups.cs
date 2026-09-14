@@ -13,30 +13,39 @@ namespace Orbit.Application.Chat;
 /// </summary>
 public static class ChatToolGroups
 {
-    private sealed record ExtendedGroup(IReadOnlyList<string> ToolNames, IReadOnlyList<string> Keywords);
+    private sealed record ExtendedGroup(
+        string EntryPointIntent,
+        IReadOnlyList<string> ToolNames,
+        IReadOnlyList<string> Keywords);
 
     private static readonly IReadOnlyList<ExtendedGroup> Groups =
     [
-        new(["get_calendar_overview", "manage_calendar_sync"],
+        new("calendar", ["get_calendar_overview", "manage_calendar_sync"],
             ["calendar", "agenda", "google cal", "calendario", "event", "evento"]),
-        new(["get_api_keys", "manage_api_keys"],
+        new("api_keys", ["get_api_keys", "manage_api_keys"],
             ["api key", "apikey", "api-key", "developer key", "mcp", "personal token"]),
-        new(["get_referral_overview", "get_referral_code"],
+        new("referrals", ["get_referral_overview", "get_referral_code"],
             ["referral", "refer a friend", "invite", "indicacao", "indicar", "convidar"]),
-        new(["get_subscription_overview", "manage_subscription"],
+        new("subscription", ["get_subscription_overview", "manage_subscription"],
             ["subscription", "subscribe", "billing", "upgrade", "downgrade", "cancel plan", "assinatura", "pagamento", "cobranca"]),
-        new(["send_support_request"],
+        new("support", ["send_support_request"],
             ["support", "contact the team", "report a bug", "suporte", "fale conosco"]),
-        new(["manage_account"],
+        new("account", ["manage_account"],
             ["my account", "delete account", "export data", "change password", "minha conta", "excluir conta", "senha"]),
-        new(["get_checklist_templates", "create_checklist_template", "delete_checklist_template"],
+        new("checklist_templates", ["get_checklist_templates", "create_checklist_template", "delete_checklist_template"],
             ["template", "checklist template", "reusable checklist", "modelo"]),
-        new(["get_notifications", "update_notifications", "delete_notifications"],
+        new("notifications", ["get_notifications", "update_notifications", "delete_notifications"],
             ["notification", "notificacao", "push alert", "reminder settings"]),
     ];
 
     private static readonly HashSet<string> ExtendedToolNames =
         Groups.SelectMany(group => group.ToolNames).ToHashSet(StringComparer.Ordinal);
+
+    public static bool IsKnownEntryPointIntent(string? entryPointIntent) =>
+        Groups.Any(group => string.Equals(
+            group.EntryPointIntent,
+            entryPointIntent,
+            StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Returns the tool names to declare this turn: every core tool, plus the tools of each rarely-used
@@ -44,7 +53,9 @@ public static class ChatToolGroups
     /// the recent history so an unlocked domain stays unlocked across the conversation.
     /// </summary>
     public static IReadOnlyCollection<string> ResolveActiveToolNames(
-        IEnumerable<string> allToolNames, string conversationText)
+        IEnumerable<string> allToolNames,
+        string conversationText,
+        string? entryPointIntent = null)
     {
         var normalized = Normalize(conversationText);
         var active = new HashSet<string>(StringComparer.Ordinal);
@@ -53,7 +64,8 @@ public static class ChatToolGroups
             active.Add(name);
 
         foreach (var group in Groups.Where(group =>
-                     group.Keywords.Any(keyword => normalized.Contains(keyword, StringComparison.Ordinal))))
+                     string.Equals(group.EntryPointIntent, entryPointIntent, StringComparison.OrdinalIgnoreCase)
+                     || group.Keywords.Any(keyword => normalized.Contains(keyword, StringComparison.Ordinal))))
         {
             foreach (var name in group.ToolNames)
                 active.Add(name);
