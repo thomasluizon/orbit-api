@@ -136,7 +136,6 @@ public class GoogleCalendarEventFetcherTests
         result.Should().ContainSingle();
         result[0].StartUtc.Should().Be(new DateTime(2026, 4, 14, 23, 0, 0, DateTimeKind.Utc));
         result[0].EndUtc.Should().Be(new DateTime(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc));
-        result[0].StartTimeZone.Should().Be("Asia/Tokyo");
     }
 
     [Fact]

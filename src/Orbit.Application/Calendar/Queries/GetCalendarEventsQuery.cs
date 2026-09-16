@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Behaviors;
@@ -10,7 +11,7 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Calendar.Queries;
 
-public record CalendarEventItem(
+public partial record CalendarEventItem(
     string Id,
     string Title,
     string? Description,
@@ -23,8 +24,7 @@ public record CalendarEventItem(
     DateTime? StartUtc = null,
     string CalendarId = "",
     string CalendarName = "",
-    DateTime? EndUtc = null,
-    string? StartTimeZone = null)
+    DateTime? EndUtc = null)
 {
     internal CalendarEventItem ProjectTo(TimeZoneInfo timeZone)
     {
@@ -50,68 +50,57 @@ public record CalendarEventItem(
                 && string.CompareOrdinal(projectedEndTime, projectedStartTime) > 0
                 ? projectedEndTime
                 : null,
-            RecurrenceRule = RecurrenceRule is not null
-                && IsRecurrenceDateStable(StartDate, StartTime, StartTimeZone, timeZone)
-                    ? RecurrenceRule
-                    : null
+            RecurrenceRule = ProjectRecurrenceRule(RecurrenceRule, StartDate, localStart)
         };
     }
 
-    private static bool IsRecurrenceDateStable(
-        string? startDate,
-        string? startTime,
-        string? startTimeZone,
-        TimeZoneInfo accountTimeZone)
+    private static string? ProjectRecurrenceRule(
+        string? recurrenceRule,
+        string? sourceStartDate,
+        DateTime localStart)
     {
-        if (string.IsNullOrWhiteSpace(startTimeZone)
-            || !DateTime.TryParseExact(
-                $"{startDate} {startTime}",
-                "yyyy-MM-dd HH:mm",
+        if (recurrenceRule is null
+            || !DateOnly.TryParseExact(
+                sourceStartDate,
+                "yyyy-MM-dd",
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.None,
                 out var sourceStart))
         {
-            return false;
+            return recurrenceRule;
         }
 
-        TimeZoneInfo sourceTimeZone;
-        try
+        var dayShift = ((int)localStart.DayOfWeek - (int)sourceStart.DayOfWeek + 7) % 7;
+        if (dayShift == 0)
+            return recurrenceRule;
+
+        return ByDayTermPattern().Replace(recurrenceRule, match =>
         {
-            sourceTimeZone = TimeZoneInfo.FindSystemTimeZoneById(startTimeZone);
-        }
-        catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException or ArgumentException)
-        {
-            return false;
-        }
-
-        // WHY(https://github.com/thomasluizon/orbit-api/issues/526): Four seasonal probes cover both hemispheres' daylight-saving offset pairs.
-        ReadOnlySpan<int> probeMonths = [1, 4, 7, 10];
-        foreach (var month in probeMonths)
-        {
-            var sourceLocal = new DateTime(
-                sourceStart.Year,
-                month,
-                15,
-                sourceStart.Hour,
-                sourceStart.Minute,
-                0,
-                DateTimeKind.Unspecified);
-            DateTime accountLocal;
-            try
-            {
-                accountLocal = TimeZoneInfo.ConvertTime(sourceLocal, sourceTimeZone, accountTimeZone);
-            }
-            catch (ArgumentException)
-            {
-                return false;
-            }
-
-            if ((accountLocal.Date - sourceLocal.Date).Days != 0)
-                return false;
-        }
-
-        return true;
+            var shiftedDays = match.Groups[3].Value
+                .Split(',')
+                .Select(token => ShiftByDayToken(token, dayShift));
+            return $"{match.Groups[1].Value}{match.Groups[2].Value}{string.Join(',', shiftedDays)}";
+        });
     }
+
+    private static string ShiftByDayToken(string token, int dayShift)
+    {
+        var match = ByDayTokenPattern().Match(token);
+        if (!match.Success)
+            return token;
+
+        var sourceDay = Array.IndexOf(RecurrenceWeekdays, match.Groups[3].Value.ToUpperInvariant());
+        var projectedDay = RecurrenceWeekdays[(sourceDay + dayShift) % 7];
+        return $"{match.Groups[1].Value}{match.Groups[2].Value}{projectedDay}{match.Groups[4].Value}";
+    }
+
+    private static readonly string[] RecurrenceWeekdays = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
+
+    [GeneratedRegex(@"(^|;|RRULE:)(BYDAY=)([^;]*)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex ByDayTermPattern();
+
+    [GeneratedRegex(@"^(\s*)([+-]?\d+)?(SU|MO|TU|WE|TH|FR|SA)(\s*)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex ByDayTokenPattern();
 }
 
 public record GetCalendarEventsQuery(Guid UserId) : IRequest<Result<List<CalendarEventItem>>>, IConcurrencyRetryable;
