@@ -31,6 +31,10 @@ function byCode(a, b) {
   return a < b ? -1 : a > b ? 1 : 0
 }
 
+function normalizeLineEndings(text) {
+  return text.replace(/\r\n?/g, "\n")
+}
+
 function toPosix(root, path) {
   return relative(root, path).split("\\").join("/")
 }
@@ -184,7 +188,7 @@ function parseStringConstants(source) {
 
 function extractMethod(source, name) {
   const text = stripComments(source)
-  const declaration = new RegExp(`\\b(?:public|private|protected)\\s+(?:(?:static|override|virtual|async|sealed|new)\\s+)*[\\w<>.?]+\\s+${name}\\s*\\(`)
+  const declaration = new RegExp(`\\b(?:public|private|protected)\\s+(?:(?:static|override|virtual|async|sealed|new)\\s+)*[\\w<>.?]+\\s+${name}(?:\\s*<[^(){};]+>)?\\s*\\(`)
   const match = declaration.exec(text)
   if (!match) return null
   const parametersOpen = text.indexOf("(", match.index)
@@ -205,7 +209,7 @@ function extractMethod(source, name) {
 
 function parseImplementationMethods(source) {
   const names = new Set()
-  const pattern = /\b(?:public|private|protected)\s+(?:static\s+)?(?:async\s+)?[\w<>.?]+\s+(\w+)\s*\(/g
+  const pattern = /\b(?:public|private|protected)\s+(?:static\s+)?(?:async\s+)?[\w<>.?]+\s+(\w+)(?:\s*<[^(){};]+>)?\s*\(/g
   let match
   const text = stripComments(source)
   while ((match = pattern.exec(text)) !== null) names.add(match[1])
@@ -213,12 +217,37 @@ function parseImplementationMethods(source) {
 }
 
 function parseInterfaceMethods(source) {
-  const methods = []
-  const pattern = /\bTask(?:<[^;()]+>)?\s+(\w+)\s*\(/g
-  let match
   const text = stripComments(source)
-  while ((match = pattern.exec(text)) !== null) methods.push(match[1])
-  return [...new Set(methods)].sort(byCode)
+  const declaration = /\binterface\s+IPayGateService\b/.exec(text)
+  if (!declaration) throw new Error("cannot find IPayGateService declaration")
+  const open = text.indexOf("{", declaration.index)
+  const close = matchBalanced(text, open, "{", "}")
+  if (open === -1 || close === -1) throw new Error("cannot read IPayGateService body")
+
+  const members = text.slice(open + 1, close).split(";").map((member) => member.trim()).filter(Boolean)
+  const methods = members.map((member) => {
+    const parametersOpen = member.indexOf("(")
+    if (parametersOpen === -1) throw new Error(`cannot parse IPayGateService member: ${member}`)
+    let prefix = member.slice(0, parametersOpen).trim()
+    if (prefix.endsWith(">")) {
+      let depth = 0
+      for (let index = prefix.length - 1; index >= 0; index -= 1) {
+        if (prefix[index] === ">") depth += 1
+        else if (prefix[index] === "<") {
+          depth -= 1
+          if (depth === 0) {
+            prefix = prefix.slice(0, index).trim()
+            break
+          }
+        }
+      }
+    }
+    const name = prefix.match(/([A-Za-z_]\w*)$/)?.[1]
+    if (!name) throw new Error(`cannot parse IPayGateService member: ${member}`)
+    return name
+  })
+  if (new Set(methods).size !== methods.length) throw new Error("overloaded IPayGateService methods are unsupported")
+  return methods.sort(byCode)
 }
 
 function reachableBodies(methodName, methods) {
@@ -263,37 +292,72 @@ function uniqueBy(items, key) {
   return [...new Map(items.map((item) => [key(item), item])).values()]
 }
 
+function ifBranches(body) {
+  const branches = []
+  const pattern = /\bif\s*\(/g
+  let match
+  while ((match = pattern.exec(body)) !== null) {
+    const conditionOpen = body.indexOf("(", match.index)
+    const conditionClose = matchBalanced(body, conditionOpen, "(", ")")
+    if (conditionClose === -1) continue
+    let branchStart = conditionClose + 1
+    while (/\s/.test(body[branchStart] ?? "")) branchStart += 1
+    let branchEnd
+    if (body[branchStart] === "{") branchEnd = matchBalanced(body, branchStart, "{", "}")
+    else branchEnd = body.indexOf(";", branchStart)
+    if (branchEnd === -1) continue
+    branches.push({
+      condition: body.slice(conditionOpen + 1, conditionClose),
+      start: branchStart,
+      end: branchEnd,
+    })
+  }
+  return branches
+}
+
 function accessRequirement(bodies, capability, sourcePath) {
   const requirements = new Set()
   for (const body of bodies) {
-    if (!body.includes("Result.PayGateFailure(")) continue
+    const failures = [...body.matchAll(/Result\.PayGateFailure\s*\(/g)].map((match) => match.index)
+    if (failures.length === 0) continue
+    const classified = new Map()
 
-    const match = body.match(/return\s+\w+\.Has([A-Z]\w*)Access\s*\?\s*Result\.Success\([^)]*\)\s*:\s*Result\.PayGateFailure\(/s)
-    if (match) {
-      requirements.add(match[1])
-      continue
+    for (const match of body.matchAll(/return\s+\w+\.Has([A-Z]\w*)Access\s*\?\s*Result\.Success\([^)]*\)\s*:\s*Result\.PayGateFailure\s*\(/gs)) {
+      const failureIndex = match.index + match[0].lastIndexOf("Result.PayGateFailure")
+      classified.set(failureIndex, match[1])
     }
 
-    const guardedFailure = body.match(
-      /if\s*\(([^)]*)\)\s*return\s+Result\.PayGateFailure\(/s,
+    const quotaVariables = new Set(
+      [...body.matchAll(/var\s+(\w+)\s*=\s*\w+\.Has[A-Z]\w*Access\s*\?\s*[^:;]+\s*:\s*[^;]+;/g)]
+        .map((match) => match[1]),
     )
-    const guardedRequirement = guardedFailure?.[1].match(/&&\s*!\s*\w+\.Has([A-Z]\w*)Access\b/)
-    if (guardedRequirement) {
-      requirements.add(guardedRequirement[1])
-      continue
+    const branches = ifBranches(body)
+    for (const failureIndex of failures) {
+      if (classified.has(failureIndex)) continue
+      const branch = branches
+        .filter((candidate) => failureIndex >= candidate.start && failureIndex <= candidate.end)
+        .sort((a, b) => (a.end - a.start) - (b.end - b.start))[0]
+      if (!branch) continue
+      const guardedRequirement = branch.condition.match(/&&\s*!\s*\w+\.Has([A-Z]\w*)Access\b/)
+      const quotaGuard = [...quotaVariables].some((variable) => {
+        const escaped = variable.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+        return new RegExp(`(?:\\b${escaped}\\b\\s*(?:<=|>=|<|>)|(?:<=|>=|<|>)\\s*\\b${escaped}\\b)`).test(branch.condition)
+      })
+      if (guardedRequirement) classified.set(failureIndex, guardedRequirement[1])
+      else if (quotaGuard) classified.set(failureIndex, null)
     }
 
-    const quotaSelection = [...body.matchAll(/var\s+(\w+)\s*=\s*\w+\.Has[A-Z]\w*Access\s*\?\s*[^:;]+\s*:\s*[^;]+;/g)]
-      .some((selection) => body.includes(`>= ${selection[1]}`))
-    if (quotaSelection) continue
-
-    throw new Error(`cannot derive plan requirement for ${capability} in ${sourcePath}: ${body.trim()}`)
+    const unclassified = failures.find((failureIndex) => !classified.has(failureIndex))
+    if (unclassified !== undefined) {
+      throw new Error(`cannot derive plan requirement for ${capability} in ${sourcePath}: ${body.trim()}`)
+    }
+    for (const requirement of classified.values()) if (requirement !== null) requirements.add(requirement)
   }
   if (requirements.size > 1) throw new Error(`conflicting plan requirements for ${capability} in ${sourcePath}`)
   return requirements.values().next().value ?? null
 }
 
-function extractInvocations(source, callName) {
+function extractInvocationArguments(source, callName) {
   const text = stripComments(source)
   const invocations = []
   let index = 0
@@ -302,10 +366,14 @@ function extractInvocations(source, callName) {
     if (open === -1) break
     const close = matchBalanced(text, open, "(", ")")
     if (close === -1) break
-    invocations.push(parseNamedArguments(text.slice(open + 1, close)))
+    invocations.push(text.slice(open + 1, close))
     index = close + 1
   }
   return invocations
+}
+
+function extractInvocations(source, callName) {
+  return extractInvocationArguments(source, callName).map(parseNamedArguments)
 }
 
 function upBody(source) {
@@ -337,8 +405,11 @@ function insertedRows(args, constants) {
 
 function applyTableMigrations(files, table, initialRows, constants) {
   const rows = new Map(initialRows.map((row) => [row.Key, { ...row }]))
-  for (const source of files) {
+  for (const [path, source] of files) {
     const body = upBody(source)
+    for (const args of extractInvocationArguments(body, "migrationBuilder.Sql")) {
+      if (args.includes(table)) throw new Error(`unsupported SQL mutation of ${table} in ${path}`)
+    }
     for (const args of extractInvocations(body, "migrationBuilder.InsertData")) {
       if (parseLiteral(args.table ?? "") !== table) continue
       for (const row of insertedRows(args, constants)) if (row.Key !== null && row.Key !== undefined) rows.set(row.Key, row)
@@ -383,7 +454,7 @@ function provenance(inputFiles) {
   for (const [path, body] of [...inputFiles.entries()].sort(([a], [b]) => byCode(a, b))) {
     hash.update(path, "utf8")
     hash.update("\0")
-    hash.update(body, "utf8")
+    hash.update(normalizeLineEndings(body), "utf8")
     hash.update("\0")
   }
   const digest = hash.digest("hex")
@@ -430,7 +501,6 @@ function buildMatrix(root) {
   const migrationSources = [...inputFiles.entries()]
     .filter(([path]) => path.startsWith("src/Orbit.Infrastructure/Migrations/") && !path.endsWith(".Designer.cs") && !path.endsWith("ModelSnapshot.cs"))
     .sort(([a], [b]) => byCode(a, b))
-    .map(([, source]) => source)
 
   const appConfigRows = applyTableMigrations(migrationSources, "AppConfigs", [], compiledConstants)
   const featureRows = applyTableMigrations(migrationSources, "AppFeatureFlags", featureSeed(contextSource), compiledConstants)
