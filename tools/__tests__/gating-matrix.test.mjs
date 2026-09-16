@@ -95,6 +95,7 @@ test("the repository matrix is complete, deterministic, and explicit about runti
     key: "gamification_free_tier",
     enabled: true,
     planRequirement: null,
+    quotaLiftedByPlan: null,
     declaredInCode: true,
   })
 
@@ -112,32 +113,39 @@ test("the repository matrix is complete, deterministic, and explicit about runti
     assert.equal(config.seededInMigrations, false)
   }
 
-  assert.equal(firstMatrix.gates.find((gate) => gate.capability === "CanCreateHabits")?.planRequirement, null)
-  assert.equal(firstMatrix.gates.find((gate) => gate.capability === "CanAccessCalendar")?.planRequirement, "Pro")
+  assert.deepEqual(
+    {
+      planRequirement: firstMatrix.gates.find((gate) => gate.capability === "CanCreateHabits")?.planRequirement,
+      quotaLiftedByPlan: firstMatrix.gates.find((gate) => gate.capability === "CanCreateHabits")?.quotaLiftedByPlan,
+    },
+    { planRequirement: null, quotaLiftedByPlan: null },
+  )
+  assert.deepEqual(
+    {
+      planRequirement: firstMatrix.gates.find((gate) => gate.capability === "CanAccessCalendar")?.planRequirement,
+      quotaLiftedByPlan: firstMatrix.gates.find((gate) => gate.capability === "CanAccessCalendar")?.quotaLiftedByPlan,
+    },
+    { planRequirement: "Pro", quotaLiftedByPlan: null },
+  )
 })
 
-test("a gated capability with an unrecognised requirement fails closed", () => {
+test("a gated capability with an unsupported condition fails closed", () => {
   const fixture = copySourceFixture("unrecognised-requirement")
 
   const implementationPath = join(fixture, "src", "Orbit.Application", "Common", "PayGateService.cs")
   const implementationSource = readFileSync(implementationPath, "utf8")
   const normalizedSource = implementationSource.replaceAll("\r\n", "\n")
-  const ternary = `        return user.HasProAccess
-            ? Result.Success()
-            : Result.PayGateFailure(errorMessage);`
-  const earlyReturn = `        if (!user.HasProAccess)
-            return Result.PayGateFailure(errorMessage);
-
-        return Result.Success();`
-  assert.ok(normalizedSource.includes(ternary))
-  writeFileSync(implementationPath, normalizedSource.replace(ternary, earlyReturn), "utf8")
+  const quotaGuard = "        if (user.AiMessagesLocalDate == userToday && user.AiMessagesUsedToday >= messageLimit)"
+  const unsupportedGuard = "        if (user.AiMessagesLocalDate == userToday)"
+  assert.ok(normalizedSource.includes(quotaGuard))
+  writeFileSync(implementationPath, normalizedSource.replace(quotaGuard, unsupportedGuard), "utf8")
 
   const result = spawnSync(process.execPath, [TOOL, "--root", fixture], { encoding: "utf8" })
   assert.notEqual(result.status, 0)
-  assert.match(result.stderr, /CanAccessCalendar/)
+  assert.match(result.stderr, /CanSendAiMessage/)
 })
 
-test("a quota failure cannot hide an unrelated unrecognised plan gate", () => {
+test("a quota failure cannot hide an unrelated unsupported condition", () => {
   const fixture = copySourceFixture("mixed-quota-and-plan")
   const implementationPath = join(fixture, "src", "Orbit.Application", "Common", "PayGateService.cs")
   const source = readFileSync(implementationPath, "utf8").replaceAll("\r\n", "\n")
@@ -145,8 +153,8 @@ test("a quota failure cannot hide an unrelated unrecognised plan gate", () => {
             return Result.Success();`
   const replacement = `${anchor}
 
-        if (!user.HasProAccess)
-            return Result.PayGateFailure("Fixture plan gate");`
+        if (user.Email == "fixture@example.com")
+            return Result.PayGateFailure("Fixture unsupported gate");`
   assert.ok(source.includes(anchor))
   writeFileSync(implementationPath, source.replace(anchor, replacement), "utf8")
 
@@ -155,26 +163,60 @@ test("a quota failure cannot hide an unrelated unrecognised plan gate", () => {
   assert.match(result.stderr, /CanSendAiMessage/)
 })
 
-test("a combined plan and quota guard keeps the plan requirement", () => {
-  const fixture = copySourceFixture("combined-plan-and-quota")
-  const implementationPath = join(fixture, "src", "Orbit.Application", "Common", "PayGateService.cs")
-  const source = readFileSync(implementationPath, "utf8").replaceAll("\r\n", "\n")
-  const quotaDeclaration = "        var messageLimit = user.HasProAccess ? proLimit : freeLimit;"
-  const combinedQuotaDeclarations = `${quotaDeclaration}
-        var dailyLimit = user.HasProAccess ? proLimit : freeLimit;
-        var usedToday = user.AiMessagesUsedToday;`
-  const quotaGuard = "        if (user.AiMessagesLocalDate == userToday && user.AiMessagesUsedToday >= messageLimit)"
-  const combinedGuard = "        if (!user.HasProAccess && usedToday >= dailyLimit)"
-  assert.ok(source.includes(quotaDeclaration))
-  assert.ok(source.includes(quotaGuard))
-  writeFileSync(
-    implementationPath,
-    source.replace(quotaDeclaration, combinedQuotaDeclarations).replace(quotaGuard, combinedGuard),
-    "utf8",
-  )
+test("plan and quota conditions keep separate access semantics", () => {
+  const cases = [
+    {
+      name: "combined-plan-and-quota",
+      condition: "        if (!user.HasProAccess && user.AiMessagesUsedToday >= messageLimit)",
+      expected: { planRequirement: null, quotaLiftedByPlan: "Pro" },
+    },
+    {
+      name: "disjoined-plan-and-quota",
+      condition: "        if (!user.HasProAccess || user.AiMessagesUsedToday >= messageLimit)",
+      expected: { planRequirement: "Pro", quotaLiftedByPlan: null },
+    },
+    {
+      name: "plan-only",
+      condition: "        if (!user.HasProAccess)",
+      expected: { planRequirement: "Pro", quotaLiftedByPlan: null },
+    },
+    {
+      name: "plan-scoped-quota-only",
+      condition: "        if (user.AiMessagesUsedToday >= messageLimit)",
+      expected: { planRequirement: null, quotaLiftedByPlan: "Pro" },
+    },
+    {
+      name: "unscoped-quota-only",
+      condition: "        if (user.AiMessagesUsedToday >= messageLimit)",
+      declaration: "        var messageLimit = freeLimit;",
+      expected: { planRequirement: null, quotaLiftedByPlan: null },
+    },
+  ]
 
-  const matrix = JSON.parse(generate(fixture))
-  assert.equal(matrix.gates.find((gate) => gate.capability === "CanSendAiMessage")?.planRequirement, "Pro")
+  for (const fixtureCase of cases) {
+    const fixture = copySourceFixture(fixtureCase.name)
+    const implementationPath = join(fixture, "src", "Orbit.Application", "Common", "PayGateService.cs")
+    const source = readFileSync(implementationPath, "utf8").replaceAll("\r\n", "\n")
+    const quotaDeclaration = "        var messageLimit = user.HasProAccess ? proLimit : freeLimit;"
+    const quotaGuard = "        if (user.AiMessagesLocalDate == userToday && user.AiMessagesUsedToday >= messageLimit)"
+    assert.ok(source.includes(quotaDeclaration))
+    assert.ok(source.includes(quotaGuard))
+    writeFileSync(
+      implementationPath,
+      source
+        .replace(quotaDeclaration, fixtureCase.declaration ?? quotaDeclaration)
+        .replace(quotaGuard, fixtureCase.condition),
+      "utf8",
+    )
+
+    const matrix = JSON.parse(generate(fixture))
+    const gate = matrix.gates.find((candidate) => candidate.capability === "CanSendAiMessage")
+    assert.deepEqual(
+      { planRequirement: gate?.planRequirement, quotaLiftedByPlan: gate?.quotaLiftedByPlan },
+      fixtureCase.expected,
+      fixtureCase.name,
+    )
+  }
 })
 
 test("a condition with distinct plan guards fails closed", () => {

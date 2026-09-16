@@ -4,7 +4,7 @@ import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import { dirname, join, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
-const GENERATOR_VERSION = 1
+const GENERATOR_VERSION = 2
 const TOOL_DIRECTORY = dirname(fileURLToPath(import.meta.url))
 const DEFAULT_ROOT = resolve(TOOL_DIRECTORY, "..")
 const USAGE = `usage: node tools/gating-matrix.mjs [--root <repository>]
@@ -315,8 +315,9 @@ function ifBranches(body) {
   return branches
 }
 
-function accessRequirement(bodies, capability, sourcePath) {
-  const requirements = new Set()
+function accessRequirements(bodies, capability, sourcePath) {
+  const planRequirements = new Set()
+  const quotaLiftedByPlans = new Set()
   for (const body of bodies) {
     const failures = [...body.matchAll(/Result\.PayGateFailure\s*\(/g)].map((match) => match.index)
     if (failures.length === 0) continue
@@ -324,13 +325,28 @@ function accessRequirement(bodies, capability, sourcePath) {
 
     for (const match of body.matchAll(/return\s+\w+\.Has([A-Z]\w*)Access\s*\?\s*Result\.Success\([^)]*\)\s*:\s*Result\.PayGateFailure\s*\(/gs)) {
       const failureIndex = match.index + match[0].lastIndexOf("Result.PayGateFailure")
-      classified.set(failureIndex, match[1])
+      classified.set(failureIndex, { planRequirement: match[1], quotaLiftedByPlan: null })
     }
 
-    const quotaVariables = new Set(
-      [...body.matchAll(/var\s+(\w+)\s*=\s*\w+\.Has[A-Z]\w*Access\s*\?\s*[^:;]+\s*:\s*[^;]+;/g)]
-        .map((match) => match[1]),
+    const quotaVariables = new Map(
+      [...body.matchAll(/var\s+(\w+)\s*=\s*await\s+\w+\.GetAsync(?:<[^>]+>)?\s*\(\s*AppConfigKeys\./g)]
+        .map((match) => [match[1], null]),
     )
+    const assignments = [...body.matchAll(/var\s+(\w+)\s*=\s*([^;]+);/g)]
+    let foundQuotaVariable = true
+    while (foundQuotaVariable) {
+      foundQuotaVariable = false
+      for (const assignment of assignments) {
+        if (quotaVariables.has(assignment[1])) continue
+        if ([...quotaVariables.keys()].some((variable) => new RegExp(`\\b${variable}\\b`).test(assignment[2]))) {
+          quotaVariables.set(assignment[1], null)
+          foundQuotaVariable = true
+        }
+      }
+    }
+    for (const match of body.matchAll(/var\s+(\w+)\s*=\s*\w+\.Has([A-Z]\w*)Access\s*\?\s*[^:;]+\s*:\s*[^;]+;/g)) {
+      quotaVariables.set(match[1], match[2])
+    }
     const branches = ifBranches(body)
     for (const failureIndex of failures) {
       if (classified.has(failureIndex)) continue
@@ -345,25 +361,54 @@ function accessRequirement(bodies, capability, sourcePath) {
       if (guardedRequirements.size > 1) {
         throw new Error(`cannot derive plan requirement for ${capability} in ${sourcePath}: ${body.trim()}`)
       }
-      const guardedRequirement = /&&|\|\|/.test(branch.condition)
-        ? guardedRequirements.values().next().value
-        : undefined
-      const quotaGuard = [...quotaVariables].some((variable) => {
+      const guardedRequirement = guardedRequirements.values().next().value
+      const quotaGuardPlans = new Set()
+      for (const [variable, plan] of quotaVariables) {
         const escaped = variable.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-        return new RegExp(`(?:\\b${escaped}\\b\\s*(?:<=|>=|<|>)|(?:<=|>=|<|>)\\s*\\b${escaped}\\b)`).test(branch.condition)
-      })
-      if (guardedRequirement) classified.set(failureIndex, guardedRequirement)
-      else if (quotaGuard) classified.set(failureIndex, null)
+        if (new RegExp(`(?:\\b${escaped}\\b\\s*(?:<=|>=|<|>)|(?:<=|>=|<|>)\\s*\\b${escaped}\\b)`).test(branch.condition)) {
+          quotaGuardPlans.add(plan)
+        }
+      }
+      const scopedQuotaPlans = new Set([...quotaGuardPlans].filter((plan) => plan !== null))
+      if (scopedQuotaPlans.size > 1) {
+        throw new Error(`cannot derive plan requirement for ${capability} in ${sourcePath}: ${body.trim()}`)
+      }
+      const quotaPlan = scopedQuotaPlans.values().next().value ?? null
+      if (guardedRequirement && quotaGuardPlans.size > 0) {
+        if (quotaPlan && quotaPlan !== guardedRequirement) {
+          throw new Error(`cannot derive plan requirement for ${capability} in ${sourcePath}: ${body.trim()}`)
+        }
+        const hasAnd = branch.condition.includes("&&")
+        const hasOr = branch.condition.includes("||")
+        if (hasAnd === hasOr) {
+          throw new Error(`cannot derive plan requirement for ${capability} in ${sourcePath}: ${body.trim()}`)
+        }
+        classified.set(failureIndex, hasAnd
+          ? { planRequirement: null, quotaLiftedByPlan: guardedRequirement }
+          : { planRequirement: guardedRequirement, quotaLiftedByPlan: null })
+      } else if (guardedRequirement) {
+        classified.set(failureIndex, { planRequirement: guardedRequirement, quotaLiftedByPlan: null })
+      } else if (quotaGuardPlans.size > 0) {
+        classified.set(failureIndex, { planRequirement: null, quotaLiftedByPlan: quotaPlan })
+      }
     }
 
     const unclassified = failures.find((failureIndex) => !classified.has(failureIndex))
     if (unclassified !== undefined) {
       throw new Error(`cannot derive plan requirement for ${capability} in ${sourcePath}: ${body.trim()}`)
     }
-    for (const requirement of classified.values()) if (requirement !== null) requirements.add(requirement)
+    for (const classification of classified.values()) {
+      if (classification.planRequirement !== null) planRequirements.add(classification.planRequirement)
+      if (classification.quotaLiftedByPlan !== null) quotaLiftedByPlans.add(classification.quotaLiftedByPlan)
+    }
   }
-  if (requirements.size > 1) throw new Error(`conflicting plan requirements for ${capability} in ${sourcePath}`)
-  return requirements.values().next().value ?? null
+  if (planRequirements.size > 1 || quotaLiftedByPlans.size > 1) {
+    throw new Error(`conflicting plan requirements for ${capability} in ${sourcePath}`)
+  }
+  return {
+    planRequirement: planRequirements.values().next().value ?? null,
+    quotaLiftedByPlan: quotaLiftedByPlans.values().next().value ?? null,
+  }
 }
 
 function extractInvocationArguments(source, callName) {
@@ -530,10 +575,12 @@ function buildMatrix(root) {
       .map((member) => featureKeys.get(member))
       .filter(Boolean)
       .sort(byCode)
+    const access = accessRequirements(bodies, method, implementationPath)
     return {
       capability: method,
       enforcingMethod: `PayGateService.${method}`,
-      planRequirement: accessRequirement(bodies, method, implementationPath),
+      planRequirement: access.planRequirement,
+      quotaLiftedByPlan: access.quotaLiftedByPlan,
       appConfigs: configs,
       featureFlags: referencedFlags,
     }
@@ -561,6 +608,7 @@ function buildMatrix(root) {
       key: row.Key,
       enabled: row.Enabled,
       planRequirement: row.PlanRequirement ?? null,
+      quotaLiftedByPlan: null,
       declaredInCode: declaredFeatureKeys.has(row.Key),
     }))
     .sort((a, b) => byCode(a.key, b.key))
