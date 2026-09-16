@@ -218,8 +218,8 @@ public class GetCalendarEventsQueryHandlerTests
                 "2026-04-15",
                 "08:00",
                 "09:00",
-                false,
-                null,
+                true,
+                "RRULE:FREQ=WEEKLY;BYDAY=WE",
                 [],
                 StartUtc: new DateTime(2026, 4, 14, 23, 0, 0, DateTimeKind.Utc),
                 EndUtc: new DateTime(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc)));
@@ -231,6 +231,7 @@ public class GetCalendarEventsQueryHandlerTests
         result.Value[0].StartDate.Should().Be("2026-04-14");
         result.Value[0].StartTime.Should().Be("20:00");
         result.Value[0].EndTime.Should().Be("21:00");
+        result.Value[0].RecurrenceRule.Should().BeNull();
     }
 
     [Fact]
