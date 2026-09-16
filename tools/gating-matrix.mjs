@@ -263,12 +263,34 @@ function uniqueBy(items, key) {
   return [...new Map(items.map((item) => [key(item), item])).values()]
 }
 
-function accessRequirement(bodies) {
+function accessRequirement(bodies, capability, sourcePath) {
+  const requirements = new Set()
   for (const body of bodies) {
+    if (!body.includes("Result.PayGateFailure(")) continue
+
     const match = body.match(/return\s+\w+\.Has([A-Z]\w*)Access\s*\?\s*Result\.Success\([^)]*\)\s*:\s*Result\.PayGateFailure\(/s)
-    if (match) return match[1]
+    if (match) {
+      requirements.add(match[1])
+      continue
+    }
+
+    const guardedFailure = body.match(
+      /if\s*\(([^)]*)\)\s*return\s+Result\.PayGateFailure\(/s,
+    )
+    const guardedRequirement = guardedFailure?.[1].match(/&&\s*!\s*\w+\.Has([A-Z]\w*)Access\b/)
+    if (guardedRequirement) {
+      requirements.add(guardedRequirement[1])
+      continue
+    }
+
+    const quotaSelection = [...body.matchAll(/var\s+(\w+)\s*=\s*\w+\.Has[A-Z]\w*Access\s*\?\s*[^:;]+\s*:\s*[^;]+;/g)]
+      .some((selection) => body.includes(`>= ${selection[1]}`))
+    if (quotaSelection) continue
+
+    throw new Error(`cannot derive plan requirement for ${capability} in ${sourcePath}: ${body.trim()}`)
   }
-  return null
+  if (requirements.size > 1) throw new Error(`conflicting plan requirements for ${capability} in ${sourcePath}`)
+  return requirements.values().next().value ?? null
 }
 
 function extractInvocations(source, callName) {
@@ -387,7 +409,8 @@ function buildMatrix(root) {
   }
 
   const interfaceSource = read("src/Orbit.Domain/Interfaces/IPayGateService.cs")
-  const implementationSource = read("src/Orbit.Application/Common/PayGateService.cs")
+  const implementationPath = "src/Orbit.Application/Common/PayGateService.cs"
+  const implementationSource = read(implementationPath)
   const configKeySource = read("src/Orbit.Application/Common/AppConfigKeys.cs")
   const featureKeySource = read("src/Orbit.Application/Common/FeatureFlagKeys.cs")
   const constantsSource = read("src/Orbit.Application/Common/AppConstants.cs")
@@ -431,7 +454,7 @@ function buildMatrix(root) {
     return {
       capability: method,
       enforcingMethod: `PayGateService.${method}`,
-      planRequirement: accessRequirement(bodies),
+      planRequirement: accessRequirement(bodies, method, implementationPath),
       appConfigs: configs,
       featureFlags: referencedFlags,
     }

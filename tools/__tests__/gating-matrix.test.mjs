@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process"
+import { execFileSync, spawnSync } from "node:child_process"
 import { cpSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import assert from "node:assert/strict"
@@ -62,6 +62,34 @@ test("the repository matrix is complete, deterministic, and explicit about runti
     assert.notEqual(config.compiledDefault, null)
     assert.equal(config.seededInMigrations, false)
   }
+
+  assert.equal(firstMatrix.gates.find((gate) => gate.capability === "CanCreateHabits")?.planRequirement, null)
+  assert.equal(firstMatrix.gates.find((gate) => gate.capability === "CanAccessCalendar")?.planRequirement, "Pro")
+})
+
+test("a gated capability with an unrecognised requirement fails closed", () => {
+  const fixture = join(temporaryRoot, "unrecognised-requirement")
+  cpSync(join(REPOSITORY_ROOT, "src"), join(fixture, "src"), {
+    recursive: true,
+    filter: (source) => statSync(source).isDirectory() || source.endsWith(".cs"),
+  })
+
+  const implementationPath = join(fixture, "src", "Orbit.Application", "Common", "PayGateService.cs")
+  const implementationSource = readFileSync(implementationPath, "utf8")
+  const normalizedSource = implementationSource.replaceAll("\r\n", "\n")
+  const ternary = `        return user.HasProAccess
+            ? Result.Success()
+            : Result.PayGateFailure(errorMessage);`
+  const earlyReturn = `        if (!user.HasProAccess)
+            return Result.PayGateFailure(errorMessage);
+
+        return Result.Success();`
+  assert.ok(normalizedSource.includes(ternary))
+  writeFileSync(implementationPath, normalizedSource.replace(ternary, earlyReturn), "utf8")
+
+  const result = spawnSync(process.execPath, [TOOL, "--root", fixture], { encoding: "utf8" })
+  assert.notEqual(result.status, 0)
+  assert.match(result.stderr, /CanAccessCalendar/)
 })
 
 test("deleting an interface method removes only its generated gate", () => {
