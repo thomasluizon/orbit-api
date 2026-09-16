@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text.RegularExpressions;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Behaviors;
@@ -11,7 +10,7 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Calendar.Queries;
 
-public partial record CalendarEventItem(
+public record CalendarEventItem(
     string Id,
     string Title,
     string? Description,
@@ -49,58 +48,9 @@ public partial record CalendarEventItem(
                 && sameDayEnd.Date == localStart.Date
                 && string.CompareOrdinal(projectedEndTime, projectedStartTime) > 0
                 ? projectedEndTime
-                : null,
-            RecurrenceRule = ProjectRecurrenceRule(RecurrenceRule, StartDate, localStart)
+                : null
         };
     }
-
-    private static string? ProjectRecurrenceRule(
-        string? recurrenceRule,
-        string? sourceStartDate,
-        DateTime localStart)
-    {
-        if (recurrenceRule is null
-            || !DateOnly.TryParseExact(
-                sourceStartDate,
-                "yyyy-MM-dd",
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.None,
-                out var sourceStart))
-        {
-            return recurrenceRule;
-        }
-
-        var dayShift = ((int)localStart.DayOfWeek - (int)sourceStart.DayOfWeek + 7) % 7;
-        if (dayShift == 0)
-            return recurrenceRule;
-
-        return ByDayTermPattern().Replace(recurrenceRule, match =>
-        {
-            var shiftedDays = match.Groups[3].Value
-                .Split(',')
-                .Select(token => ShiftByDayToken(token, dayShift));
-            return $"{match.Groups[1].Value}{match.Groups[2].Value}{string.Join(',', shiftedDays)}";
-        });
-    }
-
-    private static string ShiftByDayToken(string token, int dayShift)
-    {
-        var match = ByDayTokenPattern().Match(token);
-        if (!match.Success)
-            return token;
-
-        var sourceDay = Array.IndexOf(RecurrenceWeekdays, match.Groups[3].Value.ToUpperInvariant());
-        var projectedDay = RecurrenceWeekdays[(sourceDay + dayShift) % 7];
-        return $"{match.Groups[1].Value}{match.Groups[2].Value}{projectedDay}{match.Groups[4].Value}";
-    }
-
-    private static readonly string[] RecurrenceWeekdays = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
-
-    [GeneratedRegex(@"(^|;|RRULE:)(BYDAY=)([^;]*)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex ByDayTermPattern();
-
-    [GeneratedRegex(@"^(\s*)([+-]?\d+)?(SU|MO|TU|WE|TH|FR|SA)(\s*)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex ByDayTokenPattern();
 }
 
 public record GetCalendarEventsQuery(Guid UserId) : IRequest<Result<List<CalendarEventItem>>>, IConcurrencyRetryable;

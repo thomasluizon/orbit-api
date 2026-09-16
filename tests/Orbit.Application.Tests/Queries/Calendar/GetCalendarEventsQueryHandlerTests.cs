@@ -231,7 +231,7 @@ public class GetCalendarEventsQueryHandlerTests
         result.Value[0].StartDate.Should().Be("2026-04-14");
         result.Value[0].StartTime.Should().Be("20:00");
         result.Value[0].EndTime.Should().Be("21:00");
-        result.Value[0].RecurrenceRule.Should().Be("RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=SU,TU;WKST=SU");
+        result.Value[0].RecurrenceRule.Should().Be("RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE;WKST=SU");
     }
 
     [Fact]
@@ -264,33 +264,6 @@ public class GetCalendarEventsQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_RecurringEventWithOrdinalDay_ShiftsDayAndKeepsOrdinal()
-    {
-        var user = CreateTestUser();
-        user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
-        StubSuccessfulFetch(
-            user,
-            new CalendarEventItem(
-                "evt_tokyo_ordinal",
-                "Tokyo monthly meeting",
-                null,
-                "2026-04-15",
-                "08:00",
-                "09:00",
-                true,
-                "RRULE:FREQ=MONTHLY;BYDAY=2TU",
-                [],
-                StartUtc: new DateTime(2026, 4, 14, 23, 0, 0, DateTimeKind.Utc),
-                EndUtc: new DateTime(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc)));
-
-        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        result.Value.Should().ContainSingle();
-        result.Value[0].RecurrenceRule.Should().Be("RRULE:FREQ=MONTHLY;BYDAY=2MO");
-    }
-
-    [Fact]
     public async Task Handle_RecurringEventWithoutByDay_KeepsRecurrenceRuleUnchanged()
     {
         var user = CreateTestUser();
@@ -315,62 +288,6 @@ public class GetCalendarEventsQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().ContainSingle();
         result.Value[0].RecurrenceRule.Should().Be("RRULE:FREQ=MONTHLY;BYMONTHDAY=15");
-    }
-
-    [Fact]
-    public async Task Handle_DenverRecurringEventProjectedToPhoenix_KeepsShiftedRecurrenceRule()
-    {
-        var user = CreateTestUser();
-        user.SetTimeZone("America/Phoenix").IsSuccess.Should().BeTrue();
-        StubSuccessfulFetch(
-            user,
-            new CalendarEventItem(
-                "evt_denver",
-                "Denver midnight meeting",
-                null,
-                "2026-07-15",
-                "00:30",
-                "01:30",
-                true,
-                "RRULE:FREQ=WEEKLY;BYDAY=WE",
-                [],
-                StartUtc: new DateTime(2026, 7, 15, 6, 30, 0, DateTimeKind.Utc),
-                EndUtc: new DateTime(2026, 7, 15, 7, 30, 0, DateTimeKind.Utc)));
-
-        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        result.Value.Should().ContainSingle();
-        result.Value[0].StartDate.Should().Be("2026-07-14");
-        result.Value[0].RecurrenceRule.Should().Be("RRULE:FREQ=WEEKLY;BYDAY=TU");
-    }
-
-    [Fact]
-    public async Task Handle_LisbonRecurringEventProjectedToSaoPaulo_NeverDropsRecurrenceRule()
-    {
-        var user = CreateTestUser();
-        user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
-        StubSuccessfulFetch(
-            user,
-            new CalendarEventItem(
-                "evt_lisbon",
-                "Lisbon midnight meeting",
-                null,
-                "2026-07-15",
-                "00:30",
-                "01:30",
-                true,
-                "RRULE:FREQ=WEEKLY;BYDAY=WE",
-                [],
-                StartUtc: new DateTime(2026, 7, 14, 23, 30, 0, DateTimeKind.Utc),
-                EndUtc: new DateTime(2026, 7, 15, 0, 30, 0, DateTimeKind.Utc)));
-
-        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        result.Value.Should().ContainSingle();
-        result.Value[0].StartDate.Should().Be("2026-07-14");
-        result.Value[0].RecurrenceRule.Should().Be("RRULE:FREQ=WEEKLY;BYDAY=TU");
     }
 
     [Fact]
