@@ -36,15 +36,17 @@ public record CalendarEventItem(
         var localEnd = EndUtc is { } endUtc
             ? TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(endUtc, DateTimeKind.Utc), timeZone)
             : (DateTime?)null;
+        var projectedStartTime = localStart.ToString("HH:mm", CultureInfo.InvariantCulture);
+        var projectedEndTime = localEnd?.ToString("HH:mm", CultureInfo.InvariantCulture);
 
         return this with
         {
             StartDate = localStart.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-            StartTime = localStart.ToString("HH:mm", CultureInfo.InvariantCulture),
+            StartTime = projectedStartTime,
             EndTime = localEnd is { } sameDayEnd
                 && sameDayEnd.Date == localStart.Date
-                && sameDayEnd.TimeOfDay > localStart.TimeOfDay
-                ? sameDayEnd.ToString("HH:mm", CultureInfo.InvariantCulture)
+                && string.CompareOrdinal(projectedEndTime, projectedStartTime) > 0
+                ? projectedEndTime
                 : null
         };
     }

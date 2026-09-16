@@ -350,6 +350,62 @@ public class GetCalendarEventsQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_TimedEventWithinDisplayedMinute_OmitsEqualEndTime()
+    {
+        var user = CreateTestUser();
+        StubSuccessfulFetch(
+            user,
+            new CalendarEventItem(
+                "evt_same_minute",
+                "Short event",
+                null,
+                "2026-04-15",
+                "10:00",
+                "10:00",
+                false,
+                null,
+                [],
+                StartUtc: new DateTime(2026, 4, 15, 10, 0, 10, DateTimeKind.Utc),
+                EndUtc: new DateTime(2026, 4, 15, 10, 0, 50, DateTimeKind.Utc)));
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value[0].StartDate.Should().Be("2026-04-15");
+        result.Value[0].StartTime.Should().Be("10:00");
+        result.Value[0].EndTime.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_OneMinuteTimedEvent_KeepsLaterEndTime()
+    {
+        var user = CreateTestUser();
+        StubSuccessfulFetch(
+            user,
+            new CalendarEventItem(
+                "evt_one_minute",
+                "One minute event",
+                null,
+                "2026-04-15",
+                "10:00",
+                "10:01",
+                false,
+                null,
+                [],
+                StartUtc: new DateTime(2026, 4, 15, 10, 0, 0, DateTimeKind.Utc),
+                EndUtc: new DateTime(2026, 4, 15, 10, 1, 0, DateTimeKind.Utc)));
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value[0].StartDate.Should().Be("2026-04-15");
+        result.Value[0].StartTime.Should().Be("10:00");
+        result.Value[0].EndTime.Should().Be("10:01");
+    }
+
+    [Fact]
     public async Task Handle_TimedEventCrossingRepeatedHour_OmitsDescendingEndTime()
     {
         var user = CreateTestUser();
