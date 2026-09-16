@@ -24,7 +24,8 @@ public record HabitWidgetResponse(
     int DayOffset,
     string Language,
     int CurrentStreak,
-    IReadOnlyList<HabitWidgetItem> Items);
+    IReadOnlyList<HabitWidgetItem> Items,
+    string? EmptyReason = null);
 
 public record GetHabitWidgetQuery(Guid UserId) : IRequest<Result<HabitWidgetResponse>>;
 
@@ -61,6 +62,7 @@ public class GetHabitWidgetQueryHandler(
 
         var selectedOffset = 0;
         var selectedItems = todayItems;
+        string? emptyReason = null;
         if (ShouldShowTomorrow(todayItems))
         {
             var tomorrow = today.AddDays(1);
@@ -73,6 +75,7 @@ public class GetHabitWidgetQueryHandler(
             else
             {
                 selectedItems = [];
+                emptyReason = todayItems.Count == 0 ? "nothing-scheduled" : "all-done";
             }
         }
 
@@ -80,7 +83,8 @@ public class GetHabitWidgetQueryHandler(
             selectedOffset,
             user.Language ?? "en",
             user.CurrentStreak,
-            selectedItems));
+            selectedItems,
+            emptyReason));
     }
 
     private async Task<IReadOnlyList<Habit>> LoadWidgetHabits(
