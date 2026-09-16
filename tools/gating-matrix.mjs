@@ -338,12 +338,21 @@ function accessRequirement(bodies, capability, sourcePath) {
         .filter((candidate) => failureIndex >= candidate.start && failureIndex <= candidate.end)
         .sort((a, b) => (a.end - a.start) - (b.end - b.start))[0]
       if (!branch) continue
-      const guardedRequirement = branch.condition.match(/&&\s*!\s*\w+\.Has([A-Z]\w*)Access\b/)
+      const guardedRequirements = new Set(
+        [...branch.condition.matchAll(/!\s*\w+\.Has([A-Z]\w*)Access\b/g)]
+          .map((match) => match[1]),
+      )
+      if (guardedRequirements.size > 1) {
+        throw new Error(`cannot derive plan requirement for ${capability} in ${sourcePath}: ${body.trim()}`)
+      }
+      const guardedRequirement = /&&|\|\|/.test(branch.condition)
+        ? guardedRequirements.values().next().value
+        : undefined
       const quotaGuard = [...quotaVariables].some((variable) => {
         const escaped = variable.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
         return new RegExp(`(?:\\b${escaped}\\b\\s*(?:<=|>=|<|>)|(?:<=|>=|<|>)\\s*\\b${escaped}\\b)`).test(branch.condition)
       })
-      if (guardedRequirement) classified.set(failureIndex, guardedRequirement[1])
+      if (guardedRequirement) classified.set(failureIndex, guardedRequirement)
       else if (quotaGuard) classified.set(failureIndex, null)
     }
 

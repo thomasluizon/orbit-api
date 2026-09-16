@@ -155,6 +155,42 @@ test("a quota failure cannot hide an unrelated unrecognised plan gate", () => {
   assert.match(result.stderr, /CanSendAiMessage/)
 })
 
+test("a combined plan and quota guard keeps the plan requirement", () => {
+  const fixture = copySourceFixture("combined-plan-and-quota")
+  const implementationPath = join(fixture, "src", "Orbit.Application", "Common", "PayGateService.cs")
+  const source = readFileSync(implementationPath, "utf8").replaceAll("\r\n", "\n")
+  const quotaDeclaration = "        var messageLimit = user.HasProAccess ? proLimit : freeLimit;"
+  const combinedQuotaDeclarations = `${quotaDeclaration}
+        var dailyLimit = user.HasProAccess ? proLimit : freeLimit;
+        var usedToday = user.AiMessagesUsedToday;`
+  const quotaGuard = "        if (user.AiMessagesLocalDate == userToday && user.AiMessagesUsedToday >= messageLimit)"
+  const combinedGuard = "        if (!user.HasProAccess && usedToday >= dailyLimit)"
+  assert.ok(source.includes(quotaDeclaration))
+  assert.ok(source.includes(quotaGuard))
+  writeFileSync(
+    implementationPath,
+    source.replace(quotaDeclaration, combinedQuotaDeclarations).replace(quotaGuard, combinedGuard),
+    "utf8",
+  )
+
+  const matrix = JSON.parse(generate(fixture))
+  assert.equal(matrix.gates.find((gate) => gate.capability === "CanSendAiMessage")?.planRequirement, "Pro")
+})
+
+test("a condition with distinct plan guards fails closed", () => {
+  const fixture = copySourceFixture("distinct-plan-guards")
+  const implementationPath = join(fixture, "src", "Orbit.Application", "Common", "PayGateService.cs")
+  const source = readFileSync(implementationPath, "utf8").replaceAll("\r\n", "\n")
+  const quotaGuard = "        if (user.AiMessagesLocalDate == userToday && user.AiMessagesUsedToday >= messageLimit)"
+  const ambiguousGuard = "        if (!user.HasProAccess && !user.HasTeamAccess)"
+  assert.ok(source.includes(quotaGuard))
+  writeFileSync(implementationPath, source.replace(quotaGuard, ambiguousGuard), "utf8")
+
+  const result = spawnSync(process.execPath, [TOOL, "--root", fixture], { encoding: "utf8" })
+  assert.notEqual(result.status, 0)
+  assert.match(result.stderr, /cannot derive plan requirement for CanSendAiMessage/)
+})
+
 test("provenance is stable across LF and CRLF checkouts", () => {
   const lfFixture = copySourceFixture("lf-checkout")
   const crlfFixture = copySourceFixture("crlf-checkout")
