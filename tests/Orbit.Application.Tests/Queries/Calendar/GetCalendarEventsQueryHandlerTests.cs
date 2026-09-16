@@ -235,6 +235,66 @@ public class GetCalendarEventsQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_RecurringEventWithSeasonalDateShift_OmitsRecurrenceRule()
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
+        StubSuccessfulFetch(
+            user,
+            new CalendarEventItem(
+                "evt_lisbon_seasonal_shift",
+                "Lisbon early meeting",
+                null,
+                "2026-01-15",
+                "03:30",
+                "04:30",
+                true,
+                "RRULE:FREQ=WEEKLY;BYDAY=TH",
+                [],
+                StartUtc: new DateTime(2026, 1, 15, 3, 30, 0, DateTimeKind.Utc),
+                EndUtc: new DateTime(2026, 1, 15, 4, 30, 0, DateTimeKind.Utc),
+                StartTimeZone: "Europe/Lisbon"));
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value[0].StartDate.Should().Be("2026-01-15");
+        result.Value[0].StartTime.Should().Be("00:30");
+        result.Value[0].RecurrenceRule.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_RecurringEventWithStableSeasonalDate_KeepsRecurrenceRule()
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
+        StubSuccessfulFetch(
+            user,
+            new CalendarEventItem(
+                "evt_lisbon_stable",
+                "Lisbon afternoon meeting",
+                null,
+                "2026-01-15",
+                "15:00",
+                "16:00",
+                true,
+                "RRULE:FREQ=WEEKLY;BYDAY=TH",
+                [],
+                StartUtc: new DateTime(2026, 1, 15, 15, 0, 0, DateTimeKind.Utc),
+                EndUtc: new DateTime(2026, 1, 15, 16, 0, 0, DateTimeKind.Utc),
+                StartTimeZone: "Europe/Lisbon"));
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value[0].StartDate.Should().Be("2026-01-15");
+        result.Value[0].StartTime.Should().Be("12:00");
+        result.Value[0].RecurrenceRule.Should().Be("RRULE:FREQ=WEEKLY;BYDAY=TH");
+    }
+
+    [Fact]
     public async Task Handle_TimedEventWithoutEndUtc_ProjectsStartAndOmitsEndTime()
     {
         var user = CreateTestUser();

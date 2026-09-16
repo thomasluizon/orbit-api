@@ -23,7 +23,8 @@ public record CalendarEventItem(
     DateTime? StartUtc = null,
     string CalendarId = "",
     string CalendarName = "",
-    DateTime? EndUtc = null)
+    DateTime? EndUtc = null,
+    string? StartTimeZone = null)
 {
     internal CalendarEventItem ProjectTo(TimeZoneInfo timeZone)
     {
@@ -49,10 +50,67 @@ public record CalendarEventItem(
                 && string.CompareOrdinal(projectedEndTime, projectedStartTime) > 0
                 ? projectedEndTime
                 : null,
-            RecurrenceRule = string.Equals(StartDate, projectedStartDate, StringComparison.Ordinal)
-                ? RecurrenceRule
-                : null
+            RecurrenceRule = RecurrenceRule is not null
+                && IsRecurrenceDateStable(StartDate, StartTime, StartTimeZone, timeZone)
+                    ? RecurrenceRule
+                    : null
         };
+    }
+
+    private static bool IsRecurrenceDateStable(
+        string? startDate,
+        string? startTime,
+        string? startTimeZone,
+        TimeZoneInfo accountTimeZone)
+    {
+        if (string.IsNullOrWhiteSpace(startTimeZone)
+            || !DateTime.TryParseExact(
+                $"{startDate} {startTime}",
+                "yyyy-MM-dd HH:mm",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var sourceStart))
+        {
+            return false;
+        }
+
+        TimeZoneInfo sourceTimeZone;
+        try
+        {
+            sourceTimeZone = TimeZoneInfo.FindSystemTimeZoneById(startTimeZone);
+        }
+        catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException or ArgumentException)
+        {
+            return false;
+        }
+
+        // WHY(https://github.com/thomasluizon/orbit-api/issues/526): Four seasonal probes cover both hemispheres' daylight-saving offset pairs.
+        ReadOnlySpan<int> probeMonths = [1, 4, 7, 10];
+        foreach (var month in probeMonths)
+        {
+            var sourceLocal = new DateTime(
+                sourceStart.Year,
+                month,
+                15,
+                sourceStart.Hour,
+                sourceStart.Minute,
+                0,
+                DateTimeKind.Unspecified);
+            DateTime accountLocal;
+            try
+            {
+                accountLocal = TimeZoneInfo.ConvertTime(sourceLocal, sourceTimeZone, accountTimeZone);
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
+
+            if ((accountLocal.Date - sourceLocal.Date).Days != 0)
+                return false;
+        }
+
+        return true;
     }
 }
 

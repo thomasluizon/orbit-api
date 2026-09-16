@@ -138,7 +138,8 @@ internal sealed partial class GoogleCalendarEventFetcher(
             ResolveUtc(ev.Start),
             calendarId,
             calendarName,
-            ResolveUtc(ev.End));
+            ResolveUtc(ev.End),
+            ev.Start?.TimeZone);
     }
 
     private async Task<string?> ResolveRRule(
