@@ -191,6 +191,16 @@ test("plan and quota conditions keep separate access semantics", () => {
       declaration: "        var messageLimit = freeLimit;",
       expected: { planRequirement: null, quotaLiftedByPlan: null },
     },
+    {
+      // A semantics-preserving rewrite must not erase the plan: the limit is still the one
+      // HasProAccess selected, it just arrives through a local alias.
+      name: "aliased-plan-quota",
+      condition: "        if (user.AiMessagesUsedToday >= messageLimit)",
+      declaration:
+        "        var selectedLimit = user.HasProAccess ? proLimit : freeLimit;\n"
+        + "        var messageLimit = selectedLimit;",
+      expected: { planRequirement: null, quotaLiftedByPlan: "Pro" },
+    },
   ]
 
   for (const fixtureCase of cases) {

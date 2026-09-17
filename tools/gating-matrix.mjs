@@ -332,20 +332,32 @@ function accessRequirements(bodies, capability, sourcePath) {
       [...body.matchAll(/var\s+(\w+)\s*=\s*await\s+\w+\.GetAsync(?:<[^>]+>)?\s*\(\s*AppConfigKeys\./g)]
         .map((match) => [match[1], null]),
     )
+    /**
+     * Label the directly plan-selected quota variables BEFORE propagating, or an alias of one is
+     * recorded unscoped and never relabelled: the relabelling pass only sees the variable that
+     * literally contains the ternary. A semantics-preserving
+     * `var selected = user.HasProAccess ? proLimit : freeLimit; var limit = selected;` then reported
+     * `quotaLiftedByPlan: null` for a limit the plan does select.
+     */
+    for (const match of body.matchAll(/var\s+(\w+)\s*=\s*\w+\.Has([A-Z]\w*)Access\s*\?\s*[^:;]+\s*:\s*[^;]+;/g)) {
+      quotaVariables.set(match[1], match[2])
+    }
     const assignments = [...body.matchAll(/var\s+(\w+)\s*=\s*([^;]+);/g)]
     let foundQuotaVariable = true
     while (foundQuotaVariable) {
       foundQuotaVariable = false
       for (const assignment of assignments) {
         if (quotaVariables.has(assignment[1])) continue
-        if ([...quotaVariables.keys()].some((variable) => new RegExp(`\\b${variable}\\b`).test(assignment[2]))) {
-          quotaVariables.set(assignment[1], null)
-          foundQuotaVariable = true
-        }
+        const sources = [...quotaVariables.entries()]
+          .filter(([variable]) => new RegExp(`\\b${variable}\\b`).test(assignment[2]))
+        if (sources.length === 0) continue
+        const plans = new Set(sources.map(([, plan]) => plan).filter((plan) => plan !== null))
+        // Two different plans selecting one derived limit is not a provenance this tool can prove.
+        if (plans.size > 1)
+          throw new Error(`cannot derive plan requirement for ${capability} in ${sourcePath}: ${body.trim()}`)
+        quotaVariables.set(assignment[1], [...plans][0] ?? null)
+        foundQuotaVariable = true
       }
-    }
-    for (const match of body.matchAll(/var\s+(\w+)\s*=\s*\w+\.Has([A-Z]\w*)Access\s*\?\s*[^:;]+\s*:\s*[^;]+;/g)) {
-      quotaVariables.set(match[1], match[2])
     }
     const branches = ifBranches(body)
     for (const failureIndex of failures) {
