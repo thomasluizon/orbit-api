@@ -129,6 +129,44 @@ test("the repository matrix is complete, deterministic, and explicit about runti
   )
 })
 
+test("feature seeds without migration rows fail closed", () => {
+  const fixture = copySourceFixture("unmigrated-feature-seed")
+  const contextPath = join(fixture, "src", "Orbit.Infrastructure", "Persistence", "OrbitDbContext.cs")
+  const source = readFileSync(contextPath, "utf8").replaceAll("\r\n", "\n")
+  const seedStart = '                new { Key = "offline_mode"'
+  const unmigratedSeed =
+    "                new { Key = \"unmigrated_flag\", Enabled = true, PlanRequirement = (string?)null },\n"
+  assert.ok(source.includes(seedStart))
+  writeFileSync(contextPath, source.replace(seedStart, `${unmigratedSeed}${seedStart}`), "utf8")
+
+  const result = spawnSync(process.execPath, [TOOL, "--root", fixture], { encoding: "utf8" })
+  if (result.status === 0) {
+    const matrix = JSON.parse(readFileSync(join(fixture, "gating-matrix.json"), "utf8"))
+    assert.notEqual(matrix.featureFlags.find((flag) => flag.key === "unmigrated_flag")?.enabled, true)
+  }
+  assert.notEqual(result.status, 0)
+  assert.match(result.stderr, /unmigrated_flag/)
+})
+
+test("migration replay is authoritative over current feature seeds", () => {
+  const fixture = copySourceFixture("feature-seed-disagreement")
+  const contextPath = join(fixture, "src", "Orbit.Infrastructure", "Persistence", "OrbitDbContext.cs")
+  const source = readFileSync(contextPath, "utf8").replaceAll("\r\n", "\n")
+  const changedSeed = 'new { Key = "offline_mode", Enabled = true'
+  const removedSeed = /^\s*new \{ Key = "push_notifications".*\r?\n/m
+  assert.ok(source.includes(changedSeed))
+  assert.match(source, removedSeed)
+  writeFileSync(
+    contextPath,
+    source.replace(changedSeed, 'new { Key = "offline_mode", Enabled = false').replace(removedSeed, ""),
+    "utf8",
+  )
+
+  const matrix = JSON.parse(generate(fixture))
+  assert.equal(matrix.featureFlags.find((flag) => flag.key === "offline_mode")?.enabled, true)
+  assert.equal(matrix.featureFlags.find((flag) => flag.key === "push_notifications")?.enabled, true)
+})
+
 test("a gated capability with an unsupported condition fails closed", () => {
   const fixture = copySourceFixture("unrecognised-requirement")
 

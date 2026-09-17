@@ -611,7 +611,13 @@ function buildMatrix(root) {
     .sort(([a], [b]) => byCode(a, b))
 
   const appConfigRows = applyTableMigrations(migrationSources, "AppConfigs", [], compiledConstants)
-  const featureRows = applyTableMigrations(migrationSources, "AppFeatureFlags", featureSeed(contextSource), compiledConstants)
+  const featureSeeds = featureSeed(contextSource)
+  const featureRows = applyTableMigrations(migrationSources, "AppFeatureFlags", [], compiledConstants)
+  for (const seed of featureSeeds) {
+    if (!featureRows.has(seed.Key)) {
+      throw new Error(`feature seed has no migration row: ${seed.Key}`)
+    }
+  }
 
   const gates = interfaceMethods.map((method) => {
     if (!methods.has(method)) throw new Error(`interface method has no implementation: ${method}`)
