@@ -87,9 +87,10 @@ public partial class GetCalendarSyncSuggestionsQueryHandler(
     {
         if (importedEventIds.Contains(suggestion.GoogleEventId)) return null;
 
-        var eventItem = DeserializeEvent(suggestion);
-        if (eventItem is null) return null;
-        eventItem = eventItem.ProjectTo(timeZone);
+        var sourceEvent = DeserializeEvent(suggestion);
+        if (sourceEvent is null) return null;
+        var eventItem = sourceEvent.ProjectTo(timeZone);
+        if (sourceEvent.HasUnrepresentableRecurrenceAfterProjection(eventItem)) return null;
         if (ResolveStartDate(eventItem, suggestion.StartDateUtc, timeZone) < userToday) return null;
         if (selectedCalendars is not null
             && !string.IsNullOrEmpty(eventItem.CalendarId)

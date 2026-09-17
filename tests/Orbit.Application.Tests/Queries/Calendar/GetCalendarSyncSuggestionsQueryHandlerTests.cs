@@ -203,6 +203,45 @@ public class GetCalendarSyncSuggestionsQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_StoredByDaySuggestionCrossingAccountDate_OmitsEvent()
+    {
+        var user = User.Create("Test", "test@example.com").Value;
+        user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
+        _userRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(user);
+
+        var startUtc = new DateTime(2026, 4, 14, 23, 0, 0, DateTimeKind.Utc);
+        var eventItem = new CalendarEventItem(
+            "event-stored-recurring",
+            "Tokyo breakfast",
+            null,
+            "2026-04-15",
+            "08:00",
+            "09:00",
+            true,
+            "RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE;WKST=SU",
+            [],
+            StartUtc: startUtc,
+            EndUtc: startUtc.AddHours(1));
+        var suggestion = GoogleCalendarSyncSuggestion.Create(
+            UserId,
+            "gcal-stored-recurring",
+            eventItem.Title,
+            startUtc,
+            JsonSerializer.Serialize(eventItem),
+            startUtc);
+
+        _suggestionRepo.FindAsync(
+            Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<GoogleCalendarSyncSuggestion> { suggestion }.AsReadOnly());
+
+        var result = await _handler.Handle(new GetCalendarSyncSuggestionsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Handle_LegacyTimedSuggestionWithoutEndUtc_MatchesEventsQueryProjection()
     {
         var user = User.Create("Test", "test@example.com").Value;

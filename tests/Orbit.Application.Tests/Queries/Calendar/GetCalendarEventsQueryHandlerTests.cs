@@ -205,7 +205,7 @@ public class GetCalendarEventsQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_TimedTokyoEvent_ProjectsStartIntoSaoPauloTimezone()
+    public async Task Handle_RecurringByDayEventCrossingAccountDate_OmitsEvent()
     {
         var user = CreateTestUser();
         user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
@@ -227,11 +227,7 @@ public class GetCalendarEventsQueryHandlerTests
         var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Should().ContainSingle();
-        result.Value[0].StartDate.Should().Be("2026-04-14");
-        result.Value[0].StartTime.Should().Be("20:00");
-        result.Value[0].EndTime.Should().Be("21:00");
-        result.Value[0].RecurrenceRule.Should().Be("RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE;WKST=SU");
+        result.Value.Should().BeEmpty();
     }
 
     [Fact]

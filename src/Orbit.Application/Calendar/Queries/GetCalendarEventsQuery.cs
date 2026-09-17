@@ -51,6 +51,20 @@ public record CalendarEventItem(
                 : null
         };
     }
+
+    internal bool HasUnrepresentableRecurrenceAfterProjection(CalendarEventItem projected)
+    {
+        if (RecurrenceRule is null
+            || string.Equals(StartDate, projected.StartDate, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var ruleBody = RecurrenceRule.StartsWith("RRULE:", StringComparison.OrdinalIgnoreCase)
+            ? RecurrenceRule["RRULE:".Length..]
+            : RecurrenceRule;
+        return ruleBody.Split(';').Any(term => term.StartsWith("BYDAY=", StringComparison.OrdinalIgnoreCase));
+    }
 }
 
 public record GetCalendarEventsQuery(Guid UserId) : IRequest<Result<List<CalendarEventItem>>>, IConcurrencyRetryable;
@@ -92,7 +106,9 @@ public partial class GetCalendarEventsQueryHandler(
             var timeZone = TimeZoneHelper.FindTimeZone(user.TimeZone);
             var items = fetched
                 .Where(item => !importedEventIds.Contains(item.Id))
-                .Select(item => item.ProjectTo(timeZone))
+                .Select(item => (Source: item, Projected: item.ProjectTo(timeZone)))
+                .Where(item => !item.Source.HasUnrepresentableRecurrenceAfterProjection(item.Projected))
+                .Select(item => item.Projected)
                 .ToList();
 
             return Result.Success(items);
