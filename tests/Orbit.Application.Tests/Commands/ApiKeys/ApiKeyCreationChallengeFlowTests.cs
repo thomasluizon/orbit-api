@@ -127,7 +127,7 @@ public class ApiKeyCreationChallengeFlowTests
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be(ErrorCodes.CodeExpired);
-        _challengeService.HasAuthorization(EmailChallengeOperation.ApiKeyCreation, UserId).Should().BeFalse();
+        _challengeService.HasAuthorization(EmailChallengeOperation.ApiKeyManagement, UserId).Should().BeFalse();
     }
 
     [Fact]

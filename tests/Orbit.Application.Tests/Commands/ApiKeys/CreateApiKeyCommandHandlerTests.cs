@@ -155,7 +155,7 @@ public class CreateApiKeyCommandHandlerTests
                 false,
                 Arg.Any<CancellationToken>())
             .Returns(false);
-        _challengeService.TryConsumeAuthorization(EmailChallengeOperation.ApiKeyCreation, UserId);
+        _challengeService.TryConsumeAuthorization(EmailChallengeOperation.ApiKeyManagement, UserId);
 
         var result = await _handler.Handle(
             new CreateApiKeyCommand(UserId, "Kill switch path"),
@@ -166,7 +166,7 @@ public class CreateApiKeyCommandHandlerTests
     }
 
     private void AuthorizeCreation() => _challengeService.AuthorizeOnce(
-        EmailChallengeOperation.ApiKeyCreation,
+        EmailChallengeOperation.ApiKeyManagement,
         UserId,
         TimeSpan.FromMinutes(10));
 }

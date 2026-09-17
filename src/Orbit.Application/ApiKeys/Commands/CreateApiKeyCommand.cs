@@ -42,7 +42,7 @@ public class CreateApiKeyCommandHandler(
             false,
             cancellationToken);
         if (requiresStepUp &&
-            !challengeService.HasAuthorization(EmailChallengeOperation.ApiKeyCreation, request.UserId))
+            !challengeService.HasAuthorization(EmailChallengeOperation.ApiKeyManagement, request.UserId))
         {
             return Result.Failure<CreateApiKeyResponse>(ErrorMessages.ApiKeyCreationChallengeRequired);
         }
@@ -70,7 +70,7 @@ public class CreateApiKeyCommandHandler(
         var (apiKey, rawKey) = createResult.Value;
 
         if (requiresStepUp &&
-            !challengeService.TryConsumeAuthorization(EmailChallengeOperation.ApiKeyCreation, request.UserId))
+            !challengeService.TryConsumeAuthorization(EmailChallengeOperation.ApiKeyManagement, request.UserId))
         {
             return Result.Failure<CreateApiKeyResponse>(ErrorMessages.ApiKeyCreationChallengeRequired);
         }

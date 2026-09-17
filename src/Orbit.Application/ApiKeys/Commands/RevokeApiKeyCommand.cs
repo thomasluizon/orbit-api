@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
+using Orbit.Application.Auth.Services;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -15,13 +16,25 @@ public class RevokeApiKeyCommandHandler(
     IGenericRepository<ApiKey> apiKeyRepository,
     IPayGateService payGate,
     IUnitOfWork unitOfWork,
-    IMemoryCache cache) : IRequestHandler<RevokeApiKeyCommand, Result>
+    IMemoryCache cache,
+    IAppConfigService appConfigService,
+    EmailChallengeService challengeService) : IRequestHandler<RevokeApiKeyCommand, Result>
 {
     public async Task<Result> Handle(RevokeApiKeyCommand request, CancellationToken cancellationToken)
     {
         var gateCheck = await payGate.CanManageApiKeys(request.UserId, cancellationToken);
         if (gateCheck.IsFailure)
             return gateCheck;
+
+        var requiresStepUp = await appConfigService.GetAsync(
+            AppConfigKeys.RequireApiKeyCreationStepUp,
+            false,
+            cancellationToken);
+        if (requiresStepUp &&
+            !challengeService.HasAuthorization(EmailChallengeOperation.ApiKeyManagement, request.UserId))
+        {
+            return Result.Failure(ErrorMessages.ApiKeyCreationChallengeRequired);
+        }
 
         var keys = await apiKeyRepository.FindTrackedAsync(
             k => k.Id == request.KeyId && k.UserId == request.UserId,
@@ -30,6 +43,12 @@ public class RevokeApiKeyCommandHandler(
         var apiKey = keys.Count > 0 ? keys[0] : null;
         if (apiKey is null)
             return Result.Failure(ErrorMessages.ApiKeyNotFound);
+
+        if (requiresStepUp &&
+            !challengeService.TryConsumeAuthorization(EmailChallengeOperation.ApiKeyManagement, request.UserId))
+        {
+            return Result.Failure(ErrorMessages.ApiKeyCreationChallengeRequired);
+        }
 
         apiKey.Revoke();
         await unitOfWork.SaveChangesAsync(cancellationToken);
