@@ -186,6 +186,12 @@ test("plan and quota conditions keep separate access semantics", () => {
       expected: { planRequirement: null, quotaLiftedByPlan: "Pro" },
     },
     {
+      name: "parenthesized-plan-quota",
+      condition: "        if (user.AiMessagesUsedToday >= messageLimit)",
+      declaration: "        var messageLimit = (user.HasProAccess ? proLimit : freeLimit);",
+      expected: { planRequirement: null, quotaLiftedByPlan: "Pro" },
+    },
+    {
       name: "unscoped-quota-only",
       condition: "        if (user.AiMessagesUsedToday >= messageLimit)",
       declaration: "        var messageLimit = freeLimit;",
@@ -227,6 +233,37 @@ test("plan and quota conditions keep separate access semantics", () => {
       fixtureCase.name,
     )
   }
+})
+
+test("derived quota expressions fail closed", () => {
+  const fixture = copySourceFixture("derived-quota-expression")
+  const implementationPath = join(fixture, "src", "Orbit.Application", "Common", "PayGateService.cs")
+  const source = readFileSync(implementationPath, "utf8").replaceAll("\r\n", "\n")
+  const quotaDeclaration = "        var messageLimit = user.HasProAccess ? proLimit : freeLimit;"
+  const derivedDeclaration =
+    "        var selectedLimit = user.HasProAccess ? proLimit : freeLimit;\n"
+    + "        var messageLimit = selectedLimit - selectedLimit + freeLimit;"
+  assert.ok(source.includes(quotaDeclaration))
+  writeFileSync(implementationPath, source.replace(quotaDeclaration, derivedDeclaration), "utf8")
+
+  const result = spawnSync(process.execPath, [TOOL, "--root", fixture], { encoding: "utf8" })
+  assert.notEqual(result.status, 0)
+  assert.match(result.stderr, /cannot derive plan requirement for CanSendAiMessage/)
+})
+
+test("unsupported plan-selected quota expressions fail closed", () => {
+  const fixture = copySourceFixture("unsupported-plan-selected-quota")
+  const implementationPath = join(fixture, "src", "Orbit.Application", "Common", "PayGateService.cs")
+  const source = readFileSync(implementationPath, "utf8").replaceAll("\r\n", "\n")
+  const quotaDeclaration = "        var messageLimit = user.HasProAccess ? proLimit : freeLimit;"
+  const unsupportedDeclaration =
+    "        var messageLimit = user.HasProAccess switch { true => proLimit, false => freeLimit };"
+  assert.ok(source.includes(quotaDeclaration))
+  writeFileSync(implementationPath, source.replace(quotaDeclaration, unsupportedDeclaration), "utf8")
+
+  const result = spawnSync(process.execPath, [TOOL, "--root", fixture], { encoding: "utf8" })
+  assert.notEqual(result.status, 0)
+  assert.match(result.stderr, /cannot derive plan requirement for CanSendAiMessage/)
 })
 
 test("a condition with distinct plan guards fails closed", () => {
@@ -306,6 +343,42 @@ public partial class UnsupportedGatingSql : Migration
   assert.notEqual(result.status, 0)
   assert.match(result.stderr, /AppFeatureFlags/)
   assert.match(result.stderr, /99999999999999_UnsupportedGatingSql\.cs/)
+})
+
+test("positional UpdateData mutations change gating rows", () => {
+  const fixture = copySourceFixture("positional-gating-update")
+  const migrationPath = join(
+    fixture,
+    "src",
+    "Orbit.Infrastructure",
+    "Migrations",
+    "99999999999998_PositionalGatingUpdate.cs",
+  )
+  writeFileSync(
+    migrationPath,
+    `using Microsoft.EntityFrameworkCore.Migrations;
+
+namespace Orbit.Infrastructure.Migrations;
+
+public partial class PositionalGatingUpdate : Migration
+{
+    protected override void Up(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.UpdateData(
+            "AppFeatureFlags",
+            "Key",
+            "gamification_free_tier",
+            "Enabled",
+            false);
+    }
+}
+`,
+    "utf8",
+  )
+
+  const matrix = JSON.parse(generate(fixture))
+  const amendedFlag = matrix.featureFlags.find((flag) => flag.key === "gamification_free_tier")
+  assert.equal(amendedFlag?.enabled, false)
 })
 
 test("deleting an interface method removes only its generated gate", () => {

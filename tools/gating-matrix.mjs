@@ -292,6 +292,16 @@ function uniqueBy(items, key) {
   return [...new Map(items.map((item) => [key(item), item])).values()]
 }
 
+function stripOuterParentheses(expression) {
+  let value = expression.trim()
+  while (value.startsWith("(")) {
+    const close = matchBalanced(value, 0, "(", ")")
+    if (close !== value.length - 1) break
+    value = value.slice(1, -1).trim()
+  }
+  return value
+}
+
 function ifBranches(body) {
   const branches = []
   const pattern = /\bif\s*\(/g
@@ -332,17 +342,16 @@ function accessRequirements(bodies, capability, sourcePath) {
       [...body.matchAll(/var\s+(\w+)\s*=\s*await\s+\w+\.GetAsync(?:<[^>]+>)?\s*\(\s*AppConfigKeys\./g)]
         .map((match) => [match[1], null]),
     )
-    /**
-     * Label the directly plan-selected quota variables BEFORE propagating, or an alias of one is
-     * recorded unscoped and never relabelled: the relabelling pass only sees the variable that
-     * literally contains the ternary. A semantics-preserving
-     * `var selected = user.HasProAccess ? proLimit : freeLimit; var limit = selected;` then reported
-     * `quotaLiftedByPlan: null` for a limit the plan does select.
-     */
-    for (const match of body.matchAll(/var\s+(\w+)\s*=\s*\w+\.Has([A-Z]\w*)Access\s*\?\s*[^:;]+\s*:\s*[^;]+;/g)) {
-      quotaVariables.set(match[1], match[2])
+    const assignments = [...body.matchAll(/(?=\bvar\s+(\w+)\s*=\s*([^;]+);)/g)]
+      .filter((assignment) => !/\bvar\s+\w+\s*=/.test(assignment[2]))
+    for (const assignment of assignments) {
+      const expression = stripOuterParentheses(assignment[2])
+      const selection = expression.match(/^\w+\.Has([A-Z]\w*)Access\s*\?[\s\S]+:[\s\S]+$/)
+      if (selection) quotaVariables.set(assignment[1], selection[1])
+      else if (/\b\w+\.Has[A-Z]\w*Access\b/.test(expression)) {
+        throw new Error(`cannot derive plan requirement for ${capability} in ${sourcePath}: ${body.trim()}`)
+      }
     }
-    const assignments = [...body.matchAll(/var\s+(\w+)\s*=\s*([^;]+);/g)]
     let foundQuotaVariable = true
     while (foundQuotaVariable) {
       foundQuotaVariable = false
@@ -355,8 +364,14 @@ function accessRequirements(bodies, capability, sourcePath) {
         // Two different plans selecting one derived limit is not a provenance this tool can prove.
         if (plans.size > 1)
           throw new Error(`cannot derive plan requirement for ${capability} in ${sourcePath}: ${body.trim()}`)
-        quotaVariables.set(assignment[1], [...plans][0] ?? null)
-        foundQuotaVariable = true
+        const expression = stripOuterParentheses(assignment[2])
+        const alias = sources.find(([variable]) => expression === variable)
+        if (alias) {
+          quotaVariables.set(assignment[1], alias[1])
+          foundQuotaVariable = true
+        } else if (plans.size > 0) {
+          throw new Error(`cannot derive plan requirement for ${capability} in ${sourcePath}: ${body.trim()}`)
+        }
       }
     }
     const branches = ifBranches(body)
@@ -469,6 +484,22 @@ function insertedRows(args, constants) {
   )
 }
 
+function updateDataArguments(text) {
+  const named = parseNamedArguments(text)
+  if (Object.keys(named).length > 0) return named
+  const parts = splitTopLevel(text)
+  const [table, keyColumn, keyValue, column, value, schema] = parts
+  if (value === undefined) return { table }
+  return {
+    table,
+    keyColumn,
+    keyValue,
+    column,
+    value,
+    schema,
+  }
+}
+
 function applyTableMigrations(files, table, initialRows, constants) {
   const rows = new Map(initialRows.map((row) => [row.Key, { ...row }]))
   for (const [path, source] of files) {
@@ -480,14 +511,25 @@ function applyTableMigrations(files, table, initialRows, constants) {
       if (parseLiteral(args.table ?? "") !== table) continue
       for (const row of insertedRows(args, constants)) if (row.Key !== null && row.Key !== undefined) rows.set(row.Key, row)
     }
-    for (const args of extractInvocations(body, "migrationBuilder.UpdateData")) {
-      if (parseLiteral(args.table ?? "") !== table) continue
+    for (const invocation of extractInvocationArguments(body, "migrationBuilder.UpdateData")) {
+      const args = updateDataArguments(invocation)
+      const parsedTable = parseLiteral(args.table ?? "")
+      if (parsedTable !== table) {
+        if (invocation.includes(table)) throw new Error(`unsupported UpdateData mutation of ${table} in ${path}`)
+        continue
+      }
       const key = parseLiteral(args.keyValue ?? "", constants)
-      if (!rows.has(key)) continue
-      const row = rows.get(key)
-      if (args.column && args.value) row[parseLiteral(args.column)] = parseLiteral(args.value, constants)
+      const column = parseLiteral(args.column ?? "")
       const columns = stringLiterals(args.columns ?? "")
       const values = parseArrayRows(args.values ?? "")[0] ?? []
+      const hasSingleValue = typeof column === "string" && Object.hasOwn(args, "value")
+      const hasMultipleValues = columns.length > 0 && values.length === columns.length
+      if (key === null || (!hasSingleValue && !hasMultipleValues)) {
+        throw new Error(`unsupported UpdateData mutation of ${table} in ${path}`)
+      }
+      if (!rows.has(key)) continue
+      const row = rows.get(key)
+      if (hasSingleValue) row[column] = parseLiteral(args.value, constants)
       columns.forEach((column, index) => {
         row[column] = parseLiteral(values[index] ?? "null", constants)
       })
