@@ -22,7 +22,7 @@ public class GetCalendarEventsQueryHandlerTests
     private readonly IGoogleTokenService _googleTokenService = Substitute.For<IGoogleTokenService>();
     private readonly ICalendarEventFetcher _eventFetcher = Substitute.For<ICalendarEventFetcher>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
-    private readonly ILogger<GetCalendarEventsQueryHandler> _logger = Substitute.For<ILogger<GetCalendarEventsQueryHandler>>();
+    private readonly RecordingLogger _logger = new();
     private readonly GetCalendarEventsQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -38,6 +38,23 @@ public class GetCalendarEventsQueryHandlerTests
     private static User CreateTestUser()
     {
         return User.Create("Test User", "test@example.com").Value;
+    }
+
+    private sealed class RecordingLogger : ILogger<GetCalendarEventsQueryHandler>
+    {
+        public List<(LogLevel Level, int EventId, string Message)> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+            => Entries.Add((logLevel, eventId.Id, formatter(state, exception)));
     }
 
     private void StubSuccessfulFetch(User user, params CalendarEventItem[] items)
@@ -284,6 +301,245 @@ public class GetCalendarEventsQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().ContainSingle();
         result.Value[0].RecurrenceRule.Should().Be("RRULE:FREQ=MONTHLY;BYMONTHDAY=15");
+    }
+
+    [Fact]
+    public async Task Handle_ByDaySeriesStableAtItsFirstOccurrenceButShiftedLater_OmitsEvent()
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
+        StubSuccessfulFetch(
+            user,
+            new CalendarEventItem(
+                "evt_lisbon_daily",
+                "Lisbon stand-up",
+                null,
+                "2027-01-07",
+                "03:30",
+                "04:00",
+                true,
+                "RRULE:FREQ=DAILY;BYDAY=TH",
+                [],
+                StartUtc: new DateTime(2027, 1, 7, 3, 30, 0, DateTimeKind.Utc),
+                EndUtc: new DateTime(2027, 1, 7, 4, 0, 0, DateTimeKind.Utc))
+            {
+                ExpandedOccurrences =
+                [
+                    new DateTimeOffset(2027, 1, 7, 3, 30, 0, TimeSpan.Zero),
+                    new DateTimeOffset(2027, 7, 8, 3, 30, 0, TimeSpan.FromHours(1))
+                ]
+            });
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_ByDaySeriesStableAcrossEveryOccurrence_KeepsRecurrenceRuleUnchanged()
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
+        StubSuccessfulFetch(
+            user,
+            new CalendarEventItem(
+                "evt_lisbon_afternoon",
+                "Lisbon afternoon review",
+                null,
+                "2027-01-07",
+                "15:00",
+                "16:00",
+                true,
+                "RRULE:FREQ=DAILY;BYDAY=TH",
+                [],
+                StartUtc: new DateTime(2027, 1, 7, 15, 0, 0, DateTimeKind.Utc),
+                EndUtc: new DateTime(2027, 1, 7, 16, 0, 0, DateTimeKind.Utc))
+            {
+                ExpandedOccurrences =
+                [
+                    new DateTimeOffset(2027, 1, 7, 15, 0, 0, TimeSpan.Zero),
+                    new DateTimeOffset(2027, 7, 8, 15, 0, 0, TimeSpan.FromHours(1))
+                ]
+            });
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value[0].StartDate.Should().Be("2027-01-07");
+        result.Value[0].StartTime.Should().Be("12:00");
+        result.Value[0].RecurrenceRule.Should().Be("RRULE:FREQ=DAILY;BYDAY=TH");
+    }
+
+    [Fact]
+    public async Task Handle_EventCrossingLocalMidnight_OmitsEndTimeKeepsEndUtcAndLogsTheReason()
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone("Asia/Kathmandu").IsSuccess.Should().BeTrue();
+        StubSuccessfulFetch(
+            user,
+            new CalendarEventItem(
+                "evt_kathmandu_late",
+                "Late review",
+                null,
+                "2026-09-20",
+                "18:05",
+                "18:35",
+                false,
+                null,
+                [],
+                StartUtc: new DateTime(2026, 9, 20, 18, 5, 0, DateTimeKind.Utc),
+                EndUtc: new DateTime(2026, 9, 20, 18, 35, 0, DateTimeKind.Utc)));
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value[0].StartDate.Should().Be("2026-09-20");
+        result.Value[0].StartTime.Should().Be("23:50");
+        result.Value[0].EndTime.Should().BeNull();
+        result.Value[0].EndUtc.Should().Be(new DateTime(2026, 9, 20, 18, 35, 0, DateTimeKind.Utc));
+        _logger.Entries.Should().ContainSingle(entry =>
+            entry.Level == LogLevel.Debug && entry.Message.Contains("end time", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Handle_EventInsideRepeatedHour_OmitsEndTimeKeepsEndUtcAndLogsTheReason()
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone("America/New_York").IsSuccess.Should().BeTrue();
+        StubSuccessfulFetch(
+            user,
+            new CalendarEventItem(
+                "evt_new_york_fold",
+                "Night shift handover",
+                null,
+                "2026-11-01",
+                "01:30",
+                "02:15",
+                false,
+                null,
+                [],
+                StartUtc: new DateTime(2026, 11, 1, 5, 30, 0, DateTimeKind.Utc),
+                EndUtc: new DateTime(2026, 11, 1, 6, 15, 0, DateTimeKind.Utc)));
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value[0].StartDate.Should().Be("2026-11-01");
+        result.Value[0].StartTime.Should().Be("01:30");
+        result.Value[0].EndTime.Should().BeNull();
+        result.Value[0].EndUtc.Should().Be(new DateTime(2026, 11, 1, 6, 15, 0, DateTimeKind.Utc));
+        _logger.Entries.Should().ContainSingle(entry =>
+            entry.Level == LogLevel.Debug && entry.Message.Contains("end time", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Handle_EventKeepingItsLocalDate_LogsNoOmittedEndTime()
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone("Asia/Kathmandu").IsSuccess.Should().BeTrue();
+        StubSuccessfulFetch(
+            user,
+            new CalendarEventItem(
+                "evt_kathmandu_morning",
+                "Morning review",
+                null,
+                "2026-09-20",
+                "03:00",
+                "03:30",
+                false,
+                null,
+                [],
+                StartUtc: new DateTime(2026, 9, 20, 3, 0, 0, DateTimeKind.Utc),
+                EndUtc: new DateTime(2026, 9, 20, 3, 30, 0, DateTimeKind.Utc)));
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value[0].StartTime.Should().Be("08:45");
+        result.Value[0].EndTime.Should().Be("09:15");
+        _logger.Entries.Should().NotContain(entry => entry.Level == LogLevel.Debug);
+    }
+
+    [Theory]
+    [InlineData("Asia/Kathmandu", "2026-04-15", "04:45", "05:45")]
+    [InlineData("Pacific/Chatham", "2026-04-15", "11:45", "12:45")]
+    public async Task Handle_SubHourOffsetTimezone_ProjectsStartAndEndToTheQuarterHour(
+        string timeZone, string expectedDate, string expectedStart, string expectedEnd)
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone(timeZone).IsSuccess.Should().BeTrue();
+        StubSuccessfulFetch(
+            user,
+            new CalendarEventItem(
+                "evt_tokyo_breakfast",
+                "Tokyo breakfast",
+                null,
+                "2026-04-15",
+                "08:00",
+                "09:00",
+                false,
+                null,
+                [],
+                StartUtc: new DateTime(2026, 4, 14, 23, 0, 0, DateTimeKind.Utc),
+                EndUtc: new DateTime(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc)));
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value[0].StartDate.Should().Be(expectedDate);
+        result.Value[0].StartTime.Should().Be(expectedStart);
+        result.Value[0].EndTime.Should().Be(expectedEnd);
+    }
+
+    [Theory]
+    [InlineData(" ")]
+    [InlineData("Not/AZone")]
+    [InlineData("America/Sao_Paulo ")]
+    public async Task Handle_StoredTimeZoneTheSystemCannotResolve_ProjectsIntoUtcAndLogsAWarning(string storedTimeZone)
+    {
+        var user = CreateTestUser();
+        ForceStoredTimeZone(user, storedTimeZone);
+        StubSuccessfulFetch(
+            user,
+            new CalendarEventItem(
+                "evt_unresolvable_zone",
+                "Team sync",
+                null,
+                "2026-09-20",
+                "18:05",
+                "18:35",
+                false,
+                null,
+                [],
+                StartUtc: new DateTime(2026, 9, 20, 18, 5, 0, DateTimeKind.Utc),
+                EndUtc: new DateTime(2026, 9, 20, 18, 35, 0, DateTimeKind.Utc)));
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value[0].StartTime.Should().Be("18:05");
+        _logger.Entries.Should().ContainSingle(entry =>
+            entry.Level == LogLevel.Warning
+            && entry.Message.Contains(storedTimeZone, StringComparison.Ordinal)
+            && entry.Message.Contains(UserId.ToString(), StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Writes the column the way EF materializes it, around <see cref="User.SetTimeZone"/>. That is the
+    /// only way a row reaches the reader with an id the system cannot resolve, and it is exactly what a
+    /// row written before the boundary guard looks like.
+    /// </summary>
+    private static void ForceStoredTimeZone(User user, string timeZone)
+    {
+        typeof(User)
+            .GetProperty(nameof(User.TimeZone))!
+            .GetSetMethod(nonPublic: true)!
+            .Invoke(user, [timeZone]);
     }
 
     [Fact]

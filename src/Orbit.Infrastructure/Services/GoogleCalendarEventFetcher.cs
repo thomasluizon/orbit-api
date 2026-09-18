@@ -103,20 +103,53 @@ internal sealed partial class GoogleCalendarEventFetcher(
         string accessToken, string calendarId, string calendarName, IReadOnlyList<Event> events, CancellationToken ct)
     {
         var items = new List<CalendarEventItem>();
-        var seenRecurringMasterIds = new HashSet<string>(StringComparer.Ordinal);
+        var slotPerRecurringMaster = new Dictionary<string, int>(StringComparer.Ordinal);
+        var occurrencesPerRecurringMaster = new Dictionary<string, List<DateTimeOffset>>(StringComparer.Ordinal);
         var masterRRuleCache = new Dictionary<string, string?>(StringComparer.Ordinal);
 
         foreach (var ev in events)
         {
             if (string.IsNullOrWhiteSpace(ev.Summary)) continue;
             if (string.Equals(ev.Status, "cancelled", StringComparison.OrdinalIgnoreCase)) continue;
-            if (ev.RecurringEventId is not null && !seenRecurringMasterIds.Add(ev.RecurringEventId)) continue;
+
+            if (ev.RecurringEventId is { } masterId)
+            {
+                CollectOccurrence(occurrencesPerRecurringMaster, masterId, ev);
+                if (slotPerRecurringMaster.ContainsKey(masterId)) continue;
+                slotPerRecurringMaster[masterId] = items.Count;
+            }
 
             var rrule = await ResolveRRule(accessToken, calendarId, ev, masterRRuleCache, ct);
             items.Add(MapEvent(ev, calendarId, calendarName, rrule));
         }
 
+        foreach (var (masterId, slot) in slotPerRecurringMaster)
+        {
+            if (occurrencesPerRecurringMaster.TryGetValue(masterId, out var occurrences))
+                items[slot] = items[slot] with { ExpandedOccurrences = occurrences };
+        }
+
         return items;
+    }
+
+    /// <summary>
+    /// Records every expanded instance of a recurring master, each with the source calendar's own
+    /// offset at that instant, so the projection gate can test the whole fetch window instead of the
+    /// one instance kept in the list. An all-day instance carries no instant and is skipped.
+    /// </summary>
+    private static void CollectOccurrence(
+        Dictionary<string, List<DateTimeOffset>> occurrencesPerRecurringMaster, string masterId, Event ev)
+    {
+        if (ev.Start?.DateTimeDateTimeOffset is not { } instanceStart)
+            return;
+
+        if (!occurrencesPerRecurringMaster.TryGetValue(masterId, out var occurrences))
+        {
+            occurrences = [];
+            occurrencesPerRecurringMaster[masterId] = occurrences;
+        }
+
+        occurrences.Add(instanceStart);
     }
 
     private static CalendarEventItem MapEvent(Event ev, string calendarId, string calendarName, string? rrule)

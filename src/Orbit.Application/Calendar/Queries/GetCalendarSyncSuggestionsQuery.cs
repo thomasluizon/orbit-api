@@ -64,15 +64,29 @@ public partial class GetCalendarSyncSuggestionsQueryHandler(
                 h.DueTime?.ToString("HH:mm", CultureInfo.InvariantCulture)))
             .ToHashSet(StringComparer.Ordinal);
 
-        var items = new List<CalendarSyncSuggestionItem>();
-        var timeZone = TimeZoneHelper.FindTimeZone(user.TimeZone);
+        var timeZone = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, request.UserId);
+        var candidates = new List<(CalendarSyncSuggestionItem Item, string LegacyKey)>();
         foreach (var suggestion in suggestions.OrderBy(s => s.StartDateUtc))
         {
             var item = TryBuildSuggestionItem(
-                suggestion, userToday, importedEventIds, importedLegacyKeys, selectedCalendars, timeZone);
+                suggestion, userToday, importedEventIds, selectedCalendars, timeZone, request.UserId);
             if (item is not null)
-                items.Add(item);
+            {
+                candidates.Add((
+                    item,
+                    BuildLegacyMatchKey(item.Event.Title, item.Event.StartDate, item.Event.StartTime)));
+            }
         }
+
+        var candidatesPerLegacyKey = candidates
+            .GroupBy(candidate => candidate.LegacyKey, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+
+        var items = candidates
+            .Where(candidate => candidatesPerLegacyKey[candidate.LegacyKey] > 1
+                || !importedLegacyKeys.Contains(candidate.LegacyKey))
+            .Select(candidate => candidate.Item)
+            .ToList();
 
         return Result.Success(items);
     }
@@ -81,24 +95,23 @@ public partial class GetCalendarSyncSuggestionsQueryHandler(
         GoogleCalendarSyncSuggestion suggestion,
         DateOnly userToday,
         HashSet<string> importedEventIds,
-        HashSet<string> importedLegacyKeys,
         HashSet<string>? selectedCalendars,
-        TimeZoneInfo timeZone)
+        TimeZoneInfo timeZone,
+        Guid userId)
     {
         if (importedEventIds.Contains(suggestion.GoogleEventId)) return null;
 
         var sourceEvent = DeserializeEvent(suggestion);
         if (sourceEvent is null) return null;
         var eventItem = sourceEvent.ProjectTo(timeZone);
-        if (sourceEvent.HasUnrepresentableRecurrenceAfterProjection(eventItem)) return null;
+        if (sourceEvent.HasUnrepresentableRecurrenceAfterProjection(eventItem, timeZone)) return null;
         if (ResolveStartDate(eventItem, suggestion.StartDateUtc, timeZone) < userToday) return null;
         if (selectedCalendars is not null
             && !string.IsNullOrEmpty(eventItem.CalendarId)
             && !selectedCalendars.Contains(eventItem.CalendarId)) return null;
-        if (importedLegacyKeys.Contains(BuildLegacyMatchKey(
-            eventItem.Title,
-            eventItem.StartDate,
-            eventItem.StartTime))) return null;
+
+        if (sourceEvent.DropsEndTimeAfterProjection(eventItem))
+            LogProjectedEndTimeOmitted(logger, suggestion.GoogleEventId, userId);
 
         return new CalendarSyncSuggestionItem(
             suggestion.Id,
@@ -140,6 +153,18 @@ public partial class GetCalendarSyncSuggestionsQueryHandler(
         }
     }
 
+    /// <summary>
+    /// Title plus projected local date plus projected local time, so a habit imported before
+    /// <c>GoogleEventId</c> existed can still be matched to its event.
+    /// </summary>
+    /// <remarks>
+    /// The key only proves a prior import when exactly one candidate carries it. Two candidates share
+    /// it legitimately inside the repeated hour of a fall-back transition, where 05:30 and 06:30 UTC
+    /// both project to 01:30 local, and at most one of them is the habit the user already imported.
+    /// Excluding on an ambiguous key hides a real event with no way back, so an ambiguous key excludes
+    /// nothing and the user dismisses the duplicate instead. This mirrors the <c>group.Count() == 1</c>
+    /// guard the auto-sync reconciler already applies to the same key.
+    /// </remarks>
     private static string BuildLegacyMatchKey(string title, string? startDate, string? startTime)
     {
         return $"{title.Trim().ToLowerInvariant()}|{startDate ?? ""}|{startTime ?? ""}";
@@ -147,4 +172,7 @@ public partial class GetCalendarSyncSuggestionsQueryHandler(
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Failed to deserialize sync suggestion {SuggestionId}")]
     private static partial void LogDeserializeSuggestionFailed(ILogger logger, Exception ex, Guid suggestionId);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Omitted the end time of calendar event {EventId} for user {UserId}: the projected end does not follow the projected start on the projected start date. EndUtc still carries the duration")]
+    private static partial void LogProjectedEndTimeOmitted(ILogger logger, string eventId, Guid userId);
 }

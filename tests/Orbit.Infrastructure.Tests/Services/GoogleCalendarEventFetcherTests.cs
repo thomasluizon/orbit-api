@@ -207,6 +207,49 @@ public class GoogleCalendarEventFetcherTests
     }
 
     [Fact]
+    public async Task FetchAsync_RecurringMaster_KeepsEveryExpandedOccurrenceInTheWindow()
+    {
+        StubCalendars(Calendar("a", "owner"));
+        StubEvents(
+            "a",
+            LisbonInstance("inst-jan", new DateTimeOffset(2027, 1, 7, 3, 30, 0, TimeSpan.Zero)),
+            LisbonInstance("inst-jul", new DateTimeOffset(2027, 7, 8, 3, 30, 0, TimeSpan.FromHours(1))));
+        _api.GetEventAsync(Token, "a", "master-lisbon", Arg.Any<CancellationToken>())
+            .Returns(new Event { Recurrence = ["RRULE:FREQ=DAILY;BYDAY=TH"] });
+
+        var result = await _fetcher.FetchAsync(Token, null, null, CancellationToken.None);
+
+        result.Should().ContainSingle();
+        result[0].Id.Should().Be("master-lisbon");
+        result[0].StartUtc.Should().Be(new DateTime(2027, 1, 7, 3, 30, 0, DateTimeKind.Utc));
+        result[0].ExpandedOccurrences.Should().Equal(
+            new DateTimeOffset(2027, 1, 7, 3, 30, 0, TimeSpan.Zero),
+            new DateTimeOffset(2027, 7, 8, 3, 30, 0, TimeSpan.FromHours(1)));
+    }
+
+    [Fact]
+    public async Task FetchAsync_SingleEvent_HasNoExpandedOccurrences()
+    {
+        StubCalendars(Calendar("a", "owner"));
+        StubEvents("a", TimedEvent("solo", "One off"));
+
+        var result = await _fetcher.FetchAsync(Token, null, null, CancellationToken.None);
+
+        result.Should().ContainSingle();
+        result[0].ExpandedOccurrences.Should().BeEmpty();
+    }
+
+    private static Event LisbonInstance(string id, DateTimeOffset start)
+        => new()
+        {
+            Id = id,
+            Summary = "Lisbon stand-up",
+            RecurringEventId = "master-lisbon",
+            Start = new EventDateTime { DateTimeDateTimeOffset = start },
+            End = new EventDateTime { DateTimeDateTimeOffset = start.AddMinutes(30) }
+        };
+
+    [Fact]
     public async Task FetchAsync_FailingCalendar_IsSkippedNotFatal()
     {
         StubCalendars(Calendar("good", "owner"), Calendar("bad", "owner"));

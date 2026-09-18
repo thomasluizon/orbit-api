@@ -3,7 +3,6 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Orbit.Application.Calendar.Queries;
 using Orbit.Domain.Common;
@@ -24,7 +23,25 @@ public class GetCalendarSyncSuggestionsQueryHandlerTests
     private readonly IUserDateService _userDateService =
         Substitute.For<IUserDateService>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
+    private readonly RecordingLogger _logger = new();
     private readonly GetCalendarSyncSuggestionsQueryHandler _handler;
+
+    private sealed class RecordingLogger : ILogger<GetCalendarSyncSuggestionsQueryHandler>
+    {
+        public List<(LogLevel Level, string Message)> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+            => Entries.Add((logLevel, formatter(state, exception)));
+    }
 
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly DateOnly Today = new(2026, 4, 10);
@@ -39,7 +56,7 @@ public class GetCalendarSyncSuggestionsQueryHandlerTests
             _userRepo,
             _userDateService,
             _payGate,
-            NullLogger<GetCalendarSyncSuggestionsQueryHandler>.Instance);
+            _logger);
         _userRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(User.Create("Test", "test@example.com").Value);
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
@@ -362,6 +379,120 @@ public class GetCalendarSyncSuggestionsQueryHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_TwoSuggestionsSharingOneRepeatedHourKey_KeepsBothDespiteTheLegacyHabit()
+    {
+        var user = User.Create("Test", "test@example.com").Value;
+        user.SetTimeZone("America/New_York").IsSuccess.Should().BeTrue();
+        _userRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(user);
+        _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new DateOnly(2026, 10, 1));
+
+        var earlier = CreateFoldSuggestion("gcal-fold-early", new DateTime(2026, 11, 1, 5, 30, 0, DateTimeKind.Utc));
+        var later = CreateFoldSuggestion("gcal-fold-late", new DateTime(2026, 11, 1, 6, 30, 0, DateTimeKind.Utc));
+        var legacyHabit = CreateHabit("Night shift handover", new DateOnly(2026, 11, 1), new TimeOnly(1, 30));
+
+        _suggestionRepo.FindAsync(
+            Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<GoogleCalendarSyncSuggestion> { earlier, later }.AsReadOnly());
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { legacyHabit }.AsReadOnly());
+
+        var result = await _handler.Handle(new GetCalendarSyncSuggestionsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().HaveCount(2);
+        result.Value.Select(item => item.GoogleEventId).Should()
+            .BeEquivalentTo(new[] { "gcal-fold-early", "gcal-fold-late" });
+        result.Value.Should().OnlyContain(item => item.Event.StartTime == "01:30");
+        result.Value.Select(item => item.Event.StartUtc).Should().OnlyHaveUniqueItems();
+    }
+
+    [Fact]
+    public async Task Handle_SingleSuggestionMatchingALegacyHabitKey_IsStillExcluded()
+    {
+        var user = User.Create("Test", "test@example.com").Value;
+        user.SetTimeZone("America/New_York").IsSuccess.Should().BeTrue();
+        _userRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(user);
+        _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new DateOnly(2026, 10, 1));
+
+        var only = CreateFoldSuggestion("gcal-fold-only", new DateTime(2026, 11, 1, 5, 30, 0, DateTimeKind.Utc));
+        var legacyHabit = CreateHabit("Night shift handover", new DateOnly(2026, 11, 1), new TimeOnly(1, 30));
+
+        _suggestionRepo.FindAsync(
+            Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<GoogleCalendarSyncSuggestion> { only }.AsReadOnly());
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { legacyHabit }.AsReadOnly());
+
+        var result = await _handler.Handle(new GetCalendarSyncSuggestionsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(" ")]
+    [InlineData("Not/AZone")]
+    [InlineData("America/Sao_Paulo ")]
+    public async Task Handle_StoredTimeZoneTheSystemCannotResolve_ProjectsIntoUtcAndLogsAWarning(string storedTimeZone)
+    {
+        var user = User.Create("Test", "test@example.com").Value;
+        typeof(User)
+            .GetProperty(nameof(User.TimeZone))!
+            .GetSetMethod(nonPublic: true)!
+            .Invoke(user, [storedTimeZone]);
+        _userRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(user);
+
+        var suggestion = CreateFoldSuggestion(
+            "gcal-unresolvable-zone", new DateTime(2026, 11, 1, 5, 30, 0, DateTimeKind.Utc));
+        _suggestionRepo.FindAsync(
+            Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<GoogleCalendarSyncSuggestion> { suggestion }.AsReadOnly());
+
+        var result = await _handler.Handle(new GetCalendarSyncSuggestionsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value[0].Event.StartTime.Should().Be("05:30");
+        _logger.Entries.Should().ContainSingle(entry =>
+            entry.Level == LogLevel.Warning
+            && entry.Message.Contains(storedTimeZone, StringComparison.Ordinal)
+            && entry.Message.Contains(UserId.ToString(), StringComparison.Ordinal));
+    }
+
+    private static GoogleCalendarSyncSuggestion CreateFoldSuggestion(string googleEventId, DateTime startUtc)
+    {
+        var eventItem = new CalendarEventItem(
+            googleEventId,
+            "Night shift handover",
+            null,
+            "2026-11-01",
+            "01:30",
+            "02:15",
+            false,
+            null,
+            [],
+            StartUtc: startUtc,
+            EndUtc: startUtc.AddMinutes(45));
+
+        return GoogleCalendarSyncSuggestion.Create(
+            UserId,
+            googleEventId,
+            eventItem.Title,
+            startUtc,
+            JsonSerializer.Serialize(eventItem),
+            DateTime.SpecifyKind(new DateTime(2026, 10, 10, 12, 0, 0), DateTimeKind.Utc));
     }
 
     [Fact]
