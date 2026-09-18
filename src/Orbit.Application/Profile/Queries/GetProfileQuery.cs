@@ -137,7 +137,7 @@ public class GetProfileQueryHandler(
             user.LongestStreak,
             freezesAvailable,
             user.ThemePreference,
-            user.ColorScheme,
+            ColorSchemes.Granted,
             user.GoogleCalendarAutoSyncEnabled,
             user.GoogleCalendarAutoSyncStatus ?? GoogleCalendarAutoSyncStatus.Idle,
             user.GoogleCalendarLastSyncedAt,

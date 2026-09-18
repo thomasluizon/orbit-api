@@ -371,4 +371,36 @@ public class ExportUserDataQueryHandlerTests
         json.Should().NotContain("StripeCustomerId");
         json.Should().NotContain("PlayPurchaseToken");
     }
+
+    [Theory]
+    [InlineData("purple")]
+    [InlineData("blue")]
+    [InlineData("green")]
+    [InlineData("rose")]
+    [InlineData("orange")]
+    [InlineData("cyan")]
+    public async Task Handle_StoredHistoricalColorScheme_ExportsGrantedAccent(string storedColorScheme)
+    {
+        var user = CreateTestUser();
+        user.SetColorScheme(storedColorScheme).IsSuccess.Should().BeTrue();
+        ArrangeUser(user);
+
+        var result = await _handler.Handle(new ExportUserDataQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Settings.ColorScheme.Should().Be("orange");
+    }
+
+    [Fact]
+    public async Task Handle_NoStoredColorScheme_ExportsGrantedAccent()
+    {
+        var user = CreateTestUser();
+        user.ColorScheme.Should().BeNull();
+        ArrangeUser(user);
+
+        var result = await _handler.Handle(new ExportUserDataQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Settings.ColorScheme.Should().Be("orange");
+    }
 }

@@ -114,7 +114,7 @@ public class GetProfileQueryHandlerTests
             user.LongestStreak,
             StreakFreezesAvailable = 3,
             user.ThemePreference,
-            user.ColorScheme,
+            ColorScheme = "orange",
             user.GoogleCalendarAutoSyncEnabled,
             GoogleCalendarAutoSyncStatus = Orbit.Domain.Enums.GoogleCalendarAutoSyncStatus.Idle,
             user.GoogleCalendarLastSyncedAt,
@@ -427,6 +427,57 @@ public class GetProfileQueryHandlerTests
 
         result.Value.Level.Should().Be(12);
         result.Value.LevelTitle.Should().Be("Legend");
+    }
+
+    [Theory]
+    [InlineData("purple")]
+    [InlineData("blue")]
+    [InlineData("green")]
+    [InlineData("rose")]
+    [InlineData("orange")]
+    [InlineData("cyan")]
+    public async Task Handle_StoredHistoricalColorScheme_ResolvesToGrantedAccent(string storedColorScheme)
+    {
+        var user = CreateTestUser();
+        user.SetColorScheme(storedColorScheme).IsSuccess.Should().BeTrue();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(20);
+        StubFreezeRepoEmpty();
+
+        var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.ColorScheme.Should().Be("orange");
+    }
+
+    [Fact]
+    public async Task Handle_NoStoredColorScheme_ResolvesToGrantedAccent()
+    {
+        var user = CreateTestUser();
+        user.ColorScheme.Should().BeNull();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(20);
+        StubFreezeRepoEmpty();
+
+        var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.ColorScheme.Should().Be("orange");
+    }
+
+    [Fact]
+    public async Task Handle_FreeAccountWithStoredColorScheme_ResolvesToGrantedAccent()
+    {
+        var user = CreateFreeUser();
+        user.SetColorScheme("rose").IsSuccess.Should().BeTrue();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(20);
+        StubFreezeRepoEmpty();
+
+        var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.ColorScheme.Should().Be("orange");
     }
 
     private sealed record LegacyProfileResponse(string Name, string Email);

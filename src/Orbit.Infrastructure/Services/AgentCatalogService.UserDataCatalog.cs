@@ -38,7 +38,7 @@ public partial class AgentCatalogService
                     new UserDataFieldDescriptor("Language", "Preferred UI language.", true, true),
                     new UserDataFieldDescriptor("TimeZone", "IANA timezone used for user-facing dates.", true, true),
                     new UserDataFieldDescriptor("ThemePreference", "Preferred light/dark theme.", true, true),
-                    new UserDataFieldDescriptor("ColorScheme", "Preferred accent color scheme.", true, true)
+                    new UserDataFieldDescriptor("ColorScheme", "Accent color scheme. Orbit uses one accent, so every account reads back the same value.", true, true)
                 ]),
 
             new UserDataCatalogEntry(

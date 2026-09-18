@@ -3,6 +3,7 @@ using System.Security.Claims;
 using MediatR;
 using ModelContextProtocol.Server;
 using Orbit.Application.Profile.Queries;
+using Orbit.Domain.Common;
 
 namespace Orbit.Api.Mcp.Tools;
 
@@ -106,7 +107,7 @@ public class ProfileTools(IMediator mediator, McpExecutorBridge executorBridge)
         return enabled ? "AI summary enabled" : "AI summary disabled";
     }
 
-    [McpServerTool(Name = "set_color_scheme"), Description("Set the user's premium color scheme.")]
+    [McpServerTool(Name = "set_color_scheme"), Description("Store the user's color scheme preference. Orbit now uses one accent color, so the value is accepted for older apps but does not change how anything looks.")]
     public async Task<string> SetColorScheme(
         ClaimsPrincipal user,
         [Description("Color scheme key, or null/default to clear it")] string? colorScheme,
@@ -118,7 +119,7 @@ public class ProfileTools(IMediator mediator, McpExecutorBridge executorBridge)
         if (!result.Succeeded)
             return result.Message;
 
-        return $"Color scheme set to {colorScheme ?? "default"}";
+        return $"Color scheme saved. Orbit uses one accent color, so the app still shows {ColorSchemes.Granted}.";
     }
 
     [McpServerTool(Name = "set_week_start_day"), Description("Set which day the week starts on.")]

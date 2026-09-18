@@ -872,6 +872,23 @@ public class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_AgentSnapshotReportsGrantedColorSchemeForAFreeAccount()
+    {
+        var user = User.Create("Thomas", "thomas@test.com").Value;
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        user.SetColorScheme("rose").IsSuccess.Should().BeTrue();
+        SetupUserAndPayGate(user);
+        SetupAiResponse(new AiResponse { TextMessage = "Done", ToolCalls = null });
+        var handler = CreateHandler();
+
+        var result = await handler.Handle(new ProcessUserChatCommand(UserId, "Hello"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        _catalogService.Received(1).BuildDynamicSupplement(
+            Arg.Is<AgentContextSnapshot>(snapshot => snapshot.ColorScheme == "orange"));
+    }
+
+    [Fact]
     public async Task Handle_AiResponseWithJsonWrapper_StripsWrapper()
     {
         SetupUserAndPayGate();

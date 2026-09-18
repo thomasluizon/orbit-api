@@ -79,6 +79,10 @@ public partial class User : Entity
     public int? PreGapFreezeAwardStreak { get; private set; }
     public DateOnly? PreGapLastActiveDate { get; private set; }
     public string? ThemePreference { get; private set; }
+    /// <summary>
+    /// The raw historical value, write-only by design. No read path projects it, and no migration
+    /// rewrites it, so reverting the collapse restores the old behaviour with every value intact.
+    /// </summary>
     public string? ColorScheme { get; private set; }
     public string? PublicProfileSlug { get; private set; }
     public bool PublicProfileShowStreak { get; private set; } = true;
@@ -206,10 +210,13 @@ public partial class User : Entity
         return Result.Success();
     }
 
+    /// <summary>
+    /// Stores the colour scheme an old client sends. The value is kept for a clean revert and is
+    /// never read back: every read path reports <see cref="ColorSchemes.Granted"/>.
+    /// </summary>
     public Result SetColorScheme(string? colorScheme)
     {
-        string[] valid = ["purple", "blue", "green", "rose", "orange", "cyan"];
-        if (colorScheme is not null && !valid.Contains(colorScheme))
+        if (colorScheme is not null && !ColorSchemes.AcceptedValues.Contains(colorScheme))
             return Result.Failure(DomainErrors.InvalidColorScheme);
         ColorScheme = colorScheme;
         return Result.Success();

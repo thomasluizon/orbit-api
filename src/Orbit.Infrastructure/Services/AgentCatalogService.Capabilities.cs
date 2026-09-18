@@ -466,7 +466,7 @@ public partial class AgentCatalogService
             CreateCapability(
                 AgentCapabilityIds.ProfilePremiumAppearanceWrite,
                 "Write Premium Appearance",
-                "Updates premium color-scheme preferences.",
+                "Stores the color-scheme preference. Orbit uses one accent color, so this does not change how anything looks.",
                 "profile",
                 AgentScopes.WriteProfilePreferences,
                 AgentRiskClass.Low,
