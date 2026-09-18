@@ -1,6 +1,6 @@
-using MediatR;
+﻿using MediatR;
 using Microsoft.Extensions.Caching.Memory;
-using Orbit.Application.Auth.Services;
+using Orbit.Application.ApiKeys.Services;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -25,8 +25,7 @@ public class GetApiKeysQueryHandler(
     IGenericRepository<ApiKey> apiKeyRepository,
     IPayGateService payGate,
     IMemoryCache cache,
-    IAppConfigService appConfigService,
-    EmailChallengeService challengeService) : IRequestHandler<GetApiKeysQuery, Result<IReadOnlyList<ApiKeyResponse>>>
+    ApiKeyManagementAuthorization authorization) : IRequestHandler<GetApiKeysQuery, Result<IReadOnlyList<ApiKeyResponse>>>
 {
     public async Task<Result<IReadOnlyList<ApiKeyResponse>>> Handle(GetApiKeysQuery request, CancellationToken cancellationToken)
     {
@@ -34,15 +33,9 @@ public class GetApiKeysQueryHandler(
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<IReadOnlyList<ApiKeyResponse>>();
 
-        var requiresStepUp = await appConfigService.GetAsync(
-            AppConfigKeys.RequireApiKeyCreationStepUp,
-            false,
-            cancellationToken);
-        if (requiresStepUp &&
-            !challengeService.HasAuthorization(EmailChallengeOperation.ApiKeyManagement, request.UserId))
-        {
+        var requiresStepUp = await authorization.IsRequiredAsync(cancellationToken);
+        if (requiresStepUp && !authorization.HasGrant(request.UserId))
             return Result.Failure<IReadOnlyList<ApiKeyResponse>>(ErrorMessages.ApiKeyCreationChallengeRequired);
-        }
 
         var cacheKey = ReferenceCacheKeys.ApiKeys(request.UserId);
         if (cache.TryGetValue(cacheKey, out IReadOnlyList<ApiKeyResponse>? cached) && cached is not null)

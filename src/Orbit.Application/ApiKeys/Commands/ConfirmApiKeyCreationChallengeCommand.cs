@@ -1,4 +1,5 @@
-using MediatR;
+﻿using MediatR;
+using Orbit.Application.ApiKeys.Services;
 using Orbit.Application.Auth.Services;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -11,6 +12,7 @@ public record ConfirmApiKeyCreationChallengeCommand(Guid UserId, string Code) : 
 
 public sealed class ConfirmApiKeyCreationChallengeCommandHandler(
     EmailChallengeService challengeService,
+    ApiKeyManagementAuthorization authorization,
     IGenericRepository<User> userRepository) : IRequestHandler<ConfirmApiKeyCreationChallengeCommand, Result>
 {
     public async Task<Result> Handle(
@@ -28,10 +30,7 @@ public sealed class ConfirmApiKeyCreationChallengeCommandHandler(
         if (confirmation.IsFailure)
             return confirmation.PropagateError();
 
-        challengeService.AuthorizeOnce(
-            EmailChallengeOperation.ApiKeyManagement,
-            request.UserId,
-            confirmation.Value.RemainingLifetime);
+        authorization.Grant(request.UserId, confirmation.Value.RemainingLifetime);
 
         return Result.Success();
     }

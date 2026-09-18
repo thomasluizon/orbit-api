@@ -1,6 +1,6 @@
-using MediatR;
+﻿using MediatR;
 using Microsoft.Extensions.Caching.Memory;
-using Orbit.Application.Auth.Services;
+using Orbit.Application.ApiKeys.Services;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -30,22 +30,15 @@ public class CreateApiKeyCommandHandler(
     IPayGateService payGate,
     IUnitOfWork unitOfWork,
     IMemoryCache cache,
-    IAppConfigService appConfigService,
-    EmailChallengeService challengeService) : IRequestHandler<CreateApiKeyCommand, Result<CreateApiKeyResponse>>
+    ApiKeyManagementAuthorization authorization) : IRequestHandler<CreateApiKeyCommand, Result<CreateApiKeyResponse>>
 {
     private const int MaxActiveKeys = 5;
 
     public async Task<Result<CreateApiKeyResponse>> Handle(CreateApiKeyCommand request, CancellationToken cancellationToken)
     {
-        var requiresStepUp = await appConfigService.GetAsync(
-            AppConfigKeys.RequireApiKeyCreationStepUp,
-            false,
-            cancellationToken);
-        if (requiresStepUp &&
-            !challengeService.HasAuthorization(EmailChallengeOperation.ApiKeyManagement, request.UserId))
-        {
+        var requiresStepUp = await authorization.IsRequiredAsync(cancellationToken);
+        if (requiresStepUp && !authorization.HasGrant(request.UserId))
             return Result.Failure<CreateApiKeyResponse>(ErrorMessages.ApiKeyCreationChallengeRequired);
-        }
 
         var gateCheck = await payGate.CanCreateApiKeys(request.UserId, cancellationToken);
         if (gateCheck.IsFailure)
@@ -69,11 +62,8 @@ public class CreateApiKeyCommandHandler(
 
         var (apiKey, rawKey) = createResult.Value;
 
-        if (requiresStepUp &&
-            !challengeService.TryConsumeAuthorization(EmailChallengeOperation.ApiKeyManagement, request.UserId))
-        {
+        if (requiresStepUp && !authorization.TryConsumeGrant(request.UserId))
             return Result.Failure<CreateApiKeyResponse>(ErrorMessages.ApiKeyCreationChallengeRequired);
-        }
 
         await apiKeyRepository.AddAsync(apiKey, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);

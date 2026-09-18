@@ -1,9 +1,10 @@
-using System.Linq.Expressions;
+﻿using System.Linq.Expressions;
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Application.ApiKeys.Commands;
 using Orbit.Application.ApiKeys.Queries;
+using Orbit.Application.ApiKeys.Services;
 using Orbit.Application.Auth.Services;
 using Orbit.Application.ChecklistTemplates.Commands;
 using Orbit.Application.ChecklistTemplates.Queries;
@@ -126,7 +127,8 @@ public class ReferenceCacheInvalidationTests
         repo.FindTrackedAsync(Arg.Any<Expression<Func<ApiKey, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(new List<ApiKey> { apiKey });
 
-        var read = new GetApiKeysQueryHandler(repo, payGate, cache, appConfig, challengeService);
+        var authorization = new ApiKeyManagementAuthorization(appConfig, challengeService);
+        var read = new GetApiKeysQueryHandler(repo, payGate, cache, authorization);
         await read.Handle(new GetApiKeysQuery(UserId), CancellationToken.None);
         await read.Handle(new GetApiKeysQuery(UserId), CancellationToken.None);
         await repo.Received(1).FindAsync(Arg.Any<Expression<Func<ApiKey, bool>>>(), Arg.Any<CancellationToken>());
@@ -136,8 +138,7 @@ public class ReferenceCacheInvalidationTests
             payGate,
             unitOfWork,
             cache,
-            appConfig,
-            challengeService);
+            authorization);
         (await revoke.Handle(new RevokeApiKeyCommand(UserId, apiKey.Id), CancellationToken.None))
             .IsSuccess.Should().BeTrue();
 

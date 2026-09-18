@@ -1,8 +1,10 @@
-using System.Linq.Expressions;
+﻿using System.Linq.Expressions;
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Application.ApiKeys.Commands;
+using Orbit.Application.ApiKeys.Queries;
+using Orbit.Application.ApiKeys.Services;
 using Orbit.Application.Auth.Services;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -39,8 +41,7 @@ public class RevokeApiKeyCommandHandlerTests
             _payGate,
             _unitOfWork,
             _cache,
-            _appConfigService,
-            _challengeService);
+            new ApiKeyManagementAuthorization(_appConfigService, _challengeService));
     }
 
     [Fact]
@@ -58,8 +59,7 @@ public class RevokeApiKeyCommandHandlerTests
             _payGate,
             _unitOfWork,
             emptyCache,
-            _appConfigService,
-            new EmailChallengeService(emptyCache, TimeProvider.System));
+            new ApiKeyManagementAuthorization(_appConfigService, new EmailChallengeService(emptyCache, TimeProvider.System)));
 
         var result = await handler.Handle(
             new RevokeApiKeyCommand(UserId, apiKey.Id),
@@ -86,7 +86,7 @@ public class RevokeApiKeyCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         apiKey.IsRevoked.Should().BeTrue();
-        _challengeService.HasAuthorization(EmailChallengeOperation.ApiKeyManagement, UserId).Should().BeFalse();
+        _challengeService.HasAuthorization(EmailChallengeOperation.ApiKeyManagement, UserId).Should().BeTrue();
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -126,8 +126,7 @@ public class RevokeApiKeyCommandHandlerTests
             _payGate,
             _unitOfWork,
             expiringCache,
-            _appConfigService,
-            challengeService);
+            new ApiKeyManagementAuthorization(_appConfigService, challengeService));
 
         var result = await handler.Handle(
             new RevokeApiKeyCommand(UserId, apiKey.Id),
@@ -161,8 +160,7 @@ public class RevokeApiKeyCommandHandlerTests
             _payGate,
             _unitOfWork,
             cache,
-            _appConfigService,
-            challengeService);
+            new ApiKeyManagementAuthorization(_appConfigService, challengeService));
 
         var result = await handler.Handle(
             new RevokeApiKeyCommand(UserId, Guid.NewGuid()),
@@ -187,6 +185,40 @@ public class RevokeApiKeyCommandHandlerTests
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be(ErrorMessages.ApiKeyNotFound.Message);
         result.ErrorCode.Should().Be(ErrorCodes.ApiKeyNotFound);
+    }
+
+    [Fact]
+    public async Task Handle_AfterRevoke_TheSettingsScreenStillListsTheRemainingKeys()
+    {
+        var (revoked, _) = ApiKey.Create(UserId, "Revoked key").Value;
+        var (survivor, _) = ApiKey.Create(UserId, "Surviving key").Value;
+        _apiKeyRepo.FindTrackedAsync(
+                Arg.Any<Expression<Func<ApiKey, bool>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new List<ApiKey> { revoked });
+        _apiKeyRepo.FindAsync(
+                Arg.Any<Expression<Func<ApiKey, bool>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new List<ApiKey> { survivor });
+        _payGate.CanReadApiKeys(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Result.Success()));
+
+        var listHandler = new GetApiKeysQueryHandler(
+            _apiKeyRepo,
+            _payGate,
+            _cache,
+            new ApiKeyManagementAuthorization(_appConfigService, _challengeService));
+
+        var listedBefore = await listHandler.Handle(new GetApiKeysQuery(UserId), CancellationToken.None);
+        var revokeResult = await _handler.Handle(
+            new RevokeApiKeyCommand(UserId, revoked.Id),
+            CancellationToken.None);
+        var listedAfter = await listHandler.Handle(new GetApiKeysQuery(UserId), CancellationToken.None);
+
+        listedBefore.IsSuccess.Should().BeTrue();
+        revokeResult.IsSuccess.Should().BeTrue();
+        listedAfter.IsSuccess.Should().BeTrue();
+        listedAfter.Value.Should().ContainSingle(key => key.Id == survivor.Id);
     }
 
     private void AuthorizeManagement() => _challengeService.AuthorizeOnce(

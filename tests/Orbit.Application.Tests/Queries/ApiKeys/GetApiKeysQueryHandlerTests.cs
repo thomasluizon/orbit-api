@@ -1,8 +1,9 @@
-using System.Linq.Expressions;
+﻿using System.Linq.Expressions;
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Application.ApiKeys.Queries;
+using Orbit.Application.ApiKeys.Services;
 using Orbit.Application.Auth.Services;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -40,8 +41,7 @@ public class GetApiKeysQueryHandlerTests
             _apiKeyRepo,
             _payGate,
             _cache,
-            _appConfigService,
-            _challengeService);
+            new ApiKeyManagementAuthorization(_appConfigService, _challengeService));
     }
 
     [Fact]
@@ -52,8 +52,7 @@ public class GetApiKeysQueryHandlerTests
             _apiKeyRepo,
             _payGate,
             emptyCache,
-            _appConfigService,
-            new EmailChallengeService(emptyCache, TimeProvider.System));
+            new ApiKeyManagementAuthorization(_appConfigService, new EmailChallengeService(emptyCache, TimeProvider.System)));
 
         var result = await handler.Handle(new GetApiKeysQuery(UserId), CancellationToken.None);
 
@@ -105,8 +104,7 @@ public class GetApiKeysQueryHandlerTests
             _apiKeyRepo,
             _payGate,
             expiringCache,
-            _appConfigService,
-            challengeService);
+            new ApiKeyManagementAuthorization(_appConfigService, challengeService));
 
         var result = await handler.Handle(new GetApiKeysQuery(UserId), CancellationToken.None);
 
@@ -135,8 +133,7 @@ public class GetApiKeysQueryHandlerTests
             _apiKeyRepo,
             _payGate,
             cache,
-            _appConfigService,
-            challengeService);
+            new ApiKeyManagementAuthorization(_appConfigService, challengeService));
 
         var result = await handler.Handle(new GetApiKeysQuery(UserId), CancellationToken.None);
 
