@@ -27,14 +27,20 @@ public record CalendarEventItem(
     DateTime? EndUtc = null)
 {
     /// <summary>
-    /// Every expanded instance Google returned for this recurring master inside the fetch window,
-    /// each carrying the source zone's own offset at that instant. Server-only: the
-    /// <see cref="JsonIgnoreAttribute"/> keeps it out of the <c>GET /calendar/events</c> response
-    /// body and out of the stored suggestion JSON, so no client contract changes. Empty for a single
-    /// event, for an all-day series, and for a suggestion row read back from the database.
+    /// The IANA zone the source calendar expands this event's recurrence in, taken from the recurring
+    /// master rather than from an expanded instance. Server-only: the <see cref="JsonIgnoreAttribute"/>
+    /// keeps it out of the <c>GET /calendar/events</c> response body, so no client contract changes.
+    /// <c>StoredCalendarEventJson</c> carries it beside the stored suggestion instead, which is what
+    /// lets both feeds judge one series the same way. Null for a single event and for a suggestion row
+    /// written before that key existed.
     /// </summary>
     [JsonIgnore]
-    public IReadOnlyList<DateTimeOffset> ExpandedOccurrences { get; init; } = [];
+    public string? SourceTimeZone { get; init; }
+
+    /// <summary>
+    /// A full turn of both zones' adjustment rules, which is every offset pair a recurrence can meet.
+    /// </summary>
+    private const int ProbeDays = 366;
 
     internal CalendarEventItem ProjectTo(TimeZoneInfo timeZone)
     {
@@ -64,18 +70,24 @@ public record CalendarEventItem(
     }
 
     /// <summary>
-    /// True when a <c>BYDAY</c> rule names one weekday in the source calendar but names another
-    /// weekday for at least one occurrence once projected into <paramref name="timeZone"/>.
+    /// True when this event carries a <c>BYDAY</c> rule that the projection into
+    /// <paramref name="accountTimeZone"/> cannot be proved to leave alone for a whole year, so the
+    /// weekday the rule names and the day the account sees can disagree.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The gate walks <see cref="ExpandedOccurrences"/>, not the single sampled instance, because a
-    /// series can be stable at its first occurrence and shift at a later one: an
-    /// <c>America/Sao_Paulo</c> account reading a 03:30 <c>Europe/Lisbon</c> <c>BYDAY=TH</c> series
-    /// sees Thursday in January and Wednesday from the Lisbon transition onward. Sampling January
-    /// alone would ship a rule that is wrong for half the year. When the list is empty the check
-    /// falls back to the sampled instance: an all-day series carries no instant, and a suggestion
-    /// read back from the database drops the list because it is <see cref="JsonIgnoreAttribute"/>d.
+    /// The proof runs over both zones' own offset rules, never over the occurrences Google returned.
+    /// <c>GoogleCalendarApi</c> asks for sixty days, so an expanded-instance sample can miss the
+    /// transition entirely: a January fetch of a 03:30 <c>Europe/Lisbon</c> <c>BYDAY=TH</c> series is
+    /// Thursday 00:30 in <c>America/Sao_Paulo</c> at every instance in the window, and Wednesday 23:30
+    /// from the Lisbon transition on 2027-03-29 onward. A window that cannot reach the transition
+    /// cannot prove the series, so the decision comes from <see cref="TimeZoneInfo"/> instead.
+    /// </para>
+    /// <para>
+    /// A source zone the process cannot resolve leaves the series unproved and therefore withheld.
+    /// <c>TimeZoneHelper.FindTimeZone</c> is deliberately not used for it: that helper answers
+    /// <see cref="TimeZoneInfo.Utc"/> for an unknown id, which would assert a stability nothing
+    /// established.
     /// </para>
     /// <para>
     /// Refusal here and the clamp in <c>HabitScheduleService.IsMonthlyMatch</c> answer two different
@@ -88,28 +100,28 @@ public record CalendarEventItem(
     /// becomes an Orbit-owned habit whose rule the scheduler may then clamp.
     /// </para>
     /// </remarks>
-    internal bool HasUnrepresentableRecurrenceAfterProjection(CalendarEventItem projected, TimeZoneInfo timeZone)
+    internal bool HasUnrepresentableRecurrenceAfterProjection(TimeZoneInfo accountTimeZone)
     {
         if (RecurrenceRule is null || !NamesAWeekday(RecurrenceRule))
             return false;
 
-        if (ExpandedOccurrences.Count == 0)
-            return !string.Equals(StartDate, projected.StartDate, StringComparison.Ordinal);
+        if (StartTime is null || StartUtc is null)
+            return false;
 
-        return ExpandedOccurrences.Any(occurrence =>
-            TimeZoneInfo.ConvertTimeFromUtc(occurrence.UtcDateTime, timeZone).Date != occurrence.Date);
+        if (!TryFindSourceTimeZone(SourceTimeZone, out var sourceTimeZone))
+            return true;
+
+        return !KeepsItsLocalDateForAYear(sourceTimeZone, accountTimeZone, StartUtc.Value);
     }
 
     /// <summary>
-    /// True when the projection dropped a real end time, so the caller can log the reason. The source
-    /// carried both instants, yet the projected end no longer follows the projected start on the
-    /// projected start date. <see cref="EndUtc"/> still carries the real duration for the client.
+    /// True when the projection dropped an end time the source carried, so the caller can log the
+    /// reason. Deliberately independent of <see cref="EndUtc"/>: a suggestion row written before this
+    /// projection existed carries an <see cref="EndTime"/> with no end instant, and those rows are the
+    /// ones that lose an end most often.
     /// </summary>
     internal bool DropsEndTimeAfterProjection(CalendarEventItem projected)
-        => StartTime is not null
-            && StartUtc is not null
-            && EndUtc is not null
-            && projected.EndTime is null;
+        => EndTime is not null && projected.EndTime is null;
 
     private static bool NamesAWeekday(string recurrenceRule)
     {
@@ -118,6 +130,66 @@ public record CalendarEventItem(
             : recurrenceRule;
         return ruleBody.Split(';').Any(term => term.StartsWith("BYDAY=", StringComparison.OrdinalIgnoreCase));
     }
+
+    private static bool TryFindSourceTimeZone(string? timeZoneId, out TimeZoneInfo timeZone)
+    {
+        timeZone = TimeZoneInfo.Utc;
+        if (string.IsNullOrWhiteSpace(timeZoneId))
+            return false;
+
+        try
+        {
+            timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+            return true;
+        }
+        catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// True when the occurrence's source wall clock lands on the same account-local date on every
+    /// date of the year that follows it. A recurrence keeps one wall clock in its own zone, so walking
+    /// every date once at that wall clock covers every occurrence any <c>BYDAY</c> rule can produce,
+    /// through both zones' transitions in both hemispheres.
+    /// </summary>
+    private static bool KeepsItsLocalDateForAYear(
+        TimeZoneInfo sourceTimeZone, TimeZoneInfo accountTimeZone, DateTime startUtc)
+    {
+        var sourceStart = TimeZoneInfo.ConvertTimeFromUtc(
+            DateTime.SpecifyKind(startUtc, DateTimeKind.Utc), sourceTimeZone);
+        var wallClock = TimeOnly.FromDateTime(sourceStart);
+        var firstDay = DateOnly.FromDateTime(sourceStart).DayNumber;
+        var lastDay = Math.Min(firstDay + ProbeDays, DateOnly.MaxValue.DayNumber);
+
+        for (var dayNumber = firstDay; dayNumber <= lastDay; dayNumber++)
+        {
+            var probe = DateOnly.FromDayNumber(dayNumber);
+            var sourceLocal = probe.ToDateTime(wallClock, DateTimeKind.Unspecified);
+            if (sourceTimeZone.IsInvalidTime(sourceLocal))
+                return false;
+
+            foreach (var offset in SourceOffsetsAt(sourceTimeZone, sourceLocal))
+            {
+                var accountLocal = TimeZoneInfo.ConvertTimeFromUtc(
+                    DateTime.SpecifyKind(sourceLocal - offset, DateTimeKind.Utc), accountTimeZone);
+                if (DateOnly.FromDateTime(accountLocal) != probe)
+                    return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// The offsets the source zone can hold at one wall clock. A fall-back transition repeats an hour,
+    /// so an ambiguous wall clock has two instants and both must keep the date.
+    /// </summary>
+    private static IReadOnlyList<TimeSpan> SourceOffsetsAt(TimeZoneInfo sourceTimeZone, DateTime sourceLocal)
+        => sourceTimeZone.IsAmbiguousTime(sourceLocal)
+            ? sourceTimeZone.GetAmbiguousTimeOffsets(sourceLocal)
+            : [sourceTimeZone.GetUtcOffset(sourceLocal)];
 }
 
 public record GetCalendarEventsQuery(Guid UserId) : IRequest<Result<List<CalendarEventItem>>>, IConcurrencyRetryable;
@@ -163,9 +235,10 @@ public partial class GetCalendarEventsQueryHandler(
                 if (importedEventIds.Contains(source.Id))
                     continue;
 
-                var projected = source.ProjectTo(timeZone);
-                if (source.HasUnrepresentableRecurrenceAfterProjection(projected, timeZone))
+                if (source.HasUnrepresentableRecurrenceAfterProjection(timeZone))
                     continue;
+
+                var projected = source.ProjectTo(timeZone);
 
                 if (source.DropsEndTimeAfterProjection(projected))
                     LogProjectedEndTimeOmitted(logger, source.Id, request.UserId);
@@ -216,7 +289,8 @@ public partial class GetCalendarEventsQueryHandler(
         if (accessToken is null)
             return null;
 
-        await unitOfWork.SaveChangesAsync(cancellationToken); return accessToken;
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return accessToken;
     }
 
     private async Task<HashSet<string>> BuildImportedEventIdSet(Guid userId, CancellationToken ct)
@@ -243,6 +317,6 @@ public partial class GetCalendarEventsQueryHandler(
     [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "Google Calendar reconnect required for user {UserId} (code: {ErrorCode})")]
     private static partial void LogGoogleCalendarReconnectRequired(ILogger logger, Guid userId, string? errorCode);
 
-    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "Omitted the end time of calendar event {EventId} for user {UserId}: the projected end does not follow the projected start on the projected start date. EndUtc still carries the duration")]
+    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "Omitted the end time of calendar event {EventId} for user {UserId}: the projected end does not follow the projected start on the projected start date")]
     private static partial void LogProjectedEndTimeOmitted(ILogger logger, string eventId, Guid userId);
 }

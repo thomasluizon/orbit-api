@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
+using Orbit.Application.Calendar;
 using Orbit.Application.Calendar.Queries;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -238,13 +239,16 @@ public class GetCalendarSyncSuggestionsQueryHandlerTests
             "RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE;WKST=SU",
             [],
             StartUtc: startUtc,
-            EndUtc: startUtc.AddHours(1));
+            EndUtc: startUtc.AddHours(1))
+        {
+            SourceTimeZone = "Asia/Tokyo"
+        };
         var suggestion = GoogleCalendarSyncSuggestion.Create(
             UserId,
             "gcal-stored-recurring",
             eventItem.Title,
             startUtc,
-            JsonSerializer.Serialize(eventItem),
+            StoredCalendarEventJson.Serialize(eventItem),
             startUtc);
 
         _suggestionRepo.FindAsync(

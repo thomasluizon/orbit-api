@@ -294,6 +294,36 @@ public class RunCalendarAutoSyncCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_Success_ReconciliationMatchesOnTheAccountTimezoneDayAndTime()
+    {
+        var user = CreateEnabledProUser("America/Sao_Paulo");
+        StubUser(user);
+        _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
+            .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
+
+        var legacyHabit = Habit.Create(new HabitCreateParams(
+            user.Id, "Standup", FrequencyUnit.Day, 1,
+            DueDate: new DateOnly(2026, 10, 5),
+            DueTime: new TimeOnly(9, 0))).Value;
+
+        _habitRepo.FindTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { legacyHabit }.AsReadOnly());
+
+        _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CalendarEventItem>
+            {
+                new("evt_standup", "Standup", null, "2026-10-05", "13:00", "13:30", false, null, [],
+                    StartUtc: new DateTime(2026, 10, 5, 12, 0, 0, DateTimeKind.Utc),
+                    EndUtc: new DateTime(2026, 10, 5, 12, 30, 0, DateTimeKind.Utc))
+            });
+
+        var result = await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id), default);
+
+        result.Value.ReconciledHabits.Should().Be(1);
+        legacyHabit.GoogleEventId.Should().Be("evt_standup");
+    }
+
+    [Fact]
     public async Task Handle_Success_ReconciliationRunsAgainForHabitsStillMissingGoogleEventId()
     {
         var user = CreateEnabledProUser();

@@ -239,7 +239,10 @@ public class GetCalendarEventsQueryHandlerTests
                 "RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE;WKST=SU",
                 [],
                 StartUtc: new DateTime(2026, 4, 14, 23, 0, 0, DateTimeKind.Utc),
-                EndUtc: new DateTime(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc)));
+                EndUtc: new DateTime(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc))
+            {
+                SourceTimeZone = "Asia/Tokyo"
+            });
 
         var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
 
@@ -248,7 +251,7 @@ public class GetCalendarEventsQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_RecurringEventOnSameLocalDate_KeepsRecurrenceRuleUnchanged()
+    public async Task Handle_RecurringByDayEventOnSameLocalDateWhoseSeriesShiftsLater_OmitsEvent()
     {
         var user = CreateTestUser();
         user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
@@ -265,15 +268,15 @@ public class GetCalendarEventsQueryHandlerTests
                 "RRULE:FREQ=WEEKLY;BYDAY=TH",
                 [],
                 StartUtc: new DateTime(2026, 1, 15, 3, 30, 0, DateTimeKind.Utc),
-                EndUtc: new DateTime(2026, 1, 15, 4, 30, 0, DateTimeKind.Utc)));
+                EndUtc: new DateTime(2026, 1, 15, 4, 30, 0, DateTimeKind.Utc))
+            {
+                SourceTimeZone = "Europe/Lisbon"
+            });
 
         var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Should().ContainSingle();
-        result.Value[0].StartDate.Should().Be("2026-01-15");
-        result.Value[0].StartTime.Should().Be("00:30");
-        result.Value[0].RecurrenceRule.Should().Be("RRULE:FREQ=WEEKLY;BYDAY=TH");
+        result.Value.Should().BeEmpty();
     }
 
     [Fact]
@@ -294,7 +297,10 @@ public class GetCalendarEventsQueryHandlerTests
                 "RRULE:FREQ=MONTHLY;BYMONTHDAY=15",
                 [],
                 StartUtc: new DateTime(2026, 4, 14, 23, 0, 0, DateTimeKind.Utc),
-                EndUtc: new DateTime(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc)));
+                EndUtc: new DateTime(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc))
+            {
+                SourceTimeZone = "Asia/Tokyo"
+            });
 
         var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
 
@@ -304,7 +310,7 @@ public class GetCalendarEventsQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ByDaySeriesStableAtItsFirstOccurrenceButShiftedLater_OmitsEvent()
+    public async Task Handle_ByDaySeriesWhoseSourceZoneOnlyShiftsOutsideTheFetchWindow_OmitsEvent()
     {
         var user = CreateTestUser();
         user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
@@ -323,11 +329,7 @@ public class GetCalendarEventsQueryHandlerTests
                 StartUtc: new DateTime(2027, 1, 7, 3, 30, 0, DateTimeKind.Utc),
                 EndUtc: new DateTime(2027, 1, 7, 4, 0, 0, DateTimeKind.Utc))
             {
-                ExpandedOccurrences =
-                [
-                    new DateTimeOffset(2027, 1, 7, 3, 30, 0, TimeSpan.Zero),
-                    new DateTimeOffset(2027, 7, 8, 3, 30, 0, TimeSpan.FromHours(1))
-                ]
+                SourceTimeZone = "Europe/Lisbon"
             });
 
         var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
@@ -337,7 +339,7 @@ public class GetCalendarEventsQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ByDaySeriesStableAcrossEveryOccurrence_KeepsRecurrenceRuleUnchanged()
+    public async Task Handle_ByDaySeriesNoOffsetChangeCanMove_KeepsRecurrenceRuleUnchanged()
     {
         var user = CreateTestUser();
         user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
@@ -356,11 +358,7 @@ public class GetCalendarEventsQueryHandlerTests
                 StartUtc: new DateTime(2027, 1, 7, 15, 0, 0, DateTimeKind.Utc),
                 EndUtc: new DateTime(2027, 1, 7, 16, 0, 0, DateTimeKind.Utc))
             {
-                ExpandedOccurrences =
-                [
-                    new DateTimeOffset(2027, 1, 7, 15, 0, 0, TimeSpan.Zero),
-                    new DateTimeOffset(2027, 7, 8, 15, 0, 0, TimeSpan.FromHours(1))
-                ]
+                SourceTimeZone = "Europe/Lisbon"
             });
 
         var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
@@ -370,6 +368,91 @@ public class GetCalendarEventsQueryHandlerTests
         result.Value[0].StartDate.Should().Be("2027-01-07");
         result.Value[0].StartTime.Should().Be("12:00");
         result.Value[0].RecurrenceRule.Should().Be("RRULE:FREQ=DAILY;BYDAY=TH");
+    }
+
+    [Fact]
+    public async Task Handle_ByDaySeriesBetweenTwoZonesWithoutSeasonalDisagreement_KeepsRecurrenceRuleUnchanged()
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone("America/Bogota").IsSuccess.Should().BeTrue();
+        StubSuccessfulFetch(
+            user,
+            new CalendarEventItem(
+                "evt_sao_paulo_review",
+                "Afternoon review",
+                null,
+                "2027-01-07",
+                "15:00",
+                "16:00",
+                true,
+                "RRULE:FREQ=WEEKLY;BYDAY=TH",
+                [],
+                StartUtc: new DateTime(2027, 1, 7, 18, 0, 0, DateTimeKind.Utc),
+                EndUtc: new DateTime(2027, 1, 7, 19, 0, 0, DateTimeKind.Utc))
+            {
+                SourceTimeZone = "America/Sao_Paulo"
+            });
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value[0].StartDate.Should().Be("2027-01-07");
+        result.Value[0].StartTime.Should().Be("13:00");
+        result.Value[0].RecurrenceRule.Should().Be("RRULE:FREQ=WEEKLY;BYDAY=TH");
+    }
+
+    [Fact]
+    public async Task Handle_ByDaySeriesWithoutASourceTimeZone_OmitsEvent()
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
+        StubSuccessfulFetch(
+            user,
+            new CalendarEventItem(
+                "evt_unknown_source_zone",
+                "Legacy stand-up",
+                null,
+                "2027-01-07",
+                "15:00",
+                "16:00",
+                true,
+                "RRULE:FREQ=WEEKLY;BYDAY=TH",
+                [],
+                StartUtc: new DateTime(2027, 1, 7, 18, 0, 0, DateTimeKind.Utc),
+                EndUtc: new DateTime(2027, 1, 7, 19, 0, 0, DateTimeKind.Utc)));
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_AllDayByDaySeries_KeepsItsFloatingDateAndRule()
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone("Asia/Tokyo").IsSuccess.Should().BeTrue();
+        StubSuccessfulFetch(
+            user,
+            new CalendarEventItem(
+                "evt_all_day_series",
+                "Weekly holiday",
+                null,
+                "2027-01-07",
+                null,
+                null,
+                true,
+                "RRULE:FREQ=WEEKLY;BYDAY=TH",
+                [],
+                StartUtc: new DateTime(2027, 1, 7, 0, 0, 0, DateTimeKind.Utc)));
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value[0].StartDate.Should().Be("2027-01-07");
+        result.Value[0].RecurrenceRule.Should().Be("RRULE:FREQ=WEEKLY;BYDAY=TH");
     }
 
     [Fact]
@@ -525,8 +608,7 @@ public class GetCalendarEventsQueryHandlerTests
         result.Value[0].StartTime.Should().Be("18:05");
         _logger.Entries.Should().ContainSingle(entry =>
             entry.Level == LogLevel.Warning
-            && entry.Message.Contains(storedTimeZone, StringComparison.Ordinal)
-            && entry.Message.Contains(UserId.ToString(), StringComparison.Ordinal));
+            && entry.Message == $"Unusable timezone {storedTimeZone} for user {UserId}, falling back to UTC");
     }
 
     /// <summary>
@@ -568,6 +650,8 @@ public class GetCalendarEventsQueryHandlerTests
         result.Value[0].StartDate.Should().Be("2026-04-14");
         result.Value[0].StartTime.Should().Be("20:00");
         result.Value[0].EndTime.Should().BeNull();
+        _logger.Entries.Should().ContainSingle(entry =>
+            entry.Level == LogLevel.Debug && entry.Message.Contains("end time", StringComparison.Ordinal));
     }
 
     [Fact]

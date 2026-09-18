@@ -1,4 +1,4 @@
-using System.Text.Json;
+using System.Globalization;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -138,10 +138,11 @@ public partial class RunCalendarAutoSyncCommandHandler(
             return Result.Success(new CalendarAutoSyncResult(0, 0, GoogleCalendarAutoSyncStatus.TransientError));
         }
 
-        var reconciled = await ReconcileExistingHabits(user, fetched, utcNow, ct);
-        var newSuggestions = await CreateSuggestions(user, fetched, utcNow, ct);
+        var timeZone = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
+        var reconciled = await ReconcileExistingHabits(user, fetched, timeZone, utcNow, ct);
+        var newSuggestions = await CreateSuggestions(user, fetched, timeZone, utcNow, ct);
 
-        if (newSuggestions > 0 && IsInQuietHours(user, utcNow)
+        if (newSuggestions > 0 && IsInQuietHours(timeZone, utcNow)
             && !await HasRecentSuggestionNotification(user.Id, utcNow, ct))
         {
             await CreateSuggestionNotification(user, newSuggestions, ct);
@@ -161,8 +162,15 @@ public partial class RunCalendarAutoSyncCommandHandler(
         return Result.Success(new CalendarAutoSyncResult(newSuggestions, reconciled, GoogleCalendarAutoSyncStatus.Idle));
     }
 
+    /// <summary>
+    /// Backfills <c>GoogleEventId</c> on a habit imported before that column existed, by matching
+    /// title plus day plus time. A habit holds account-local values, so the fetched event is projected
+    /// into the account timezone first. <c>GetCalendarSyncSuggestionsQuery</c> builds the same key from
+    /// the same projection, so a suggestion the query hides as already imported is the suggestion this
+    /// pass links.
+    /// </summary>
     private async Task<int> ReconcileExistingHabits(
-        User user, List<CalendarEventItem> fetched, DateTime utcNow, CancellationToken ct)
+        User user, List<CalendarEventItem> fetched, TimeZoneInfo timeZone, DateTime utcNow, CancellationToken ct)
     {
         var assignedEventIds = (await deps.HabitRepository.FindAsync(
                 h => h.UserId == user.Id && h.GoogleEventId != null, ct))
@@ -172,6 +180,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
 
         var eventsByKey = fetched
             .Where(ev => !assignedEventIds.Contains(ev.Id))
+            .Select(ev => ev.ProjectTo(timeZone))
             .GroupBy(ev => BuildLegacyMatchKey(ev.Title, ev.StartDate, ev.StartTime), StringComparer.Ordinal)
             .Where(group => group.Count() == 1)
             .ToDictionary(group => group.Key, group => group.Single().Id, StringComparer.Ordinal);
@@ -188,8 +197,8 @@ public partial class RunCalendarAutoSyncCommandHandler(
         var habitsByKey = existingHabits
             .GroupBy(habit => BuildLegacyMatchKey(
                 habit.Title,
-                habit.DueDate.ToString("yyyy-MM-dd"),
-                habit.DueTime?.ToString("HH:mm")), StringComparer.Ordinal)
+                habit.DueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                habit.DueTime?.ToString("HH:mm", CultureInfo.InvariantCulture)), StringComparer.Ordinal)
             .Where(group => group.Count() == 1)
             .ToDictionary(group => group.Key, group => group.Single(), StringComparer.Ordinal);
 
@@ -214,7 +223,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
     }
 
     private async Task<int> CreateSuggestions(
-        User user, List<CalendarEventItem> fetched, DateTime utcNow, CancellationToken ct)
+        User user, List<CalendarEventItem> fetched, TimeZoneInfo timeZone, DateTime utcNow, CancellationToken ct)
     {
         if (fetched.Count == 0) return 0;
 
@@ -235,10 +244,11 @@ public partial class RunCalendarAutoSyncCommandHandler(
         foreach (var ev in fetched)
         {
             if (created >= MaxSuggestionsPerTick) break;
+            if (ev.HasUnrepresentableRecurrenceAfterProjection(timeZone)) continue;
             if (!reservedEventIds.Add(ev.Id)) continue;
 
             var startDateUtc = ResolveStartDateUtc(ev);
-            var rawJson = JsonSerializer.Serialize(ev);
+            var rawJson = StoredCalendarEventJson.Serialize(ev);
 
             var suggestion = GoogleCalendarSyncSuggestion.Create(
                 user.Id,
@@ -301,10 +311,9 @@ public partial class RunCalendarAutoSyncCommandHandler(
         await deps.NotificationRepository.AddAsync(notification, ct);
     }
 
-    private bool IsInQuietHours(User user, DateTime utcNow)
+    private static bool IsInQuietHours(TimeZoneInfo timeZone, DateTime utcNow)
     {
-        var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
-        var local = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utcNow, DateTimeKind.Utc), tz);
+        var local = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utcNow, DateTimeKind.Utc), timeZone);
         return local.Hour >= QuietHoursStart && local.Hour < QuietHoursEnd;
     }
 

@@ -103,8 +103,9 @@ public partial class GetCalendarSyncSuggestionsQueryHandler(
 
         var sourceEvent = DeserializeEvent(suggestion);
         if (sourceEvent is null) return null;
+        if (sourceEvent.HasUnrepresentableRecurrenceAfterProjection(timeZone)) return null;
+
         var eventItem = sourceEvent.ProjectTo(timeZone);
-        if (sourceEvent.HasUnrepresentableRecurrenceAfterProjection(eventItem, timeZone)) return null;
         if (ResolveStartDate(eventItem, suggestion.StartDateUtc, timeZone) < userToday) return null;
         if (selectedCalendars is not null
             && !string.IsNullOrEmpty(eventItem.CalendarId)
@@ -144,7 +145,7 @@ public partial class GetCalendarSyncSuggestionsQueryHandler(
     {
         try
         {
-            return JsonSerializer.Deserialize<CalendarEventItem>(suggestion.RawEventJson);
+            return StoredCalendarEventJson.Deserialize(suggestion.RawEventJson);
         }
         catch (JsonException ex)
         {
@@ -158,12 +159,13 @@ public partial class GetCalendarSyncSuggestionsQueryHandler(
     /// <c>GoogleEventId</c> existed can still be matched to its event.
     /// </summary>
     /// <remarks>
-    /// The key only proves a prior import when exactly one candidate carries it. Two candidates share
-    /// it legitimately inside the repeated hour of a fall-back transition, where 05:30 and 06:30 UTC
-    /// both project to 01:30 local, and at most one of them is the habit the user already imported.
-    /// Excluding on an ambiguous key hides a real event with no way back, so an ambiguous key excludes
-    /// nothing and the user dismisses the duplicate instead. This mirrors the <c>group.Count() == 1</c>
-    /// guard the auto-sync reconciler already applies to the same key.
+    /// The key only proves a prior import when exactly one candidate carries it, and several ordinary
+    /// shapes make two candidates share one: the same meeting held in two synced calendars, two
+    /// same-named events at one time, and the repeated hour of a fall-back transition, where 05:30 and
+    /// 06:30 UTC both project to 01:30 local. At most one of them is the habit the user already
+    /// imported. Excluding on an ambiguous key hides a real event with no way back, so an ambiguous key
+    /// excludes nothing and the user dismisses the duplicate instead. This mirrors the
+    /// <c>group.Count() == 1</c> guard the auto-sync reconciler already applies to the same key.
     /// </remarks>
     private static string BuildLegacyMatchKey(string title, string? startDate, string? startTime)
     {
@@ -173,6 +175,6 @@ public partial class GetCalendarSyncSuggestionsQueryHandler(
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Failed to deserialize sync suggestion {SuggestionId}")]
     private static partial void LogDeserializeSuggestionFailed(ILogger logger, Exception ex, Guid suggestionId);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Omitted the end time of calendar event {EventId} for user {UserId}: the projected end does not follow the projected start on the projected start date. EndUtc still carries the duration")]
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Omitted the end time of calendar event {EventId} for user {UserId}: the projected end does not follow the projected start on the projected start date")]
     private static partial void LogProjectedEndTimeOmitted(ILogger logger, string eventId, Guid userId);
 }
