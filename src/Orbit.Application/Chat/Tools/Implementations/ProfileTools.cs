@@ -3,6 +3,7 @@ using MediatR;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Profile.Commands;
 using Orbit.Application.Profile.Queries;
+using Orbit.Domain.Common;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
@@ -127,7 +128,7 @@ public class UpdateProfilePreferencesTool(IMediator mediator) : IAiTool
 public class SetColorSchemeTool(IMediator mediator) : IAiTool
 {
     public string Name => "set_color_scheme";
-    public string Description => "Update the user's premium color scheme preference.";
+    public string Description => "Accept a color scheme from an older app. Orbit renders one accent, so the stored value becomes the granted one and nothing looks different.";
 
     public object GetParameterSchema() => new
     {
@@ -148,7 +149,7 @@ public class SetColorSchemeTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(new SetColorSchemeCommand(userId, colorScheme), ct);
 
         return result.IsSuccess
-            ? new ToolResult(true, EntityId: userId.ToString(), EntityName: "Color scheme updated", Payload: new { color_scheme = colorScheme })
+            ? new ToolResult(true, EntityId: userId.ToString(), EntityName: "Color scheme updated", Payload: new { color_scheme = ColorSchemes.Granted })
             : ToolResult.FromFailure(result, userId.ToString());
     }
 }

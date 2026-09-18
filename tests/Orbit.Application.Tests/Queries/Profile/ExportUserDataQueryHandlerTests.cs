@@ -1,10 +1,13 @@
 using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Goals.Services;
+using Orbit.Application.Tests.Common;
 using Orbit.Application.Profile.Queries;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.Services;
 using System.Linq.Expressions;
 
 namespace Orbit.Application.Tests.Queries.Profile;
@@ -370,5 +373,80 @@ public class ExportUserDataQueryHandlerTests
         json.Should().NotContain("sub_secret456");
         json.Should().NotContain("StripeCustomerId");
         json.Should().NotContain("PlayPurchaseToken");
+    }
+
+    [Theory]
+    [InlineData("purple")]
+    [InlineData("blue")]
+    [InlineData("green")]
+    [InlineData("rose")]
+    [InlineData("cyan")]
+    public async Task Handle_LegacyStoredColorScheme_ExportsTheStoredValueNotTheGrantedAccent(string storedColorScheme)
+    {
+        var user = CreateTestUser().WithStoredColorScheme(storedColorScheme);
+        ArrangeUser(user);
+
+        var result = await _handler.Handle(new ExportUserDataQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Settings.ColorScheme.Should().Be(storedColorScheme);
+    }
+
+    [Fact]
+    public async Task Handle_NoStoredColorScheme_ExportsNull()
+    {
+        var user = CreateTestUser();
+        user.ColorScheme.Should().BeNull();
+        ArrangeUser(user);
+
+        var result = await _handler.Handle(new ExportUserDataQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Settings.ColorScheme.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_ColorSchemeWrittenByTheCurrentApi_ExportsTheGrantedAccent()
+    {
+        var user = CreateTestUser();
+        user.SetColorScheme("rose").IsSuccess.Should().BeTrue();
+        ArrangeUser(user);
+
+        var result = await _handler.Handle(new ExportUserDataQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Settings.ColorScheme.Should().Be(ColorSchemes.Granted);
+    }
+
+    /// <summary>
+    /// The data catalog answers "what does Orbit store about me" for Astra, and the export answers
+    /// the same question as a file. A row written before the colour collapse still holds its own key,
+    /// so the export returns it, and a catalog sentence that promises one value for every account
+    /// makes the two surfaces contradict each other over one field.
+    /// </summary>
+    [Fact]
+    public async Task Handle_LegacyStoredColorScheme_AgreesWithTheUserDataCatalogEntry()
+    {
+        const string preCollapseKey = "rose";
+        var user = CreateTestUser().WithStoredColorScheme(preCollapseKey);
+        ArrangeUser(user);
+
+        var result = await _handler.Handle(new ExportUserDataQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Settings.ColorScheme.Should().Be(preCollapseKey);
+        result.Value.Settings.ColorScheme.Should().NotBe(ColorSchemes.Granted);
+
+        var meaning = new AgentCatalogService().GetUserDataCatalog()
+            .Single(entry => entry.Id == "profile")
+            .Fields.Single(field => field.Name == nameof(User.ColorScheme))
+            .Meaning;
+
+        meaning.Should().NotContainEquivalentOf(
+            "the same value",
+            "the export returns the stored key, so the catalog cannot promise one value for every account");
+        meaning.Should().MatchRegex(
+            "(?i)original|pre-collapse|before the collapse",
+            "the catalog has to name the pre-collapse row that the export still reports");
     }
 }

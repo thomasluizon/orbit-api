@@ -217,6 +217,25 @@ public class ProfileNotificationCalendarToolTests
     }
 
     [Fact]
+    public async Task SetColorSchemeTool_ReportsTheGrantedAccentBackNotTheRequestedValue()
+    {
+        var mediator = Substitute.For<IMediator>();
+        mediator.Send(Arg.Any<SetColorSchemeCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success());
+        var tool = new SetColorSchemeTool(mediator);
+
+        var result = await tool.ExecuteAsync(
+            Parse("""{"color_scheme":"rose"}"""),
+            UserId,
+            CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        var payload = JsonSerializer.Serialize(result.Payload);
+        payload.Should().Contain("orange");
+        payload.Should().NotContain("rose");
+    }
+
+    [Fact]
     public async Task UpdateProfilePreferencesTool_CompletesOnboarding()
     {
         var mediator = Substitute.For<IMediator>();

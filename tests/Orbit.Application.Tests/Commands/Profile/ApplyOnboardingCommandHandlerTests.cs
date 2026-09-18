@@ -105,7 +105,7 @@ public class ApplyOnboardingCommandHandlerTests
         result.Value.LoggedFirstHabit.Should().BeTrue();
         user.HasCompletedOnboarding.Should().BeTrue();
         user.WeekStartDay.Should().Be(0);
-        user.ColorScheme.Should().Be("blue");
+        user.ColorScheme.Should().Be(ColorSchemes.Granted);
         await _habitRepo.Received(2).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
         await _goalRepo.Received(1).AddAsync(Arg.Any<Goal>(), Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());

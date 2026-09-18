@@ -195,7 +195,7 @@ public class ProfileCommandHandlerTests
     }
 
     [Fact]
-    public async Task SetColorScheme_Valid_UpdatesAndSaves()
+    public async Task SetColorScheme_Valid_StoresTheGrantedAccentAndSaves()
     {
         var user = CreateTestUser();
         SetupUserFound(user);
@@ -206,7 +206,7 @@ public class ProfileCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        user.ColorScheme.Should().Be("purple");
+        user.ColorScheme.Should().Be(ColorSchemes.Granted);
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 

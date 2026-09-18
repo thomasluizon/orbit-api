@@ -79,6 +79,11 @@ public partial class User : Entity
     public int? PreGapFreezeAwardStreak { get; private set; }
     public DateOnly? PreGapLastActiveDate { get; private set; }
     public string? ThemePreference { get; private set; }
+    /// <summary>
+    /// Either null or <see cref="ColorSchemes.Granted"/> once the account writes again. No migration
+    /// rewrites the column, so a row written before the collapse still holds its historical value
+    /// and the data export still reports it truthfully.
+    /// </summary>
     public string? ColorScheme { get; private set; }
     public string? PublicProfileSlug { get; private set; }
     public bool PublicProfileShowStreak { get; private set; } = true;
@@ -206,12 +211,17 @@ public partial class User : Entity
         return Result.Success();
     }
 
+    /// <summary>
+    /// Accepts every historical key so an old client's write still succeeds, then stores
+    /// <see cref="ColorSchemes.Granted"/> instead of the requested one, because every read path
+    /// reports the granted accent. Storing the request would let the write and the read disagree.
+    /// A null request still clears the preference rather than writing a value no read surfaces.
+    /// </summary>
     public Result SetColorScheme(string? colorScheme)
     {
-        string[] valid = ["purple", "blue", "green", "rose", "orange", "cyan"];
-        if (colorScheme is not null && !valid.Contains(colorScheme))
+        if (colorScheme is not null && !ColorSchemes.AcceptedValues.Contains(colorScheme))
             return Result.Failure(DomainErrors.InvalidColorScheme);
-        ColorScheme = colorScheme;
+        ColorScheme = colorScheme is null ? null : ColorSchemes.Granted;
         return Result.Success();
     }
 

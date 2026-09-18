@@ -198,7 +198,9 @@ public class ProfileToolsTests
         var request = await CapturedRequestAsync(async () => result = await _tools.SetColorScheme(_user, "blue"));
 
         request.OperationId.Should().Be("set_color_scheme");
-        result.Should().Contain("Color scheme set to blue");
+        result.Should().Contain("Color scheme saved");
+        result.Should().Contain("orange");
+        result.Should().NotContain("blue");
     }
 
     [Fact]
