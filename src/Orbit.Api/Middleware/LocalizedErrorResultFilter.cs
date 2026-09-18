@@ -12,7 +12,14 @@ namespace Orbit.Api.Middleware;
 /// 190 call sites of <c>ToErrorResult</c> and <c>ToPayGateAwareResult</c> would have put the
 /// same three lines in 190 places, and a failure raised by a domain guard would still have
 /// depended on each of them remembering. Here a guard's developer-facing sentence cannot reach
-/// a client at all, because the code always resolves first.
+/// a client through a <see cref="ErrorResponse"/> body, because the code always resolves first.
+/// </para>
+/// <para>
+/// It covers exactly the responses shaped as an <see cref="ErrorResponse"/>. A FluentValidation
+/// failure is not one: <see cref="ValidationExceptionHandler"/> is an <c>IExceptionHandler</c>
+/// that writes its own <c>ValidationFailure</c> body and never produces an <c>ObjectResult</c>,
+/// so its messages ship in the language each validator was written in. Localizing those needs an
+/// error code on every rule across the validator tree and is its own piece of work.
 /// </para>
 /// <para>
 /// The language comes from <see cref="IRequestLanguageResolver"/>, which reads the signed-in

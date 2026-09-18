@@ -16,8 +16,10 @@ namespace Orbit.Application.Common;
 /// <para>
 /// Every entry answers what happened and what the person can do next, in that order. The
 /// catalog is total over <see cref="ErrorCodes"/>, <see cref="ErrorMessages"/> and
-/// <see cref="DomainErrors"/>, and <c>ErrorCopyTotalityTests</c> fails the build when a new
-/// error constant arrives without its copy, so the raw-message fallback stays unreachable.
+/// <see cref="DomainErrors"/>, and <c>ErrorCopyTests</c> fails in CI when a new error constant
+/// arrives without its copy. Totality over those three catalogs is not reachability: a
+/// FluentValidation message never passes through here, because the validation handler writes its
+/// own body rather than an <c>ErrorResponse</c>.
 /// </para>
 /// </summary>
 public static class ErrorCopy
@@ -168,7 +170,7 @@ public static class ErrorCopy
         (ErrorCodes.NoHabitsForPeriod, "You have no habits in this period yet.", "Você ainda não tem hábitos neste período."),
         (ErrorCodes.InvalidPeriod, "Pick a period: week, month, quarter, semester or year.", "Escolha um período: semana, mês, trimestre, semestre ou ano."),
         (ErrorCodes.InvalidClosedMonthParameters, "Pick a year and a month together, and only with the month period.", "Escolha um ano e um mês juntos, e só com o período de mês."),
-        (ErrorCodes.RecapMonthNotClosed, "That month has not finished yet. Its recap arrives once it does.", "Esse mês ainda não terminou. A retrospectiva chega quando ele acabar."),
+        (ErrorCodes.RecapMonthNotClosed, "That month has not finished yet. Come back after it ends to read the recap.", "Esse mês ainda não terminou. Volte depois que ele acabar para ler a retrospectiva."),
         (ErrorCodes.RecapMonthBeforeAccount, "That month is before this account existed.", "Esse mês é anterior à criação desta conta."),
         (DomainErrors.ClosedMonthRangeInvalid.Code, "A monthly recap covers one whole calendar month.", "Uma retrospectiva mensal cobre um mês inteiro."),
         (DomainErrors.ClosedMonthRecapResponseInvalid.Code, "We could not read that recap. Open it again.", "Não conseguimos ler essa retrospectiva. Abra de novo."),
@@ -225,7 +227,7 @@ public static class ErrorCopy
         (ErrorCodes.AlreadyJoinedChallenge, "You already joined this challenge.", "Você já entrou neste desafio."),
         (ErrorCodes.NotChallengeParticipant, "You are not in this challenge.", "Você não está neste desafio."),
         (ErrorCodes.InvalidJoinCode, "That join code is not valid. Check it and enter it again.", "Esse código de entrada não é válido. Confira e digite de novo."),
-        (ErrorCodes.ChallengeClosed, "This challenge is no longer taking part.", "Este desafio não aceita mais participantes."),
+        (ErrorCodes.ChallengeClosed, "This challenge is no longer open to new people.", "Este desafio não aceita mais participantes."),
         (ErrorCodes.PairNotFound, "That accountability pair is not here any more.", "Essa dupla não está mais aqui."),
         (ErrorCodes.PairLimitReached, "You have {0} accountability pairs, which is the limit. End one to start another.", "Você tem {0} duplas, que é o limite. Encerre uma para começar outra."),
         (ErrorCodes.AlreadyPaired, "You already have an accountability pair with this person.", "Você já tem uma dupla com esta pessoa."),
@@ -288,9 +290,9 @@ public static class ErrorCopy
     /// <summary>Offline sync, batched mutations and support.</summary>
     private static readonly (string Code, string En, string PtBr)[] SyncAndSupport =
     [
-        (ErrorCodes.SyncWindowExceeded, "This device was offline too long to catch up. Orbit will load everything again.", "Este aparelho ficou offline tempo demais para se atualizar. O Orbit vai carregar tudo de novo."),
+        (ErrorCodes.SyncWindowExceeded, "This device was offline too long to catch up from where it stopped. Open Orbit again to load your data fresh.", "Este aparelho ficou offline tempo demais para continuar de onde parou. Abra o Orbit de novo para carregar seus dados do zero."),
         (ErrorCodes.NoMutations, "There is nothing to sync.", "Não há nada para sincronizar."),
-        (ErrorCodes.TooManyMutations, "Orbit syncs {0} changes at a time. It will send the rest next.", "O Orbit sincroniza {0} mudanças por vez. Ele envia o resto em seguida."),
+        (ErrorCodes.TooManyMutations, "Orbit syncs {0} changes at a time. The rest are still on this device. Try again to send them.", "O Orbit sincroniza {0} mudanças por vez. O resto continua neste aparelho. Tente de novo para enviá-las."),
         (ErrorCodes.MutationFailed, "We could not apply one of your offline changes. Open the item and redo it.", "Não conseguimos aplicar uma das suas mudanças offline. Abra o item e refaça."),
         (ErrorCodes.SubjectRequired, "Enter a subject.", "Digite um assunto."),
         (ErrorCodes.MessageRequired, "Write your message.", "Escreva sua mensagem."),
@@ -341,9 +343,12 @@ public static class ErrorCopy
 
     /// <summary>
     /// The English copy for <paramref name="code"/>, which <see cref="ErrorMessages"/> takes as
-    /// each constant's message so one sentence is never written in two files. Throws on an
-    /// unknown code, so a constant that arrives without copy fails at startup rather than
-    /// shipping a developer sentence to a screen.
+    /// each constant's message so one sentence is never written in two files. Throws on an unknown
+    /// code rather than shipping a developer sentence to a screen. <see cref="ErrorMessages"/> is a
+    /// static class of static readonly fields, so that throw surfaces as a
+    /// <see cref="TypeInitializationException"/> on the first request that touches the class rather
+    /// than at startup. <c>ErrorCopyTests</c> is what keeps it off a live request, by failing in CI
+    /// on any constant that arrives without copy.
     /// </summary>
     public static string Resolve(string code, bool isPtBr)
     {

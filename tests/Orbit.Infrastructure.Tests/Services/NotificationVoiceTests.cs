@@ -1,4 +1,8 @@
 using FluentAssertions;
+using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
+using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using Orbit.Infrastructure.Services;
 using Orbit.Infrastructure.Services.Prompts;
 
@@ -38,6 +42,8 @@ public class NotificationVoiceTests
         { "proactive checkin, en", AiProactiveCheckinMessageService.BuildPrompt("Thomas", ["Run"], 4, "en") },
         { "proactive checkin, pt-BR", AiProactiveCheckinMessageService.BuildPrompt("Thomas", ["Correr"], 0, "pt-BR") },
         { "daily summary, system", AiSummaryService.SystemPrompt },
+        { "daily summary, en", DailySummaryPrompt("en") },
+        { "daily summary, pt-BR", DailySummaryPrompt("pt-BR") },
     };
 
     public static TheoryData<string, string> EveryGeneratedUserPrompt() => new()
@@ -46,7 +52,28 @@ public class NotificationVoiceTests
         { "slip alert, pt-BR", AiSlipAlertMessageService.BuildPrompt("Fumar", DayOfWeek.Monday, null, "pt-BR") },
         { "proactive checkin, en", AiProactiveCheckinMessageService.BuildPrompt("Thomas", ["Run"], 4, "en") },
         { "proactive checkin, pt-BR", AiProactiveCheckinMessageService.BuildPrompt("Thomas", ["Correr"], 0, "pt-BR") },
+        { "daily summary, en", DailySummaryPrompt("en") },
+        { "daily summary, pt-BR", DailySummaryPrompt("pt-BR") },
     };
+
+    /// <summary>
+    /// The daily summary is built rather than declared, and it is the prompt this pull request
+    /// strips doubled hyphens from, so the guard written for that leak has to reach it.
+    /// </summary>
+    private static string DailySummaryPrompt(string language)
+    {
+        var today = new DateOnly(2026, 9, 18);
+        var habit = Habit.Create(new HabitCreateParams(
+            Guid.NewGuid(),
+            language == "pt-BR" ? "Correr" : "Run",
+            FrequencyUnit.Day,
+            1,
+            DueDate: today)).Value;
+
+        return AiSummaryService.BuildSummaryPrompt(
+            [habit],
+            new DailySummaryContext(today, today, today, language, null, 0, 0, new Dictionary<Guid, DateOnly>()));
+    }
 
     [Theory]
     [MemberData(nameof(EveryPromptSentToAModel))]
@@ -74,39 +101,60 @@ public class NotificationVoiceTests
         prompt.Should().Contain($"Write ONLY in {languageName}");
     }
 
-    [Fact]
-    public void TheVoiceContractBansEveryCharacterClassTheOldPromptsLeaked()
-    {
-        NotificationVoice.Rules.Should().Contain("no exclamation mark");
-        NotificationVoice.Rules.Should().Contain("no em dash");
-        NotificationVoice.Rules.Should().Contain("no en dash");
-        NotificationVoice.Rules.Should().Contain("no doubled hyphen");
-        NotificationVoice.Rules.Should().Contain("no emoji");
-        NotificationVoice.Rules.Should().Contain("no markdown");
-    }
-
-    [Fact]
-    public void TheVoiceContractBansTheSellingRegister()
-    {
-        NotificationVoice.Rules.Should().Contain("Never sell");
-        NotificationVoice.Rules.Should().Contain("never perform enthusiasm");
-        NotificationVoice.Rules.Should().Contain("Never shame, blame, scold or warn");
-        NotificationVoice.Rules.Should().Contain("Never call them the user");
-        NotificationVoice.Rules.Should().Contain("Never frame anything as a journey");
-    }
-
+    /// <summary>
+    /// Asserted over every prompt a model actually receives rather than over
+    /// <c>NotificationVoice.Rules</c> itself. A test that reads a constant's own literals back out
+    /// of it only reddens when somebody edits that constant, which no product change does. These
+    /// redden when a generator stops carrying the contract, which is the failure that ships slop.
+    /// </summary>
     [Theory]
-    [MemberData(nameof(HypeWordCases))]
-    public void TheVoiceContractNamesEveryBannedHypeWord(string hypeWord)
+    [MemberData(nameof(EveryGeneratedUserPrompt))]
+    public void EveryPromptTellsTheModelWhichCharactersAreBanned(string label, string prompt)
     {
-        NotificationVoice.Rules.Should().Contain(hypeWord, $"the model can only avoid \"{hypeWord}\" if it is told to");
+        foreach (var ban in new[]
+                 {
+                     "no exclamation mark", "no em dash", "no en dash",
+                     "no doubled hyphen", "no emoji", "no markdown",
+                 })
+        {
+            prompt.Should().Contain(ban, $"the {label} prompt must ban {ban}");
+        }
     }
 
-    public static TheoryData<string> HypeWordCases()
+    /// <inheritdoc cref="EveryPromptTellsTheModelWhichCharactersAreBanned"/>
+    [Theory]
+    [MemberData(nameof(EveryGeneratedUserPrompt))]
+    public void EveryPromptBansTheSellingRegister(string label, string prompt)
     {
-        var cases = new TheoryData<string>();
-        foreach (var word in HypeWords)
-            cases.Add(word);
+        foreach (var ban in new[]
+                 {
+                     "Never sell", "never perform enthusiasm", "Never shame, blame, scold or warn",
+                     "Never call them the user", "Never frame anything as a journey",
+                 })
+        {
+            prompt.Should().Contain(ban, $"the {label} prompt must carry: {ban}");
+        }
+    }
+
+    /// <inheritdoc cref="EveryPromptTellsTheModelWhichCharactersAreBanned"/>
+    [Theory]
+    [MemberData(nameof(EveryPromptAndHypeWord))]
+    public void EveryPromptNamesEveryBannedHypeWord(string label, string prompt, string hypeWord)
+    {
+        prompt.Should().Contain(
+            hypeWord, $"the {label} prompt can only keep \"{hypeWord}\" out if it names it");
+    }
+
+    public static TheoryData<string, string, string> EveryPromptAndHypeWord()
+    {
+        var cases = new TheoryData<string, string, string>();
+        foreach (var promptCase in EveryGeneratedUserPrompt())
+        {
+            var label = (string)promptCase[0];
+            var prompt = (string)promptCase[1];
+            foreach (var word in HypeWords)
+                cases.Add(label, prompt, word);
+        }
         return cases;
     }
 }

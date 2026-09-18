@@ -64,7 +64,7 @@ public sealed partial class AiProactiveCheckinMessageService(
             if (string.IsNullOrWhiteSpace(text))
             {
                 LogEmptyProactiveCheckinResponse(logger);
-                return GenerateFallback(displayName, language);
+                return GenerateFallback(displayName, offTrackHabitTitles.Count, language);
             }
 
             var lines = text.Trim().Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -75,16 +75,30 @@ public sealed partial class AiProactiveCheckinMessageService(
         catch (Exception ex)
         {
             LogProactiveCheckinGenerationFailed(logger, ex);
-            return GenerateFallback(displayName, language);
+            return GenerateFallback(displayName, offTrackHabitTitles.Count, language);
         }
     }
 
-    private static Result<(string Title, string Body)> GenerateFallback(string displayName, string language) =>
-        Result.Success((
-            FallbackTitle(displayName, language),
-            LocaleHelper.IsPortuguese(language)
-                ? "Alguns hábitos seguem abertos hoje. Escolha o mais fácil e a Astra cuida do resto."
-                : "A few habits are still open today. Pick the easiest one and Astra records the rest."));
+    /// <summary>
+    /// The copy that ships whenever the model is down, so it claims only what the scheduler and the
+    /// tools can stand behind. <c>ProactiveCheckinSchedulerService</c> sends as soon as one habit is
+    /// off track, which makes a single habit the ordinary case rather than the exception, and
+    /// <c>LogHabitTool</c> records only the habit a person names, so nothing logs "the rest".
+    /// </summary>
+    private static Result<(string Title, string Body)> GenerateFallback(
+        string displayName, int openHabitCount, string language)
+    {
+        var isPtBr = LocaleHelper.IsPortuguese(language);
+        var body = openHabitCount > 1
+            ? isPtBr
+                ? "Ainda há hábitos abertos hoje. Escolha o mais fácil e conte à Astra quando fizer."
+                : "Some habits are still open today. Pick the easiest one and tell Astra when you do it."
+            : isPtBr
+                ? "Um hábito segue aberto hoje. Conte à Astra quando você fizer."
+                : "One habit is still open today. Tell Astra when you do it.";
+
+        return Result.Success((FallbackTitle(displayName, language), body));
+    }
 
     private static string FallbackTitle(string displayName, string language)
     {

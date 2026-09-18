@@ -111,7 +111,7 @@ public sealed partial class AiSummaryService(
         return scheduledTopLevel.Concat(children).ToList();
     }
 
-    private static string BuildSummaryPrompt(
+    internal static string BuildSummaryPrompt(
         List<Habit> scheduledHabits,
         DailySummaryContext context)
     {

@@ -247,4 +247,33 @@ public class ErrorCopyTests
     {
         new AppError("SOME_CODE", "Some message.").Should().Be(new AppError("SOME_CODE", "Some message."));
     }
+
+    /// <summary>
+    /// <see cref="AppError.Format"/> stores the params array it was handed, and each call allocates
+    /// a new one, so the record's generated equality compared two equal errors by reference and
+    /// answered false.
+    /// </summary>
+    [Fact]
+    public void TwoErrorsFormattedWithTheSameCountAreEqual()
+    {
+        var first = ErrorMessages.MaxTagsPerHabit.Format(5);
+        var second = ErrorMessages.MaxTagsPerHabit.Format(5);
+
+        first.Should().Be(second);
+        first.GetHashCode().Should().Be(second.GetHashCode());
+    }
+
+    [Fact]
+    public void TwoErrorsFormattedWithDifferentCountsAreNotEqual()
+    {
+        ErrorMessages.MaxTagsPerHabit.Format(5)
+            .Should().NotBe(ErrorMessages.MaxTagsPerHabit.Format(6));
+    }
+
+    [Fact]
+    public void AFormattedErrorIsNotEqualToItsUnformattedTemplate()
+    {
+        ErrorMessages.MaxTagsPerHabit.Format(5)
+            .Should().NotBe(ErrorMessages.MaxTagsPerHabit);
+    }
 }

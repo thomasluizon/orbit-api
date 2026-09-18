@@ -41,7 +41,7 @@ public class AiProactiveCheckinMessageServiceTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Still time today, Thomas");
-        result.Value.Body.Should().Contain("Astra records the rest");
+        result.Value.Body.Should().Contain("tell Astra when you do it");
     }
 
     [Fact]
@@ -51,7 +51,7 @@ public class AiProactiveCheckinMessageServiceTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Ainda dá tempo hoje, Thomas");
-        result.Value.Body.Should().Contain("cuida do resto");
+        result.Value.Body.Should().Contain("conte à Astra quando fizer");
     }
 
     [Fact]
@@ -160,10 +160,11 @@ public class AiProactiveCheckinMessageServiceTests
         lines[1].Should().Be("Body");
     }
 
-    private static Result<(string Title, string Body)> InvokeGenerateFallback(string displayName, string language)
+    private static Result<(string Title, string Body)> InvokeGenerateFallback(
+        string displayName, string language, int openHabitCount = 2)
     {
         var method = typeof(AiProactiveCheckinMessageService)
             .GetMethod("GenerateFallback", PrivateStatic)!;
-        return (Result<(string Title, string Body)>)method.Invoke(null, [displayName, language])!;
+        return (Result<(string Title, string Body)>)method.Invoke(null, [displayName, openHabitCount, language])!;
     }
 }

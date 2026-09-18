@@ -87,14 +87,7 @@ public sealed partial class DistributedRateLimitFilter(
                 context.HttpContext.Request.Method,
                 context.HttpContext.Request.Path,
                 context.HttpContext.GetRequestId());
-            context.Result = new ObjectResult(new
-            {
-                error = "Too many requests",
-                requestId = context.HttpContext.GetRequestId(),
-                limit = decision.PermitLimit,
-                count = decision.CurrentCount,
-                retryAfterUtc = decision.WindowEndsAtUtc
-            })
+            context.Result = new ObjectResult(ErrorMessages.TooManyRequests.ToErrorBody())
             {
                 StatusCode = StatusCodes.Status429TooManyRequests
             };
@@ -299,14 +292,7 @@ public sealed partial class ConcurrentChatLimitFilter(
                 context.HttpContext.Request.Method,
                 context.HttpContext.Request.Path,
                 context.HttpContext.GetRequestId());
-            context.Result = new ObjectResult(new
-            {
-                error = "Too many requests",
-                requestId = context.HttpContext.GetRequestId(),
-                limit = decision.PermitLimit,
-                count = decision.CurrentCount,
-                retryAfterUtc = decision.WindowEndsAtUtc
-            })
+            context.Result = new ObjectResult(ErrorMessages.TooManyRequests.ToErrorBody())
             {
                 StatusCode = StatusCodes.Status429TooManyRequests
             };

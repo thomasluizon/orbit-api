@@ -75,7 +75,7 @@ public class AiProactiveCheckinMessageServiceGenerationTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Still time today, Thomas");
-        result.Value.Body.Should().Be("A few habits are still open today. Pick the easiest one and Astra records the rest.");
+        result.Value.Body.Should().Be("Some habits are still open today. Pick the easiest one and tell Astra when you do it.");
     }
 
     [Fact]
@@ -87,7 +87,7 @@ public class AiProactiveCheckinMessageServiceGenerationTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Ainda dá tempo hoje, Thomas");
-        result.Value.Body.Should().Be("Alguns hábitos seguem abertos hoje. Escolha o mais fácil e a Astra cuida do resto.");
+        result.Value.Body.Should().Be("Ainda há hábitos abertos hoje. Escolha o mais fácil e conte à Astra quando fizer.");
     }
 
     [Fact]
@@ -99,7 +99,7 @@ public class AiProactiveCheckinMessageServiceGenerationTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Still time today, Thomas");
-        result.Value.Body.Should().Be("A few habits are still open today. Pick the easiest one and Astra records the rest.");
+        result.Value.Body.Should().Be("Some habits are still open today. Pick the easiest one and tell Astra when you do it.");
     }
 
     [Fact]
@@ -111,7 +111,43 @@ public class AiProactiveCheckinMessageServiceGenerationTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Ainda dá tempo hoje, Thomas");
-        result.Value.Body.Should().Be("Alguns hábitos seguem abertos hoje. Escolha o mais fácil e a Astra cuida do resto.");
+        result.Value.Body.Should().Be("Ainda há hábitos abertos hoje. Escolha o mais fácil e conte à Astra quando fizer.");
+    }
+
+    /// <summary>
+    /// <c>ProactiveCheckinSchedulerService</c> sends as soon as one habit is off track, so a single
+    /// open habit is the ordinary case and the copy must not call it a few. The old fallback also
+    /// promised that Astra recorded the rest, which <c>LogHabitTool</c> never does: it records only
+    /// the habit a person names.
+    /// </summary>
+    [Theory]
+    [InlineData("en", "One habit is still open today. Tell Astra when you do it.")]
+    [InlineData("pt-BR", "Um hábito segue aberto hoje. Conte à Astra quando você fizer.")]
+    public async Task GenerateMessageAsync_OneOpenHabit_CountsItAsOne(string language, string expected)
+    {
+        var service = BuildService("   ");
+
+        var result = await service.GenerateMessageAsync("Thomas", ["Meditate"], 5, language);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Body.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task GenerateMessageAsync_TheFallbackNeverPromisesAutomaticLogging(string language)
+    {
+        var service = BuildService("   ");
+
+        var oneOpen = await service.GenerateMessageAsync("Thomas", ["Meditate"], 5, language);
+        var manyOpen = await service.GenerateMessageAsync("Thomas", OffTrackHabits, 5, language);
+
+        foreach (var body in new[] { oneOpen.Value.Body, manyOpen.Value.Body })
+        {
+            body.Should().NotContainEquivalentOf("records the rest");
+            body.Should().NotContainEquivalentOf("cuida do resto");
+        }
     }
 
     private static AiProactiveCheckinMessageService BuildService(string content, HttpStatusCode status = HttpStatusCode.OK)
