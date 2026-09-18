@@ -2745,7 +2745,7 @@
       "Challenges": 15,
       "Chat": 84,
       "ChecklistTemplates": 5,
-      "Common": 36,
+      "Common": 37,
       "Gamification": 33,
       "Goals": 35,
       "Habits": 78,
@@ -2954,7 +2954,7 @@
       "Challenges": 14,
       "Chat": 63,
       "ChecklistTemplates": 9,
-      "Common": 197,
+      "Common": 251,
       "Gamification": 43,
       "Goals": 54,
       "Habits": 93,
@@ -4900,6 +4900,11 @@
       {
         "testClass": "ErrorCodesAndMessagesTests",
         "file": "tests/Orbit.Application.Tests/Common/ErrorCodesAndMessagesTests.cs",
+        "references": []
+      },
+      {
+        "testClass": "ErrorCopyTests",
+        "file": "tests/Orbit.Application.Tests/Common/ErrorCopyTests.cs",
         "references": []
       },
       {
@@ -7155,13 +7160,6 @@
         ]
       },
       {
-        "testClass": "EmailTemplateRendererTests",
-        "file": "tests/Orbit.Infrastructure.Tests/Email/EmailTemplateRendererTests.cs",
-        "references": [
-          "Report"
-        ]
-      },
-      {
         "testClass": "HttpContextExtensionsTests",
         "file": "tests/Orbit.Infrastructure.Tests/Extensions/HttpContextExtensionsTests.cs",
         "references": [
@@ -7320,8 +7318,18 @@
         "references": []
       },
       {
+        "testClass": "LocalizedErrorResultFilterTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Middleware/LocalizedErrorResultFilterTests.cs",
+        "references": []
+      },
+      {
         "testClass": "MinimumVersionMiddlewareTests",
         "file": "tests/Orbit.Infrastructure.Tests/Middleware/MinimumVersionMiddlewareTests.cs",
+        "references": []
+      },
+      {
+        "testClass": "RequestObservabilityMiddlewareTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Middleware/RequestObservabilityMiddlewareTests.cs",
         "references": []
       },
       {
@@ -7864,6 +7872,11 @@
           "Habit",
           "User"
         ]
+      },
+      {
+        "testClass": "ImageValidationServiceTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Services/ImageValidationServiceTests.cs",
+        "references": []
       },
       {
         "testClass": "MarketingUnsubscribeTokenServiceTests",

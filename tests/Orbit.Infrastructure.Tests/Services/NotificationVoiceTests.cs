@@ -14,8 +14,14 @@ namespace Orbit.Infrastructure.Tests.Services;
 public class NotificationVoiceTests
 {
     private const string DoubledHyphen = "--";
-    private const string EmDash = "—";
-    private const string EnDash = "–";
+    /// <summary>
+    /// The two banned dashes are built from their code points instead of typed, because a file
+    /// that detects a dash by embedding one still embeds one, and the Dash Ban gate scans this
+    /// file like any other. U+2014 is the em dash and U+2013 is the en dash.
+    /// </summary>
+    private static readonly string EmDash = ((char)0x2014).ToString();
+
+    private static readonly string EnDash = ((char)0x2013).ToString();
 
     private static readonly string[] HypeWords =
     [
