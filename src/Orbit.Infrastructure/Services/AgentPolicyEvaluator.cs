@@ -12,6 +12,7 @@ public class AgentPolicyEvaluator(
     OrbitDbContext dbContext,
     IAgentCatalogService catalogService,
     IPendingAgentOperationStore pendingOperationStore,
+    IAgentStepUpAuthorizationBridge stepUpAuthorizationBridge,
     IOptions<AgentPlatformSettings> settings) : IAgentPolicyEvaluator
 {
     private readonly AgentPlatformSettings _settings = settings.Value;
@@ -33,9 +34,13 @@ public class AgentPolicyEvaluator(
         AgentPolicyEvaluationContext context,
         bool createPendingOperations)
     {
-        var capability = catalogService.GetCapability(context.CapabilityId);
-        if (capability is null)
+        var declared = catalogService.GetCapability(context.CapabilityId);
+        if (declared is null)
             return new AgentPolicyDecision(AgentPolicyDecisionStatus.Denied, null, "unsupported_by_policy");
+
+        var capability = context.ConfirmationRequirementOverride is { } escalated
+            ? declared with { ConfirmationRequirement = escalated }
+            : declared;
 
         var user = GetUser(context.UserId);
         if (user is null)
@@ -91,7 +96,9 @@ public class AgentPolicyEvaluator(
         if (context.IsReadOnlyCredential && capability.IsMutation)
             return new AgentPolicyDecision(AgentPolicyDecisionStatus.Denied, capability, "read_only_credential");
 
-        if (capability.IsMutation && string.IsNullOrWhiteSpace(context.OperationFingerprint))
+        var needsFingerprint = capability.IsMutation ||
+            capability.ConfirmationRequirement is AgentConfirmationRequirement.FreshConfirmation or AgentConfirmationRequirement.StepUp;
+        if (needsFingerprint && string.IsNullOrWhiteSpace(context.OperationFingerprint))
             return new AgentPolicyDecision(AgentPolicyDecisionStatus.Denied, capability, "operation_not_deterministic");
 
         return null;
@@ -107,7 +114,12 @@ public class AgentPolicyEvaluator(
 
         var requireStepUp = capability.ConfirmationRequirement == AgentConfirmationRequirement.StepUp;
         if (HasFreshConfirmation(context, capability, requireStepUp))
+        {
+            if (requireStepUp)
+                stepUpAuthorizationBridge.OnStepUpVerified(capability.Id, context.UserId);
+
             return new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability);
+        }
 
         var reason = requireStepUp ? "step_up_required" : "confirmation_required";
         if (!createPendingOperations)

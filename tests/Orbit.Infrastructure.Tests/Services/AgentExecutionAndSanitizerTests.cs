@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -235,6 +235,68 @@ public class AgentExecutionAndSanitizerTests
     }
 
     [Fact]
+    public async Task AgentOperationExecutor_PassesTheEscalatedConfirmationRequirementToThePolicy()
+    {
+        var catalog = Substitute.For<IAgentCatalogService>();
+        var capability = CreateCapability(AgentCapabilityIds.ApiKeysRead, AgentScopes.ReadApiKeys, AgentRiskClass.Low, AgentConfirmationRequirement.None, isMutation: false);
+        var operation = CreateOperation("get_api_keys", capability.Id, isMutation: false, isAgentExecutable: true, AgentConfirmationRequirement.None, AgentRiskClass.Low);
+        catalog.GetOperation(operation.Id).Returns(operation);
+        catalog.GetCapability(capability.Id).Returns(capability);
+        var bridge = Substitute.For<IAgentStepUpAuthorizationBridge>();
+        bridge.GetRequiredConfirmationAsync(capability.Id, Arg.Any<CancellationToken>())
+            .Returns(AgentConfirmationRequirement.StepUp);
+        var capturedContext = default(AgentPolicyEvaluationContext);
+        var policy = Substitute.For<IAgentPolicyEvaluator>();
+        policy.Evaluate(Arg.Do<AgentPolicyEvaluationContext>(context => capturedContext = context))
+            .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.ConfirmationRequired, capability, "step_up_required"));
+        var executor = CreateExecutor(
+            catalog,
+            policyEvaluator: policy,
+            stepUpAuthorizationBridge: bridge);
+
+        var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
+            UserId,
+            operation.Id,
+            Parse("{}"),
+            AgentExecutionSurface.Mcp,
+            AgentAuthMethod.Jwt));
+
+        capturedContext.Should().NotBeNull();
+        capturedContext.ConfirmationRequirementOverride.Should().Be(AgentConfirmationRequirement.StepUp);
+        response.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation);
+        response.Operation.ConfirmationRequirement.Should().Be(AgentConfirmationRequirement.StepUp);
+    }
+
+    [Fact]
+    public async Task AgentOperationExecutor_WithoutEscalation_LeavesTheContextOverrideEmpty()
+    {
+        var catalog = Substitute.For<IAgentCatalogService>();
+        var capability = CreateCapability(AgentCapabilityIds.ApiKeysRead, AgentScopes.ReadApiKeys, AgentRiskClass.Low, AgentConfirmationRequirement.None, isMutation: false);
+        var operation = CreateOperation("get_api_keys", capability.Id, isMutation: false, isAgentExecutable: true, AgentConfirmationRequirement.None, AgentRiskClass.Low);
+        catalog.GetOperation(operation.Id).Returns(operation);
+        catalog.GetCapability(capability.Id).Returns(capability);
+        var capturedContext = default(AgentPolicyEvaluationContext);
+        var policy = Substitute.For<IAgentPolicyEvaluator>();
+        policy.Evaluate(Arg.Do<AgentPolicyEvaluationContext>(context => capturedContext = context))
+            .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability));
+        var executor = CreateExecutor(
+            catalog,
+            policyEvaluator: policy,
+            toolRegistry: new AiToolRegistry([new StubTool(operation.Id, (_, _, _) => Task.FromResult(new ToolResult(true)))]));
+
+        var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
+            UserId,
+            operation.Id,
+            Parse("{}"),
+            AgentExecutionSurface.Mcp,
+            AgentAuthMethod.Jwt));
+
+        capturedContext.Should().NotBeNull();
+        capturedContext.ConfirmationRequirementOverride.Should().BeNull();
+        response.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
+    }
+
+    [Fact]
     public async Task AgentOperationExecutor_WritesAuditRowForSuccessfulReadOnlyTool()
     {
         var catalog = Substitute.For<IAgentCatalogService>();
@@ -398,8 +460,16 @@ public class AgentExecutionAndSanitizerTests
         IAgentAuditService? auditService = null,
         IAgentTargetOwnershipService? ownershipService = null,
         AiToolRegistry? toolRegistry = null,
-        IUnitOfWork? unitOfWork = null)
+        IUnitOfWork? unitOfWork = null,
+        IAgentStepUpAuthorizationBridge? stepUpAuthorizationBridge = null)
     {
+        if (stepUpAuthorizationBridge is null)
+        {
+            stepUpAuthorizationBridge = Substitute.For<IAgentStepUpAuthorizationBridge>();
+            stepUpAuthorizationBridge.GetRequiredConfirmationAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+                .Returns((AgentConfirmationRequirement?)null);
+        }
+
         if (ownershipService is null)
         {
             ownershipService = Substitute.For<IAgentTargetOwnershipService>();
@@ -412,6 +482,7 @@ public class AgentExecutionAndSanitizerTests
             policyEvaluator ?? Substitute.For<IAgentPolicyEvaluator>(),
             auditService ?? Substitute.For<IAgentAuditService>(),
             ownershipService,
+            stepUpAuthorizationBridge,
             toolRegistry ?? new AiToolRegistry([]),
             unitOfWork ?? Substitute.For<IUnitOfWork>(),
             NullLogger<AgentOperationExecutor>.Instance);
