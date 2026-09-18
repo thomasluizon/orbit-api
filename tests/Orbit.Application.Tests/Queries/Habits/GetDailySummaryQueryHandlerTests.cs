@@ -10,6 +10,7 @@ using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Persistence;
 using System.Linq.Expressions;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Queries.Habits;
 
@@ -290,7 +291,7 @@ public class GetDailySummaryQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("User not found");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
         result.ErrorCode.Should().Be("USER_NOT_FOUND");
     }
 
@@ -321,7 +322,7 @@ public class GetDailySummaryQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("AI summary is disabled");
+        result.Error.Should().Be(ErrorMessages.AiSummaryDisabled.Message);
     }
 
     [Fact]

@@ -168,7 +168,7 @@ public class SkipHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("completed");
+        result.Error.Should().Be(ErrorMessages.CannotSkipCompletedHabit.Message);
     }
 
     [Fact]
@@ -185,7 +185,7 @@ public class SkipHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("future");
+        result.Error.Should().Be(ErrorMessages.CannotSkipFutureDate.Message);
     }
 
     [Fact]
@@ -202,7 +202,7 @@ public class SkipHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("not yet due");
+        result.Error.Should().Be(ErrorMessages.HabitNotYetDue.Message);
     }
 
     [Fact]

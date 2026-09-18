@@ -102,7 +102,7 @@ public class ApiKeyCreationChallengeFlowTests
                 CancellationToken.None);
 
             result.IsFailure.Should().BeTrue();
-            result.Error.Should().Contain($"Remaining attempts: {AppConstants.MaxVerificationAttempts - attempt}");
+            result.Error.Should().Be(ErrorMessages.InvalidApiKeyCreationCode.Format(AppConstants.MaxVerificationAttempts - attempt).Message);
         }
 
         var exhausted = await _confirmHandler.Handle(
@@ -111,7 +111,7 @@ public class ApiKeyCreationChallengeFlowTests
 
         exhausted.IsFailure.Should().BeTrue();
         exhausted.ErrorCode.Should().Be(ErrorCodes.TooManyAttempts);
-        exhausted.Error.Should().Be("Too many attempts. Try again in 15 minutes");
+        exhausted.Error.Should().Be(ErrorMessages.TooManyCodeAttempts.Message);
     }
 
     [Fact]

@@ -4,6 +4,7 @@ using Orbit.Application.Referrals.Commands;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Commands.Referrals;
 
@@ -91,6 +92,6 @@ public class GetOrCreateReferralCodeCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("User not found");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
     }
 }

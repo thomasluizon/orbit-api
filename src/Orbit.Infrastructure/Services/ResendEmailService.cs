@@ -33,7 +33,7 @@ public partial class ResendEmailService(
         var htmlCopy = EmailCopy.Welcome(isPtBr, WebUtility.HtmlEncode(userName));
         var textCopy = EmailCopy.Welcome(isPtBr, userName);
 
-        var layout = new EmailLayout(LangCode(isPtBr), htmlCopy.Preheader, htmlCopy.Footer, LogoUrl, GradientHeader: true);
+        var layout = new EmailLayout(LangCode(isPtBr), htmlCopy.Preheader, htmlCopy.Footer, LogoUrl);
         var html = EmailTemplateRenderer.RenderHtml("Welcome", layout, WelcomeTokens(htmlCopy));
         var text = EmailTemplateRenderer.RenderText("Welcome", WelcomeTokens(textCopy));
 
@@ -57,7 +57,7 @@ public partial class ResendEmailService(
             [FooterToken] = copy.Footer,
         };
 
-        var layout = new EmailLayout(LangCode(isPtBr), copy.Preheader, copy.Footer, LogoUrl, GradientHeader: false);
+        var layout = new EmailLayout(LangCode(isPtBr), copy.Preheader, copy.Footer, LogoUrl);
         var html = EmailTemplateRenderer.RenderHtml("VerificationCode", layout, tokens);
         var text = EmailTemplateRenderer.RenderText("VerificationCode", tokens);
 
@@ -79,7 +79,7 @@ public partial class ResendEmailService(
             [FooterToken] = copy.Footer,
         };
 
-        var layout = new EmailLayout(LangCode(isPtBr), copy.Preheader, copy.Footer, LogoUrl, GradientHeader: false);
+        var layout = new EmailLayout(LangCode(isPtBr), copy.Preheader, copy.Footer, LogoUrl);
         var html = EmailTemplateRenderer.RenderHtml("AccountDeletion", layout, tokens);
         var text = EmailTemplateRenderer.RenderText("AccountDeletion", tokens);
 
@@ -101,7 +101,7 @@ public partial class ResendEmailService(
             [FooterToken] = copy.Footer,
         };
 
-        var layout = new EmailLayout(LangCode(isPtBr), copy.Preheader, copy.Footer, LogoUrl, GradientHeader: false);
+        var layout = new EmailLayout(LangCode(isPtBr), copy.Preheader, copy.Footer, LogoUrl);
         var html = EmailTemplateRenderer.RenderHtml("ApiKeyCreation", layout, tokens);
         var text = EmailTemplateRenderer.RenderText("ApiKeyCreation", tokens);
 
@@ -123,7 +123,7 @@ public partial class ResendEmailService(
             [FooterToken] = copy.Footer,
         };
 
-        var layout = new EmailLayout(LangCode(isPtBr), copy.Preheader, copy.Footer, LogoUrl, GradientHeader: true);
+        var layout = new EmailLayout(LangCode(isPtBr), copy.Preheader, copy.Footer, LogoUrl);
         var html = EmailTemplateRenderer.RenderHtml("WaitlistConfirmation", layout, tokens);
         var text = EmailTemplateRenderer.RenderText("WaitlistConfirmation", tokens);
 
@@ -135,10 +135,11 @@ public partial class ResendEmailService(
     {
         var isPtBr = LocaleHelper.IsPortuguese(language);
         var footer = MarketingFooterHtml(isPtBr, unsubscribeUrl);
-        var layout = new EmailLayout(LangCode(isPtBr), Preheader: "", footer, LogoUrl, GradientHeader: true);
+        var layout = new EmailLayout(LangCode(isPtBr), Preheader: "", footer, LogoUrl);
         var readableBody =
-            "<div style=\"font-family: Rubik, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; " +
-            $"font-size: 16px; line-height: 1.6; color: #E2E8F0;\">{bodyHtml}</div>";
+            "<div class=\"orbit-fg-2\" style=\"font-family: 'Geist Sans', Geist, -apple-system, BlinkMacSystemFont, " +
+            "'Segoe UI', Roboto, Helvetica, Arial, sans-serif; " +
+            $"font-size: 16px; line-height: 1.6; color: #424247;\">{bodyHtml}</div>";
         var html = EmailTemplateRenderer.RenderLayout(layout, readableBody);
 
         var payload = new
@@ -168,7 +169,7 @@ public partial class ResendEmailService(
 
         var encodedUrl = WebUtility.HtmlEncode(unsubscribeUrl);
         return $"{reason}<br>{legalIdentity}<br>" +
-            $"<a href=\"{encodedUrl}\" style=\"color: #90A1B9; text-decoration: underline;\">{unsubscribeLabel}</a>";
+            $"<a class=\"orbit-fg-3\" href=\"{encodedUrl}\" style=\"color: #68686D; text-decoration: underline;\">{unsubscribeLabel}</a>";
     }
 
     private async Task SendMarketingWithBackoffAsync(string to, string subject, string serializedPayload, CancellationToken cancellationToken)
@@ -239,10 +240,13 @@ public partial class ResendEmailService(
 
     public async Task SendSupportEmailAsync(string fromName, string fromEmail, string subject, string message, CancellationToken cancellationToken = default)
     {
-        const string supportFooter = "Reply directly to respond to the user.";
+        var copy = EmailCopy.Support();
 
         var htmlTokens = new Dictionary<string, string>
         {
+            [HeadingToken] = copy.Heading,
+            ["fromLabel"] = copy.FromLabel,
+            ["subjectLabel"] = copy.SubjectLabel,
             ["fromName"] = WebUtility.HtmlEncode(fromName),
             ["fromEmail"] = WebUtility.HtmlEncode(fromEmail),
             ["subject"] = WebUtility.HtmlEncode(subject),
@@ -251,13 +255,17 @@ public partial class ResendEmailService(
 
         var textTokens = new Dictionary<string, string>
         {
+            [HeadingToken] = copy.Heading,
+            ["fromLabel"] = copy.FromLabel,
+            ["subjectLabel"] = copy.SubjectLabel,
             ["fromName"] = fromName,
             ["fromEmail"] = fromEmail,
             ["subject"] = subject,
             ["message"] = message,
+            [FooterToken] = copy.Footer,
         };
 
-        var layout = new EmailLayout("en", Preheader: "", Footer: supportFooter, LogoUrl, GradientHeader: false);
+        var layout = new EmailLayout("en", Preheader: "", Footer: copy.Footer, LogoUrl);
         var html = EmailTemplateRenderer.RenderHtml("Support", layout, htmlTokens);
         var text = EmailTemplateRenderer.RenderText("Support", textTokens);
 

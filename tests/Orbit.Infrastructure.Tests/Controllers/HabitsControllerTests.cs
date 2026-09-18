@@ -269,8 +269,8 @@ public class HabitsControllerTests
         objectResult.StatusCode.Should().Be(404);
         objectResult.Value.Should().BeEquivalentTo(new
         {
-            error = ErrorMessages.HabitNotFound.Message,
-            errorCode = ErrorMessages.HabitNotFound.Code
+            Error = ErrorMessages.HabitNotFound.Message,
+            ErrorCode = ErrorMessages.HabitNotFound.Code
         });
     }
 

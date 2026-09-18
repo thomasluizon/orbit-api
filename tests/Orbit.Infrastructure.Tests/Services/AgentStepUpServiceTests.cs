@@ -7,6 +7,7 @@ using Orbit.Domain.Models;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
+using Orbit.Application.Common;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
@@ -108,7 +109,7 @@ public class AgentStepUpServiceTests : IDisposable
             CancellationToken.None);
 
         verifyResult.IsFailure.Should().BeTrue();
-        verifyResult.Error.Should().Be("Invalid step-up code.");
+        verifyResult.Error.Should().Be(ErrorMessages.InvalidStepUpCode.Message);
     }
 
     [Fact]

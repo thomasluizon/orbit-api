@@ -180,7 +180,7 @@ public class BulkLogHabitsCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Results[0].Status.Should().Be(BulkItemStatus.Failed);
-        result.Value.Results[0].Error.Should().Contain("future");
+        result.Value.Results[0].Error.Should().Be(ErrorMessages.CannotLogFutureDate.Message);
     }
 
     [Fact]
@@ -197,7 +197,7 @@ public class BulkLogHabitsCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Results[0].Status.Should().Be(BulkItemStatus.Failed);
-        result.Value.Results[0].Error.Should().Contain("overdue window");
+        result.Value.Results[0].Error.Should().Be(ErrorMessages.BeyondOverdueWindow.Message);
     }
 
     [Fact]

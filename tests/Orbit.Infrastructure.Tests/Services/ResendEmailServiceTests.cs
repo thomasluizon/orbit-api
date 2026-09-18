@@ -58,7 +58,7 @@ public class ResendEmailServiceTests
 
         await _sut.SendVerificationCodeAsync("user@test.com", "123456", "pt-BR");
 
-        _handler.LastRequestBody.Should().Contain("Seu c\\u00F3digo de verifica\\u00E7\\u00E3o do Orbit");
+        _handler.LastRequestBody.Should().Contain("Seu c\\u00F3digo de acesso do Orbit");
     }
 
     [Fact]
@@ -68,7 +68,7 @@ public class ResendEmailServiceTests
 
         await _sut.SendVerificationCodeAsync("user@test.com", "123456", "en");
 
-        _handler.LastRequestBody.Should().Contain("Your Orbit verification code");
+        _handler.LastRequestBody.Should().Contain("Your Orbit sign-in code");
     }
 
     [Fact]
@@ -163,7 +163,7 @@ public class ResendEmailServiceTests
         await _sut.SendWelcomeEmailAsync("user@test.com", "Thomas");
 
         _handler.LastRequest.Should().NotBeNull();
-        _handler.LastRequestBody.Should().Contain("Welcome aboard");
+        _handler.LastRequestBody.Should().Contain("You are in");
     }
 
     [Fact]
@@ -183,7 +183,7 @@ public class ResendEmailServiceTests
 
         await _sut.SendAccountDeletionCodeAsync("user@test.com", "654321", "en");
 
-        _handler.LastRequestBody.Should().Contain("Confirm your Orbit account deletion");
+        _handler.LastRequestBody.Should().Contain("Confirm that you want to delete your Orbit account");
     }
 
     [Fact]
@@ -203,8 +203,8 @@ public class ResendEmailServiceTests
 
         await _sut.SendApiKeyCreationCodeAsync("user@test.com", "654321", "en");
 
-        _handler.LastRequestBody.Should().Contain("Confirm your Orbit API key creation");
-        _handler.LastRequestBody.Should().Contain("No API key will be created");
+        _handler.LastRequestBody.Should().Contain("Confirm your new Orbit API key");
+        _handler.LastRequestBody.Should().Contain("No key is created.");
         _handler.LastRequestBody.Should().NotContain("account deletion");
     }
 
@@ -260,7 +260,7 @@ public class ResendEmailServiceTests
         await _sut.SendVerificationCodeAsync("user@test.com", "123456");
 
         _handler.LastRequestBody.Should().Contain("logo-no-bg.png");
-        _handler.LastRequestBody.Should().Contain("It expires in 5 minutes.");
+        _handler.LastRequestBody.Should().Contain("It works for the next 5 minutes.");
     }
 
     [Fact]
@@ -271,18 +271,20 @@ public class ResendEmailServiceTests
         await _sut.SendWelcomeEmailAsync("user@test.com", "Ana & Co");
 
         _handler.LastRequestBody.Should().Contain("\"text\":");
-        _handler.LastRequestBody.Should().Contain("Welcome aboard, Ana \\u0026 Co!");
-        _handler.LastRequestBody.Should().Contain("Welcome aboard, Ana \\u0026amp; Co!");
+        _handler.LastRequestBody.Should().Contain("You are in, Ana \\u0026 Co");
+        _handler.LastRequestBody.Should().Contain("You are in, Ana \\u0026amp; Co");
     }
 
     [Fact]
-    public async Task SendWelcomeEmailAsync_UsesGradientHeaderWithSolidFallback()
+    public async Task SendWelcomeEmailAsync_CarriesNoBannedGradientOrGlow()
     {
         _handler.ResponseToReturn = new HttpResponseMessage(HttpStatusCode.OK);
 
         await _sut.SendWelcomeEmailAsync("user@test.com", "Thomas");
 
-        _handler.LastRequestBody.Should().Contain("#22094F");
+        _handler.LastRequestBody.Should().NotContain("#22094F");
+        _handler.LastRequestBody.Should().NotContain("linear-gradient");
+        _handler.LastRequestBody.Should().NotContain("box-shadow");
     }
 
     [Fact]
@@ -316,7 +318,7 @@ public class ResendEmailServiceTests
 
         _handler.LastRequestBody.Should().Contain("logo-no-bg.png");
         _handler.LastRequestBody.Should().Contain("\"text\":");
-        _handler.LastRequestBody.Should().Contain("Reply directly to respond to the user.");
+        _handler.LastRequestBody.Should().Contain("Reply to this email to answer them.");
     }
 
     [Fact]
@@ -337,7 +339,7 @@ public class ResendEmailServiceTests
 
         await _sut.SendWelcomeEmailAsync("user@test.com", "{{footer}}");
 
-        _handler.LastRequestBody.Should().Contain("Welcome aboard, {{footer}}!");
+        _handler.LastRequestBody.Should().Contain("You are in, {{footer}}");
     }
 
     [Fact]
@@ -398,7 +400,7 @@ public class ResendEmailServiceTests
             "en");
 
         _handler.LastRequest!.RequestUri!.PathAndQuery.Should().Be("/emails");
-        _handler.LastRequestBody.Should().Contain("Confirm your spot on the Orbit iOS waitlist");
+        _handler.LastRequestBody.Should().Contain("Confirm your place on the Orbit iOS list");
         _handler.LastRequestBody.Should().Contain("https://api.useorbit.org/api/waitlist/confirm?token=abc.def");
         _handler.LastRequestBody.Should().Contain("\"text\":");
         _handler.LastRequestBody.Should().NotContain("{{");
@@ -414,7 +416,7 @@ public class ResendEmailServiceTests
             "https://api.useorbit.org/api/waitlist/confirm?token=abc.def",
             "pt-BR");
 
-        _handler.LastRequestBody.Should().Contain("Confirme sua vaga na lista de espera");
+        _handler.LastRequestBody.Should().Contain("Confirme sua vaga na lista do Orbit");
     }
 
     /// <summary>

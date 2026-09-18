@@ -6,6 +6,7 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Queries.Goals;
 
@@ -70,7 +71,7 @@ public class GetGoalMetricsQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Goal not found");
+        result.Error.Should().Be(ErrorMessages.GoalNotFound.Message);
         result.ErrorCode.Should().Be("GOAL_NOT_FOUND");
     }
 
