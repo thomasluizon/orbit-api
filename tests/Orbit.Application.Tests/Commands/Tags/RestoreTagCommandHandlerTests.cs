@@ -5,6 +5,7 @@ using NSubstitute;
 using Orbit.Application.Tags.Commands;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Commands.Tags;
 
@@ -52,7 +53,7 @@ public class RestoreTagCommandHandlerTests
         var result = await _handler.Handle(new RestoreTagCommand(UserId, tag.Id), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("Tag not found.");
+        result.Error.Should().Be(ErrorMessages.TagNotFound.Message);
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -64,6 +65,6 @@ public class RestoreTagCommandHandlerTests
         var result = await _handler.Handle(new RestoreTagCommand(UserId, Guid.NewGuid()), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("Tag not found.");
+        result.Error.Should().Be(ErrorMessages.TagNotFound.Message);
     }
 }

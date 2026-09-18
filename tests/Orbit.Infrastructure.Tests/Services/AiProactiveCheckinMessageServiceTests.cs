@@ -41,7 +41,7 @@ public class AiProactiveCheckinMessageServiceTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Still time today, Thomas");
-        result.Value.Body.Should().Contain("back on track");
+        result.Value.Body.Should().Contain("Astra records the rest");
     }
 
     [Fact]
@@ -51,7 +51,7 @@ public class AiProactiveCheckinMessageServiceTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Ainda dá tempo hoje, Thomas");
-        result.Value.Body.Should().Contain("retomar");
+        result.Value.Body.Should().Contain("cuida do resto");
     }
 
     [Fact]

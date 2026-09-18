@@ -8,6 +8,7 @@ using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using System.Linq.Expressions;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Queries.Habits;
 
@@ -273,7 +274,7 @@ public class GetRetrospectiveQueryHandlerTests
         var result = await HandleWeek();
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("No habits found");
+        result.Error.Should().Be(ErrorMessages.NoHabitsForPeriod.Message);
     }
 
     [Fact]
@@ -301,7 +302,7 @@ public class GetRetrospectiveQueryHandlerTests
         var result = await HandleWeek();
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("No habits found");
+        result.Error.Should().Be(ErrorMessages.NoHabitsForPeriod.Message);
     }
 
     [Fact]

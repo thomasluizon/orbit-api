@@ -6,6 +6,7 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Commands.Tags;
 
@@ -50,7 +51,7 @@ public class TagCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("already exists");
+        result.Error.Should().Be(ErrorMessages.DuplicateTagName.Message);
     }
 
     [Fact]
@@ -91,7 +92,7 @@ public class TagCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("Tag not found.");
+        result.Error.Should().Be(ErrorMessages.TagNotFound.Message);
     }
 
     [Fact]
@@ -129,7 +130,7 @@ public class TagCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("Tag not found.");
+        result.Error.Should().Be(ErrorMessages.TagNotFound.Message);
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -173,7 +174,7 @@ public class TagCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("at most 2 tags");
+        result.Error.Should().Be(ErrorMessages.MaxTagsPerHabit.Format(2).Message);
     }
 
     [Fact]
@@ -193,6 +194,6 @@ public class TagCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("Habit not found.");
+        result.Error.Should().Be(ErrorMessages.HabitNotFound.Message);
     }
 }

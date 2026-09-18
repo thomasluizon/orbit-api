@@ -21,13 +21,13 @@ public class AiProactiveCheckinMessageServiceGenerationTests
     [Fact]
     public async Task GenerateMessageAsync_TwoLines_ReturnsTitleAndBody()
     {
-        var service = BuildService("Still time today, Thomas\nYou fell behind on Meditate. Astra's got your back.");
+        var service = BuildService("Still time today, Thomas\nMeditate is still open. Astra records it when you do it.");
 
         var result = await service.GenerateMessageAsync("Thomas", OffTrackHabits, 5, "en");
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Still time today, Thomas");
-        result.Value.Body.Should().Be("You fell behind on Meditate. Astra's got your back.");
+        result.Value.Body.Should().Be("Meditate is still open. Astra records it when you do it.");
     }
 
     [Fact]
@@ -75,7 +75,7 @@ public class AiProactiveCheckinMessageServiceGenerationTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Still time today, Thomas");
-        result.Value.Body.Should().Be("You've fallen behind on a few habits today. Astra's got your back -- let's get back on track.");
+        result.Value.Body.Should().Be("A few habits are still open today. Pick the easiest one and Astra records the rest.");
     }
 
     [Fact]
@@ -87,7 +87,7 @@ public class AiProactiveCheckinMessageServiceGenerationTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Ainda dá tempo hoje, Thomas");
-        result.Value.Body.Should().Be("Você ficou para trás em alguns hábitos hoje. A Astra está aqui -- bora retomar?");
+        result.Value.Body.Should().Be("Alguns hábitos seguem abertos hoje. Escolha o mais fácil e a Astra cuida do resto.");
     }
 
     [Fact]
@@ -99,7 +99,7 @@ public class AiProactiveCheckinMessageServiceGenerationTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Still time today, Thomas");
-        result.Value.Body.Should().Be("You've fallen behind on a few habits today. Astra's got your back -- let's get back on track.");
+        result.Value.Body.Should().Be("A few habits are still open today. Pick the easiest one and Astra records the rest.");
     }
 
     [Fact]
@@ -111,7 +111,7 @@ public class AiProactiveCheckinMessageServiceGenerationTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Ainda dá tempo hoje, Thomas");
-        result.Value.Body.Should().Be("Você ficou para trás em alguns hábitos hoje. A Astra está aqui -- bora retomar?");
+        result.Value.Body.Should().Be("Alguns hábitos seguem abertos hoje. Escolha o mais fácil e a Astra cuida do resto.");
     }
 
     private static AiProactiveCheckinMessageService BuildService(string content, HttpStatusCode status = HttpStatusCode.OK)

@@ -153,7 +153,7 @@ public class BulkSkipHabitsCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Results[0].Status.Should().Be(BulkItemStatus.Failed);
-        result.Value.Results[0].Error.Should().Contain("completed");
+        result.Value.Results[0].Error.Should().Be(ErrorMessages.CannotSkipCompletedHabit.Message);
     }
 
     [Fact]
@@ -170,7 +170,7 @@ public class BulkSkipHabitsCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Results[0].Status.Should().Be(BulkItemStatus.Failed);
-        result.Value.Results[0].Error.Should().Contain("future");
+        result.Value.Results[0].Error.Should().Be(ErrorMessages.CannotSkipFutureDate.Message);
     }
 
     [Fact]
@@ -188,7 +188,7 @@ public class BulkSkipHabitsCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Results[0].Status.Should().Be(BulkItemStatus.Failed);
-        result.Value.Results[0].Error.Should().Contain("not yet due");
+        result.Value.Results[0].Error.Should().Be(ErrorMessages.HabitNotYetDue.Message);
     }
 
     [Fact]

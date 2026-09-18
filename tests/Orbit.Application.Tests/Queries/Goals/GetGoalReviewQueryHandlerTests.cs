@@ -8,6 +8,7 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Queries.Goals;
 
@@ -157,7 +158,7 @@ public class GetGoalReviewQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("No active goals found");
+        result.Error.Should().Be(ErrorMessages.NoActiveGoals.Message);
     }
 
     [Fact]

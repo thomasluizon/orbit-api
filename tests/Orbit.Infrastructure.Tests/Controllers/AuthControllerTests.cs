@@ -87,8 +87,8 @@ public class AuthControllerTests
         objectResult.StatusCode.Should().Be(401);
         objectResult.Value.Should().BeEquivalentTo(new
         {
-            error = ErrorMessages.InvalidVerificationCode.Message,
-            errorCode = ErrorMessages.InvalidVerificationCode.Code
+            Error = ErrorMessages.InvalidVerificationCode.Message,
+            ErrorCode = ErrorMessages.InvalidVerificationCode.Code
         });
     }
 
@@ -117,8 +117,8 @@ public class AuthControllerTests
         objectResult.StatusCode.Should().Be(401);
         objectResult.Value.Should().BeEquivalentTo(new
         {
-            error = ErrorMessages.InvalidGoogleToken.Message,
-            errorCode = ErrorMessages.InvalidGoogleToken.Code
+            Error = ErrorMessages.InvalidGoogleToken.Message,
+            ErrorCode = ErrorMessages.InvalidGoogleToken.Code
         });
     }
 

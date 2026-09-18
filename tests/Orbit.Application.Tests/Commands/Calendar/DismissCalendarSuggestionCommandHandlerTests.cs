@@ -5,6 +5,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Commands.Calendar;
 
@@ -58,7 +59,7 @@ public class DismissCalendarSuggestionCommandHandlerTests
         var result = await _handler.Handle(new DismissCalendarSuggestionCommand(UserId, SuggestionId), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Suggestion not found");
+        result.Error.Should().Be(ErrorMessages.SuggestionNotFound.Message);
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 }

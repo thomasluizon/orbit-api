@@ -9,6 +9,7 @@ using Orbit.Application.Auth.Jobs;
 using Orbit.Application.Auth.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Commands.Profile;
 
@@ -80,7 +81,7 @@ public class RequestAccountDeletionCommandHandlerTests
         var result = await _handler.Handle(new RequestAccountDeletionCommand(UserId), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("User not found.");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
         _backgroundJobClient.DidNotReceive().Create(Arg.Any<Job>(), Arg.Any<IState>());
     }
 

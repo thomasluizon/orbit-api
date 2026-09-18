@@ -7,6 +7,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Chat;
 
@@ -453,7 +454,7 @@ public class QueryHabitsToolTests
         var result = await Execute("{}");
 
         result.Success.Should().BeFalse();
-        result.Error.Should().Contain("User not found");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
     }
 
     [Fact]

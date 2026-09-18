@@ -31,6 +31,13 @@ public static class ErrorCodes
     public const string MaxDepthReached = "MAX_DEPTH_REACHED";
     public const string CircularReference = "CIRCULAR_REFERENCE";
     public const string InvalidVerificationCode = "INVALID_VERIFICATION_CODE";
+
+    /// <summary>
+    /// A wrong code on a flow that counts down the tries left, so its copy carries the
+    /// remaining count. It is a separate code from <see cref="InvalidVerificationCode"/>
+    /// because copy is selected by code, and the two differ in how many values they take.
+    /// </summary>
+    public const string InvalidCodeAttemptsRemaining = "INVALID_CODE_ATTEMPTS_REMAINING";
     public const string CodeExpired = "CODE_EXPIRED";
     public const string TooManyAttempts = "TOO_MANY_ATTEMPTS";
     public const string InvalidGoogleToken = "INVALID_GOOGLE_TOKEN";
@@ -65,6 +72,7 @@ public static class ErrorCodes
     public const string WebhookStripeApiError = "WEBHOOK_STRIPE_API_ERROR";
     public const string WebhookProcessingFailed = "WEBHOOK_PROCESSING_FAILED";
     public const string InvalidUnsubscribeToken = "INVALID_UNSUBSCRIBE_TOKEN";
+    public const string InvalidWaitlistConfirmation = "INVALID_WAITLIST_CONFIRMATION";
     public const string PlayNotificationVerificationFailed = "PLAY_NOTIFICATION_VERIFICATION_FAILED";
     public const string CodeRequestCooldown = "CODE_REQUEST_COOLDOWN";
     public const string GoogleEmailUnavailable = "GOOGLE_EMAIL_UNAVAILABLE";

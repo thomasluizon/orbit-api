@@ -241,7 +241,10 @@ public static partial class ServiceCollectionExtensions
     {
         AddResponseCompression(builder);
 
-        builder.Services.AddControllers()
+        builder.Services.AddControllers(options =>
+            {
+                options.Filters.Add<LocalizedErrorResultFilter>();
+            })
             .AddJsonOptions(options =>
             {
                 options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());

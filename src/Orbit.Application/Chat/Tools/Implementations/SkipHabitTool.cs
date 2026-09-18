@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
@@ -35,7 +36,7 @@ public class SkipHabitTool(
             return HabitToolHelpers.HabitNotFoundResult(habitId);
 
         if (habit.IsCompleted)
-            return new ToolResult(false, Error: "Cannot skip a completed habit.");
+            return new ToolResult(false, Error: ErrorMessages.CannotSkipCompletedHabit.Message);
 
         var today = await userDateService.GetUserTodayAsync(userId, ct);
 
@@ -67,19 +68,19 @@ public class SkipHabitTool(
     private async Task<ToolResult> SkipRecurringHabit(Habit habit, DateOnly targetDate, DateOnly today, int weekStartDay, CancellationToken ct)
     {
         if (targetDate > today)
-            return new ToolResult(false, Error: "Cannot skip a future date.");
+            return new ToolResult(false, Error: ErrorMessages.CannotSkipFutureDate.Message);
 
         if (!habit.IsFlexible && habit.DueDate > targetDate)
-            return new ToolResult(false, Error: "Cannot skip a habit that is not yet due.");
+            return new ToolResult(false, Error: ErrorMessages.HabitNotYetDue.Message);
 
         if (!HabitScheduleService.IsHabitDueOnDate(habit, targetDate, weekStartDay))
-            return new ToolResult(false, Error: "Habit is not scheduled on this date.");
+            return new ToolResult(false, Error: ErrorMessages.NotScheduledOnDate.Message);
 
         if (habit.IsFlexible)
         {
             var remaining = HabitScheduleService.GetRemainingCompletions(habit, targetDate, habit.Logs, weekStartDay);
             if (remaining <= 0)
-                return new ToolResult(false, Error: "All instances for this period have already been completed or skipped.");
+                return new ToolResult(false, Error: ErrorMessages.AllInstancesDone.Message);
 
             var skipResult = habit.SkipFlexible(targetDate);
             if (skipResult.IsFailure)

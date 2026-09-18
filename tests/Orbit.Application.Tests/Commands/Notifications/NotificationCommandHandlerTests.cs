@@ -60,7 +60,7 @@ public class MarkNotificationReadCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Notification not found");
+        result.Error.Should().Be(ErrorMessages.NotificationNotFound.Message);
         result.ErrorCode.Should().Be("NOTIFICATION_NOT_FOUND");
     }
 }

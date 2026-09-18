@@ -11,6 +11,35 @@ public sealed partial class AiSlipAlertMessageService(
     AiCompletionClient aiClient,
     ILogger<AiSlipAlertMessageService> logger) : ISlipAlertMessageService
 {
+    internal const string SystemPrompt =
+        "You are a calm, steady presence helping someone stay away from a habit they are trying to quit. "
+        + "You write one push notification. You never sell, never perform enthusiasm, and never scold.";
+
+    internal static string BuildPrompt(string habitTitle, DayOfWeek dayOfWeek, int? peakHour, string language)
+    {
+        var languageName = LocaleHelper.GetAiLanguageName(language);
+
+        var timeContext = peakHour.HasValue
+            ? $"They tend to slip around {peakHour.Value}:00 on {dayOfWeek}s."
+            : $"They tend to slip on {dayOfWeek}s (no specific time pattern).";
+
+        return $"""
+            Bad habit: {PromptDataSanitizer.QuoteInline(habitTitle, 100)}
+            Pattern: {timeContext}
+
+            Write a push notification that helps this person let it pass today.
+
+            Format:
+            - Return EXACTLY two lines. The first line is the notification title, the second line is the body.
+            - Title: at most 8 words.
+            - Body: one or two sentences, specific to this habit and to the pattern above.
+            - Do not name the app.
+            - Write ONLY in {languageName}.
+
+            {NotificationVoice.Rules}
+            """;
+    }
+
     public async Task<Result<(string Title, string Body)>> GenerateMessageAsync(
         string habitTitle,
         DayOfWeek dayOfWeek,
@@ -18,35 +47,12 @@ public sealed partial class AiSlipAlertMessageService(
         string language,
         CancellationToken cancellationToken = default)
     {
-        var languageName = LocaleHelper.GetAiLanguageName(language);
-        var sanitizedHabitTitle = SanitizeHeadingTitle(habitTitle);
-
-        var timeContext = peakHour.HasValue
-            ? $"They tend to slip around {peakHour.Value}:00 on {dayOfWeek}s."
-            : $"They tend to slip on {dayOfWeek}s (no specific time pattern).";
-
-        var prompt = $"""
-            Bad habit: {PromptDataSanitizer.QuoteInline(habitTitle, 100)}
-            Pattern: {timeContext}
-
-            Generate a short, inspiring push notification to help them stay strong today.
-
-            Rules:
-            - Return EXACTLY two lines: first line is the notification title, second line is the body
-            - Title: 5-8 words max, personal and warm (e.g., "Stay strong today!" or "You've got this!")
-            - Body: 1-2 sentences max, motivational and specific to their habit
-            - Be creative and varied -- don't use the same structure every time
-            - Tone: supportive friend, not preachy or judgmental
-            - Do NOT use emojis
-            - Do NOT mention the app name
-            - Write ONLY in {languageName}
-            - No quotes or formatting, just plain text
-            """;
+        var prompt = BuildPrompt(habitTitle, dayOfWeek, peakHour, language);
 
         try
         {
             var text = await aiClient.CompleteTextAsync(
-                "You are a supportive habit coach sending a push notification to help someone avoid a bad habit slip-up.",
+                SystemPrompt,
                 prompt,
                 temperature: 0.9,
                 cancellationToken: cancellationToken,
@@ -59,13 +65,9 @@ public sealed partial class AiSlipAlertMessageService(
             }
 
             var lines = text.Trim().Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            if (lines.Length >= 2)
-                return Result.Success((lines[0], lines[1]));
-
-            var fallbackTitle = LocaleHelper.IsPortuguese(language)
-                ? $"Fique atento: {sanitizedHabitTitle}"
-                : $"Heads up: {sanitizedHabitTitle}";
-            return Result.Success((fallbackTitle, lines[0]));
+            return lines.Length >= 2
+                ? Result.Success((lines[0], lines[1]))
+                : Result.Success((FallbackTitle(habitTitle, language), lines[0]));
         }
         catch (Exception ex)
         {
@@ -74,14 +76,19 @@ public sealed partial class AiSlipAlertMessageService(
         }
     }
 
-    private static Result<(string Title, string Body)> GenerateFallback(string habitTitle, string language)
+    private static Result<(string Title, string Body)> GenerateFallback(string habitTitle, string language) =>
+        Result.Success((
+            FallbackTitle(habitTitle, language),
+            LocaleHelper.IsPortuguese(language)
+                ? "É por volta desta hora que costuma aparecer. Hoje você pode deixar passar."
+                : "This is around the time it usually comes up. You can let it pass today."));
+
+    private static string FallbackTitle(string habitTitle, string language)
     {
         var sanitizedHabitTitle = SanitizeHeadingTitle(habitTitle);
         return LocaleHelper.IsPortuguese(language)
-            ? Result.Success(($"Fique atento: {sanitizedHabitTitle}",
-                "Você costuma deslizar por volta desse horário. Força -- você consegue!"))
-            : Result.Success(($"Heads up: {sanitizedHabitTitle}",
-                "You tend to slip around this time. Stay strong -- you've got this!"));
+            ? $"Seu horário de sempre: {sanitizedHabitTitle}"
+            : $"Your usual time for {sanitizedHabitTitle}";
     }
 
     private static string SanitizeHeadingTitle(string habitTitle) =>

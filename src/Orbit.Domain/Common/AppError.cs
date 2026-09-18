@@ -9,6 +9,20 @@ namespace Orbit.Domain.Common;
 /// </summary>
 public sealed record AppError(string Code, string Message)
 {
+    /// <summary>
+    /// The arguments the last <see cref="Format"/> call applied, kept so the user-facing
+    /// counterpart selected by <see cref="Code"/> can be formatted with the same values.
+    /// <see cref="Format"/> bakes them into <see cref="Message"/> eagerly, which otherwise
+    /// leaves the response boundary no way to recover them. The default is
+    /// <see cref="Array.Empty{T}"/> rather than a fresh array so that two errors carrying
+    /// no arguments stay equal under the record's structural equality.
+    /// </summary>
+    public IReadOnlyList<object?> Args { get; init; } = Array.Empty<object?>();
+
     public AppError Format(params object?[] args) =>
-        this with { Message = string.Format(CultureInfo.InvariantCulture, Message, args) };
+        this with
+        {
+            Message = string.Format(CultureInfo.InvariantCulture, Message, args),
+            Args = args,
+        };
 }

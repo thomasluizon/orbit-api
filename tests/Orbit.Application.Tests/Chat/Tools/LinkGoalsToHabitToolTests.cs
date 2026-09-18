@@ -10,6 +10,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Chat.Tools;
 
@@ -105,12 +106,12 @@ public class LinkGoalsToHabitToolTests
         var habit = CreateHabit("Run 5K");
         SetupHabitFound(habit);
         _mediator.Send(Arg.Any<LinkGoalsToHabitCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure("Habit not found."));
+            .Returns(Result.Failure(ErrorMessages.HabitNotFound));
 
         var result = await Execute($$"""{"habit_id": "{{habit.Id}}", "goal_ids": ["{{Guid.NewGuid()}}"]}""");
 
         result.Success.Should().BeFalse();
-        result.Error.Should().Be("Habit not found.");
+        result.Error.Should().Be(ErrorMessages.HabitNotFound.Message);
         result.EntityName.Should().BeNull();
     }
 

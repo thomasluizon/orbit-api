@@ -9,6 +9,7 @@ using Orbit.Api.Controllers;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Infrastructure.Persistence;
+using Orbit.Application.Common;
 
 namespace Orbit.Infrastructure.Tests.Controllers;
 
@@ -248,9 +249,9 @@ public class SyncControllerTests : IDisposable
         response.Processed.Should().Be(1);
         response.Failed.Should().Be(3);
         response.Results.Should().ContainInOrder(
-            new SyncController.SyncMutationResult(0, "failed", "Mutation failed"),
-            new SyncController.SyncMutationResult(1, "failed", "Mutation failed"),
-            new SyncController.SyncMutationResult(2, "failed", "Mutation failed"),
+            new SyncController.SyncMutationResult(0, "failed", ErrorMessages.MutationFailed.Message),
+            new SyncController.SyncMutationResult(1, "failed", ErrorMessages.MutationFailed.Message),
+            new SyncController.SyncMutationResult(2, "failed", ErrorMessages.MutationFailed.Message),
             new SyncController.SyncMutationResult(3, "success"));
         notification.IsRead.Should().BeTrue();
     }

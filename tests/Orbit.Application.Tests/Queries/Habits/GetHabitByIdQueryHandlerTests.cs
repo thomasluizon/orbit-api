@@ -8,6 +8,7 @@ using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Persistence;
 using System.Linq.Expressions;
 using System.Reflection;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Queries.Habits;
 
@@ -94,7 +95,7 @@ public class GetHabitByIdQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Habit not found");
+        result.Error.Should().Be(ErrorMessages.HabitNotFound.Message);
     }
 
     [Fact]
