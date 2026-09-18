@@ -92,7 +92,7 @@ public class AgentCatalogServiceTests
     public void BuildDynamicSupplement_ExcludesStaticPolicyAndSurfaces()
     {
         var prompt = _catalogService.BuildDynamicSupplement(new Orbit.Domain.Models.AgentContextSnapshot(
-            "pro", "en", "America/Sao_Paulo", true, true, 1, "dark", "blue", true, true, "Idle",
+            "pro", "en", "America/Sao_Paulo", true, true, 1, "dark", true, true, "Idle",
             TagNames: ["focus"]));
 
         prompt.Should().Contain("Safe User Context");
@@ -197,7 +197,6 @@ public class AgentCatalogServiceTests
             true,
             1,
             "dark",
-            "blue",
             true,
             true,
             "Idle",

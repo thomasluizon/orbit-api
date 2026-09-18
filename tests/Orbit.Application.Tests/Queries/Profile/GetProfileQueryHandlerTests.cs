@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Profile.Queries;
+using Orbit.Application.Tests.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
@@ -436,10 +437,9 @@ public class GetProfileQueryHandlerTests
     [InlineData("rose")]
     [InlineData("orange")]
     [InlineData("cyan")]
-    public async Task Handle_StoredHistoricalColorScheme_ResolvesToGrantedAccent(string storedColorScheme)
+    public async Task Handle_LegacyStoredColorScheme_ResolvesToGrantedAccent(string storedColorScheme)
     {
-        var user = CreateTestUser();
-        user.SetColorScheme(storedColorScheme).IsSuccess.Should().BeTrue();
+        var user = CreateTestUser().WithStoredColorScheme(storedColorScheme);
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
         _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(20);
         StubFreezeRepoEmpty();
@@ -466,10 +466,9 @@ public class GetProfileQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_FreeAccountWithStoredColorScheme_ResolvesToGrantedAccent()
+    public async Task Handle_FreeAccountWithLegacyStoredColorScheme_ResolvesToGrantedAccent()
     {
-        var user = CreateFreeUser();
-        user.SetColorScheme("rose").IsSuccess.Should().BeTrue();
+        var user = CreateFreeUser().WithStoredColorScheme("rose");
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
         _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(20);
         StubFreezeRepoEmpty();

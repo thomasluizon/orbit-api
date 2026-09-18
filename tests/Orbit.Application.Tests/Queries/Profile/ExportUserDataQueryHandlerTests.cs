@@ -1,7 +1,9 @@
 using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Goals.Services;
+using Orbit.Application.Tests.Common;
 using Orbit.Application.Profile.Queries;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -377,22 +379,20 @@ public class ExportUserDataQueryHandlerTests
     [InlineData("blue")]
     [InlineData("green")]
     [InlineData("rose")]
-    [InlineData("orange")]
     [InlineData("cyan")]
-    public async Task Handle_StoredHistoricalColorScheme_ExportsGrantedAccent(string storedColorScheme)
+    public async Task Handle_LegacyStoredColorScheme_ExportsTheStoredValueNotTheGrantedAccent(string storedColorScheme)
     {
-        var user = CreateTestUser();
-        user.SetColorScheme(storedColorScheme).IsSuccess.Should().BeTrue();
+        var user = CreateTestUser().WithStoredColorScheme(storedColorScheme);
         ArrangeUser(user);
 
         var result = await _handler.Handle(new ExportUserDataQuery(UserId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Settings.ColorScheme.Should().Be("orange");
+        result.Value.Settings.ColorScheme.Should().Be(storedColorScheme);
     }
 
     [Fact]
-    public async Task Handle_NoStoredColorScheme_ExportsGrantedAccent()
+    public async Task Handle_NoStoredColorScheme_ExportsNull()
     {
         var user = CreateTestUser();
         user.ColorScheme.Should().BeNull();
@@ -401,6 +401,19 @@ public class ExportUserDataQueryHandlerTests
         var result = await _handler.Handle(new ExportUserDataQuery(UserId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Settings.ColorScheme.Should().Be("orange");
+        result.Value.Settings.ColorScheme.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_ColorSchemeWrittenByTheCurrentApi_ExportsTheGrantedAccent()
+    {
+        var user = CreateTestUser();
+        user.SetColorScheme("rose").IsSuccess.Should().BeTrue();
+        ArrangeUser(user);
+
+        var result = await _handler.Handle(new ExportUserDataQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Settings.ColorScheme.Should().Be(ColorSchemes.Granted);
     }
 }

@@ -89,7 +89,7 @@ public class ExportUserDataQueryHandler(
                 user.Language,
                 user.WeekStartDay,
                 user.ThemePreference,
-                ColorSchemes.Granted,
+                user.ColorScheme,
                 user.AiMemoryEnabled,
                 user.AiSummaryEnabled,
                 user.ProactiveAstraEnabled),

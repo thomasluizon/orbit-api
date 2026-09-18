@@ -107,7 +107,6 @@ public partial class AgentCatalogService : IAgentCatalogService
         sb.AppendLine($"AI summary: {(snapshot.AiSummaryEnabled ? "enabled" : "disabled")}");
         sb.AppendLine($"Week starts on: {(snapshot.WeekStartDay == 0 ? "Sunday" : "Monday")}");
         sb.AppendLine($"Theme: {snapshot.ThemePreference ?? "system"}");
-        sb.AppendLine($"Color scheme: {snapshot.ColorScheme ?? "default"}");
         sb.AppendLine($"Google Calendar connected: {(snapshot.HasGoogleConnection ? "yes" : "no")}");
         sb.AppendLine($"Calendar auto-sync: {(snapshot.GoogleCalendarAutoSyncEnabled ? "enabled" : "disabled")} ({snapshot.GoogleCalendarAutoSyncStatus})");
 

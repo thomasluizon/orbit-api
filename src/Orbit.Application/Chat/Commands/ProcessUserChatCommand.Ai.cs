@@ -122,7 +122,6 @@ public partial class ProcessUserChatCommandHandler
             hasProAccess && (user?.AiSummaryEnabled ?? true),
             user?.WeekStartDay ?? 1,
             user?.ThemePreference,
-            ColorSchemes.Granted,
             hasProAccess && user?.GoogleAccessToken is not null,
             hasProAccess && (user?.GoogleCalendarAutoSyncEnabled ?? false),
             hasProAccess
