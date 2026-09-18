@@ -2954,7 +2954,7 @@
       "Challenges": 14,
       "Chat": 63,
       "ChecklistTemplates": 9,
-      "Common": 251,
+      "Common": 252,
       "Gamification": 43,
       "Goals": 54,
       "Habits": 93,
@@ -7160,6 +7160,11 @@
         ]
       },
       {
+        "testClass": "EmailCopyTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Email/EmailCopyTests.cs",
+        "references": []
+      },
+      {
         "testClass": "HttpContextExtensionsTests",
         "file": "tests/Orbit.Infrastructure.Tests/Extensions/HttpContextExtensionsTests.cs",
         "references": [
@@ -7320,7 +7325,9 @@
       {
         "testClass": "LocalizedErrorResultFilterTests",
         "file": "tests/Orbit.Infrastructure.Tests/Middleware/LocalizedErrorResultFilterTests.cs",
-        "references": []
+        "references": [
+          "User"
+        ]
       },
       {
         "testClass": "MinimumVersionMiddlewareTests",
@@ -7882,6 +7889,13 @@
         "testClass": "MarketingUnsubscribeTokenServiceTests",
         "file": "tests/Orbit.Infrastructure.Tests/Services/MarketingUnsubscribeTokenServiceTests.cs",
         "references": []
+      },
+      {
+        "testClass": "NotificationVoiceTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Services/NotificationVoiceTests.cs",
+        "references": [
+          "Habit"
+        ]
       },
       {
         "testClass": "CapturingLogger",
