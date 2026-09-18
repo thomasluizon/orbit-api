@@ -241,6 +241,8 @@ public static partial class ServiceCollectionExtensions
     {
         AddResponseCompression(builder);
 
+        builder.Services.AddScoped<IRequestLanguageResolver, RequestLanguageResolver>();
+
         builder.Services.AddControllers(options =>
             {
                 options.Filters.Add<LocalizedErrorResultFilter>();

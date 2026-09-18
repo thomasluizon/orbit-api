@@ -148,7 +148,70 @@ public class ErrorCopyTests
     public void EveryApplicationConstantTakesItsMessageFromTheCatalog()
     {
         foreach (var error in DeclaredErrors(typeof(ErrorMessages)))
-            error.Message.Should().Be(ErrorCopy.All[error.Code].En, $"{error.Code} must not be written twice");
+        {
+            var allowed = ErrorCopy.AllCounted.TryGetValue(error.Code, out var counted)
+                ? new[] { ErrorCopy.All[error.Code].En, counted.En }
+                : [ErrorCopy.All[error.Code].En];
+
+            allowed.Should().Contain(error.Message, $"{error.Code} must not be written twice");
+        }
+    }
+
+    public static TheoryData<string, string, string> EveryCountedEntry()
+    {
+        var entries = new TheoryData<string, string, string>();
+        foreach (var (code, copy) in ErrorCopy.AllCounted)
+            entries.Add(code, copy.En, copy.PtBr);
+        return entries;
+    }
+
+    /// <summary>
+    /// A counted variant answers a code the plain catalog already answers, so it stays inside the
+    /// same totality guarantee: the fallback in the response path must stay unreachable whether or
+    /// not the failure carried a count.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(EveryCountedEntry))]
+    public void EveryCountedVariantAnswersAKnownCodeAndTakesACount(string code, string english, string portuguese)
+    {
+        ErrorCopy.All.Should().ContainKey(code);
+
+        foreach (var copy in new[] { english, portuguese })
+        {
+            copy.Should().NotContain("!", $"{code} must stay calm");
+            copy.Should().NotContain(EmDash, $"{code} must carry no em dash");
+            copy.Should().NotContain(EnDash, $"{code} must carry no en dash");
+            copy.Should().NotContain(DoubledHyphen, $"{code} must carry no doubled hyphen");
+            PlaceholderPattern.IsMatch(copy).Should().BeTrue($"{code} is only selected when a count is present");
+        }
+    }
+
+    /// <summary>
+    /// Orbit 1.3.31 and the web step-up screen read the remaining-attempt count out of this
+    /// message with <c>/remaining attempts:\s*(\d+)\s*$/i</c> and render it from their own
+    /// localized plural strings. The token is therefore a wire contract in both languages, and a
+    /// translated one would drop the count for every pt-BR reader.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TheAttemptsVariantKeepsTheTokenTheShippedClientsParse(bool isPtBr)
+    {
+        var formatted = ErrorMessages.InvalidDeletionCode.Format(2);
+
+        formatted.Code.Should().Be(ErrorCodes.InvalidVerificationCode);
+        ErrorCopy.TryResolve(formatted.Code, isPtBr, formatted.Args, out var message).Should().BeTrue();
+        message.Should().MatchRegex(@"[Rr]emaining attempts:\s*2\s*$");
+    }
+
+    [Fact]
+    public void AFailureWithoutACountStillGetsThePlainSentence()
+    {
+        ErrorCopy.TryResolve(ErrorCodes.InvalidVerificationCode, isPtBr: true, [], out var message)
+            .Should().BeTrue();
+
+        message.Should().Be(ErrorCopy.All[ErrorCodes.InvalidVerificationCode].PtBr);
+        message.Should().NotContainEquivalentOf("remaining attempts");
     }
 
     [Fact]

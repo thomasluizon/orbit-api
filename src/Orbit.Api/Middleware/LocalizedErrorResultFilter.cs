@@ -6,7 +6,7 @@ namespace Orbit.Api.Middleware;
 
 /// <summary>
 /// Replaces the message on every <see cref="ErrorResponse"/> with the user-facing copy
-/// <see cref="ErrorCopy"/> holds for its code, in the language the request asked for.
+/// <see cref="ErrorCopy"/> holds for its code, in the language the reader reads.
 /// <para>
 /// This is the single seam where that substitution happens. Threading a language through the
 /// 190 call sites of <c>ToErrorResult</c> and <c>ToPayGateAwareResult</c> would have put the
@@ -15,25 +15,29 @@ namespace Orbit.Api.Middleware;
 /// a client at all, because the code always resolves first.
 /// </para>
 /// <para>
+/// The language comes from <see cref="IRequestLanguageResolver"/>, which reads the signed-in
+/// account's stored language and treats <c>Accept-Language</c> as the anonymous fallback. Both
+/// shipped clients send no such header, so reading it alone answered every signed-in pt-BR
+/// reader in English.
+/// </para>
+/// <para>
 /// The status code, the error code and the body's shape are untouched. Only the sentence
 /// changes, and only when the code carries copy.
 /// </para>
 /// </summary>
-internal sealed class LocalizedErrorResultFilter : IResultFilter
+internal sealed class LocalizedErrorResultFilter(IRequestLanguageResolver languageResolver) : IAsyncResultFilter
 {
-    public void OnResultExecuting(ResultExecutingContext context)
+    public async Task OnResultExecutionAsync(ResultExecutingContext context, ResultExecutionDelegate next)
     {
-        if (context.Result is not ObjectResult { Value: ErrorResponse body } objectResult)
-            return;
+        if (context.Result is ObjectResult { Value: ErrorResponse body } objectResult)
+        {
+            var isPtBr = await languageResolver.IsPortugueseAsync(
+                context.HttpContext, context.HttpContext.RequestAborted);
 
-        var isPtBr = LocaleHelper.IsPortuguese(
-            context.HttpContext.Request.Headers.AcceptLanguage.ToString());
+            if (ErrorCopy.TryResolve(body.ErrorCode, isPtBr, body.Args, out var message))
+                objectResult.Value = body with { Error = message };
+        }
 
-        if (ErrorCopy.TryResolve(body.ErrorCode, isPtBr, body.Args, out var message))
-            objectResult.Value = body with { Error = message };
-    }
-
-    public void OnResultExecuted(ResultExecutedContext context)
-    {
+        await next();
     }
 }

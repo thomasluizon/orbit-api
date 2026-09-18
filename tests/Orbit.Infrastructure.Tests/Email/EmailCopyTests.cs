@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.Reflection;
 using FluentAssertions;
+using Orbit.Application.Common;
 using Orbit.Infrastructure.Email;
 
 namespace Orbit.Infrastructure.Tests.Email;
@@ -77,12 +79,55 @@ public class EmailCopyTests
     [Fact]
     public void EveryLocalizedEmailDiffersBetweenTheTwoLanguages()
     {
-        var english = EveryString(isPtBr: false).Where(s => s.Email != "Support").ToList();
-        var portuguese = EveryString(isPtBr: true).Where(s => s.Email != "Support").ToList();
+        var english = EveryString(isPtBr: false)
+            .Where(s => s.Email != "Support")
+            .ToDictionary(s => (s.Email, s.Field), s => s.Value);
+        var portuguese = EveryString(isPtBr: true)
+            .Where(s => s.Email != "Support")
+            .ToDictionary(s => (s.Email, s.Field), s => s.Value);
 
-        for (var i = 0; i < english.Count; i++)
-            portuguese[i].Value.Should().NotBe(
-                english[i].Value, $"{english[i].Email}.{english[i].Field} must be translated, not copied");
+        portuguese.Keys.Should().BeEquivalentTo(english.Keys);
+
+        foreach (var ((email, field), value) in english)
+            portuguese[(email, field)].Should().NotBe(
+                value, $"{email}.{field} must be translated, not copied");
+    }
+
+    /// <summary>
+    /// Confirming deletion deactivates the account: <c>ConfirmAccountDeletionCommandHandler</c>
+    /// schedules removal at most <see cref="AppConstants.MaxDeletionGraceDays"/> days out, and
+    /// signing in again cancels it through <c>User.CancelDeactivation</c>. Copy that promised an
+    /// immediate and permanent wipe was wrong in both directions, which is the defect pull request
+    /// 954 already corrected once inside the app.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(BothLanguages))]
+    public void TheDeletionEmailNamesTheGraceWindowAndTheWayOutOfIt(bool isPtBr)
+    {
+        var intro = EmailCopy.AccountDeletion(isPtBr).Intro;
+
+        intro.Should().Contain(
+            AppConstants.MaxDeletionGraceDays.ToString(CultureInfo.InvariantCulture),
+            "the window is read from the constant the handler schedules against");
+        intro.Should().ContainEquivalentOf(
+            isPtBr ? "Entre de novo" : "Sign in again",
+            "signing in cancels the deletion");
+    }
+
+    [Theory]
+    [MemberData(nameof(BothLanguages))]
+    public void TheDeletionEmailNeverCallsTheRequestIrreversible(bool isPtBr)
+    {
+        var intro = EmailCopy.AccountDeletion(isPtBr).Intro;
+
+        foreach (var claim in new[]
+                 {
+                     "cannot be undone", "não pode ser desfeito",
+                     "irreversible", "irreversível", "permanently now", "imediatamente",
+                 })
+        {
+            intro.Should().NotContainEquivalentOf(claim);
+        }
     }
 
     [Fact]

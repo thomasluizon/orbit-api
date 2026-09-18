@@ -21,6 +21,8 @@ public static class ErrorMessages
 {
     private static AppError From(string code) => new(code, ErrorCopy.English(code));
 
+    private static AppError FromCounted(string code) => new(code, ErrorCopy.EnglishWithCount(code));
+
     public static readonly AppError UserNotFound = From(ErrorCodes.UserNotFound);
     public static readonly AppError HabitNotFound = From(ErrorCodes.HabitNotFound);
     public static readonly AppError ParentHabitNotFound = From(ErrorCodes.ParentHabitNotFound);
@@ -85,9 +87,17 @@ public static class ErrorMessages
     public static readonly AppError DeletionCodeExpired = From(ErrorCodes.CodeExpired);
     public static readonly AppError TooManyCodeAttempts = From(ErrorCodes.TooManyAttempts);
     public static readonly AppError InvalidVerificationCode = From(ErrorCodes.InvalidVerificationCode);
-    public static readonly AppError InvalidDeletionCode = From(ErrorCodes.InvalidCodeAttemptsRemaining);
+    /// <summary>
+    /// Keeps <see cref="ErrorCodes.InvalidVerificationCode"/> because both shipped clients branch
+    /// on that value and have no branch for anything else: a new code sends Orbit 1.3.31 and the
+    /// web step-up screen down their generic-error path. The count rides in the counted variant
+    /// <see cref="ErrorCopy.EnglishWithCount"/> resolves, which keeps the trailing token those
+    /// clients parse.
+    /// </summary>
+    public static readonly AppError InvalidDeletionCode = FromCounted(ErrorCodes.InvalidVerificationCode);
     public static readonly AppError ApiKeyCreationCodeExpired = From(ErrorCodes.CodeExpired);
-    public static readonly AppError InvalidApiKeyCreationCode = From(ErrorCodes.InvalidCodeAttemptsRemaining);
+    /// <inheritdoc cref="InvalidDeletionCode"/>
+    public static readonly AppError InvalidApiKeyCreationCode = FromCounted(ErrorCodes.InvalidVerificationCode);
     public static readonly AppError InvalidGoogleToken = From(ErrorCodes.InvalidGoogleToken);
     public static readonly AppError GoogleEmailUnavailable = From(ErrorCodes.GoogleEmailUnavailable);
     public static readonly AppError GoogleTokenAudienceMismatch = From(ErrorCodes.GoogleTokenAudienceMismatch);

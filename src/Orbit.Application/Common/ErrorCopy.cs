@@ -29,7 +29,6 @@ public static class ErrorCopy
         (ErrorCodes.InvalidSession, "This session ended. Sign in again to continue.", "Esta sessão terminou. Entre de novo para continuar."),
         (ErrorCodes.SessionCreationFailed, "We could not start a session. Try signing in again.", "Não conseguimos iniciar a sessão. Tente entrar de novo."),
         (ErrorCodes.InvalidVerificationCode, "That code is not correct. Check it and enter it again.", "Esse código não está certo. Confira e digite de novo."),
-        (ErrorCodes.InvalidCodeAttemptsRemaining, "That code is not correct. You have {0} tries left.", "Esse código não está certo. Você tem mais {0} tentativas."),
         (ErrorCodes.CodeExpired, "That code expired. Ask for a new one.", "Esse código expirou. Peça um novo."),
         (ErrorCodes.TooManyAttempts, $"Too many tries. Wait {AppConstants.VerificationAttemptWindowMinutes} minutes and start again.", $"Tentativas demais. Espere {AppConstants.VerificationAttemptWindowMinutes} minutos e comece de novo."),
         (ErrorCodes.CodeRequestCooldown, "Wait a moment before asking for another code.", "Espere um instante antes de pedir outro código."),
@@ -313,6 +312,28 @@ public static class ErrorCopy
         (DomainErrors.InvalidWeekStartDay.Code, "Choose Sunday or Monday as the first day of the week.", "Escolha domingo ou segunda como primeiro dia da semana."),
     ];
 
+    /// <summary>
+    /// The variant a code renders when the failure carries a count, selected by the presence of
+    /// arguments rather than by a second error code.
+    /// <para>
+    /// The trailing <c>Remaining attempts: {0}</c> is a wire contract, not prose. Orbit 1.3.31 and
+    /// the web step-up screen read the count out of the message with
+    /// <c>/remaining attempts:\s*(\d+)\s*$/i</c> and then render it from their own localized
+    /// plural strings, so the sentence itself never reaches a screen. It stays byte-identical in
+    /// both languages for that reason: a translated token would lose the count for every pt-BR
+    /// reader the moment the language stops being English.
+    /// </para>
+    /// </summary>
+    private static readonly (string Code, string En, string PtBr)[] CountedVariants =
+    [
+        (ErrorCodes.InvalidVerificationCode,
+            "That code is not correct. Remaining attempts: {0}",
+            "Esse código não está certo. Remaining attempts: {0}"),
+    ];
+
+    private static readonly Dictionary<string, (string En, string PtBr)> CountedCatalog =
+        CountedVariants.ToDictionary(entry => entry.Code, entry => (entry.En, entry.PtBr), StringComparer.Ordinal);
+
     private static readonly Dictionary<string, (string En, string PtBr)> Catalog = BuildCatalog();
 
     /// <summary>Every error code this API can return, paired with its copy in both languages.</summary>
@@ -339,6 +360,18 @@ public static class ErrorCopy
             : throw new InvalidOperationException($"Error code has no user-facing copy: {code}");
 
     /// <summary>
+    /// The English counted variant for <paramref name="code"/>, which <see cref="ErrorMessages"/>
+    /// takes as the message of a constant whose call site always applies a count.
+    /// </summary>
+    public static string EnglishWithCount(string code) =>
+        CountedCatalog.TryGetValue(code, out var copy)
+            ? copy.En
+            : throw new InvalidOperationException($"Error code has no counted copy: {code}");
+
+    /// <summary>Every counted variant, paired with its code.</summary>
+    public static IReadOnlyDictionary<string, (string En, string PtBr)> AllCounted => CountedCatalog;
+
+    /// <summary>
     /// The user-facing message for <paramref name="code"/>, formatted with
     /// <paramref name="args"/> when the copy carries a placeholder. Returns false when the
     /// code has no entry, which leaves the caller on the raw message.
@@ -346,7 +379,22 @@ public static class ErrorCopy
     public static bool TryResolve(
         string? code, bool isPtBr, IReadOnlyList<object?> args, out string message)
     {
-        if (code is null || !Catalog.TryGetValue(code, out var copy))
+        if (code is null)
+        {
+            message = string.Empty;
+            return false;
+        }
+
+        if (args.Count > 0 && CountedCatalog.TryGetValue(code, out var counted))
+        {
+            message = string.Format(
+                System.Globalization.CultureInfo.InvariantCulture,
+                isPtBr ? counted.PtBr : counted.En,
+                [.. args]);
+            return true;
+        }
+
+        if (!Catalog.TryGetValue(code, out var copy))
         {
             message = string.Empty;
             return false;

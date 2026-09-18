@@ -32,12 +32,6 @@ public static class ErrorCodes
     public const string CircularReference = "CIRCULAR_REFERENCE";
     public const string InvalidVerificationCode = "INVALID_VERIFICATION_CODE";
 
-    /// <summary>
-    /// A wrong code on a flow that counts down the tries left, so its copy carries the
-    /// remaining count. It is a separate code from <see cref="InvalidVerificationCode"/>
-    /// because copy is selected by code, and the two differ in how many values they take.
-    /// </summary>
-    public const string InvalidCodeAttemptsRemaining = "INVALID_CODE_ATTEMPTS_REMAINING";
     public const string CodeExpired = "CODE_EXPIRED";
     public const string TooManyAttempts = "TOO_MANY_ATTEMPTS";
     public const string InvalidGoogleToken = "INVALID_GOOGLE_TOKEN";

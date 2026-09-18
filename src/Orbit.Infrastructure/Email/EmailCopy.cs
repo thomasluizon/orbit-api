@@ -1,3 +1,5 @@
+using Orbit.Application.Common;
+
 namespace Orbit.Infrastructure.Email;
 
 /// <summary>
@@ -14,6 +16,15 @@ public static class EmailCopy
         string Subject, string Heading, string Intro, string FeaturesTitle,
         string Feature1, string Feature2, string Feature3, string Cta, string Footer, string Preheader);
 
+    /// <summary>
+    /// The intro states the grace window and the way back out of it, because confirming
+    /// deletion deactivates the account rather than erasing it:
+    /// <c>ConfirmAccountDeletionCommandHandler</c> schedules removal at most
+    /// <see cref="AppConstants.MaxDeletionGraceDays"/> days out, and signing in again calls
+    /// <c>User.CancelDeactivation</c>. Copy that promised an immediate and permanent wipe was
+    /// wrong in both directions: it told somebody a returning sign-in was impossible, and it
+    /// told somebody who wanted a real wipe that it had already happened.
+    /// </summary>
     public sealed record AccountDeletionCopy(
         string Subject, string Heading, string Intro, string CodeLabel, string Warning, string Footer, string Preheader);
 
@@ -76,8 +87,8 @@ public static class EmailCopy
     public static AccountDeletionCopy AccountDeletion(bool isPtBr)
     {
         var intro = isPtBr
-            ? "Você pediu para excluir sua conta Orbit. Isso não pode ser desfeito. Seus hábitos, histórico, conversas e configurações são apagados de vez."
-            : "You asked to delete your Orbit account. This cannot be undone. Your habits, history, conversations and settings are removed for good.";
+            ? $"Você pediu para excluir sua conta Orbit. O Orbit desativa a conta primeiro e apaga tudo de vez em até {AppConstants.MaxDeletionGraceDays} dias. Entre de novo enquanto ela está desativada e a conta volta com tudo dentro."
+            : $"You asked to delete your Orbit account. Orbit deactivates it first, then removes it for good within {AppConstants.MaxDeletionGraceDays} days. Sign in again while it is deactivated and the account comes back with everything in it.";
 
         return new AccountDeletionCopy(
             Subject: isPtBr ? "Confirme a exclusão da sua conta Orbit" : "Confirm that you want to delete your Orbit account",
