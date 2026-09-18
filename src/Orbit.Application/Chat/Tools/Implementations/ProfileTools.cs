@@ -128,7 +128,7 @@ public class UpdateProfilePreferencesTool(IMediator mediator) : IAiTool
 public class SetColorSchemeTool(IMediator mediator) : IAiTool
 {
     public string Name => "set_color_scheme";
-    public string Description => "Store the user's color scheme preference. Orbit now uses one accent color, so the value is accepted for older apps but does not change how anything looks.";
+    public string Description => "Accept a color scheme from an older app. Orbit renders one accent, so the stored value becomes the granted one and nothing looks different.";
 
     public object GetParameterSchema() => new
     {

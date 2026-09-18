@@ -107,7 +107,7 @@ public class ProfileTools(IMediator mediator, McpExecutorBridge executorBridge)
         return enabled ? "AI summary enabled" : "AI summary disabled";
     }
 
-    [McpServerTool(Name = "set_color_scheme"), Description("Store the user's color scheme preference. Orbit now uses one accent color, so the value is accepted for older apps but does not change how anything looks.")]
+    [McpServerTool(Name = "set_color_scheme"), Description("Accept a color scheme from an older app. Orbit renders one accent, so the stored value becomes the granted one and nothing looks different.")]
     public async Task<string> SetColorScheme(
         ClaimsPrincipal user,
         [Description("Color scheme key, or null/default to clear it")] string? colorScheme,
