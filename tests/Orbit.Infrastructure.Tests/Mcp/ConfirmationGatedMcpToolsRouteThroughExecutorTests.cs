@@ -56,6 +56,9 @@ public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
     [GeneratedRegex(@"\bstring\?\s+" + ConfirmationTokenParameterName + @"\b")]
     private static partial Regex ConfirmationTokenParameterPattern();
 
+    [GeneratedRegex(@"\b" + ConfirmationTokenParameterName + @"\s*=[^=>]")]
+    private static partial Regex ConfirmationTokenAssignmentPattern();
+
     [GeneratedRegex(@"^\w+\s*:(?!:)")]
     private static partial Regex NamedArgumentPrefixPattern();
 
@@ -159,6 +162,12 @@ public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
                     $"{tool.FileName}: {tool.ToolName} declares no " +
                     $"'string? {ConfirmationTokenParameterName}' parameter");
 
+            if (tool.AssignsConfirmationTokenParameter)
+                offenders.Add(
+                    $"{tool.FileName}: {tool.ToolName} assigns to " +
+                    $"{ConfirmationTokenParameterName} before the executor reads it, so the " +
+                    "forwarded identifier no longer carries the caller's token");
+
             offenders.AddRange(tool.BridgeCalls
                 .Where(call => call.ConfirmationTokenExpression != ConfirmationTokenParameterName)
                 .Select(call =>
@@ -204,7 +213,8 @@ public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
                     toolName,
                     capability,
                     CollectBridgeCalls(member, membersByName, constants),
-                    DeclaresConfirmationTokenParameter(member)));
+                    DeclaresConfirmationTokenParameter(member),
+                    AssignsConfirmationTokenParameter(member, membersByName)));
             }
         }
 
@@ -217,6 +227,15 @@ public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
             .Any(parameter => ConfirmationTokenParameterPattern().IsMatch(parameter));
     }
 
+    private static bool AssignsConfirmationTokenParameter(
+        MemberSource member,
+        IReadOnlyDictionary<string, MemberSource> membersByName)
+    {
+        return ConfirmationTokenAssignmentPattern().IsMatch(member.Statements) ||
+            ReadHelperCalls(member, membersByName)
+                .Any(helper => ConfirmationTokenAssignmentPattern().IsMatch(helper.Target.Statements));
+    }
+
     private static IReadOnlyList<BridgeCallSite> CollectBridgeCalls(
         MemberSource member,
         IReadOnlyDictionary<string, MemberSource> membersByName,
@@ -224,19 +243,25 @@ public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
     {
         var calls = ReadBridgeCalls(member.Body, constants, [], []);
 
+        foreach (var (target, callerArguments) in ReadHelperCalls(member, membersByName))
+            calls.AddRange(ReadBridgeCalls(target.Body, constants, target.Parameters, callerArguments));
+
+        return calls;
+    }
+
+    private static IEnumerable<(MemberSource Target, List<string> CallerArguments)> ReadHelperCalls(
+        MemberSource member,
+        IReadOnlyDictionary<string, MemberSource> membersByName)
+    {
         foreach (var invocation in InvocationPattern().Matches(member.Body).Cast<Match>())
         {
             var callee = invocation.Groups["name"].Value;
             if (callee == member.Name || !membersByName.TryGetValue(callee, out var target))
                 continue;
 
-            var callerArguments = SplitTopLevelArguments(
-                ReadBalancedText(member.Body, invocation.Index + invocation.Length - 1));
-
-            calls.AddRange(ReadBridgeCalls(target.Body, constants, target.Parameters, callerArguments));
+            yield return (target, SplitTopLevelArguments(
+                ReadBalancedText(member.Body, invocation.Index + invocation.Length - 1)));
         }
-
-        return calls;
     }
 
     private static List<BridgeCallSite> ReadBridgeCalls(
@@ -323,11 +348,13 @@ public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
             var end = index + 1 < declarations.Count ? declarations[index + 1].Index : source.Length;
             var parameterListStart = declaration.Index + declaration.Length - 1;
             var parameterList = ReadBalancedText(source, parameterListStart);
+            var statementsStart = Math.Min(parameterListStart + parameterList.Length + 1, end);
 
             members.Add(new MemberSource(
                 declaration.Groups["name"].Value,
                 declaration.Index,
                 source[declaration.Index..end],
+                source[statementsStart..end],
                 parameterList,
                 ReadParameterNames(parameterList)));
         }
@@ -465,7 +492,8 @@ public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
         string ToolName,
         AgentCapability Capability,
         IReadOnlyList<BridgeCallSite> BridgeCalls,
-        bool DeclaresConfirmationTokenParameter);
+        bool DeclaresConfirmationTokenParameter,
+        bool AssignsConfirmationTokenParameter);
 
     private sealed record BridgeCallSite(
         string OperationIdExpression,
@@ -476,6 +504,7 @@ public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
         string Name,
         int Start,
         string Body,
+        string Statements,
         string ParameterList,
         List<string> Parameters);
 
