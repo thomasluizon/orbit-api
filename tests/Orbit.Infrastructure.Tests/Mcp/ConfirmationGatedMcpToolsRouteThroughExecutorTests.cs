@@ -10,22 +10,44 @@ namespace Orbit.Infrastructure.Tests.Mcp;
 /// <c>WebApplicationExtensions</c> forwards a tool whose capability carries a confirmation
 /// requirement straight to the tool, because <c>IAgentOperationExecutor</c> owns that gate and is
 /// the only layer that receives the caller's confirmation token. That deferral is safe only while
-/// two invariants hold: a confirmation requirement always sits on a mutation, and every
-/// confirmation-gated MCP tool reaches the executor through <c>McpExecutorBridge</c>. Break either
-/// one and a high-risk tool would run with no confirmation at all, so both are pinned here.
+/// four invariants hold, and each one is pinned by a test here.
+/// <list type="number">
+/// <item>A confirmation requirement always sits on a mutation, because only a mutation is
+/// guaranteed to reach the executor.</item>
+/// <item>Every confirmation-gated MCP tool reaches the executor through
+/// <c>McpExecutorBridge</c>.</item>
+/// <item>The operation id a gated tool forwards resolves to a capability carrying the same
+/// confirmation requirement. The executor gates on
+/// <c>GetCapability(operation.CapabilityId)</c>, never on the MCP tool name, so a gated tool
+/// forwarding an ungated operation id keeps the middleware stepping aside while the executor finds
+/// nothing to enforce, and the tool runs with no confirmation at all.</item>
+/// <item>Every gated tool exposes a <c>confirmationToken</c> parameter and forwards it. A gated
+/// tool that hardcodes <c>confirmationToken: null</c> is refused forever, because
+/// <c>HasFreshConfirmation</c> can never see a token and the client has no parameter to carry
+/// one.</item>
+/// </list>
 /// </summary>
 public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
 {
     private const string BridgeCall = "executorBridge.ExecuteAsync(";
+    private const int OperationIdArgumentIndex = 1;
+    private const int ConfirmationTokenArgumentIndex = 3;
+    private const string NullLiteral = "null";
 
     [GeneratedRegex(@"\[McpServerTool\(Name = ""(?<name>[^""]+)""")]
     private static partial Regex ToolAttributePattern();
 
-    [GeneratedRegex(@"(?m)^(?=    (?:\[|public |private |internal |protected ))")]
-    private static partial Regex MemberBoundaryPattern();
+    [GeneratedRegex(@"(?m)^    (?![\[/])(?:[\w<>\[\],\.\?]+\s+)+(?<name>\w+)\s*(?:<[^<>()]*>)?\s*\(")]
+    private static partial Regex MemberDeclarationPattern();
+
+    [GeneratedRegex(@"(?m)^\s*(?:public|private|protected|internal)?\s*const\s+string\s+(?<name>\w+)\s*=\s*""(?<value>[^""]*)""\s*;")]
+    private static partial Regex StringConstantPattern();
 
     [GeneratedRegex(@"\b(?<name>\w+)\s*\(")]
     private static partial Regex InvocationPattern();
+
+    [GeneratedRegex(@"string\?\s+confirmationToken\b")]
+    private static partial Regex ConfirmationTokenParameterPattern();
 
     [Fact]
     public void EveryConfirmationRequirement_SitsOnAMutation()
@@ -45,30 +67,32 @@ public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
     }
 
     [Fact]
+    public void TheSourceScan_ReachesEveryConfirmationGatedMcpToolInTheCatalog()
+    {
+        var expected = new AgentCatalogService()
+            .GetCapabilities()
+            .Where(capability => capability.ConfirmationRequirement is not AgentConfirmationRequirement.None)
+            .SelectMany(capability => capability.McpToolNames ?? [])
+            .OrderBy(toolName => toolName, StringComparer.Ordinal)
+            .ToList();
+
+        var scanned = ScanConfirmationGatedMcpTools()
+            .Select(tool => tool.ToolName)
+            .OrderBy(toolName => toolName, StringComparer.Ordinal)
+            .ToList();
+
+        scanned.Should().Equal(expected,
+            "the three guards below assert over whatever this scan finds, so a scan that silently " +
+            "stopped finding gated tools would turn every one of them green while enforcing nothing");
+    }
+
+    [Fact]
     public void EveryConfirmationGatedMcpTool_RoutesThroughTheExecutorBridge()
     {
-        var catalogService = new AgentCatalogService();
-        var offenders = new List<string>();
-
-        foreach (var file in Directory.EnumerateFiles(LocateMcpToolsDirectory(), "*.cs", SearchOption.TopDirectoryOnly))
-        {
-            var source = File.ReadAllText(file);
-            var memberBodies = BuildMemberBodies(source);
-            var toolAttributes = ToolAttributePattern().Matches(source);
-
-            for (var index = 0; index < toolAttributes.Count; index++)
-            {
-                var toolName = toolAttributes[index].Groups["name"].Value;
-                var capability = catalogService.GetCapabilityByMcpTool(toolName);
-                if (capability?.ConfirmationRequirement is null or AgentConfirmationRequirement.None)
-                    continue;
-
-                var end = index + 1 < toolAttributes.Count ? toolAttributes[index + 1].Index : source.Length;
-                var region = source[toolAttributes[index].Index..end];
-                if (!ReachesBridge(region, memberBodies))
-                    offenders.Add($"{Path.GetFileName(file)}: {toolName} ({capability.ConfirmationRequirement})");
-            }
-        }
+        var offenders = ScanConfirmationGatedMcpTools()
+            .Where(tool => tool.BridgeCalls.Count == 0)
+            .Select(tool => $"{tool.FileName}: {tool.ToolName} ({tool.Capability.ConfirmationRequirement})")
+            .ToList();
 
         offenders.Should().BeEmpty(
             "a confirmation-gated MCP tool must reach IAgentOperationExecutor through " +
@@ -76,31 +100,321 @@ public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
             "Offending tool(s):\n" + string.Join("\n", offenders));
     }
 
-    private static bool ReachesBridge(string region, IReadOnlyDictionary<string, string> memberBodies)
+    [Fact]
+    public void EveryConfirmationGatedMcpTool_ForwardsAnOperationIdCarryingTheSameConfirmationRequirement()
     {
-        if (region.Contains(BridgeCall, StringComparison.Ordinal))
-            return true;
+        var catalogService = new AgentCatalogService();
+        var offenders = new List<string>();
 
-        return InvocationPattern().Matches(region)
-            .Select(match => match.Groups["name"].Value)
-            .Distinct(StringComparer.Ordinal)
-            .Any(callee =>
-                memberBodies.TryGetValue(callee, out var body) &&
-                body.Contains(BridgeCall, StringComparison.Ordinal));
-    }
-
-    private static Dictionary<string, string> BuildMemberBodies(string source)
-    {
-        var bodies = new Dictionary<string, string>(StringComparer.Ordinal);
-
-        foreach (var member in MemberBoundaryPattern().Split(source))
+        foreach (var tool in ScanConfirmationGatedMcpTools())
         {
-            var declaration = InvocationPattern().Match(member);
-            if (declaration.Success)
-                bodies[declaration.Groups["name"].Value] = member;
+            foreach (var call in tool.BridgeCalls)
+            {
+                var forwarded = call.OperationId is null
+                    ? null
+                    : catalogService.GetCapabilityByChatTool(call.OperationId);
+
+                if (forwarded?.ConfirmationRequirement == tool.Capability.ConfirmationRequirement)
+                    continue;
+
+                offenders.Add(
+                    $"{tool.FileName}: {tool.ToolName} ({tool.Capability.ConfirmationRequirement}) forwards " +
+                    $"operation '{call.OperationIdExpression}' resolving to " +
+                    $"{forwarded?.Id ?? "an unknown capability"} " +
+                    $"({forwarded?.ConfirmationRequirement.ToString() ?? "no requirement"})");
+            }
         }
 
-        return bodies;
+        offenders.Should().BeEmpty(
+            "the executor gates on the capability behind the forwarded operation id, not on the " +
+            "MCP tool name, so a gated tool forwarding an ungated operation id runs with no " +
+            "confirmation while the middleware still steps aside. Offending tool(s):\n" +
+            string.Join("\n", offenders));
+    }
+
+    [Fact]
+    public void EveryConfirmationGatedMcpTool_AcceptsAndForwardsAConfirmationToken()
+    {
+        var offenders = new List<string>();
+
+        foreach (var tool in ScanConfirmationGatedMcpTools())
+        {
+            if (!tool.DeclaresConfirmationTokenParameter)
+                offenders.Add($"{tool.FileName}: {tool.ToolName} declares no confirmationToken parameter");
+
+            offenders.AddRange(tool.BridgeCalls
+                .Where(call => call.ConfirmationTokenExpression is null or NullLiteral)
+                .Select(call =>
+                    $"{tool.FileName}: {tool.ToolName} forwards confirmationToken " +
+                    $"'{call.ConfirmationTokenExpression ?? "nothing"}' to the executor"));
+        }
+
+        offenders.Should().BeEmpty(
+            "a confirmation-gated MCP tool is refused until the executor sees a fresh confirmation " +
+            "token, so the tool must expose the parameter and pass the caller's value through. " +
+            "Offending tool(s):\n" + string.Join("\n", offenders));
+    }
+
+    private static IReadOnlyList<GatedMcpTool> ScanConfirmationGatedMcpTools()
+    {
+        var catalogService = new AgentCatalogService();
+        var scanned = new List<GatedMcpTool>();
+
+        foreach (var file in Directory.EnumerateFiles(LocateMcpToolsDirectory(), "*.cs", SearchOption.AllDirectories))
+        {
+            var source = File.ReadAllText(file);
+            var members = BuildMembers(source);
+            var membersByName = members
+                .GroupBy(member => member.Name, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+            var constants = BuildStringConstants(source);
+
+            foreach (var attribute in ToolAttributePattern().Matches(source).Cast<Match>())
+            {
+                var toolName = attribute.Groups["name"].Value;
+                var capability = catalogService.GetCapabilityByMcpTool(toolName);
+                if (capability is null || capability.ConfirmationRequirement == AgentConfirmationRequirement.None)
+                    continue;
+
+                var member = members.FirstOrDefault(candidate => candidate.Start > attribute.Index)
+                    ?? throw new InvalidOperationException(
+                        $"MCP tool '{toolName}' in {Path.GetFileName(file)} has no method declaration after its attribute.");
+
+                scanned.Add(new GatedMcpTool(
+                    Path.GetFileName(file),
+                    toolName,
+                    capability,
+                    CollectBridgeCalls(member, membersByName, constants),
+                    ConfirmationTokenParameterPattern().IsMatch(member.Body)));
+            }
+        }
+
+        return scanned;
+    }
+
+    private static IReadOnlyList<BridgeCallSite> CollectBridgeCalls(
+        MemberSource member,
+        IReadOnlyDictionary<string, MemberSource> membersByName,
+        IReadOnlyDictionary<string, string> constants)
+    {
+        var direct = ReadBridgeCalls(member.Body, constants, [], []);
+        if (direct.Count > 0)
+            return direct;
+
+        var indirect = new List<BridgeCallSite>();
+        foreach (var invocation in InvocationPattern().Matches(member.Body).Cast<Match>())
+        {
+            var callee = invocation.Groups["name"].Value;
+            if (callee == member.Name || !membersByName.TryGetValue(callee, out var target))
+                continue;
+
+            var callerArguments = SplitTopLevelArguments(
+                ReadBalancedText(member.Body, invocation.Index + invocation.Length - 1));
+
+            indirect.AddRange(ReadBridgeCalls(target.Body, constants, target.Parameters, callerArguments));
+        }
+
+        return indirect;
+    }
+
+    private static List<BridgeCallSite> ReadBridgeCalls(
+        string body,
+        IReadOnlyDictionary<string, string> constants,
+        List<string> calleeParameters,
+        List<string> callerArguments)
+    {
+        var calls = new List<BridgeCallSite>();
+        var searchFrom = 0;
+
+        while (true)
+        {
+            var callIndex = body.IndexOf(BridgeCall, searchFrom, StringComparison.Ordinal);
+            if (callIndex < 0)
+                return calls;
+
+            var openIndex = callIndex + BridgeCall.Length - 1;
+            var arguments = SplitTopLevelArguments(ReadBalancedText(body, openIndex));
+            var operation = ArgumentAt(arguments, OperationIdArgumentIndex);
+            var token = ArgumentAt(arguments, ConfirmationTokenArgumentIndex);
+
+            calls.Add(new BridgeCallSite(
+                operation ?? "nothing",
+                ResolveStringValue(operation, constants, calleeParameters, callerArguments),
+                ResolveExpression(token, calleeParameters, callerArguments)));
+
+            searchFrom = openIndex + 1;
+        }
+    }
+
+    private static string? ArgumentAt(List<string> arguments, int index)
+    {
+        if (index >= arguments.Count)
+            return null;
+
+        var argument = arguments[index];
+        var namedSeparator = argument.IndexOf(':', StringComparison.Ordinal);
+        return namedSeparator < 0 ? argument : argument[(namedSeparator + 1)..].Trim();
+    }
+
+    private static string? ResolveExpression(
+        string? expression,
+        List<string> calleeParameters,
+        List<string> callerArguments)
+    {
+        if (expression is null)
+            return null;
+
+        var parameterIndex = calleeParameters.IndexOf(expression);
+        if (parameterIndex < 0 || parameterIndex >= callerArguments.Count)
+            return expression;
+
+        return ArgumentAt(callerArguments, parameterIndex);
+    }
+
+    private static string? ResolveStringValue(
+        string? expression,
+        IReadOnlyDictionary<string, string> constants,
+        List<string> calleeParameters,
+        List<string> callerArguments)
+    {
+        var resolved = ResolveExpression(expression, calleeParameters, callerArguments);
+        if (resolved is null)
+            return null;
+
+        if (resolved.StartsWith('"') && resolved.EndsWith('"') && resolved.Length >= 2)
+            return resolved[1..^1];
+
+        return constants.GetValueOrDefault(resolved);
+    }
+
+    private static List<MemberSource> BuildMembers(string source)
+    {
+        var declarations = MemberDeclarationPattern().Matches(source).Cast<Match>().ToList();
+        var members = new List<MemberSource>();
+
+        for (var index = 0; index < declarations.Count; index++)
+        {
+            var declaration = declarations[index];
+            var end = index + 1 < declarations.Count ? declarations[index + 1].Index : source.Length;
+            var parameterListStart = declaration.Index + declaration.Length - 1;
+
+            members.Add(new MemberSource(
+                declaration.Groups["name"].Value,
+                declaration.Index,
+                source[declaration.Index..end],
+                ReadParameterNames(ReadBalancedText(source, parameterListStart))));
+        }
+
+        return members;
+    }
+
+    private static Dictionary<string, string> BuildStringConstants(string source)
+    {
+        return StringConstantPattern().Matches(source)
+            .Cast<Match>()
+            .GroupBy(match => match.Groups["name"].Value, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First().Groups["value"].Value, StringComparer.Ordinal);
+    }
+
+    private static List<string> ReadParameterNames(string parameterList)
+    {
+        return SplitTopLevelArguments(parameterList)
+            .Select(parameter =>
+            {
+                var withoutDefault = parameter.Split('=')[0].Trim();
+                var tokens = withoutDefault.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+                return tokens.Length == 0 ? string.Empty : tokens[^1];
+            })
+            .ToList();
+    }
+
+    private static List<string> SplitTopLevelArguments(string argumentList)
+    {
+        var arguments = new List<string>();
+        var depth = 0;
+        var start = 0;
+        var index = 0;
+
+        while (index < argumentList.Length)
+        {
+            var current = argumentList[index];
+            if (current == '"')
+            {
+                index = SkipStringLiteral(argumentList, index);
+                continue;
+            }
+
+            if (current is '(' or '[' or '{')
+                depth++;
+            else if (current is ')' or ']' or '}')
+                depth--;
+            else if (current == ',' && depth == 0)
+            {
+                arguments.Add(argumentList[start..index].Trim());
+                start = index + 1;
+            }
+
+            index++;
+        }
+
+        var tail = argumentList[start..].Trim();
+        if (tail.Length > 0)
+            arguments.Add(tail);
+
+        return arguments;
+    }
+
+    private static string ReadBalancedText(string source, int openIndex)
+    {
+        var depth = 0;
+        var index = openIndex;
+
+        while (index < source.Length)
+        {
+            var current = source[index];
+            if (current == '"')
+            {
+                index = SkipStringLiteral(source, index);
+                continue;
+            }
+
+            if (current is '(' or '[' or '{')
+            {
+                depth++;
+            }
+            else if (current is ')' or ']' or '}')
+            {
+                depth--;
+                if (depth == 0)
+                    return source[(openIndex + 1)..index];
+            }
+
+            index++;
+        }
+
+        throw new InvalidOperationException(
+            $"Unbalanced argument list while scanning MCP tool source at offset {openIndex}.");
+    }
+
+    private static int SkipStringLiteral(string source, int quoteIndex)
+    {
+        var index = quoteIndex + 1;
+
+        while (index < source.Length)
+        {
+            if (source[index] == '\\')
+            {
+                index += 2;
+                continue;
+            }
+
+            if (source[index] == '"')
+                return index + 1;
+
+            index++;
+        }
+
+        return index;
     }
 
     private static string LocateMcpToolsDirectory()
@@ -118,4 +432,23 @@ public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
         throw new DirectoryNotFoundException(
             "Could not locate src/Orbit.Api/Mcp/Tools by walking up from the test output directory.");
     }
+
+    private sealed record GatedMcpTool(
+        string FileName,
+        string ToolName,
+        AgentCapability Capability,
+        IReadOnlyList<BridgeCallSite> BridgeCalls,
+        bool DeclaresConfirmationTokenParameter);
+
+    private sealed record BridgeCallSite(
+        string OperationIdExpression,
+        string? OperationId,
+        string? ConfirmationTokenExpression);
+
+    private sealed record MemberSource(
+        string Name,
+        int Start,
+        string Body,
+        List<string> Parameters);
+
 }

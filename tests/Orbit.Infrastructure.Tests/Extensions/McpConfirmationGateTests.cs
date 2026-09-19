@@ -44,7 +44,9 @@ public class McpConfirmationGateTests : IDisposable
     private readonly AgentStepUpService _stepUpService;
     private readonly IAgentAuditService _auditService = Substitute.For<IAgentAuditService>();
     private readonly ApiKeyTools _apiKeyTools;
+    private readonly AgentTools _agentTools;
     private readonly ClaimsPrincipal _user;
+    private readonly ClaimsPrincipal _apiKeyUser;
     private readonly Guid _userId;
     private readonly Guid _keyId = Guid.NewGuid();
     private string? _emailedCode;
@@ -96,9 +98,16 @@ public class McpConfirmationGateTests : IDisposable
             NullLogger<AgentOperationExecutor>.Instance);
 
         _apiKeyTools = new ApiKeyTools(Substitute.For<IMediator>(), new McpExecutorBridge(executor));
+        _agentTools = new AgentTools(_catalogService, executor, _pendingOperationStore, _stepUpService);
         _user = new ClaimsPrincipal(new ClaimsIdentity(
             [new Claim(ClaimTypes.NameIdentifier, _userId.ToString())],
             "JwtBearer"));
+        _apiKeyUser = new ClaimsPrincipal(new ClaimsIdentity(
+            [
+                new Claim(ClaimTypes.NameIdentifier, _userId.ToString()),
+                new Claim("auth_method", "api_key")
+            ],
+            "ApiKey"));
     }
 
     public void Dispose()
@@ -113,7 +122,6 @@ public class McpConfirmationGateTests : IDisposable
         var outcome = await InvokeManageApiKeysAsync(confirmationToken: null);
 
         outcome.PolicyError.Should().BeNull();
-        outcome.ToolOutput.Should().NotBeNull();
         outcome.ToolOutput.Should().Contain("Step-up verification required");
         outcome.ToolOutput.Should().Contain("step_up_agent_operation_v2");
         outcome.ToolOutput.Should().Contain("verify_step_up_agent_operation_v2");
@@ -125,27 +133,51 @@ public class McpConfirmationGateTests : IDisposable
     }
 
     [Fact]
-    public async Task StepUpTool_WithConfirmedStepUpToken_RunsInsteadOfBeingRefused()
+    public async Task StepUpTool_AfterTheFourRecoveryToolsRun_RunsInsteadOfBeingRefused()
     {
-        await InvokeManageApiKeysAsync(confirmationToken: null);
-        var pendingOperation = _dbContext.PendingAgentOperations.Single();
+        var refusal = await InvokeManageApiKeysAsync(confirmationToken: null);
+        refusal.ToolOutput.Should().Contain("Step-up verification required");
 
-        var challenge = await _stepUpService.IssueChallengeAsync(
-            _userId, pendingOperation.Id, "en", CancellationToken.None);
-        challenge.IsSuccess.Should().BeTrue();
+        var pendingOperationId = _dbContext.PendingAgentOperations.Single().Id.ToString();
+
+        var challenge = await _agentTools.StepUpAgentOperation(
+            _user, pendingOperationId, "en", CancellationToken.None);
         _emailedCode.Should().NotBeNull();
 
-        var verification = await _stepUpService.VerifyChallengeAsync(
-            _userId, pendingOperation.Id, challenge.Value.ChallengeId, _emailedCode!, CancellationToken.None);
-        verification.IsSuccess.Should().BeTrue();
+        var verified = await _agentTools.VerifyStepUpAgentOperation(
+            _user, pendingOperationId, challenge.ChallengeId.ToString(), _emailedCode!, CancellationToken.None);
+        verified.Id.ToString().Should().Be(pendingOperationId);
+        _dbContext.PendingAgentOperations.Single().StepUpSatisfiedAtUtc.Should().NotBeNull();
 
-        var confirmation = _pendingOperationStore.Confirm(_userId, pendingOperation.Id);
+        var confirmation = _agentTools.ConfirmAgentOperation(_user, pendingOperationId);
         confirmation.Should().NotBeNull();
 
         var outcome = await InvokeManageApiKeysAsync(confirmation!.ConfirmationToken);
 
         outcome.PolicyError.Should().BeNull();
         outcome.ToolOutput.Should().Be($"Revoked API key {_keyId}.");
+    }
+
+    [Fact]
+    public async Task TheRecoveryTools_RefuseAnApiKeyCredentialSoThatDoorStaysClosed()
+    {
+        await InvokeManageApiKeysAsync(confirmationToken: null);
+        var pendingOperationId = _dbContext.PendingAgentOperations.Single().Id.ToString();
+
+        var stepUp = () => _agentTools.StepUpAgentOperation(
+            _apiKeyUser, pendingOperationId, "en", CancellationToken.None);
+        var verify = () => _agentTools.VerifyStepUpAgentOperation(
+            _apiKeyUser, pendingOperationId, Guid.NewGuid().ToString(), "123456", CancellationToken.None);
+        var confirm = () => _agentTools.ConfirmAgentOperation(_apiKeyUser, pendingOperationId);
+
+        await stepUp.Should().ThrowAsync<UnauthorizedAccessException>()
+            .WithMessage("API key credentials cannot satisfy step-up authorization.");
+        await verify.Should().ThrowAsync<UnauthorizedAccessException>()
+            .WithMessage("API key credentials cannot satisfy step-up authorization.");
+        confirm.Should().Throw<UnauthorizedAccessException>()
+            .WithMessage("API key credentials cannot confirm pending operations.");
+
+        _dbContext.PendingAgentOperations.Single().ConfirmedAtUtc.Should().BeNull();
     }
 
     [Fact]
@@ -162,13 +194,7 @@ public class McpConfirmationGateTests : IDisposable
     [Fact]
     public async Task ToolWithoutConfirmationRequirement_IsStillGatedByTheMiddleware()
     {
-        var apiKeyUser = new ClaimsPrincipal(new ClaimsIdentity(
-            [
-                new Claim(ClaimTypes.NameIdentifier, _userId.ToString()),
-                new Claim("auth_method", "api_key")
-            ],
-            "ApiKey"));
-        var context = CreateHttpContext(apiKeyUser);
+        var context = CreateHttpContext(_apiKeyUser);
         var toolRan = false;
 
         using var document = CreateToolCallDocument(
