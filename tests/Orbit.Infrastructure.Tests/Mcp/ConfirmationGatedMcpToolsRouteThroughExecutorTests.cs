@@ -26,11 +26,15 @@ namespace Orbit.Infrastructure.Tests.Mcp;
 /// forwarding an ungated operation id keeps the middleware stepping aside while the executor finds
 /// nothing to enforce, and the tool runs with no confirmation at all.</item>
 /// <item>Every gated tool declares a <c>string? confirmationToken</c> parameter and forwards that
-/// identifier to the executor, directly or through a helper it calls. Any other expression in the
-/// token slot refuses the tool forever, because <c>HasFreshConfirmation</c> can never see the
-/// caller's token. The guard resolves the forwarded expression back to the parameter rather than
-/// rejecting a list of null spellings, so <c>default</c>, <c>null!</c>, <c>(string?)null</c>,
-/// <c>""</c> and an unrelated local all fail the same way.</item>
+/// bare identifier in the executor's token slot, because <c>HasFreshConfirmation</c> sees only
+/// what that slot carries. The resolver is a text scan over one file, not a compiler. It accepts
+/// the identifier written directly in the bridge call, or carried through exactly one same-file
+/// helper that receives it in the matching argument position, and it refuses a tool that assigns
+/// to the parameter before the call. <c>default</c>, <c>null!</c>, <c>(string?)null</c>,
+/// <c>""</c>, an unrelated local, a conditional expression and an omitted optional argument all
+/// fail, because none of them is that identifier. Two or more helper hops read as no bridge call
+/// at all and fail the routing guard above; that direction is safe, so it stands. Aliasing,
+/// reflection and a call reached through an interface are outside what the scan models.</item>
 /// </list>
 /// </summary>
 public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
