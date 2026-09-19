@@ -110,7 +110,6 @@ public record AgentPolicyEvaluationContext(
     string? OperationFingerprint = null,
     string? OperationArgumentsJson = null,
     string? ConfirmationToken = null,
-    bool StepUpSatisfied = false,
     bool IsReadOnlyCredential = false);
 
 public record AgentPolicyDecision(
