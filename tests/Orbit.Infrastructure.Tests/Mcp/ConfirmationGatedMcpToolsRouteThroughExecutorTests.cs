@@ -29,12 +29,18 @@ namespace Orbit.Infrastructure.Tests.Mcp;
 /// bare identifier in the executor's token slot, because <c>HasFreshConfirmation</c> sees only
 /// what that slot carries. The resolver is a text scan over one file, not a compiler. It accepts
 /// the identifier written directly in the bridge call, or carried through exactly one same-file
-/// helper that receives it in the matching argument position, and it refuses a tool that assigns
-/// to the parameter before the call. <c>default</c>, <c>null!</c>, <c>(string?)null</c>,
-/// <c>""</c>, an unrelated local, a conditional expression and an omitted optional argument all
-/// fail, because none of them is that identifier. Two or more helper hops read as no bridge call
-/// at all and fail the routing guard above; that direction is safe, so it stands. Aliasing,
-/// reflection and a call reached through an interface are outside what the scan models.</item>
+/// helper, and it refuses a tool that writes to the parameter with <c>=</c>, <c>??=</c> or
+/// <c>+=</c> before the call. <c>default</c>, <c>null!</c>, <c>(string?)null</c>, <c>""</c>, an
+/// unrelated local, a conditional expression and an omitted optional argument all fail, because
+/// none of them is that identifier. The helper hop pairs a caller argument with a helper
+/// parameter by position alone: it strips a named-argument prefix without reading the name, so a
+/// call that names its arguments out of the declared order is read wrong. Several members can
+/// share one name, and the scan reads every member whose parameter count admits the call, so an
+/// ambiguous name reddens the tool instead of resolving to one member. Two or more helper hops
+/// read as no bridge call at all and fail the routing guard above; that direction is safe, so it
+/// stands. Aliasing, reflection and a call reached through an interface are outside what the scan
+/// models, and an author who sets out to defeat a text scan can spell the bypass another way.
+/// What this guard closes is every shape an ordinary refactor produces.</item>
 /// </list>
 /// </summary>
 public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
