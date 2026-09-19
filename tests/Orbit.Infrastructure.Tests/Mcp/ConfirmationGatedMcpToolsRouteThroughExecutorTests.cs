@@ -39,6 +39,7 @@ public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
     private const int OperationIdArgumentIndex = 1;
     private const int ConfirmationTokenArgumentIndex = 3;
     private const string ConfirmationTokenParameterName = "confirmationToken";
+    private const string OmittedArgument = "<omitted>";
 
     [GeneratedRegex(@"\[McpServerTool\(Name = ""(?<name>[^""]+)""")]
     private static partial Regex ToolAttributePattern();
@@ -289,8 +290,11 @@ public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
             return null;
 
         var parameterIndex = calleeParameters.IndexOf(expression);
-        if (parameterIndex < 0 || parameterIndex >= callerArguments.Count)
+        if (parameterIndex < 0)
             return expression;
+
+        if (parameterIndex >= callerArguments.Count)
+            return OmittedArgument;
 
         return ArgumentAt(callerArguments, parameterIndex);
     }
