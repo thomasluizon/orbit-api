@@ -111,6 +111,58 @@ public class GoogleCalendarEventFetcherTests
     }
 
     [Fact]
+    public async Task FetchAsync_TimedEvent_PreservesStartAndEndUtcInstants()
+    {
+        StubCalendars(Calendar("owned", "owner"));
+        StubEvents(
+            "owned",
+            new Event
+            {
+                Id = "tokyo-event",
+                Summary = "Tokyo breakfast",
+                Start = new EventDateTime
+                {
+                    DateTimeDateTimeOffset = new DateTimeOffset(2026, 4, 15, 8, 0, 0, TimeSpan.FromHours(9)),
+                    TimeZone = "Asia/Tokyo"
+                },
+                End = new EventDateTime
+                {
+                    DateTimeDateTimeOffset = new DateTimeOffset(2026, 4, 15, 9, 0, 0, TimeSpan.FromHours(9))
+                }
+            });
+
+        var result = await _fetcher.FetchAsync(Token, null, null, CancellationToken.None);
+
+        result.Should().ContainSingle();
+        result[0].StartUtc.Should().Be(new DateTime(2026, 4, 14, 23, 0, 0, DateTimeKind.Utc));
+        result[0].EndUtc.Should().Be(new DateTime(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc));
+    }
+
+    [Fact]
+    public async Task FetchAsync_AllDayEvent_PreservesFloatingDateWithNullTimes()
+    {
+        StubCalendars(Calendar("owned", "owner"));
+        StubEvents(
+            "owned",
+            new Event
+            {
+                Id = "all-day-event",
+                Summary = "Holiday",
+                Start = new EventDateTime { Date = "2026-04-15" },
+                End = new EventDateTime { Date = "2026-04-16" }
+            });
+
+        var result = await _fetcher.FetchAsync(Token, null, null, CancellationToken.None);
+
+        result.Should().ContainSingle();
+        result[0].StartDate.Should().Be("2026-04-15");
+        result[0].StartTime.Should().BeNull();
+        result[0].EndTime.Should().BeNull();
+        result[0].StartUtc.Should().Be(new DateTime(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc));
+        result[0].EndUtc.Should().BeNull("Google's all-day end date is exclusive, so it is not the end instant");
+    }
+
+    [Fact]
     public async Task FetchAsync_ExplicitSelection_FetchesOnlyChosenCalendars()
     {
         StubCalendars(
@@ -153,6 +205,77 @@ public class GoogleCalendarEventFetcherTests
         result.Should().OnlyContain(i => i.Id == "master");
         result.Select(i => i.CalendarId).Should().BeEquivalentTo(ExpectedCalendarIds);
     }
+
+    [Fact]
+    public async Task FetchAsync_RecurringInstance_TakesTheRuleAndZoneFromTheMaster()
+    {
+        StubCalendars(Calendar("a", "owner"));
+        StubEvents(
+            "a",
+            LisbonInstance("inst-jan", new DateTimeOffset(2027, 1, 7, 3, 30, 0, TimeSpan.Zero)),
+            LisbonInstance("inst-jan-2", new DateTimeOffset(2027, 1, 14, 3, 30, 0, TimeSpan.Zero)));
+        _api.GetEventAsync(Token, "a", "master-lisbon", Arg.Any<CancellationToken>())
+            .Returns(new Event
+            {
+                Recurrence = ["RRULE:FREQ=DAILY;BYDAY=TH"],
+                Start = new EventDateTime
+                {
+                    DateTimeDateTimeOffset = new DateTimeOffset(2027, 1, 7, 3, 30, 0, TimeSpan.Zero),
+                    TimeZone = "Europe/Lisbon"
+                }
+            });
+
+        var result = await _fetcher.FetchAsync(Token, null, null, CancellationToken.None);
+
+        result.Should().ContainSingle();
+        result[0].Id.Should().Be("master-lisbon");
+        result[0].StartUtc.Should().Be(new DateTime(2027, 1, 7, 3, 30, 0, DateTimeKind.Utc));
+        result[0].RecurrenceRule.Should().Be("RRULE:FREQ=DAILY;BYDAY=TH");
+        result[0].SourceTimeZone.Should().Be("Europe/Lisbon");
+        await _api.Received(1).GetEventAsync(Token, "a", "master-lisbon", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task FetchAsync_RecurringInstance_IgnoresTheInstanceTimeZone()
+    {
+        StubCalendars(Calendar("a", "owner"));
+        var instance = LisbonInstance("inst-jan", new DateTimeOffset(2027, 1, 7, 3, 30, 0, TimeSpan.Zero));
+        instance.Start.TimeZone = "Etc/GMT-5";
+        StubEvents("a", instance);
+        _api.GetEventAsync(Token, "a", "master-lisbon", Arg.Any<CancellationToken>())
+            .Returns(new Event
+            {
+                Recurrence = ["RRULE:FREQ=DAILY;BYDAY=TH"],
+                Start = new EventDateTime { TimeZone = "Europe/Lisbon" }
+            });
+
+        var result = await _fetcher.FetchAsync(Token, null, null, CancellationToken.None);
+
+        result.Should().ContainSingle();
+        result[0].SourceTimeZone.Should().Be("Europe/Lisbon");
+    }
+
+    [Fact]
+    public async Task FetchAsync_SingleEvent_HasNoSourceTimeZone()
+    {
+        StubCalendars(Calendar("a", "owner"));
+        StubEvents("a", TimedEvent("solo", "One off"));
+
+        var result = await _fetcher.FetchAsync(Token, null, null, CancellationToken.None);
+
+        result.Should().ContainSingle();
+        result[0].SourceTimeZone.Should().BeNull();
+    }
+
+    private static Event LisbonInstance(string id, DateTimeOffset start)
+        => new()
+        {
+            Id = id,
+            Summary = "Lisbon stand-up",
+            RecurringEventId = "master-lisbon",
+            Start = new EventDateTime { DateTimeDateTimeOffset = start },
+            End = new EventDateTime { DateTimeDateTimeOffset = start.AddMinutes(30) }
+        };
 
     [Fact]
     public async Task FetchAsync_FailingCalendar_IsSkippedNotFatal()
