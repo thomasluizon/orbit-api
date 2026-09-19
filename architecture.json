@@ -2950,7 +2950,7 @@
       "ApiKeys": 14,
       "Auth": 26,
       "Behaviors": 14,
-      "Calendar": 18,
+      "Calendar": 19,
       "Challenges": 14,
       "Chat": 63,
       "ChecklistTemplates": 9,
@@ -2959,7 +2959,7 @@
       "Goals": 54,
       "Habits": 93,
       "Marketing": 6,
-      "Notifications": 20,
+      "Notifications": 21,
       "Profile": 40,
       "Referrals": 13,
       "Social": 36,
@@ -5037,6 +5037,11 @@
           "GetApiKeysQuery",
           "GetApiKeysQueryHandler"
         ]
+      },
+      {
+        "testClass": "CalendarEventItemSerializationTests",
+        "file": "tests/Orbit.Application.Tests/Queries/Calendar/CalendarEventItemSerializationTests.cs",
+        "references": []
       },
       {
         "testClass": "CalendarFeedAgreementTests",

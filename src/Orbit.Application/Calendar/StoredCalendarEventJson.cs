@@ -37,6 +37,18 @@ internal static class StoredCalendarEventJson
         if (item is null)
             return null;
 
-        return item with { SourceTimeZone = stored[SourceTimeZoneKey]?.GetValue<string>() };
+        return item with { SourceTimeZone = ReadSourceTimeZone(stored) };
     }
+
+    /// <summary>
+    /// Reads the key only when it really holds a string. <c>GetValue&lt;string&gt;</c> throws
+    /// <see cref="InvalidOperationException"/> on a number, which <c>DeserializeEvent</c> does not
+    /// catch, so one such row would fail the whole suggestion request instead of itself. A value of
+    /// any other kind is no evidence of a source zone, which is what a missing key already means and
+    /// what the recurrence gate already handles by withholding the series.
+    /// </summary>
+    private static string? ReadSourceTimeZone(JsonObject stored)
+        => stored[SourceTimeZoneKey] is JsonValue value && value.TryGetValue<string>(out var timeZoneId)
+            ? timeZoneId
+            : null;
 }

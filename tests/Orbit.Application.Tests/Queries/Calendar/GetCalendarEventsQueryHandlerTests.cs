@@ -6,6 +6,7 @@ using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
+using System.Globalization;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -426,6 +427,172 @@ public class GetCalendarEventsQueryHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// The account reads a calendar kept in its own zone, so the projection is the identity and no
+    /// occurrence can move. One date of the year loses the wall clock to a spring-forward gap, and on
+    /// that date the series produces no occurrence at all, so the date is not evidence against it.
+    /// </summary>
+    [Theory]
+    [InlineData("America/New_York", "02:30")]
+    [InlineData("America/Los_Angeles", "02:30")]
+    [InlineData("America/Chicago", "02:30")]
+    [InlineData("Europe/Berlin", "02:30")]
+    [InlineData("Europe/London", "01:30")]
+    [InlineData("Australia/Sydney", "02:30")]
+    [InlineData("Pacific/Auckland", "02:30")]
+    public async Task Handle_ByDaySeriesOnAWallClockOneGapRemoves_IsKeptWhenTheAccountReadsItsOwnZone(
+        string zoneId, string wallClock)
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone(zoneId).IsSuccess.Should().BeTrue();
+        StubSuccessfulFetch(
+            user,
+            new CalendarEventItem(
+                "evt_own_zone_gap",
+                "Night shift",
+                null,
+                "2027-01-07",
+                wallClock,
+                null,
+                true,
+                "RRULE:FREQ=WEEKLY;BYDAY=TH",
+                [],
+                StartUtc: ToUtc(zoneId, "2027-01-07", wallClock))
+            {
+                SourceTimeZone = zoneId
+            });
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value[0].StartDate.Should().Be("2027-01-07");
+        result.Value[0].StartTime.Should().Be(wallClock);
+        result.Value[0].RecurrenceRule.Should().Be("RRULE:FREQ=WEEKLY;BYDAY=TH");
+    }
+
+    /// <summary>
+    /// <c>America/New_York</c> and <c>America/Chicago</c> hold different rules, so the walk really
+    /// runs, and they stay exactly one hour apart all year, so the account-local date can never move.
+    /// The source zone still loses 02:30 to its own spring-forward gap on 2027-03-14, and the series
+    /// must survive that date.
+    /// </summary>
+    [Fact]
+    public async Task Handle_ByDaySeriesOnAWallClockTheSourceGapRemoves_IsKeptWhenTheDateCannotMove()
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone("America/Chicago").IsSuccess.Should().BeTrue();
+        StubSuccessfulFetch(
+            user,
+            new CalendarEventItem(
+                "evt_new_york_gap",
+                "New York night shift",
+                null,
+                "2027-01-07",
+                "02:30",
+                null,
+                true,
+                "RRULE:FREQ=WEEKLY;BYDAY=TH",
+                [],
+                StartUtc: ToUtc("America/New_York", "2027-01-07", "02:30"))
+            {
+                SourceTimeZone = "America/New_York"
+            });
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value[0].StartDate.Should().Be("2027-01-07");
+        result.Value[0].StartTime.Should().Be("01:30");
+        result.Value[0].RecurrenceRule.Should().Be("RRULE:FREQ=WEEKLY;BYDAY=TH");
+    }
+
+    /// <summary>
+    /// Lebanon ends its summer time at 00:00 local, so 23:00 to 23:59 on that Saturday happens twice
+    /// in <c>Asia/Beirut</c>. The earlier instant is 23:30 in <c>Europe/Athens</c> and the later one is
+    /// 00:30 the next day, because Athens keeps its own offset for three more hours. Every other date
+    /// of the year holds the two zones on the same clock, so the repeated hour is the only reason this
+    /// series can show the account a different weekday, and it is enough to withhold it.
+    /// </summary>
+    /// <remarks>
+    /// The series starts the Friday after Lebanon's 2026 transition, so the repeated hour it fails on
+    /// is 2027-10-30, exactly 365 days later. That also pins the length of the walk: a
+    /// <c>ProbeDays</c> of 364 or less never reaches the only date that decides this series.
+    /// </remarks>
+    [Fact]
+    public async Task Handle_ByDaySeriesInsideARepeatedHourWhoseTwoInstantsDisagree_OmitsEvent()
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone("Europe/Athens").IsSuccess.Should().BeTrue();
+        StubSuccessfulFetch(
+            user,
+            new CalendarEventItem(
+                "evt_beirut_late",
+                "Beirut late call",
+                null,
+                "2026-10-30",
+                "23:30",
+                null,
+                true,
+                "RRULE:FREQ=WEEKLY;BYDAY=FR",
+                [],
+                StartUtc: ToUtc("Asia/Beirut", "2026-10-30", "23:30"))
+            {
+                SourceTimeZone = "Asia/Beirut"
+            });
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// An all-day event carries no <see cref="CalendarEventItem.EndTime"/>, so the projection drops
+    /// nothing and the omission log stays silent. Without the <c>EndTime is not null</c> half of the
+    /// guard the Debug line fires for every all-day event on every calendar read.
+    /// </summary>
+    [Fact]
+    public async Task Handle_AllDayEvent_LogsNoOmittedEndTime()
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone("Asia/Tokyo").IsSuccess.Should().BeTrue();
+        StubSuccessfulFetch(
+            user,
+            new CalendarEventItem(
+                "evt_all_day_quiet",
+                "Holiday",
+                null,
+                "2026-04-15",
+                null,
+                null,
+                false,
+                null,
+                [],
+                StartUtc: new DateTime(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc)));
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value[0].EndTime.Should().BeNull();
+        _logger.Entries.Should().NotContain(entry => entry.Level == LogLevel.Debug);
+    }
+
+    /// <summary>
+    /// Builds the instant a source calendar means by one wall clock, so a test states the zone and the
+    /// clock the user sees rather than a UTC value whose offset a reader has to verify by hand.
+    /// </summary>
+    private static DateTime ToUtc(string zoneId, string date, string wallClock)
+    {
+        var local = DateTime.ParseExact(
+            $"{date} {wallClock}", "yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None);
+        return TimeZoneInfo.ConvertTimeToUtc(
+            DateTime.SpecifyKind(local, DateTimeKind.Unspecified),
+            TimeZoneInfo.FindSystemTimeZoneById(zoneId));
     }
 
     [Fact]

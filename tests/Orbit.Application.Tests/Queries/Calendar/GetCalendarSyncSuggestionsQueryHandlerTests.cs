@@ -475,6 +475,56 @@ public class GetCalendarSyncSuggestionsQueryHandlerTests
             && entry.Message.Contains(UserId.ToString(), StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// No production writer can put a number under the source timezone key, so this is robustness and
+    /// not a live defect. The consequence would be out of proportion to the cause: the read threw
+    /// <see cref="InvalidOperationException"/>, which <c>DeserializeEvent</c> does not catch, so one
+    /// row failed the whole feed. The row now reads back with no source zone, which the gate treats as
+    /// unproved, and every other row is unaffected.
+    /// </summary>
+    [Fact]
+    public async Task Handle_StoredRowWhoseSourceTimeZoneIsANumber_StillReturnsTheOtherRows()
+    {
+        var user = User.Create("Test", "test@example.com").Value;
+        user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
+        _userRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(user);
+
+        var startUtc = new DateTime(2026, 4, 15, 18, 0, 0, DateTimeKind.Utc);
+        var brokenItem = new CalendarEventItem(
+            "event-broken-zone",
+            "Weekly review",
+            null,
+            "2026-04-15",
+            "15:00",
+            null,
+            true,
+            "RRULE:FREQ=WEEKLY;BYDAY=WE",
+            [],
+            StartUtc: startUtc)
+        {
+            SourceTimeZone = "America/Sao_Paulo"
+        };
+        var brokenJson = JsonNode.Parse(StoredCalendarEventJson.Serialize(brokenItem))!.AsObject();
+        brokenJson[nameof(CalendarEventItem.SourceTimeZone)] = 42;
+        var broken = GoogleCalendarSyncSuggestion.Create(
+            UserId, "gcal-broken-zone", brokenItem.Title, startUtc, brokenJson.ToJsonString(), startUtc);
+
+        _suggestionRepo.FindAsync(
+            Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<GoogleCalendarSyncSuggestion>
+            {
+                broken,
+                CreateSuggestion("gcal-plain", "Morning yoga", "2026-04-15", "09:00")
+            }.AsReadOnly());
+
+        var result = await _handler.Handle(new GetCalendarSyncSuggestionsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value[0].GoogleEventId.Should().Be("gcal-plain");
+    }
+
     private static GoogleCalendarSyncSuggestion CreateFoldSuggestion(string googleEventId, DateTime startUtc)
     {
         var eventItem = new CalendarEventItem(

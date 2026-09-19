@@ -84,6 +84,12 @@ public record CalendarEventItem(
     /// cannot prove the series, so the decision comes from <see cref="TimeZoneInfo"/> instead.
     /// </para>
     /// <para>
+    /// Two zones that hold the same rules make the projection the identity, so no occurrence can move
+    /// and <see cref="TimeZoneInfo.HasSameRules"/> answers the whole question before the walk starts.
+    /// That is the ordinary case for an account whose calendar lives in its own zone, and it is the
+    /// case a walk must never refuse.
+    /// </para>
+    /// <para>
     /// A source zone the process cannot resolve leaves the series unproved and therefore withheld.
     /// <c>TimeZoneHelper.FindTimeZone</c> is deliberately not used for it: that helper answers
     /// <see cref="TimeZoneInfo.Utc"/> for an unknown id, which would assert a stability nothing
@@ -110,6 +116,9 @@ public record CalendarEventItem(
 
         if (!TryFindSourceTimeZone(SourceTimeZone, out var sourceTimeZone))
             return true;
+
+        if (sourceTimeZone.HasSameRules(accountTimeZone))
+            return false;
 
         return !KeepsItsLocalDateForAYear(sourceTimeZone, accountTimeZone, StartUtc.Value);
     }
@@ -154,6 +163,12 @@ public record CalendarEventItem(
     /// every date once at that wall clock covers every occurrence any <c>BYDAY</c> rule can produce,
     /// through both zones' transitions in both hemispheres.
     /// </summary>
+    /// <remarks>
+    /// A wall clock a spring-forward gap removes names no instant on that date, so the series produces
+    /// no occurrence there and the date carries no evidence either way. The walk moves to the next
+    /// date rather than ending. Counting the absent date as a failure withheld a whole series on a
+    /// date it never fires, which is the opposite of what the gate exists to prevent.
+    /// </remarks>
     private static bool KeepsItsLocalDateForAYear(
         TimeZoneInfo sourceTimeZone, TimeZoneInfo accountTimeZone, DateTime startUtc)
     {
@@ -168,7 +183,7 @@ public record CalendarEventItem(
             var probe = DateOnly.FromDayNumber(dayNumber);
             var sourceLocal = probe.ToDateTime(wallClock, DateTimeKind.Unspecified);
             if (sourceTimeZone.IsInvalidTime(sourceLocal))
-                return false;
+                continue;
 
             foreach (var offset in SourceOffsetsAt(sourceTimeZone, sourceLocal))
             {
@@ -186,6 +201,14 @@ public record CalendarEventItem(
     /// The offsets the source zone can hold at one wall clock. A fall-back transition repeats an hour,
     /// so an ambiguous wall clock has two instants and both must keep the date.
     /// </summary>
+    /// <remarks>
+    /// Picking one of the two would need a fact the response does not carry. RFC 5545 section 3.3.5
+    /// reads a repeated wall clock as "the first occurrence of the referenced time", while
+    /// <see cref="TimeZoneInfo.ConvertTimeToUtc(DateTime, TimeZoneInfo)"/> reads it as standard time,
+    /// which is the second. The two readings disagree, and which one the source calendar expanded the
+    /// occurrence to is not in what Google returns, so requiring both to keep the date withholds a
+    /// series the first reading would allow rather than asserting a normalization nothing established.
+    /// </remarks>
     private static IReadOnlyList<TimeSpan> SourceOffsetsAt(TimeZoneInfo sourceTimeZone, DateTime sourceLocal)
         => sourceTimeZone.IsAmbiguousTime(sourceLocal)
             ? sourceTimeZone.GetAmbiguousTimeOffsets(sourceLocal)

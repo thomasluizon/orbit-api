@@ -5,6 +5,7 @@ using NSubstitute;
 using Orbit.Application.Calendar.Commands;
 using Orbit.Application.Calendar.Queries;
 using Orbit.Application.Calendar.Services;
+using Orbit.Application.Notifications;
 using Orbit.Application.Tests.Commands.Calendar;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -134,6 +135,46 @@ public class CalendarFeedAgreementTests
         suggestionsResult.Value[0].Event.RecurrenceRule.Should().Be("RRULE:FREQ=DAILY;BYDAY=TH");
         suggestionsResult.Value[0].Event.StartDate.Should().Be(eventsResult.Value[0].StartDate);
         suggestionsResult.Value[0].Event.StartTime.Should().Be(eventsResult.Value[0].StartTime);
+    }
+
+    /// <summary>
+    /// The read gate hides a withheld row, but it cannot undo the write. <c>newSuggestions</c> is the
+    /// number <c>CreateSuggestionNotification</c> pushes, so a row auto-sync stores for a series the
+    /// feed hides becomes a notification that opens an empty list. The write path must refuse it
+    /// itself, and this asserts the row and the notification rather than the feed that follows them.
+    /// </summary>
+    [Fact]
+    public async Task SeasonallyShiftingByDaySeries_IsNeitherStoredNorNotifiedByAutoSync()
+    {
+        var user = CreateSyncingUser("America/Sao_Paulo");
+        StubFetch(user, LisbonThursdayStandup());
+
+        var autoSyncResult = await _autoSync.Handle(new RunCalendarAutoSyncCommand(user.Id), CancellationToken.None);
+
+        autoSyncResult.IsSuccess.Should().BeTrue();
+        autoSyncResult.Value.NewSuggestions.Should().Be(0);
+        _writtenSuggestions.Should().BeEmpty("the events feed cannot encode this series honestly");
+        await _notificationRepo.DidNotReceive().AddAsync(Arg.Any<Notification>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// The control for the test above, on the same account zone and the same clock, so the notification
+    /// it asserts is absent is one this account really does receive for a series the gate allows.
+    /// </summary>
+    [Fact]
+    public async Task StableByDaySeries_IsStoredAndNotifiedByAutoSync()
+    {
+        var user = CreateSyncingUser("America/Sao_Paulo");
+        StubFetch(user, SaoPauloAfternoonReview());
+
+        var autoSyncResult = await _autoSync.Handle(new RunCalendarAutoSyncCommand(user.Id), CancellationToken.None);
+
+        autoSyncResult.IsSuccess.Should().BeTrue();
+        autoSyncResult.Value.NewSuggestions.Should().Be(1);
+        _writtenSuggestions.Should().ContainSingle();
+        await _notificationRepo.Received(1).AddAsync(
+            Arg.Is<Notification>(n => n.Url == NotificationUrls.CalendarSyncReview),
+            Arg.Any<CancellationToken>());
     }
 
     private static CalendarEventItem LisbonThursdayStandup()
