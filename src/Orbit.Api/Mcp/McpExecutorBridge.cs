@@ -65,7 +65,8 @@ public class McpExecutorBridge(IAgentOperationExecutor operationExecutor)
         {
             return "Step-up verification required before this action runs. Request a code via " +
                    $"step_up_agent_operation_v2 for pending operation {pendingId}, verify it with " +
-                   "verify_step_up_agent_operation_v2, then retry with the returned confirmation token.";
+                   "verify_step_up_agent_operation_v2, read the confirmation token from " +
+                   "confirm_agent_operation_v2, then retry this tool with that token.";
         }
 
         return $"Confirmation required before this action runs. Confirm pending operation {pendingId} " +
