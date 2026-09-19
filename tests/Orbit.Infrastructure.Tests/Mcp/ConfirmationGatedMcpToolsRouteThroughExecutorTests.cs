@@ -10,21 +10,27 @@ namespace Orbit.Infrastructure.Tests.Mcp;
 /// <c>WebApplicationExtensions</c> forwards a tool whose capability carries a confirmation
 /// requirement straight to the tool, because <c>IAgentOperationExecutor</c> owns that gate and is
 /// the only layer that receives the caller's confirmation token. That deferral is safe only while
-/// four invariants hold, and each one is pinned by a test here.
+/// five invariants hold, and each one is pinned by a test here.
 /// <list type="number">
 /// <item>A confirmation requirement always sits on a mutation, because only a mutation is
 /// guaranteed to reach the executor.</item>
+/// <item>The source scan reaches every confirmation-gated MCP tool the catalog declares. The three
+/// guards below assert over whatever the scan returns, so a scan that silently stopped finding
+/// gated tools would report every one of them clean while enforcing nothing. The other three
+/// source-scan invariants rest on this one.</item>
 /// <item>Every confirmation-gated MCP tool reaches the executor through
 /// <c>McpExecutorBridge</c>.</item>
-/// <item>The operation id a gated tool forwards resolves to a capability carrying the same
-/// confirmation requirement. The executor gates on
+/// <item>The operation id a gated tool forwards resolves to the tool's own capability, carrying the
+/// same id and the same confirmation requirement. The executor gates on
 /// <c>GetCapability(operation.CapabilityId)</c>, never on the MCP tool name, so a gated tool
 /// forwarding an ungated operation id keeps the middleware stepping aside while the executor finds
 /// nothing to enforce, and the tool runs with no confirmation at all.</item>
-/// <item>Every gated tool exposes a <c>confirmationToken</c> parameter and forwards it. A gated
-/// tool that hardcodes <c>confirmationToken: null</c> is refused forever, because
-/// <c>HasFreshConfirmation</c> can never see a token and the client has no parameter to carry
-/// one.</item>
+/// <item>Every gated tool declares a <c>string? confirmationToken</c> parameter and forwards that
+/// identifier to the executor, directly or through a helper it calls. Any other expression in the
+/// token slot refuses the tool forever, because <c>HasFreshConfirmation</c> can never see the
+/// caller's token. The guard resolves the forwarded expression back to the parameter rather than
+/// rejecting a list of null spellings, so <c>default</c>, <c>null!</c>, <c>(string?)null</c>,
+/// <c>""</c> and an unrelated local all fail the same way.</item>
 /// </list>
 /// </summary>
 public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
@@ -32,7 +38,7 @@ public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
     private const string BridgeCall = "executorBridge.ExecuteAsync(";
     private const int OperationIdArgumentIndex = 1;
     private const int ConfirmationTokenArgumentIndex = 3;
-    private const string NullLiteral = "null";
+    private const string ConfirmationTokenParameterName = "confirmationToken";
 
     [GeneratedRegex(@"\[McpServerTool\(Name = ""(?<name>[^""]+)""")]
     private static partial Regex ToolAttributePattern();
@@ -46,7 +52,7 @@ public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
     [GeneratedRegex(@"\b(?<name>\w+)\s*\(")]
     private static partial Regex InvocationPattern();
 
-    [GeneratedRegex(@"string\?\s+confirmationToken\b")]
+    [GeneratedRegex(@"\bstring\?\s+" + ConfirmationTokenParameterName + @"\b")]
     private static partial Regex ConfirmationTokenParameterPattern();
 
     [Fact]
@@ -114,11 +120,14 @@ public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
                     ? null
                     : catalogService.GetCapabilityByChatTool(call.OperationId);
 
-                if (forwarded?.ConfirmationRequirement == tool.Capability.ConfirmationRequirement)
+                if (forwarded is not null &&
+                    forwarded.Id == tool.Capability.Id &&
+                    forwarded.ConfirmationRequirement == tool.Capability.ConfirmationRequirement)
                     continue;
 
                 offenders.Add(
-                    $"{tool.FileName}: {tool.ToolName} ({tool.Capability.ConfirmationRequirement}) forwards " +
+                    $"{tool.FileName}: {tool.ToolName} ({tool.Capability.Id}, " +
+                    $"{tool.Capability.ConfirmationRequirement}) forwards " +
                     $"operation '{call.OperationIdExpression}' resolving to " +
                     $"{forwarded?.Id ?? "an unknown capability"} " +
                     $"({forwarded?.ConfirmationRequirement.ToString() ?? "no requirement"})");
@@ -128,7 +137,9 @@ public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
         offenders.Should().BeEmpty(
             "the executor gates on the capability behind the forwarded operation id, not on the " +
             "MCP tool name, so a gated tool forwarding an ungated operation id runs with no " +
-            "confirmation while the middleware still steps aside. Offending tool(s):\n" +
+            "confirmation while the middleware still steps aside, and a gated tool forwarding " +
+            "another gated capability's operation id has the executor enforce the wrong scope. " +
+            "Offending tool(s):\n" +
             string.Join("\n", offenders));
     }
 
@@ -140,19 +151,23 @@ public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
         foreach (var tool in ScanConfirmationGatedMcpTools())
         {
             if (!tool.DeclaresConfirmationTokenParameter)
-                offenders.Add($"{tool.FileName}: {tool.ToolName} declares no confirmationToken parameter");
+                offenders.Add(
+                    $"{tool.FileName}: {tool.ToolName} declares no " +
+                    $"'string? {ConfirmationTokenParameterName}' parameter");
 
             offenders.AddRange(tool.BridgeCalls
-                .Where(call => call.ConfirmationTokenExpression is null or NullLiteral)
+                .Where(call => call.ConfirmationTokenExpression != ConfirmationTokenParameterName)
                 .Select(call =>
-                    $"{tool.FileName}: {tool.ToolName} forwards confirmationToken " +
-                    $"'{call.ConfirmationTokenExpression ?? "nothing"}' to the executor"));
+                    $"{tool.FileName}: {tool.ToolName} forwards '{call.ConfirmationTokenExpression ?? "nothing"}' " +
+                    $"to the executor instead of its own {ConfirmationTokenParameterName} parameter"));
         }
 
         offenders.Should().BeEmpty(
             "a confirmation-gated MCP tool is refused until the executor sees a fresh confirmation " +
-            "token, so the tool must expose the parameter and pass the caller's value through. " +
-            "Offending tool(s):\n" + string.Join("\n", offenders));
+            "token, so the tool must declare the parameter and forward that identifier through. " +
+            "Asserting the forwarded expression resolves to the parameter, rather than rejecting a " +
+            "list of null spellings, is what keeps 'default', 'null!', '(string?)null', '\"\"' and " +
+            "an unrelated local from passing. Offending tool(s):\n" + string.Join("\n", offenders));
     }
 
     private static IReadOnlyList<GatedMcpTool> ScanConfirmationGatedMcpTools()
@@ -185,11 +200,17 @@ public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
                     toolName,
                     capability,
                     CollectBridgeCalls(member, membersByName, constants),
-                    ConfirmationTokenParameterPattern().IsMatch(member.Body)));
+                    DeclaresConfirmationTokenParameter(member)));
             }
         }
 
         return scanned;
+    }
+
+    private static bool DeclaresConfirmationTokenParameter(MemberSource member)
+    {
+        return SplitTopLevelArguments(member.ParameterList)
+            .Any(parameter => ConfirmationTokenParameterPattern().IsMatch(parameter));
     }
 
     private static IReadOnlyList<BridgeCallSite> CollectBridgeCalls(
@@ -297,12 +318,14 @@ public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
             var declaration = declarations[index];
             var end = index + 1 < declarations.Count ? declarations[index + 1].Index : source.Length;
             var parameterListStart = declaration.Index + declaration.Length - 1;
+            var parameterList = ReadBalancedText(source, parameterListStart);
 
             members.Add(new MemberSource(
                 declaration.Groups["name"].Value,
                 declaration.Index,
                 source[declaration.Index..end],
-                ReadParameterNames(ReadBalancedText(source, parameterListStart))));
+                parameterList,
+                ReadParameterNames(parameterList)));
         }
 
         return members;
@@ -449,6 +472,7 @@ public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
         string Name,
         int Start,
         string Body,
+        string ParameterList,
         List<string> Parameters);
 
 }
