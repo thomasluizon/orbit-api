@@ -196,9 +196,7 @@ public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
         {
             var source = File.ReadAllText(file);
             var members = BuildMembers(source);
-            var membersByName = members
-                .GroupBy(member => member.Name, StringComparer.Ordinal)
-                .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+            var membersByName = members.ToLookup(member => member.Name, StringComparer.Ordinal);
             var constants = BuildStringConstants(source);
 
             foreach (var attribute in ToolAttributePattern().Matches(source).Cast<Match>())
@@ -233,7 +231,7 @@ public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
 
     private static bool AssignsConfirmationTokenParameter(
         MemberSource member,
-        IReadOnlyDictionary<string, MemberSource> membersByName)
+        ILookup<string, MemberSource> membersByName)
     {
         return ConfirmationTokenAssignmentPattern().IsMatch(member.Statements) ||
             ReadHelperCalls(member, membersByName)
@@ -242,7 +240,7 @@ public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
 
     private static IReadOnlyList<BridgeCallSite> CollectBridgeCalls(
         MemberSource member,
-        IReadOnlyDictionary<string, MemberSource> membersByName,
+        ILookup<string, MemberSource> membersByName,
         IReadOnlyDictionary<string, string> constants)
     {
         var calls = ReadBridgeCalls(member.Body, constants, [], []);
@@ -255,16 +253,20 @@ public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
 
     private static IEnumerable<(MemberSource Target, List<string> CallerArguments)> ReadHelperCalls(
         MemberSource member,
-        IReadOnlyDictionary<string, MemberSource> membersByName)
+        ILookup<string, MemberSource> membersByName)
     {
         foreach (var invocation in InvocationPattern().Matches(member.Body).Cast<Match>())
         {
             var callee = invocation.Groups["name"].Value;
-            if (callee == member.Name || !membersByName.TryGetValue(callee, out var target))
+            if (callee == member.Name || !membersByName.Contains(callee))
                 continue;
 
-            yield return (target, SplitTopLevelArguments(
-                ReadBalancedText(member.Body, invocation.Index + invocation.Length - 1)));
+            var callerArguments = SplitTopLevelArguments(
+                ReadBalancedText(member.Body, invocation.Index + invocation.Length - 1));
+
+            foreach (var target in membersByName[callee]
+                .Where(candidate => candidate.Parameters.Count >= callerArguments.Count))
+                yield return (target, callerArguments);
         }
     }
 
