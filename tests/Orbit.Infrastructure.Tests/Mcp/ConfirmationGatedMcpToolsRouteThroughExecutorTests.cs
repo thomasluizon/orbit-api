@@ -60,7 +60,7 @@ public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
     [GeneratedRegex(@"\bstring\?\s+" + ConfirmationTokenParameterName + @"\b")]
     private static partial Regex ConfirmationTokenParameterPattern();
 
-    [GeneratedRegex(@"\b" + ConfirmationTokenParameterName + @"\s*=[^=>]")]
+    [GeneratedRegex(@"\b" + ConfirmationTokenParameterName + @"\s*(?:\?\?|\+)?=[^=>]")]
     private static partial Regex ConfirmationTokenAssignmentPattern();
 
     [GeneratedRegex(@"^\w+\s*:(?!:)")]
