@@ -222,11 +222,8 @@ public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
         IReadOnlyDictionary<string, MemberSource> membersByName,
         IReadOnlyDictionary<string, string> constants)
     {
-        var direct = ReadBridgeCalls(member.Body, constants, [], []);
-        if (direct.Count > 0)
-            return direct;
+        var calls = ReadBridgeCalls(member.Body, constants, [], []);
 
-        var indirect = new List<BridgeCallSite>();
         foreach (var invocation in InvocationPattern().Matches(member.Body).Cast<Match>())
         {
             var callee = invocation.Groups["name"].Value;
@@ -236,10 +233,10 @@ public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
             var callerArguments = SplitTopLevelArguments(
                 ReadBalancedText(member.Body, invocation.Index + invocation.Length - 1));
 
-            indirect.AddRange(ReadBridgeCalls(target.Body, constants, target.Parameters, callerArguments));
+            calls.AddRange(ReadBridgeCalls(target.Body, constants, target.Parameters, callerArguments));
         }
 
-        return indirect;
+        return calls;
     }
 
     private static List<BridgeCallSite> ReadBridgeCalls(
