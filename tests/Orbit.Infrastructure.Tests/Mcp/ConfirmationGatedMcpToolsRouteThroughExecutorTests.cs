@@ -55,6 +55,9 @@ public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
     [GeneratedRegex(@"\bstring\?\s+" + ConfirmationTokenParameterName + @"\b")]
     private static partial Regex ConfirmationTokenParameterPattern();
 
+    [GeneratedRegex(@"^\w+\s*:(?!:)")]
+    private static partial Regex NamedArgumentPrefixPattern();
+
     [Fact]
     public void EveryConfirmationRequirement_SitsOnAMutation()
     {
@@ -273,8 +276,8 @@ public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
             return null;
 
         var argument = arguments[index];
-        var namedSeparator = argument.IndexOf(':', StringComparison.Ordinal);
-        return namedSeparator < 0 ? argument : argument[(namedSeparator + 1)..].Trim();
+        var namedPrefix = NamedArgumentPrefixPattern().Match(argument);
+        return namedPrefix.Success ? argument[namedPrefix.Length..].Trim() : argument;
     }
 
     private static string? ResolveExpression(
