@@ -41,13 +41,13 @@ public class StreakFreeze : Entity
             ordered.Select(date => Create(userId, date, StreakFreezeOrigin.Manual)).ToArray());
     }
 
-    public static StreakFreeze Create(Guid userId, DateOnly date, StreakFreezeOrigin? origin = null)
+    public static StreakFreeze Create(Guid userId, DateOnly date, StreakFreezeOrigin origin)
     {
         if (userId == Guid.Empty)
             throw new ArgumentException("User ID is required.", nameof(userId));
         if (date == DateOnly.MinValue)
             throw new ArgumentOutOfRangeException(nameof(date), "Used date is required.");
-        if (origin.HasValue && !Enum.IsDefined(origin.Value))
+        if (!Enum.IsDefined(origin))
             throw new ArgumentOutOfRangeException(nameof(origin), "Freeze origin is invalid.");
 
         return new StreakFreeze
