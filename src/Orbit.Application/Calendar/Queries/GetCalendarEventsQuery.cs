@@ -24,7 +24,8 @@ public record CalendarEventItem(
     DateTime? StartUtc = null,
     string CalendarId = "",
     string CalendarName = "",
-    DateTime? EndUtc = null)
+    DateTime? EndUtc = null,
+    string? RecurrenceTimeZone = null)
 {
     /// <summary>
     /// The IANA zone the source calendar expands this event's recurrence in, taken from the recurring

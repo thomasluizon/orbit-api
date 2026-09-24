@@ -21,11 +21,13 @@ public class CalendarEventItemSerializationTests
     public void ResponseBody_CarriesEndUtcAndOmitsTheSourceTimeZone()
     {
         var json = JsonSerializer.Serialize(LisbonSeries(), ResponseOptions);
+        using var response = JsonDocument.Parse(json);
 
         json.Should().NotContainEquivalentOf("sourceTimeZone");
         json.Should().NotContainEquivalentOf("recurrenceStartUtc");
-        json.Should().NotContain("Europe/Lisbon");
         json.Should().Contain("endUtc");
+        response.RootElement.TryGetProperty("recurrenceTimeZone", out var zone).Should().BeTrue();
+        zone.GetString().Should().Be("Europe/Lisbon");
     }
 
     [Fact]
@@ -78,7 +80,8 @@ public class CalendarEventItemSerializationTests
             "RRULE:FREQ=DAILY;BYDAY=TH",
             [],
             StartUtc: new DateTime(2027, 1, 7, 3, 30, 0, DateTimeKind.Utc),
-            EndUtc: new DateTime(2027, 1, 7, 4, 0, 0, DateTimeKind.Utc))
+            EndUtc: new DateTime(2027, 1, 7, 4, 0, 0, DateTimeKind.Utc),
+            RecurrenceTimeZone: "Europe/Lisbon")
         {
             SourceTimeZone = "Europe/Lisbon",
             RecurrenceStartUtc = new DateTime(2027, 1, 7, 3, 30, 0, DateTimeKind.Utc)
