@@ -2741,7 +2741,7 @@
       "ApiKeys": 11,
       "Auth": 22,
       "Behaviors": 4,
-      "Calendar": 15,
+      "Calendar": 16,
       "Challenges": 15,
       "Chat": 84,
       "ChecklistTemplates": 5,
@@ -2950,7 +2950,7 @@
       "ApiKeys": 14,
       "Auth": 26,
       "Behaviors": 14,
-      "Calendar": 16,
+      "Calendar": 19,
       "Challenges": 14,
       "Chat": 64,
       "ChecklistTemplates": 9,
@@ -2959,7 +2959,7 @@
       "Goals": 54,
       "Habits": 93,
       "Marketing": 6,
-      "Notifications": 20,
+      "Notifications": 21,
       "Profile": 40,
       "Referrals": 13,
       "Social": 36,
@@ -5036,6 +5036,27 @@
           "ApiKey",
           "GetApiKeysQuery",
           "GetApiKeysQueryHandler"
+        ]
+      },
+      {
+        "testClass": "CalendarEventItemSerializationTests",
+        "file": "tests/Orbit.Application.Tests/Queries/Calendar/CalendarEventItemSerializationTests.cs",
+        "references": []
+      },
+      {
+        "testClass": "CalendarFeedAgreementTests",
+        "file": "tests/Orbit.Application.Tests/Queries/Calendar/CalendarFeedAgreementTests.cs",
+        "references": [
+          "GetCalendarEventsQuery",
+          "GetCalendarEventsQueryHandler",
+          "GetCalendarSyncSuggestionsQuery",
+          "GetCalendarSyncSuggestionsQueryHandler",
+          "GoogleCalendarSyncSuggestion",
+          "Habit",
+          "Notification",
+          "RunCalendarAutoSyncCommand",
+          "RunCalendarAutoSyncCommandHandler",
+          "User"
         ]
       },
       {
@@ -7762,6 +7783,17 @@
         "references": [
           "User",
           "UserSession"
+        ]
+      },
+      {
+        "testClass": "CalendarProjectionEndToEndTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Services/CalendarProjectionEndToEndTests.cs",
+        "references": [
+          "GetCalendarEventsQuery",
+          "GetCalendarEventsQueryHandler",
+          "GoogleCalendarSyncSuggestion",
+          "Habit",
+          "User"
         ]
       },
       {

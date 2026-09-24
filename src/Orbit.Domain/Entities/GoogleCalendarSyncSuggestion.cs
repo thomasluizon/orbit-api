@@ -45,4 +45,16 @@ public class GoogleCalendarSyncSuggestion : Entity
         ImportedAtUtc = utcNow;
         ImportedHabitId = habitId;
     }
+
+    public void RefreshPendingEvent(string title, DateTime startDateUtc, string rawEventJson)
+    {
+        if (DismissedAtUtc is not null || ImportedAtUtc is not null)
+            throw new InvalidOperationException("Only a pending calendar suggestion can be refreshed.");
+
+        ArgumentException.ThrowIfNullOrWhiteSpace(title);
+        ArgumentException.ThrowIfNullOrWhiteSpace(rawEventJson);
+        Title = title;
+        StartDateUtc = startDateUtc;
+        RawEventJson = rawEventJson;
+    }
 }
