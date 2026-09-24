@@ -212,6 +212,35 @@ public class CalendarFeedAgreementTests
         eventsAfterRefresh.Value.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task LegacyPendingSuggestion_WithDuplicateFetchedId_IsNotRefreshed()
+    {
+        var user = CreateSyncingUser("America/Sao_Paulo");
+        var first = SaoPauloAfternoonReview();
+        var second = first with { Title = "Another calendar's review", SourceTimeZone = "America/Bogota" };
+        StubFetch(user, first);
+        _fetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<IReadOnlyCollection<string>?>(),
+                Arg.Any<DateTime?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ => new List<CalendarEventItem> { first, second });
+        var legacyJson = JsonSerializer.Serialize(first);
+        var legacy = GoogleCalendarSyncSuggestion.Create(
+            user.Id, first.Id, first.Title, first.StartUtc!.Value,
+            legacyJson,
+            new DateTime(2027, 1, 4, 12, 0, 0, DateTimeKind.Utc));
+        _writtenSuggestions.Add(legacy);
+
+        var sync = await _autoSync.Handle(new RunCalendarAutoSyncCommand(user.Id), CancellationToken.None);
+
+        sync.IsSuccess.Should().BeTrue();
+        sync.Value.NewSuggestions.Should().Be(0);
+        _writtenSuggestions.Should().ContainSingle();
+        legacy.RawEventJson.Should().Be(legacyJson);
+        legacy.Title.Should().Be(first.Title);
+    }
+
     private static CalendarEventItem LisbonThursdayStandup()
         => new(
             "master-lisbon",

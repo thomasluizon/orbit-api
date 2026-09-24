@@ -121,7 +121,6 @@ public partial class RunCalendarAutoSyncCommandHandler(
         {
             fetched = await deps.EventFetcher.FetchAsync(
                 accessToken, user.GetSelectedCalendarIds(), updatedMin: null, ct);
-            fetched = NormalizeFetchedEvents(user.Id, fetched);
         }
         catch (CalendarProviderException ex) when (ex.Kind == CalendarFetchErrorKind.ReconnectRequired)
         {
@@ -139,8 +138,9 @@ public partial class RunCalendarAutoSyncCommandHandler(
         }
 
         var timeZone = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
-        var reconciled = await ReconcileExistingHabits(user, fetched, timeZone, utcNow, ct);
-        var newSuggestions = await CreateSuggestions(user, fetched, timeZone, utcNow, ct);
+        var normalizedFetched = NormalizeFetchedEvents(user.Id, fetched);
+        var reconciled = await ReconcileExistingHabits(user, normalizedFetched, timeZone, utcNow, ct);
+        var newSuggestions = await CreateSuggestions(user, normalizedFetched, fetched, timeZone, utcNow, ct);
 
         if (newSuggestions > 0 && IsInQuietHours(timeZone, utcNow)
             && !await HasRecentSuggestionNotification(user.Id, utcNow, ct))
@@ -223,7 +223,8 @@ public partial class RunCalendarAutoSyncCommandHandler(
     }
 
     private async Task<int> CreateSuggestions(
-        User user, List<CalendarEventItem> fetched, TimeZoneInfo timeZone, DateTime utcNow, CancellationToken ct)
+        User user, List<CalendarEventItem> fetched, List<CalendarEventItem> fetchedIncludingDuplicates,
+        TimeZoneInfo timeZone, DateTime utcNow, CancellationToken ct)
     {
         if (fetched.Count == 0) return 0;
 
@@ -240,7 +241,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
         var reservedEventIds = new HashSet<string>(habitEventIds, StringComparer.Ordinal);
         reservedEventIds.UnionWith(existingSuggestionEventIds);
 
-        var fetchedById = fetched
+        var fetchedById = fetchedIncludingDuplicates
             .GroupBy(ev => ev.Id, StringComparer.Ordinal)
             .Where(group => group.Count() == 1)
             .ToDictionary(group => group.Key, group => group.Single(), StringComparer.Ordinal);
