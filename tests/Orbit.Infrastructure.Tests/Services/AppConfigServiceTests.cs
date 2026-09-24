@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
@@ -123,18 +123,6 @@ public class AppConfigServiceTests
     }
 
     [Fact]
-    public async Task GetAsync_UnparseableValue_ReturnsDefault()
-    {
-        await using var dbContext = NewDbContext();
-        await SeedAsync(dbContext, "max_habits", "not-a-number");
-        var service = Create(dbContext);
-
-        var value = await service.GetAsync("max_habits", 5);
-
-        value.Should().Be(5);
-    }
-
-    [Fact]
     public async Task GetAsync_UnsupportedType_ReturnsDefault()
     {
         await using var dbContext = NewDbContext();
@@ -208,5 +196,53 @@ public class AppConfigServiceTests
 
         first.Should().HaveCount(1);
         second.Should().HaveCount(1);
+    }
+
+    [Theory]
+    [InlineData("1")]
+    [InlineData("yes")]
+    [InlineData("on")]
+    [InlineData("")]
+    public async Task GetAsync_MalformedBooleanRow_ThrowsNamingTheKey(string raw)
+    {
+        await using var dbContext = NewDbContext();
+        await SeedAsync(dbContext, AppConfigKeys.RequireApiKeyCreationStepUp, raw);
+        var service = Create(dbContext);
+
+        var read = async () => await service.GetAsync(
+            AppConfigKeys.RequireApiKeyCreationStepUp,
+            false);
+
+        (await read.Should().ThrowAsync<InvalidOperationException>())
+            .WithMessage($"*{AppConfigKeys.RequireApiKeyCreationStepUp}*");
+    }
+
+    [Theory]
+    [InlineData("true", true)]
+    [InlineData("True", true)]
+    [InlineData(" true ", true)]
+    [InlineData("false", false)]
+    public async Task GetAsync_ParsableBooleanRow_ReturnsTheStoredValue(string raw, bool expected)
+    {
+        await using var dbContext = NewDbContext();
+        await SeedAsync(dbContext, AppConfigKeys.RequireApiKeyCreationStepUp, raw);
+        var service = Create(dbContext);
+
+        var value = await service.GetAsync(AppConfigKeys.RequireApiKeyCreationStepUp, false);
+
+        value.Should().Be(expected);
+    }
+
+    [Fact]
+    public async Task GetAsync_MalformedIntegerRow_ThrowsNamingTheKey()
+    {
+        await using var dbContext = NewDbContext();
+        await SeedAsync(dbContext, AppConfigKeys.MaxUserFacts, "not-a-number");
+        var service = Create(dbContext);
+
+        var read = async () => await service.GetAsync(AppConfigKeys.MaxUserFacts, 10);
+
+        (await read.Should().ThrowAsync<InvalidOperationException>())
+            .WithMessage($"*{AppConfigKeys.MaxUserFacts}*");
     }
 }

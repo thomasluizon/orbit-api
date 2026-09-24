@@ -1,7 +1,9 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using NSubstitute;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
@@ -14,6 +16,7 @@ public class AgentPolicyEvaluatorTests : IDisposable
     private readonly OrbitDbContext _dbContext;
     private readonly AgentCatalogService _catalogService = new();
     private readonly PendingAgentOperationStore _pendingOperationStore;
+    private readonly IAgentStepUpAuthorizationBridge _stepUpAuthorizationBridge;
     private readonly AgentPolicyEvaluator _policyEvaluator;
     private readonly Guid _userId;
     private readonly IOptions<AgentPlatformSettings> _settings = Options.Create(new AgentPlatformSettings());
@@ -32,7 +35,16 @@ public class AgentPolicyEvaluatorTests : IDisposable
         _dbContext.SaveChanges();
 
         _pendingOperationStore = new PendingAgentOperationStore(_dbContext, _settings);
-        _policyEvaluator = new AgentPolicyEvaluator(_dbContext, _catalogService, _pendingOperationStore, _settings);
+        _stepUpAuthorizationBridge = Substitute.For<IAgentStepUpAuthorizationBridge>();
+        _stepUpAuthorizationBridge
+            .GetRequiredConfirmationAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns((AgentConfirmationRequirement?)null);
+        _policyEvaluator = new AgentPolicyEvaluator(
+            _dbContext,
+            _catalogService,
+            _pendingOperationStore,
+            _stepUpAuthorizationBridge,
+            _settings);
     }
 
     public void Dispose()
@@ -184,12 +196,155 @@ public class AgentPolicyEvaluatorTests : IDisposable
     }
 
     [Fact]
+    public void Evaluate_ApiKeyReadWithoutEscalation_AllowsTheReadOutright()
+    {
+        var decision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+            AgentCapabilityIds.ApiKeysRead,
+            _userId,
+            AgentExecutionSurface.Mcp,
+            AgentAuthMethod.Jwt,
+            [],
+            "get_api_keys",
+            "Read API keys",
+            OperationFingerprint: "get_api_keys:{}"));
+
+        decision.Status.Should().Be(AgentPolicyDecisionStatus.Allowed);
+    }
+
+    [Fact]
+    public void Evaluate_ApiKeyReadEscalatedToStepUp_OpensAPendingOperationDoor()
+    {
+        var decision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+            AgentCapabilityIds.ApiKeysRead,
+            _userId,
+            AgentExecutionSurface.Mcp,
+            AgentAuthMethod.Jwt,
+            [],
+            "get_api_keys",
+            "Read API keys",
+            OperationFingerprint: "get_api_keys:{}",
+            ConfirmationRequirementOverride: AgentConfirmationRequirement.StepUp));
+
+        decision.Status.Should().Be(AgentPolicyDecisionStatus.ConfirmationRequired);
+        decision.Reason.Should().Be("step_up_required");
+        decision.PendingOperation.Should().NotBeNull();
+        decision.PendingOperation!.ConfirmationRequirement.Should().Be(AgentConfirmationRequirement.StepUp);
+    }
+
+    [Fact]
+    public void Evaluate_VerifiedStepUpOnTheApiKeyRead_TellsTheAuthorizationBridge()
+    {
+        var initialDecision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+            AgentCapabilityIds.ApiKeysRead,
+            _userId,
+            AgentExecutionSurface.Mcp,
+            AgentAuthMethod.Jwt,
+            [],
+            "get_api_keys",
+            "Read API keys",
+            OperationFingerprint: "get_api_keys:{}",
+            ConfirmationRequirementOverride: AgentConfirmationRequirement.StepUp));
+
+        var pendingOperation = initialDecision.PendingOperation;
+        pendingOperation.Should().NotBeNull();
+
+        var confirmation = _pendingOperationStore.Confirm(_userId, pendingOperation!.Id);
+        confirmation.Should().NotBeNull();
+
+        var storedOperation = _dbContext.PendingAgentOperations.Single(item => item.Id == pendingOperation.Id);
+        storedOperation.MarkStepUpSatisfied();
+        _dbContext.SaveChanges();
+
+        var confirmedDecision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+            AgentCapabilityIds.ApiKeysRead,
+            _userId,
+            AgentExecutionSurface.Mcp,
+            AgentAuthMethod.Jwt,
+            [],
+            "get_api_keys",
+            "Read API keys",
+            OperationFingerprint: "get_api_keys:{}",
+            ConfirmationToken: confirmation!.ConfirmationToken,
+            ConfirmationRequirementOverride: AgentConfirmationRequirement.StepUp));
+
+        confirmedDecision.Status.Should().Be(AgentPolicyDecisionStatus.Allowed);
+        _stepUpAuthorizationBridge.Received(1).OnStepUpVerified(AgentCapabilityIds.ApiKeysRead, _userId);
+    }
+
+    [Fact]
+    public void Evaluate_VerifiedStepUpOnApiKeyManagement_TellsTheAuthorizationBridge()
+    {
+        var initialDecision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+            AgentCapabilityIds.ApiKeysManage,
+            _userId,
+            AgentExecutionSurface.Chat,
+            AgentAuthMethod.Jwt,
+            [],
+            "manage_api_keys",
+            "Revoke API key",
+            OperationFingerprint: "manage_api_keys:{\"action\":\"revoke\"}"));
+
+        var pendingOperation = initialDecision.PendingOperation;
+        pendingOperation.Should().NotBeNull();
+
+        var confirmation = _pendingOperationStore.Confirm(_userId, pendingOperation!.Id);
+        var storedOperation = _dbContext.PendingAgentOperations.Single(item => item.Id == pendingOperation.Id);
+        storedOperation.MarkStepUpSatisfied();
+        _dbContext.SaveChanges();
+
+        var confirmedDecision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+            AgentCapabilityIds.ApiKeysManage,
+            _userId,
+            AgentExecutionSurface.Chat,
+            AgentAuthMethod.Jwt,
+            [],
+            "manage_api_keys",
+            "Revoke API key",
+            OperationFingerprint: "manage_api_keys:{\"action\":\"revoke\"}",
+            ConfirmationToken: confirmation!.ConfirmationToken));
+
+        confirmedDecision.Status.Should().Be(AgentPolicyDecisionStatus.Allowed);
+        _stepUpAuthorizationBridge.Received(1).OnStepUpVerified(AgentCapabilityIds.ApiKeysManage, _userId);
+    }
+
+    [Fact]
+    public void Evaluate_FreshConfirmationWithoutStepUp_TellsTheBridgeNothing()
+    {
+        var initialDecision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+            AgentCapabilityIds.HabitsDelete,
+            _userId,
+            AgentExecutionSurface.Chat,
+            AgentAuthMethod.Jwt,
+            [],
+            "delete_habit",
+            "Delete habit via chat",
+            OperationFingerprint: "delete_habit:{\"habitId\":\"123\"}"));
+
+        var confirmation = _pendingOperationStore.Confirm(_userId, initialDecision.PendingOperation!.Id);
+
+        var confirmedDecision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+            AgentCapabilityIds.HabitsDelete,
+            _userId,
+            AgentExecutionSurface.Chat,
+            AgentAuthMethod.Jwt,
+            [],
+            "delete_habit",
+            "Delete habit via chat",
+            OperationFingerprint: "delete_habit:{\"habitId\":\"123\"}",
+            ConfirmationToken: confirmation!.ConfirmationToken));
+
+        confirmedDecision.Status.Should().Be(AgentPolicyDecisionStatus.Allowed);
+        _stepUpAuthorizationBridge.DidNotReceive().OnStepUpVerified(Arg.Any<string>(), Arg.Any<Guid>());
+    }
+
+    [Fact]
     public void Evaluate_InShadowMode_ReturnsAllowedWithShadowDecision()
     {
         var shadowEvaluator = new AgentPolicyEvaluator(
             _dbContext,
             _catalogService,
             _pendingOperationStore,
+            _stepUpAuthorizationBridge,
             Options.Create(new AgentPlatformSettings { ShadowModeEnabled = true }));
 
         var decision = shadowEvaluator.Evaluate(new AgentPolicyEvaluationContext(

@@ -2738,7 +2738,7 @@
     },
     "featureFolders": {
       "Accountability": 17,
-      "ApiKeys": 11,
+      "ApiKeys": 12,
       "Auth": 22,
       "Behaviors": 4,
       "Calendar": 16,
@@ -2947,14 +2947,14 @@
   "testCoverage": {
     "featureFolders": {
       "Accountability": 9,
-      "ApiKeys": 14,
-      "Auth": 26,
+      "ApiKeys": 16,
+      "Auth": 31,
       "Behaviors": 14,
       "Calendar": 19,
       "Challenges": 14,
       "Chat": 64,
       "ChecklistTemplates": 9,
-      "Common": 197,
+      "Common": 201,
       "Gamification": 43,
       "Goals": 54,
       "Habits": 93,
@@ -3793,6 +3793,8 @@
         "file": "tests/Orbit.Application.Tests/Commands/ApiKeys/RevokeApiKeyCommandHandlerTests.cs",
         "references": [
           "ApiKey",
+          "GetApiKeysQuery",
+          "GetApiKeysQueryHandler",
           "RevokeApiKeyCommand",
           "RevokeApiKeyCommandHandler"
         ]
@@ -5563,6 +5565,11 @@
         ]
       },
       {
+        "testClass": "ApiKeyManagementAuthorizationTests",
+        "file": "tests/Orbit.Application.Tests/Services/ApiKeys/ApiKeyManagementAuthorizationTests.cs",
+        "references": []
+      },
+      {
         "testClass": "AuthSessionServiceTests",
         "file": "tests/Orbit.Application.Tests/Services/AuthSessionServiceTests.cs",
         "references": [
@@ -7195,6 +7202,10 @@
         "references": [
           "ApiKey",
           "AppFeatureFlag",
+          "GetApiKeysQuery",
+          "GetApiKeysQueryHandler",
+          "RevokeApiKeyCommand",
+          "RevokeApiKeyCommandHandler",
           "User"
         ]
       },
@@ -7242,9 +7253,7 @@
       {
         "testClass": "ApiKeyToolsTests",
         "file": "tests/Orbit.Infrastructure.Tests/Mcp/ApiKeyToolsTests.cs",
-        "references": [
-          "GetApiKeysQuery"
-        ]
+        "references": []
       },
       {
         "testClass": "CalendarToolsTests",

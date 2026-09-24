@@ -1,9 +1,11 @@
 using System.Security.Claims;
+using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -14,7 +16,13 @@ using NSubstitute;
 using Orbit.Api.Extensions;
 using Orbit.Api.Mcp;
 using Orbit.Api.Mcp.Tools;
+using Orbit.Application.ApiKeys.Commands;
+using Orbit.Application.ApiKeys.Queries;
+using Orbit.Application.ApiKeys.Services;
+using Orbit.Application.Auth.Services;
 using Orbit.Application.Chat.Tools;
+using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -43,12 +51,18 @@ public class McpConfirmationGateTests : IDisposable
     private readonly AgentPolicyEvaluator _policyEvaluator;
     private readonly AgentStepUpService _stepUpService;
     private readonly IAgentAuditService _auditService = Substitute.For<IAgentAuditService>();
+    private readonly AgentOperationExecutor _executor;
     private readonly ApiKeyTools _apiKeyTools;
     private readonly AgentTools _agentTools;
     private readonly ClaimsPrincipal _user;
     private readonly ClaimsPrincipal _apiKeyUser;
     private readonly Guid _userId;
-    private readonly Guid _keyId = Guid.NewGuid();
+    private readonly Guid _keyId;
+    private readonly ApiKey _apiKey;
+    private readonly ApiKeyManagementAuthorization _authorization;
+    private readonly IAppConfigService _appConfigService = Substitute.For<IAppConfigService>();
+    private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
+    private bool _stepUpEnabled = true;
     private string? _emailedCode;
 
     public McpConfirmationGateTests()
@@ -66,10 +80,36 @@ public class McpConfirmationGateTests : IDisposable
         _dbContext.SaveChanges();
 
         var settings = Options.Create(new AgentPlatformSettings());
-        var manageApiKeysTool = new StubManageApiKeysTool(_keyId);
-        _catalogService = new AgentCatalogService([manageApiKeysTool]);
+        _apiKey = ApiKey.Create(_userId, "CI key").Value.Entity;
+        _keyId = _apiKey.Id;
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        _appConfigService.GetAsync(AppConfigKeys.RequireApiKeyCreationStepUp, false, Arg.Any<CancellationToken>())
+            .Returns(_ => _stepUpEnabled);
+        _authorization = new ApiKeyManagementAuthorization(
+            _appConfigService,
+            new EmailChallengeService(cache, TimeProvider.System));
+        var repository = Substitute.For<IGenericRepository<ApiKey>>();
+        repository.FindAsync(Arg.Any<Expression<Func<ApiKey, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<ApiKey> { _apiKey });
+        repository.FindTrackedAsync(Arg.Any<Expression<Func<ApiKey, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<ApiKey> { _apiKey });
+        var payGate = Substitute.For<IPayGateService>();
+        payGate.CanReadApiKeys(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Orbit.Domain.Common.Result.Success()));
+        payGate.CanManageApiKeys(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Orbit.Domain.Common.Result.Success()));
+        var listHandler = new GetApiKeysQueryHandler(repository, payGate, cache, _authorization);
+        var revokeHandler = new RevokeApiKeyCommandHandler(repository, payGate, _unitOfWork, cache, _authorization);
+        var mediator = Substitute.For<IMediator>();
+        mediator.Send(Arg.Any<GetApiKeysQuery>(), Arg.Any<CancellationToken>())
+            .Returns(call => listHandler.Handle(call.Arg<GetApiKeysQuery>(), call.Arg<CancellationToken>()));
+        mediator.Send(Arg.Any<RevokeApiKeyCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call => revokeHandler.Handle(call.Arg<RevokeApiKeyCommand>(), call.Arg<CancellationToken>()));
+        var getApiKeysTool = new GetApiKeysTool(mediator);
+        var manageApiKeysTool = new ManageApiKeysTool(mediator);
+        _catalogService = new AgentCatalogService([getApiKeysTool, manageApiKeysTool]);
         _pendingOperationStore = new PendingAgentOperationStore(_dbContext, settings);
-        _policyEvaluator = new AgentPolicyEvaluator(_dbContext, _catalogService, _pendingOperationStore, settings);
+        _policyEvaluator = new AgentPolicyEvaluator(_dbContext, _catalogService, _pendingOperationStore, _authorization, settings);
 
         var emailService = Substitute.For<IEmailService>();
         emailService.SendVerificationCodeAsync(
@@ -88,24 +128,26 @@ public class McpConfirmationGateTests : IDisposable
                 Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
-        var executor = new AgentOperationExecutor(
+        _executor = new AgentOperationExecutor(
             _catalogService,
             _policyEvaluator,
             _auditService,
             ownershipService,
-            new AiToolRegistry([manageApiKeysTool]),
-            Substitute.For<IUnitOfWork>(),
+            _authorization,
+            new AiToolRegistry([getApiKeysTool, manageApiKeysTool]),
+            _unitOfWork,
             NullLogger<AgentOperationExecutor>.Instance);
 
-        _apiKeyTools = new ApiKeyTools(Substitute.For<IMediator>(), new McpExecutorBridge(executor));
-        _agentTools = new AgentTools(_catalogService, executor, _pendingOperationStore, _stepUpService);
+        _apiKeyTools = new ApiKeyTools(new McpExecutorBridge(_executor));
+        _agentTools = new AgentTools(_catalogService, _executor, _pendingOperationStore, _stepUpService);
         _user = new ClaimsPrincipal(new ClaimsIdentity(
             [new Claim(ClaimTypes.NameIdentifier, _userId.ToString())],
             "JwtBearer"));
         _apiKeyUser = new ClaimsPrincipal(new ClaimsIdentity(
             [
                 new Claim(ClaimTypes.NameIdentifier, _userId.ToString()),
-                new Claim("auth_method", "api_key")
+                new Claim("auth_method", "api_key"),
+                new Claim("scope", AgentScopes.ReadApiKeys)
             ],
             "ApiKey"));
     }
@@ -156,6 +198,8 @@ public class McpConfirmationGateTests : IDisposable
 
         outcome.PolicyError.Should().BeNull();
         outcome.ToolOutput.Should().Be($"Revoked API key {_keyId}.");
+        _apiKey.IsRevoked.Should().BeTrue();
+        _authorization.HasGrant(_userId).Should().BeTrue();
     }
 
     [Fact]
@@ -189,6 +233,98 @@ public class McpConfirmationGateTests : IDisposable
 
         outcome.PolicyError.Should().BeNull();
         outcome.ToolOutput.Should().Contain("Step-up verification required");
+    }
+
+    [Fact]
+    public async Task GetApiKeys_WithFlagOn_ListsAfterVerifiedAgentStepUp()
+    {
+        var refusal = await InvokeGetApiKeysAsync(_user, null);
+        refusal.PolicyError.Should().BeNull();
+        refusal.ToolOutput.Should().Contain("Step-up verification required");
+
+        var pendingOperationId = _dbContext.PendingAgentOperations.Single().Id.ToString();
+        var challenge = await _agentTools.StepUpAgentOperation(_user, pendingOperationId);
+        var verified = await _agentTools.VerifyStepUpAgentOperation(
+            _user, pendingOperationId, challenge.ChallengeId.ToString(), _emailedCode!);
+        verified.Id.ToString().Should().Be(pendingOperationId);
+        var confirmation = _agentTools.ConfirmAgentOperation(_user, pendingOperationId);
+
+        var outcome = await InvokeGetApiKeysAsync(_user, confirmation!.ConfirmationToken);
+
+        outcome.PolicyError.Should().BeNull();
+        outcome.ToolOutput.Should().Contain("CI key");
+        _authorization.HasGrant(_userId).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetApiKeys_WithFlagOff_ListsWithoutChallenge()
+    {
+        _stepUpEnabled = false;
+
+        var outcome = await InvokeGetApiKeysAsync(_user, null);
+
+        outcome.PolicyError.Should().BeNull();
+        outcome.ToolOutput.Should().Contain("CI key");
+        _dbContext.PendingAgentOperations.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetApiKeys_WithApiKeyCredential_CannotCompleteStepUp()
+    {
+        var outcome = await InvokeGetApiKeysAsync(_apiKeyUser, null);
+
+        outcome.PolicyError.Should().BeNull();
+        outcome.ToolOutput.Should().Contain("Step-up verification required");
+        outcome.ToolOutput.Should().NotContain("CI key");
+        var pendingOperationId = _dbContext.PendingAgentOperations.Single().Id.ToString();
+        var stepUp = () => _agentTools.StepUpAgentOperation(_apiKeyUser, pendingOperationId);
+        await stepUp.Should().ThrowAsync<UnauthorizedAccessException>();
+        _authorization.HasGrant(_userId).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ChatGetApiKeys_WithFlagOn_ListsAfterVerifiedAgentStepUp()
+    {
+        var arguments = JsonSerializer.SerializeToElement(new { });
+        var request = new AgentExecuteOperationRequest(
+            _userId, "get_api_keys", arguments, AgentExecutionSurface.Chat, AgentAuthMethod.Jwt);
+        var refusal = await _executor.ExecuteAsync(request);
+        refusal.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation);
+
+        var pendingOperationId = refusal.Operation.PendingOperationId!.Value.ToString();
+        var challenge = await _agentTools.StepUpAgentOperation(_user, pendingOperationId);
+        await _agentTools.VerifyStepUpAgentOperation(
+            _user, pendingOperationId, challenge.ChallengeId.ToString(), _emailedCode!);
+        var confirmation = _agentTools.ConfirmAgentOperation(_user, pendingOperationId);
+
+        var outcome = await _executor.ExecuteAsync(request with
+        {
+            ConfirmationToken = confirmation!.ConfirmationToken
+        });
+
+        outcome.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
+        outcome.Operation.Payload.Should().BeAssignableTo<IReadOnlyList<ApiKeyResponse>>()
+            .Which.Should().ContainSingle(key => key.Id == _keyId);
+        _authorization.HasGrant(_userId).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ChatGetApiKeys_WithFlagOff_ListsWithoutChallenge()
+    {
+        _stepUpEnabled = false;
+        var request = new AgentExecuteOperationRequest(
+            _userId,
+            "get_api_keys",
+            JsonSerializer.SerializeToElement(new { }),
+            AgentExecutionSurface.Chat,
+            AgentAuthMethod.Jwt);
+
+        var outcome = await _executor.ExecuteAsync(request);
+
+        outcome.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
+        outcome.Operation.Payload.Should().BeAssignableTo<IReadOnlyList<ApiKeyResponse>>()
+            .Which.Should().ContainSingle(key => key.Id == _keyId);
+        _dbContext.PendingAgentOperations.Should().BeEmpty();
     }
 
     [Fact]
@@ -249,6 +385,29 @@ public class McpConfirmationGateTests : IDisposable
         return new McpCallOutcome(toolOutput, ReadPolicyError(context));
     }
 
+    private async Task<McpCallOutcome> InvokeGetApiKeysAsync(ClaimsPrincipal user, string? confirmationToken)
+    {
+        var arguments = new Dictionary<string, JsonElement>();
+        if (confirmationToken is not null)
+            arguments["confirmationToken"] = JsonSerializer.SerializeToElement(confirmationToken);
+
+        using var document = CreateToolCallDocument("get_api_keys", new RequestId(2), arguments);
+        var body = document.RootElement.GetRawText();
+        WebApplicationExtensions.TryGetMcpToolCall(
+            document.RootElement, out var toolName, out var requestId, out var operationId, out var fingerprint)
+            .Should().BeTrue();
+
+        var context = CreateHttpContext(user);
+        string? toolOutput = null;
+        await WebApplicationExtensions.HandleMcpToolCallAsync(
+            context,
+            async () => toolOutput = await _apiKeyTools.GetApiKeys(user, confirmationToken),
+            body,
+            new WebApplicationExtensions.McpToolCallRequest(toolName!, requestId, operationId, fingerprint));
+
+        return new McpCallOutcome(toolOutput, ReadPolicyError(context));
+    }
+
     private DefaultHttpContext CreateHttpContext(ClaimsPrincipal user)
     {
         var services = new ServiceCollection()
@@ -299,15 +458,4 @@ public class McpConfirmationGateTests : IDisposable
 
     private sealed record McpCallOutcome(string? ToolOutput, string? PolicyError);
 
-    private sealed class StubManageApiKeysTool(Guid keyId) : IAiTool
-    {
-        public string Name => "manage_api_keys";
-
-        public string Description => "Creates and revokes scoped API keys.";
-
-        public object GetParameterSchema() => new { type = "object" };
-
-        public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
-            => Task.FromResult(new ToolResult(true, keyId.ToString(), "CI key"));
-    }
 }

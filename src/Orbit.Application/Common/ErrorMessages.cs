@@ -22,7 +22,7 @@ public static class ErrorMessages
     public static readonly AppError SelfReferral = new(ErrorCodes.SelfReferral, "You cannot refer yourself.");
     public static readonly AppError AlreadyReferred = new(ErrorCodes.AlreadyReferred, "This account was already referred.");
     public static readonly AppError ApiKeyNotFound = new(ErrorCodes.ApiKeyNotFound, "API key not found.");
-    public static readonly AppError ApiKeyCreationChallengeRequired = new(ErrorCodes.ApiKeyCreationChallengeRequired, "Confirm the emailed code before creating an API key.");
+    public static readonly AppError ApiKeyCreationChallengeRequired = new(ErrorCodes.ApiKeyCreationChallengeRequired, "Confirm the emailed code before managing API keys.");
     public static readonly AppError NotificationNotFound = new(ErrorCodes.NotificationNotFound, "Notification not found.");
     public static readonly AppError NoPushSubscriptions = new(ErrorCodes.NoPushSubscriptions, "No push subscriptions found for this user.");
     public static readonly AppError SubscriptionNotFound = new(ErrorCodes.SubscriptionNotFound, "No subscription found.");
