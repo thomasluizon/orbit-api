@@ -81,6 +81,9 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IClosedMonthRecapStore, ClosedMonthRecapStore>();
         builder.Services.AddScoped<IAppConfigService, AppConfigService>();
         builder.Services.AddSingleton<Orbit.Application.Auth.Services.EmailChallengeService>();
+        builder.Services.AddScoped<Orbit.Application.ApiKeys.Services.ApiKeyManagementAuthorization>();
+        builder.Services.AddScoped<IAgentStepUpAuthorizationBridge>(sp =>
+            sp.GetRequiredService<Orbit.Application.ApiKeys.Services.ApiKeyManagementAuthorization>());
         builder.Services.AddScoped<IUserDateService, UserDateService>();
         builder.Services.AddScoped<IUserStreakService, UserStreakService>();
         builder.Services.AddScoped<IGoalProgressReadSyncer, GoalProgressReadSyncer>();

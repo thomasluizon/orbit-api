@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
@@ -79,6 +79,8 @@ public partial class ApiKeysController(IMediator mediator, ILogger<ApiKeysContro
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status428PreconditionRequired)]
     public async Task<IActionResult> GetApiKeys(CancellationToken cancellationToken)
     {
         var query = new GetApiKeysQuery(HttpContext.GetUserId());
@@ -89,7 +91,9 @@ public partial class ApiKeysController(IMediator mediator, ILogger<ApiKeysContro
     [HttpDelete("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status428PreconditionRequired)]
     public async Task<IActionResult> RevokeApiKey(Guid id, CancellationToken cancellationToken)
     {
         var command = new RevokeApiKeyCommand(HttpContext.GetUserId(), id);
