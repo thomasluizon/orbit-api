@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Chat.Tools;
@@ -13,6 +13,7 @@ public partial class AgentOperationExecutor(
     IAgentPolicyEvaluator policyEvaluator,
     IAgentAuditService auditService,
     IAgentTargetOwnershipService targetOwnershipService,
+    IAgentStepUpAuthorizationBridge stepUpAuthorizationBridge,
     AiToolRegistry toolRegistry,
     IUnitOfWork unitOfWork,
     ILogger<AgentOperationExecutor> logger) : IAgentOperationExecutor
@@ -33,15 +34,22 @@ public partial class AgentOperationExecutor(
         if (operation is null)
             return await DenyUnknownOperationAsync(request, arguments, cancellationToken);
 
-        var capability = catalogService.GetCapability(operation.CapabilityId)
+        var declaredCapability = catalogService.GetCapability(operation.CapabilityId)
             ?? throw new InvalidOperationException($"Operation '{operation.Id}' is mapped to an unknown capability '{operation.CapabilityId}'.");
 
+        var escalatedRequirement = await stepUpAuthorizationBridge.GetRequiredConfirmationAsync(
+            declaredCapability.Id,
+            cancellationToken);
+        var capability = escalatedRequirement is { } required
+            ? declaredCapability with { ConfirmationRequirement = required }
+            : declaredCapability;
         var execution = new OperationExecutionContext(
             request,
             operation,
             capability,
             arguments,
-            $"{operation.DisplayName} requested via {request.Surface}");
+            $"{operation.DisplayName} requested via {request.Surface}",
+            escalatedRequirement);
 
         if (!operation.IsAgentExecutable)
             return await DenyDirectUserFlowAsync(execution, cancellationToken);
@@ -153,7 +161,8 @@ public partial class AgentOperationExecutor(
             operationFingerprint,
             execution.Arguments.GetRawText(),
             execution.Request.ConfirmationToken,
-            IsReadOnlyCredential: execution.Request.IsReadOnlyCredential));
+            IsReadOnlyCredential: execution.Request.IsReadOnlyCredential,
+            ConfirmationRequirementOverride: execution.EscalatedRequirement));
     }
 
     private async Task<AgentExecuteOperationResponse> DenyByPolicyAsync(
@@ -374,7 +383,8 @@ public partial class AgentOperationExecutor(
         AgentOperation Operation,
         AgentCapability Capability,
         JsonElement Arguments,
-        string Summary);
+        string Summary,
+        AgentConfirmationRequirement? EscalatedRequirement);
 
     private sealed record AuditContext(
         AgentExecuteOperationRequest Request,

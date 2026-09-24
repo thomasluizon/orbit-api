@@ -1,5 +1,6 @@
-using MediatR;
+﻿using MediatR;
 using Microsoft.Extensions.Caching.Memory;
+using Orbit.Application.ApiKeys.Services;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -15,13 +16,18 @@ public class RevokeApiKeyCommandHandler(
     IGenericRepository<ApiKey> apiKeyRepository,
     IPayGateService payGate,
     IUnitOfWork unitOfWork,
-    IMemoryCache cache) : IRequestHandler<RevokeApiKeyCommand, Result>
+    IMemoryCache cache,
+    ApiKeyManagementAuthorization authorization) : IRequestHandler<RevokeApiKeyCommand, Result>
 {
     public async Task<Result> Handle(RevokeApiKeyCommand request, CancellationToken cancellationToken)
     {
         var gateCheck = await payGate.CanManageApiKeys(request.UserId, cancellationToken);
         if (gateCheck.IsFailure)
             return gateCheck;
+
+        var requiresStepUp = await authorization.IsRequiredAsync(cancellationToken);
+        if (requiresStepUp && !authorization.HasGrant(request.UserId))
+            return Result.Failure(ErrorMessages.ApiKeyCreationChallengeRequired);
 
         var keys = await apiKeyRepository.FindTrackedAsync(
             k => k.Id == request.KeyId && k.UserId == request.UserId,
