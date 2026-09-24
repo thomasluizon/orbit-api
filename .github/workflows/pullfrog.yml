@@ -70,6 +70,8 @@ jobs:
         continue-on-error: true
         with:
           prompt: ${{ inputs.prompt }}
+          model: openai/gpt-6-sol
+          effort: high
       # Claude reviews ONLY when the Codex step fails, which is what an
       # exhausted OpenAI allowance looks like. Green runs never reach this.
       - name: Run agent (Claude fallback)
