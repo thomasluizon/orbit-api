@@ -2947,14 +2947,14 @@
   "testCoverage": {
     "featureFolders": {
       "Accountability": 9,
-      "ApiKeys": 15,
-      "Auth": 30,
+      "ApiKeys": 16,
+      "Auth": 31,
       "Behaviors": 14,
       "Calendar": 19,
       "Challenges": 14,
       "Chat": 64,
       "ChecklistTemplates": 9,
-      "Common": 200,
+      "Common": 201,
       "Gamification": 43,
       "Goals": 54,
       "Habits": 93,
@@ -7202,6 +7202,10 @@
         "references": [
           "ApiKey",
           "AppFeatureFlag",
+          "GetApiKeysQuery",
+          "GetApiKeysQueryHandler",
+          "RevokeApiKeyCommand",
+          "RevokeApiKeyCommandHandler",
           "User"
         ]
       },
