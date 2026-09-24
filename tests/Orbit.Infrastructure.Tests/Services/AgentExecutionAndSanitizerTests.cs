@@ -54,17 +54,26 @@ public class AgentExecutionAndSanitizerTests
     {
         var catalog = Substitute.For<IAgentCatalogService>();
         catalog.GetOperation("missing").Returns((AgentOperation?)null);
-        var executor = CreateExecutor(catalog);
+        var auditService = Substitute.For<IAgentAuditService>();
+        var executor = CreateExecutor(catalog, auditService: auditService);
 
         var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
             UserId,
             "missing",
             Parse("""{"id":"1"}"""),
-            AgentExecutionSurface.Chat,
+            AgentExecutionSurface.Mcp,
             AgentAuthMethod.Jwt));
 
         response.Operation.Status.Should().Be(AgentOperationStatus.UnsupportedByPolicy);
         response.PolicyDenial!.Reason.Should().Be("unsupported_by_policy");
+        await auditService.Received(1).RecordAsync(
+            Arg.Is<AgentAuditEntry>(entry =>
+                entry.SourceName == "missing" &&
+                entry.Surface == AgentExecutionSurface.Mcp &&
+                entry.PolicyDecision == AgentPolicyDecisionStatus.Denied &&
+                entry.OutcomeStatus == AgentOperationStatus.UnsupportedByPolicy &&
+                entry.Error == "unsupported_by_policy"),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

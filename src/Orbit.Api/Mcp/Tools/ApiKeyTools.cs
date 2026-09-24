@@ -56,7 +56,7 @@ public class ApiKeyTools(McpExecutorBridge executorBridge)
         [Description("For create: comma-separated scope names")] string? scopes = null,
         [Description("For create: whether the key is read-only")] bool? isReadOnly = null,
         [Description("For create: ISO-8601 UTC expiry timestamp")] string? expiresAtUtc = null,
-        [Description("Confirmation token from verify_step_up_agent_operation_v2 (required: managing API keys is high-risk and needs step-up)")] string? confirmationToken = null,
+        [Description("Confirmation token from confirm_agent_operation_v2, after step_up_agent_operation_v2 and verify_step_up_agent_operation_v2 (required: managing API keys is high-risk and needs step-up)")] string? confirmationToken = null,
         CancellationToken cancellationToken = default)
     {
         var scopeList = scopes?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);

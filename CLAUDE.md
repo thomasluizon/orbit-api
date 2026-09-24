@@ -71,3 +71,11 @@ Pre-commit hook: a git-level `pre-commit` (lefthook, `lefthook.yml`) runs `dotne
 ## Deployment
 
 Render (Docker, auto-deploy on push to main) + Supabase PostgreSQL (session pooler) + Resend (email) + Firebase (FCM) + Stripe.
+
+## Generated gating matrix
+
+Run `node tools/gating-matrix.mjs` to write `gating-matrix.json` at the repository root. The file is not committed.
+Gate rows distinguish a hard `planRequirement` from a plan-scoped quota in `quotaLiftedByPlan`.
+Feature flag rows always set `quotaLiftedByPlan` to `null` because their `planRequirement` comes from the database column.
+The `Gating matrix drift` check generates it twice, verifies deterministic output, and publishes the `gating-matrix` artifact.
+Its provenance hash covers every C# input read. Live `AppConfigs` rows can override the compiled defaults it reports.
