@@ -256,6 +256,34 @@ public class GoogleCalendarEventFetcherTests
     }
 
     [Fact]
+    public async Task FetchAsync_RescheduledFirstInstance_KeepsItsOriginalRecurrenceStart()
+    {
+        StubCalendars(Calendar("a", "owner"));
+        var instance = LisbonInstance("inst-moved", new DateTimeOffset(2027, 1, 7, 15, 0, 0, TimeSpan.Zero));
+        instance.OriginalStartTime = new EventDateTime
+        {
+            DateTimeDateTimeOffset = new DateTimeOffset(2027, 1, 7, 3, 30, 0, TimeSpan.Zero)
+        };
+        StubEvents("a", instance);
+        _api.GetEventAsync(Token, "a", "master-lisbon", Arg.Any<CancellationToken>())
+            .Returns(new Event
+            {
+                Recurrence = ["RRULE:FREQ=DAILY;BYDAY=TH"],
+                Start = new EventDateTime
+                {
+                    DateTimeDateTimeOffset = new DateTimeOffset(2027, 1, 7, 3, 30, 0, TimeSpan.Zero),
+                    TimeZone = "Europe/Lisbon"
+                }
+            });
+
+        var result = await _fetcher.FetchAsync(Token, null, null, CancellationToken.None);
+
+        result.Should().ContainSingle();
+        result[0].StartUtc.Should().Be(new DateTime(2027, 1, 7, 15, 0, 0, DateTimeKind.Utc));
+        result[0].RecurrenceStartUtc.Should().Be(new DateTime(2027, 1, 7, 3, 30, 0, DateTimeKind.Utc));
+    }
+
+    [Fact]
     public async Task FetchAsync_SingleEvent_HasNoSourceTimeZone()
     {
         StubCalendars(Calendar("a", "owner"));
@@ -274,6 +302,7 @@ public class GoogleCalendarEventFetcherTests
             Summary = "Lisbon stand-up",
             RecurringEventId = "master-lisbon",
             Start = new EventDateTime { DateTimeDateTimeOffset = start },
+            OriginalStartTime = new EventDateTime { DateTimeDateTimeOffset = start },
             End = new EventDateTime { DateTimeDateTimeOffset = start.AddMinutes(30) }
         };
 

@@ -112,6 +112,7 @@ public class CalendarProjectionEndToEndTests
                     Summary = "Lisbon stand-up",
                     RecurringEventId = "master-lisbon",
                     Start = new EventDateTime { DateTimeDateTimeOffset = start },
+                    OriginalStartTime = new EventDateTime { DateTimeDateTimeOffset = start },
                     End = new EventDateTime { DateTimeDateTimeOffset = start.AddMinutes(30) }
                 })
                 .ToList());

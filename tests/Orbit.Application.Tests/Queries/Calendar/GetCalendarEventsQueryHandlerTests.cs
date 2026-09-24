@@ -242,7 +242,8 @@ public class GetCalendarEventsQueryHandlerTests
                 StartUtc: new DateTime(2026, 4, 14, 23, 0, 0, DateTimeKind.Utc),
                 EndUtc: new DateTime(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc))
             {
-                SourceTimeZone = "Asia/Tokyo"
+                SourceTimeZone = "Asia/Tokyo",
+                RecurrenceStartUtc = new DateTime(2026, 4, 14, 23, 0, 0, DateTimeKind.Utc)
             });
 
         var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
@@ -300,7 +301,8 @@ public class GetCalendarEventsQueryHandlerTests
                 StartUtc: new DateTime(2026, 4, 14, 23, 0, 0, DateTimeKind.Utc),
                 EndUtc: new DateTime(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc))
             {
-                SourceTimeZone = "Asia/Tokyo"
+                SourceTimeZone = "Asia/Tokyo",
+                RecurrenceStartUtc = new DateTime(2026, 4, 14, 23, 0, 0, DateTimeKind.Utc)
             });
 
         var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
@@ -343,7 +345,7 @@ public class GetCalendarEventsQueryHandlerTests
     public async Task Handle_ByDaySeriesNoOffsetChangeCanMove_KeepsRecurrenceRuleUnchanged()
     {
         var user = CreateTestUser();
-        user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
+        user.SetTimeZone("Europe/Lisbon").IsSuccess.Should().BeTrue();
         StubSuccessfulFetch(
             user,
             new CalendarEventItem(
@@ -359,7 +361,8 @@ public class GetCalendarEventsQueryHandlerTests
                 StartUtc: new DateTime(2027, 1, 7, 15, 0, 0, DateTimeKind.Utc),
                 EndUtc: new DateTime(2027, 1, 7, 16, 0, 0, DateTimeKind.Utc))
             {
-                SourceTimeZone = "Europe/Lisbon"
+                SourceTimeZone = "Europe/Lisbon",
+                RecurrenceStartUtc = new DateTime(2027, 1, 7, 15, 0, 0, DateTimeKind.Utc)
             });
 
         var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
@@ -367,8 +370,60 @@ public class GetCalendarEventsQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().ContainSingle();
         result.Value[0].StartDate.Should().Be("2027-01-07");
-        result.Value[0].StartTime.Should().Be("12:00");
+        result.Value[0].StartTime.Should().Be("15:00");
         result.Value[0].RecurrenceRule.Should().Be("RRULE:FREQ=DAILY;BYDAY=TH");
+    }
+
+    [Theory]
+    [InlineData("RRULE:FREQ=DAILY;BYDAY=TH", 1, 7, 15, "12:00")]
+    [InlineData("RRULE:FREQ=DAILY;BYDAY=TH", 7, 8, 14, "11:00")]
+    [InlineData("RRULE:FREQ=DAILY", 1, 7, 15, "12:00")]
+    [InlineData("RRULE:FREQ=DAILY", 7, 8, 14, "11:00")]
+    public async Task Handle_RecurringLisbonAfternoonWithSeasonalClockDrift_OmitsEvent(
+        string rule, int month, int day, int utcHour, string projectedTime)
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
+        var startUtc = new DateTime(2027, month, day, utcHour, 0, 0, DateTimeKind.Utc);
+        var source = new CalendarEventItem(
+            "evt_lisbon_afternoon_drift", "Lisbon afternoon", null,
+            $"2027-{month:00}-{day:00}", "15:00", "16:00", true, rule, [],
+            StartUtc: startUtc, EndUtc: startUtc.AddHours(1))
+        {
+            SourceTimeZone = "Europe/Lisbon",
+            RecurrenceStartUtc = startUtc
+        };
+        source.ProjectTo(TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo"))
+            .StartTime.Should().Be(projectedTime);
+        StubSuccessfulFetch(user, source);
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_RescheduledFirstInstance_UsesOriginalRecurrenceClock()
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
+        var actualStart = new DateTime(2027, 1, 7, 15, 0, 0, DateTimeKind.Utc);
+        var originalStart = new DateTime(2027, 1, 7, 3, 30, 0, DateTimeKind.Utc);
+        StubSuccessfulFetch(user, new CalendarEventItem(
+            "evt_moved_first", "Moved Lisbon stand-up", null,
+            "2027-01-07", "15:00", "16:00", true,
+            "RRULE:FREQ=DAILY;BYDAY=TH", [],
+            StartUtc: actualStart, EndUtc: actualStart.AddHours(1))
+        {
+            SourceTimeZone = "Europe/Lisbon",
+            RecurrenceStartUtc = originalStart
+        });
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeEmpty();
     }
 
     [Fact]
@@ -391,7 +446,8 @@ public class GetCalendarEventsQueryHandlerTests
                 StartUtc: new DateTime(2027, 1, 7, 18, 0, 0, DateTimeKind.Utc),
                 EndUtc: new DateTime(2027, 1, 7, 19, 0, 0, DateTimeKind.Utc))
             {
-                SourceTimeZone = "America/Sao_Paulo"
+                SourceTimeZone = "America/Sao_Paulo",
+                RecurrenceStartUtc = new DateTime(2027, 1, 7, 18, 0, 0, DateTimeKind.Utc)
             });
 
         var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
@@ -461,7 +517,8 @@ public class GetCalendarEventsQueryHandlerTests
                 [],
                 StartUtc: ToUtc(zoneId, "2027-01-07", wallClock))
             {
-                SourceTimeZone = zoneId
+                SourceTimeZone = zoneId,
+                RecurrenceStartUtc = ToUtc(zoneId, "2027-01-07", wallClock)
             });
 
         var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
@@ -498,7 +555,8 @@ public class GetCalendarEventsQueryHandlerTests
                 [],
                 StartUtc: ToUtc("America/New_York", "2027-01-07", "02:30"))
             {
-                SourceTimeZone = "America/New_York"
+                SourceTimeZone = "America/New_York",
+                RecurrenceStartUtc = ToUtc("America/New_York", "2027-01-07", "02:30")
             });
 
         var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);

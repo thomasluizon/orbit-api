@@ -7,24 +7,22 @@ namespace Orbit.Application.Calendar;
 /// <summary>
 /// Reads and writes the JSON a <c>GoogleCalendarSyncSuggestion</c> row keeps in
 /// <c>RawEventJson</c>. That column is server-owned storage rather than a client contract, so it
-/// carries one key the response never does: the source calendar's own timezone, which the recurrence
-/// gate needs and which <see cref="CalendarEventItem.SourceTimeZone"/> hides from the response body.
-/// Without it a stored row would reach the suggestion feed with less evidence than the events feed
-/// had, and the two feeds would answer differently about one series.
+/// carries two keys the response never does: the source calendar's timezone and the recurrence-defined
+/// start. Both feeds need these facts to judge one series the same way.
 /// </summary>
 /// <remarks>
-/// The shape stays flat and additive, so a row written before the key existed still reads back as a
-/// plain <see cref="CalendarEventItem"/> with a null source timezone, which the gate treats as
-/// unproved.
+/// The shape stays flat and additive. Missing keys on a legacy row leave its recurrence unproved.
 /// </remarks>
 internal static class StoredCalendarEventJson
 {
     private const string SourceTimeZoneKey = nameof(CalendarEventItem.SourceTimeZone);
+    private const string RecurrenceStartUtcKey = nameof(CalendarEventItem.RecurrenceStartUtc);
 
     internal static string Serialize(CalendarEventItem item)
     {
         var stored = JsonSerializer.SerializeToNode(item)!.AsObject();
         stored[SourceTimeZoneKey] = item.SourceTimeZone;
+        stored[RecurrenceStartUtcKey] = item.RecurrenceStartUtc;
         return stored.ToJsonString();
     }
 
@@ -37,7 +35,23 @@ internal static class StoredCalendarEventJson
         if (item is null)
             return null;
 
-        return item with { SourceTimeZone = ReadSourceTimeZone(stored) };
+        return item with
+        {
+            SourceTimeZone = ReadSourceTimeZone(stored),
+            RecurrenceStartUtc = ReadRecurrenceStartUtc(stored)
+        };
+    }
+
+    internal static bool NeedsRecurrenceEvidenceRefresh(string rawEventJson)
+    {
+        try
+        {
+            return Deserialize(rawEventJson)?.NeedsRecurrenceEvidenceRefresh ?? true;
+        }
+        catch (JsonException)
+        {
+            return true;
+        }
     }
 
     /// <summary>
@@ -50,5 +64,11 @@ internal static class StoredCalendarEventJson
     private static string? ReadSourceTimeZone(JsonObject stored)
         => stored[SourceTimeZoneKey] is JsonValue value && value.TryGetValue<string>(out var timeZoneId)
             ? timeZoneId
+            : null;
+
+    private static DateTime? ReadRecurrenceStartUtc(JsonObject stored)
+        => stored[RecurrenceStartUtcKey] is JsonValue value
+            && value.TryGetValue<DateTime>(out var startUtc)
+            ? startUtc
             : null;
 }

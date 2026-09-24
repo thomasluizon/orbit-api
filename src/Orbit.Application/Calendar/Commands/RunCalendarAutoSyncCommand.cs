@@ -232,13 +232,36 @@ public partial class RunCalendarAutoSyncCommandHandler(
             .Select(h => h.GoogleEventId!)
             .ToHashSet(StringComparer.Ordinal);
 
-        // Reserve ids from ALL suggestions (incl. imported/dismissed): UserId+GoogleEventId is a full unique index, so re-inserting a known event throws 23505 — https://thomasluizon.sentry.io/issues/ORBIT-API-E
-        var existingSuggestionEventIds = (await deps.SuggestionRepository.FindAsync(
-                s => s.UserId == user.Id, ct))
+        // Reserve ids from ALL suggestions (incl. imported/dismissed): UserId+GoogleEventId is a full unique index, so re-inserting a known event throws 23505. https://thomasluizon.sentry.io/issues/ORBIT-API-E
+        var existingSuggestions = await deps.SuggestionRepository.FindAsync(s => s.UserId == user.Id, ct);
+        var existingSuggestionEventIds = existingSuggestions
             .Select(s => s.GoogleEventId)
             .ToHashSet(StringComparer.Ordinal);
         var reservedEventIds = new HashSet<string>(habitEventIds, StringComparer.Ordinal);
         reservedEventIds.UnionWith(existingSuggestionEventIds);
+
+        var fetchedById = fetched
+            .GroupBy(ev => ev.Id, StringComparer.Ordinal)
+            .Where(group => group.Count() == 1)
+            .ToDictionary(group => group.Key, group => group.Single(), StringComparer.Ordinal);
+        var legacyPendingIds = existingSuggestions
+            .Where(s => s.DismissedAtUtc is null && s.ImportedAtUtc is null
+                && StoredCalendarEventJson.NeedsRecurrenceEvidenceRefresh(s.RawEventJson)
+                && fetchedById.TryGetValue(s.GoogleEventId, out var ev)
+                && !ev.NeedsRecurrenceEvidenceRefresh)
+            .Select(s => s.GoogleEventId)
+            .ToHashSet(StringComparer.Ordinal);
+        if (legacyPendingIds.Count > 0)
+        {
+            var pendingTracked = await deps.SuggestionRepository.FindTrackedAsync(
+                s => s.UserId == user.Id && s.DismissedAtUtc == null && s.ImportedAtUtc == null, ct);
+            foreach (var suggestion in pendingTracked.Where(s => legacyPendingIds.Contains(s.GoogleEventId)))
+            {
+                var refreshed = fetchedById[suggestion.GoogleEventId];
+                suggestion.RefreshPendingEvent(
+                    refreshed.Title, ResolveStartDateUtc(refreshed), StoredCalendarEventJson.Serialize(refreshed));
+            }
+        }
 
         int created = 0;
         foreach (var ev in fetched)

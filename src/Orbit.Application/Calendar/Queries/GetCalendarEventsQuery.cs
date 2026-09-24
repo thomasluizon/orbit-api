@@ -29,13 +29,20 @@ public record CalendarEventItem(
     /// <summary>
     /// The IANA zone the source calendar expands this event's recurrence in, taken from the recurring
     /// master rather than from an expanded instance. Server-only: the <see cref="JsonIgnoreAttribute"/>
-    /// keeps it out of the <c>GET /calendar/events</c> response body, so no client contract changes.
+    /// keeps this field out of the <c>GET /calendar/events</c> response body.
     /// <c>StoredCalendarEventJson</c> carries it beside the stored suggestion instead, which is what
     /// lets both feeds judge one series the same way. Null for a single event and for a suggestion row
     /// written before that key existed.
     /// </summary>
     [JsonIgnore]
     public string? SourceTimeZone { get; init; }
+
+    /// <summary>The start prescribed by the recurrence, which can differ from an instance moved by hand.</summary>
+    [JsonIgnore]
+    public DateTime? RecurrenceStartUtc { get; init; }
+
+    internal bool NeedsRecurrenceEvidenceRefresh => IsRecurring && StartTime is not null
+        && (string.IsNullOrWhiteSpace(SourceTimeZone) || RecurrenceStartUtc is null);
 
     /// <summary>
     /// A full turn of both zones' adjustment rules, which is every offset pair a recurrence can meet.
@@ -70,57 +77,51 @@ public record CalendarEventItem(
     }
 
     /// <summary>
-    /// True when this event carries a <c>BYDAY</c> rule that the projection into
-    /// <paramref name="accountTimeZone"/> cannot be proved to leave alone for a whole year, so the
-    /// weekday the rule names and the day the account sees can disagree.
+    /// True when a timed recurrence cannot be shown to keep one account-local weekday pattern and
+    /// one displayed start clock across a year in <paramref name="accountTimeZone"/>.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The proof runs over both zones' own offset rules, never over the occurrences Google returned.
-    /// <c>GoogleCalendarApi</c> asks for sixty days, so an expanded-instance sample can miss the
-    /// transition entirely: a January fetch of a 03:30 <c>Europe/Lisbon</c> <c>BYDAY=TH</c> series is
-    /// Thursday 00:30 in <c>America/Sao_Paulo</c> at every instance in the window, and Wednesday 23:30
-    /// from the Lisbon transition on 2027-03-29 onward. A window that cannot reach the transition
-    /// cannot prove the series, so the decision comes from <see cref="TimeZoneInfo"/> instead.
+    /// The proof uses the original recurrence start, not the actual start of a rescheduled instance.
+    /// It walks source wall clocks through a year because Google's expanded feed covers sixty days.
     /// </para>
     /// <para>
-    /// Two zones that hold the same rules make the projection the identity, so no occurrence can move
-    /// and <see cref="TimeZoneInfo.HasSameRules"/> answers the whole question before the walk starts.
-    /// That is the ordinary case for an account whose calendar lives in its own zone, and it is the
-    /// case a walk must never refuse.
+    /// Two zones with the same rules keep the same date and clock after the actual instance is
+    /// checked against the recurrence-defined start.
     /// </para>
     /// <para>
-    /// A source zone the process cannot resolve leaves the series unproved and therefore withheld.
-    /// <c>TimeZoneHelper.FindTimeZone</c> is deliberately not used for it: that helper answers
-    /// <see cref="TimeZoneInfo.Utc"/> for an unknown id, which would assert a stability nothing
-    /// established.
+    /// Missing source zone or original recurrence start leaves the series unproved and withheld.
     /// </para>
     /// <para>
-    /// Refusal here and the clamp in <c>HabitScheduleService.IsMonthlyMatch</c> answer two different
-    /// questions on purpose. The scheduler clamps a rule Orbit OWNS, already expressed in the user's
-    /// own timezone, so "monthly on the 31st" firing on 28 February keeps the user's stated intent.
-    /// This gate judges a rule Orbit IMPORTS and does not own. A Lisbon <c>BYDAY=TH</c> rule cannot be
-    /// re-expressed in Sao Paulo without picking a weekday the source never named, and either choice
-    /// is wrong for half the year, so Orbit refuses rather than invents. The two compose: refuse at
-    /// the import boundary, then apply best effort inside, because an event that passes this gate
-    /// becomes an Orbit-owned habit whose rule the scheduler may then clamp.
+    /// A <c>BYDAY</c> rule must keep its source weekday. Other rules may keep a fixed date shift, but
+    /// all timed recurrences must keep the same displayed start minute.
     /// </para>
     /// </remarks>
     internal bool HasUnrepresentableRecurrenceAfterProjection(TimeZoneInfo accountTimeZone)
     {
-        if (RecurrenceRule is null || !NamesAWeekday(RecurrenceRule))
+        if (!IsRecurring)
             return false;
 
-        if (StartTime is null || StartUtc is null)
+        if (StartTime is null)
             return false;
 
-        if (!TryFindSourceTimeZone(SourceTimeZone, out var sourceTimeZone))
+        if (StartUtc is null || RecurrenceStartUtc is null || RecurrenceRule is null
+            || !TryFindSourceTimeZone(SourceTimeZone, out var sourceTimeZone))
+            return true;
+
+        var recurrenceStart = DateTime.SpecifyKind(RecurrenceStartUtc.Value, DateTimeKind.Utc);
+        var actualStart = DateTime.SpecifyKind(StartUtc.Value, DateTimeKind.Utc);
+        var projectedRecurrenceStart = TimeZoneInfo.ConvertTimeFromUtc(recurrenceStart, accountTimeZone);
+        var projectedActualStart = TimeZoneInfo.ConvertTimeFromUtc(actualStart, accountTimeZone);
+        if (projectedActualStart.DayOfWeek != projectedRecurrenceStart.DayOfWeek
+            || ProjectedClock(projectedActualStart) != ProjectedClock(projectedRecurrenceStart))
             return true;
 
         if (sourceTimeZone.HasSameRules(accountTimeZone))
             return false;
 
-        return !KeepsItsLocalDateForAYear(sourceTimeZone, accountTimeZone, StartUtc.Value);
+        return !KeepsItsLocalScheduleForAYear(
+            sourceTimeZone, accountTimeZone, recurrenceStart, NamesAWeekday(RecurrenceRule));
     }
 
     /// <summary>
@@ -158,10 +159,8 @@ public record CalendarEventItem(
     }
 
     /// <summary>
-    /// True when the occurrence's source wall clock lands on the same account-local date on every
-    /// date of the year that follows it. A recurrence keeps one wall clock in its own zone, so walking
-    /// every date once at that wall clock covers every occurrence any <c>BYDAY</c> rule can produce,
-    /// through both zones' transitions in both hemispheres.
+    /// True when every source wall clock across a year projects to the same account-local start
+    /// minute and day relationship as the recurrence-defined first start.
     /// </summary>
     /// <remarks>
     /// A wall clock a spring-forward gap removes names no instant on that date, so the series produces
@@ -169,11 +168,19 @@ public record CalendarEventItem(
     /// date rather than ending. Counting the absent date as a failure withheld a whole series on a
     /// date it never fires, which is the opposite of what the gate exists to prevent.
     /// </remarks>
-    private static bool KeepsItsLocalDateForAYear(
-        TimeZoneInfo sourceTimeZone, TimeZoneInfo accountTimeZone, DateTime startUtc)
+    private static bool KeepsItsLocalScheduleForAYear(
+        TimeZoneInfo sourceTimeZone, TimeZoneInfo accountTimeZone, DateTime recurrenceStartUtc,
+        bool namesAWeekday)
     {
         var sourceStart = TimeZoneInfo.ConvertTimeFromUtc(
-            DateTime.SpecifyKind(startUtc, DateTimeKind.Utc), sourceTimeZone);
+            recurrenceStartUtc, sourceTimeZone);
+        var projectedStart = TimeZoneInfo.ConvertTimeFromUtc(recurrenceStartUtc, accountTimeZone);
+        var projectedClock = ProjectedClock(projectedStart);
+        var projectedDayOffset = DateOnly.FromDateTime(projectedStart).DayNumber
+            - DateOnly.FromDateTime(sourceStart).DayNumber;
+        if (namesAWeekday && projectedDayOffset != 0)
+            return false;
+
         var wallClock = TimeOnly.FromDateTime(sourceStart);
         var firstDay = DateOnly.FromDateTime(sourceStart).DayNumber;
         var lastDay = Math.Min(firstDay + ProbeDays, DateOnly.MaxValue.DayNumber);
@@ -189,13 +196,16 @@ public record CalendarEventItem(
             {
                 var accountLocal = TimeZoneInfo.ConvertTimeFromUtc(
                     DateTime.SpecifyKind(sourceLocal - offset, DateTimeKind.Utc), accountTimeZone);
-                if (DateOnly.FromDateTime(accountLocal) != probe)
+                if (ProjectedClock(accountLocal) != projectedClock
+                    || DateOnly.FromDateTime(accountLocal).DayNumber - probe.DayNumber != projectedDayOffset)
                     return false;
             }
         }
 
         return true;
     }
+
+    private static string ProjectedClock(DateTime local) => local.ToString("HH:mm", CultureInfo.InvariantCulture);
 
     /// <summary>
     /// The offsets the source zone can hold at one wall clock. A fall-back transition repeats an hour,
@@ -325,6 +335,7 @@ public partial class GetCalendarEventsQueryHandler(
 
         var pendingSuggestionEventIds = (await repos.Suggestions.FindAsync(
                 s => s.UserId == userId && s.DismissedAtUtc == null && s.ImportedAtUtc == null, ct))
+            .Where(s => !StoredCalendarEventJson.NeedsRecurrenceEvidenceRefresh(s.RawEventJson))
             .Select(s => s.GoogleEventId)
             .ToList();
 

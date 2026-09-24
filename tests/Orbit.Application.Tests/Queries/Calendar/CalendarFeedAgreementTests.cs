@@ -1,7 +1,9 @@
 using System.Linq.Expressions;
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
+using Orbit.Application.Calendar;
 using Orbit.Application.Calendar.Commands;
 using Orbit.Application.Calendar.Queries;
 using Orbit.Application.Calendar.Services;
@@ -80,6 +82,9 @@ public class CalendarFeedAgreementTests
                 Arg.Any<GoogleCalendarSyncSuggestion>(), Arg.Any<CancellationToken>()))
             .Do(call => _writtenSuggestions.Add(call.ArgAt<GoogleCalendarSyncSuggestion>(0)));
         _suggestionRepo.FindAsync(
+                Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(_ => _writtenSuggestions.AsReadOnly());
+        _suggestionRepo.FindTrackedAsync(
                 Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(_ => _writtenSuggestions.AsReadOnly());
     }
@@ -177,6 +182,36 @@ public class CalendarFeedAgreementTests
             Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task LegacyPendingSuggestion_DoesNotHideLiveEventAndRefreshesOnAutoSync()
+    {
+        var user = CreateSyncingUser("America/Sao_Paulo");
+        var fetched = SaoPauloAfternoonReview();
+        StubFetch(user, fetched);
+        var legacy = GoogleCalendarSyncSuggestion.Create(
+            user.Id, fetched.Id, fetched.Title, fetched.StartUtc!.Value,
+            JsonSerializer.Serialize(fetched),
+            new DateTime(2027, 1, 4, 12, 0, 0, DateTimeKind.Utc));
+        _writtenSuggestions.Add(legacy);
+
+        var beforeRefresh = await _events.Handle(new GetCalendarEventsQuery(user.Id), CancellationToken.None);
+        beforeRefresh.IsSuccess.Should().BeTrue();
+        beforeRefresh.Value.Should().ContainSingle();
+
+        var sync = await _autoSync.Handle(new RunCalendarAutoSyncCommand(user.Id), CancellationToken.None);
+        sync.IsSuccess.Should().BeTrue();
+        sync.Value.NewSuggestions.Should().Be(0);
+        _writtenSuggestions.Should().ContainSingle();
+        StoredCalendarEventJson.Deserialize(legacy.RawEventJson)!.SourceTimeZone
+            .Should().Be("America/Sao_Paulo");
+        var afterRefresh = await _suggestions.Handle(
+            new GetCalendarSyncSuggestionsQuery(user.Id), CancellationToken.None);
+        afterRefresh.IsSuccess.Should().BeTrue();
+        afterRefresh.Value.Should().ContainSingle();
+        var eventsAfterRefresh = await _events.Handle(new GetCalendarEventsQuery(user.Id), CancellationToken.None);
+        eventsAfterRefresh.Value.Should().BeEmpty();
+    }
+
     private static CalendarEventItem LisbonThursdayStandup()
         => new(
             "master-lisbon",
@@ -191,7 +226,8 @@ public class CalendarFeedAgreementTests
             StartUtc: new DateTime(2027, 1, 7, 3, 30, 0, DateTimeKind.Utc),
             EndUtc: new DateTime(2027, 1, 7, 4, 0, 0, DateTimeKind.Utc))
         {
-            SourceTimeZone = "Europe/Lisbon"
+            SourceTimeZone = "Europe/Lisbon",
+            RecurrenceStartUtc = new DateTime(2027, 1, 7, 3, 30, 0, DateTimeKind.Utc)
         };
 
     private static CalendarEventItem SaoPauloAfternoonReview()
@@ -208,7 +244,8 @@ public class CalendarFeedAgreementTests
             StartUtc: new DateTime(2027, 1, 7, 18, 0, 0, DateTimeKind.Utc),
             EndUtc: new DateTime(2027, 1, 7, 19, 0, 0, DateTimeKind.Utc))
         {
-            SourceTimeZone = "America/Sao_Paulo"
+            SourceTimeZone = "America/Sao_Paulo",
+            RecurrenceStartUtc = new DateTime(2027, 1, 7, 18, 0, 0, DateTimeKind.Utc)
         };
 
     private User CreateSyncingUser(string timeZone)

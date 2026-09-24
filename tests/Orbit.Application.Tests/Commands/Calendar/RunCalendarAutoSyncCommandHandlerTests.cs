@@ -160,8 +160,8 @@ public class RunCalendarAutoSyncCommandHandlerTests
         _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
             .Returns(new List<CalendarEventItem>
             {
-                new("evt_a", "Daily standup", null, "2026-04-10", "09:00", "09:30", true, null, []),
-                new("evt_b", "Review", null, "2026-04-11", "10:00", "11:00", true, null, [])
+                new("evt_a", "Daily standup", null, "2026-04-10", "09:00", "09:30", false, null, []),
+                new("evt_b", "Review", null, "2026-04-11", "10:00", "11:00", false, null, [])
             });
 
         var result = await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id), default);
@@ -193,8 +193,8 @@ public class RunCalendarAutoSyncCommandHandlerTests
         _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
             .Returns(new List<CalendarEventItem>
             {
-                new("evt_a", "Daily standup", null, "2026-04-10", "09:00", "09:30", true, null, []),
-                new("evt_b", "Review", null, "2026-04-11", "10:00", "11:00", true, null, [])
+                new("evt_a", "Daily standup", null, "2026-04-10", "09:00", "09:30", false, null, []),
+                new("evt_b", "Review", null, "2026-04-11", "10:00", "11:00", false, null, [])
             });
 
         var result = await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id), default);
@@ -283,7 +283,7 @@ public class RunCalendarAutoSyncCommandHandlerTests
         _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
             .Returns(new List<CalendarEventItem>
             {
-                new("evt_a", "Daily standup", null, "2026-04-10", "09:00", "09:30", true, null, [])
+                new("evt_a", "Daily standup", null, "2026-04-10", "09:00", "09:30", false, null, [])
             });
 
         var result = await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id), default);
@@ -344,7 +344,7 @@ public class RunCalendarAutoSyncCommandHandlerTests
         _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
             .Returns(new List<CalendarEventItem>
             {
-                new("evt_review", "Imported Review Event", null, "2026-04-10", "09:00", "09:30", true, null, [])
+                new("evt_review", "Imported Review Event", null, "2026-04-10", "09:00", "09:30", false, null, [])
             });
 
         var result = await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id), default);
@@ -376,7 +376,7 @@ public class RunCalendarAutoSyncCommandHandlerTests
         _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
             .Returns(new List<CalendarEventItem>
             {
-                new("evt_a", "Daily standup", null, "2026-04-10", "09:00", "09:30", true, null, [])
+                new("evt_a", "Daily standup", null, "2026-04-10", "09:00", "09:30", false, null, [])
             });
 
         var result = await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id), default);
@@ -421,7 +421,7 @@ public class RunCalendarAutoSyncCommandHandlerTests
         _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
             .Returns(new List<CalendarEventItem>
             {
-                new("evt_a", "Daily standup", null, "2026-04-10", "09:00", "09:30", true, null, [])
+                new("evt_a", "Daily standup", null, "2026-04-10", "09:00", "09:30", false, null, [])
             });
 
         var result = await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id), default);
@@ -453,8 +453,8 @@ public class RunCalendarAutoSyncCommandHandlerTests
         _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
             .Returns(new List<CalendarEventItem>
             {
-                new("evt_dup", "Daily standup", null, "2026-04-10", "09:00", "09:30", true, null, []),
-                new("evt_dup", "Review", null, "2026-04-11", "10:00", "11:00", true, null, [])
+                new("evt_dup", "Daily standup", null, "2026-04-10", "09:00", "09:30", false, null, []),
+                new("evt_dup", "Review", null, "2026-04-11", "10:00", "11:00", false, null, [])
             });
 
         var result = await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id), default);
@@ -475,8 +475,8 @@ public class RunCalendarAutoSyncCommandHandlerTests
         _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
             .Returns(new List<CalendarEventItem>
             {
-                new("evt_dup", "Daily standup", null, "2026-04-10", "09:00", "09:30", true, null, []),
-                new("evt_dup", "Daily standup duplicate", null, "2026-04-10", "09:30", "10:00", true, null, [])
+                new("evt_dup", "Daily standup", null, "2026-04-10", "09:00", "09:30", false, null, []),
+                new("evt_dup", "Daily standup duplicate", null, "2026-04-10", "09:30", "10:00", false, null, [])
             });
 
         var result = await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id), default);
@@ -770,8 +770,8 @@ public class RunCalendarAutoSyncCommandHandlerTests
         _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
             .Returns(new List<CalendarEventItem>
             {
-                new("evt_a", "Daily standup", null, "2026-04-10", "09:00", "09:30", true, null, []),
-                new("evt_b", "Review", null, "2026-04-11", "10:00", "11:00", true, null, [])
+                new("evt_a", "Daily standup", null, "2026-04-10", "09:00", "09:30", false, null, []),
+                new("evt_b", "Review", null, "2026-04-11", "10:00", "11:00", false, null, [])
             });
 
         Notification? captured = null;
@@ -796,8 +796,8 @@ public class RunCalendarAutoSyncCommandHandlerTests
         _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
             .Returns(new List<CalendarEventItem>
             {
-                new("evt_a", "Daily standup", null, "2026-04-10", "09:00", "09:30", true, null, []),
-                new("evt_b", "Review", null, "2026-04-11", "10:00", "11:00", true, null, [])
+                new("evt_a", "Daily standup", null, "2026-04-10", "09:00", "09:30", false, null, []),
+                new("evt_b", "Review", null, "2026-04-11", "10:00", "11:00", false, null, [])
             });
 
         Notification? captured = null;
@@ -821,7 +821,7 @@ public class RunCalendarAutoSyncCommandHandlerTests
         _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
             .Returns(new List<CalendarEventItem>
             {
-                new("evt_a", "Daily standup", null, "2026-04-10", "09:00", "09:30", true, null, [])
+                new("evt_a", "Daily standup", null, "2026-04-10", "09:00", "09:30", false, null, [])
             });
 
         Notification? captured = null;

@@ -147,7 +147,12 @@ internal sealed partial class GoogleCalendarEventFetcher(
             calendarName,
             ev.End?.DateTimeDateTimeOffset?.UtcDateTime)
         {
-            SourceTimeZone = recurrence.TimeZone
+            SourceTimeZone = recurrence.TimeZone,
+            RecurrenceStartUtc = !isRecurring
+                ? null
+                : ev.RecurringEventId is not null
+                    ? ev.OriginalStartTime?.DateTimeDateTimeOffset?.UtcDateTime
+                    : ev.Start?.DateTimeDateTimeOffset?.UtcDateTime
         };
     }
 
