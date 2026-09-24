@@ -62,8 +62,8 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 1
-      # Codex is the reviewer. No model input, so Pullfrog resolves its own
-      # default exactly as before.
+      # Codex is the reviewer, pinned to GPT-6 Sol at medium effort. The v0 tag still maps
+      # its default "GPT Sol" slug to gpt-5.6-sol, so the model is named here (#636).
       - name: Run agent
         id: codex
         uses: pullfrog/pullfrog@v0
