@@ -455,8 +455,9 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         [Description("Comma-separated habit IDs (GUIDs). Omit when filterJson is provided.")] string? habitIds = null,
         [Description("Date to log for in YYYY-MM-DD format (defaults to today)")] string? date = null,
         [Description("Optional JSON server-side filter used instead of habitIds")] string? filterJson = null,
+        [Description("Confirmation token returned by confirm_agent_operation_v2 (required: bulk log is a destructive batch operation)")] string? confirmationToken = null,
         CancellationToken cancellationToken = default) =>
-        ExecuteBulkHabitOperationAsync(user, "bulk_log_habits", habitIds, date, filterJson, cancellationToken);
+        ExecuteBulkHabitOperationAsync(user, "bulk_log_habits", habitIds, date, filterJson, confirmationToken, cancellationToken);
 
     [McpServerTool(Name = "bulk_skip_habits"), Description("Skip multiple habits at once.")]
     public Task<string> BulkSkipHabits(
@@ -464,8 +465,9 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         [Description("Comma-separated habit IDs (GUIDs). Omit when filterJson is provided.")] string? habitIds = null,
         [Description("Date to skip in YYYY-MM-DD format (defaults to today)")] string? date = null,
         [Description("Optional JSON server-side filter used instead of habitIds")] string? filterJson = null,
+        [Description("Confirmation token returned by confirm_agent_operation_v2 (required: bulk skip is a destructive batch operation)")] string? confirmationToken = null,
         CancellationToken cancellationToken = default) =>
-        ExecuteBulkHabitOperationAsync(user, "bulk_skip_habits", habitIds, date, filterJson, cancellationToken);
+        ExecuteBulkHabitOperationAsync(user, "bulk_skip_habits", habitIds, date, filterJson, confirmationToken, cancellationToken);
 
     private async Task<string> ExecuteBulkHabitOperationAsync(
         ClaimsPrincipal user,
@@ -473,6 +475,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         string? habitIds,
         string? date,
         string? filterJson,
+        string? confirmationToken,
         CancellationToken cancellationToken)
     {
         var ids = string.IsNullOrWhiteSpace(habitIds) ? [] : McpToolHelpers.ParseGuidCsv(habitIds);
@@ -483,7 +486,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
             habit_ids = ids.Count > 0 ? ids.Select(id => id.ToString()) : null,
             filter,
             date
-        }, confirmationToken: null, cancellationToken);
+        }, confirmationToken, cancellationToken);
 
         return result.Succeeded ? result.TargetName ?? "Bulk habit operation completed." : result.Message;
     }

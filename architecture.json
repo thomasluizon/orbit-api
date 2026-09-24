@@ -2952,7 +2952,7 @@
       "Behaviors": 14,
       "Calendar": 19,
       "Challenges": 14,
-      "Chat": 63,
+      "Chat": 64,
       "ChecklistTemplates": 9,
       "Common": 197,
       "Gamification": 43,
@@ -7186,6 +7186,15 @@
         "testClass": "HttpContextExtensionsTests",
         "file": "tests/Orbit.Infrastructure.Tests/Extensions/HttpContextExtensionsTests.cs",
         "references": [
+          "User"
+        ]
+      },
+      {
+        "testClass": "McpConfirmationGateTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Extensions/McpConfirmationGateTests.cs",
+        "references": [
+          "ApiKey",
+          "AppFeatureFlag",
           "User"
         ]
       },
