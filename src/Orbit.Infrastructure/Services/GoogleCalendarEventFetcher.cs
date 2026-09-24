@@ -103,23 +103,30 @@ internal sealed partial class GoogleCalendarEventFetcher(
         string accessToken, string calendarId, string calendarName, IReadOnlyList<Event> events, CancellationToken ct)
     {
         var items = new List<CalendarEventItem>();
-        var seenRecurringMasterIds = new HashSet<string>(StringComparer.Ordinal);
-        var masterRRuleCache = new Dictionary<string, string?>(StringComparer.Ordinal);
+        var seenRecurringMasters = new HashSet<string>(StringComparer.Ordinal);
+        var masterRecurrenceCache = new Dictionary<string, MasterRecurrence>(StringComparer.Ordinal);
 
         foreach (var ev in events)
         {
             if (string.IsNullOrWhiteSpace(ev.Summary)) continue;
             if (string.Equals(ev.Status, "cancelled", StringComparison.OrdinalIgnoreCase)) continue;
-            if (ev.RecurringEventId is not null && !seenRecurringMasterIds.Add(ev.RecurringEventId)) continue;
+            if (ev.RecurringEventId is { } masterId && !seenRecurringMasters.Add(masterId)) continue;
 
-            var rrule = await ResolveRRule(accessToken, calendarId, ev, masterRRuleCache, ct);
-            items.Add(MapEvent(ev, calendarId, calendarName, rrule));
+            var recurrence = await ResolveRecurrence(accessToken, calendarId, ev, masterRecurrenceCache, ct);
+            items.Add(MapEvent(ev, calendarId, calendarName, recurrence));
         }
 
         return items;
     }
 
-    private static CalendarEventItem MapEvent(Event ev, string calendarId, string calendarName, string? rrule)
+    /// <summary>
+    /// The recurrence facts that live on the master event rather than on an expanded instance: the
+    /// rule itself, and the IANA zone the master expands that rule in.
+    /// </summary>
+    private readonly record struct MasterRecurrence(string? Rule, string? TimeZone);
+
+    private static CalendarEventItem MapEvent(
+        Event ev, string calendarId, string calendarName, MasterRecurrence recurrence)
     {
         var startTime = ev.Start?.DateTimeDateTimeOffset?.ToString("HH:mm");
         var isRecurring = ev.RecurringEventId is not null
@@ -133,44 +140,65 @@ internal sealed partial class GoogleCalendarEventFetcher(
             startTime,
             ev.End?.DateTimeDateTimeOffset?.ToString("HH:mm"),
             isRecurring,
-            rrule,
+            recurrence.Rule,
             BuildReminders(ev, startTime),
             ResolveStartUtc(ev.Start),
             calendarId,
-            calendarName);
+            calendarName,
+            ev.End?.DateTimeDateTimeOffset?.UtcDateTime)
+        {
+            SourceTimeZone = recurrence.TimeZone,
+            RecurrenceStartUtc = !isRecurring
+                ? null
+                : ev.RecurringEventId is not null
+                    ? ev.OriginalStartTime?.DateTimeDateTimeOffset?.UtcDateTime
+                    : ev.Start?.DateTimeDateTimeOffset?.UtcDateTime
+        };
     }
 
-    private async Task<string?> ResolveRRule(
+    /// <summary>
+    /// Reads the rule and the expansion timezone from whichever event actually owns them. Google
+    /// declares <c>EventDateTime.TimeZone</c> required on a recurring event and says the recurrence is
+    /// expanded in it, but an expanded instance is not a recurring event, so the value is read from the
+    /// master that the list request never returns
+    /// (<c>Google.Apis.Calendar.v3.xml</c>, <c>EventDateTime.TimeZone</c>, package 1.75.0.4206).
+    /// </summary>
+    private async Task<MasterRecurrence> ResolveRecurrence(
         string accessToken,
         string calendarId,
         Event ev,
-        Dictionary<string, string?> masterRRuleCache,
+        Dictionary<string, MasterRecurrence> masterRecurrenceCache,
         CancellationToken ct)
     {
         if (ev.Recurrence is not null)
-            return ev.Recurrence.FirstOrDefault(r => r.StartsWith("RRULE:", StringComparison.OrdinalIgnoreCase));
+            return ReadRecurrence(ev);
 
         if (ev.RecurringEventId is null)
-            return null;
+            return default;
 
-        if (masterRRuleCache.TryGetValue(ev.RecurringEventId, out var cached))
+        if (masterRecurrenceCache.TryGetValue(ev.RecurringEventId, out var cached))
             return cached;
 
-        string? rrule;
+        MasterRecurrence recurrence;
         try
         {
             var master = await api.GetEventAsync(accessToken, calendarId, ev.RecurringEventId, ct);
-            rrule = master.Recurrence?.FirstOrDefault(r => r.StartsWith("RRULE:", StringComparison.OrdinalIgnoreCase));
+            recurrence = ReadRecurrence(master);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             LogFetchMasterRruleFailed(logger, ex, ev.RecurringEventId);
-            rrule = null;
+            recurrence = default;
         }
 
-        masterRRuleCache[ev.RecurringEventId] = rrule;
-        return rrule;
+        masterRecurrenceCache[ev.RecurringEventId] = recurrence;
+        return recurrence;
     }
+
+    private static MasterRecurrence ReadRecurrence(Event master)
+        => new(
+            master.Recurrence?.FirstOrDefault(r => r.StartsWith("RRULE:", StringComparison.OrdinalIgnoreCase)),
+            master.Start?.TimeZone);
 
     internal static List<int> BuildReminders(Event ev, string? startTime)
     {
@@ -200,16 +228,22 @@ internal sealed partial class GoogleCalendarEventFetcher(
     private static string ResolveCalendarName(CalendarListEntry entry) =>
         entry.SummaryOverride ?? entry.Summary ?? string.Empty;
 
-    private static DateTime? ResolveStartUtc(EventDateTime? start)
+    /// <summary>
+    /// The start instant, or midnight UTC of an all-day event's floating start date, which the stored
+    /// suggestion row orders and filters on. The matching end carries no such fallback on purpose:
+    /// Google's all-day end date is EXCLUSIVE, so reading it the same way would report a one-day
+    /// holiday as ending on the following day.
+    /// </summary>
+    private static DateTime? ResolveStartUtc(EventDateTime? value)
     {
-        if (start is null)
+        if (value is null)
             return null;
 
-        if (start.DateTimeDateTimeOffset is { } dto)
+        if (value.DateTimeDateTimeOffset is { } dto)
             return dto.UtcDateTime;
 
-        if (!string.IsNullOrWhiteSpace(start.Date)
-            && DateOnly.TryParse(start.Date, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var date))
+        if (!string.IsNullOrWhiteSpace(value.Date)
+            && DateOnly.TryParse(value.Date, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var date))
         {
             return date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
         }

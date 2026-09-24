@@ -87,7 +87,7 @@ public class SubscriptionTools(
         ClaimsPrincipal user,
         [Description("Action to perform: create_checkout, create_portal, or claim_ad_reward")] string action,
         [Description("For create_checkout: billing interval (monthly or yearly)")] string? interval = null,
-        [Description("Confirmation token from verify_step_up_agent_operation_v2 (required: managing a subscription is high-risk and needs step-up)")] string? confirmationToken = null,
+        [Description("Confirmation token from confirm_agent_operation_v2, after step_up_agent_operation_v2 and verify_step_up_agent_operation_v2 (required: managing a subscription is high-risk and needs step-up)")] string? confirmationToken = null,
         CancellationToken cancellationToken = default)
     {
         var result = await executorBridge.ExecuteAsync(user, "manage_subscription", new
