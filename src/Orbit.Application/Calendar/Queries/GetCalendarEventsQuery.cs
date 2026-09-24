@@ -41,13 +41,19 @@ public record CalendarEventItem(
     [JsonIgnore]
     public DateTime? RecurrenceStartUtc { get; init; }
 
+    /// <summary>The recurrence-defined starts Google expanded inside its bounded event feed.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<DateTime>? ExpandedOccurrencesUtc { get; init; }
+
     internal bool NeedsRecurrenceEvidenceRefresh => IsRecurring && StartTime is not null
-        && (string.IsNullOrWhiteSpace(SourceTimeZone) || RecurrenceStartUtc is null);
+        && (string.IsNullOrWhiteSpace(SourceTimeZone) || RecurrenceStartUtc is null
+            || ExpandedOccurrencesUtc is null);
 
     /// <summary>
     /// A full turn of both zones' adjustment rules, which is every offset pair a recurrence can meet.
     /// </summary>
     private const int ProbeDays = 366;
+    private static readonly string[] Weekdays = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
 
     internal CalendarEventItem ProjectTo(TimeZoneInfo timeZone)
     {
@@ -68,6 +74,7 @@ public record CalendarEventItem(
         {
             StartDate = projectedStartDate,
             StartTime = projectedStartTime,
+            RecurrenceRule = ProjectedRecurrenceRule(timeZone),
             EndTime = localEnd is { } sameDayEnd
                 && sameDayEnd.Date == localStart.Date
                 && string.CompareOrdinal(projectedEndTime, projectedStartTime) > 0
@@ -93,8 +100,9 @@ public record CalendarEventItem(
     /// Missing source zone or original recurrence start leaves the series unproved and withheld.
     /// </para>
     /// <para>
-    /// A <c>BYDAY</c> rule must keep its source weekday. Other rules may keep a fixed date shift, but
-    /// all timed recurrences must keep the same displayed start minute.
+    /// A shifted <c>BYDAY</c> rule must have uniform occurrence evidence before its weekdays move.
+    /// Other rules may keep a fixed date shift, but all timed recurrences must keep the same
+    /// displayed start minute.
     /// </para>
     /// </remarks>
     internal bool HasUnrepresentableRecurrenceAfterProjection(TimeZoneInfo accountTimeZone)
@@ -111,6 +119,7 @@ public record CalendarEventItem(
 
         var recurrenceStart = DateTime.SpecifyKind(RecurrenceStartUtc.Value, DateTimeKind.Utc);
         var actualStart = DateTime.SpecifyKind(StartUtc.Value, DateTimeKind.Utc);
+        var sourceRecurrenceStart = TimeZoneInfo.ConvertTimeFromUtc(recurrenceStart, sourceTimeZone);
         var projectedRecurrenceStart = TimeZoneInfo.ConvertTimeFromUtc(recurrenceStart, accountTimeZone);
         var projectedActualStart = TimeZoneInfo.ConvertTimeFromUtc(actualStart, accountTimeZone);
         if (projectedActualStart.DayOfWeek != projectedRecurrenceStart.DayOfWeek
@@ -120,8 +129,136 @@ public record CalendarEventItem(
         if (sourceTimeZone.HasSameRules(accountTimeZone))
             return false;
 
+        var dayShift = DateOnly.FromDateTime(projectedRecurrenceStart).DayNumber
+            - DateOnly.FromDateTime(sourceRecurrenceStart).DayNumber;
+        if (dayShift != 0 && NamesAWeekday(RecurrenceRule))
+            return !TryShiftByDayRule(sourceTimeZone, accountTimeZone, recurrenceStart, dayShift, out _);
+
         return !KeepsItsLocalScheduleForAYear(
             sourceTimeZone, accountTimeZone, recurrenceStart, NamesAWeekday(RecurrenceRule));
+    }
+
+    private string? ProjectedRecurrenceRule(TimeZoneInfo accountTimeZone)
+    {
+        if (RecurrenceRule is null || RecurrenceStartUtc is null
+            || !TryFindSourceTimeZone(SourceTimeZone, out var sourceTimeZone))
+            return RecurrenceRule;
+
+        var recurrenceStart = DateTime.SpecifyKind(RecurrenceStartUtc.Value, DateTimeKind.Utc);
+        var sourceStart = TimeZoneInfo.ConvertTimeFromUtc(recurrenceStart, sourceTimeZone);
+        var accountStart = TimeZoneInfo.ConvertTimeFromUtc(recurrenceStart, accountTimeZone);
+        var dayShift = DateOnly.FromDateTime(accountStart).DayNumber
+            - DateOnly.FromDateTime(sourceStart).DayNumber;
+        return dayShift != 0 && TryShiftByDayRule(
+                sourceTimeZone, accountTimeZone, recurrenceStart, dayShift, out var shiftedRule)
+            ? shiftedRule
+            : RecurrenceRule;
+    }
+
+    private bool TryShiftByDayRule(
+        TimeZoneInfo sourceTimeZone, TimeZoneInfo accountTimeZone, DateTime recurrenceStartUtc,
+        int dayShift, out string? shiftedRule)
+    {
+        shiftedRule = null;
+        if (RecurrenceRule is null || ExpandedOccurrencesUtc is not { Count: > 0 } occurrences
+            || !occurrences.Contains(recurrenceStartUtc))
+            return false;
+        var parsed = ParseShiftableByDayRule(RecurrenceRule);
+        if (parsed is null)
+            return false;
+
+        var (terms, byDayIndex, tokens, weekStartIndex, shiftWeekStart) = parsed.Value;
+
+        var sourceStart = TimeZoneInfo.ConvertTimeFromUtc(recurrenceStartUtc, sourceTimeZone);
+        var accountStart = TimeZoneInfo.ConvertTimeFromUtc(recurrenceStartUtc, accountTimeZone);
+        var accountClock = ProjectedClock(accountStart);
+        foreach (var occurrence in occurrences)
+        {
+            var utc = DateTime.SpecifyKind(occurrence, DateTimeKind.Utc);
+            var sourceLocal = TimeZoneInfo.ConvertTimeFromUtc(utc, sourceTimeZone);
+            var accountLocal = TimeZoneInfo.ConvertTimeFromUtc(utc, accountTimeZone);
+            if (TimeOnly.FromDateTime(sourceLocal) != TimeOnly.FromDateTime(sourceStart)
+                || ProjectedClock(accountLocal) != accountClock
+                || DateOnly.FromDateTime(accountLocal).DayNumber
+                    - DateOnly.FromDateTime(sourceLocal).DayNumber != dayShift)
+                return false;
+        }
+
+        terms[byDayIndex] = terms[byDayIndex][.."BYDAY=".Length]
+            + string.Join(',', tokens.Select(token => ShiftWeekday(token, dayShift)));
+        if (shiftWeekStart)
+        {
+            if (weekStartIndex is { } index)
+            {
+                var weekStartTerm = terms[index];
+                terms[index] = weekStartTerm[.."WKST=".Length]
+                    + ShiftWeekday(weekStartTerm["WKST=".Length..], dayShift);
+            }
+            else
+            {
+                terms = [.. terms, "WKST=" + ShiftWeekday("MO", dayShift)];
+            }
+        }
+        shiftedRule = string.Join(';', terms);
+        return true;
+    }
+
+    private static (string[] Terms, int ByDayIndex, string[] Tokens, int? WeekStartIndex, bool ShiftWeekStart)?
+        ParseShiftableByDayRule(string recurrenceRule)
+    {
+        var terms = recurrenceRule.Split(';');
+        var frequencies = terms.Where(term => term.StartsWith("RRULE:FREQ=", StringComparison.OrdinalIgnoreCase)
+            || term.StartsWith("FREQ=", StringComparison.OrdinalIgnoreCase)).ToList();
+        if (frequencies.Count != 1)
+            return null;
+
+        var frequency = frequencies[0];
+        var frequencyValue = frequency[(frequency.StartsWith("RRULE:", StringComparison.OrdinalIgnoreCase)
+            ? "RRULE:FREQ=".Length : "FREQ=".Length)..];
+        if (!(string.Equals(frequencyValue, "WEEKLY", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(frequencyValue, "DAILY", StringComparison.OrdinalIgnoreCase))
+            || terms.Any(term => term.StartsWith("BYSETPOS=", StringComparison.OrdinalIgnoreCase)
+                || term.StartsWith("BYMONTHDAY=", StringComparison.OrdinalIgnoreCase)))
+            return null;
+
+        var byDays = terms.Select((term, index) => (term, index))
+            .Where(entry => entry.term.StartsWith("BYDAY=", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (byDays.Count != 1)
+            return null;
+
+        var tokens = byDays[0].term["BYDAY=".Length..].Split(',');
+        if (tokens.Length == 0 || tokens.Any(token =>
+                !Weekdays.Contains(token, StringComparer.OrdinalIgnoreCase)))
+            return null;
+
+        var intervals = terms.Where(term => term.StartsWith("INTERVAL=", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (intervals.Count > 1)
+            return null;
+
+        var interval = 1;
+        if (intervals.Count == 1 && (!int.TryParse(intervals[0]["INTERVAL=".Length..],
+                NumberStyles.None, CultureInfo.InvariantCulture, out interval) || interval < 1))
+            return null;
+
+        var weekStarts = terms.Select((term, index) => (term, index))
+            .Where(entry => entry.term.StartsWith("WKST=", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (weekStarts.Count > 1 || (weekStarts.Count == 1
+            && !Weekdays.Contains(weekStarts[0].term["WKST=".Length..], StringComparer.OrdinalIgnoreCase)))
+            return null;
+
+        var weekStartIndex = weekStarts.Count == 1 ? weekStarts[0].index : (int?)null;
+        return (terms, byDays[0].index, tokens, weekStartIndex,
+            string.Equals(frequencyValue, "WEEKLY", StringComparison.OrdinalIgnoreCase) && interval > 1);
+    }
+
+    private static string ShiftWeekday(string token, int dayShift)
+    {
+        var index = Array.FindIndex(Weekdays, day =>
+            string.Equals(day, token, StringComparison.OrdinalIgnoreCase));
+        return Weekdays[((index + dayShift) % 7 + 7) % 7];
     }
 
     /// <summary>

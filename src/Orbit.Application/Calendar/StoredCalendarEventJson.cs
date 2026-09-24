@@ -7,8 +7,8 @@ namespace Orbit.Application.Calendar;
 /// <summary>
 /// Reads and writes the JSON a <c>GoogleCalendarSyncSuggestion</c> row keeps in
 /// <c>RawEventJson</c>. That column is server-owned storage rather than a client contract, so it
-/// carries two keys the response never does: the source calendar's timezone and the recurrence-defined
-/// start. Both feeds need these facts to judge one series the same way.
+/// carries the source calendar's timezone, recurrence-defined start, and expanded starts outside the
+/// response. Both feeds need these facts to judge one series the same way.
 /// </summary>
 /// <remarks>
 /// The shape stays flat and additive. Missing keys on a legacy row leave its recurrence unproved.
@@ -17,12 +17,14 @@ internal static class StoredCalendarEventJson
 {
     private const string SourceTimeZoneKey = nameof(CalendarEventItem.SourceTimeZone);
     private const string RecurrenceStartUtcKey = nameof(CalendarEventItem.RecurrenceStartUtc);
+    private const string ExpandedOccurrencesUtcKey = nameof(CalendarEventItem.ExpandedOccurrencesUtc);
 
     internal static string Serialize(CalendarEventItem item)
     {
         var stored = JsonSerializer.SerializeToNode(item)!.AsObject();
         stored[SourceTimeZoneKey] = item.SourceTimeZone;
         stored[RecurrenceStartUtcKey] = item.RecurrenceStartUtc;
+        stored[ExpandedOccurrencesUtcKey] = JsonSerializer.SerializeToNode(item.ExpandedOccurrencesUtc);
         return stored.ToJsonString();
     }
 
@@ -38,7 +40,8 @@ internal static class StoredCalendarEventJson
         return item with
         {
             SourceTimeZone = ReadSourceTimeZone(stored),
-            RecurrenceStartUtc = ReadRecurrenceStartUtc(stored)
+            RecurrenceStartUtc = ReadRecurrenceStartUtc(stored),
+            ExpandedOccurrencesUtc = ReadExpandedOccurrencesUtc(stored)
         };
     }
 
@@ -71,4 +74,16 @@ internal static class StoredCalendarEventJson
             && value.TryGetValue<DateTime>(out var startUtc)
             ? startUtc
             : null;
+
+    private static IReadOnlyList<DateTime>? ReadExpandedOccurrencesUtc(JsonObject stored)
+    {
+        try
+        {
+            return stored[ExpandedOccurrencesUtcKey]?.Deserialize<List<DateTime>>();
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
 }

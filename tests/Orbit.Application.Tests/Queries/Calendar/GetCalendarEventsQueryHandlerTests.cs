@@ -223,7 +223,7 @@ public class GetCalendarEventsQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_RecurringByDayEventCrossingAccountDate_OmitsEvent()
+    public async Task Handle_RecurringByDayEventCrossingAccountDate_ShiftsWeekdays()
     {
         var user = CreateTestUser();
         user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
@@ -243,8 +243,66 @@ public class GetCalendarEventsQueryHandlerTests
                 EndUtc: new DateTime(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc))
             {
                 SourceTimeZone = "Asia/Tokyo",
-                RecurrenceStartUtc = new DateTime(2026, 4, 14, 23, 0, 0, DateTimeKind.Utc)
+                RecurrenceStartUtc = new DateTime(2026, 4, 14, 23, 0, 0, DateTimeKind.Utc),
+                ExpandedOccurrencesUtc =
+                [
+                    new DateTime(2026, 4, 14, 23, 0, 0, DateTimeKind.Utc),
+                    new DateTime(2026, 4, 26, 23, 0, 0, DateTimeKind.Utc),
+                    new DateTime(2026, 4, 28, 23, 0, 0, DateTimeKind.Utc)
+                ]
             });
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value[0].StartDate.Should().Be("2026-04-14");
+        result.Value[0].RecurrenceRule.Should().Be("RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=SU,TU;WKST=SA");
+    }
+
+    [Theory]
+    [InlineData("RRULE:FREQ=WEEKLY;BYDAY=2TH")]
+    [InlineData("RRULE:FREQ=WEEKLY;BYDAY=TH;BYSETPOS=1")]
+    [InlineData("RRULE:FREQ=DAILY;BYDAY=TH;BYMONTHDAY=7")]
+    [InlineData("RRULE:FREQ=MONTHLY;BYDAY=TH")]
+    public async Task Handle_ShiftedByDayRuleOutsideSupportedSubset_OmitsEvent(string rule)
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
+        var start = new DateTime(2027, 1, 7, 0, 0, 0, DateTimeKind.Utc);
+        StubSuccessfulFetch(user, new CalendarEventItem(
+            "evt_unsupported", "Tokyo breakfast", null,
+            "2027-01-07", "09:00", "10:00", true, rule, [],
+            StartUtc: start, EndUtc: start.AddHours(1))
+        {
+            SourceTimeZone = "Asia/Tokyo",
+            RecurrenceStartUtc = start,
+            ExpandedOccurrencesUtc = [start, start.AddDays(7)]
+        });
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_ShiftedByDaySeriesWithSeasonalClockChange_OmitsEvent()
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
+        var first = new DateTime(2027, 3, 4, 0, 30, 0, DateTimeKind.Utc);
+        var later = new DateTime(2027, 3, 31, 23, 30, 0, DateTimeKind.Utc);
+        StubSuccessfulFetch(user, new CalendarEventItem(
+            "evt_lisbon_shift", "Lisbon midnight call", null,
+            "2027-03-04", "00:30", "01:00", true,
+            "RRULE:FREQ=WEEKLY;BYDAY=TH", [],
+            StartUtc: first, EndUtc: first.AddMinutes(30))
+        {
+            SourceTimeZone = "Europe/Lisbon",
+            RecurrenceStartUtc = first,
+            ExpandedOccurrencesUtc = [first, later]
+        });
 
         var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
 

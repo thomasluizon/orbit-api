@@ -24,6 +24,7 @@ public class CalendarEventItemSerializationTests
 
         json.Should().NotContainEquivalentOf("sourceTimeZone");
         json.Should().NotContainEquivalentOf("recurrenceStartUtc");
+        json.Should().NotContainEquivalentOf("expandedOccurrencesUtc");
         json.Should().NotContain("Europe/Lisbon");
         json.Should().Contain("endUtc");
     }
@@ -40,6 +41,8 @@ public class CalendarEventItemSerializationTests
         readBack.Should().NotBeNull();
         readBack!.SourceTimeZone.Should().Be("Europe/Lisbon");
         readBack.RecurrenceStartUtc.Should().Be(new DateTime(2027, 1, 7, 3, 30, 0, DateTimeKind.Utc));
+        readBack.ExpandedOccurrencesUtc.Should().Equal(
+            new DateTime(2027, 1, 7, 3, 30, 0, DateTimeKind.Utc));
         readBack.Id.Should().Be("master-lisbon");
         readBack.EndUtc.Should().Be(new DateTime(2027, 1, 7, 4, 0, 0, DateTimeKind.Utc));
     }
@@ -81,6 +84,7 @@ public class CalendarEventItemSerializationTests
             EndUtc: new DateTime(2027, 1, 7, 4, 0, 0, DateTimeKind.Utc))
         {
             SourceTimeZone = "Europe/Lisbon",
-            RecurrenceStartUtc = new DateTime(2027, 1, 7, 3, 30, 0, DateTimeKind.Utc)
+            RecurrenceStartUtc = new DateTime(2027, 1, 7, 3, 30, 0, DateTimeKind.Utc),
+            ExpandedOccurrencesUtc = [new DateTime(2027, 1, 7, 3, 30, 0, DateTimeKind.Utc)]
         };
 }

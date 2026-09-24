@@ -142,6 +142,41 @@ public class CalendarFeedAgreementTests
         suggestionsResult.Value[0].Event.StartTime.Should().Be(eventsResult.Value[0].StartTime);
     }
 
+    [Theory]
+    [InlineData("RRULE:FREQ=WEEKLY;BYDAY=TH", "RRULE:FREQ=WEEKLY;BYDAY=WE")]
+    [InlineData("RRULE:FREQ=DAILY;BYDAY=TH", "RRULE:FREQ=DAILY;BYDAY=WE")]
+    public async Task UniformlyShiftedByDaySeries_IsOfferedByBothFeeds(string rule, string expectedRule)
+    {
+        var user = CreateSyncingUser("America/Sao_Paulo");
+        var first = new DateTime(2027, 1, 7, 0, 0, 0, DateTimeKind.Utc);
+        StubFetch(user, new CalendarEventItem(
+            "master-tokyo", "Tokyo breakfast", null,
+            "2027-01-07", "09:00", "10:00", true,
+            rule, [],
+            StartUtc: first, EndUtc: first.AddHours(1))
+        {
+            SourceTimeZone = "Asia/Tokyo",
+            RecurrenceStartUtc = first,
+            ExpandedOccurrencesUtc = [first, first.AddDays(7), first.AddDays(14)]
+        });
+
+        var eventsResult = await _events.Handle(new GetCalendarEventsQuery(user.Id), CancellationToken.None);
+        eventsResult.IsSuccess.Should().BeTrue();
+        eventsResult.Value.Should().ContainSingle();
+        eventsResult.Value[0].StartDate.Should().Be("2027-01-06");
+        eventsResult.Value[0].RecurrenceRule.Should().Be(expectedRule);
+
+        var syncResult = await _autoSync.Handle(new RunCalendarAutoSyncCommand(user.Id), CancellationToken.None);
+        syncResult.IsSuccess.Should().BeTrue();
+        syncResult.Value.NewSuggestions.Should().Be(1);
+        var suggestionsResult = await _suggestions.Handle(
+            new GetCalendarSyncSuggestionsQuery(user.Id), CancellationToken.None);
+        suggestionsResult.IsSuccess.Should().BeTrue();
+        suggestionsResult.Value.Should().ContainSingle();
+        suggestionsResult.Value[0].Event.StartDate.Should().Be(eventsResult.Value[0].StartDate);
+        suggestionsResult.Value[0].Event.RecurrenceRule.Should().Be(eventsResult.Value[0].RecurrenceRule);
+    }
+
     /// <summary>
     /// The read gate hides a withheld row, but it cannot undo the write. <c>newSuggestions</c> is the
     /// number <c>CreateSuggestionNotification</c> pushes, so a row auto-sync stores for a series the
@@ -274,7 +309,8 @@ public class CalendarFeedAgreementTests
             EndUtc: new DateTime(2027, 1, 7, 19, 0, 0, DateTimeKind.Utc))
         {
             SourceTimeZone = "America/Sao_Paulo",
-            RecurrenceStartUtc = new DateTime(2027, 1, 7, 18, 0, 0, DateTimeKind.Utc)
+            RecurrenceStartUtc = new DateTime(2027, 1, 7, 18, 0, 0, DateTimeKind.Utc),
+            ExpandedOccurrencesUtc = [new DateTime(2027, 1, 7, 18, 0, 0, DateTimeKind.Utc)]
         };
 
     private User CreateSyncingUser(string timeZone)
