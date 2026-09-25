@@ -55,7 +55,8 @@ public partial class ProcessUserChatCommandHandler
 
         var activeToolNames = ChatToolGroups.ResolveActiveToolNames(
             ai.ToolRegistry.GetAll().Select(t => t.Name),
-            BuildConversationText(request));
+            BuildConversationText(request),
+            request.ClientContext?.EntryPointIntent);
 
         var toolDeclarations = skipTools
             ? new List<object>()
@@ -145,14 +146,12 @@ public partial class ProcessUserChatCommandHandler
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Take(8)
                 .ToList(),
-            hasProAccess
-                ? activeGoals
-                    .OrderByDescending(goal => goal.UpdatedAtUtc)
-                    .Select(goal => goal.Title)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .Take(8)
-                    .ToList()
-                : [],
+            activeGoals
+                .OrderByDescending(goal => goal.UpdatedAtUtc)
+                .Select(goal => goal.Title)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(8)
+                .ToList(),
             ClientContext: clientContext);
     }
 

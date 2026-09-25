@@ -7,13 +7,16 @@ namespace Orbit.Application.Chat;
 /// Cache-safe coarse tool grouping: a handful of rarely-used tool domains are only declared to the
 /// model when the conversation actually references them, trimming the per-turn tool payload for the
 /// common habit/goal flows. Core habit, goal, logging, query, profile, tag, gamification, and meta
-/// tools are ALWAYS declared, so a turn is never starved of a core capability. Gating is driven by the
-/// cumulative conversation text (message + history), so an unlocked domain stays unlocked for the rest
-/// of the conversation — the active set only grows, keeping prompt caching stable between unlock points.
+/// tools are ALWAYS declared, so a turn is never starved of a core capability. Keywords are matched
+/// against the cumulative conversation text (message + history), so a keyword unlock persists across
+/// turns. A client entry-point intent also activates its matching group when supplied on each turn.
 /// </summary>
 public static class ChatToolGroups
 {
-    private sealed record ExtendedGroup(IReadOnlyList<string> ToolNames, IReadOnlyList<string> Keywords);
+    private sealed record ExtendedGroup(
+        IReadOnlyList<string> ToolNames,
+        IReadOnlyList<string> Keywords,
+        string? EntryPointIntent = null);
 
     private static readonly IReadOnlyList<ExtendedGroup> Groups =
     [
@@ -26,7 +29,8 @@ public static class ChatToolGroups
         new(["get_subscription_overview", "manage_subscription"],
             ["subscription", "subscribe", "billing", "upgrade", "downgrade", "cancel plan", "assinatura", "pagamento", "cobranca"]),
         new(["send_support_request"],
-            ["support", "contact the team", "report a bug", "suporte", "fale conosco"]),
+            ["support", "contact the team", "report a bug", "suporte", "fale conosco"],
+            EntryPointIntent: "support"),
         new(["manage_account"],
             ["my account", "delete account", "export data", "change password", "minha conta", "excluir conta", "senha"]),
         new(["get_checklist_templates", "create_checklist_template", "delete_checklist_template"],
@@ -40,11 +44,11 @@ public static class ChatToolGroups
 
     /// <summary>
     /// Returns the tool names to declare this turn: every core tool, plus the tools of each rarely-used
-    /// domain whose keywords appear anywhere in the conversation text. Pass the user message joined with
-    /// the recent history so an unlocked domain stays unlocked across the conversation.
+    /// domain whose keywords appear anywhere in the conversation text or whose entry-point intent matches.
+    /// Pass the user message joined with the recent history so a keyword unlock persists across turns.
     /// </summary>
     public static IReadOnlyCollection<string> ResolveActiveToolNames(
-        IEnumerable<string> allToolNames, string conversationText)
+        IEnumerable<string> allToolNames, string conversationText, string? entryPointIntent = null)
     {
         var normalized = Normalize(conversationText);
         var active = new HashSet<string>(StringComparer.Ordinal);
@@ -53,7 +57,9 @@ public static class ChatToolGroups
             active.Add(name);
 
         foreach (var group in Groups.Where(group =>
-                     group.Keywords.Any(keyword => normalized.Contains(keyword, StringComparison.Ordinal))))
+                     group.Keywords.Any(keyword => normalized.Contains(keyword, StringComparison.Ordinal)) ||
+                     (group.EntryPointIntent is not null &&
+                      string.Equals(group.EntryPointIntent, entryPointIntent, StringComparison.OrdinalIgnoreCase))))
         {
             foreach (var name in group.ToolNames)
                 active.Add(name);

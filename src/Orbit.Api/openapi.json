@@ -1185,6 +1185,46 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Precondition Required",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -1353,8 +1393,48 @@
               }
             }
           },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Precondition Required",
             "content": {
               "text/plain": {
                 "schema": {
@@ -4509,6 +4589,14 @@
                 "string"
               ],
               "format": "int32"
+            }
+          },
+          {
+            "name": "weekStart",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
             }
           }
         ],
@@ -9216,7 +9304,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResponse"
+                }
+              }
+            }
           },
           "401": {
             "description": "Unauthorized",
@@ -13118,6 +13223,15 @@
             "items": {
               "$ref": "#/components/schemas/ChecklistItem"
             }
+          },
+          "intervalWeeks": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -13454,6 +13568,15 @@
             "items": {
               "type": "string"
             }
+          },
+          "intervalWeeks": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -14368,6 +14491,9 @@
           }
         }
       },
+      "GoogleCalendarAutoSyncStatus": {
+        "type": "integer"
+      },
       "HabitListCard": {
         "required": [
           "scope",
@@ -14508,6 +14634,12 @@
           "language": {
             "type": "string",
             "default": "en"
+          },
+          "turnstileToken": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -14739,6 +14871,332 @@
           }
         }
       },
+      "ProfileResponse": {
+        "required": [
+          "userId",
+          "name",
+          "email",
+          "timeZone",
+          "aiMemoryEnabled",
+          "aiSummaryEnabled",
+          "hasCompletedOnboarding",
+          "hasCompletedTour",
+          "hasCreatedFirstHabit",
+          "hasLoggedFirstHabit",
+          "hasTriedAstra",
+          "hasCompletedOnboardingChecklist",
+          "language",
+          "plan",
+          "hasProAccess",
+          "isTrialActive",
+          "trialEndsAt",
+          "planExpiresAt",
+          "aiMessagesUsed",
+          "aiMessagesLimit",
+          "hasImportedCalendar",
+          "hasSeenImportPrompt",
+          "hasGoogleConnection",
+          "subscriptionInterval",
+          "subscriptionSource",
+          "isLifetimePro",
+          "weekStartDay",
+          "totalXp",
+          "level",
+          "levelTitle",
+          "adRewardsClaimedToday",
+          "currentStreak",
+          "longestStreak",
+          "streakFreezesAvailable",
+          "themePreference",
+          "colorScheme",
+          "googleCalendarAutoSyncEnabled",
+          "googleCalendarAutoSyncStatus",
+          "googleCalendarLastSyncedAt",
+          "canViewGamification",
+          "handle",
+          "socialOptIn"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "timeZone": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "aiMemoryEnabled": {
+            "type": "boolean"
+          },
+          "aiSummaryEnabled": {
+            "type": "boolean"
+          },
+          "hasCompletedOnboarding": {
+            "type": "boolean"
+          },
+          "hasCompletedTour": {
+            "type": "boolean"
+          },
+          "hasCreatedFirstHabit": {
+            "type": "boolean"
+          },
+          "hasLoggedFirstHabit": {
+            "type": "boolean"
+          },
+          "hasTriedAstra": {
+            "type": "boolean"
+          },
+          "hasCompletedOnboardingChecklist": {
+            "type": "boolean"
+          },
+          "language": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "plan": {
+            "type": "string"
+          },
+          "hasProAccess": {
+            "type": "boolean"
+          },
+          "isTrialActive": {
+            "type": "boolean"
+          },
+          "trialEndsAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "planExpiresAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "aiMessagesUsed": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "aiMessagesLimit": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "hasImportedCalendar": {
+            "type": "boolean"
+          },
+          "hasSeenImportPrompt": {
+            "type": "boolean"
+          },
+          "hasGoogleConnection": {
+            "type": "boolean"
+          },
+          "subscriptionInterval": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "subscriptionSource": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isLifetimePro": {
+            "type": "boolean"
+          },
+          "weekStartDay": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalXp": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "level": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "levelTitle": {
+            "type": "string"
+          },
+          "adRewardsClaimedToday": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "currentStreak": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "longestStreak": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "streakFreezesAvailable": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "themePreference": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "colorScheme": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "googleCalendarAutoSyncEnabled": {
+            "type": "boolean"
+          },
+          "googleCalendarAutoSyncStatus": {
+            "$ref": "#/components/schemas/GoogleCalendarAutoSyncStatus"
+          },
+          "googleCalendarLastSyncedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "canViewGamification": {
+            "type": "boolean"
+          },
+          "handle": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "socialOptIn": {
+            "type": "boolean"
+          },
+          "uses24HourClock": {
+            "type": "boolean",
+            "default": true
+          },
+          "publicProfile": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PublicProfileSettings"
+              }
+            ]
+          },
+          "proactiveAstraEnabled": {
+            "type": "boolean",
+            "default": false
+          },
+          "marketingEmailConsent": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "lastCompletionDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          }
+        }
+      },
+      "PublicProfileSettings": {
+        "required": [
+          "enabled",
+          "slug",
+          "shareUrl",
+          "showStreak",
+          "showLevel",
+          "showAchievements",
+          "showTopHabits"
+        ],
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "slug": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "shareUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "showStreak": {
+            "type": "boolean"
+          },
+          "showLevel": {
+            "type": "boolean"
+          },
+          "showAchievements": {
+            "type": "boolean"
+          },
+          "showTopHabits": {
+            "type": "boolean"
+          }
+        }
+      },
       "QuickAction": {
         "required": [
           "label",
@@ -14947,6 +15405,12 @@
           "language": {
             "type": "string",
             "default": "en"
+          },
+          "turnstileToken": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -14962,6 +15426,12 @@
           "language": {
             "type": "string",
             "default": "en"
+          },
+          "turnstileToken": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -15369,6 +15839,22 @@
               "string"
             ],
             "format": "int32"
+          },
+          "lastFreezeCoveredOrigin": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "repairableGapDates": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "date"
+            }
           }
         }
       },
@@ -15829,6 +16315,12 @@
               "null",
               "string"
             ]
+          },
+          "turnstileToken": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -15850,6 +16342,12 @@
             "default": "en"
           },
           "referralCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "turnstileToken": {
             "type": [
               "null",
               "string"

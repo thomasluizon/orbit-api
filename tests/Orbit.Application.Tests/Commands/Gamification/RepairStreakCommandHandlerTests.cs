@@ -11,6 +11,7 @@ using Orbit.Application.Gamification.Commands;
 using Orbit.Application.Gamification.Queries;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Application.Tests.Common;
@@ -66,6 +67,9 @@ public class RepairStreakCommandHandlerTests
             .Returns(StreakRepairEvaluation.Available(
                 MissedDate,
                 new UserStreakState(10, 12, MissedDate)));
+        StreakFreeze? writtenFreeze = null;
+        _freezeRepository.AddAsync(Arg.Do<StreakFreeze>(freeze => writtenFreeze = freeze),
+            Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
 
         var result = await _handler.Handle(new RepairStreakCommand(UserId), CancellationToken.None);
 
@@ -79,6 +83,8 @@ public class RepairStreakCommandHandlerTests
                 freeze.UserId == UserId && freeze.UsedOnDate == MissedDate),
             Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        writtenFreeze.Should().NotBeNull();
+        writtenFreeze!.Origin.Should().Be(StreakFreezeOrigin.Manual);
         _productAnalytics.Received(1).CaptureUserEvent(
             UserId,
             "streak_repair_spent",

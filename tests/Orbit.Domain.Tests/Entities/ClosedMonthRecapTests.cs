@@ -75,4 +75,40 @@ public class ClosedMonthRecapTests
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be(DomainErrors.ClosedMonthRecapResponseInvalid.Code);
     }
+
+    [Fact]
+    public void CreateClosedWeek_SevenDayWindow_Succeeds()
+    {
+        var result = ClosedMonthRecap.CreateClosedWeek(
+            Guid.NewGuid(), new DateOnly(2026, 8, 17), new DateOnly(2026, 8, 23), "{}");
+
+        result.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public void CreateClosedWeek_IncompleteWindow_ReturnsNamedFailure()
+    {
+        var result = ClosedMonthRecap.CreateClosedWeek(
+            Guid.NewGuid(), new DateOnly(2026, 8, 17), new DateOnly(2026, 8, 22), "{}");
+
+        result.ErrorCode.Should().Be(DomainErrors.ClosedWeekRangeInvalid.Code);
+    }
+
+    [Fact]
+    public void CreateClosedYear_CalendarYear_Succeeds()
+    {
+        var result = ClosedMonthRecap.CreateClosedYear(
+            Guid.NewGuid(), new DateOnly(2025, 1, 1), new DateOnly(2025, 12, 31), "{}");
+
+        result.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public void CreateClosedYear_IncompleteWindow_ReturnsNamedFailure()
+    {
+        var result = ClosedMonthRecap.CreateClosedYear(
+            Guid.NewGuid(), new DateOnly(2025, 1, 1), new DateOnly(2025, 12, 30), "{}");
+
+        result.ErrorCode.Should().Be(DomainErrors.ClosedYearRangeInvalid.Code);
+    }
 }

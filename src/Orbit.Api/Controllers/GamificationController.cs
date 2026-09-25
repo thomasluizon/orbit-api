@@ -84,7 +84,8 @@ public class GamificationController(IMediator mediator, IUserDateService userDat
         [FromQuery] string period,
         CancellationToken cancellationToken,
         [FromQuery] int? year = null,
-        [FromQuery] int? month = null)
+        [FromQuery] int? month = null,
+        [FromQuery] DateOnly? weekStart = null)
     {
         if (!RetrospectivePeriodRange.IsKnownPeriod(period))
             return BadRequest(ErrorMessages.InvalidPeriod.ToErrorBody());
@@ -94,7 +95,29 @@ public class GamificationController(IMediator mediator, IUserDateService userDat
         DateOnly dateFrom;
         DateOnly dateTo;
 
-        if (year.HasValue || month.HasValue)
+        if (weekStart.HasValue)
+        {
+            if (!period.Equals("week", StringComparison.OrdinalIgnoreCase)
+                || year.HasValue || month.HasValue)
+                return BadRequest(ErrorMessages.InvalidClosedWeekParameters.ToErrorBody());
+
+            var closedWeek = ClosedPeriodRange.ResolveWeek(weekStart.Value, today);
+            if (closedWeek.IsFailure)
+                return closedWeek.ToErrorResult();
+
+            dateFrom = closedWeek.Value.DateFrom;
+            dateTo = closedWeek.Value.DateTo;
+        }
+        else if (period.Equals("year", StringComparison.OrdinalIgnoreCase) && year.HasValue && !month.HasValue)
+        {
+            var closedYear = ClosedPeriodRange.ResolveYear(year.Value, today);
+            if (closedYear.IsFailure)
+                return closedYear.ToErrorResult();
+
+            dateFrom = closedYear.Value.DateFrom;
+            dateTo = closedYear.Value.DateTo;
+        }
+        else if (year.HasValue || month.HasValue)
         {
             if (!year.HasValue || !month.HasValue || !period.Equals("month", StringComparison.OrdinalIgnoreCase))
                 return BadRequest(ErrorMessages.InvalidClosedMonthParameters.ToErrorBody());
@@ -112,7 +135,7 @@ public class GamificationController(IMediator mediator, IUserDateService userDat
             (dateFrom, dateTo) = RetrospectivePeriodRange.Resolve(period, today, weekStartDay);
         }
 
-        var query = new GetRecapQuery(userId, dateFrom, dateTo, period, year, month);
+        var query = new GetRecapQuery(userId, dateFrom, dateTo, period, year, month, weekStart);
         var result = await mediator.Send(query, cancellationToken);
 
         return result.ToPayGateAwareResult(v => Ok(v));

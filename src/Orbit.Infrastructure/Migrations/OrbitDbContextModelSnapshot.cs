@@ -17,7 +17,7 @@ namespace Orbit.Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.11")
+                .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -1441,6 +1441,7 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("ConsumedAtUtc")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("CreatedAtUtc")
@@ -1835,6 +1836,10 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("Origin")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<DateOnly>("UsedOnDate")
                         .HasColumnType("date");
 
@@ -2012,6 +2017,9 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.Property<int>("LastFreezeAwardStreak")
                         .HasColumnType("integer");
+
+                    b.Property<DateOnly?>("LastPurgedCompletionDate")
+                        .HasColumnType("date");
 
                     b.Property<int>("Level")
                         .HasColumnType("integer");
@@ -2251,6 +2259,30 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("UserSessions");
+                });
+
+            modelBuilder.Entity("Orbit.Domain.Entities.UserSessionRefreshToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<Guid>("UserSessionId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserSessionId");
+
+                    b.ToTable("UserSessionRefreshTokens");
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.XpAwardLog", b =>
@@ -2609,6 +2641,15 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Orbit.Domain.Entities.UserSessionRefreshToken", b =>
+                {
+                    b.HasOne("Orbit.Domain.Entities.UserSession", null)
+                        .WithMany()
+                        .HasForeignKey("UserSessionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

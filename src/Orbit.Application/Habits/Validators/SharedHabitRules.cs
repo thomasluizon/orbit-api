@@ -6,9 +6,18 @@ namespace Orbit.Application.Habits.Validators;
 
 public static class SharedHabitRules
 {
-    public static void AddTitleRules<T>(IRuleBuilder<T, string> rule)
+    public static void AddTitleRules<T>(
+        IRuleBuilder<T, string> rule,
+        string? requiredMessage = null,
+        string? maximumLengthMessage = null)
     {
-        rule.NotEmpty().MaximumLength(AppConstants.MaxHabitTitleLength);
+        var requiredRule = rule.NotEmpty();
+        if (requiredMessage is not null)
+            requiredRule.WithMessage(requiredMessage);
+
+        var lengthRule = requiredRule.MaximumLength(AppConstants.MaxHabitTitleLength);
+        if (maximumLengthMessage is not null)
+            lengthRule.WithMessage(maximumLengthMessage);
     }
 
     public static void AddDescriptionRules<T>(IRuleBuilder<T, string?> rule)

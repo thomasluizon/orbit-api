@@ -177,6 +177,15 @@ public class GamificationControllerTests
         var result = await _controller.GetRecap("week", CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
+
+        var closedYear = await _controller.GetRecap("year", CancellationToken.None, 2025);
+
+        closedYear.Should().BeOfType<OkObjectResult>();
+        await _mediator.Received(1).Send(
+            Arg.Is<GetRecapQuery>(query =>
+                query.DateFrom == new DateOnly(2025, 1, 1)
+                && query.DateTo == new DateOnly(2025, 12, 31)),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -199,6 +208,70 @@ public class GamificationControllerTests
             Arg.Any<CancellationToken>());
         await _userDateService.DidNotReceive()
             .GetUserWeekStartDayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(1, 17, 23)]
+    [InlineData(0, 16, 22)]
+    [InlineData(0, 17, 23)]
+    [InlineData(1, 16, 22)]
+    public async Task GetRecap_ClosedWeek_ResolvesAnchorIndependentlyOfCurrentPreference(
+        int currentWeekStartDay, int startDay, int endDay)
+    {
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new DateOnly(2026, 8, 24));
+        _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(currentWeekStartDay);
+        _mediator.Send(Arg.Any<GetRecapQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(default(RecapResponse)!));
+
+        var weekStart = new DateOnly(2026, 8, startDay);
+        var result = await _controller.GetRecap("week", CancellationToken.None, weekStart: weekStart);
+
+        result.Should().BeOfType<OkObjectResult>();
+        await _mediator.Received(1).Send(
+            Arg.Is<GetRecapQuery>(query => query.DateFrom == weekStart
+                && query.DateTo == new DateOnly(2026, 8, endDay)
+                && query.ClosedWeekStart == weekStart
+                && query.ClosedYear == null
+                && query.ClosedMonth == null),
+            Arg.Any<CancellationToken>());
+        await _userDateService.DidNotReceive()
+            .GetUserWeekStartDayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(17, ErrorCodes.RecapWeekNotClosed)]
+    [InlineData(18, ErrorCodes.InvalidClosedWeekParameters)]
+    public async Task GetRecap_InvalidOrOpenWeek_ReturnsNamedBadRequest(
+        int startDay, string errorCode)
+    {
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new DateOnly(2026, 8, 23));
+        _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(1);
+
+        var result = await _controller.GetRecap(
+            "week", CancellationToken.None, weekStart: new DateOnly(2026, 8, startDay));
+
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        JsonSerializer.Serialize(objectResult.Value).Should().Contain(errorCode);
+        await _mediator.DidNotReceive().Send(Arg.Any<GetRecapQuery>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetRecap_CurrentYear_ReturnsNamedBadRequest()
+    {
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new DateOnly(2026, 8, 23));
+
+        var result = await _controller.GetRecap("year", CancellationToken.None, 2026);
+
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        JsonSerializer.Serialize(objectResult.Value).Should().Contain(ErrorCodes.RecapYearNotClosed);
+        await _mediator.DidNotReceive().Send(Arg.Any<GetRecapQuery>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

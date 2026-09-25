@@ -17,20 +17,21 @@ namespace Orbit.Api.Controllers;
 [Route("api/[controller]")]
 public partial class AuthController(IMediator mediator, IAgentAuditService auditService, ILogger<AuthController> logger) : ControllerBase
 {
-    public record SendCodeRequest(string Email, string Language = "en");
-    public record VerifyCodeRequest(string Email, string Code, string Language = "en", string? ReferralCode = null);
+    public record SendCodeRequest(string Email, string Language = "en", string? TurnstileToken = null);
+    public record VerifyCodeRequest(string Email, string Code, string Language = "en", string? ReferralCode = null, string? TurnstileToken = null);
     public record GoogleAuthRequest(string AccessToken, string Language = "en", string? GoogleAccessToken = null, string? GoogleRefreshToken = null, string? ReferralCode = null);
     public record ConfirmDeletionRequest(string Code);
     public record RefreshSessionRequest(string RefreshToken);
     public record LogoutSessionRequest(string RefreshToken);
-    public record SendCodeOperationRequest(string Email, string Language = "en");
-    public record VerifyCodeOperationRequest(string Email, string Code, string Language = "en", string? ReferralCode = null);
+    public record SendCodeOperationRequest(string Email, string Language = "en", string? TurnstileToken = null);
+    public record VerifyCodeOperationRequest(string Email, string Code, string Language = "en", string? ReferralCode = null, string? TurnstileToken = null);
     public record GoogleAuthOperationRequest(string AccessToken, string Language = "en", string? GoogleAccessToken = null, string? GoogleRefreshToken = null, string? ReferralCode = null);
     public record RefreshSessionOperationRequest(string RefreshToken);
     public record LogoutSessionOperationRequest(string RefreshToken);
 
     [HttpPost("send-code")]
     [DistributedRateLimit("auth")]
+    [RequireBotProtection]
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -53,6 +54,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
     [HttpPost("operations/send-code")]
     [DistributedRateLimit("auth")]
+    [RequireBotProtection]
     [AllowAnonymous]
     public async Task<IActionResult> SendCodeOperation(
         [FromBody] SendCodeOperationRequest request,
@@ -81,6 +83,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
     [HttpPost("verify-code")]
     [DistributedRateLimit("auth")]
+    [RequireBotProtection]
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -103,6 +106,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
     [HttpPost("operations/verify-code")]
     [DistributedRateLimit("auth")]
+    [RequireBotProtection]
     [AllowAnonymous]
     public async Task<IActionResult> VerifyCodeOperation(
         [FromBody] VerifyCodeOperationRequest request,
