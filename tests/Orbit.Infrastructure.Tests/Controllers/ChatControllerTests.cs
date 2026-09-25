@@ -92,7 +92,7 @@ public class ChatControllerTests
     }
 
     [Fact]
-    public async Task ProcessChat_MetricsCapability_MapsClientContext()
+    public async Task ProcessChat_ClientContext_MapsCapabilitiesAndEntryPointIntent()
     {
         ProcessUserChatCommand? capturedCommand = null;
         _mediator.Send(
@@ -105,12 +105,13 @@ public class ChatControllerTests
             null,
             null,
             CancellationToken.None,
-            clientContext: """{"platform":"android","supportsMetricsCard":true}""");
+            clientContext: """{"platform":"android","supportsMetricsCard":true,"entryPointIntent":"support"}""");
 
         result.Should().BeOfType<OkObjectResult>();
         capturedCommand.Should().NotBeNull();
         capturedCommand!.ClientContext!.Platform.Should().Be("android");
         capturedCommand.ClientContext.SupportsMetricsCard.Should().BeTrue();
+        capturedCommand.ClientContext.EntryPointIntent.Should().Be("support");
     }
 
     [Fact]
