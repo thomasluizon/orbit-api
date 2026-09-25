@@ -710,7 +710,7 @@ public class ReminderSchedulerServiceTests
             .Options);
 
     private static ReminderSchedulerService CreateService(
-        OrbitDbContext dbContext, IPushNotificationService pushService)
+        OrbitDbContext dbContext, IPushNotificationService pushService, TimeProvider? timeProvider = null)
     {
         var serviceProvider = new ServiceCollection()
             .AddSingleton(dbContext)
@@ -719,7 +719,12 @@ public class ReminderSchedulerServiceTests
         var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
         return new ReminderSchedulerService(
             scopeFactory, NullLogger<ReminderSchedulerService>.Instance,
-            new ConfigurationBuilder().Build());
+            new ConfigurationBuilder().Build(), timeProvider);
+    }
+
+    private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
     }
 
     private static OrbitDbContext CreateInterceptingDbContext(ISaveChangesInterceptor interceptor) =>

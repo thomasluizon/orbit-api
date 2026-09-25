@@ -18,7 +18,8 @@ namespace Orbit.Infrastructure.Services;
 public partial class ReminderSchedulerService(
     IServiceScopeFactory scopeFactory,
     ILogger<ReminderSchedulerService> logger,
-    IConfiguration configuration) : ScheduledServiceBase, IScheduledJob
+    IConfiguration configuration,
+    TimeProvider? timeProvider = null) : ScheduledServiceBase, IScheduledJob
 {
     private readonly TimeSpan _interval = TimeSpan.FromMinutes(
         configuration.GetValue("BackgroundServices:ReminderIntervalMinutes", 1));
@@ -62,9 +63,10 @@ public partial class ReminderSchedulerService(
 
     private async Task ProcessRelativeReminders(OrbitDbContext dbContext, List<PendingReminderPush> pending, CancellationToken ct)
     {
+        var nowUtc = (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime;
 #pragma warning disable ORBIT0004
-        var minLocalDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
-        var maxLocalDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
+        var minLocalDate = DateOnly.FromDateTime(nowUtc.AddDays(-1));
+        var maxLocalDate = DateOnly.FromDateTime(nowUtc.AddDays(1));
 #pragma warning restore ORBIT0004
         var habits = await dbContext.Habits
             .AsNoTracking()
@@ -83,7 +85,7 @@ public partial class ReminderSchedulerService(
 
         var habitIds = habits.Select(h => h.Id).ToList();
 #pragma warning disable ORBIT0004
-        var utcToday = DateOnly.FromDateTime(DateTime.UtcNow);
+        var utcToday = DateOnly.FromDateTime(nowUtc);
 #pragma warning restore ORBIT0004
         var minWindowDate = utcToday.AddDays(-1);
         var maxWindowDate = utcToday.AddDays(1);
@@ -110,7 +112,7 @@ public partial class ReminderSchedulerService(
         foreach (var habit in habits)
         {
             await ProcessSingleRelativeReminderAsync(
-                habit, users, loggedHabitDates, sentReminderSet, pending, dbContext, ct);
+                habit, users, loggedHabitDates, sentReminderSet, pending, dbContext, nowUtc, ct);
         }
     }
 
@@ -118,12 +120,12 @@ public partial class ReminderSchedulerService(
         Habit habit, Dictionary<Guid, User> users,
         HashSet<(Guid HabitId, DateOnly Date)> loggedHabitDates,
         HashSet<(Guid HabitId, DateOnly Date, int MinutesBefore)> sentReminderSet,
-        List<PendingReminderPush> pending, OrbitDbContext dbContext, CancellationToken ct)
+        List<PendingReminderPush> pending, OrbitDbContext dbContext, DateTime nowUtc, CancellationToken ct)
     {
         if (!users.TryGetValue(habit.UserId, out var user)) return;
 
         var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
-        var userNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+        var userNow = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, tz);
         var userToday = DateOnly.FromDateTime(userNow);
         var userTimeNow = TimeOnly.FromDateTime(userNow);
 
