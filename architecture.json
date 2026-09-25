@@ -2746,7 +2746,7 @@
       "Chat": 85,
       "ChecklistTemplates": 5,
       "Common": 36,
-      "Gamification": 33,
+      "Gamification": 34,
       "Goals": 35,
       "Habits": 78,
       "Marketing": 4,
@@ -2958,8 +2958,8 @@
       "Challenges": 14,
       "Chat": 65,
       "ChecklistTemplates": 9,
-      "Common": 201,
-      "Gamification": 43,
+      "Common": 202,
+      "Gamification": 44,
       "Goals": 54,
       "Habits": 94,
       "Marketing": 6,
@@ -5159,6 +5159,11 @@
           "ResetAccountCommandHandler",
           "User"
         ]
+      },
+      {
+        "testClass": "ClosedPeriodRangeTests",
+        "file": "tests/Orbit.Application.Tests/Queries/Gamification/ClosedPeriodRangeTests.cs",
+        "references": []
       },
       {
         "testClass": "GetAchievementsQueryHandlerTests",
