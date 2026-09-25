@@ -62,12 +62,16 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 1
-      # Codex is the reviewer, pinned to GPT-6 Sol at medium effort. The v0 tag still maps
-      # its default "GPT Sol" slug to gpt-5.6-sol, so the model is named here (#636).
+      # Codex is the reviewer, pinned to GPT-6 Sol at medium effort (#636). The published
+      # pullfrog 0.1.82 has no gpt-6-sol entry, so it would drop the effort. PULLFROG_FORCE_LOCAL_CLI
+      # runs the action's own code at this pinned pullfrog/pullfrog main commit, whose models.ts
+      # has it. Return to @v0 and drop the variable once pullfrog 0.1.83 is published.
       - name: Run agent
         id: codex
-        uses: pullfrog/pullfrog@v0
+        uses: pullfrog/pullfrog@405f60c2302dd458154b5854d0f72d6868e1a54a
         continue-on-error: true
+        env:
+          PULLFROG_FORCE_LOCAL_CLI: "1"
         with:
           prompt: ${{ inputs.prompt }}
           model: openai/gpt-6-sol
