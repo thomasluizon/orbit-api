@@ -226,6 +226,45 @@ public class HabitLogReaderTests
     }
 
     [Fact]
+    public async Task LastCompletionDate_ExcludesNewerBadHabitSlip()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var user = User.Create("Slip User", "slip@example.com").Value;
+        var goodHabit = Habit.Create(new HabitCreateParams(
+            user.Id, "Good", FrequencyUnit.Day, 1, Anchor)).Value;
+        var badHabit = Habit.Create(new HabitCreateParams(
+            user.Id, "Bad", FrequencyUnit.Day, 1, Anchor, IsBadHabit: true)).Value;
+        Log(goodHabit, Anchor.AddDays(-3));
+        Log(badHabit, Anchor.AddDays(-1));
+        factory.Context.Users.Add(user);
+        factory.Context.Habits.AddRange(goodHabit, badHabit);
+        await factory.Context.SaveChangesAsync();
+
+        var result = await new HabitLogReader(factory.Context)
+            .GetLastCompletionDateAsync(user.Id, CancellationToken.None);
+
+        result.Should().Be(Anchor.AddDays(-3));
+    }
+
+    [Fact]
+    public async Task LastCompletionDate_ReturnsNullWhenOnlyBadHabitSlipsExist()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var user = User.Create("Slip Only User", "slip-only@example.com").Value;
+        var badHabit = Habit.Create(new HabitCreateParams(
+            user.Id, "Bad", FrequencyUnit.Day, 1, Anchor, IsBadHabit: true)).Value;
+        Log(badHabit, Anchor);
+        factory.Context.Users.Add(user);
+        factory.Context.Habits.Add(badHabit);
+        await factory.Context.SaveChangesAsync();
+
+        var result = await new HabitLogReader(factory.Context)
+            .GetLastCompletionDateAsync(user.Id, CancellationToken.None);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
     public async Task LastCompletionDate_ExcludesSkipsAndDeletedCompletions()
     {
         using var factory = new SqliteOrbitDbContextFactory();
