@@ -260,6 +260,30 @@ public class GetCalendarEventsQueryHandlerTests
         result.Value[0].RecurrenceRule.Should().Be("RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=SU,TU;WKST=SA");
     }
 
+    [Fact]
+    public async Task Handle_ShiftedAlternateWeekRule_ShiftsTheDefaultWeekStart()
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
+        var first = new DateTime(2026, 4, 14, 23, 0, 0, DateTimeKind.Utc);
+        StubSuccessfulFetch(user, new CalendarEventItem(
+            "evt_alternate", "Tokyo weekly review", null,
+            "2026-04-15", "08:00", "09:00", true,
+            "RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=WE", [],
+            StartUtc: first, EndUtc: first.AddHours(1))
+        {
+            SourceTimeZone = "Asia/Tokyo",
+            RecurrenceStartUtc = first,
+            ExpandedOccurrencesUtc = [first, first.AddDays(14)]
+        });
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value[0].RecurrenceRule.Should().Be("RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;WKST=SU");
+    }
+
     [Theory]
     [InlineData("RRULE:FREQ=WEEKLY;BYDAY=2TH")]
     [InlineData("RRULE:FREQ=WEEKLY;BYDAY=TH;BYSETPOS=1")]
