@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Orbit.Application.Chat;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Common;
@@ -117,12 +118,14 @@ public partial class ProcessUserChatCommandHandler(
     {
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
         LogProcessingChatMessage(logger, request.Message);
+        var detectedCrisisLocales = CrisisSupportGuard.Detect(request.Message);
 
         var contextResult = await LoadChatContextAsync(request, cancellationToken);
         if (contextResult.IsFailure)
             return contextResult.PropagateError<ChatResponse>();
 
         var context = contextResult.Value;
+        var crisisTurn = IsCrisisTurn(detectedCrisisLocales, context.EnabledFeatureFlags);
         var userLanguage = GetUserLanguage(context.User);
         var aiStreamFilter = BuildAiStreamFilter(request.StreamSink);
         Func<AiStreamEvent, Task>? aiStreamSink = aiStreamFilter is null
@@ -130,7 +133,8 @@ public partial class ProcessUserChatCommandHandler(
             : aiStreamFilter.HandleAsync;
 
         var faqMatch = ChatFaqCache.TryMatchFaqKey(request.Message);
-        if (faqMatch is { } faqHit && ChatFaqCache.TryGetAnswer(faqHit.Key, faqHit.Locale, out var cachedFaqAnswer))
+        var cachedFaqAnswer = crisisTurn ? null : TryGetCachedFaqAnswer(faqMatch);
+        if (cachedFaqAnswer is not null)
             return Result.Success(new ChatResponse(cachedFaqAnswer, [], CorrelationId: request.CorrelationId));
 
         var skipTools = request.ImageData is null
@@ -170,7 +174,7 @@ public partial class ProcessUserChatCommandHandler(
         saveStopwatch.Stop();
         LogChangesSaved(logger, saveStopwatch.ElapsedMilliseconds);
 
-        if (toolLoopResult.TokenBudgetExceeded && string.IsNullOrWhiteSpace(aiResponse.TextMessage))
+        if (IsEmptyTokenBudgetResponse(toolLoopResult.TokenBudgetExceeded, aiResponse.TextMessage))
             return Result.Failure<ChatResponse>(ErrorMessages.AiUnavailable);
 
         var responseText = StripJsonWrapper(aiResponse.TextMessage);
@@ -179,11 +183,15 @@ public partial class ProcessUserChatCommandHandler(
         var (aiMessage, habitList, goalList, metricsCard) = await BuildResponseCardsAsync(
             responseText, request, context, cancellationToken);
 
-        if (faqMatch is { } faqToCache
-            && !string.IsNullOrWhiteSpace(aiMessage)
-            && IsShareableFaqTurn(executionResults, metricsCard))
+        if (crisisTurn)
+            aiMessage = await CompleteCrisisReplyAsync(
+                request, aiMessage, detectedCrisisLocales,
+                request.StreamSink is null ? "batch" : "stream");
+
+        if (ShouldCacheFaqAnswer(crisisTurn, faqMatch, aiMessage, executionResults, metricsCard))
         {
-            ChatFaqCache.StoreAnswer(faqToCache.Key, faqToCache.Locale, aiMessage);
+            var faqToCache = faqMatch!.Value;
+            ChatFaqCache.StoreAnswer(faqToCache.Key, faqToCache.Locale, aiMessage ?? string.Empty);
         }
 
         if (metricsCard is not null && context.User is not null)
@@ -205,7 +213,7 @@ public partial class ProcessUserChatCommandHandler(
             request.UserId,
             request.Message,
             aiMessage,
-            shouldExtractFacts: context.AiMemoryEnabled && context.User is not null && context.User.HasProAccess,
+            shouldExtractFacts: ShouldExtractFacts(crisisTurn, context),
             existingFacts: context.UserFacts);
 
         totalStopwatch.Stop();
@@ -229,6 +237,61 @@ public partial class ProcessUserChatCommandHandler(
     }
 
     private static string? GetUserLanguage(User? user) => user?.Language;
+
+    private static bool IsCrisisTurn(CrisisLocales locales, IReadOnlyList<string> enabledFlags) =>
+        locales != CrisisLocales.None
+        && !enabledFlags.Contains(FeatureFlagKeys.AstraCrisisResourcesDisabled, StringComparer.OrdinalIgnoreCase);
+
+    private static string? TryGetCachedFaqAnswer((string Key, string Locale)? match) =>
+        match is { } faq && ChatFaqCache.TryGetAnswer(faq.Key, faq.Locale, out var answer)
+            ? answer
+            : null;
+
+    private static bool IsEmptyTokenBudgetResponse(bool exceeded, string? text) =>
+        exceeded && string.IsNullOrWhiteSpace(text);
+
+    private static bool ShouldCacheFaqAnswer(
+        bool crisisTurn,
+        (string Key, string Locale)? match,
+        string? aiMessage,
+        ToolExecutionAccumulator executionResults,
+        MetricsCard? metricsCard) =>
+        !crisisTurn && match is not null && !string.IsNullOrWhiteSpace(aiMessage)
+        && IsShareableFaqTurn(executionResults, metricsCard);
+
+    private static bool ShouldExtractFacts(bool crisisTurn, ChatContext context) =>
+        !crisisTurn && context.AiMemoryEnabled && context.User is { HasProAccess: true };
+
+    private async Task<string> CompleteCrisisReplyAsync(
+        ProcessUserChatCommand request,
+        string? reply,
+        CrisisLocales locales,
+        string deliveryPath)
+    {
+        var finalText = CrisisSupportGuard.EnsureResources(reply, locales, request.History);
+        if (request.StreamSink is not null)
+        {
+            await request.StreamSink(ChatStreamEvent.Reset());
+            await request.StreamSink(ChatStreamEvent.Delta(finalText));
+        }
+
+        if (finalText.Contains(CrisisSupportGuard.EnglishResource, StringComparison.Ordinal)
+            || finalText.Contains(CrisisSupportGuard.PortugueseResource, StringComparison.Ordinal))
+        {
+            AnalyticsCapture.SafeCaptureAggregateEvent(
+                execution.ProductAnalytics,
+                logger,
+                "astra_crisis_resources_shown",
+                new Dictionary<string, object>
+                {
+                    ["count"] = 1,
+                    ["locale"] = CrisisSupportGuard.LocaleLabel(locales),
+                    ["delivery_path"] = deliveryPath
+                });
+        }
+
+        return finalText;
+    }
 
     private static string AppendTruncationNotice(string? text, string? language)
     {
