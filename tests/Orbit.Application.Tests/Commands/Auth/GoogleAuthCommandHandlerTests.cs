@@ -8,6 +8,8 @@ using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Orbit.Application.Auth.Commands;
+using Orbit.Application.Auth.Queries;
+using Orbit.Application.Behaviors;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -86,11 +88,16 @@ public class GoogleAuthCommandHandlerTests
         _httpHandler.SetResponse(HttpStatusCode.Unauthorized, "{}");
 
         var command = new GoogleAuthCommand("invalid-token");
+        var behavior = new ConcurrencyRetryBehavior<GoogleAuthCommand, Result<LoginResponse>>(_unitOfWork);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        var result = await behavior.Handle(command, ct => _handler.Handle(command, ct), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be(ErrorMessages.InvalidGoogleToken.Message);
+        _httpHandler.RequestCount.Should().Be(1);
+        _unitOfWork.DidNotReceive().ResetTracking();
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _authSessionService.DidNotReceive().CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
         await _userRepo.DidNotReceive().AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
     }
 
@@ -116,18 +123,63 @@ public class GoogleAuthCommandHandlerTests
     [Fact]
     public async Task Handle_WithGoogleTokens_StoresTokensOnUser()
     {
+        var staleUser = User.Create("Google User", TestEmail).Value;
+        var currentUser = User.Create("Updated profile", TestEmail).Value;
+        currentUser.SetSelectedCalendars(["calendar-1"]);
+        currentUser.Deactivate(DateTime.UtcNow.AddDays(7));
+        SetupGoogleTokenResponse(TestEmail, "Google User");
+        var trackerWasReset = false;
+        _unitOfWork.When(work => work.ResetTracking()).Do(_ => trackerWasReset = true);
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
+            Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(_ => trackerWasReset ? currentUser : staleUser);
+        var saves = 0;
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => ++saves == 1
+                ? throw new DbUpdateConcurrencyException("stale user")
+                : Task.FromResult(1));
+
+        var command = new GoogleAuthCommand("valid-token", GoogleAccessToken: "gat-123", GoogleRefreshToken: "grt-456");
+        var behavior = new ConcurrencyRetryBehavior<GoogleAuthCommand, Result<LoginResponse>>(_unitOfWork);
+
+        var result = await behavior.Handle(command, ct => _handler.Handle(command, ct), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.WasReactivated.Should().BeTrue();
+        result.Value.UserId.Should().Be(currentUser.Id);
+        currentUser.Name.Should().Be("Updated profile");
+        currentUser.GetSelectedCalendarIds().Should().Equal("calendar-1");
+        currentUser.GoogleAccessToken.Should().Be("gat-123");
+        currentUser.GoogleRefreshToken.Should().Be("grt-456");
+        currentUser.IsDeactivated.Should().BeFalse();
+        trackerWasReset.Should().BeTrue();
+        saves.Should().Be(2);
+        await _authSessionService.Received(1).CreateSessionAsync(currentUser.Id, currentUser.Email, Arg.Any<CancellationToken>());
+        _analytics.DidNotReceive().CaptureUserEvent(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>());
+        await _emailService.DidNotReceive().SendWelcomeEmailAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WithGoogleTokens_PersistentConflict_StopsAfterThreeAttempts()
+    {
         var user = User.Create("Google User", TestEmail).Value;
         SetupGoogleTokenResponse(TestEmail, "Google User");
         SetupExistingUser(user);
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DbUpdateConcurrencyException("stale user"));
 
         var command = new GoogleAuthCommand("valid-token", GoogleAccessToken: "gat-123", GoogleRefreshToken: "grt-456");
+        var behavior = new ConcurrencyRetryBehavior<GoogleAuthCommand, Result<LoginResponse>>(_unitOfWork);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        var act = async () => await behavior.Handle(command, ct => _handler.Handle(command, ct), CancellationToken.None);
 
-        result.IsSuccess.Should().BeTrue();
-        user.GoogleAccessToken.Should().Be("gat-123");
-        user.GoogleRefreshToken.Should().Be("grt-456");
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await act.Should().ThrowAsync<DbUpdateConcurrencyException>();
+        await _unitOfWork.Received(3).SaveChangesAsync(Arg.Any<CancellationToken>());
+        _unitOfWork.Received(2).ResetTracking();
+        await _authSessionService.DidNotReceive().CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        _analytics.DidNotReceive().CaptureUserEvent(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>());
+        await _emailService.DidNotReceive().SendWelcomeEmailAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -230,6 +282,8 @@ public class GoogleAuthCommandHandlerTests
         private HttpStatusCode _statusCode = HttpStatusCode.OK;
         private string _content = "{}";
 
+        public int RequestCount { get; private set; }
+
         public void SetResponse(HttpStatusCode statusCode, string content)
         {
             _statusCode = statusCode;
@@ -239,6 +293,7 @@ public class GoogleAuthCommandHandlerTests
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            RequestCount++;
             return Task.FromResult(new HttpResponseMessage(_statusCode)
             {
                 Content = new StringContent(_content, Encoding.UTF8, "application/json")

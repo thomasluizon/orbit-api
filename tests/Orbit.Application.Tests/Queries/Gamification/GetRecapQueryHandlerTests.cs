@@ -249,6 +249,118 @@ public class GetRecapQueryHandlerTests
         result.Value.GoalCompletions.Should().Be(0);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Handle_ClosedWeekOrYear_ReturnsHistoricalWindowAndAddressableLink(bool week)
+    {
+        var dateFrom = week ? new DateOnly(2026, 8, 17) : new DateOnly(2025, 1, 1);
+        var dateTo = week ? dateFrom.AddDays(6) : new DateOnly(2025, 12, 31);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Walk", FrequencyUnit.Day, 1, DueDate: dateFrom)).Value;
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
+            habit, new DateTime(2023, 1, 1, 12, 0, 0, DateTimeKind.Utc));
+        habit.Log(dateFrom);
+        habit.AdvanceDueDate(dateTo.AddDays(30));
+        StubHabits(habit);
+        StubGoalCount(CreateCompletedGoal(dateFrom.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc)));
+        var query = new GetRecapQuery(UserId, dateFrom, dateTo,
+            week ? "week" : "year", ClosedYear: week ? null : 2025,
+            ClosedWeekStart: week ? dateFrom : null);
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.DateFrom.Should().Be(dateFrom);
+        result.Value.DateTo.Should().Be(dateTo);
+        result.Value.Metrics.TotalCompletions.Should().Be(1);
+        result.Value.GoalCompletions.Should().Be(1);
+        result.Value.ShareDeepLink.Should().Be(week
+            ? "https://app.useorbit.org/r/ABCD2345?recap=week&weekStart=2026-08-17"
+            : "https://app.useorbit.org/r/ABCD2345?recap=year&year=2025");
+        await _habitRepo.Received(1).FindIgnoringFiltersAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>());
+        await _closedMonthRecapStore.Received(1).AddAsync(
+            Arg.Any<ClosedMonthRecap>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Handle_ClosedWeekOrYearAfterCadenceAndGoalChanges_ReturnsIdenticalResponse(bool week)
+    {
+        var dateFrom = week ? new DateOnly(2026, 8, 17) : new DateOnly(2025, 1, 1);
+        var dateTo = week ? dateFrom.AddDays(6) : new DateOnly(2025, 12, 31);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Walk", FrequencyUnit.Day, 1, DueDate: dateFrom)).Value;
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
+            habit, new DateTime(2024, 1, 1, 12, 0, 0, DateTimeKind.Utc));
+        habit.Log(dateFrom, advanceDueDate: false);
+        StubHabits(habit);
+        StubGoalCount(CreateCompletedGoal(dateFrom.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc)));
+        _userStreakService.RecalculateAsync(UserId, awardFreezeIfEligible: false, Arg.Any<CancellationToken>())
+            .Returns(new UserStreakState(3, 8, dateTo));
+        var query = new GetRecapQuery(UserId, dateFrom, dateTo, week ? "week" : "year",
+            ClosedYear: week ? null : 2025, ClosedWeekStart: week ? dateFrom : null);
+
+        var first = await _handler.Handle(query, CancellationToken.None);
+        var update = habit.Update(new HabitUpdateParams(
+            habit.Title, habit.Description, FrequencyUnit.Week, 1, null,
+            habit.IsBadHabit, dateTo.AddMonths(2)));
+        update.IsSuccess.Should().BeTrue();
+        StubGoalCount();
+        _userStreakService.RecalculateAsync(UserId, awardFreezeIfEligible: false, Arg.Any<CancellationToken>())
+            .Returns(new UserStreakState(0, 0, dateTo));
+        var second = await CreateHandler().Handle(query, CancellationToken.None);
+
+        first.IsSuccess.Should().BeTrue();
+        second.IsSuccess.Should().BeTrue();
+        JsonSerializer.SerializeToUtf8Bytes(second.Value)
+            .Should().Equal(JsonSerializer.SerializeToUtf8Bytes(first.Value));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Handle_ClosedWeekOrYearEntirelyBeforeLocalizedAccountDate_ReturnsFailure(bool week)
+    {
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(CreateUser("America/Sao_Paulo",
+                new DateTime(2025, 1, 15, 2, 30, 0, DateTimeKind.Utc)));
+        var dateFrom = week ? new DateOnly(2025, 1, 6) : new DateOnly(2024, 1, 1);
+        var dateTo = week ? dateFrom.AddDays(6) : new DateOnly(2024, 12, 31);
+        var query = new GetRecapQuery(UserId, dateFrom, dateTo, week ? "week" : "year",
+            ClosedYear: week ? null : 2024, ClosedWeekStart: week ? dateFrom : null);
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.RecapPeriodBeforeAccount);
+        await _mediator.DidNotReceive()
+            .Send(Arg.Any<GetOrCreateReferralCodeCommand>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Handle_ClosedWeekOrYearContainingLocalizedAccountDate_Succeeds(bool week)
+    {
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(CreateUser("America/Sao_Paulo",
+                new DateTime(2025, 1, 15, 2, 30, 0, DateTimeKind.Utc)));
+        StubHabits();
+        var dateFrom = week ? new DateOnly(2025, 1, 13) : new DateOnly(2025, 1, 1);
+        var dateTo = week ? dateFrom.AddDays(6) : new DateOnly(2025, 12, 31);
+        var query = new GetRecapQuery(UserId, dateFrom, dateTo, week ? "week" : "year",
+            ClosedYear: week ? null : 2025, ClosedWeekStart: week ? dateFrom : null);
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+    }
+
     [Fact]
     public async Task Handle_GoalCompletionBoundary_UsesUserTimezone()
     {

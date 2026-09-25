@@ -15,6 +15,7 @@ public class GetProfileQueryHandlerTests
 {
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IGenericRepository<StreakFreeze> _streakFreezeRepo = Substitute.For<IGenericRepository<StreakFreeze>>();
+    private readonly IHabitLogReader _habitLogReader = Substitute.For<IHabitLogReader>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IFeatureFlagService _featureFlagService = Substitute.For<IFeatureFlagService>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
@@ -30,6 +31,7 @@ public class GetProfileQueryHandlerTests
         _handler = new GetProfileQueryHandler(
             _userRepo,
             _streakFreezeRepo,
+            _habitLogReader,
             _userDateService,
             _featureFlagService,
             _payGate,
@@ -134,7 +136,8 @@ public class GetProfileQueryHandlerTests
                 ShowTopHabits = false
             },
             user.ProactiveAstraEnabled,
-            user.MarketingEmailConsent
+            user.MarketingEmailConsent,
+            LastCompletionDate = (DateOnly?)null
         });
     }
 
@@ -190,7 +193,73 @@ public class GetProfileQueryHandlerTests
             new JsonSerializerOptions(JsonSerializerDefaults.Web));
 
         json.Should().Contain($"\"userId\":\"{callerId:D}\"");
+        json.Should().Contain("\"lastCompletionDate\":null");
         legacyProfile.Should().Be(new LegacyProfileResponse("Legacy User", "test@example.com"));
+    }
+
+    [Fact]
+    public async Task Handle_ReturnsLastCompletionDateFromHabitLogs()
+    {
+        var user = CreateTestUser();
+        var lastCompletionDate = Today.AddDays(-2);
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _habitLogReader.GetLastCompletionDateAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(lastCompletionDate);
+        StubFreezeRepoEmpty();
+
+        var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
+
+        result.Value.LastCompletionDate.Should().Be(lastCompletionDate);
+        await _habitLogReader.Received(1).GetLastCompletionDateAsync(UserId, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ReturnsPurgedCompletionWhenLiveLogsAreOlder()
+    {
+        var user = CreateTestUser();
+        var purgedDate = Today.AddDays(-35);
+        user.RecordPurgedCompletion(purgedDate);
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _habitLogReader.GetLastCompletionDateAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(purgedDate.AddDays(-1));
+        StubFreezeRepoEmpty();
+
+        var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
+
+        result.Value.LastCompletionDate.Should().Be(purgedDate);
+    }
+
+    [Fact]
+    public async Task Handle_ReturnsLaterLiveCompletionAfterPurge()
+    {
+        var user = CreateTestUser();
+        user.RecordPurgedCompletion(Today.AddDays(-35));
+        var liveDate = Today.AddDays(-2);
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _habitLogReader.GetLastCompletionDateAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(liveDate);
+        StubFreezeRepoEmpty();
+
+        var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
+
+        result.Value.LastCompletionDate.Should().Be(liveDate);
+    }
+
+    [Theory]
+    [InlineData(StreakFreezeOrigin.Automatic)]
+    [InlineData(StreakFreezeOrigin.Manual)]
+    public async Task Handle_FreezeWithoutCompletion_ReturnsNullDate(StreakFreezeOrigin origin)
+    {
+        var user = CreateTestUser();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _streakFreezeRepo.FindAsync(
+                Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new List<StreakFreeze> { StreakFreeze.Create(UserId, Today, origin) }.AsReadOnly());
+
+        var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
+
+        result.Value.LastCompletionDate.Should().BeNull();
     }
 
     [Fact]

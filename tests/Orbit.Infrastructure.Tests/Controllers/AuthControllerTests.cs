@@ -11,6 +11,7 @@ using Orbit.Api.Controllers;
 using Orbit.Application.Auth.Commands;
 using Orbit.Application.Auth.Models;
 using Orbit.Application.Auth.Queries;
+using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
@@ -98,10 +99,15 @@ public class AuthControllerTests
         _mediator.Send(Arg.Any<GoogleAuthCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(default(LoginResponse)!));
 
-        var request = new AuthController.GoogleAuthRequest("google-access-token");
+        var request = new AuthController.GoogleAuthRequest("google-access-token", GoogleAccessToken: "calendar-access", GoogleRefreshToken: "calendar-refresh");
         var result = await _controller.GoogleAuth(request, CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
+        await _mediator.Received(1).Send(
+            Arg.Is<GoogleAuthCommand>(command => command is IConcurrencyRetryable
+                && command.GoogleAccessToken == "calendar-access"
+                && command.GoogleRefreshToken == "calendar-refresh"),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -302,10 +308,15 @@ public class AuthControllerTests
         _mediator.Send(Arg.Any<GoogleAuthCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new LoginResponse(Guid.NewGuid(), "token", "Name", "e@x.com", false, "refresh")));
 
-        var request = new AuthController.GoogleAuthOperationRequest("google-token");
+        var request = new AuthController.GoogleAuthOperationRequest("google-token", GoogleAccessToken: "calendar-access", GoogleRefreshToken: "calendar-refresh");
         var result = await _controller.GoogleAuthOperation(request, CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
+        await _mediator.Received(1).Send(
+            Arg.Is<GoogleAuthCommand>(command => command is IConcurrencyRetryable
+                && command.GoogleAccessToken == "calendar-access"
+                && command.GoogleRefreshToken == "calendar-refresh"),
+            Arg.Any<CancellationToken>());
         await _auditService.Received(1).RecordAsync(Arg.Any<AgentAuditEntry>(), Arg.Any<CancellationToken>());
     }
 

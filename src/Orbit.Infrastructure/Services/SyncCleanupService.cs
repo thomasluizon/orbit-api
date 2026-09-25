@@ -71,6 +71,37 @@ public partial class SyncCleanupService(
 #pragma warning restore ORBIT0004
         var totalPurged = 0;
 
+        var purgedCompletions = await dbContext.Database.SqlQuery<PurgedCompletion>($"""
+            WITH RECURSIVE "PurgeHabits" ("Id", "UserId", "IsBadHabit") AS (
+                SELECT h."Id", h."UserId", h."IsBadHabit"
+                FROM "Habits" h
+                WHERE h."IsDeleted" = TRUE AND h."DeletedAtUtc" < {cutoff}
+                UNION
+                SELECT child."Id", child."UserId", child."IsBadHabit"
+                FROM "Habits" child
+                JOIN "PurgeHabits" parent
+                    ON child."ParentHabitId" = parent."Id" AND child."UserId" = parent."UserId"
+            )
+            SELECT h."UserId" AS "UserId", MAX(l."Date") AS "Date"
+            FROM "PurgeHabits" h
+            JOIN "HabitLogs" l ON l."HabitId" = h."Id"
+            WHERE h."IsBadHabit" = FALSE AND CAST(l."Value" AS NUMERIC) > 0
+                AND l."IsDeleted" = FALSE
+            GROUP BY h."UserId"
+            """)
+            .ToListAsync(ct);
+
+        if (purgedCompletions.Count > 0)
+        {
+            var userIds = purgedCompletions.Select(x => x.UserId).ToArray();
+            var users = await dbContext.Users.IgnoreQueryFilters()
+                .Where(u => userIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, ct);
+
+            foreach (var completion in purgedCompletions)
+                users[completion.UserId].RecordPurgedCompletion(completion.Date);
+        }
+
         totalPurged += await PurgeAsync(dbContext.Habits, h => h.IsDeleted && h.DeletedAtUtc < cutoff, ct);
         totalPurged += await PurgeAsync(dbContext.Goals, g => g.IsDeleted && g.DeletedAtUtc < cutoff, ct);
         totalPurged += await PurgeAsync(dbContext.Tags, t => t.IsDeleted && t.DeletedAtUtc < cutoff, ct);
@@ -110,6 +141,12 @@ public partial class SyncCleanupService(
 
         set.RemoveRange(deleted);
         return deleted.Count;
+    }
+
+    private sealed class PurgedCompletion
+    {
+        public Guid UserId { get; set; }
+        public DateOnly Date { get; set; }
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "SyncCleanupService started")]

@@ -17,8 +17,8 @@ public class GetRecapQueryValidator : AbstractValidator<GetRecapQuery>
             .WithMessage("DateFrom must be on or before DateTo.");
 
         RuleFor(x => x)
-            .Must(x => x.ClosedYear.HasValue == x.ClosedMonth.HasValue)
-            .WithMessage("ClosedYear and ClosedMonth must be provided together.");
+            .Must(HasValidClosedParameters)
+            .WithMessage("Closed period parameters must match the requested period.");
 
         When(x => x.ClosedYear.HasValue && x.ClosedMonth.HasValue, () =>
         {
@@ -39,6 +39,43 @@ public class GetRecapQueryValidator : AbstractValidator<GetRecapQuery>
                 .When(x => x.ClosedYear is >= 1 and <= 9999 && x.ClosedMonth is >= 1 and <= 12)
                 .WithMessage("DateFrom and DateTo must match the complete closed calendar month.");
         });
+
+        When(x => x.ClosedYear.HasValue && !x.ClosedMonth.HasValue, () =>
+        {
+            RuleFor(x => x.ClosedYear)
+                .InclusiveBetween(1, 9999)
+                .WithMessage("ClosedYear must be between 1 and 9999.");
+
+            RuleFor(x => x)
+                .Must(x => x.ClosedYear is >= 1 and <= 9999
+                    && x.DateFrom == new DateOnly(x.ClosedYear.Value, 1, 1)
+                    && x.DateTo == new DateOnly(x.ClosedYear.Value, 12, 31))
+                .WithMessage("DateFrom and DateTo must match the complete closed calendar year.");
+        });
+
+        When(x => x.ClosedWeekStart.HasValue, () =>
+        {
+            RuleFor(x => x)
+                .Must(x => x.ClosedWeekStart is { } weekStart
+                    && weekStart.DayNumber <= DateOnly.MaxValue.DayNumber - 6
+                    && x.DateFrom == weekStart
+                    && x.DateTo == weekStart.AddDays(6))
+                .WithMessage("DateFrom and DateTo must match the complete closed calendar week.");
+        });
+    }
+
+    private static bool HasValidClosedParameters(GetRecapQuery query)
+    {
+        if (query.ClosedWeekStart.HasValue)
+            return string.Equals(query.Period, "week", StringComparison.OrdinalIgnoreCase)
+                && !query.ClosedYear.HasValue && !query.ClosedMonth.HasValue;
+
+        if (query.ClosedMonth.HasValue)
+            return string.Equals(query.Period, "month", StringComparison.OrdinalIgnoreCase)
+                && query.ClosedYear.HasValue;
+
+        return !query.ClosedYear.HasValue
+            || string.Equals(query.Period, "year", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool MatchesClosedMonth(DateOnly dateFrom, DateOnly dateTo, int year, int month) =>

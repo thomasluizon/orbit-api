@@ -117,6 +117,11 @@ public static class ErrorMessages
     public static readonly AppError InvalidClosedMonthParameters = From(ErrorCodes.InvalidClosedMonthParameters);
     public static readonly AppError RecapMonthNotClosed = From(ErrorCodes.RecapMonthNotClosed);
     public static readonly AppError RecapMonthBeforeAccount = From(ErrorCodes.RecapMonthBeforeAccount);
+    public static readonly AppError RecapPeriodBeforeAccount = From(ErrorCodes.RecapPeriodBeforeAccount);
+    public static readonly AppError InvalidClosedWeekParameters = From(ErrorCodes.InvalidClosedWeekParameters);
+    public static readonly AppError InvalidClosedYearParameters = From(ErrorCodes.InvalidClosedYearParameters);
+    public static readonly AppError RecapWeekNotClosed = From(ErrorCodes.RecapWeekNotClosed);
+    public static readonly AppError RecapYearNotClosed = From(ErrorCodes.RecapYearNotClosed);
     public static readonly AppError AiSummaryDisabled = From(ErrorCodes.AiSummaryDisabled);
     public static readonly AppError NoActiveGoals = From(ErrorCodes.NoActiveGoals);
     public static readonly AppError NoGoalsData = From(ErrorCodes.NoGoalsData);

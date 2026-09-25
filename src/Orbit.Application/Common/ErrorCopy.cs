@@ -172,7 +172,14 @@ public static class ErrorCopy
         (ErrorCodes.InvalidClosedMonthParameters, "Pick a year and a month together, and only with the month period.", "Escolha um ano e um mês juntos, e só com o período de mês."),
         (ErrorCodes.RecapMonthNotClosed, "That month has not finished yet. Come back after it ends to read the recap.", "Esse mês ainda não terminou. Volte depois que ele acabar para ler a retrospectiva."),
         (ErrorCodes.RecapMonthBeforeAccount, "That month is before this account existed.", "Esse mês é anterior à criação desta conta."),
+        (ErrorCodes.RecapPeriodBeforeAccount, "That period is before this account existed. Choose a later one.", "Esse período é anterior à criação desta conta. Escolha um período mais recente."),
+        (ErrorCodes.InvalidClosedWeekParameters, "Choose a week that begins on your first weekday.", "Escolha uma semana que comece no seu primeiro dia da semana."),
+        (ErrorCodes.InvalidClosedYearParameters, "Choose a valid year, and use it only with the year period.", "Escolha um ano válido e use apenas com o período de ano."),
+        (ErrorCodes.RecapWeekNotClosed, "That week has not finished yet. Come back after it ends to read the recap.", "Essa semana ainda não terminou. Volte depois que ela acabar para ler a retrospectiva."),
+        (ErrorCodes.RecapYearNotClosed, "That year has not finished yet. Come back after it ends to read the recap.", "Esse ano ainda não terminou. Volte depois que ele acabar para ler a retrospectiva."),
         (DomainErrors.ClosedMonthRangeInvalid.Code, "A monthly recap covers one whole calendar month.", "Uma retrospectiva mensal cobre um mês inteiro."),
+        (DomainErrors.ClosedWeekRangeInvalid.Code, "A weekly recap covers seven full days. Choose a complete week.", "Uma retrospectiva semanal cobre sete dias completos. Escolha uma semana completa."),
+        (DomainErrors.ClosedYearRangeInvalid.Code, "A yearly recap covers one full calendar year. Choose a complete year.", "Uma retrospectiva anual cobre um ano inteiro. Escolha um ano completo."),
         (DomainErrors.ClosedMonthRecapResponseInvalid.Code, "We could not read that recap. Open it again.", "Não conseguimos ler essa retrospectiva. Abra de novo."),
     ];
 
