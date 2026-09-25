@@ -139,7 +139,7 @@ public class UserStreakServiceTests
 
         SetupUser(user, new DateOnly(2026, 4, 4));
         SetupHabits(new List<Habit> { habit });
-        SetupFreezes(new List<StreakFreeze> { StreakFreeze.Create(UserId, new DateOnly(2026, 4, 3)) });
+        SetupFreezes(new List<StreakFreeze> { StreakFreeze.Create(UserId, new DateOnly(2026, 4, 3), StreakFreezeOrigin.Manual) });
 
         var result = await _sut.RecalculateAsync(UserId, cancellationToken: CancellationToken.None);
 
@@ -328,7 +328,7 @@ public class UserStreakServiceTests
 
         SetupUser(user, new DateOnly(2026, 4, 5));
         SetupHabits(new List<Habit> { habit });
-        SetupFreezes(new List<StreakFreeze> { StreakFreeze.Create(UserId, new DateOnly(2026, 4, 4)) });
+        SetupFreezes(new List<StreakFreeze> { StreakFreeze.Create(UserId, new DateOnly(2026, 4, 4), StreakFreezeOrigin.Manual) });
 
         var result = await _sut.RecalculateAsync(UserId, cancellationToken: CancellationToken.None);
 
@@ -511,9 +511,9 @@ public class UserStreakServiceTests
         SetupHabits(new List<Habit> { habit });
         SetupFreezes(new List<StreakFreeze>
         {
-            StreakFreeze.Create(UserId, new DateOnly(2026, 4, 1)),
-            StreakFreeze.Create(UserId, new DateOnly(2026, 4, 2)),
-            StreakFreeze.Create(UserId, new DateOnly(2026, 4, 3))
+            StreakFreeze.Create(UserId, new DateOnly(2026, 4, 1), StreakFreezeOrigin.Manual),
+            StreakFreeze.Create(UserId, new DateOnly(2026, 4, 2), StreakFreezeOrigin.Manual),
+            StreakFreeze.Create(UserId, new DateOnly(2026, 4, 3), StreakFreezeOrigin.Manual)
         });
 
         var result = await _sut.EvaluateRepairAsync(

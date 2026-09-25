@@ -74,6 +74,7 @@ public partial class User : Entity
     public int CurrentStreak { get; private set; } = 0;
     public int LongestStreak { get; private set; } = 0;
     public DateOnly? LastActiveDate { get; private set; }
+    public DateOnly? LastPurgedCompletionDate { get; private set; }
     public int StreakFreezesAccumulated { get; private set; } = 0;
     public int LastFreezeAwardStreak { get; private set; } = 0;
     public int? PreGapFreezeAwardStreak { get; private set; }
@@ -123,6 +124,19 @@ public partial class User : Entity
     {
         Name = name.Trim();
         Email = email.Trim().ToLowerInvariant();
+    }
+
+    public void RecordPurgedCompletion(DateOnly date)
+    {
+        if (LastPurgedCompletionDate is null || date > LastPurgedCompletionDate.Value)
+            LastPurgedCompletionDate = date;
+    }
+
+    public DateOnly? GetLastCompletionDate(DateOnly? liveCompletionDate)
+    {
+        return liveCompletionDate is null || LastPurgedCompletionDate > liveCompletionDate
+            ? LastPurgedCompletionDate
+            : liveCompletionDate;
     }
 
     public Result SetName(string name)

@@ -87,6 +87,7 @@ public class CalendarProjectionEndToEndTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().ContainSingle();
         result.Value[0].RecurrenceRule.Should().Be("RRULE:FREQ=DAILY;BYDAY=TH");
+        result.Value[0].RecurrenceTimeZone.Should().Be("Europe/Lisbon");
         result.Value[0].StartDate.Should().Be("2027-01-07");
         result.Value[0].StartTime.Should().Be("03:30");
     }

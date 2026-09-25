@@ -13,6 +13,7 @@ namespace Orbit.Infrastructure.Tests.Services;
 public class AuthSessionServiceTests
 {
     private readonly IGenericRepository<UserSession> _userSessionRepository = Substitute.For<IGenericRepository<UserSession>>();
+    private readonly IGenericRepository<UserSessionRefreshToken> _refreshTokenRepository = Substitute.For<IGenericRepository<UserSessionRefreshToken>>();
     private readonly IGenericRepository<User> _userRepository = Substitute.For<IGenericRepository<User>>();
     private readonly ITokenService _tokenService = Substitute.For<ITokenService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
@@ -21,10 +22,11 @@ public class AuthSessionServiceTests
 
     public AuthSessionServiceTests()
     {
-        _tokenService.GenerateToken(Arg.Any<Guid>(), Arg.Any<string>()).Returns("access-token");
+        _tokenService.GenerateToken(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>()).Returns("access-token");
 
         _sut = new AuthSessionService(
             _userSessionRepository,
+            _refreshTokenRepository,
             _userRepository,
             _tokenService,
             _unitOfWork,
@@ -113,7 +115,7 @@ public class AuthSessionServiceTests
         result.Which.IsFailure.Should().BeTrue();
         result.Which.ErrorCode.Should().Be("INVALID_SESSION");
         _unitOfWork.Received(1).DiscardChanges();
-        _tokenService.DidNotReceive().GenerateToken(Arg.Any<Guid>(), Arg.Any<string>());
+        _tokenService.DidNotReceive().GenerateToken(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>());
     }
 
     [Fact]

@@ -17,22 +17,25 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 internal sealed class SqliteOrbitDbContextFactory : IDisposable
 {
     private readonly SqliteConnection _connection;
+    private readonly DbContextOptions<OrbitDbContext> _options;
 
     internal SqliteOrbitDbContextFactory(params IInterceptor[] interceptors)
     {
         _connection = new SqliteConnection("Data Source=:memory:");
         _connection.Open();
 
-        var options = new DbContextOptionsBuilder<OrbitDbContext>()
+        _options = new DbContextOptionsBuilder<OrbitDbContext>()
             .UseSqlite(_connection)
             .AddInterceptors(interceptors)
             .Options;
 
-        Context = new SqliteCompatOrbitDbContext(options);
+        Context = CreateContext();
         Context.Database.EnsureCreated();
     }
 
     internal OrbitDbContext Context { get; }
+
+    internal OrbitDbContext CreateContext() => new SqliteCompatOrbitDbContext(_options);
 
     public void Dispose()
     {

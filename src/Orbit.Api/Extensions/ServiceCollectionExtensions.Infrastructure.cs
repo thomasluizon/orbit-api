@@ -63,11 +63,29 @@ public static partial class ServiceCollectionExtensions
 
         builder.Services.Configure<WaitlistSettings>(
             builder.Configuration.GetSection(WaitlistSettings.SectionName));
+        AddBotProtection(builder, httpTimeout);
         builder.Services.Configure<MarketingSettings>(
             builder.Configuration.GetSection(MarketingSettings.SectionName));
         builder.Services.AddSingleton<IWaitlistConfirmationTokenService, WaitlistConfirmationTokenService>();
         builder.Services.AddSingleton<IMarketingUnsubscribeTokenService, MarketingUnsubscribeTokenService>();
         builder.Services.AddScoped<IMarketingContactsService, ResendContactsService>();
+    }
+
+    internal static void AddBotProtection(WebApplicationBuilder builder, TimeSpan httpTimeout)
+    {
+        var settings = builder.Configuration.GetSection(BotProtectionSettings.SectionName).Get<BotProtectionSettings>()
+            ?? new BotProtectionSettings();
+        if (settings.Enabled && string.IsNullOrWhiteSpace(settings.SecretKey))
+            throw new InvalidOperationException("BotProtection:Enabled is true but BotProtection:SecretKey is not configured.");
+
+        builder.Services.Configure<BotProtectionSettings>(
+            builder.Configuration.GetSection(BotProtectionSettings.SectionName));
+        builder.Services.AddHttpClient(TurnstileVerificationService.HttpClientName, client =>
+        {
+            client.BaseAddress = new Uri("https://challenges.cloudflare.com/");
+            client.Timeout = httpTimeout;
+        });
+        builder.Services.AddScoped<ITurnstileVerificationService, TurnstileVerificationService>();
     }
 
     private static void AddStripeBilling(WebApplicationBuilder builder, TimeSpan httpTimeout)

@@ -244,7 +244,7 @@ public class GoalTools(IMediator mediator, McpExecutorBridge executorBridge)
         return metricsSummary;
     }
 
-    [McpServerTool(Name = "get_goal_review"), Description("Get an AI-generated review of all active goals. Requires Pro subscription.")]
+    [McpServerTool(Name = "get_goal_review"), Description("Get an AI-generated review of all active goals.")]
     public async Task<string> GetGoalReview(
         ClaimsPrincipal user,
         [Description("Language code (en, pt-BR)")] string language = "en",

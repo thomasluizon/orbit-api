@@ -38,6 +38,7 @@ internal static class McpToolHelpers
     {
         title = dto.Title,
         description = dto.Description,
+        emoji = dto.Emoji,
         frequency_unit = dto.FrequencyUnit,
         frequency_quantity = dto.FrequencyQuantity,
         is_bad_habit = dto.IsBadHabit,
@@ -52,6 +53,7 @@ internal static class McpToolHelpers
     {
         var prefix = new string(' ', indent * 2) + "- ";
         var line = $"{prefix}[{(data.IsCompleted ? "x" : " ")}] {data.Title} (id: {data.Id})";
+        line += $" | Emoji: {data.Emoji ?? "None"}";
         if (data.FreqUnit is not null) line += $" | {data.FreqQty}x/{data.FreqUnit}";
         else if (!data.IsGeneral) line += " | one-time";
         if (data.IsGeneral) line += " | general";
@@ -70,7 +72,7 @@ internal static class McpToolHelpers
         {
             lines.Add(FormatHabitLine(new HabitLineData(c.Id, c.Title, c.FrequencyUnit, c.FrequencyQuantity,
                 c.DueTime, c.IsCompleted, false, c.IsBadHabit, c.IsGeneral, c.IsFlexible,
-                c.ChecklistItems, c.Tags), indent));
+                c.ChecklistItems, c.Tags, c.Emoji), indent));
             if (c.Children.Count > 0)
                 AppendChildren(lines, c.Children, indent + 1);
         }
@@ -86,7 +88,8 @@ internal static class McpToolHelpers
         string? DueTime = null,
         bool IsGeneral = false,
         bool IsFlexible = false,
-        List<BulkHabitItemDto>? SubHabits = null);
+        List<BulkHabitItemDto>? SubHabits = null,
+        string? Emoji = null);
 
     public sealed record HabitPositionDto(string HabitId, int Position);
 
@@ -96,5 +99,5 @@ internal static class McpToolHelpers
         Guid Id, string Title, FrequencyUnit? FreqUnit, int? FreqQty,
         TimeOnly? DueTime, bool IsCompleted, bool IsOverdue, bool IsBadHabit,
         bool IsGeneral, bool IsFlexible,
-        IReadOnlyList<ChecklistItem> Checklist, IReadOnlyList<HabitTagItem> Tags);
+        IReadOnlyList<ChecklistItem> Checklist, IReadOnlyList<HabitTagItem> Tags, string? Emoji);
 }

@@ -44,6 +44,7 @@ public class OrbitDbContext : DbContext
     public DbSet<StreakFreeze> StreakFreezes => Set<StreakFreeze>();
     public DbSet<XpAwardLog> XpAwardLogs => Set<XpAwardLog>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
+    public DbSet<UserSessionRefreshToken> UserSessionRefreshTokens => Set<UserSessionRefreshToken>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
     public DbSet<PendingAgentOperationState> PendingAgentOperations => Set<PendingAgentOperationState>();
     public DbSet<PendingClarification> PendingClarifications => Set<PendingClarification>();
@@ -110,6 +111,7 @@ public class OrbitDbContext : DbContext
         ConfigureStreakFreezeEntity(modelBuilder);
         ConfigureXpAwardLogEntity(modelBuilder);
         ConfigureUserSessionEntity(modelBuilder);
+        ConfigureUserSessionRefreshTokenEntity(modelBuilder);
         ConfigureApiKeyEntity(modelBuilder);
         ConfigurePendingAgentOperationEntity(modelBuilder);
         ConfigureAgentStepUpChallengeEntity(modelBuilder);
@@ -323,6 +325,7 @@ public class OrbitDbContext : DbContext
         modelBuilder.Entity<StreakFreeze>(entity =>
         {
             entity.HasIndex(sf => new { sf.UserId, sf.UsedOnDate }).IsUnique();
+            entity.Property(sf => sf.Origin).HasConversion<string>().HasMaxLength(32);
             entity.HasOne<User>().WithMany().HasForeignKey(sf => sf.UserId).OnDelete(DeleteBehavior.Cascade);
         });
     }
@@ -345,6 +348,17 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(s => s.UserId);
             entity.HasOne<User>().WithMany().HasForeignKey(s => s.UserId).OnDelete(DeleteBehavior.Cascade);
             entity.Property(s => s.TokenHash).HasMaxLength(128);
+        });
+    }
+
+    private static void ConfigureUserSessionRefreshTokenEntity(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<UserSessionRefreshToken>(entity =>
+        {
+            entity.HasIndex(token => token.TokenHash).IsUnique();
+            entity.HasIndex(token => token.UserSessionId);
+            entity.HasOne<UserSession>().WithMany().HasForeignKey(token => token.UserSessionId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(token => token.TokenHash).HasMaxLength(128);
         });
     }
 
@@ -380,6 +394,7 @@ public class OrbitDbContext : DbContext
             entity.Property(item => item.Summary).HasMaxLength(500);
             entity.Property(item => item.OperationFingerprint).HasMaxLength(256);
             entity.Property(item => item.ConfirmationTokenHash).HasMaxLength(64);
+            entity.Property(item => item.ConsumedAtUtc).IsConcurrencyToken();
             entity.Property(item => item.Surface).HasConversion<string>().HasMaxLength(32);
             entity.Property(item => item.RiskClass).HasConversion<string>().HasMaxLength(32);
             entity.Property(item => item.ConfirmationRequirement).HasConversion<string>().HasMaxLength(32);

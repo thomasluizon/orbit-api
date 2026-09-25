@@ -234,7 +234,7 @@ public partial class LogHabitCommandHandler(
              * The completion already exists. The catch sits OUTSIDE the transaction because a failed
              * statement aborts the whole block, and the reply below has to read rows.
              */
-            unitOfWork.ResetTracking();
+            unitOfWork.DiscardChanges();
             return await BuildAlreadyLoggedResultAsync(habit, targetDate, today, cancellationToken);
         }
 

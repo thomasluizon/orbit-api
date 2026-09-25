@@ -8,6 +8,10 @@ namespace Orbit.Infrastructure.Services;
 /// </summary>
 public sealed class NoOpProductAnalytics : IProductAnalytics
 {
+    public void CaptureAggregateEvent(string eventName, IReadOnlyDictionary<string, object> properties)
+    {
+    }
+
     public void CaptureUserEvent(
         Guid userId,
         string eventName,
