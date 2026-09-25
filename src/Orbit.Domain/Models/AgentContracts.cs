@@ -111,7 +111,8 @@ public record AgentPolicyEvaluationContext(
     string? OperationArgumentsJson = null,
     string? ConfirmationToken = null,
     bool StepUpSatisfied = false,
-    bool IsReadOnlyCredential = false);
+    bool IsReadOnlyCredential = false,
+    AgentConfirmationRequirement? ConfirmationRequirementOverride = null);
 
 public record AgentPolicyDecision(
     AgentPolicyDecisionStatus Status,

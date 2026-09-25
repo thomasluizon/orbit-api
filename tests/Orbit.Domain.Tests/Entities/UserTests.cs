@@ -183,6 +183,32 @@ public class UserTests
     }
 
     [Fact]
+    public void SetTimeZone_SurroundingWhitespace_StoresTheTrimmedId()
+    {
+        var user = CreateValidUser();
+
+        var result = user.SetTimeZone("  America/Sao_Paulo  ");
+
+        result.IsSuccess.Should().BeTrue();
+        user.TimeZone.Should().Be("America/Sao_Paulo");
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void SetTimeZone_BlankId_ReturnsFailureAndKeepsThePreviousZone(string timeZoneId)
+    {
+        var user = CreateValidUser();
+        user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
+
+        var result = user.SetTimeZone(timeZoneId);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("Invalid timezone");
+        user.TimeZone.Should().Be("America/Sao_Paulo");
+    }
+
+    [Fact]
     public void SetName_ValidName_UpdatesName()
     {
         var user = CreateValidUser();
