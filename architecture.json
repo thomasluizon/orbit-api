@@ -2745,7 +2745,7 @@
       "Challenges": 15,
       "Chat": 85,
       "ChecklistTemplates": 5,
-      "Common": 36,
+      "Common": 37,
       "Gamification": 34,
       "Goals": 35,
       "Habits": 78,
@@ -2952,13 +2952,13 @@
     "featureFolders": {
       "Accountability": 9,
       "ApiKeys": 16,
-      "Auth": 31,
+      "Auth": 32,
       "Behaviors": 17,
       "Calendar": 19,
       "Challenges": 15,
       "Chat": 65,
       "ChecklistTemplates": 9,
-      "Common": 202,
+      "Common": 204,
       "Gamification": 44,
       "Goals": 55,
       "Habits": 95,
@@ -2972,7 +2972,7 @@
       "Tags": 14,
       "Uploads": 4,
       "UserFacts": 8,
-      "Waitlist": 4
+      "Waitlist": 5
     },
     "untested": [],
     "testClasses": [
@@ -7634,6 +7634,16 @@
         "references": []
       },
       {
+        "testClass": "RequireBotProtectionFilterTests",
+        "file": "tests/Orbit.Infrastructure.Tests/RateLimiting/RequireBotProtectionFilterTests.cs",
+        "references": [
+          "JoinWaitlistCommand",
+          "JoinWaitlistCommandHandler",
+          "SendCodeCommand",
+          "SendCodeCommandHandler"
+        ]
+      },
+      {
         "testClass": "AccountDeletionServiceDbTests",
         "file": "tests/Orbit.Infrastructure.Tests/Services/AccountDeletionServiceDbTests.cs",
         "references": [
@@ -8202,6 +8212,11 @@
           "User",
           "UserFact"
         ]
+      },
+      {
+        "testClass": "TurnstileVerificationServiceTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Services/TurnstileVerificationServiceTests.cs",
+        "references": []
       },
       {
         "testClass": "UserDateServiceTests",
