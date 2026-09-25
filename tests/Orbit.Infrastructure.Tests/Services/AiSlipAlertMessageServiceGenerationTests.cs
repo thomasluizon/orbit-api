@@ -19,24 +19,24 @@ public class AiSlipAlertMessageServiceGenerationTests
     [Fact]
     public async Task GenerateMessageAsync_TwoLines_ReturnsTitleAndBody()
     {
-        var service = BuildService("Stay strong today!\nYou tend to reach for it now -- ride it out.");
+        var service = BuildService("Your usual time for Smoking\nIt tends to show up around now. You can let it pass.");
 
         var result = await service.GenerateMessageAsync("Smoking", DayOfWeek.Friday, 14, "en");
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Title.Should().Be("Stay strong today!");
-        result.Value.Body.Should().Be("You tend to reach for it now -- ride it out.");
+        result.Value.Title.Should().Be("Your usual time for Smoking");
+        result.Value.Body.Should().Be("It tends to show up around now. You can let it pass.");
     }
 
     [Fact]
     public async Task GenerateMessageAsync_NullPeakHour_StillReturnsModelText()
     {
-        var service = BuildService("You've got this!\nOne clean day at a time.");
+        var service = BuildService("A clean Monday\nOne clean day at a time.");
 
         var result = await service.GenerateMessageAsync("Smoking", DayOfWeek.Monday, null, "en");
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Title.Should().Be("You've got this!");
+        result.Value.Title.Should().Be("A clean Monday");
         result.Value.Body.Should().Be("One clean day at a time.");
     }
 
@@ -48,7 +48,7 @@ public class AiSlipAlertMessageServiceGenerationTests
         var result = await service.GenerateMessageAsync("Smoking", DayOfWeek.Friday, 14, "en");
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Title.Should().Be("Heads up: Smoking");
+        result.Value.Title.Should().Be("Ahead of the usual time for Smoking");
         result.Value.Body.Should().Be("Keep your streak clean today.");
     }
 
@@ -60,7 +60,7 @@ public class AiSlipAlertMessageServiceGenerationTests
         var result = await service.GenerateMessageAsync("Smoking", DayOfWeek.Friday, 14, "pt-BR");
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Title.Should().Be("Fique atento: Smoking");
+        result.Value.Title.Should().Be("Antes do horário de costume: Smoking");
         result.Value.Body.Should().Be("Mantenha a sequencia limpa hoje.");
     }
 
@@ -72,8 +72,8 @@ public class AiSlipAlertMessageServiceGenerationTests
         var result = await service.GenerateMessageAsync("Smoking", DayOfWeek.Friday, 14, "en");
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Title.Should().Be("Heads up: Smoking");
-        result.Value.Body.Should().Be("You tend to slip around this time. Stay strong -- you've got this!");
+        result.Value.Title.Should().Be("Ahead of the usual time for Smoking");
+        result.Value.Body.Should().Be("This tends to come up later today. You can let it pass.");
     }
 
     [Fact]
@@ -84,8 +84,32 @@ public class AiSlipAlertMessageServiceGenerationTests
         var result = await service.GenerateMessageAsync("Smoking", DayOfWeek.Friday, null, "pt-BR");
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Title.Should().Be("Fique atento: Smoking");
-        result.Value.Body.Should().Be("Você costuma deslizar por volta desse horário. Força -- você consegue!");
+        result.Value.Title.Should().Be("Um lembrete tranquilo: Smoking");
+        result.Value.Body.Should().Be("Hoje é um dos dias em que isso costuma aparecer. Você pode deixar passar.");
+    }
+
+    [Fact]
+    public async Task GenerateMessageAsync_BlankResponseEnglishWithoutPeak_ReturnsDayFallback()
+    {
+        var service = BuildService("   ");
+
+        var result = await service.GenerateMessageAsync("Smoking", DayOfWeek.Friday, null, "en");
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Title.Should().Be("A quiet note about Smoking");
+        result.Value.Body.Should().Be("Today is one of the days this tends to come up. You can let it pass.");
+    }
+
+    [Fact]
+    public async Task GenerateMessageAsync_BlankResponsePortugueseWithPeak_ReturnsEarlyFallback()
+    {
+        var service = BuildService("   ");
+
+        var result = await service.GenerateMessageAsync("Smoking", DayOfWeek.Friday, 14, "pt-BR");
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Title.Should().Be("Antes do horário de costume: Smoking");
+        result.Value.Body.Should().Be("Isso costuma aparecer mais tarde hoje. Você pode deixar passar.");
     }
 
     [Fact]
@@ -96,8 +120,8 @@ public class AiSlipAlertMessageServiceGenerationTests
         var result = await service.GenerateMessageAsync("Smoking", DayOfWeek.Friday, 14, "en");
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Title.Should().Be("Heads up: Smoking");
-        result.Value.Body.Should().Be("You tend to slip around this time. Stay strong -- you've got this!");
+        result.Value.Title.Should().Be("Ahead of the usual time for Smoking");
+        result.Value.Body.Should().Be("This tends to come up later today. You can let it pass.");
     }
 
     [Fact]
@@ -108,8 +132,8 @@ public class AiSlipAlertMessageServiceGenerationTests
         var result = await service.GenerateMessageAsync("Smoking", DayOfWeek.Friday, null, "pt-BR");
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Title.Should().Be("Fique atento: Smoking");
-        result.Value.Body.Should().Be("Você costuma deslizar por volta desse horário. Força -- você consegue!");
+        result.Value.Title.Should().Be("Um lembrete tranquilo: Smoking");
+        result.Value.Body.Should().Be("Hoje é um dos dias em que isso costuma aparecer. Você pode deixar passar.");
     }
 
     private static AiSlipAlertMessageService BuildService(string content, HttpStatusCode status = HttpStatusCode.OK)

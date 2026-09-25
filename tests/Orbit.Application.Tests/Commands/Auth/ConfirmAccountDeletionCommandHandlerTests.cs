@@ -192,7 +192,7 @@ public class ConfirmAccountDeletionCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("Invalid code. Remaining attempts: 2");
+        result.Error.Should().Be(ErrorMessages.InvalidDeletionCode.Format(2).Message);
         user.IsDeactivated.Should().BeFalse();
         user.ScheduledDeletionAt.Should().BeNull();
         _cache.TryGetValue($"delete-attempts:{TestEmail}", out int attempts).Should().BeTrue();
@@ -209,14 +209,14 @@ public class ConfirmAccountDeletionCommandHandlerTests
         {
             SetupDeletionCode(TestEmail, "123456");
             var wrong = await _handler.Handle(new ConfirmAccountDeletionCommand(UserId, "999999"), CancellationToken.None);
-            wrong.Error.Should().Be($"Invalid code. Remaining attempts: {AppConstants.MaxVerificationAttempts - attempt - 1}");
+            wrong.Error.Should().Be(ErrorMessages.InvalidDeletionCode.Format(AppConstants.MaxVerificationAttempts - attempt - 1).Message);
         }
 
         SetupDeletionCode(TestEmail, "123456");
         var result = await _handler.Handle(new ConfirmAccountDeletionCommand(UserId, "123456"), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("Too many attempts. Try again in 15 minutes");
+        result.Error.Should().Be(ErrorMessages.TooManyCodeAttempts.Message);
         user.IsDeactivated.Should().BeFalse();
     }
 
@@ -228,7 +228,7 @@ public class ConfirmAccountDeletionCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("not found");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
     }
 
     [Fact]
@@ -260,7 +260,7 @@ public class ConfirmAccountDeletionCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("Too many attempts. Try again in 15 minutes");
+        result.Error.Should().Be(ErrorMessages.TooManyCodeAttempts.Message);
         user.IsDeactivated.Should().BeFalse();
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }

@@ -14,6 +14,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Commands.Auth;
 
@@ -92,7 +93,7 @@ public class GoogleAuthCommandHandlerTests
         var result = await behavior.Handle(command, ct => _handler.Handle(command, ct), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Invalid");
+        result.Error.Should().Be(ErrorMessages.InvalidGoogleToken.Message);
         _httpHandler.RequestCount.Should().Be(1);
         _unitOfWork.DidNotReceive().ResetTracking();
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());

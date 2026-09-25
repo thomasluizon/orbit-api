@@ -9,6 +9,7 @@ using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Application.Tests.Common;
 using Orbit.Domain.Common;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Commands.Habits;
 
@@ -72,7 +73,7 @@ public class DeleteHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("Habit not found.");
+        result.Error.Should().Be(ErrorMessages.HabitNotFound.Message);
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -89,7 +90,7 @@ public class DeleteHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("You don't have permission to delete this habit.");
+        result.Error.Should().Be(ErrorMessages.NoPermission.Message);
         habit.IsDeleted.Should().BeFalse();
     }
 

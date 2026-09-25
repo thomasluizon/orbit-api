@@ -641,7 +641,7 @@ public class AiSummaryServiceTests
 
         var section = InvokeBuildHabitSection([badHabit]);
 
-        section.Should().Contain("Skip Gym (bad habit -- slipped)");
+        section.Should().Contain("Skip Gym (bad habit, slipped)");
         section.Should().NotContain("(done)");
     }
 
@@ -653,7 +653,7 @@ public class AiSummaryServiceTests
 
         var section = InvokeBuildHabitSection([badHabit], Today, lastSlips);
 
-        section.Should().Contain("Cheat diet (bad habit -- clean, 3 days since last slip)");
+        section.Should().Contain("Cheat diet (bad habit, clean, 3 days since last slip)");
         section.Should().NotContain("(done)");
         section.Should().NotContain("slipped");
     }
@@ -666,7 +666,7 @@ public class AiSummaryServiceTests
 
         var section = InvokeBuildHabitSection([badHabit], Today, lastSlips);
 
-        section.Should().Contain("Cheat diet (bad habit -- clean, 7 days since last slip)");
+        section.Should().Contain("Cheat diet (bad habit, clean, 7 days since last slip)");
     }
 
     [Fact]
@@ -676,7 +676,7 @@ public class AiSummaryServiceTests
 
         var section = InvokeBuildHabitSection([badHabit], Today);
 
-        section.Should().Contain("Smoke (bad habit -- clean, no slips on record)");
+        section.Should().Contain("Smoke (bad habit, clean, no slips on record)");
     }
 
     [Fact]
@@ -700,9 +700,9 @@ public class AiSummaryServiceTests
 
         var result = InvokeBuildSummaryPrompt([badHabit], Today, "en");
 
-        result.Should().Contain("bad habit -- slipped");
+        result.Should().Contain("bad habit, slipped");
         result.Should().Contain("never congratulate it");
-        result.Should().Contain("bad habit -- clean");
+        result.Should().Contain("bad habit, clean");
         result.Should().Contain("the real win worth naming");
     }
 

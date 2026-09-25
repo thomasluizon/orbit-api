@@ -115,7 +115,7 @@ public class CreateApiKeyCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("at most 5");
+        result.Error.Should().Be(ErrorMessages.MaxApiKeys.Format(5).Message);
         await _apiKeyRepo.DidNotReceive().AddAsync(Arg.Any<ApiKey>(), Arg.Any<CancellationToken>());
     }
 

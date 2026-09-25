@@ -10,9 +10,6 @@ namespace Orbit.Infrastructure.Email;
 /// </summary>
 public static partial class EmailTemplateRenderer
 {
-    private const string CanvasColor = "#020618";
-    private const string GradientTopColor = "#22094F";
-
     private static readonly ConcurrentDictionary<string, string> TemplateCache = new();
 
     [GeneratedRegex(@"\{\{(\w+)\}\}")]
@@ -38,10 +35,6 @@ public static partial class EmailTemplateRenderer
         ["preheader"] = layout.Preheader,
         ["footer"] = layout.Footer,
         ["logoUrl"] = layout.LogoUrl,
-        ["headerBgColor"] = layout.GradientHeader ? GradientTopColor : CanvasColor,
-        ["headerBackground"] = layout.GradientHeader
-            ? $"background: linear-gradient(180deg, {GradientTopColor} 0%, {CanvasColor} 100%);"
-            : $"background-color: {CanvasColor};",
         ["content"] = content,
     };
 

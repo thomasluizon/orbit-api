@@ -5,6 +5,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.AI;
+using Orbit.Infrastructure.Services.Prompts;
 
 namespace Orbit.Infrastructure.Services;
 
@@ -13,6 +14,9 @@ public sealed partial class AiSummaryService(
     ILogger<AiSummaryService> logger) : ISummaryService
 {
     private const int MaxSummaryChars = 300;
+
+    internal const string SystemPrompt =
+        "You are Astra, a perceptive, warm close friend who knows the person well. You notice and celebrate the good things they have already done, you treat a slip on a habit they are trying to quit as a gentle, judgment-free moment rather than something to praise, and you stay easy and unpushy about what is left. You never sound corporate, clinical, or like a coach reading a checklist. You reply with a single JSON object as instructed. The wording inside every field is plain language, with no markdown, no bullet, no heading and no emoji, no greeting and no sign-off, only in the language you are told to use.";
 
     public async Task<Result<DailySummaryContent>> GenerateSummaryAsync(
         IEnumerable<Habit> allHabits,
@@ -35,7 +39,7 @@ public sealed partial class AiSummaryService(
         try
         {
             var content = await aiClient.CompleteJsonAsync<DailySummaryJson>(
-                "You are Astra, a perceptive, warm close friend who knows the person well. You notice and celebrate the good things they have already done, you treat a slip on a habit they are trying to quit as a gentle, judgment-free moment rather than something to praise, and you stay easy and unpushy about what is left. You never sound corporate, clinical, or like a coach reading a checklist. You reply with a single JSON object as instructed; the wording inside every field is plain language -- no markdown, bullets, headings, or emoji -- with no greeting and no sign-off, only in the language you are told to use.",
+                SystemPrompt,
                 prompt,
                 temperature: 0.7,
                 cancellationToken: cancellationToken,
@@ -107,7 +111,7 @@ public sealed partial class AiSummaryService(
         return scheduledTopLevel.Concat(children).ToList();
     }
 
-    private static string BuildSummaryPrompt(
+    internal static string BuildSummaryPrompt(
         List<Habit> scheduledHabits,
         DailySummaryContext context)
     {
@@ -139,25 +143,27 @@ public sealed partial class AiSummaryService(
             Write a short message to this person about their day.
 
             Rules:
-            - LEAD with a specific, genuine acknowledgment of what they have ALREADY completed today -- name the activity naturally, don't just say "good job"
-            - THEN, gently point at ONE still-pending habit as an easy next move -- never list everything, never frame it as a checklist, never guilt-trip
+            - LEAD with a specific, genuine acknowledgment of what they have ALREADY completed today. Name the activity naturally, and never settle for "good job"
+            - THEN, gently point at ONE still-pending habit as an easy next move. Never list everything, never frame it as a checklist, never guilt-trip
             - Lines marked "overdue" are the most worth a gentle nudge, but raise at most one and never with guilt
-            - A line tagged "bad habit -- slipped" is a slip on something they are trying to QUIT: never congratulate it, never count it as a win; acknowledge it briefly and kindly, or simply focus elsewhere
-            - A line tagged "bad habit -- clean" means they have stayed away from something they are trying to quit: THAT is the real win worth naming warmly; for these, fewer slips and longer clean streaks are the progress
-            - If EVERYTHING is already done (nothing is pending), simply celebrate the full day warmly and leave it there -- do NOT invent, imply, or suggest any remaining task
-            - If nothing is done yet, stay warm and forward-looking; do NOT imply they are behind or failing
+            - A line tagged "bad habit, slipped" is a slip on something they are trying to QUIT: never congratulate it, never count it as a win; acknowledge it briefly and kindly, or simply focus elsewhere
+            - A line tagged "bad habit, clean" means they have stayed away from something they are trying to quit: THAT is the real win worth naming warmly; for these, fewer slips and longer clean streaks are the progress
+            - If EVERYTHING is already done (nothing is pending), simply celebrate the full day warmly and leave it there. Do NOT invent, imply, or suggest any remaining task
+            - If nothing is done yet, stay warm and forward-looking. Do NOT imply they are behind or failing
             - If a current streak or streak freezes are noted above, you MAY reference that momentum naturally, but never turn it into pressure
             - Describe the ACTIVITY naturally, don't just parrot the exact habit title
             - BAD: "You have Yoga, Morning Routine, and Guitar Playing left."
-            - GOOD: "Nice work getting your run in -- some guitar later could be a great way to unwind."
-            - Keep it to TWO short sentences -- three only when the day truly needs them -- under ~300 characters total, warm and close, like a friend who actually knows you -- never corporate or coach-like
+            - GOOD: "Nice work getting your run in. Some guitar later could be an easy one to land."
+            - Keep it to TWO short sentences, three only when the day truly needs them, under ~300 characters total, warm and close, like a friend who actually knows you, never corporate or coach-like
             - This message is shown for the WHOLE current part of the day, so it must read correctly whether they see it at the start or the end of that window
             - Treat the time of day as a broad window, not an exact moment; never imply a precise instant
             - Do NOT use phrases like "right now", "just woke up", "now that the afternoon is here", "as the day begins", "earlier today", or "upcoming later today"
             - Do NOT use markdown, bullet points, or emojis in the wording
             - Do NOT mention the date explicitly
             - Write ONLY in {languageName}, using natural, fluent, grammatically correct phrasing a native speaker would actually use
-            - No greeting like "good morning", no sign-off -- just the message
+            - No greeting like "good morning", no sign-off, just the message
+
+            {NotificationVoice.Rules}
 
             Respond with ONLY a JSON object with one string field and nothing else: "summary" (the message above).
             """;
@@ -240,13 +246,13 @@ public sealed partial class AiSummaryService(
         IReadOnlyDictionary<Guid, DateOnly> lastBadHabitSlipDates)
     {
         if (IsDoneInRange(habit, dateFrom, dateTo))
-            return "bad habit -- slipped";
+            return "bad habit, slipped";
 
         if (!lastBadHabitSlipDates.TryGetValue(habit.Id, out var lastSlip))
-            return "bad habit -- clean, no slips on record";
+            return "bad habit, clean, no slips on record";
 
         var daysClean = userToday.DayNumber - lastSlip.DayNumber;
-        return $"bad habit -- clean, {daysClean} days since last slip";
+        return $"bad habit, clean, {daysClean} days since last slip";
     }
 
     private static void AppendGoalsLine(List<string> habitLines, Habit habit)

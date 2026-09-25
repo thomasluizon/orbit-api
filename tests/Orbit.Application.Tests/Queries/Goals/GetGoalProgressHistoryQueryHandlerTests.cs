@@ -5,6 +5,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Queries.Goals;
 
@@ -101,7 +102,7 @@ public class GetGoalProgressHistoryQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Goal not found");
+        result.Error.Should().Be(ErrorMessages.GoalNotFound.Message);
         await _progressLogRepo.DidNotReceive().FindAsync(
             Arg.Any<Expression<Func<GoalProgressLog, bool>>>(), Arg.Any<CancellationToken>());
     }

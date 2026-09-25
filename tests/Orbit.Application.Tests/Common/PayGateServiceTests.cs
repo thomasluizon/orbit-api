@@ -222,7 +222,7 @@ public class PayGateServiceTests
         var result = await _sut.CanCreateHabits(UserId);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("User not found");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
     }
 
     [Fact]
@@ -481,7 +481,7 @@ public class PayGateServiceTests
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be("PAY_GATE");
-        result.Error.Should().Be("Retrospectives are a Pro feature. Upgrade to unlock!");
+        result.Error.Should().Be(ErrorMessages.ProFeature.Message);
     }
 
     [Fact]
@@ -496,7 +496,7 @@ public class PayGateServiceTests
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be("PAY_GATE");
-        result.Error.Should().Be("Retrospectives are a Pro feature. Upgrade to unlock!");
+        result.Error.Should().Be(ErrorMessages.ProFeature.Message);
     }
 
     [Fact]
@@ -507,7 +507,7 @@ public class PayGateServiceTests
         var result = await _sut.CanUseRetrospective(UserId);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("User not found");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
     }
 
     [Fact]
@@ -556,7 +556,7 @@ public class PayGateServiceTests
         var result = await _sut.CanUseGoalReview(UserId);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("User not found");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
     }
 
     [Fact]
@@ -591,7 +591,7 @@ public class PayGateServiceTests
         var result = await _sut.CanCreateApiKeys(UserId);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("User not found");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
     }
 
     [Fact]
@@ -667,7 +667,7 @@ public class PayGateServiceTests
         var result = await _sut.CanUseDailySummary(UserId);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("User not found");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
     }
 
     [Fact]
@@ -678,7 +678,7 @@ public class PayGateServiceTests
         var result = await _sut.CanSendAiMessage(UserId);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("User not found");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
     }
 
     [Fact]
@@ -689,7 +689,7 @@ public class PayGateServiceTests
         var result = await _sut.CanCreateSubHabits(UserId);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("User not found");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
     }
 
     private static async Task WithEnvironment(string aspNetEnv, string? smokeEmail, Func<Task> body)

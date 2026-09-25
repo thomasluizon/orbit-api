@@ -38,7 +38,7 @@ public class ResolveClarificationRequestValidatorTests
         var payload = new string('x', AppConstants.MaxClarificationValueLength + 1);
         var result = _validator.Validate(new ResolveClarificationRequest(payload));
         result.IsValid.Should().BeFalse();
-        result.Errors.Should().Contain(e => e.ErrorMessage.Contains("cannot exceed"));
+        result.Errors.Should().Contain(e => e.ErrorMessage == ErrorMessages.ClarificationValueTooLong.Format(AppConstants.MaxClarificationValueLength).Message);
     }
 
     [Fact]
