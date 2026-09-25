@@ -36,14 +36,33 @@ public class CalendarEventItemSerializationTests
         var stored = StoredCalendarEventJson.Serialize(LisbonSeries());
 
         stored.Should().Contain("Europe/Lisbon");
+        var legacy = JsonNode.Parse(stored)!.AsObject();
+        legacy.Remove(nameof(CalendarEventItem.RecurrenceTimeZone));
 
-        var readBack = StoredCalendarEventJson.Deserialize(stored);
+        var readBack = StoredCalendarEventJson.Deserialize(legacy.ToJsonString());
 
         readBack.Should().NotBeNull();
         readBack!.SourceTimeZone.Should().Be("Europe/Lisbon");
+        readBack.RecurrenceTimeZone.Should().Be("Europe/Lisbon");
         readBack.RecurrenceStartUtc.Should().Be(new DateTime(2027, 1, 7, 3, 30, 0, DateTimeKind.Utc));
         readBack.Id.Should().Be("master-lisbon");
         readBack.EndUtc.Should().Be(new DateTime(2027, 1, 7, 4, 0, 0, DateTimeKind.Utc));
+    }
+
+    [Theory]
+    [InlineData(true, null)]
+    [InlineData(false, "03:30")]
+    public void StoredRow_OnlyTimedRecurrencesExposeTheSourceTimeZone(bool isRecurring, string? startTime)
+    {
+        var item = LisbonSeries() with { IsRecurring = isRecurring, StartTime = startTime };
+        var legacy = JsonNode.Parse(StoredCalendarEventJson.Serialize(item))!.AsObject();
+        legacy.Remove(nameof(CalendarEventItem.RecurrenceTimeZone));
+
+        var readBack = StoredCalendarEventJson.Deserialize(legacy.ToJsonString());
+
+        readBack.Should().NotBeNull();
+        readBack!.SourceTimeZone.Should().Be("Europe/Lisbon");
+        readBack.RecurrenceTimeZone.Should().BeNull();
     }
 
     /// <summary>
