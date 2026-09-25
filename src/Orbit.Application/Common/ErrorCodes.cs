@@ -84,6 +84,10 @@ public static class ErrorCodes
     public const string InvalidClosedMonthParameters = "INVALID_CLOSED_MONTH_PARAMETERS";
     public const string RecapMonthNotClosed = "RECAP_MONTH_NOT_CLOSED";
     public const string RecapMonthBeforeAccount = "RECAP_MONTH_BEFORE_ACCOUNT";
+    public const string InvalidClosedWeekParameters = "INVALID_CLOSED_WEEK_PARAMETERS";
+    public const string InvalidClosedYearParameters = "INVALID_CLOSED_YEAR_PARAMETERS";
+    public const string RecapWeekNotClosed = "RECAP_WEEK_NOT_CLOSED";
+    public const string RecapYearNotClosed = "RECAP_YEAR_NOT_CLOSED";
     public const string AiSummaryDisabled = "AI_SUMMARY_DISABLED";
     public const string NoActiveGoals = "NO_ACTIVE_GOALS";
     public const string NoGoalsData = "NO_GOALS_DATA";

@@ -249,6 +249,43 @@ public class GetRecapQueryHandlerTests
         result.Value.GoalCompletions.Should().Be(0);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Handle_ClosedWeekOrYear_ReturnsHistoricalWindowAndAddressableLink(bool week)
+    {
+        var dateFrom = week ? new DateOnly(2026, 8, 17) : new DateOnly(2024, 1, 1);
+        var dateTo = week ? dateFrom.AddDays(6) : new DateOnly(2024, 12, 31);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Walk", FrequencyUnit.Day, 1, DueDate: dateFrom)).Value;
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
+            habit, new DateTime(2023, 1, 1, 12, 0, 0, DateTimeKind.Utc));
+        habit.Log(dateFrom);
+        habit.AdvanceDueDate(dateTo.AddDays(30));
+        StubHabits(habit);
+        StubGoalCount(CreateCompletedGoal(dateFrom.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc)));
+        var query = new GetRecapQuery(UserId, dateFrom, dateTo,
+            week ? "week" : "year", ClosedYear: week ? null : 2024,
+            ClosedWeekStart: week ? dateFrom : null);
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.DateFrom.Should().Be(dateFrom);
+        result.Value.DateTo.Should().Be(dateTo);
+        result.Value.Metrics.TotalCompletions.Should().Be(1);
+        result.Value.GoalCompletions.Should().Be(1);
+        result.Value.ShareDeepLink.Should().Be(week
+            ? "https://app.useorbit.org/r/ABCD2345?recap=week&weekStart=2026-08-17"
+            : "https://app.useorbit.org/r/ABCD2345?recap=year&year=2024");
+        await _habitRepo.Received(1).FindIgnoringFiltersAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>());
+        await _closedMonthRecapStore.DidNotReceive().AddAsync(
+            Arg.Any<ClosedMonthRecap>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task Handle_GoalCompletionBoundary_UsesUserTimezone()
     {

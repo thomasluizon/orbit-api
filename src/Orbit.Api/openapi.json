@@ -4590,6 +4590,14 @@
               ],
               "format": "int32"
             }
+          },
+          {
+            "name": "weekStart",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
           }
         ],
         "responses": {
