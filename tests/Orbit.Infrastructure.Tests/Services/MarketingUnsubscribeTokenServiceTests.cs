@@ -29,13 +29,23 @@ public class MarketingUnsubscribeTokenServiceTests
     public void TryValidateToken_TamperedToken_Fails()
     {
         var sut = Build();
-        var token = sut.CreateToken(Guid.NewGuid());
-        var tampered = token[..^2] + (token.EndsWith('a') ? "bb" : "aa");
 
-        var valid = sut.TryValidateToken(tampered, out var parsedUserId);
+        for (var attempt = 0; attempt < 500; attempt++)
+        {
+            var token = sut.CreateToken(Guid.NewGuid());
+            var originalSignature = DecodeSignature(token);
+            var tamperedSignature = (byte[])originalSignature.Clone();
+            tamperedSignature[0] ^= 1;
+            var encodedSignature = Convert.ToBase64String(tamperedSignature).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+            var tampered = token[..(token.IndexOf('.') + 1)] + encodedSignature;
 
-        valid.Should().BeFalse();
-        parsedUserId.Should().Be(Guid.Empty);
+            DecodeSignature(tampered).SequenceEqual(originalSignature).Should().BeFalse();
+
+            var valid = sut.TryValidateToken(tampered, out var parsedUserId);
+
+            valid.Should().BeFalse();
+            parsedUserId.Should().Be(Guid.Empty);
+        }
     }
 
     [Fact]
@@ -61,5 +71,11 @@ public class MarketingUnsubscribeTokenServiceTests
         var act = () => Build(signingKey: "").CreateToken(Guid.NewGuid());
 
         act.Should().Throw<InvalidOperationException>();
+    }
+
+    private static byte[] DecodeSignature(string token)
+    {
+        var signature = token[(token.IndexOf('.') + 1)..];
+        return Convert.FromBase64String(signature.Replace('-', '+').Replace('_', '/') + "=");
     }
 }
