@@ -127,7 +127,7 @@ public partial class ProcessUserChatCommandHandler(
         var context = contextResult.Value;
         var crisisTurn = IsCrisisTurn(detectedCrisisLocales, context.EnabledFeatureFlags);
         if (crisisTurn)
-            return await HandleCrisisTurnAsync(request, context, detectedCrisisLocales, cancellationToken);
+            return await HandleCrisisTurnAsync(request, detectedCrisisLocales);
 
         var userLanguage = GetUserLanguage(context.User);
         var aiStreamFilter = BuildAiStreamFilter(request.StreamSink);
@@ -265,27 +265,11 @@ public partial class ProcessUserChatCommandHandler(
 
     private async Task<Result<ChatResponse>> HandleCrisisTurnAsync(
         ProcessUserChatCommand request,
-        ChatContext context,
-        CrisisLocales locales,
-        CancellationToken cancellationToken)
-    {
-        var response = await RequestInitialAiResponseAsync(
-            request, context, aiStreamSink: null, skipTools: true, cancellationToken);
-        if (response.IsFailure)
-            return await CreateCrisisFallbackAsync(request, locales);
-
-        var message = await CompleteCrisisReplyAsync(
-            request, CrisisSupportGuard.FallbackMessage(locales), locales,
-            request.StreamSink is null ? "batch" : "stream");
-        return Result.Success(new ChatResponse(message, [], CorrelationId: request.CorrelationId));
-    }
-
-    private async Task<Result<ChatResponse>> CreateCrisisFallbackAsync(
-        ProcessUserChatCommand request,
         CrisisLocales locales)
     {
         var message = await CompleteCrisisReplyAsync(
-            request, CrisisSupportGuard.FallbackMessage(locales), locales, "fallback");
+            request, CrisisSupportGuard.FallbackMessage(locales), locales,
+            request.StreamSink is null ? "batch" : "stream");
         return Result.Success(new ChatResponse(message, [], CorrelationId: request.CorrelationId));
     }
 

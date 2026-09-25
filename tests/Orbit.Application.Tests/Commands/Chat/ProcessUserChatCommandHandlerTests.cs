@@ -555,9 +555,10 @@ public class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.AiMessage.Should().StartWith(CrisisSupportGuard.EnglishSupport);
         result.Value.Actions.Should().BeEmpty();
-        await _aiIntentService.Received(1).SendWithToolsAsync(
-            Arg.Is<AiToolRequest>(aiRequest => aiRequest.ToolDeclarations.Count == 0),
-            Arg.Is<Func<AiStreamEvent, Task>?>(sink => sink == null),
+        await _payGate.DidNotReceive()
+            .TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>());
+        await _aiIntentService.DidNotReceive().SendWithToolsAsync(
+            Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(),
             Arg.Any<CancellationToken>());
         await tool.DidNotReceive().ExecuteAsync(
             Arg.Any<JsonElement>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
@@ -567,7 +568,7 @@ public class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_TypographicApostropheWhenProviderFails_Returns988Fallback()
+    public async Task Handle_TypographicApostropheWithUnavailableProvider_Returns988WithoutCallingAi()
     {
         SetupUserAndPayGate();
         SetupAiFailure("AI service unavailable");
@@ -579,6 +580,8 @@ public class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.AiMessage.Should().Be(
             CrisisSupportGuard.EnglishSupport + "\n\n" + CrisisSupportGuard.EnglishResource);
+        await _aiIntentService.DidNotReceive().SendWithToolsAsync(
+            Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -593,7 +596,7 @@ public class ProcessUserChatCommandHandlerTests
 
         result.Value.AiMessage.Should().StartWith(CrisisSupportGuard.EnglishSupport);
         ChatFaqCache.TryGetAnswer("free_vs_pro", "en", out _).Should().BeFalse();
-        await _aiIntentService.Received(1).SendWithToolsAsync(
+        await _aiIntentService.DidNotReceive().SendWithToolsAsync(
             Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
@@ -666,12 +669,14 @@ public class ProcessUserChatCommandHandlerTests
         result.Value.AiMessage.Should().Be(
             "I'm sorry you're going through this. You deserve support right now.\n\n"
             + CrisisSupportGuard.EnglishResource);
+        await _payGate.DidNotReceive()
+            .TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>());
         await _aiIntentService.DidNotReceive().SendWithToolsAsync(
             Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_CrisisDisclosureWhenProviderFails_ReturnsStaticResources()
+    public async Task Handle_CrisisDisclosureWithUnavailableProvider_ReturnsStaticResourcesWithoutCallingAi()
     {
         SetupUserAndPayGate();
         SetupAiFailure("AI service unavailable");
@@ -684,10 +689,12 @@ public class ProcessUserChatCommandHandlerTests
         result.Value.AiMessage.Should().Be(
             "Sinto muito que você esteja passando por isso. Você merece apoio agora.\n\n"
             + CrisisSupportGuard.PortugueseResource);
+        await _aiIntentService.DidNotReceive().SendWithToolsAsync(
+            Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_CrisisFallbackStream_DeliversTextAndRecordsFallbackPath()
+    public async Task Handle_CrisisStaticStream_DeliversTextAndRecordsStreamPath()
     {
         SetupUserAndPayGate(payGatePass: false);
         var events = new List<ChatStreamEvent>();
@@ -708,7 +715,7 @@ public class ProcessUserChatCommandHandlerTests
         _productAnalytics.Received(1).CaptureAggregateEvent(
             "astra_crisis_resources_shown",
             Arg.Is<IReadOnlyDictionary<string, object>>(properties =>
-                (string)properties["delivery_path"] == "fallback"));
+                (string)properties["delivery_path"] == "stream"));
     }
 
     [Fact]
