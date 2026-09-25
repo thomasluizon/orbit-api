@@ -306,6 +306,47 @@ public class GetCalendarSyncSuggestionsQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_LegacyRecurringSuggestion_ExposesStoredSourceTimeZone()
+    {
+        var user = User.Create("Test", "test@example.com").Value;
+        user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
+        _userRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(user);
+
+        var startUtc = new DateTime(2026, 4, 15, 15, 0, 0, DateTimeKind.Utc);
+        var eventItem = new CalendarEventItem(
+            "event-legacy-recurring",
+            "Weekly review",
+            null,
+            "2026-04-15",
+            "12:00",
+            "13:00",
+            true,
+            "RRULE:FREQ=WEEKLY;BYDAY=WE",
+            [],
+            StartUtc: startUtc,
+            EndUtc: startUtc.AddHours(1))
+        {
+            SourceTimeZone = "America/Sao_Paulo",
+            RecurrenceStartUtc = startUtc
+        };
+        var legacyJson = JsonNode.Parse(StoredCalendarEventJson.Serialize(eventItem))!.AsObject();
+        legacyJson.Remove(nameof(CalendarEventItem.RecurrenceTimeZone));
+        var suggestion = GoogleCalendarSyncSuggestion.Create(
+            UserId, "gcal-legacy-recurring", eventItem.Title, startUtc, legacyJson.ToJsonString(), startUtc);
+
+        _suggestionRepo.FindAsync(
+            Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<GoogleCalendarSyncSuggestion> { suggestion }.AsReadOnly());
+
+        var result = await _handler.Handle(new GetCalendarSyncSuggestionsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value[0].Event.RecurrenceTimeZone.Should().Be("America/Sao_Paulo");
+    }
+
+    [Fact]
     public async Task Handle_TimedSuggestionCrossingLocalMidnight_OmitsEndTime()
     {
         var startUtc = new DateTime(2026, 4, 14, 23, 0, 0, DateTimeKind.Utc);

@@ -145,7 +145,10 @@ internal sealed partial class GoogleCalendarEventFetcher(
             ResolveStartUtc(ev.Start),
             calendarId,
             calendarName,
-            ev.End?.DateTimeDateTimeOffset?.UtcDateTime)
+            ev.End?.DateTimeDateTimeOffset?.UtcDateTime,
+            isRecurring && startTime is not null && !string.IsNullOrWhiteSpace(recurrence.TimeZone)
+                ? recurrence.TimeZone
+                : null)
         {
             SourceTimeZone = recurrence.TimeZone,
             RecurrenceStartUtc = !isRecurring

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using Google.Apis.Calendar.v3.Data;
 using Microsoft.Extensions.Logging;
@@ -15,6 +16,7 @@ public class GoogleCalendarEventFetcherTests
     private readonly GoogleCalendarEventFetcher _fetcher;
 
     private const string Token = "access-token";
+    private static readonly JsonSerializerOptions ResponseOptions = new(JsonSerializerDefaults.Web);
 
     private static readonly string[] SharedCalendarSelection = new[] { "shared" };
     private static readonly string[] ChosenCalendarSelection = new[] { "chosen" };
@@ -148,7 +150,7 @@ public class GoogleCalendarEventFetcherTests
             {
                 Id = "all-day-event",
                 Summary = "Holiday",
-                Start = new EventDateTime { Date = "2026-04-15" },
+                Start = new EventDateTime { Date = "2026-04-15", TimeZone = "Europe/Lisbon" },
                 End = new EventDateTime { Date = "2026-04-16" }
             });
 
@@ -160,6 +162,9 @@ public class GoogleCalendarEventFetcherTests
         result[0].EndTime.Should().BeNull();
         result[0].StartUtc.Should().Be(new DateTime(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc));
         result[0].EndUtc.Should().BeNull("Google's all-day end date is exclusive, so it is not the end instant");
+        var response = JsonSerializer.SerializeToElement(result[0], ResponseOptions);
+        response.TryGetProperty("recurrenceTimeZone", out var zone).Should().BeTrue();
+        zone.ValueKind.Should().Be(JsonValueKind.Null);
     }
 
     [Fact]
@@ -232,6 +237,9 @@ public class GoogleCalendarEventFetcherTests
         result[0].StartUtc.Should().Be(new DateTime(2027, 1, 7, 3, 30, 0, DateTimeKind.Utc));
         result[0].RecurrenceRule.Should().Be("RRULE:FREQ=DAILY;BYDAY=TH");
         result[0].SourceTimeZone.Should().Be("Europe/Lisbon");
+        var response = JsonSerializer.SerializeToElement(result[0], ResponseOptions);
+        response.TryGetProperty("recurrenceTimeZone", out var zone).Should().BeTrue();
+        zone.GetString().Should().Be("Europe/Lisbon");
         await _api.Received(1).GetEventAsync(Token, "a", "master-lisbon", Arg.Any<CancellationToken>());
     }
 
@@ -253,6 +261,9 @@ public class GoogleCalendarEventFetcherTests
 
         result.Should().ContainSingle();
         result[0].SourceTimeZone.Should().Be("Europe/Lisbon");
+        var response = JsonSerializer.SerializeToElement(result[0], ResponseOptions);
+        response.TryGetProperty("recurrenceTimeZone", out var zone).Should().BeTrue();
+        zone.GetString().Should().Be("Europe/Lisbon");
     }
 
     [Fact]
