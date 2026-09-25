@@ -660,6 +660,25 @@ public class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_CrisisDisclosure_EmitsAggregateMetricWithoutMessage()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "I'm listening." });
+
+        await CreateHandler().Handle(
+            new ProcessUserChatCommand(UserId, "Quero me machucar"),
+            CancellationToken.None);
+
+        _productAnalytics.Received(1).CaptureAggregateEvent(
+            "astra_crisis_resources_shown",
+            Arg.Is<IReadOnlyDictionary<string, object>>(properties =>
+                properties.Count == 3
+                && (int)properties["count"] == 1
+                && (string)properties["locale"] == "pt"
+                && (string)properties["delivery_path"] == "batch"));
+    }
+
+    [Fact]
     public async Task Handle_DisabledCrisisGuard_LeavesModelReplyUnchanged()
     {
         SetupUserAndPayGate();

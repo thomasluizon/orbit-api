@@ -14,11 +14,10 @@ public sealed partial class PostHogProductAnalytics(
 {
     public void CaptureAggregateEvent(string eventName, IReadOnlyDictionary<string, object> properties)
     {
-        var enqueued = postHogClient.Capture(
+        postHogClient.Capture(
             "aggregate:astra_crisis_resources",
             eventName,
             new Dictionary<string, object>(properties));
-        LogCaptureEnqueued(logger, eventName, "aggregate:astra_crisis_resources", enqueued);
     }
 
     public void CaptureUserEvent(

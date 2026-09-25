@@ -188,10 +188,9 @@ public partial class ProcessUserChatCommandHandler(
                 request, aiMessage, detectedCrisisLocales,
                 request.StreamSink is null ? "batch" : "stream");
 
-        if (ShouldCacheFaqAnswer(crisisTurn, faqMatch, aiMessage, executionResults, metricsCard))
+        if (GetShareableFaqAnswer(crisisTurn, faqMatch, aiMessage, executionResults, metricsCard) is { } faqToCache)
         {
-            var faqToCache = faqMatch!.Value;
-            ChatFaqCache.StoreAnswer(faqToCache.Key, faqToCache.Locale, aiMessage ?? string.Empty);
+            ChatFaqCache.StoreAnswer(faqToCache.Key, faqToCache.Locale, faqToCache.Answer);
         }
 
         if (metricsCard is not null && context.User is not null)
@@ -250,14 +249,19 @@ public partial class ProcessUserChatCommandHandler(
     private static bool IsEmptyTokenBudgetResponse(bool exceeded, string? text) =>
         exceeded && string.IsNullOrWhiteSpace(text);
 
-    private static bool ShouldCacheFaqAnswer(
+    private static (string Key, string Locale, string Answer)? GetShareableFaqAnswer(
         bool crisisTurn,
         (string Key, string Locale)? match,
         string? aiMessage,
         ToolExecutionAccumulator executionResults,
-        MetricsCard? metricsCard) =>
-        !crisisTurn && match is not null && !string.IsNullOrWhiteSpace(aiMessage)
-        && IsShareableFaqTurn(executionResults, metricsCard);
+        MetricsCard? metricsCard)
+    {
+        if (crisisTurn || match is null || string.IsNullOrWhiteSpace(aiMessage)
+            || !IsShareableFaqTurn(executionResults, metricsCard))
+            return null;
+
+        return (match.Value.Key, match.Value.Locale, aiMessage);
+    }
 
     private static bool ShouldExtractFacts(bool crisisTurn, ChatContext context) =>
         !crisisTurn && context.AiMemoryEnabled && context.User is { HasProAccess: true };
