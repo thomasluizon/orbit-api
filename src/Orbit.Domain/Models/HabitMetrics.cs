@@ -6,4 +6,6 @@ public record HabitMetrics(
     decimal WeeklyCompletionRate,
     decimal MonthlyCompletionRate,
     int TotalCompletions,
-    DateOnly? LastCompletedDate);
+    DateOnly? LastCompletedDate,
+    Guid? HabitId = null,
+    string? HabitTitle = null);

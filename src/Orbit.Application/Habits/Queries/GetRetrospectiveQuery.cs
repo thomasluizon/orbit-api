@@ -31,13 +31,25 @@ public record RetrospectiveMetrics(
     int BadHabitSlips,
     IReadOnlyList<int> WeeklyConsistency,
     IReadOnlyList<RetrospectiveHabitStat> TopHabits,
-    IReadOnlyList<RetrospectiveHabitStat> NeedsAttention);
+    IReadOnlyList<RetrospectiveHabitStat> NeedsAttention,
+    CompletionSeries? CompletionSeries = null);
+
+public record CompletionSeries(string Granularity, IReadOnlyList<CompletionSeriesPoint> Points);
+
+public record CompletionSeriesPoint(
+    DateOnly StartDate,
+    DateOnly EndDate,
+    int Scheduled,
+    int Completed,
+    int? CompletionRate);
 
 public record RetrospectiveResponse(
     string Period,
     RetrospectiveMetrics Metrics,
     RetrospectiveNarrative Narrative,
-    bool FromCache);
+    bool FromCache,
+    DateOnly? DateFrom = null,
+    DateOnly? DateTo = null);
 
 public record GetRetrospectiveQuery(
     Guid UserId,
@@ -112,7 +124,9 @@ public class GetRetrospectiveQueryHandler(
             request.Period,
             metrics,
             narrativeResult.Value,
-            FromCache: false);
+            FromCache: false,
+            DateFrom: request.DateFrom,
+            DateTo: request.DateTo);
 
         cache.Set(cacheKey, response, new MemoryCacheEntryOptions
         {

@@ -50,7 +50,8 @@ public static class HabitScheduleService
         Habit habit,
         DateOnly from,
         DateOnly to,
-        int weekStartDay = 1)
+        int weekStartDay = 1,
+        DateOnly? recurrenceAnchor = null)
     {
         if (to.DayNumber - from.DayNumber > AppConstants.MaxRangeDays)
             to = from.AddDays(AppConstants.MaxRangeDays);
@@ -59,7 +60,11 @@ public static class HabitScheduleService
         var current = from;
         while (current <= to)
         {
-            if (IsHabitDueOnDate(habit, current, weekStartDay))
+            if (recurrenceAnchor.HasValue
+                ? current >= recurrenceAnchor.Value
+                    && (!habit.EndDate.HasValue || current <= habit.EndDate.Value)
+                    && IsHistoricallyDueOnDate(habit, current, recurrenceAnchor.Value, weekStartDay)
+                : IsHabitDueOnDate(habit, current, weekStartDay))
                 dates.Add(current);
             current = current.AddDays(1);
         }

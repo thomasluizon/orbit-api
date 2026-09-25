@@ -214,7 +214,13 @@ public record AgentClientContext(
     bool? SupportsPendingOperationChanges = null,
     bool? SupportsToolSteps = null,
     bool? SupportsFollowUps = null,
-    string? MessageOrigin = null);
+    string? MessageOrigin = null,
+    bool? SupportsPeriodInsightCard = null,
+    bool? SupportsDaySummaryCard = null,
+    bool? SupportsStreakCard = null,
+    bool? SupportsCalendarCard = null,
+    bool? SupportsRecordListCard = null,
+    bool? SupportsAccountRowsCard = null);
 
 public record AgentContextSnapshot(
     string Plan,
