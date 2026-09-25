@@ -24,7 +24,8 @@ public record ApplyHabitInput(
     TimeOnly? DueTime = null,
     bool ReminderEnabled = false,
     IReadOnlyList<int>? ReminderTimes = null,
-    IReadOnlyList<ChecklistItem>? ChecklistItems = null);
+    IReadOnlyList<ChecklistItem>? ChecklistItems = null,
+    int? IntervalWeeks = null);
 
 public record ApplyLogInput(int HabitIndex, DateOnly Date);
 
@@ -173,7 +174,8 @@ public class ApplyOnboardingCommandHandler(
                 ChecklistItems: item.ChecklistItems,
                 IsGeneral: item.IsGeneral,
                 IsFlexible: item.IsFlexible,
-                Position: position++));
+                Position: position++,
+                IntervalWeeks: item.IntervalWeeks));
 
             if (habitResult.IsFailure)
                 return habitResult.PropagateError<List<Habit>>();

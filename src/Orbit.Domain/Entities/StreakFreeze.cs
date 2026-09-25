@@ -1,4 +1,5 @@
 using Orbit.Domain.Common;
+using Orbit.Domain.Enums;
 
 namespace Orbit.Domain.Entities;
 
@@ -7,6 +8,7 @@ public class StreakFreeze : Entity
     public Guid UserId { get; private set; }
     public DateOnly UsedOnDate { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
+    public StreakFreezeOrigin? Origin { get; private set; }
 
     private StreakFreeze() { }
 
@@ -36,20 +38,23 @@ public class StreakFreeze : Entity
         }
 
         return Result.Success<IReadOnlyList<StreakFreeze>>(
-            ordered.Select(date => Create(userId, date)).ToArray());
+            ordered.Select(date => Create(userId, date, StreakFreezeOrigin.Manual)).ToArray());
     }
 
-    public static StreakFreeze Create(Guid userId, DateOnly date)
+    public static StreakFreeze Create(Guid userId, DateOnly date, StreakFreezeOrigin origin)
     {
         if (userId == Guid.Empty)
             throw new ArgumentException("User ID is required.", nameof(userId));
         if (date == DateOnly.MinValue)
             throw new ArgumentOutOfRangeException(nameof(date), "Used date is required.");
+        if (!Enum.IsDefined(origin))
+            throw new ArgumentOutOfRangeException(nameof(origin), "Freeze origin is invalid.");
 
         return new StreakFreeze
         {
             UserId = userId,
             UsedOnDate = date,
+            Origin = origin,
             CreatedAtUtc = DateTime.UtcNow
         };
     }

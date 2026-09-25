@@ -37,11 +37,16 @@ internal static class StoredCalendarEventJson
         if (item is null)
             return null;
 
+        var sourceTimeZone = ReadSourceTimeZone(stored);
         return item with
         {
-            SourceTimeZone = ReadSourceTimeZone(stored),
+            SourceTimeZone = sourceTimeZone,
             RecurrenceStartUtc = ReadRecurrenceStartUtc(stored),
-            ExpandedOccurrencesUtc = ReadExpandedOccurrencesUtc(stored)
+            ExpandedOccurrencesUtc = ReadExpandedOccurrencesUtc(stored),
+            RecurrenceTimeZone = item.IsRecurring && item.StartTime is not null
+                && !string.IsNullOrWhiteSpace(sourceTimeZone)
+                ? sourceTimeZone
+                : null
         };
     }
 
