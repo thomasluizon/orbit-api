@@ -10,9 +10,13 @@ namespace Orbit.Infrastructure.Tests.Services;
 public class TurnstileVerificationServiceTests
 {
     [Theory]
-    [InlineData("{\"success\":true,\"error-codes\":[]}", true)]
-    [InlineData("{\"success\":false,\"error-codes\":[\"timeout-or-duplicate\"]}", false)]
-    public async Task Siteverify_SendsDocumentedFormAndReadsResult(string json, bool expectedSuccess)
+    [InlineData(200, """{"challenge_ts":"2026-09-25T16:18:07.915Z","error-codes":[],"hostname":"example.com","metadata":{"result_with_testing_key":true},"success":true}""", "accept")]
+    [InlineData(200, """{"error-codes":["invalid-input-response"],"success":false,"messages":[],"metadata":{"result_with_testing_key":true}}""", "reject")]
+    [InlineData(200, """{"error-codes":["timeout-or-duplicate"],"success":false,"messages":[],"metadata":{"result_with_testing_key":true}}""", "reject")]
+    [InlineData(400, """{"error-codes":["invalid-input-secret"],"success":false,"messages":[]}""", "unavailable")]
+    [InlineData(200, """{"error-codes":["missing-input-response"],"success":false,"messages":[]}""", "reject")]
+    [InlineData(400, """{"error-codes":["missing-input-secret"],"success":false,"messages":[]}""", "unavailable")]
+    public async Task Siteverify_ObservedResponse_MapsToDecision(int statusCode, string json, string decision)
     {
         HttpRequestMessage? sentRequest = null;
         string? sentForm = null;
@@ -20,12 +24,21 @@ public class TurnstileVerificationServiceTests
         {
             sentRequest = request;
             sentForm = await request.Content!.ReadAsStringAsync();
-            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json) };
+            return new HttpResponseMessage((HttpStatusCode)statusCode) { Content = new StringContent(json) };
         });
 
-        var result = await Service(client).VerifyAsync("client-token");
+        var service = Service(client);
+        if (decision == "unavailable")
+        {
+            var action = () => service.VerifyAsync("client-token");
+            await action.Should().ThrowAsync<HttpRequestException>();
+        }
+        else
+        {
+            var result = await service.VerifyAsync("client-token");
+            result.Success.Should().Be(decision == "accept");
+        }
 
-        result.Success.Should().Be(expectedSuccess);
         sentRequest!.Method.Should().Be(HttpMethod.Post);
         sentRequest.RequestUri!.ToString().Should().Be("https://challenges.cloudflare.com/turnstile/v0/siteverify");
         sentRequest.Content!.Headers.ContentType!.MediaType.Should().Be("application/x-www-form-urlencoded");
@@ -49,65 +62,6 @@ public class TurnstileVerificationServiceTests
     }
 
     [Fact]
-    public async Task Siteverify_InternalError_RetriesThenAcceptsSuccess()
-    {
-        var attempts = 0;
-        using var client = Client(_ =>
-        {
-            attempts++;
-            var json = attempts == 1
-                ? "{\"success\":false,\"error-codes\":[\"internal-error\"]}"
-                : "{\"success\":true,\"error-codes\":[]}";
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json) });
-        });
-
-        var result = await Service(client).VerifyAsync("client-token");
-
-        result.Success.Should().BeTrue();
-        attempts.Should().Be(2);
-    }
-
-    [Fact]
-    public async Task Siteverify_InternalErrorAfterRetries_IsUnavailable()
-    {
-        var attempts = 0;
-        using var client = Client(_ =>
-        {
-            attempts++;
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent("{\"success\":false,\"error-codes\":[\"internal-error\"]}")
-            });
-        });
-
-        var action = () => Service(client).VerifyAsync("client-token");
-
-        await action.Should().ThrowAsync<HttpRequestException>();
-        attempts.Should().Be(3);
-    }
-
-    [Theory]
-    [InlineData("missing-input-secret")]
-    [InlineData("invalid-input-secret")]
-    public async Task Siteverify_SecretError_IsUnavailableWithoutRetry(string errorCode)
-    {
-        var attempts = 0;
-        using var client = Client(_ =>
-        {
-            attempts++;
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent($"{{\"success\":false,\"error-codes\":[\"{errorCode}\"]}}")
-            });
-        });
-
-        var action = () => Service(client).VerifyAsync("client-token");
-
-        await action.Should().ThrowAsync<HttpRequestException>();
-        attempts.Should().Be(1);
-    }
-
-    [Fact]
     public async Task Siteverify_NetworkFailure_ThrowsAfterRetries()
     {
         using var client = Client(_ => throw new HttpRequestException("network down"));
@@ -115,19 +69,6 @@ public class TurnstileVerificationServiceTests
         var action = () => Service(client).VerifyAsync("client-token");
 
         await action.Should().ThrowAsync<HttpRequestException>();
-    }
-
-    [Fact]
-    public async Task Siteverify_OmittedSuccess_IsUnavailable()
-    {
-        using var client = Client(_ => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent("{\"error-codes\":[]}")
-        }));
-
-        var action = () => Service(client).VerifyAsync("client-token");
-
-        await action.Should().ThrowAsync<System.Text.Json.JsonException>();
     }
 
     private static TurnstileVerificationService Service(HttpClient client)

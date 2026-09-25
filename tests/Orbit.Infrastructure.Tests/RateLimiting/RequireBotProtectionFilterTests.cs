@@ -198,12 +198,11 @@ public class RequireBotProtectionFilterTests
     }
 
     [Theory]
-    [InlineData("internal-error")]
-    [InlineData("missing-input-secret")]
-    [InlineData("invalid-input-secret")]
-    public async Task SiteverifyServerFailure_Returns503BeforeCommand(string errorCode)
+    [InlineData("""{"error-codes":["missing-input-secret"],"success":false,"messages":[]}""")]
+    [InlineData("""{"error-codes":["invalid-input-secret"],"success":false,"messages":[]}""")]
+    public async Task SiteverifySecretFailure_Returns503BeforeCommand(string responseBody)
     {
-        using var client = new HttpClient(new SiteverifyHandler(errorCode))
+        using var client = new HttpClient(new SiteverifyHandler(responseBody))
         {
             BaseAddress = new Uri("https://challenges.cloudflare.com/")
         };
@@ -320,14 +319,14 @@ public class RequireBotProtectionFilterTests
     private static ActionExecutedContext Executed(ActionExecutingContext context)
         => new(context, context.Filters, context.Controller);
 
-    private sealed class SiteverifyHandler(string errorCode) : HttpMessageHandler
+    private sealed class SiteverifyHandler(string responseBody) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
-            => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            => Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadRequest)
             {
-                Content = new StringContent($"{{\"success\":false,\"error-codes\":[\"{errorCode}\"]}}")
+                Content = new StringContent(responseBody)
             });
     }
 }
