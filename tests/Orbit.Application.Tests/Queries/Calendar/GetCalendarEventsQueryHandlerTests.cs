@@ -223,7 +223,7 @@ public class GetCalendarEventsQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_RecurringByDayEventCrossingAccountDate_ShiftsWeekdays()
+    public async Task Handle_ShiftedMultiDayAlternateWeekRule_OmitsEvent()
     {
         var user = CreateTestUser();
         user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
@@ -255,9 +255,55 @@ public class GetCalendarEventsQueryHandlerTests
         var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_ShiftedMultiDayWeeklyRule_UsesDailyDaysForInstalledImporter()
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
+        var first = new DateTime(2027, 1, 7, 0, 0, 0, DateTimeKind.Utc);
+        StubSuccessfulFetch(user, new CalendarEventItem(
+            "evt_multiday_weekly", "Tokyo class", null,
+            "2027-01-07", "09:00", "10:00", true,
+            "RRULE:FREQ=WEEKLY;BYDAY=TH,SA;WKST=MO", [],
+            StartUtc: first, EndUtc: first.AddHours(1))
+        {
+            SourceTimeZone = "Asia/Tokyo",
+            RecurrenceStartUtc = first,
+            ExpandedOccurrencesUtc = [first, first.AddDays(2), first.AddDays(7), first.AddDays(9)]
+        });
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
         result.Value.Should().ContainSingle();
-        result.Value[0].StartDate.Should().Be("2026-04-14");
-        result.Value[0].RecurrenceRule.Should().Be("RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=SU,TU;WKST=SA");
+        result.Value[0].StartDate.Should().Be("2027-01-06");
+        result.Value[0].RecurrenceRule.Should().Be("RRULE:FREQ=DAILY;BYDAY=WE,FR");
+    }
+
+    [Fact]
+    public async Task Handle_ShiftedAlternateWeekRuleWhoseAnchorIsNotNamed_OmitsEvent()
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
+        var first = new DateTime(2027, 1, 7, 0, 0, 0, DateTimeKind.Utc);
+        StubSuccessfulFetch(user, new CalendarEventItem(
+            "evt_mismatched_anchor", "Tokyo class", null,
+            "2027-01-07", "09:00", "10:00", true,
+            "RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO", [],
+            StartUtc: first, EndUtc: first.AddHours(1))
+        {
+            SourceTimeZone = "Asia/Tokyo",
+            RecurrenceStartUtc = first,
+            ExpandedOccurrencesUtc = [first, first.AddDays(14)]
+        });
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeEmpty();
     }
 
     [Fact]
@@ -289,6 +335,12 @@ public class GetCalendarEventsQueryHandlerTests
     [InlineData("RRULE:FREQ=WEEKLY;BYDAY=TH;BYSETPOS=1")]
     [InlineData("RRULE:FREQ=DAILY;BYDAY=TH;BYMONTHDAY=7")]
     [InlineData("RRULE:FREQ=MONTHLY;BYDAY=TH")]
+    [InlineData("RRULE:FREQ=DAILY;INTERVAL=2;BYDAY=TH")]
+    [InlineData("RRULE:FREQ=WEEKLY;BYDAY=TH;BYMONTH=1")]
+    [InlineData("RRULE:FREQ=WEEKLY;BYDAY=TH;BYYEARDAY=7")]
+    [InlineData("RRULE:FREQ=WEEKLY;BYDAY=TH;BYWEEKNO=2")]
+    [InlineData("RRULE:FREQ=WEEKLY;BYDAY=TH;COUNT=4")]
+    [InlineData("RRULE:FREQ=WEEKLY;BYDAY=TH;UNTIL=20270131T000000Z")]
     public async Task Handle_ShiftedByDayRuleOutsideSupportedSubset_OmitsEvent(string rule)
     {
         var user = CreateTestUser();
@@ -326,6 +378,29 @@ public class GetCalendarEventsQueryHandlerTests
             SourceTimeZone = "Europe/Lisbon",
             RecurrenceStartUtc = first,
             ExpandedOccurrencesUtc = [first, later]
+        });
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_ShiftedByDaySeriesDriftingAfterFetchWindow_OmitsEvent()
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
+        var first = new DateTime(2027, 1, 7, 0, 30, 0, DateTimeKind.Utc);
+        StubSuccessfulFetch(user, new CalendarEventItem(
+            "evt_lisbon_later_drift", "Lisbon midnight call", null,
+            "2027-01-07", "00:30", "01:00", true,
+            "RRULE:FREQ=WEEKLY;BYDAY=TH", [],
+            StartUtc: first, EndUtc: first.AddMinutes(30))
+        {
+            SourceTimeZone = "Europe/Lisbon",
+            RecurrenceStartUtc = first,
+            ExpandedOccurrencesUtc = [first, first.AddDays(7), first.AddDays(14)]
         });
 
         var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);

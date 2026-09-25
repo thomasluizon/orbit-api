@@ -143,7 +143,7 @@ public class CalendarFeedAgreementTests
     }
 
     [Theory]
-    [InlineData("RRULE:FREQ=WEEKLY;BYDAY=TH", "RRULE:FREQ=WEEKLY;BYDAY=WE")]
+    [InlineData("RRULE:FREQ=WEEKLY;BYDAY=TH", "RRULE:FREQ=DAILY;BYDAY=WE")]
     [InlineData("RRULE:FREQ=DAILY;BYDAY=TH", "RRULE:FREQ=DAILY;BYDAY=WE")]
     public async Task UniformlyShiftedByDaySeries_IsOfferedByBothFeeds(string rule, string expectedRule)
     {
