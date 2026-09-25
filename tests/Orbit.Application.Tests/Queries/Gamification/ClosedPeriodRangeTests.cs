@@ -7,15 +7,15 @@ namespace Orbit.Application.Tests.Queries.Gamification;
 public class ClosedPeriodRangeTests
 {
     [Theory]
-    [InlineData(0, 2026, 8, 16, 2026, 8, 22)]
-    [InlineData(1, 2026, 8, 17, 2026, 8, 23)]
-    [InlineData(0, 2025, 12, 28, 2026, 1, 3)]
+    [InlineData(2026, 8, 16, 2026, 8, 22)]
+    [InlineData(2026, 8, 17, 2026, 8, 23)]
+    [InlineData(2025, 12, 28, 2026, 1, 3)]
     public void ResolveWeek_ClosedWeek_ReturnsCalendarBounds(
-        int weekStartDay, int year, int month, int day,
+        int year, int month, int day,
         int endYear, int endMonth, int endDay)
     {
         var result = ClosedPeriodRange.ResolveWeek(
-            new DateOnly(year, month, day), new DateOnly(2026, 8, 24), weekStartDay);
+            new DateOnly(year, month, day), new DateOnly(2026, 8, 24));
 
         result.IsSuccess.Should().BeTrue();
         result.Value.DateFrom.Should().Be(new DateOnly(year, month, day));
@@ -26,17 +26,19 @@ public class ClosedPeriodRangeTests
     public void ResolveWeek_CurrentWeek_ReturnsNamedFailure()
     {
         var result = ClosedPeriodRange.ResolveWeek(
-            new DateOnly(2026, 8, 17), new DateOnly(2026, 8, 23), 1);
+            new DateOnly(2026, 8, 17), new DateOnly(2026, 8, 23));
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be(ErrorCodes.RecapWeekNotClosed);
     }
 
-    [Fact]
-    public void ResolveWeek_MisalignedStart_ReturnsNamedFailure()
+    [Theory]
+    [InlineData(18)]
+    [InlineData(22)]
+    public void ResolveWeek_StartOnNoSupportedWeekStartDay_ReturnsNamedFailure(int day)
     {
         var result = ClosedPeriodRange.ResolveWeek(
-            new DateOnly(2026, 8, 18), new DateOnly(2026, 8, 24), 1);
+            new DateOnly(2026, 8, day), new DateOnly(2026, 8, 31));
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be(ErrorCodes.InvalidClosedWeekParameters);

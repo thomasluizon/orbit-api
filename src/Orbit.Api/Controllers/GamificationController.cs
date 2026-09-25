@@ -101,8 +101,7 @@ public class GamificationController(IMediator mediator, IUserDateService userDat
                 || year.HasValue || month.HasValue)
                 return BadRequest(ErrorMessages.InvalidClosedWeekParameters.ToErrorBody());
 
-            var weekStartDay = await userDateService.GetUserWeekStartDayAsync(userId, cancellationToken);
-            var closedWeek = ClosedPeriodRange.ResolveWeek(weekStart.Value, today, weekStartDay);
+            var closedWeek = ClosedPeriodRange.ResolveWeek(weekStart.Value, today);
             if (closedWeek.IsFailure)
                 return closedWeek.ToErrorResult();
 
