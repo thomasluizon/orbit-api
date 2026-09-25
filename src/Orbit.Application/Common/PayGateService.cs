@@ -142,9 +142,6 @@ public class PayGateService(
         return Result.Success();
     }
 
-    public Task<Result> CanUseGoalReview(Guid userId, CancellationToken ct = default) =>
-        RequireProAccess(userId, "Goal reviews are a Pro feature. Upgrade to unlock!", ct);
-
     public Task<Result> CanAccessCalendar(Guid userId, CancellationToken ct = default) =>
         RequireProAccess(userId, "Calendar integration is a Pro feature. Upgrade to unlock!", ct);
 

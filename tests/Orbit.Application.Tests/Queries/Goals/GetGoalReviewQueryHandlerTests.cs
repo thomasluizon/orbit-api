@@ -15,6 +15,7 @@ public class GetGoalReviewQueryHandlerTests
 {
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
+    private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IGoalReviewService _reviewService = Substitute.For<IGoalReviewService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IGoalProgressReadSyncer _goalProgressReadSyncer = Substitute.For<IGoalProgressReadSyncer>();
@@ -29,6 +30,7 @@ public class GetGoalReviewQueryHandlerTests
         _handler = new GetGoalReviewQueryHandler(
             _goalRepo,
             _payGate,
+            _unitOfWork,
             _reviewService,
             _userDateService,
             _goalProgressReadSyncer,
@@ -36,6 +38,8 @@ public class GetGoalReviewQueryHandlerTests
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
         _goalProgressReadSyncer.ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>())
             .Returns(new Dictionary<Guid, int>());
+        _payGate.TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>())
+            .Returns(Result.Success());
     }
 
     private static Goal CreateTestGoal()
@@ -46,8 +50,6 @@ public class GetGoalReviewQueryHandlerTests
     [Fact]
     public async Task Handle_GeneratesNewReview_WhenNotCached()
     {
-        _payGate.CanUseGoalReview(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
-
         var goal = CreateTestGoal();
         _goalRepo.FindAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),
@@ -66,13 +68,13 @@ public class GetGoalReviewQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Review.Should().Be("Review content");
         result.Value.FromCache.Should().BeFalse();
+        await _payGate.Received(1).TryConsumeAiMessage(
+            UserId, Arg.Any<IUnitOfWork>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task Handle_RefreshesStreakGoalValue_BeforeBuildingContext()
     {
-        _payGate.CanUseGoalReview(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
-
         var streakGoal = Goal.Create(new Goal.CreateGoalParams(
             UserId, "Avoid doom scrolling", 7, "days", Type: GoalType.Streak)).Value;
         var badHabit = Habit.Create(new HabitCreateParams(
@@ -105,8 +107,6 @@ public class GetGoalReviewQueryHandlerTests
     [Fact]
     public async Task Handle_ReturnsCachedReview_WhenCached()
     {
-        _payGate.CanUseGoalReview(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
-
         var goal = CreateTestGoal();
         _goalRepo.FindAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),
@@ -126,26 +126,52 @@ public class GetGoalReviewQueryHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.FromCache.Should().BeTrue();
+        await _payGate.Received(1).TryConsumeAiMessage(
+            UserId, _unitOfWork, Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_PayGateFails_ReturnsFailure()
+    public async Task Handle_FreeUser_GeneratesReview()
     {
-        _payGate.CanUseGoalReview(UserId, Arg.Any<CancellationToken>())
-            .Returns(Result.PayGateFailure("Goal reviews are a Pro feature"));
+        _goalRepo.FindAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Goal> { CreateTestGoal() }.AsReadOnly());
+        _reviewService.GenerateReviewAsync(
+            Arg.Any<string>(), "en", Arg.Any<CancellationToken>())
+            .Returns(Result.Success("Review content"));
 
         var query = new GetGoalReviewQuery(UserId, "en");
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Review.Should().Be("Review content");
+    }
+
+    [Fact]
+    public async Task Handle_DailyAiLimitReached_DoesNotGenerateReview()
+    {
+        _goalRepo.FindAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Goal> { CreateTestGoal() }.AsReadOnly());
+        _payGate.TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>())
+            .Returns(Result.PayGateFailure("Daily AI limit reached"));
+
+        var result = await _handler.Handle(new GetGoalReviewQuery(UserId, "en"), CancellationToken.None);
+
         result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(Result.PayGateErrorCode);
+        await _reviewService.DidNotReceive().GenerateReviewAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task Handle_NoActiveGoals_ReturnsFailure()
     {
-        _payGate.CanUseGoalReview(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
-
         _goalRepo.FindAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),
             Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
@@ -158,13 +184,13 @@ public class GetGoalReviewQueryHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("No active goals found");
+        await _payGate.DidNotReceive().TryConsumeAiMessage(
+            UserId, _unitOfWork, Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task Handle_ReviewServiceFails_ReturnsFailure()
     {
-        _payGate.CanUseGoalReview(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
-
         var goal = CreateTestGoal();
         _goalRepo.FindAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),

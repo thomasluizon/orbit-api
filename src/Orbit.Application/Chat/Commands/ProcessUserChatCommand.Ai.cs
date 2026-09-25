@@ -146,14 +146,12 @@ public partial class ProcessUserChatCommandHandler
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Take(8)
                 .ToList(),
-            hasProAccess
-                ? activeGoals
-                    .OrderByDescending(goal => goal.UpdatedAtUtc)
-                    .Select(goal => goal.Title)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .Take(8)
-                    .ToList()
-                : [],
+            activeGoals
+                .OrderByDescending(goal => goal.UpdatedAtUtc)
+                .Select(goal => goal.Title)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(8)
+                .ToList(),
             ClientContext: clientContext);
     }
 

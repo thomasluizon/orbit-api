@@ -1064,6 +1064,56 @@ public class ProcessUserChatCommandHandlerTests
         streakGoal.Status.Should().Be(GoalStatus.Active);
     }
 
+    [Theory]
+    [InlineData("free")]
+    [InlineData("pro")]
+    [InlineData("lifetime")]
+    [InlineData("expired_trial")]
+    public async Task Handle_GoalDirective_ReturnsFreshGoalsForEveryPlan(string plan)
+    {
+        var user = User.Create("Thomas", "thomas@test.com").Value;
+        if (plan == "free")
+            user.StartTrial(DateTime.UtcNow.AddDays(-30));
+        if (plan == "pro")
+            user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddDays(30));
+        if (plan == "lifetime")
+            user.GrantLifetimePro();
+        if (plan == "expired_trial")
+            user.StartTrial(DateTime.UtcNow.AddDays(5));
+
+        var first = Goal.Create(new Goal.CreateGoalParams(
+            UserId, "Read books", 12, "days", Type: GoalType.Streak)).Value;
+        var second = Goal.Create(new Goal.CreateGoalParams(
+            UserId, "Save money", 20, "days", Type: GoalType.Streak)).Value;
+        if (plan == "expired_trial")
+            user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        SetupUserAndPayGate(user);
+        _goalRepo.FindAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Goal> { first, second }.AsReadOnly());
+        _goalProgressReadSyncer.ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<Guid, int> { [first.Id] = 3, [second.Id] = 7 });
+        SetupAiResponse(new AiResponse { TextMessage = "Your goals:\n[[orbit:goals]]" });
+
+        var result = await CreateHandler().Handle(
+            new ProcessUserChatCommand(UserId, "Show my goals", ClientContext: new AgentClientContext(SupportsGoalListCard: true)),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.GoalList.Should().NotBeNull();
+        result.Value.GoalList!.Items.Should().HaveCount(2);
+        result.Value.GoalList.Items.Should().Contain(item => item.Title == "Read books" && item.Current == 3);
+        result.Value.GoalList.Items.Should().Contain(item => item.Title == "Save money" && item.Current == 7);
+        _promptBuilder.Received(1).BuildDynamic(Arg.Is<PromptBuildRequest>(request =>
+            request.ActiveGoals != null && request.ActiveGoals.Count == 2));
+        _catalogService.Received(1).BuildDynamicSupplement(Arg.Is<AgentContextSnapshot>(snapshot =>
+            snapshot.RecentGoalTitles != null &&
+            snapshot.RecentGoalTitles.Contains("Read books") &&
+            snapshot.RecentGoalTitles.Contains("Save money")));
+    }
+
     [Fact]
     public async Task Handle_PromptBuilderIncludesCompletedParentsForActiveSubHabits()
     {

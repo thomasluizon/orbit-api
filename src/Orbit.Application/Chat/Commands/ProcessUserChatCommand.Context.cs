@@ -36,21 +36,17 @@ public partial class ProcessUserChatCommandHandler
         var hasProAccess = user?.HasProAccess ?? false;
         var aiMemoryEnabled = user is { HasProAccess: true, AiMemoryEnabled: true };
 
-        IReadOnlyList<Goal> activeGoals = [];
-        if (hasProAccess)
+        var freshProgressValues = await execution.GoalProgressReadSyncer.ComputeFreshValuesAsync(request.UserId, userToday, cancellationToken);
+        var loadedGoals = await data.GoalRepository.FindAsync(
+            g => g.UserId == request.UserId && g.Status == GoalStatus.Active,
+            q => q.Include(g => g.Habits),
+            cancellationToken);
+        foreach (var goal in loadedGoals)
         {
-            var freshProgressValues = await execution.GoalProgressReadSyncer.ComputeFreshValuesAsync(request.UserId, userToday, cancellationToken);
-            var loadedGoals = await data.GoalRepository.FindAsync(
-                g => g.UserId == request.UserId && g.Status == GoalStatus.Active,
-                q => q.Include(g => g.Habits),
-                cancellationToken);
-            foreach (var goal in loadedGoals)
-            {
-                if (freshProgressValues.TryGetValue(goal.Id, out var fresh))
-                    GoalProgressSyncService.ApplyReadValue(goal, fresh);
-            }
-            activeGoals = loadedGoals;
+            if (freshProgressValues.TryGetValue(goal.Id, out var fresh))
+                GoalProgressSyncService.ApplyReadValue(goal, fresh);
         }
+        IReadOnlyList<Goal> activeGoals = loadedGoals;
 
         IReadOnlyList<UserFact> userFacts = [];
         if (aiMemoryEnabled)

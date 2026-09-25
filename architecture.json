@@ -4937,7 +4937,6 @@
         "testClass": "PayGateServiceTests",
         "file": "tests/Orbit.Application.Tests/Common/PayGateServiceTests.cs",
         "references": [
-          "Goal",
           "Habit",
           "User"
         ]
