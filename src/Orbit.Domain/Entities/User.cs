@@ -74,6 +74,7 @@ public partial class User : Entity
     public int CurrentStreak { get; private set; } = 0;
     public int LongestStreak { get; private set; } = 0;
     public DateOnly? LastActiveDate { get; private set; }
+    public DateOnly? LastPurgedCompletionDate { get; private set; }
     public int StreakFreezesAccumulated { get; private set; } = 0;
     public int LastFreezeAwardStreak { get; private set; } = 0;
     public int? PreGapFreezeAwardStreak { get; private set; }
@@ -125,6 +126,19 @@ public partial class User : Entity
         Email = email.Trim().ToLowerInvariant();
     }
 
+    public void RecordPurgedCompletion(DateOnly date)
+    {
+        if (LastPurgedCompletionDate is null || date > LastPurgedCompletionDate.Value)
+            LastPurgedCompletionDate = date;
+    }
+
+    public DateOnly? GetLastCompletionDate(DateOnly? liveCompletionDate)
+    {
+        return liveCompletionDate is null || LastPurgedCompletionDate > liveCompletionDate
+            ? LastPurgedCompletionDate
+            : liveCompletionDate;
+    }
+
     public Result SetName(string name)
     {
         if (string.IsNullOrWhiteSpace(name))
@@ -138,17 +152,27 @@ public partial class User : Entity
         return Result.Success();
     }
 
+    /// <summary>
+    /// Stores the IANA zone id after trimming it. Trimming here is the boundary fix for
+    /// <c>"America/Sao_Paulo "</c>: every reader calls <c>TimeZoneHelper.FindTimeZone</c>, which stays
+    /// strict on purpose so a malformed stored id is logged rather than silently repaired.
+    /// A blank id is rejected instead of stored, so no reader ever falls back to UTC over whitespace.
+    /// </summary>
     public Result SetTimeZone(string ianaTimeZoneId)
     {
+        var trimmedTimeZoneId = ianaTimeZoneId?.Trim();
+        if (string.IsNullOrEmpty(trimmedTimeZoneId))
+            return Result.Failure(DomainErrors.InvalidTimezone.Format(ianaTimeZoneId ?? string.Empty));
+
         try
         {
-            TimeZoneInfo.FindSystemTimeZoneById(ianaTimeZoneId);
-            TimeZone = ianaTimeZoneId;
+            TimeZoneInfo.FindSystemTimeZoneById(trimmedTimeZoneId);
+            TimeZone = trimmedTimeZoneId;
             return Result.Success();
         }
-        catch (TimeZoneNotFoundException)
+        catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException)
         {
-            return Result.Failure(DomainErrors.InvalidTimezone.Format(ianaTimeZoneId));
+            return Result.Failure(DomainErrors.InvalidTimezone.Format(trimmedTimeZoneId));
         }
     }
 

@@ -46,6 +46,38 @@ public class GetHabitWidgetQueryHandlerTests
         result.Value.DayOffset.Should().Be(0);
         result.Value.Items.Should().ContainSingle();
         result.Value.Items[0].Title.Should().Be("Morning run");
+        result.Value.EmptyReason.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_ReturnsNothingScheduledWhenTodayAndTomorrowAreEmpty()
+    {
+        SetupHabits();
+
+        var result = await _handler.Handle(new GetHabitWidgetQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Items.Should().BeEmpty();
+        result.Value.EmptyReason.Should().Be("nothing-scheduled");
+    }
+
+    [Fact]
+    public async Task Handle_ReturnsAllDoneWhenCompletedTodayAndTomorrowIsEmpty()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId,
+            "Done today",
+            FrequencyUnit: null,
+            FrequencyQuantity: null,
+            DueDate: Today)).Value;
+        habit.Log(Today);
+        SetupHabits(habit);
+
+        var result = await _handler.Handle(new GetHabitWidgetQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Items.Should().BeEmpty();
+        result.Value.EmptyReason.Should().Be("all-done");
     }
 
     [Fact]

@@ -19,7 +19,7 @@ public class AccountTools(McpExecutorBridge executorBridge)
         ClaimsPrincipal user,
         [Description("Action to perform: reset_account, request_deletion, or confirm_deletion")] string action,
         [Description("For confirm_deletion: the deletion code emailed to the user")] string? code = null,
-        [Description("Confirmation token from verify_step_up_agent_operation_v2 (required: account changes are high-risk and need step-up)")] string? confirmationToken = null,
+        [Description("Confirmation token from confirm_agent_operation_v2, after step_up_agent_operation_v2 and verify_step_up_agent_operation_v2 (required: account changes are high-risk and need step-up)")] string? confirmationToken = null,
         CancellationToken cancellationToken = default)
     {
         var result = await executorBridge.ExecuteAsync(user, "manage_account", new

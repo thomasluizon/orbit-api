@@ -23,6 +23,20 @@ public class UserTests
     }
 
     [Fact]
+    public void RecordPurgedCompletion_KeepsNewestDate()
+    {
+        var user = CreateValidUser();
+        var latest = new DateOnly(2026, 8, 15);
+
+        user.RecordPurgedCompletion(latest);
+        user.RecordPurgedCompletion(latest.AddDays(-1));
+
+        user.LastPurgedCompletionDate.Should().Be(latest);
+        user.GetLastCompletionDate(null).Should().Be(latest);
+        user.GetLastCompletionDate(latest.AddDays(1)).Should().Be(latest.AddDays(1));
+    }
+
+    [Fact]
     public void Create_EmptyName_ReturnsFailure()
     {
         var result = User.Create("", "thomas@example.com");
@@ -180,6 +194,32 @@ public class UserTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Invalid timezone");
+    }
+
+    [Fact]
+    public void SetTimeZone_SurroundingWhitespace_StoresTheTrimmedId()
+    {
+        var user = CreateValidUser();
+
+        var result = user.SetTimeZone("  America/Sao_Paulo  ");
+
+        result.IsSuccess.Should().BeTrue();
+        user.TimeZone.Should().Be("America/Sao_Paulo");
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void SetTimeZone_BlankId_ReturnsFailureAndKeepsThePreviousZone(string timeZoneId)
+    {
+        var user = CreateValidUser();
+        user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
+
+        var result = user.SetTimeZone(timeZoneId);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("Invalid timezone");
+        user.TimeZone.Should().Be("America/Sao_Paulo");
     }
 
     [Fact]

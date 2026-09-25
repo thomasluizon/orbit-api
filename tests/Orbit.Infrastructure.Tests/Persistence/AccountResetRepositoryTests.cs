@@ -177,7 +177,7 @@ public class AccountResetRepositoryTests : IDisposable
             DateTime.UtcNow));
         _dbContext.PushSubscriptions.Add(
             PushSubscription.Create(userId, $"https://push/{userId}", "p256dh", "auth").Value);
-        _dbContext.StreakFreezes.Add(StreakFreeze.Create(userId, DateOnly.FromDateTime(DateTime.UtcNow)));
+        _dbContext.StreakFreezes.Add(StreakFreeze.Create(userId, DateOnly.FromDateTime(DateTime.UtcNow), StreakFreezeOrigin.Manual));
         _dbContext.ApiKeys.Add(
             ApiKey.Create(userId, "key", ["habits:read"]).Value.Entity);
         _dbContext.ClosedMonthRecaps.Add(

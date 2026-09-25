@@ -136,6 +136,25 @@ public class TimeZoneHelperTests
         result.Should().Be(TimeZoneInfo.Utc);
     }
 
+    [Theory]
+    [InlineData(" ")]
+    [InlineData("Not/AZone")]
+    [InlineData("America/Sao_Paulo ")]
+    public void FindTimeZone_UnusableId_ReturnsUtcAndNamesTheIdAndTheUser(string timeZoneId)
+    {
+        var userId = Guid.NewGuid();
+
+        var result = TimeZoneHelper.FindTimeZone(timeZoneId, _logger, userId);
+
+        result.Should().Be(TimeZoneInfo.Utc);
+        _logger.ReceivedWithAnyArgs().Log(
+            LogLevel.Warning,
+            Arg.Any<EventId>(),
+            Arg.Any<object>(),
+            Arg.Any<Exception>(),
+            Arg.Any<Func<object, Exception?, string>>());
+    }
+
     [Fact]
     public void FindTimeZone_SameInput_ReturnsSameTimezone()
     {

@@ -184,6 +184,160 @@ public class HabitLogReaderTests
         result.Select(l => l.Date).Should().Equal(Anchor);
     }
 
+    [Fact]
+    public async Task LastCompletionDate_IncludesRecentSubhabit()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var user = User.Create("Subhabit User", "subhabit@example.com").Value;
+        var otherUser = User.Create("Other User", "other@example.com").Value;
+        var parent = Habit.Create(new HabitCreateParams(user.Id, "Parent", FrequencyUnit.Day, 1, Anchor)).Value;
+        var child = Habit.Create(new HabitCreateParams(
+            user.Id, "Child", FrequencyUnit.Day, 1, Anchor, ParentHabitId: parent.Id)).Value;
+        var otherHabit = Habit.Create(new HabitCreateParams(otherUser.Id, "Other", FrequencyUnit.Day, 1, Anchor)).Value;
+        Log(parent, Anchor.AddDays(-10));
+        Log(child, Anchor.AddDays(-1));
+        Log(otherHabit, Anchor.AddDays(1));
+        factory.Context.Users.AddRange(user, otherUser);
+        factory.Context.Habits.AddRange(parent, child, otherHabit);
+        await factory.Context.SaveChangesAsync();
+
+        var result = await new HabitLogReader(factory.Context)
+            .GetLastCompletionDateAsync(user.Id, CancellationToken.None);
+
+        result.Should().Be(Anchor.AddDays(-1));
+    }
+
+    [Fact]
+    public async Task LastCompletionDate_IncludesRecentGeneralHabit()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var user = User.Create("General User", "general@example.com").Value;
+        var general = Habit.Create(new HabitCreateParams(
+            user.Id, "General", null, null, Anchor, IsGeneral: true)).Value;
+        Log(general, Anchor.AddDays(-2));
+        factory.Context.Users.Add(user);
+        factory.Context.Habits.Add(general);
+        await factory.Context.SaveChangesAsync();
+
+        var result = await new HabitLogReader(factory.Context)
+            .GetLastCompletionDateAsync(user.Id, CancellationToken.None);
+
+        result.Should().Be(Anchor.AddDays(-2));
+    }
+
+    [Fact]
+    public async Task LastCompletionDate_ExcludesNewerBadHabitSlip()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var user = User.Create("Slip User", "slip@example.com").Value;
+        var goodHabit = Habit.Create(new HabitCreateParams(
+            user.Id, "Good", FrequencyUnit.Day, 1, Anchor)).Value;
+        var badHabit = Habit.Create(new HabitCreateParams(
+            user.Id, "Bad", FrequencyUnit.Day, 1, Anchor, IsBadHabit: true)).Value;
+        Log(goodHabit, Anchor.AddDays(-3));
+        Log(badHabit, Anchor.AddDays(-1));
+        factory.Context.Users.Add(user);
+        factory.Context.Habits.AddRange(goodHabit, badHabit);
+        await factory.Context.SaveChangesAsync();
+
+        var result = await new HabitLogReader(factory.Context)
+            .GetLastCompletionDateAsync(user.Id, CancellationToken.None);
+
+        result.Should().Be(Anchor.AddDays(-3));
+    }
+
+    [Fact]
+    public async Task LastCompletionDate_ReturnsNullWhenOnlyBadHabitSlipsExist()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var user = User.Create("Slip Only User", "slip-only@example.com").Value;
+        var badHabit = Habit.Create(new HabitCreateParams(
+            user.Id, "Bad", FrequencyUnit.Day, 1, Anchor, IsBadHabit: true)).Value;
+        Log(badHabit, Anchor);
+        factory.Context.Users.Add(user);
+        factory.Context.Habits.Add(badHabit);
+        await factory.Context.SaveChangesAsync();
+
+        var result = await new HabitLogReader(factory.Context)
+            .GetLastCompletionDateAsync(user.Id, CancellationToken.None);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task LastCompletionDate_ExcludesSkipsAndDeletedCompletions()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var user = User.Create("Skip User", "skip@example.com").Value;
+        var habit = FlexibleHabitFor(user.Id);
+        Log(habit, Anchor.AddDays(-8));
+        habit.SkipFlexible(Anchor.AddDays(-1)).IsSuccess.Should().BeTrue();
+        Log(habit, Anchor).SoftDelete();
+        factory.Context.Users.Add(user);
+        factory.Context.Habits.Add(habit);
+        await factory.Context.SaveChangesAsync();
+
+        var result = await new HabitLogReader(factory.Context)
+            .GetLastCompletionDateAsync(user.Id, CancellationToken.None);
+
+        result.Should().Be(Anchor.AddDays(-8));
+    }
+
+    [Fact]
+    public async Task LastCompletionDate_ReturnsNullWhenOnlyActivityIsSkip()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var user = User.Create("Skip Only User", "skip-only@example.com").Value;
+        var habit = FlexibleHabitFor(user.Id);
+        habit.SkipFlexible(Anchor).IsSuccess.Should().BeTrue();
+        factory.Context.Users.Add(user);
+        factory.Context.Habits.Add(habit);
+        await factory.Context.SaveChangesAsync();
+
+        var result = await new HabitLogReader(factory.Context)
+            .GetLastCompletionDateAsync(user.Id, CancellationToken.None);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task LastCompletionDate_IncludesCompletionsFromDeletedHabits()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var user = User.Create("Former Habit User", "former@example.com").Value;
+        var habit = Habit.Create(new HabitCreateParams(user.Id, "Former", FrequencyUnit.Day, 1, Anchor)).Value;
+        Log(habit, Anchor.AddDays(-3));
+        habit.SoftDelete();
+        factory.Context.Users.Add(user);
+        factory.Context.Habits.Add(habit);
+        await factory.Context.SaveChangesAsync();
+
+        var result = await new HabitLogReader(factory.Context)
+            .GetLastCompletionDateAsync(user.Id, CancellationToken.None);
+
+        result.Should().Be(Anchor.AddDays(-3));
+    }
+
+    [Fact]
+    public async Task LastCompletionDate_ReturnsNullWithoutCompletionsInOneQuery()
+    {
+        var counter = new CountingDbCommandInterceptor();
+        using var factory = new SqliteOrbitDbContextFactory(counter);
+        var user = User.Create("New User", "new@example.com").Value;
+        factory.Context.Users.Add(user);
+        await factory.Context.SaveChangesAsync();
+        counter.Reset();
+
+        var result = await new HabitLogReader(factory.Context)
+            .GetLastCompletionDateAsync(user.Id, CancellationToken.None);
+
+        result.Should().BeNull();
+        counter.CommandCount.Should().Be(1);
+    }
+
+    private static Habit FlexibleHabitFor(Guid userId) =>
+        Habit.Create(new HabitCreateParams(userId, "Flexible", FrequencyUnit.Week, 3, Anchor, IsFlexible: true)).Value;
+
     private static OrbitDbContext CreateInMemoryDbContext()
     {
         var options = new DbContextOptionsBuilder<OrbitDbContext>()

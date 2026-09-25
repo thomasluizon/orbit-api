@@ -23,6 +23,8 @@ public class ApplyHabitInputValidator : AbstractValidator<ApplyHabitInput>
             .WithMessage("Frequency quantity is required when frequency unit is set")
             .When(x => x.FrequencyUnit is not null);
 
+        SharedHabitRules.AddIntervalWeeksRules(RuleFor(x => x.IntervalWeeks));
+
         SharedHabitRules.AddReminderTimesRules(RuleFor(x => x.ReminderTimes));
         SharedHabitRules.AddDaysRules(this, x => x.Days, x => x.FrequencyQuantity, x => x.FrequencyUnit, x => x.IsFlexible);
         SharedHabitRules.AddGeneralHabitRules(this, x => x.IsGeneral, x => x.FrequencyUnit, x => x.FrequencyQuantity, x => x.Days);
