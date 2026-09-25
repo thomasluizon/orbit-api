@@ -124,10 +124,11 @@ public class AuthSessionServiceRevokeAllTests
     private static AuthSessionService CreateService(OrbitDbContext context)
     {
         var tokenService = Substitute.For<ITokenService>();
-        tokenService.GenerateToken(Arg.Any<Guid>(), Arg.Any<string>()).Returns("access-token");
+        tokenService.GenerateToken(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>()).Returns("access-token");
 
         return new AuthSessionService(
             new GenericRepository<UserSession>(context),
+            new GenericRepository<UserSessionRefreshToken>(context),
             new GenericRepository<User>(context),
             tokenService,
             new UnitOfWork(context, new DatabaseConnectionSettings()),

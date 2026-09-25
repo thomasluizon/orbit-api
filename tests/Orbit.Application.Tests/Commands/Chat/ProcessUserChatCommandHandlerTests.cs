@@ -525,6 +525,7 @@ public class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.AiMessage.Should().Contain(number);
+        result.Value.AiMessage.Should().NotContain("habits");
     }
 
     [Fact]
@@ -541,6 +542,46 @@ public class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_CrisisDisclosure_DoesNotExecuteModelRequestedTool()
+    {
+        SetupUserAndPayGate();
+        var tool = CreateFailingCreateHabitTool();
+        SetupAiResponse(ToolResponse("create_habit", "call_1", "{}"));
+
+        var result = await CreateHandler(tool).Handle(
+            new ProcessUserChatCommand(UserId, "I want to hurt myself"),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessage.Should().StartWith(CrisisSupportGuard.EnglishSupport);
+        result.Value.Actions.Should().BeEmpty();
+        await _aiIntentService.Received(1).SendWithToolsAsync(
+            Arg.Is<AiToolRequest>(aiRequest => aiRequest.ToolDeclarations.Count == 0),
+            Arg.Is<Func<AiStreamEvent, Task>?>(sink => sink == null),
+            Arg.Any<CancellationToken>());
+        await tool.DidNotReceive().ExecuteAsync(
+            Arg.Any<JsonElement>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        await _aiIntentService.DidNotReceive().ContinueWithToolResultsAsync(
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_TypographicApostropheWhenProviderFails_Returns988Fallback()
+    {
+        SetupUserAndPayGate();
+        SetupAiFailure("AI service unavailable");
+
+        var result = await CreateHandler().Handle(
+            new ProcessUserChatCommand(UserId, "I don’t want to live"),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessage.Should().Be(
+            CrisisSupportGuard.EnglishSupport + "\n\n" + CrisisSupportGuard.EnglishResource);
+    }
+
+    [Fact]
     public async Task Handle_CrisisShapedFaq_DoesNotStoreAnswer()
     {
         SetupUserAndPayGate();
@@ -550,14 +591,14 @@ public class ProcessUserChatCommandHandlerTests
             new ProcessUserChatCommand(UserId, "What are the pro features? I want to hurt myself."),
             CancellationToken.None);
 
-        result.Value.AiMessage.Should().Contain("I hear you.");
+        result.Value.AiMessage.Should().StartWith(CrisisSupportGuard.EnglishSupport);
         ChatFaqCache.TryGetAnswer("free_vs_pro", "en", out _).Should().BeFalse();
         await _aiIntentService.Received(1).SendWithToolsAsync(
             Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_FigurativeCrisisKeyword_PreservesModelReplyWithFooter()
+    public async Task Handle_FigurativeCrisisKeyword_UsesSafeStaticReply()
     {
         SetupUserAndPayGate();
         SetupAiResponse(new AiResponse { TextMessage = "That episode has an unexpected ending." });
@@ -566,7 +607,8 @@ public class ProcessUserChatCommandHandlerTests
             new ProcessUserChatCommand(UserId, "That episode about suicide had an odd ending."),
             CancellationToken.None);
 
-        result.Value.AiMessage.Should().StartWith("That episode has an unexpected ending.");
+        result.Value.AiMessage.Should().StartWith(CrisisSupportGuard.EnglishSupport);
+        result.Value.AiMessage.Should().NotContain("That episode has an unexpected ending.");
         result.Value.AiMessage.Should().EndWith(CrisisSupportGuard.EnglishResource);
     }
 
@@ -584,7 +626,7 @@ public class ProcessUserChatCommandHandlerTests
             new ProcessUserChatCommand(UserId, "I still want to hurt myself", History: history),
             CancellationToken.None);
 
-        result.Value.AiMessage.Should().Be("I'm here with you.");
+        result.Value.AiMessage.Should().Be(CrisisSupportGuard.EnglishSupport);
         _productAnalytics.DidNotReceive().CaptureAggregateEvent(
             Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, object>>());
     }

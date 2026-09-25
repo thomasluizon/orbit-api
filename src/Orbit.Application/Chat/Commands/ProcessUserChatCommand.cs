@@ -126,6 +126,9 @@ public partial class ProcessUserChatCommandHandler(
 
         var context = contextResult.Value;
         var crisisTurn = IsCrisisTurn(detectedCrisisLocales, context.EnabledFeatureFlags);
+        if (crisisTurn)
+            return await HandleCrisisTurnAsync(request, context, detectedCrisisLocales, cancellationToken);
+
         var userLanguage = GetUserLanguage(context.User);
         var aiStreamFilter = BuildAiStreamFilter(request.StreamSink);
         Func<AiStreamEvent, Task>? aiStreamSink = aiStreamFilter is null
@@ -133,7 +136,7 @@ public partial class ProcessUserChatCommandHandler(
             : aiStreamFilter.HandleAsync;
 
         var faqMatch = ChatFaqCache.TryMatchFaqKey(request.Message);
-        var cachedFaqAnswer = crisisTurn ? null : TryGetCachedFaqAnswer(faqMatch);
+        var cachedFaqAnswer = TryGetCachedFaqAnswer(faqMatch);
         if (cachedFaqAnswer is not null)
             return Result.Success(new ChatResponse(cachedFaqAnswer, [], CorrelationId: request.CorrelationId));
 
@@ -148,9 +151,7 @@ public partial class ProcessUserChatCommandHandler(
         LogAiIntentServiceCompleted(logger, aiStopwatch.ElapsedMilliseconds);
 
         if (response.IsFailure)
-            return crisisTurn
-                ? await CreateCrisisFallbackAsync(request, detectedCrisisLocales)
-                : response.PropagateError<ChatResponse>();
+            return response.PropagateError<ChatResponse>();
 
         var executionResults = new ToolExecutionAccumulator();
         var actionsStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -177,9 +178,7 @@ public partial class ProcessUserChatCommandHandler(
         LogChangesSaved(logger, saveStopwatch.ElapsedMilliseconds);
 
         if (IsEmptyTokenBudgetResponse(toolLoopResult.TokenBudgetExceeded, aiResponse.TextMessage))
-            return crisisTurn
-                ? await CreateCrisisFallbackAsync(request, detectedCrisisLocales)
-                : Result.Failure<ChatResponse>(ErrorMessages.AiUnavailable);
+            return Result.Failure<ChatResponse>(ErrorMessages.AiUnavailable);
 
         var responseText = StripJsonWrapper(aiResponse.TextMessage);
         if (aiResponse.IsTruncated)
@@ -187,12 +186,7 @@ public partial class ProcessUserChatCommandHandler(
         var (aiMessage, habitList, goalList, metricsCard) = await BuildResponseCardsAsync(
             responseText, request, context, cancellationToken);
 
-        if (crisisTurn)
-            aiMessage = await CompleteCrisisReplyAsync(
-                request, aiMessage, detectedCrisisLocales,
-                request.StreamSink is null ? "batch" : "stream");
-
-        if (GetShareableFaqAnswer(crisisTurn, faqMatch, aiMessage, executionResults, metricsCard) is { } faqToCache)
+        if (GetShareableFaqAnswer(faqMatch, aiMessage, executionResults, metricsCard) is { } faqToCache)
         {
             ChatFaqCache.StoreAnswer(faqToCache.Key, faqToCache.Locale, faqToCache.Answer);
         }
@@ -216,7 +210,7 @@ public partial class ProcessUserChatCommandHandler(
             request.UserId,
             request.Message,
             aiMessage,
-            shouldExtractFacts: ShouldExtractFacts(crisisTurn, context),
+            shouldExtractFacts: ShouldExtractFacts(context),
             existingFacts: context.UserFacts);
 
         totalStopwatch.Stop();
@@ -254,21 +248,37 @@ public partial class ProcessUserChatCommandHandler(
         exceeded && string.IsNullOrWhiteSpace(text);
 
     private static (string Key, string Locale, string Answer)? GetShareableFaqAnswer(
-        bool crisisTurn,
         (string Key, string Locale)? match,
         string? aiMessage,
         ToolExecutionAccumulator executionResults,
         MetricsCard? metricsCard)
     {
-        if (crisisTurn || match is null || string.IsNullOrWhiteSpace(aiMessage)
+        if (match is null || string.IsNullOrWhiteSpace(aiMessage)
             || !IsShareableFaqTurn(executionResults, metricsCard))
             return null;
 
         return (match.Value.Key, match.Value.Locale, aiMessage);
     }
 
-    private static bool ShouldExtractFacts(bool crisisTurn, ChatContext context) =>
-        !crisisTurn && context.AiMemoryEnabled && context.User is { HasProAccess: true };
+    private static bool ShouldExtractFacts(ChatContext context) =>
+        context.AiMemoryEnabled && context.User is { HasProAccess: true };
+
+    private async Task<Result<ChatResponse>> HandleCrisisTurnAsync(
+        ProcessUserChatCommand request,
+        ChatContext context,
+        CrisisLocales locales,
+        CancellationToken cancellationToken)
+    {
+        var response = await RequestInitialAiResponseAsync(
+            request, context, aiStreamSink: null, skipTools: true, cancellationToken);
+        if (response.IsFailure)
+            return await CreateCrisisFallbackAsync(request, locales);
+
+        var message = await CompleteCrisisReplyAsync(
+            request, CrisisSupportGuard.FallbackMessage(locales), locales,
+            request.StreamSink is null ? "batch" : "stream");
+        return Result.Success(new ChatResponse(message, [], CorrelationId: request.CorrelationId));
+    }
 
     private async Task<Result<ChatResponse>> CreateCrisisFallbackAsync(
         ProcessUserChatCommand request,

@@ -93,8 +93,10 @@ public static class CrisisSupportGuard
         var builder = new StringBuilder(decomposed.Length);
         foreach (var ch in decomposed)
         {
-            if (CharUnicodeInfo.GetUnicodeCategory(ch) != UnicodeCategory.NonSpacingMark)
-                builder.Append(ch);
+            if (CharUnicodeInfo.GetUnicodeCategory(ch) == UnicodeCategory.NonSpacingMark)
+                continue;
+
+            builder.Append(ch is '\u2019' or '\u2018' or '\u02bc' or '\uff07' ? '\'' : ch);
         }
         return builder.ToString();
     }

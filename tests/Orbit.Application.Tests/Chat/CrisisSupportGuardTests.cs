@@ -11,6 +11,7 @@ public class CrisisSupportGuardTests
     [InlineData("Quero me machucar", CrisisLocales.Portuguese)]
     [InlineData("Tenho pensamentos de suicídio", CrisisLocales.Portuguese)]
     [InlineData("I want to die. Quero morrer.", CrisisLocales.English | CrisisLocales.Portuguese)]
+    [InlineData("I don’t want to live", CrisisLocales.English)]
     public void Detect_RecognizesCuratedPhrases(string message, CrisisLocales expected)
     {
         CrisisSupportGuard.Detect(message).Should().Be(expected);
