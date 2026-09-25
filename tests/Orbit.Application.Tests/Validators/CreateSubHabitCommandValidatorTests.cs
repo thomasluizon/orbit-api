@@ -45,14 +45,16 @@ public class CreateSubHabitCommandValidatorTests
     public void Validate_EmptyTitle_HasError()
     {
         var result = _validator.TestValidate(ValidCommand() with { Title = "" });
-        result.ShouldHaveValidationErrorFor(x => x.Title);
+        result.Errors.Should().ContainSingle(e => e.PropertyName == nameof(CreateSubHabitCommand.Title))
+            .Which.ErrorMessage.Should().Be("Sub-habit title must not be empty");
     }
 
     [Fact]
     public void Validate_TitleOver200Chars_HasError()
     {
-        var result = _validator.TestValidate(ValidCommand() with { Title = new string('a', 201) });
-        result.ShouldHaveValidationErrorFor(x => x.Title);
+        var result = _validator.TestValidate(ValidCommand() with { Title = new string('a', 250) });
+        result.Errors.Should().ContainSingle(e => e.PropertyName == nameof(CreateSubHabitCommand.Title))
+            .Which.ErrorMessage.Should().Be($"Sub-habit title must not exceed {AppConstants.MaxHabitTitleLength} characters");
     }
 
     [Fact]
