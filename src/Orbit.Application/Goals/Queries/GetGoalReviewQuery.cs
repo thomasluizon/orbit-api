@@ -17,6 +17,7 @@ public record GetGoalReviewQuery(Guid UserId, string Language) : IRequest<Result
 public class GetGoalReviewQueryHandler(
     IGenericRepository<Goal> goalRepository,
     IPayGateService payGate,
+    IUnitOfWork unitOfWork,
     IGoalReviewService goalReviewService,
     IUserDateService userDateService,
     IGoalProgressReadSyncer goalProgressReadSyncer,
@@ -26,10 +27,6 @@ public class GetGoalReviewQueryHandler(
         GetGoalReviewQuery request,
         CancellationToken cancellationToken)
     {
-        var gateCheck = await payGate.CanUseGoalReview(request.UserId, cancellationToken);
-        if (gateCheck.IsFailure)
-            return gateCheck.PropagateError<GoalReviewResponse>();
-
         var cacheKey = $"goal-review:{request.UserId}:{request.Language}";
 
         if (cache.TryGetValue(cacheKey, out string? cached) && cached is not null)
@@ -59,6 +56,13 @@ public class GetGoalReviewQueryHandler(
                 GoalProgressSyncService.ApplyReadValue(goal, freshValue);
 
         var goalsContext = BuildGoalsContext(goalList, userToday, weekStartDay);
+
+        var reservation = await payGate.TryConsumeAiMessage(
+            request.UserId,
+            unitOfWork,
+            cancellationToken);
+        if (reservation.IsFailure)
+            return reservation.PropagateError<GoalReviewResponse>();
 
         var result = await goalReviewService.GenerateReviewAsync(
             goalsContext,
