@@ -7977,6 +7977,7 @@
         "testClass": "PendingAgentOperationStoreTests",
         "file": "tests/Orbit.Infrastructure.Tests/Services/PendingAgentOperationStoreTests.cs",
         "references": [
+          "PendingAgentOperationState",
           "User"
         ]
       },
