@@ -61,21 +61,23 @@ public class GetRecapQueryHandler(
             return Result.Failure<RecapResponse>(ErrorMessages.UserNotFound);
 
         var userTimeZone = TimeZoneHelper.FindTimeZone(user.TimeZone);
-        if (isClosedMonth && IsBeforeAccountMonth(request.DateFrom, user, userTimeZone))
-            return Result.Failure<RecapResponse>(ErrorMessages.RecapMonthBeforeAccount);
+        if (isClosedPeriod && IsBeforeAccountPeriod(request.DateTo, user, userTimeZone))
+            return Result.Failure<RecapResponse>(isClosedMonth
+                ? ErrorMessages.RecapMonthBeforeAccount
+                : ErrorMessages.RecapPeriodBeforeAccount);
 
-        if (isClosedMonth)
-            return await HandleClosedMonthAsync(request, userTimeZone, user.WeekStartDay, cancellationToken);
+        if (isClosedPeriod)
+            return await HandleClosedPeriodAsync(request, userTimeZone, user.WeekStartDay, cancellationToken);
 
         return await BuildResponseAsync(
             request,
             userTimeZone,
             user.WeekStartDay,
-            isClosedPeriod,
+            isClosedPeriod: false,
             cancellationToken);
     }
 
-    private async Task<Result<RecapResponse>> HandleClosedMonthAsync(
+    private async Task<Result<RecapResponse>> HandleClosedPeriodAsync(
         GetRecapQuery request,
         TimeZoneInfo userTimeZone,
         int weekStartDay,
@@ -115,11 +117,12 @@ public class GetRecapQueryHandler(
                     return result;
 
                 var responseJson = JsonSerializer.Serialize(result.Value, SerializerOptions);
-                var recapResult = ClosedMonthRecap.Create(
-                    request.UserId,
-                    request.DateFrom,
-                    request.DateTo,
-                    responseJson);
+                var recapResult = request.Period.ToLowerInvariant() switch
+                {
+                    "week" => ClosedMonthRecap.CreateClosedWeek(request.UserId, request.DateFrom, request.DateTo, responseJson),
+                    "year" => ClosedMonthRecap.CreateClosedYear(request.UserId, request.DateFrom, request.DateTo, responseJson),
+                    _ => ClosedMonthRecap.Create(request.UserId, request.DateFrom, request.DateTo, responseJson)
+                };
                 if (recapResult.IsFailure)
                     throw new InvalidOperationException(recapResult.Error);
 
@@ -190,16 +193,15 @@ public class GetRecapQueryHandler(
     private static RecapResponse DeserializeResponse(string responseJson)
     {
         return JsonSerializer.Deserialize<RecapResponse>(responseJson, SerializerOptions)
-            ?? throw new InvalidOperationException("Stored closed month recap response is invalid.");
+            ?? throw new InvalidOperationException("Stored closed period recap response is invalid.");
     }
 
-    private static bool IsBeforeAccountMonth(DateOnly dateFrom, User user, TimeZoneInfo userTimeZone)
+    private static bool IsBeforeAccountPeriod(DateOnly dateTo, User user, TimeZoneInfo userTimeZone)
     {
         var accountCreatedLocal = TimeZoneInfo.ConvertTimeFromUtc(
             DateTime.SpecifyKind(user.CreatedAtUtc, DateTimeKind.Utc),
             userTimeZone);
-        var accountFirstMonth = new DateOnly(accountCreatedLocal.Year, accountCreatedLocal.Month, 1);
-        return dateFrom < accountFirstMonth;
+        return dateTo < DateOnly.FromDateTime(accountCreatedLocal);
     }
 
     private async Task<IReadOnlyList<Habit>> LoadHabitsAsync(

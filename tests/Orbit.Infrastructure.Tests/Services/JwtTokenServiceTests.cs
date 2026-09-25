@@ -34,7 +34,7 @@ public class JwtTokenServiceTests
         var userId = Guid.NewGuid();
         var email = "test@example.com";
 
-        var token = _sut.GenerateToken(userId, email);
+        var token = _sut.GenerateToken(userId, email, Guid.NewGuid());
 
         token.Should().NotBeNullOrWhiteSpace();
     }
@@ -45,7 +45,7 @@ public class JwtTokenServiceTests
         var userId = Guid.NewGuid();
         var email = "test@example.com";
 
-        var token = _sut.GenerateToken(userId, email);
+        var token = _sut.GenerateToken(userId, email, Guid.NewGuid());
 
         var handler = new JwtSecurityTokenHandler();
         var jwt = handler.ReadJwtToken(token);
@@ -61,7 +61,7 @@ public class JwtTokenServiceTests
         var userId = Guid.NewGuid();
         var email = "user@orbit.test";
 
-        var token = _sut.GenerateToken(userId, email);
+        var token = _sut.GenerateToken(userId, email, Guid.NewGuid());
 
         var handler = new JwtSecurityTokenHandler();
         var jwt = handler.ReadJwtToken(token);
@@ -74,7 +74,7 @@ public class JwtTokenServiceTests
     [Fact]
     public void GenerateToken_OmitsAdminClaim()
     {
-        var token = _sut.GenerateToken(Guid.NewGuid(), "user@orbit.test");
+        var token = _sut.GenerateToken(Guid.NewGuid(), "user@orbit.test", Guid.NewGuid());
 
         var jwt = new JwtSecurityTokenHandler().ReadJwtToken(token);
 
@@ -86,7 +86,7 @@ public class JwtTokenServiceTests
     [Fact]
     public void GenerateToken_IncludesGuidJtiClaim()
     {
-        var token = _sut.GenerateToken(Guid.NewGuid(), "user@orbit.test");
+        var token = _sut.GenerateToken(Guid.NewGuid(), "user@orbit.test", Guid.NewGuid());
 
         var jwt = new JwtSecurityTokenHandler().ReadJwtToken(token);
 
@@ -99,9 +99,9 @@ public class JwtTokenServiceTests
     {
         var handler = new JwtSecurityTokenHandler();
 
-        var firstJti = handler.ReadJwtToken(_sut.GenerateToken(Guid.NewGuid(), "a@orbit.test"))
+        var firstJti = handler.ReadJwtToken(_sut.GenerateToken(Guid.NewGuid(), "a@orbit.test", Guid.NewGuid()))
             .Claims.Single(c => c.Type == JwtRegisteredClaimNames.Jti).Value;
-        var secondJti = handler.ReadJwtToken(_sut.GenerateToken(Guid.NewGuid(), "b@orbit.test"))
+        var secondJti = handler.ReadJwtToken(_sut.GenerateToken(Guid.NewGuid(), "b@orbit.test", Guid.NewGuid()))
             .Claims.Single(c => c.Type == JwtRegisteredClaimNames.Jti).Value;
 
         secondJti.Should().NotBe(firstJti);
@@ -117,7 +117,8 @@ public class JwtTokenServiceTests
         var userId = Guid.Parse("11111111-2222-3333-4444-555555555555");
         const string email = "probe@orbit.test";
 
-        var token = _sut.GenerateToken(userId, email);
+        var sessionId = Guid.NewGuid();
+        var token = _sut.GenerateToken(userId, email, sessionId);
 
         var segments = token.Split('.');
         segments.Should().HaveCount(3);
@@ -142,6 +143,7 @@ public class JwtTokenServiceTests
             "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier",
             "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress",
             "jti",
+            "orbit_session_id",
             "iat",
             "nbf"
         ]);
@@ -162,6 +164,7 @@ public class JwtTokenServiceTests
             .GetString().Should().Be(email);
         properties["jti"].ValueKind.Should().Be(JsonValueKind.String);
         Guid.TryParse(properties["jti"].GetString(), out _).Should().BeTrue();
+        properties["orbit_session_id"].GetString().Should().Be(sessionId.ToString());
         properties["iat"].ValueKind.Should().Be(JsonValueKind.Number);
         properties["iat"].TryGetInt64(out _).Should().BeTrue();
         properties["nbf"].ValueKind.Should().Be(JsonValueKind.Number);
@@ -175,7 +178,7 @@ public class JwtTokenServiceTests
         var email = "test@example.com";
         var beforeGeneration = DateTime.UtcNow;
 
-        var token = _sut.GenerateToken(userId, email);
+        var token = _sut.GenerateToken(userId, email, Guid.NewGuid());
 
         var handler = new JwtSecurityTokenHandler();
         var jwt = handler.ReadJwtToken(token);

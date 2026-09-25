@@ -84,6 +84,7 @@ public static class ErrorCodes
     public const string InvalidClosedMonthParameters = "INVALID_CLOSED_MONTH_PARAMETERS";
     public const string RecapMonthNotClosed = "RECAP_MONTH_NOT_CLOSED";
     public const string RecapMonthBeforeAccount = "RECAP_MONTH_BEFORE_ACCOUNT";
+    public const string RecapPeriodBeforeAccount = "RECAP_PERIOD_BEFORE_ACCOUNT";
     public const string InvalidClosedWeekParameters = "INVALID_CLOSED_WEEK_PARAMETERS";
     public const string InvalidClosedYearParameters = "INVALID_CLOSED_YEAR_PARAMETERS";
     public const string RecapWeekNotClosed = "RECAP_WEEK_NOT_CLOSED";

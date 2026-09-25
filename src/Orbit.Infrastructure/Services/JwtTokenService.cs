@@ -13,15 +13,17 @@ public class JwtTokenService(IOptions<JwtSettings> options) : ITokenService
 {
     private readonly JwtSettings _settings = options.Value;
 
-    public string GenerateToken(Guid userId, string email)
+    public string GenerateToken(Guid userId, string email, Guid sessionId)
     {
+        ArgumentOutOfRangeException.ThrowIfEqual(sessionId, Guid.Empty);
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_settings.SecretKey));
 
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, userId.ToString()),
             new(ClaimTypes.Email, email),
-            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new("orbit_session_id", sessionId.ToString())
         };
 
         var descriptor = new SecurityTokenDescriptor
