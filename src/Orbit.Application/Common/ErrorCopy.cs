@@ -56,7 +56,7 @@ public static class ErrorCopy
         (ErrorCodes.StepUpChallengeNotFound, "That confirmation expired. Start the action again.", "Essa confirmação expirou. Comece a ação de novo."),
         (ErrorCodes.InvalidStepUpCode, "That confirmation code is not correct. Check it and enter it again.", "Esse código de confirmação não está certo. Confira e digite de novo."),
         (ErrorCodes.ApiKeyNotFound, "That API key is not here any more.", "Essa chave de API não está mais aqui."),
-        (ErrorCodes.ApiKeyCreationChallengeRequired, "Enter the code we emailed you before creating an API key.", "Digite o código que enviamos por e-mail antes de criar uma chave de API."),
+        (ErrorCodes.ApiKeyCreationChallengeRequired, "Confirm the emailed code before managing API keys.", "Confirme o código enviado por e-mail antes de gerenciar chaves de API."),
         (ErrorCodes.MaxApiKeys, "You can keep {0} active API keys. Revoke one to create another.", "Você pode manter {0} chaves de API ativas. Revogue uma para criar outra."),
         (DomainErrors.ApiKeyNameRequired.Code, "Enter a name for the API key.", "Digite um nome para a chave de API."),
         (DomainErrors.ApiKeyNameTooLong.Code, "An API key name fits 50 characters. Shorten it.", "Um nome de chave de API cabe em 50 caracteres. Encurte."),

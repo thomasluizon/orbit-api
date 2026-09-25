@@ -1,11 +1,14 @@
-using System.Linq.Expressions;
+﻿using System.Linq.Expressions;
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Application.ApiKeys.Commands;
 using Orbit.Application.ApiKeys.Queries;
+using Orbit.Application.ApiKeys.Services;
+using Orbit.Application.Auth.Services;
 using Orbit.Application.ChecklistTemplates.Commands;
 using Orbit.Application.ChecklistTemplates.Queries;
+using Orbit.Application.Common;
 using Orbit.Application.Tags.Commands;
 using Orbit.Application.Tags.Queries;
 using Orbit.Application.UserFacts.Commands;
@@ -113,6 +116,8 @@ public class ReferenceCacheInvalidationTests
         var repo = Substitute.For<IGenericRepository<ApiKey>>();
         var payGate = Substitute.For<IPayGateService>();
         var unitOfWork = Substitute.For<IUnitOfWork>();
+        var appConfig = Substitute.For<IAppConfigService>();
+        var challengeService = new EmailChallengeService(cache, TimeProvider.System);
         var (apiKey, _) = ApiKey.Create(UserId, "Agent Key").Value;
 
         payGate.CanReadApiKeys(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
@@ -122,12 +127,18 @@ public class ReferenceCacheInvalidationTests
         repo.FindTrackedAsync(Arg.Any<Expression<Func<ApiKey, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(new List<ApiKey> { apiKey });
 
-        var read = new GetApiKeysQueryHandler(repo, payGate, cache);
+        var authorization = new ApiKeyManagementAuthorization(appConfig, challengeService);
+        var read = new GetApiKeysQueryHandler(repo, payGate, cache, authorization);
         await read.Handle(new GetApiKeysQuery(UserId), CancellationToken.None);
         await read.Handle(new GetApiKeysQuery(UserId), CancellationToken.None);
         await repo.Received(1).FindAsync(Arg.Any<Expression<Func<ApiKey, bool>>>(), Arg.Any<CancellationToken>());
 
-        var revoke = new RevokeApiKeyCommandHandler(repo, payGate, unitOfWork, cache);
+        var revoke = new RevokeApiKeyCommandHandler(
+            repo,
+            payGate,
+            unitOfWork,
+            cache,
+            authorization);
         (await revoke.Handle(new RevokeApiKeyCommand(UserId, apiKey.Id), CancellationToken.None))
             .IsSuccess.Should().BeTrue();
 

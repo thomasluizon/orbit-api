@@ -63,7 +63,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         {
             lines.Add(McpToolHelpers.FormatHabitLine(new McpToolHelpers.HabitLineData(h.Id, h.Title, h.FrequencyUnit, h.FrequencyQuantity,
                 h.DueTime, h.IsCompleted, h.IsOverdue, h.IsBadHabit, h.IsGeneral, h.IsFlexible,
-                h.ChecklistItems, h.Tags), indent: 0));
+                h.ChecklistItems, h.Tags, h.Emoji), indent: 0));
             McpToolHelpers.AppendChildren(lines, h.Children, indent: 1);
         }
 
@@ -86,6 +86,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
 
         var h = result.Value;
         var habitSummary = $"Title: {h.Title}\nID: {h.Id}\n" +
+                   $"Emoji: {h.Emoji ?? "None"}\n" +
                    $"Status: {(h.IsCompleted ? "Completed" : "Active")}\n" +
                    (h.Description is not null ? $"Description: {h.Description}\n" : "") +
                    (h.FrequencyUnit is not null ? $"Frequency: {h.FrequencyQuantity}x per {h.FrequencyUnit}\n" : "Type: One-time task\n") +
@@ -115,6 +116,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         [Description("Whether this is a flexible frequency habit")] bool isFlexible = false,
         [Description("Due time in HH:mm format")] string? dueTime = null,
         [Description("Repeat interval in weeks. Omit for every week.")] int? intervalWeeks = null,
+        [Description("Emoji icon for the habit")] string? emoji = null,
         CancellationToken cancellationToken = default)
     {
         var result = await executorBridge.ExecuteAsync(user, "create_habit", new
@@ -128,7 +130,8 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
             is_general = isGeneral,
             is_flexible = isFlexible,
             due_time = dueTime,
-            interval_weeks = intervalWeeks
+            interval_weeks = intervalWeeks,
+            emoji
         }, confirmationToken: null, cancellationToken);
 
         if (!result.Succeeded)
@@ -151,19 +154,24 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         [Description("New due date in YYYY-MM-DD format")] string? dueDate = null,
         [Description("New due time in HH:mm format")] string? dueTime = null,
         [Description("New repeat interval in weeks. Use 1 for every week.")] int? intervalWeeks = null,
+        [Description("Emoji icon. Omit to keep it, or pass null to clear it.")] string? emoji = "",
         CancellationToken cancellationToken = default)
     {
-        var result = await executorBridge.ExecuteAsync(user, "update_habit", new
+        var arguments = new Dictionary<string, object?>
         {
-            habit_id = habitId,
-            title,
-            description,
-            frequency_unit = frequencyUnit,
-            frequency_quantity = frequencyQuantity,
-            due_date = dueDate,
-            due_time = dueTime,
-            interval_weeks = intervalWeeks
-        }, confirmationToken: null, cancellationToken);
+            ["habit_id"] = habitId,
+            ["title"] = title,
+            ["description"] = description,
+            ["frequency_unit"] = frequencyUnit,
+            ["frequency_quantity"] = frequencyQuantity,
+            ["due_date"] = dueDate,
+            ["due_time"] = dueTime,
+            ["interval_weeks"] = intervalWeeks
+        };
+        if (emoji != string.Empty)
+            arguments["emoji"] = emoji;
+
+        var result = await executorBridge.ExecuteAsync(user, "update_habit", arguments, confirmationToken: null, cancellationToken);
 
         return result.Succeeded ? $"Updated habit {habitId}" : result.Message;
     }
@@ -362,7 +370,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
     [McpServerTool(Name = "bulk_create_habits"), Description("Create multiple habits at once. Each habit can have sub-habits.")]
     public async Task<string> BulkCreateHabits(
         ClaimsPrincipal user,
-        [Description("JSON array of habit objects. Each with: title (required), description, frequencyUnit (Day/Week/Month/Year), frequencyQuantity, isBadHabit, dueDate (YYYY-MM-DD), dueTime (HH:mm), isGeneral, isFlexible")] string habitsJson,
+        [Description("JSON array of habit objects. Each with: title (required), description, emoji, frequencyUnit (Day/Week/Month/Year), frequencyQuantity, isBadHabit, dueDate (YYYY-MM-DD), dueTime (HH:mm), isGeneral, isFlexible")] string habitsJson,
         [Description("Confirmation token returned by confirm_agent_operation_v2 (required: bulk create is a destructive batch operation)")] string? confirmationToken = null,
         CancellationToken cancellationToken = default)
     {
@@ -455,8 +463,9 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         [Description("Comma-separated habit IDs (GUIDs). Omit when filterJson is provided.")] string? habitIds = null,
         [Description("Date to log for in YYYY-MM-DD format (defaults to today)")] string? date = null,
         [Description("Optional JSON server-side filter used instead of habitIds")] string? filterJson = null,
+        [Description("Confirmation token returned by confirm_agent_operation_v2 (required: bulk log is a destructive batch operation)")] string? confirmationToken = null,
         CancellationToken cancellationToken = default) =>
-        ExecuteBulkHabitOperationAsync(user, "bulk_log_habits", habitIds, date, filterJson, cancellationToken);
+        ExecuteBulkHabitOperationAsync(user, "bulk_log_habits", habitIds, date, filterJson, confirmationToken, cancellationToken);
 
     [McpServerTool(Name = "bulk_skip_habits"), Description("Skip multiple habits at once.")]
     public Task<string> BulkSkipHabits(
@@ -464,8 +473,9 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         [Description("Comma-separated habit IDs (GUIDs). Omit when filterJson is provided.")] string? habitIds = null,
         [Description("Date to skip in YYYY-MM-DD format (defaults to today)")] string? date = null,
         [Description("Optional JSON server-side filter used instead of habitIds")] string? filterJson = null,
+        [Description("Confirmation token returned by confirm_agent_operation_v2 (required: bulk skip is a destructive batch operation)")] string? confirmationToken = null,
         CancellationToken cancellationToken = default) =>
-        ExecuteBulkHabitOperationAsync(user, "bulk_skip_habits", habitIds, date, filterJson, cancellationToken);
+        ExecuteBulkHabitOperationAsync(user, "bulk_skip_habits", habitIds, date, filterJson, confirmationToken, cancellationToken);
 
     private async Task<string> ExecuteBulkHabitOperationAsync(
         ClaimsPrincipal user,
@@ -473,6 +483,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         string? habitIds,
         string? date,
         string? filterJson,
+        string? confirmationToken,
         CancellationToken cancellationToken)
     {
         var ids = string.IsNullOrWhiteSpace(habitIds) ? [] : McpToolHelpers.ParseGuidCsv(habitIds);
@@ -483,7 +494,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
             habit_ids = ids.Count > 0 ? ids.Select(id => id.ToString()) : null,
             filter,
             date
-        }, confirmationToken: null, cancellationToken);
+        }, confirmationToken, cancellationToken);
 
         return result.Succeeded ? result.TargetName ?? "Bulk habit operation completed." : result.Message;
     }

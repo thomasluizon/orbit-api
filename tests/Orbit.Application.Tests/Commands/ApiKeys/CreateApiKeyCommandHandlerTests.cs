@@ -1,8 +1,9 @@
-using System.Linq.Expressions;
+﻿using System.Linq.Expressions;
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Application.ApiKeys.Commands;
+using Orbit.Application.ApiKeys.Services;
 using Orbit.Application.Auth.Services;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -31,8 +32,7 @@ public class CreateApiKeyCommandHandlerTests
             _payGate,
             _unitOfWork,
             _cache,
-            _appConfigService,
-            _challengeService);
+            new ApiKeyManagementAuthorization(_appConfigService, _challengeService));
 
         _appConfigService.GetAsync(
                 AppConfigKeys.RequireApiKeyCreationStepUp,
@@ -59,8 +59,7 @@ public class CreateApiKeyCommandHandlerTests
             _payGate,
             _unitOfWork,
             emptyCache,
-            _appConfigService,
-            new EmailChallengeService(emptyCache, TimeProvider.System));
+            new ApiKeyManagementAuthorization(_appConfigService, new EmailChallengeService(emptyCache, TimeProvider.System)));
 
         var result = await handler.Handle(
             new CreateApiKeyCommand(UserId, "My API Key"),
@@ -155,7 +154,7 @@ public class CreateApiKeyCommandHandlerTests
                 false,
                 Arg.Any<CancellationToken>())
             .Returns(false);
-        _challengeService.TryConsumeAuthorization(EmailChallengeOperation.ApiKeyCreation, UserId);
+        _challengeService.TryConsumeAuthorization(EmailChallengeOperation.ApiKeyManagement, UserId);
 
         var result = await _handler.Handle(
             new CreateApiKeyCommand(UserId, "Kill switch path"),
@@ -166,7 +165,7 @@ public class CreateApiKeyCommandHandlerTests
     }
 
     private void AuthorizeCreation() => _challengeService.AuthorizeOnce(
-        EmailChallengeOperation.ApiKeyCreation,
+        EmailChallengeOperation.ApiKeyManagement,
         UserId,
         TimeSpan.FromMinutes(10));
 }

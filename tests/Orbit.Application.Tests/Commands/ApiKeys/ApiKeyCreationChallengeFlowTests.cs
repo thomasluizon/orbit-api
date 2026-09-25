@@ -1,4 +1,4 @@
-using System.Linq.Expressions;
+﻿using System.Linq.Expressions;
 using FluentAssertions;
 using Hangfire;
 using Hangfire.Common;
@@ -8,6 +8,7 @@ using NSubstitute;
 using Orbit.Application.ApiKeys.Commands;
 using Orbit.Application.ApiKeys.Jobs;
 using Orbit.Application.Auth.Commands;
+using Orbit.Application.ApiKeys.Services;
 using Orbit.Application.Auth.Services;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -58,14 +59,14 @@ public class ApiKeyCreationChallengeFlowTests
             _backgroundJobClient);
         _confirmHandler = new ConfirmApiKeyCreationChallengeCommandHandler(
             _challengeService,
+            new ApiKeyManagementAuthorization(_appConfigService, _challengeService),
             _userRepository);
         _createHandler = new CreateApiKeyCommandHandler(
             _apiKeyRepository,
             _payGate,
             _unitOfWork,
             _cache,
-            _appConfigService,
-            _challengeService);
+            new ApiKeyManagementAuthorization(_appConfigService, _challengeService));
     }
 
     [Fact]
@@ -127,7 +128,7 @@ public class ApiKeyCreationChallengeFlowTests
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be(ErrorCodes.CodeExpired);
-        _challengeService.HasAuthorization(EmailChallengeOperation.ApiKeyCreation, UserId).Should().BeFalse();
+        _challengeService.HasAuthorization(EmailChallengeOperation.ApiKeyManagement, UserId).Should().BeFalse();
     }
 
     [Fact]

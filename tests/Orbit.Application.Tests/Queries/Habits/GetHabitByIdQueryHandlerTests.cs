@@ -33,11 +33,11 @@ public class GetHabitByIdQueryHandlerTests
             .Returns(new List<HabitLog>().AsReadOnly());
     }
 
-    private static Habit CreateTestHabit(string title = "Test Habit")
+    private static Habit CreateTestHabit(string title = "Test Habit", string? emoji = null)
     {
         return Habit.Create(new HabitCreateParams(
             UserId, title, FrequencyUnit.Day, 1,
-            DueDate: Today)).Value;
+            DueDate: Today, Emoji: emoji)).Value;
     }
 
     private static Habit CreateOneTimeHabit(string title, DateOnly dueDate, Guid? parentHabitId = null)
@@ -62,7 +62,7 @@ public class GetHabitByIdQueryHandlerTests
     [Fact]
     public async Task Handle_HabitFound_ReturnsSuccess()
     {
-        var habit = CreateTestHabit("My Daily Habit");
+        var habit = CreateTestHabit("My Daily Habit", "📚");
 
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -76,6 +76,7 @@ public class GetHabitByIdQueryHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("My Daily Habit");
+        result.Value.Emoji.Should().Be("📚");
         result.Value.FrequencyUnit.Should().Be(FrequencyUnit.Day);
         result.Value.FrequencyQuantity.Should().Be(1);
         result.Value.DueDate.Should().Be(Today);

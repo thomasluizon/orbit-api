@@ -17,7 +17,7 @@ namespace Orbit.Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.11")
+                .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -2253,6 +2253,30 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("UserSessions");
                 });
 
+            modelBuilder.Entity("Orbit.Domain.Entities.UserSessionRefreshToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<Guid>("UserSessionId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserSessionId");
+
+                    b.ToTable("UserSessionRefreshTokens");
+                });
+
             modelBuilder.Entity("Orbit.Domain.Entities.XpAwardLog", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2609,6 +2633,15 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Orbit.Domain.Entities.UserSessionRefreshToken", b =>
+                {
+                    b.HasOne("Orbit.Domain.Entities.UserSession", null)
+                        .WithMany()
+                        .HasForeignKey("UserSessionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

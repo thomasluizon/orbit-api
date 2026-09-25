@@ -10,7 +10,7 @@ namespace Orbit.Application.Auth.Services;
 public enum EmailChallengeOperation
 {
     AccountDeletion,
-    ApiKeyCreation,
+    ApiKeyManagement,
 }
 
 public readonly record struct EmailChallengeConfirmation(TimeSpan RemainingLifetime);
@@ -130,28 +130,28 @@ public sealed class EmailChallengeService(IMemoryCache cache, TimeProvider timeP
     private static AppError ExpiredError(EmailChallengeOperation operation) => operation switch
     {
         EmailChallengeOperation.AccountDeletion => ErrorMessages.DeletionCodeExpired,
-        EmailChallengeOperation.ApiKeyCreation => ErrorMessages.ApiKeyCreationCodeExpired,
+        EmailChallengeOperation.ApiKeyManagement => ErrorMessages.ApiKeyCreationCodeExpired,
         _ => throw new ArgumentOutOfRangeException(nameof(operation)),
     };
 
     private static AppError InvalidCodeError(EmailChallengeOperation operation, int attemptsRemaining) => operation switch
     {
         EmailChallengeOperation.AccountDeletion => ErrorMessages.InvalidDeletionCode.Format(attemptsRemaining),
-        EmailChallengeOperation.ApiKeyCreation => ErrorMessages.InvalidApiKeyCreationCode.Format(attemptsRemaining),
+        EmailChallengeOperation.ApiKeyManagement => ErrorMessages.InvalidApiKeyCreationCode.Format(attemptsRemaining),
         _ => throw new ArgumentOutOfRangeException(nameof(operation)),
     };
 
     private static string ChallengeCacheKey(EmailChallengeOperation operation, string email) => operation switch
     {
         EmailChallengeOperation.AccountDeletion => $"delete:{email}",
-        EmailChallengeOperation.ApiKeyCreation => $"api-key-create:{email}",
+        EmailChallengeOperation.ApiKeyManagement => $"api-key-create:{email}",
         _ => throw new ArgumentOutOfRangeException(nameof(operation)),
     };
 
     private static string FailedAttemptCacheKey(EmailChallengeOperation operation, string email) => operation switch
     {
         EmailChallengeOperation.AccountDeletion => $"delete-attempts:{email}",
-        EmailChallengeOperation.ApiKeyCreation => $"api-key-create-attempts:{email}",
+        EmailChallengeOperation.ApiKeyManagement => $"api-key-create-attempts:{email}",
         _ => throw new ArgumentOutOfRangeException(nameof(operation)),
     };
 

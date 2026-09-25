@@ -1,3 +1,4 @@
+﻿using System.Reflection;
 using System.Security.Claims;
 using FluentAssertions;
 using MediatR;
@@ -162,5 +163,52 @@ public class ApiKeysControllerTests
         var result = await _controller.RevokeApiKey(Guid.NewGuid(), CancellationToken.None);
 
         result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(404);
+    }
+
+    private static IReadOnlyList<int> DeclaredStatuses(string actionName) =>
+        typeof(ApiKeysController)
+            .GetMethod(actionName)!
+            .GetCustomAttributes<ProducesResponseTypeAttribute>()
+            .Select(attribute => attribute.StatusCode)
+            .ToList();
+
+    [Fact]
+    public void RevokeApiKey_DeclaresTheStepUpAndPayGateStatusesItReturns()
+    {
+        var declared = DeclaredStatuses(nameof(ApiKeysController.RevokeApiKey));
+
+        declared.Should().Contain(StatusCodes.Status428PreconditionRequired);
+        declared.Should().Contain(StatusCodes.Status403Forbidden);
+    }
+
+    [Fact]
+    public void GetApiKeys_DeclaresTheStepUpAndPayGateStatusesItReturns()
+    {
+        var declared = DeclaredStatuses(nameof(ApiKeysController.GetApiKeys));
+
+        declared.Should().Contain(StatusCodes.Status403Forbidden);
+        declared.Should().Contain(StatusCodes.Status428PreconditionRequired);
+    }
+
+    [Fact]
+    public async Task GetApiKeys_StepUpRequired_Returns428()
+    {
+        _mediator.Send(Arg.Any<GetApiKeysQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure<IReadOnlyList<ApiKeyResponse>>(ErrorMessages.ApiKeyCreationChallengeRequired));
+
+        var result = await _controller.GetApiKeys(CancellationToken.None);
+
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(428);
+    }
+
+    [Fact]
+    public async Task RevokeApiKey_StepUpRequired_Returns428()
+    {
+        _mediator.Send(Arg.Any<RevokeApiKeyCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure(ErrorMessages.ApiKeyCreationChallengeRequired));
+
+        var result = await _controller.RevokeApiKey(Guid.NewGuid(), CancellationToken.None);
+
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(428);
     }
 }
