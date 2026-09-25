@@ -2131,10 +2131,15 @@ public class ProcessUserChatCommandHandlerTests
             .Should().Be("Ready  done");
     }
 
-    [Fact]
-    public async Task Handle_StreamedHabitDirectiveAcrossChunks_StripsTokenAndReturnsCard()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_StreamedHabitDirectiveAcrossChunks_StripsTokenAndReturnsCard(bool cardAfterFollowUps)
     {
         SetupUserAndPayGate();
+        var response = cardAfterFollowUps
+            ? "Your habits:\n[[orbit:followups]]\nWhat changed?\nWhat next?\n[[orbit:habits:today]]"
+            : "Your habits:\n[[orbit:habits:today]]\n[[orbit:followups]]\nWhat changed?\nWhat next?";
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
@@ -2146,10 +2151,10 @@ public class ProcessUserChatCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(async callInfo =>
             {
-                var sink = callInfo.ArgAt<Func<AiStreamEvent, Task>?>(1);
-                await sink!(AiStreamEvent.Delta("Your habits:\n[[orbit:habi"));
-                await sink(AiStreamEvent.Delta("ts:today]]"));
-                return Result.Success(new AiResponse { TextMessage = "Your habits:\n[[orbit:habits:today]]" });
+                var sink = callInfo.ArgAt<Func<AiStreamEvent, Task>?>(1)!;
+                foreach (var character in response)
+                    await sink(AiStreamEvent.Delta(character.ToString()));
+                return Result.Success(new AiResponse { TextMessage = response });
             });
         var streamEvents = new List<ChatStreamEvent>();
         var handler = CreateHandler();
@@ -2158,7 +2163,7 @@ public class ProcessUserChatCommandHandlerTests
             new ProcessUserChatCommand(
                 UserId,
                 "Show today's habits",
-                ClientContext: new AgentClientContext(SupportsHabitListCard: true),
+                ClientContext: new AgentClientContext(SupportsHabitListCard: true, SupportsFollowUps: true),
                 StreamSink: streamEvent =>
                 {
                     streamEvents.Add(streamEvent);
@@ -2168,10 +2173,11 @@ public class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         string.Concat(streamEvents.Where(streamEvent => streamEvent.Type == "delta").Select(streamEvent => streamEvent.Text))
-            .Should().Be("Your habits:\n");
+            .Trim().Should().Be("Your habits:");
         result.Value.AiMessage.Should().Be("Your habits:");
         result.Value.HabitList.Should().NotBeNull();
         result.Value.HabitList!.Scope.Should().Be("today");
+        result.Value.FollowUps.Should().Equal("What changed?", "What next?");
     }
 
     [Fact]

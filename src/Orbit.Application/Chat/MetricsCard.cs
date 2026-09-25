@@ -30,10 +30,10 @@ public static partial class MetricsCardBuilder
 
     public const string PromptInstruction = """
         ## Metrics rendering (this client)
-        This app can display one card for current week progress. When the user asks about their current week, write one short intro without repeating figures, then emit [[orbit:metrics]] as the final line. Emit at most one directive. For other questions, answer normally.
+        This app can display one card for current week progress. When the user asks about their current week, write one short intro without repeating figures, then emit [[orbit:metrics]] before optional follow-ups. Emit at most one directive. For other questions, answer normally.
         """;
 
-    public const string HabitPromptInstruction = "After get_habit_metrics succeeds, write one short line without repeating figures, then emit [[orbit:metrics]] last so the card shows that habit.";
+    public const string HabitPromptInstruction = "After get_habit_metrics succeeds, write one short line without repeating figures, then emit [[orbit:metrics]] before optional follow-ups so the card shows that habit.";
 
     public static bool TryExtractDirective(string? message, out string stripped)
     {

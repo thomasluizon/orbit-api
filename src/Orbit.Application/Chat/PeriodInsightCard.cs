@@ -23,7 +23,7 @@ public record PeriodInsightCard(
 public static class PeriodInsightCardBuilder
 {
     public const string Directive = "[[orbit:insight]]";
-    public const string PromptInstruction = "For a successful get_retrospective answer, write one line without restating figures, then emit [[orbit:insight]] last.";
+    public const string PromptInstruction = "For a successful get_retrospective answer, write one line without restating figures, then emit [[orbit:insight]] before optional follow-ups.";
 
     public static PeriodInsightCard? Build(RetrospectiveResponse? response)
     {

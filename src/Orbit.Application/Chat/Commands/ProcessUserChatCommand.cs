@@ -220,10 +220,11 @@ public partial class ProcessUserChatCommandHandler(
         if (IsEmptyTokenBudgetResponse(toolLoopResult.TokenBudgetExceeded, aiResponse.TextMessage))
             return Result.Failure<ChatResponse>(ErrorMessages.AiUnavailable);
 
-        var (responseText, parsedFollowUps) = FollowUpDirective.Extract(StripJsonWrapper(aiResponse.TextMessage));
+        var parsedResponse = FollowUpDirective.Parse(StripJsonWrapper(aiResponse.TextMessage));
         var followUps = CanEmitFollowUps(request, toolLoopResult, executionResults, aiResponse)
-            ? parsedFollowUps
+            ? parsedResponse.FollowUps
             : null;
+        var responseText = parsedResponse.CardText;
         if (aiResponse.IsTruncated)
             responseText = AppendTruncationNotice(responseText, userLanguage);
         var cards = await TryBuildResponseCardsAsync(
