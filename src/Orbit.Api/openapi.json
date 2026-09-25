@@ -4590,6 +4590,14 @@
               ],
               "format": "int32"
             }
+          },
+          {
+            "name": "weekStart",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
           }
         ],
         "responses": {
@@ -13215,6 +13223,15 @@
             "items": {
               "$ref": "#/components/schemas/ChecklistItem"
             }
+          },
+          "intervalWeeks": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -13551,6 +13568,15 @@
             "items": {
               "type": "string"
             }
+          },
+          "intervalWeeks": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -15795,6 +15821,22 @@
               "string"
             ],
             "format": "int32"
+          },
+          "lastFreezeCoveredOrigin": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "repairableGapDates": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "date"
+            }
           }
         }
       },

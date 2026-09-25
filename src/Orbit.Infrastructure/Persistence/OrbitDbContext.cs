@@ -325,6 +325,7 @@ public class OrbitDbContext : DbContext
         modelBuilder.Entity<StreakFreeze>(entity =>
         {
             entity.HasIndex(sf => new { sf.UserId, sf.UsedOnDate }).IsUnique();
+            entity.Property(sf => sf.Origin).HasConversion<string>().HasMaxLength(32);
             entity.HasOne<User>().WithMany().HasForeignKey(sf => sf.UserId).OnDelete(DeleteBehavior.Cascade);
         });
     }

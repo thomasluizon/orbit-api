@@ -4,6 +4,7 @@ using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Profile.Queries;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
 using System.Text.Json;
@@ -357,9 +358,9 @@ public class GetProfileQueryHandlerTests
 
         var recentFreezes = new List<StreakFreeze>
         {
-            StreakFreeze.Create(UserId, Today.AddDays(-1)),
-            StreakFreeze.Create(UserId, Today.AddDays(-5)),
-            StreakFreeze.Create(UserId, Today.AddDays(-10))
+            StreakFreeze.Create(UserId, Today.AddDays(-1), StreakFreezeOrigin.Manual),
+            StreakFreeze.Create(UserId, Today.AddDays(-5), StreakFreezeOrigin.Manual),
+            StreakFreeze.Create(UserId, Today.AddDays(-10), StreakFreezeOrigin.Manual)
         };
         _streakFreezeRepo.FindAsync(
             Arg.Any<Expression<Func<StreakFreeze, bool>>>(),

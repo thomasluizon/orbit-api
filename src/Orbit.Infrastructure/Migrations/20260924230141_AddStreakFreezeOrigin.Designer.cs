@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Orbit.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    partial class OrbitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260924230141_AddStreakFreezeOrigin")]
+    partial class AddStreakFreezeOrigin
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2257,30 +2260,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("UserSessions");
                 });
 
-            modelBuilder.Entity("Orbit.Domain.Entities.UserSessionRefreshToken", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("TokenHash")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<Guid>("UserSessionId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TokenHash")
-                        .IsUnique();
-
-                    b.HasIndex("UserSessionId");
-
-                    b.ToTable("UserSessionRefreshTokens");
-                });
-
             modelBuilder.Entity("Orbit.Domain.Entities.XpAwardLog", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2637,15 +2616,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.UserSessionRefreshToken", b =>
-                {
-                    b.HasOne("Orbit.Domain.Entities.UserSession", null)
-                        .WithMany()
-                        .HasForeignKey("UserSessionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

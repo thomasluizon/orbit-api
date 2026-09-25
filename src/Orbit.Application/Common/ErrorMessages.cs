@@ -85,6 +85,11 @@ public static class ErrorMessages
     public static readonly AppError InvalidClosedMonthParameters = new(ErrorCodes.InvalidClosedMonthParameters, "Year and month must be valid, provided together, and used only with the month period.");
     public static readonly AppError RecapMonthNotClosed = new(ErrorCodes.RecapMonthNotClosed, "The requested recap month has not closed yet.");
     public static readonly AppError RecapMonthBeforeAccount = new(ErrorCodes.RecapMonthBeforeAccount, "The requested recap month is before this account existed.");
+    public static readonly AppError RecapPeriodBeforeAccount = new(ErrorCodes.RecapPeriodBeforeAccount, "The requested recap period is before this account existed.");
+    public static readonly AppError InvalidClosedWeekParameters = new(ErrorCodes.InvalidClosedWeekParameters, "Week start must match the user's first weekday and be used only with the week period.");
+    public static readonly AppError InvalidClosedYearParameters = new(ErrorCodes.InvalidClosedYearParameters, "Year must be valid and used only with the year period.");
+    public static readonly AppError RecapWeekNotClosed = new(ErrorCodes.RecapWeekNotClosed, "The requested recap week has not closed yet.");
+    public static readonly AppError RecapYearNotClosed = new(ErrorCodes.RecapYearNotClosed, "The requested recap year has not closed yet.");
     public static readonly AppError AiSummaryDisabled = new(ErrorCodes.AiSummaryDisabled, "AI summary is disabled.");
     public static readonly AppError NoActiveGoals = new(ErrorCodes.NoActiveGoals, "No active goals found.");
     public static readonly AppError NoGoalsData = new(ErrorCodes.NoGoalsData, "No goals data provided.");
