@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
+using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Models;
 
 namespace Orbit.Application.Tests.Chat;
@@ -64,6 +65,33 @@ public class FaqTurnShareabilityTests
         var results = new ProcessUserChatCommandHandler.ToolExecutionAccumulator();
         var metricsCard = new MetricsCard("week", 50, 2, 4, 2, 1, 3, true, "progress");
 
-        ProcessUserChatCommandHandler.IsShareableFaqTurn(results, metricsCard).Should().BeFalse();
+        ProcessUserChatCommandHandler.IsShareableFaqTurn(results, new ResponseCards(null, MetricsCard: metricsCard)).Should().BeFalse();
+    }
+
+    [Fact]
+    public void AnyOtherCardProduced_IsNotShareable()
+    {
+        var results = new ProcessUserChatCommandHandler.ToolExecutionAccumulator();
+        var cards = new ResponseCards("Done", RecordLists: [new RecordListCard("tags", 0, [])]);
+
+        ProcessUserChatCommandHandler.IsShareableFaqTurn(results, cards).Should().BeFalse();
+    }
+
+    [Fact]
+    public void LastSuccessfulPayload_SkipsFailedLaterCall()
+    {
+        var results = new ProcessUserChatCommandHandler.ToolExecutionAccumulator();
+        var first = new RetrospectiveResponse("week",
+            new RetrospectiveMetrics(0, 0, 0, 0, 7, 0, 0, 0, new int[7], [], []),
+            new RetrospectiveNarrative("first", "", "", ""), false);
+        var second = first with { Period = "month" };
+        results.Add("get_retrospective", null,
+            Operation("get_retrospective", AgentOperationStatus.Succeeded) with { Payload = first }, null, null);
+        results.Add("get_retrospective", null,
+            Operation("get_retrospective", AgentOperationStatus.Succeeded) with { Payload = second }, null, null);
+        results.Add("get_retrospective", null,
+            Operation("get_retrospective", AgentOperationStatus.Failed) with { Payload = first }, null, null);
+
+        results.LastSuccessfulPayload<RetrospectiveResponse>("get_retrospective").Should().Be(second);
     }
 }

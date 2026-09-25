@@ -2743,7 +2743,7 @@
       "Behaviors": 4,
       "Calendar": 16,
       "Challenges": 15,
-      "Chat": 85,
+      "Chat": 89,
       "ChecklistTemplates": 5,
       "Common": 37,
       "Gamification": 34,
@@ -2951,25 +2951,25 @@
   "testCoverage": {
     "featureFolders": {
       "Accountability": 9,
-      "ApiKeys": 16,
+      "ApiKeys": 17,
       "Auth": 31,
       "Behaviors": 17,
-      "Calendar": 19,
+      "Calendar": 21,
       "Challenges": 14,
-      "Chat": 65,
+      "Chat": 70,
       "ChecklistTemplates": 9,
       "Common": 258,
-      "Gamification": 44,
+      "Gamification": 45,
       "Goals": 54,
-      "Habits": 94,
+      "Habits": 97,
       "Marketing": 6,
-      "Notifications": 21,
+      "Notifications": 23,
       "Profile": 41,
-      "Referrals": 13,
+      "Referrals": 15,
       "Social": 36,
       "Subscriptions": 18,
       "Support": 4,
-      "Tags": 14,
+      "Tags": 16,
       "Uploads": 4,
       "UserFacts": 8,
       "Waitlist": 4
@@ -3350,6 +3350,13 @@
         ]
       },
       {
+        "testClass": "AccountRowsCardBuilderTests",
+        "file": "tests/Orbit.Application.Tests/Chat/AccountRowsCardBuilderTests.cs",
+        "references": [
+          "Referral"
+        ]
+      },
+      {
         "testClass": "AiToolRegistryTests",
         "file": "tests/Orbit.Application.Tests/Chat/AiToolRegistryTests.cs",
         "references": []
@@ -3405,7 +3412,8 @@
         "testClass": "GoalListCardBuilderTests",
         "file": "tests/Orbit.Application.Tests/Chat/GoalListCardBuilderTests.cs",
         "references": [
-          "Goal"
+          "Goal",
+          "Habit"
         ]
       },
       {
@@ -3435,6 +3443,18 @@
           "Habit",
           "Tag",
           "User"
+        ]
+      },
+      {
+        "testClass": "RecordListCardBuilderTests",
+        "file": "tests/Orbit.Application.Tests/Chat/RecordListCardBuilderTests.cs",
+        "references": []
+      },
+      {
+        "testClass": "StatusCardBuilderTests",
+        "file": "tests/Orbit.Application.Tests/Chat/StatusCardBuilderTests.cs",
+        "references": [
+          "Habit"
         ]
       },
       {
@@ -3590,6 +3610,15 @@
         "references": [
           "DuplicateHabitCommand",
           "Habit"
+        ]
+      },
+      {
+        "testClass": "GetCalendarOverviewToolTests",
+        "file": "tests/Orbit.Application.Tests/Chat/Tools/GetCalendarOverviewToolTests.cs",
+        "references": [
+          "GetCalendarAutoSyncStateQuery",
+          "GetCalendarEventsQuery",
+          "GetCalendarSyncSuggestionsQuery"
         ]
       },
       {
@@ -4036,6 +4065,7 @@
           "Habit",
           "ProcessUserChatCommand",
           "ProcessUserChatCommandHandler",
+          "Referral",
           "Tag",
           "User",
           "UserFact"
@@ -5704,6 +5734,13 @@
         "file": "tests/Orbit.Application.Tests/Services/PlayReferralCouponConsumerTests.cs",
         "references": [
           "User"
+        ]
+      },
+      {
+        "testClass": "RetrospectiveCompletionSeriesTests",
+        "file": "tests/Orbit.Application.Tests/Services/RetrospectiveCompletionSeriesTests.cs",
+        "references": [
+          "Habit"
         ]
       },
       {

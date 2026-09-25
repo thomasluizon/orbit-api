@@ -4,6 +4,11 @@ using Orbit.Application.Gamification.Queries;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
+public record GamificationOverviewPayload(
+    GamificationProfileResponse? Profile,
+    AchievementsResponse? Achievements,
+    StreakInfoResponse? Streak);
+
 public class GetGamificationOverviewTool(IMediator mediator) : IAiTool
 {
     public string Name => "get_gamification_overview";
@@ -27,9 +32,9 @@ public class GetGamificationOverviewTool(IMediator mediator) : IAiTool
         var includeAchievements = JsonArgumentParser.GetOptionalBool(args, "include_achievements") ?? true;
         var includeStreak = JsonArgumentParser.GetOptionalBool(args, "include_streak") ?? true;
 
-        object? profile = null;
-        object? achievements = null;
-        object? streak = null;
+        GamificationProfileResponse? profile = null;
+        AchievementsResponse? achievements = null;
+        StreakInfoResponse? streak = null;
 
         if (includeProfile)
         {
@@ -52,6 +57,6 @@ public class GetGamificationOverviewTool(IMediator mediator) : IAiTool
             streak = streakResult.Value;
         }
 
-        return new ToolResult(true, Payload: new { profile, achievements, streak });
+        return new ToolResult(true, Payload: new GamificationOverviewPayload(profile, achievements, streak));
     }
 }

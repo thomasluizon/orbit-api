@@ -38,6 +38,7 @@ public static class RetrospectiveMetricsCalculator
             dateTo,
             currentStreak,
             bestStreak,
+            weekStartDay,
             habit => HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo, weekStartDay));
     }
 
@@ -60,6 +61,7 @@ public static class RetrospectiveMetricsCalculator
             dateTo,
             currentStreak,
             bestStreak,
+            weekStartDay,
             habit => HabitScheduleService.GetHistoricalScheduledDates(
                 habit,
                 dateFrom,
@@ -74,6 +76,7 @@ public static class RetrospectiveMetricsCalculator
         DateOnly dateTo,
         int currentStreak,
         int bestStreak,
+        int weekStartDay,
         Func<Habit, List<DateOnly>> resolveScheduledDates)
     {
         var trackedHabits = habits.Where(h => h.ParentHabitId is null).ToList();
@@ -85,6 +88,8 @@ public static class RetrospectiveMetricsCalculator
         var stats = new List<RetrospectiveHabitStat>();
         var weekdayScheduled = new int[7];
         var weekdayCompleted = new int[7];
+        var dailyScheduled = new int[dateTo.DayNumber - dateFrom.DayNumber + 1];
+        var dailyCompleted = new int[dailyScheduled.Length];
 
         foreach (var habit in trackedHabits)
         {
@@ -107,7 +112,7 @@ public static class RetrospectiveMetricsCalculator
             totalCompletions += completedCount;
             totalMet += Math.Min(completedCount, scheduledDates.Count);
 
-            AccumulateWeekdayConsistency(habit, scheduledDates, weekdayScheduled, weekdayCompleted);
+            AccumulateWeekdayConsistency(habit, scheduledDates, weekdayScheduled, weekdayCompleted, dailyScheduled, dailyCompleted, dateFrom);
             stats.Add(BuildHabitStat(habit, scheduledDates.Count, completedCount));
         }
 
@@ -142,11 +147,13 @@ public static class RetrospectiveMetricsCalculator
             badHabitSlips,
             weeklyConsistency,
             topHabits,
-            needsAttention);
+            needsAttention,
+            BuildCompletionSeries(dateFrom, dateTo, weekStartDay, dailyScheduled, dailyCompleted));
     }
 
     private static void AccumulateWeekdayConsistency(
-        Habit habit, List<DateOnly> scheduledDates, int[] weekdayScheduled, int[] weekdayCompleted)
+        Habit habit, List<DateOnly> scheduledDates, int[] weekdayScheduled, int[] weekdayCompleted,
+        int[] dailyScheduled, int[] dailyCompleted, DateOnly dateFrom)
     {
         var completedDates = habit.Logs
             .Where(l => !l.IsDeleted && l.Value > 0)
@@ -157,10 +164,44 @@ public static class RetrospectiveMetricsCalculator
         {
             var index = WeekdayIndex(date.DayOfWeek);
             weekdayScheduled[index]++;
+            dailyScheduled[date.DayNumber - dateFrom.DayNumber]++;
             if (completedDates.Contains(date))
+            {
                 weekdayCompleted[index]++;
+                dailyCompleted[date.DayNumber - dateFrom.DayNumber]++;
+            }
         }
     }
+
+    private static CompletionSeries BuildCompletionSeries(
+        DateOnly dateFrom, DateOnly dateTo, int weekStartDay, int[] scheduled, int[] completed)
+    {
+        var isDaily = scheduled.Length <= 31;
+        var points = new List<CompletionSeriesPoint>();
+        var start = dateFrom;
+        while (start <= dateTo)
+        {
+            var end = isDaily
+                ? start
+                : MinDate(start.AddDays(6 - ((7 + (int)start.DayOfWeek - weekStartDay) % 7)), dateTo);
+            var bucketScheduled = 0;
+            var bucketCompleted = 0;
+            for (var date = start; date <= end; date = date.AddDays(1))
+            {
+                bucketScheduled += scheduled[date.DayNumber - dateFrom.DayNumber];
+                bucketCompleted += completed[date.DayNumber - dateFrom.DayNumber];
+            }
+
+            points.Add(new CompletionSeriesPoint(
+                start, end, bucketScheduled, bucketCompleted,
+                bucketScheduled == 0 ? null : Math.Min(100, Percent(bucketCompleted, bucketScheduled))));
+            start = end.AddDays(1);
+        }
+
+        return new CompletionSeries(isDaily ? "day" : "week", points);
+    }
+
+    private static DateOnly MinDate(DateOnly first, DateOnly second) => first < second ? first : second;
 
     private static RetrospectiveHabitStat BuildHabitStat(Habit habit, int scheduledCount, int completedCount) =>
         new(

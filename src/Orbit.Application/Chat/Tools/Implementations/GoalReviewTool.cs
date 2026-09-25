@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Common;
+using Orbit.Application.Chat;
 using Orbit.Application.Goals.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -38,7 +39,7 @@ public class GoalReviewTool(
             ct);
 
         if (goals.Count == 0)
-            return new ToolResult(true, EntityName: "No active goals found.");
+            return new ToolResult(true, EntityName: "No active goals found.", Payload: new GoalListCard([]));
 
         var sb = new StringBuilder();
         foreach (var goal in goals)
@@ -57,6 +58,7 @@ public class GoalReviewTool(
                 sb.AppendLine($"  Linked habit: \"{h.HabitTitle}\" | Weekly: {h.WeeklyCompletionRate}% | Streak: {h.CurrentStreak}d");
         }
 
-        return new ToolResult(true, EntityName: sb.ToString());
+        return new ToolResult(true, EntityName: sb.ToString(),
+            Payload: GoalListCardBuilder.Build(goals.ToList(), userToday, weekStartDay));
     }
 }
