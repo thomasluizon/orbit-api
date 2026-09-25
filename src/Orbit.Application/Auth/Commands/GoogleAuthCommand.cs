@@ -4,6 +4,7 @@ using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Auth.Queries;
+using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Application.Referrals.Commands;
 using Orbit.Domain.Common;
@@ -13,7 +14,7 @@ using Orbit.Domain.Interfaces;
 namespace Orbit.Application.Auth.Commands;
 
 public record GoogleAuthCommand(string AccessToken, string Language = "en", string? GoogleAccessToken = null, string? GoogleRefreshToken = null, string? ReferralCode = null)
-    : IRequest<Result<LoginResponse>>;
+    : IRequest<Result<LoginResponse>>, IConcurrencyRetryable;
 
 public partial class GoogleAuthCommandHandler(
     IGenericRepository<User> userRepository,
