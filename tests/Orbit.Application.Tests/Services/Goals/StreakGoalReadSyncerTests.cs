@@ -108,12 +108,18 @@ public class GoalProgressReadSyncerTests
     [Fact]
     public void CalculateStandardCompletions_ExcludesLogsCreatedBeforeGoalStarted()
     {
+        var logDate = new DateOnly(2026, 3, 20);
+        var goalStartedAtUtc = logDate.ToDateTime(new TimeOnly(10, 0), DateTimeKind.Utc);
         var habit = Habit.Create(new HabitCreateParams(
-            UserId, "Exercise", FrequencyUnit.Day, 2, DueDate: Today, IsFlexible: true)).Value;
-        habit.Log(Today);
+            UserId, "Exercise", FrequencyUnit.Day, 2, DueDate: logDate, IsFlexible: true)).Value;
+        var beforeGoalLog = habit.Log(logDate).Value;
         var goal = Goal.Create(UserId, "Complete 10 sessions", 10, "sessions").Value;
         goal.AddHabit(habit);
-        habit.Log(Today);
+        var afterGoalLog = habit.Log(logDate).Value;
+        typeof(Goal).GetProperty(nameof(Goal.CreatedAtUtc))!.SetValue(goal, goalStartedAtUtc);
+        var logCreatedAtUtc = typeof(HabitLog).GetProperty(nameof(HabitLog.CreatedAtUtc))!;
+        logCreatedAtUtc.SetValue(beforeGoalLog, goalStartedAtUtc.AddSeconds(-1));
+        logCreatedAtUtc.SetValue(afterGoalLog, goalStartedAtUtc.AddSeconds(1));
 
         var completions = GoalProgressSyncService.CalculateStandardCompletions(goal);
 
