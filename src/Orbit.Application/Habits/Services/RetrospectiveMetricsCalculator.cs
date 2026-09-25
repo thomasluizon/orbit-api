@@ -40,7 +40,11 @@ public static class RetrospectiveMetricsCalculator
             currentStreak,
             bestStreak,
             weekStartDay,
-            habit => HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo, weekStartDay));
+            (habit, from, to) => HabitScheduleService.GetScheduledDates(
+                habit, from, to, weekStartDay,
+                habit.FrequencyUnit is not null && !habit.IsFlexible
+                    ? habit.ScheduledStartDate ?? habit.DueDate
+                    : null));
     }
 
     /// <summary>
@@ -63,10 +67,10 @@ public static class RetrospectiveMetricsCalculator
             currentStreak,
             bestStreak,
             weekStartDay,
-            habit => HabitScheduleService.GetHistoricalScheduledDates(
+            (habit, from, to) => HabitScheduleService.GetHistoricalScheduledDates(
                 habit,
-                dateFrom,
-                dateTo,
+                from,
+                to,
                 userTimeZone,
                 weekStartDay));
     }
@@ -78,7 +82,7 @@ public static class RetrospectiveMetricsCalculator
         int currentStreak,
         int bestStreak,
         int weekStartDay,
-        Func<Habit, List<DateOnly>> resolveScheduledDates)
+        Func<Habit, DateOnly, DateOnly, List<DateOnly>> resolveScheduledDates)
     {
         var trackedHabits = habits.Where(h => h.ParentHabitId is null).ToList();
 
@@ -94,7 +98,7 @@ public static class RetrospectiveMetricsCalculator
 
         foreach (var habit in trackedHabits)
         {
-            var scheduledDates = resolveScheduledDates(habit);
+            var scheduledDates = resolveScheduledDates(habit, dateFrom, dateTo);
             var completedCount = habit.Logs.Count(l => !l.IsDeleted
                 && l.Date >= dateFrom
                 && l.Date <= dateTo
@@ -111,25 +115,25 @@ public static class RetrospectiveMetricsCalculator
 
             if (habit.FrequencyUnit is not null && !habit.IsFlexible)
             {
-                var occurrenceDates = scheduledDates.ToHashSet();
-                var resolvedDates = habit.Logs.Where(l => !l.IsDeleted)
-                    .Select(l => l.Date).ToHashSet();
-                var creditedOverdueDates = new HashSet<DateOnly>();
                 var recurrenceStart = habit.ScheduledStartDate ?? habit.DueDate;
+                var occurrenceDates = ResolveOccurrences(
+                    habit, recurrenceStart, dateTo, resolveScheduledDates).ToHashSet();
+                var unresolvedDates = new SortedSet<DateOnly>(occurrenceDates);
+                var creditedDates = scheduledDates.ToHashSet();
                 foreach (var log in habit.Logs.Where(l => !l.IsDeleted
-                    && l.Value > 0
-                    && l.Date >= dateFrom
                     && l.Date <= dateTo).OrderBy(l => l.Date))
                 {
                     if (occurrenceDates.Contains(log.Date))
+                    {
+                        unresolvedDates.Remove(log.Date);
+                        continue;
+                    }
+
+                    if (log.Value <= 0 || unresolvedDates.Count == 0 || unresolvedDates.Min >= log.Date)
                         continue;
 
-                    var isScheduled = HabitScheduleService.IsHabitDueOnDateForStreakLookback(
-                        habit, log.Date, recurrenceStart, weekStartDay);
-                    if ((isScheduled || HasUnresolvedPastOccurrence(
-                            habit, log.Date, recurrenceStart, weekStartDay,
-                            resolvedDates, creditedOverdueDates))
-                        && occurrenceDates.Add(log.Date))
+                    unresolvedDates.Remove(unresolvedDates.Min);
+                    if (log.Date >= dateFrom && creditedDates.Add(log.Date))
                         scheduledDates.Add(log.Date);
                 }
             }
@@ -178,24 +182,22 @@ public static class RetrospectiveMetricsCalculator
             BuildCompletionSeries(dateFrom, dateTo, weekStartDay, dailyScheduled, dailyCompleted));
     }
 
-    private static bool HasUnresolvedPastOccurrence(
-        Habit habit, DateOnly logDate, DateOnly recurrenceStart, int weekStartDay,
-        HashSet<DateOnly> resolvedDates, HashSet<DateOnly> creditedOverdueDates)
+    private static List<DateOnly> ResolveOccurrences(
+        Habit habit, DateOnly recurrenceStart, DateOnly dateTo,
+        Func<Habit, DateOnly, DateOnly, List<DateOnly>> resolveScheduledDates)
     {
-        for (var offset = 1; offset <= AppConstants.DefaultOverdueWindowDays && logDate.DayNumber >= offset; offset++)
+        var occurrences = new List<DateOnly>();
+        for (var from = recurrenceStart; from <= dateTo;)
         {
-            var candidate = logDate.AddDays(-offset);
-            if (!resolvedDates.Contains(candidate)
-                && !creditedOverdueDates.Contains(candidate)
-                && HabitScheduleService.IsHabitDueOnDateForStreakLookback(
-                    habit, candidate, recurrenceStart, weekStartDay))
-            {
-                creditedOverdueDates.Add(candidate);
-                return true;
-            }
+            var to = DateOnly.FromDayNumber(Math.Min(
+                from.DayNumber + AppConstants.MaxRangeDays, dateTo.DayNumber));
+            occurrences.AddRange(resolveScheduledDates(habit, from, to));
+            if (to == dateTo)
+                break;
+            from = to.AddDays(1);
         }
 
-        return false;
+        return occurrences;
     }
 
     private static int AccumulateWeekdayConsistency(

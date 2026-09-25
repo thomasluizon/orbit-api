@@ -146,6 +146,69 @@ public class RetrospectiveCompletionSeriesTests
         metrics.TopHabits.Single().CompletionRate.Should().Be(50);
     }
 
+    [Fact]
+    public void HistoricalMonthlyOccurrence_LoggedTenDaysLate_IsCredited()
+    {
+        var due = new DateOnly(2026, 1, 31);
+        var logged = new DateOnly(2026, 2, 10);
+        var habit = Monthly(due);
+        habit.Log(logged).IsSuccess.Should().BeTrue();
+
+        var day = RetrospectiveMetricsCalculator.ComputeHistorical(
+            [habit], logged, logged, 0, 0, TimeZoneInfo.Utc);
+
+        day.TotalScheduled.Should().Be(1);
+        day.CompletionRate.Should().Be(100);
+        day.CompletionSeries!.Points.Single().Should().Be(
+            new CompletionSeriesPoint(logged, logged, 1, 1, 100));
+    }
+
+    [Fact]
+    public void HistoricalMonthEndOccurrence_LoggedAfterDueDateAdvances_BuildsCompletedDayCard()
+    {
+        var due = new DateOnly(2026, 1, 31);
+        var logged = new DateOnly(2026, 2, 1);
+        var habit = Monthly(due);
+        habit.Log(logged).IsSuccess.Should().BeTrue();
+
+        var metrics = RetrospectiveMetricsCalculator.ComputeHistorical(
+            [habit], logged, logged, 0, 0, TimeZoneInfo.Utc);
+        var card = StatusCardBuilder.BuildDay(logged, metrics, 0);
+
+        habit.DueDate.Should().Be(new DateOnly(2026, 2, 28));
+        card.Due.Should().Be(1);
+        card.Done.Should().Be(1);
+        metrics.CompletionSeries!.Points.Single().Should().Be(
+            new CompletionSeriesPoint(logged, logged, 1, 1, 100));
+    }
+
+    [Fact]
+    public void HistoricalMonthlyOccurrence_ExtraOffCadenceLog_IsNotCredited()
+    {
+        var due = new DateOnly(2026, 1, 31);
+        var firstLog = new DateOnly(2026, 2, 10);
+        var extraLog = firstLog.AddDays(1);
+        var habit = Monthly(due);
+        habit.Log(firstLog).IsSuccess.Should().BeTrue();
+        habit.Log(extraLog, advanceDueDate: false).IsSuccess.Should().BeTrue();
+
+        var metrics = RetrospectiveMetricsCalculator.ComputeHistorical(
+            [habit], firstLog, extraLog, 0, 0, TimeZoneInfo.Utc);
+
+        metrics.TotalScheduled.Should().Be(1);
+        metrics.CompletionSeries!.Points[0].Completed.Should().Be(1);
+        metrics.CompletionSeries.Points[1].Scheduled.Should().Be(0);
+        metrics.CompletionSeries.Points[1].Completed.Should().Be(0);
+    }
+
+    private static Habit Monthly(DateOnly dueDate)
+    {
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Monthly", FrequencyUnit.Month, 1, dueDate)).Value;
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
+            habit, new DateTime(2026, 1, 30, 12, 0, 0, DateTimeKind.Utc));
+        return habit;
+    }
+
     private static Habit Daily(string title, DateOnly dueDate) =>
         Habit.Create(new HabitCreateParams(UserId, title, FrequencyUnit.Day, 1, dueDate)).Value;
 }
