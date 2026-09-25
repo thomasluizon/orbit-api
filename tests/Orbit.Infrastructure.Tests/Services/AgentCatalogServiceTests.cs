@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using FluentAssertions;
@@ -92,7 +93,7 @@ public class AgentCatalogServiceTests
     public void BuildDynamicSupplement_ExcludesStaticPolicyAndSurfaces()
     {
         var prompt = _catalogService.BuildDynamicSupplement(new Orbit.Domain.Models.AgentContextSnapshot(
-            "pro", "en", "America/Sao_Paulo", true, true, 1, "dark", "blue", true, true, "Idle",
+            "pro", "en", "America/Sao_Paulo", true, true, 1, "dark", true, true, "Idle",
             TagNames: ["focus"]));
 
         prompt.Should().Contain("Safe User Context");
@@ -197,7 +198,6 @@ public class AgentCatalogServiceTests
             true,
             1,
             "dark",
-            "blue",
             true,
             true,
             "Idle",
@@ -215,6 +215,67 @@ public class AgentCatalogServiceTests
         prompt.Should().Contain("Recent goals: Read 12 books");
         prompt.Should().Contain("Support");
         prompt.Should().Contain("Account Lifecycle");
+    }
+
+    /// <summary>
+    /// One field, several surfaces. The data export returns the raw ColorScheme column, so a row
+    /// written before the colour collapse still reports its own key. Any agent-facing sentence that
+    /// promises one value for every account contradicts that export, and fixing one surface while its
+    /// twin keeps the claim is exactly the defect this sweep closes.
+    /// </summary>
+    [Fact]
+    public void NoAgentFacingColorSchemeText_PromisesOneStoredValueForEveryAccount()
+    {
+        var described = new List<(string Source, string Text)>();
+
+        foreach (var entry in _catalogService.GetUserDataCatalog())
+        {
+            described.Add(($"data catalog {entry.Id}", entry.Description));
+            described.AddRange(entry.Fields.Select(field => ($"data catalog {entry.Id}.{field.Name}", field.Meaning)));
+        }
+
+        described.AddRange(_catalogService.GetCapabilities()
+            .Select(capability => ($"capability {capability.Id}", capability.Description)));
+        described.AddRange(_catalogService.GetSurfaces()
+            .Select(surface => ($"surface {surface.Id}", surface.Description)));
+        described.AddRange(ChatToolDescriptions());
+        described.AddRange(McpToolDescriptions());
+
+        var aboutTheColorScheme = described
+            .Where(pair => pair.Text.Contains("color scheme", StringComparison.OrdinalIgnoreCase)
+                || pair.Text.Contains("color-scheme", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        aboutTheColorScheme.Should().NotBeEmpty("the sweep is vacuous if no surface mentions the field");
+
+        var contradictingTheExport = aboutTheColorScheme
+            .Where(pair => pair.Text.Contains("the same value", StringComparison.OrdinalIgnoreCase)
+                || pair.Text.Contains("same for every", StringComparison.OrdinalIgnoreCase))
+            .Select(pair => pair.Source)
+            .ToList();
+
+        contradictingTheExport.Should().BeEmpty();
+    }
+
+    private static IEnumerable<(string Source, string Text)> ChatToolDescriptions()
+    {
+        return typeof(AiToolRegistry).Assembly
+            .GetTypes()
+            .Where(type => type.IsClass && !type.IsAbstract && typeof(IAiTool).IsAssignableFrom(type))
+            .Select(type => (IAiTool)RuntimeHelpers.GetUninitializedObject(type))
+            .Select(tool => ($"chat tool {tool.Name}", tool.Description));
+    }
+
+    private static IEnumerable<(string Source, string Text)> McpToolDescriptions()
+    {
+        return typeof(Orbit.Api.Mcp.Tools.HabitTools).Assembly
+            .GetTypes()
+            .Where(type => type.GetCustomAttribute<McpServerToolTypeAttribute>() is not null)
+            .SelectMany(type => type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly))
+            .Where(method => method.GetCustomAttribute<McpServerToolAttribute>() is not null)
+            .Select(method => (
+                $"mcp tool {method.GetCustomAttribute<McpServerToolAttribute>()!.Name}",
+                method.GetCustomAttribute<DescriptionAttribute>()?.Description ?? string.Empty));
     }
 
     private static bool IsControllerAction(MethodInfo methodInfo)

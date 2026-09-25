@@ -2958,13 +2958,13 @@
       "Challenges": 14,
       "Chat": 65,
       "ChecklistTemplates": 9,
-      "Common": 257,
+      "Common": 258,
       "Gamification": 44,
       "Goals": 54,
       "Habits": 94,
       "Marketing": 6,
       "Notifications": 21,
-      "Profile": 40,
+      "Profile": 41,
       "Referrals": 13,
       "Social": 36,
       "Subscriptions": 18,
@@ -3277,6 +3277,18 @@
           "Habit",
           "SetAccountabilityHabitsCommand",
           "SetAccountabilityHabitsCommandHandler",
+          "User"
+        ]
+      },
+      {
+        "testClass": "ColorSchemeRoundTripTests",
+        "file": "tests/Orbit.Application.Tests/Behaviors/ColorSchemeRoundTripTests.cs",
+        "references": [
+          "GetProfileQuery",
+          "GetProfileQueryHandler",
+          "SetColorSchemeCommand",
+          "SetColorSchemeCommandHandler",
+          "StreakFreeze",
           "User"
         ]
       },
@@ -6734,6 +6746,13 @@
       {
         "testClass": "UserCalendarAutoSyncTests",
         "file": "tests/Orbit.Domain.Tests/Entities/UserCalendarAutoSyncTests.cs",
+        "references": [
+          "User"
+        ]
+      },
+      {
+        "testClass": "UserColorSchemeTests",
+        "file": "tests/Orbit.Domain.Tests/Entities/UserColorSchemeTests.cs",
         "references": [
           "User"
         ]

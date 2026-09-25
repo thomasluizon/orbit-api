@@ -205,7 +205,6 @@ public record AgentContextSnapshot(
     bool AiSummaryEnabled,
     int WeekStartDay,
     string? ThemePreference,
-    string? ColorScheme,
     bool HasGoogleConnection,
     bool GoogleCalendarAutoSyncEnabled,
     string GoogleCalendarAutoSyncStatus,

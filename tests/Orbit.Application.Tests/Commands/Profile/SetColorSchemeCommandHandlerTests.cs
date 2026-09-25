@@ -55,7 +55,7 @@ public class SetColorSchemeCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        user.ColorScheme.Should().Be("purple");
+        user.ColorScheme.Should().Be(ColorSchemes.Granted);
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -72,6 +72,57 @@ public class SetColorSchemeCommandHandlerTests
         result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
     }
 
+    [Theory]
+    [InlineData("purple")]
+    [InlineData("blue")]
+    [InlineData("green")]
+    [InlineData("rose")]
+    [InlineData("orange")]
+    [InlineData("cyan")]
+    public async Task Handle_HistoricalColorSchemeFromOldClient_SucceedsAndStoresTheGrantedAccent(string colorScheme)
+    {
+        var user = User.Create("Test User", "test@example.com").Value;
+        SetupUserFound(user);
+
+        var command = new SetColorSchemeCommand(UserId, colorScheme);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.ColorScheme.Should().Be(ColorSchemes.Granted);
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_NullColorScheme_ClearsTheStoredPreference()
+    {
+        var user = User.Create("Test User", "test@example.com").Value;
+        user.SetColorScheme("blue").IsSuccess.Should().BeTrue();
+        SetupUserFound(user);
+
+        var command = new SetColorSchemeCommand(UserId, null);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.ColorScheme.Should().BeNull();
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_UnknownColorScheme_StillRejected()
+    {
+        var user = User.Create("Test User", "test@example.com").Value;
+        SetupUserFound(user);
+
+        var command = new SetColorSchemeCommand(UserId, "magenta");
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("INVALID_COLOR_SCHEME");
+    }
+
     [Fact]
     public async Task Handle_ConcurrencyConflictThenSuccess_ResolvesToSuccessAndKeepsLastWrite()
     {
@@ -85,7 +136,7 @@ public class SetColorSchemeCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        user.ColorScheme.Should().Be("purple");
+        user.ColorScheme.Should().Be(ColorSchemes.Granted);
         await _userRepo.Received(1).ReloadAsync(user, Arg.Any<CancellationToken>());
         await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
     }

@@ -155,7 +155,7 @@ public class AgentSessionAndSyncEntityTests
         var denial = new AgentPolicyDenial(operation.Id, "execute_agent_operation_v2", AgentRiskClass.High, AgentConfirmationRequirement.StepUp, "denied");
         var executeResponse = new AgentExecuteOperationResponse(operationResult, pendingOperation, denial);
         var clientContext = new AgentClientContext("ios", "en-US", "24h", "today", true);
-        var snapshot = new AgentContextSnapshot("pro", "en-US", "UTC", true, true, 1, "dark", "sunset", true, true, "Idle", ["beta"], ["Health"], ["Morning"], ["Run"], ["Lose weight"], clientContext);
+        var snapshot = new AgentContextSnapshot("pro", "en-US", "UTC", true, true, 1, "dark", true, true, "Idle", ["beta"], ["Health"], ["Morning"], ["Run"], ["Lose weight"], clientContext);
         var auditEntry = new AgentAuditEntry(Guid.NewGuid(), capability.Id, "execute_agent_operation_v2", AgentExecutionSurface.Mcp, AgentAuthMethod.Jwt, AgentRiskClass.High, AgentPolicyDecisionStatus.Allowed, AgentOperationStatus.Succeeded, Summary: "Created habit");
 
         capability.ChatToolNames.Should().Contain("create_habit");
