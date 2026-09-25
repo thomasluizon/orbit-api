@@ -1,4 +1,5 @@
 using System.Text;
+using System.Security.Claims;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -232,6 +233,24 @@ public static partial class ServiceCollectionExtensions
                 IssuerSigningKey = new SymmetricSecurityKey(
                     Encoding.UTF8.GetBytes(jwtSettings.SecretKey)),
                 ClockSkew = TimeSpan.Zero
+            };
+            options.Events = new JwtBearerEvents
+            {
+                OnTokenValidated = async context =>
+                {
+                    var sessionClaim = context.Principal?.FindFirst("orbit_session_id")?.Value;
+                    if (sessionClaim is null)
+                        // https://github.com/thomasluizon/orbit-api/issues/660: Pre-deploy tokens remain valid for 168 hours; #660 removes this allowance.
+                        return;
+
+                    var userClaim = context.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                    if (!Guid.TryParse(sessionClaim, out var sessionId)
+                        || !Guid.TryParse(userClaim, out var userId)
+                        || !await context.HttpContext.RequestServices
+                            .GetRequiredService<IAuthSessionService>()
+                            .IsSessionActiveAsync(sessionId, userId, context.HttpContext.RequestAborted))
+                        context.Fail("Session is no longer active.");
+                }
             };
         })
         .AddScheme<AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>("ApiKey", null)
