@@ -284,6 +284,26 @@ public sealed class BulkUpdateHabitsCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_FlexibleOnly_ClearsExistingDays()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Exercise", FrequencyUnit.Day, 1, Today,
+            Days: [DayOfWeek.Monday, DayOfWeek.Wednesday])).Value;
+        SetupHabits(habit);
+        var command = new BulkUpdateHabitsCommand(
+            UserId,
+            new BulkHabitFilter(true, []),
+            new BulkHabitChanges(HasIsFlexible: true, IsFlexible: true));
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        habit.IsFlexible.Should().BeTrue();
+        habit.Days.Should().BeEmpty();
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_OneTimeHabitGivenRecurringUnitWithoutQuantity_RejectsChunkBeforeMutation()
     {
         var habit = Habit.Create(new HabitCreateParams(UserId, "Task", null, null, Today)).Value;

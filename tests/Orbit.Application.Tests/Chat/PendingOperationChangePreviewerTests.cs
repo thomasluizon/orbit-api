@@ -13,6 +13,11 @@ public sealed class PendingOperationChangePreviewerTests
 {
     private static readonly Guid UserId = Guid.NewGuid();
     private readonly IGenericRepository<Habit> _habits = Substitute.For<IGenericRepository<Habit>>();
+    private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
+
+    public PendingOperationChangePreviewerTests() =>
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new DateOnly(2026, 9, 25));
 
     [Fact]
     public async Task PreviewAsync_ThreeMatches_UsesEachRealOldEmoji()
@@ -61,8 +66,40 @@ public sealed class PendingOperationChangePreviewerTests
         preview.Changes.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task PreviewAsync_FlexibleOnly_ShowsDaysClearedByUpdate()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "One", FrequencyUnit.Day, 1, new DateOnly(2026, 9, 25),
+            Days: [DayOfWeek.Monday, DayOfWeek.Wednesday])).Value;
+        Setup([habit]);
+
+        var preview = await Preview("bulk_update_habits", """{"filter":{"all":true},"updates":{"is_flexible":true}}""");
+
+        preview!.Changes.Should().Contain(row => row.Field == "days"
+            && row.OldValue == "Monday, Wednesday" && row.NewValue == "");
+        preview.Changes.Should().Contain(row => row.Field == "is_flexible"
+            && row.OldValue == "false" && row.NewValue == "true");
+        habit.Days.Should().Equal(DayOfWeek.Monday, DayOfWeek.Wednesday);
+    }
+
+    [Fact]
+    public async Task PreviewAsync_ScheduledReminderForTimedHabit_ShowsNormalizedStore()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "One", FrequencyUnit.Day, 1, new DateOnly(2026, 9, 25),
+            DueTime: new TimeOnly(9, 0), ReminderTimes: [])).Value;
+        Setup([habit]);
+
+        var preview = await Preview("bulk_update_habits", """{"filter":{"all":true},"updates":{"scheduled_reminders":[{"when":"same_day","time":"08:30"}]}}""");
+
+        preview!.Changes.Should().ContainSingle().Which.Should().Match<Orbit.Domain.Models.PendingOperationChange>(
+            row => row.Field == "reminder_times" && row.OldValue == "0" && row.NewValue == "1");
+        habit.ReminderTimes.Should().BeEmpty();
+    }
+
     private async Task<Orbit.Domain.Models.PendingOperationChangePreview?> Preview(string operation, string json) =>
-        await new PendingOperationChangePreviewer(_habits).PreviewAsync(
+        await new PendingOperationChangePreviewer(_habits, _userDateService).PreviewAsync(
             UserId, operation, JsonDocument.Parse(json).RootElement);
 
     private void Setup(IReadOnlyList<Habit> habits) =>

@@ -130,6 +130,11 @@ public partial class ProcessUserChatCommandHandler
         {
             foreach (var call in orderedCalls)
             {
+                var outcome = outcomesByCallId[call.Id];
+                if (outcome.OperationResult?.Status != AgentOperationStatus.Succeeded
+                    || outcome.ActionResult is { Status: not ActionStatus.Success })
+                    continue;
+
                 var tool = ai.ToolRegistry.GetTool(call.Name);
                 var capability = ai.CatalogService.GetCapabilityByChatTool(call.Name);
                 if (tool is null || capability is null)

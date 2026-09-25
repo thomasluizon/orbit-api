@@ -9,7 +9,8 @@ using Orbit.Domain.Models;
 namespace Orbit.Application.Chat;
 
 public sealed class PendingOperationChangePreviewer(
-    IGenericRepository<Habit> habitRepository) : IPendingOperationChangePreviewer
+    IGenericRepository<Habit> habitRepository,
+    IUserDateService userDateService) : IPendingOperationChangePreviewer
 {
     public async Task<PendingOperationChangePreview?> PreviewAsync(
         Guid userId,
@@ -45,38 +46,49 @@ public sealed class PendingOperationChangePreviewer(
             return null;
 
         var habits = await BulkHabitSelection.LoadAsync(habitRepository, userId, filter, cancellationToken);
+        var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
         var rows = new List<PendingOperationChange>();
         foreach (var habit in habits.Take(10))
-            AddChanges(rows, habit, changes);
+        {
+            var update = BulkUpdateHabitsCommandHandler.ResolveUpdate(habit, changes, today);
+            var preview = habit.PreviewUpdate(update);
+            if (preview.IsFailure)
+                return null;
+            AddChanges(rows, habit, preview.Value);
+        }
 
         return new PendingOperationChangePreview(rows, habits.Count);
     }
 
-    private static void AddChanges(List<PendingOperationChange> rows, Habit habit, BulkHabitChanges changes)
+    private static void AddChanges(List<PendingOperationChange> rows, Habit habit, Habit effective)
     {
-        void Add(bool specified, string field, object? oldValue, object? newValue, string valueType)
+        void Add(string field, object? oldValue, object? newValue, string valueType, bool? changed = null)
         {
-            if (specified)
+            if (changed ?? !Equals(oldValue, newValue))
                 rows.Add(new PendingOperationChange(
                     habit.Id, habit.Title, field, Format(oldValue), Format(newValue), valueType));
         }
 
-        Add(changes.HasTitle, "title", habit.Title, changes.Title, "text");
-        Add(changes.HasDescription, "description", habit.Description, changes.Description, "text");
-        Add(changes.HasEmoji, "emoji", habit.Emoji, changes.Emoji, "emoji");
-        Add(changes.HasFrequencyUnit, "frequency_unit", habit.FrequencyUnit, changes.FrequencyUnit, "text");
-        Add(changes.HasFrequencyQuantity, "frequency_quantity", habit.FrequencyQuantity, changes.FrequencyQuantity, "number");
-        Add(changes.HasIntervalWeeks, "interval_weeks", habit.IntervalWeeks, changes.IntervalWeeks, "number");
-        Add(changes.HasDays, "days", string.Join(", ", habit.Days), string.Join(", ", changes.Days ?? []), "text");
-        Add(changes.HasDueDate, "due_date", habit.DueDate, changes.DueDate, "date");
-        Add(changes.HasEndDate, "end_date", habit.EndDate, changes.EndDate, "date");
-        Add(changes.HasDueTime, "due_time", habit.DueTime, changes.DueTime, "time");
-        Add(changes.HasIsBadHabit, "is_bad_habit", habit.IsBadHabit, changes.IsBadHabit, "boolean");
-        Add(changes.HasIsFlexible, "is_flexible", habit.IsFlexible, changes.IsFlexible, "boolean");
-        Add(changes.HasReminderEnabled, "reminder_enabled", habit.ReminderEnabled, changes.ReminderEnabled, "boolean");
-        Add(changes.HasReminderTimes, "reminder_times", habit.ReminderTimes.Count, changes.ReminderTimes?.Count ?? 0, "count");
-        Add(changes.HasChecklistItems, "checklist_items", habit.ChecklistItems.Count, changes.ChecklistItems?.Count ?? 0, "count");
-        Add(changes.HasScheduledReminders, "scheduled_reminders", habit.ScheduledReminders.Count, changes.ScheduledReminders?.Count ?? 0, "count");
+        Add("title", habit.Title, effective.Title, "text");
+        Add("description", habit.Description, effective.Description, "text");
+        Add("emoji", habit.Emoji, effective.Emoji, "emoji");
+        Add("frequency_unit", habit.FrequencyUnit, effective.FrequencyUnit, "text");
+        Add("frequency_quantity", habit.FrequencyQuantity, effective.FrequencyQuantity, "number");
+        Add("interval_weeks", habit.IntervalWeeks, effective.IntervalWeeks, "number");
+        Add("days", string.Join(", ", habit.Days), string.Join(", ", effective.Days), "text");
+        Add("due_date", habit.DueDate, effective.DueDate, "date");
+        Add("end_date", habit.EndDate, effective.EndDate, "date");
+        Add("due_time", habit.DueTime, effective.DueTime, "time");
+        Add("is_bad_habit", habit.IsBadHabit, effective.IsBadHabit, "boolean");
+        Add("is_flexible", habit.IsFlexible, effective.IsFlexible, "boolean");
+        Add("is_completed", habit.IsCompleted, effective.IsCompleted, "boolean");
+        Add("reminder_enabled", habit.ReminderEnabled, effective.ReminderEnabled, "boolean");
+        Add("reminder_times", habit.ReminderTimes.Count, effective.ReminderTimes.Count, "count",
+            !habit.ReminderTimes.SequenceEqual(effective.ReminderTimes));
+        Add("checklist_items", habit.ChecklistItems.Count, effective.ChecklistItems.Count, "count",
+            !habit.ChecklistItems.SequenceEqual(effective.ChecklistItems));
+        Add("scheduled_reminders", habit.ScheduledReminders.Count, effective.ScheduledReminders.Count, "count",
+            !habit.ScheduledReminders.SequenceEqual(effective.ScheduledReminders));
     }
 
     private static string? Format(object? value) => value switch

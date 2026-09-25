@@ -176,7 +176,7 @@ public sealed partial class BulkUpdateHabitsCommandHandler(
         return Result.Success(updates.Count);
     }
 
-    private static HabitUpdateParams ResolveUpdate(Habit habit, BulkHabitChanges changes, DateOnly today)
+    internal static HabitUpdateParams ResolveUpdate(Habit habit, BulkHabitChanges changes, DateOnly today)
     {
         var dueTime = changes.HasDueTime ? changes.DueTime : habit.DueTime;
         var (reminderTimes, scheduledReminders) = ReminderStoreNormalizer.NormalizeForUpdate(
@@ -192,7 +192,7 @@ public sealed partial class BulkUpdateHabitsCommandHandler(
             changes.HasDescription ? changes.Description : habit.Description,
             changes.HasFrequencyUnit ? changes.FrequencyUnit : habit.FrequencyUnit,
             changes.HasFrequencyQuantity ? changes.FrequencyQuantity : habit.FrequencyQuantity,
-            changes.HasDays ? changes.Days : habit.Days.ToList(),
+            changes.HasIsFlexible && changes.IsFlexible ? [] : changes.HasDays ? changes.Days : habit.Days.ToList(),
             changes.HasIsBadHabit ? changes.IsBadHabit : habit.IsBadHabit,
             changes.HasDueDate ? changes.DueDate : habit.DueDate,
             DueTime: dueTime,

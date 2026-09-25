@@ -1375,6 +1375,61 @@ public class ProcessUserChatCommandHandlerTests
         events.Should().NotContain(item => item.Type == "step");
     }
 
+    [Theory]
+    [InlineData(AgentOperationStatus.Denied, "pay_gate")]
+    [InlineData(AgentOperationStatus.UnsupportedByPolicy, "unsupported_by_policy")]
+    public async Task Handle_DeniedRead_EmitsNoStep(AgentOperationStatus status, string reason)
+    {
+        SetupUserAndPayGate();
+        const string toolName = "query_habits";
+        var tool = FakeTool(toolName);
+        SetupAiResponse(ToolResponse(toolName, "one", "{}"));
+        _aiIntentService.ContinueWithToolResultsAsync(
+                Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "No results" }));
+        var events = new List<ChatStreamEvent>();
+        var handler = CreateHandler(tool);
+        _operationExecutor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new AgentExecuteOperationResponse(new AgentOperationResult(
+                toolName, toolName, AgentRiskClass.Low, AgentConfirmationRequirement.None,
+                status, PolicyReason: reason)));
+
+        var result = await handler.Handle(new ProcessUserChatCommand(
+            UserId, "Show habits", ClientContext: new AgentClientContext(SupportsToolSteps: true),
+            StreamSink: streamEvent => { events.Add(streamEvent); return Task.CompletedTask; }), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        events.Should().NotContain(item => item.Type == "step");
+    }
+
+    [Fact]
+    public async Task Handle_RepeatedSingleHabitUpdates_EmitNoStep()
+    {
+        SetupUserAndPayGate();
+        var tool = FakeTool("update_habit");
+        tool.IsReadOnly.Returns(false);
+        var calls = Enumerable.Range(1, BulkToolRepeatGuard.Threshold)
+            .Select(index => new AiToolCall(tool.Name, $"call_{index}",
+                ParseArguments($"{{\"habit_id\":\"{Guid.NewGuid()}\",\"emoji\":\"✅\"}}")))
+            .ToList();
+        SetupAiResponse(new AiResponse { ToolCalls = calls, ConversationContext = TestConversationContext });
+        _aiIntentService.ContinueWithToolResultsAsync(
+                Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Use a bulk update" }));
+        var events = new List<ChatStreamEvent>();
+
+        var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
+            UserId, "Update several habits", ClientContext: new AgentClientContext(SupportsToolSteps: true),
+            StreamSink: streamEvent => { events.Add(streamEvent); return Task.CompletedTask; }), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _operationExecutor.DidNotReceive().ExecuteAsync(
+            Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>());
+        events.Should().NotContain(item => item.Type == "step");
+    }
+
     [Fact]
     public async Task Handle_ToolFailure_EmitsNoStepOrFollowUps()
     {
