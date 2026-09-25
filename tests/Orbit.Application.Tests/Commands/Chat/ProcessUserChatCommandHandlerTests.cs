@@ -511,6 +511,22 @@ public class ProcessUserChatCommandHandlerTests
         result.Value.Actions.Should().BeEmpty();
     }
 
+    [Theory]
+    [InlineData("I want to hurt myself", "988")]
+    [InlineData("Quero me machucar", "188")]
+    public async Task Handle_CrisisDisclosure_AddsMatchingResource(string message, string number)
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "Let's work on habits.", ToolCalls = null });
+        var handler = CreateHandler();
+
+        var result = await handler.Handle(
+            new ProcessUserChatCommand(UserId, message), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessage.Should().Contain(number);
+    }
+
     [Fact]
     public async Task Handle_TruncatedAiResponse_AppendsExplicitPartialNotice()
     {
