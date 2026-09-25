@@ -6,6 +6,7 @@ using Orbit.Application.Chat;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Tests.Chat;
 
@@ -94,8 +95,41 @@ public sealed class PendingOperationChangePreviewerTests
         var preview = await Preview("bulk_update_habits", """{"filter":{"all":true},"updates":{"scheduled_reminders":[{"when":"same_day","time":"08:30"}]}}""");
 
         preview!.Changes.Should().ContainSingle().Which.Should().Match<Orbit.Domain.Models.PendingOperationChange>(
-            row => row.Field == "reminder_times" && row.OldValue == "0" && row.NewValue == "1");
+            row => row.Field == "reminder_times" && row.OldValue == "" && row.NewValue == "08:30");
         habit.ReminderTimes.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task PreviewAsync_EqualSizeReminderAndChecklistReplacement_ShowsActualValues()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "One", FrequencyUnit.Day, 1, new DateOnly(2026, 9, 25),
+            DueTime: new TimeOnly(9, 0), ReminderTimes: [15],
+            ChecklistItems: [new ChecklistItem("Warm up", false)])).Value;
+        Setup([habit]);
+
+        var preview = await Preview("bulk_update_habits", """{"filter":{"all":true},"updates":{"reminder_times":[30],"checklist_items":[{"text":"Stretch"}]}}""");
+
+        preview!.Changes.Should().Contain(row => row.Field == "reminder_times"
+            && row.OldValue == "08:45" && row.NewValue == "08:30");
+        preview.Changes.Should().Contain(row => row.Field == "checklist_items"
+            && row.OldValue == "Warm up" && row.NewValue == "Stretch");
+    }
+
+    [Fact]
+    public async Task PreviewAsync_LongChecklist_ShowsThreeValuesAndRemainder()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "One", FrequencyUnit.Day, 1, new DateOnly(2026, 9, 25),
+            ChecklistItems: [new("One", false), new("Two", false), new("Three", false), new("Four", false), new("Five", false)])).Value;
+        Setup([habit]);
+
+        var preview = await Preview("bulk_update_habits", """{"filter":{"all":true},"updates":{"checklist_items":[{"text":"Alpha"},{"text":"Beta"},{"text":"Gamma"},{"text":"Delta"},{"text":"Epsilon"}]}}""");
+
+        preview!.Changes.Should().ContainSingle().Which.Should().Match<Orbit.Domain.Models.PendingOperationChange>(
+            row => row.Field == "checklist_items"
+                && row.OldValue == "One, Two, Three, +2 more"
+                && row.NewValue == "Alpha, Beta, Gamma, +2 more");
     }
 
     private async Task<Orbit.Domain.Models.PendingOperationChangePreview?> Preview(string operation, string json) =>

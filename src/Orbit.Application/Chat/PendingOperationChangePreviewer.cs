@@ -3,8 +3,10 @@ using System.Text.Json;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
+using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Chat;
 
@@ -12,6 +14,9 @@ public sealed class PendingOperationChangePreviewer(
     IGenericRepository<Habit> habitRepository,
     IUserDateService userDateService) : IPendingOperationChangePreviewer
 {
+    private const int MaxDisplayedEntries = 3;
+    private const int MaxEntryLength = 60;
+
     public async Task<PendingOperationChangePreview?> PreviewAsync(
         Guid userId,
         string operationId,
@@ -83,13 +88,50 @@ public sealed class PendingOperationChangePreviewer(
         Add("is_flexible", habit.IsFlexible, effective.IsFlexible, "boolean");
         Add("is_completed", habit.IsCompleted, effective.IsCompleted, "boolean");
         Add("reminder_enabled", habit.ReminderEnabled, effective.ReminderEnabled, "boolean");
-        Add("reminder_times", habit.ReminderTimes.Count, effective.ReminderTimes.Count, "count",
+        Add("reminder_times", FormatList(habit.ReminderTimes, offset => FormatReminderTime(habit.DueTime, offset)),
+            FormatList(effective.ReminderTimes, offset => FormatReminderTime(effective.DueTime, offset)), "text",
             !habit.ReminderTimes.SequenceEqual(effective.ReminderTimes));
-        Add("checklist_items", habit.ChecklistItems.Count, effective.ChecklistItems.Count, "count",
+        Add("checklist_items", FormatList(habit.ChecklistItems, FormatChecklistItem),
+            FormatList(effective.ChecklistItems, FormatChecklistItem), "text",
             !habit.ChecklistItems.SequenceEqual(effective.ChecklistItems));
-        Add("scheduled_reminders", habit.ScheduledReminders.Count, effective.ScheduledReminders.Count, "count",
+        Add("scheduled_reminders", FormatList(habit.ScheduledReminders, FormatScheduledReminder),
+            FormatList(effective.ScheduledReminders, FormatScheduledReminder), "text",
             !habit.ScheduledReminders.SequenceEqual(effective.ScheduledReminders));
     }
+
+    private static string FormatList<T>(IReadOnlyList<T> values, Func<T, string> format)
+    {
+        var entries = values.Take(MaxDisplayedEntries)
+            .Select(value => TruncateEntry(format(value)))
+            .ToList();
+        if (values.Count > MaxDisplayedEntries)
+            entries.Add($"+{values.Count - MaxDisplayedEntries} more");
+        return string.Join(", ", entries);
+    }
+
+    private static string TruncateEntry(string value)
+    {
+        var singleLine = value.Replace('\r', ' ').Replace('\n', ' ');
+        return singleLine.Length <= MaxEntryLength
+            ? singleLine
+            : string.Concat(singleLine.AsSpan(0, MaxEntryLength - 3), "...");
+    }
+
+    private static string FormatReminderTime(TimeOnly? dueTime, int offset)
+    {
+        if (dueTime is null)
+            return $"{offset} min before due";
+
+        var reminder = ReminderStoreNormalizer.ToScheduledReminder(dueTime.Value, offset);
+        var time = reminder.Time.ToString("HH:mm", CultureInfo.InvariantCulture);
+        return reminder.When == ScheduledReminderWhen.DayBefore ? $"day_before {time}" : time;
+    }
+
+    private static string FormatScheduledReminder(ScheduledReminderTime reminder) =>
+        $"{(reminder.When == ScheduledReminderWhen.DayBefore ? "day_before" : "same_day")} {reminder.Time.ToString("HH:mm", CultureInfo.InvariantCulture)}";
+
+    private static string FormatChecklistItem(ChecklistItem item) =>
+        item.IsChecked ? $"{item.Text} (checked)" : item.Text;
 
     private static string? Format(object? value) => value switch
     {
