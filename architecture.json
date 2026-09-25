@@ -2940,6 +2940,10 @@
       "file": "src/Orbit.Domain/Entities/UserSession.cs"
     },
     {
+      "entity": "UserSessionRefreshToken",
+      "file": "src/Orbit.Domain/Entities/UserSessionRefreshToken.cs"
+    },
+    {
       "entity": "XpAwardLog",
       "file": "src/Orbit.Domain/Entities/XpAwardLog.cs"
     }
@@ -5574,7 +5578,8 @@
         "file": "tests/Orbit.Application.Tests/Services/AuthSessionServiceTests.cs",
         "references": [
           "User",
-          "UserSession"
+          "UserSession",
+          "UserSessionRefreshToken"
         ]
       },
       {
@@ -6747,6 +6752,13 @@
         ]
       },
       {
+        "testClass": "UserSessionRefreshTokenTests",
+        "file": "tests/Orbit.Domain.Tests/Entities/UserSessionRefreshTokenTests.cs",
+        "references": [
+          "UserSessionRefreshToken"
+        ]
+      },
+      {
         "testClass": "UserSessionTests",
         "file": "tests/Orbit.Domain.Tests/Entities/UserSessionTests.cs",
         "references": [
@@ -7767,7 +7779,8 @@
         "file": "tests/Orbit.Infrastructure.Tests/Services/AuthSessionServiceConcurrentRefreshTests.cs",
         "references": [
           "User",
-          "UserSession"
+          "UserSession",
+          "UserSessionRefreshToken"
         ]
       },
       {
@@ -7775,7 +7788,17 @@
         "file": "tests/Orbit.Infrastructure.Tests/Services/AuthSessionServiceHasSessionForTokenTests.cs",
         "references": [
           "User",
-          "UserSession"
+          "UserSession",
+          "UserSessionRefreshToken"
+        ]
+      },
+      {
+        "testClass": "AuthSessionServiceLogoutRaceTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Services/AuthSessionServiceLogoutRaceTests.cs",
+        "references": [
+          "User",
+          "UserSession",
+          "UserSessionRefreshToken"
         ]
       },
       {
@@ -7783,7 +7806,8 @@
         "file": "tests/Orbit.Infrastructure.Tests/Services/AuthSessionServiceRevokeAllTests.cs",
         "references": [
           "User",
-          "UserSession"
+          "UserSession",
+          "UserSessionRefreshToken"
         ]
       },
       {
@@ -7791,7 +7815,8 @@
         "file": "tests/Orbit.Infrastructure.Tests/Services/AuthSessionServiceTests.cs",
         "references": [
           "User",
-          "UserSession"
+          "UserSession",
+          "UserSessionRefreshToken"
         ]
       },
       {
