@@ -82,7 +82,8 @@ public partial class HabitsController
         IReadOnlyList<ChecklistItem>? ChecklistItems = null,
         string? GoogleEventId = null,
         string? Emoji = null,
-        IReadOnlyList<string>? Tags = null);
+        IReadOnlyList<string>? Tags = null,
+        int? IntervalWeeks = null);
 
     public record BulkDeleteHabitsRequest(IReadOnlyList<Guid> HabitIds);
 
