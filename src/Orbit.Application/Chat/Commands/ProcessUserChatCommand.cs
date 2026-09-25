@@ -129,6 +129,8 @@ public partial class ProcessUserChatCommandHandler(
         if (crisisTurn)
             return await HandleCrisisTurnAsync(request, detectedCrisisLocales);
 
+        request = ApplyClientKillFlags(request, context.EnabledFeatureFlags);
+
         var userLanguage = GetUserLanguage(context.User);
         var aiStreamFilter = BuildAiStreamFilter(request.StreamSink);
         Func<AiStreamEvent, Task>? aiStreamSink = aiStreamFilter is null
@@ -208,6 +210,8 @@ public partial class ProcessUserChatCommandHandler(
                 });
         }
 
+        CaptureChangePreviewEvents(request, context.User, executionResults.PendingOperations);
+
         RunBackgroundPostResponseWork(
             request.UserId,
             request.Message,
@@ -236,6 +240,51 @@ public partial class ProcessUserChatCommandHandler(
     }
 
     private static string? GetUserLanguage(User? user) => user?.Language;
+
+    private static ProcessUserChatCommand ApplyClientKillFlags(
+        ProcessUserChatCommand request,
+        IReadOnlyList<string> enabledFlags)
+    {
+        if (request.ClientContext is not { } clientContext)
+            return request;
+
+        return request with
+        {
+            ClientContext = clientContext with
+            {
+                SupportsPendingOperationChanges = clientContext.SupportsPendingOperationChanges == true
+                    && !enabledFlags.Contains(FeatureFlagKeys.AstraChangePreviewDisabled, StringComparer.OrdinalIgnoreCase),
+                SupportsToolSteps = clientContext.SupportsToolSteps == true
+                    && !enabledFlags.Contains(FeatureFlagKeys.AstraToolStepsDisabled, StringComparer.OrdinalIgnoreCase),
+                SupportsFollowUps = clientContext.SupportsFollowUps == true
+                    && !enabledFlags.Contains(FeatureFlagKeys.AstraFollowUpsDisabled, StringComparer.OrdinalIgnoreCase)
+            }
+        };
+    }
+
+    private void CaptureChangePreviewEvents(
+        ProcessUserChatCommand request,
+        User? user,
+        IReadOnlyList<PendingAgentOperation> pendingOperations)
+    {
+        if (user is null)
+            return;
+
+        foreach (var pending in pendingOperations.Where(item => item.Changes is not null))
+        {
+            AnalyticsCapture.SafeCaptureUserEvent(
+                execution.ProductAnalytics,
+                logger,
+                request.UserId,
+                user.Plan.ToString(),
+                "chat_change_preview_card_emitted",
+                new Dictionary<string, object>
+                {
+                    ["platform"] = request.ClientContext?.Platform ?? "unknown",
+                    ["kind"] = pending.CapabilityId
+                });
+        }
+    }
 
     private static bool IsCrisisTurn(CrisisLocales locales, IReadOnlyList<string> enabledFlags) =>
         locales != CrisisLocales.None

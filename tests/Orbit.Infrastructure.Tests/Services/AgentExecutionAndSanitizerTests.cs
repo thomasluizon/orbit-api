@@ -178,6 +178,72 @@ public class AgentExecutionAndSanitizerTests
         response.PendingOperation.Should().Be(pending);
     }
 
+    [Theory]
+    [InlineData(AgentExecutionSurface.Chat, true, true)]
+    [InlineData(AgentExecutionSurface.Chat, false, false)]
+    [InlineData(AgentExecutionSurface.Mcp, true, false)]
+    public async Task AgentOperationExecutor_PreviewsOnlyCapableChatConfirmations(
+        AgentExecutionSurface surface, bool includePreview, bool expectedPreview)
+    {
+        var catalog = Substitute.For<IAgentCatalogService>();
+        var capability = CreateCapability(AgentCapabilityIds.HabitsBulkWrite, AgentScopes.WriteHabits,
+            AgentRiskClass.High, AgentConfirmationRequirement.StepUp, isMutation: true);
+        var operation = CreateOperation("bulk_update_habits", capability.Id, true, true,
+            AgentConfirmationRequirement.StepUp, AgentRiskClass.High);
+        catalog.GetOperation(operation.Id).Returns(operation);
+        catalog.GetCapability(capability.Id).Returns(capability);
+        var pending = new PendingAgentOperation(Guid.NewGuid(), capability.Id, capability.DisplayName,
+            "Bulk update", capability.RiskClass, capability.ConfirmationRequirement, DateTime.UtcNow.AddMinutes(5));
+        var policy = Substitute.For<IAgentPolicyEvaluator>();
+        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+            .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.ConfirmationRequired, capability,
+                "step_up_required", pending));
+        var previewer = Substitute.For<IPendingOperationChangePreviewer>();
+        previewer.PreviewAsync(UserId, operation.Id, Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
+            .Returns(new PendingOperationChangePreview(
+                [new PendingOperationChange(Guid.NewGuid(), "Habit", "emoji", "🔴", "✅", "emoji")], 1));
+        var executor = CreateExecutor(catalog, policyEvaluator: policy, changePreviewer: previewer);
+
+        var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
+            UserId, operation.Id, Parse("""{"filter":{"all":true},"updates":{"emoji":"✅"}}"""),
+            surface, AgentAuthMethod.Jwt, IncludeChangePreview: includePreview));
+
+        if (expectedPreview)
+            response.PendingOperation!.Changes.Should().ContainSingle();
+        else
+            response.PendingOperation!.Changes.Should().BeNull();
+        response.PendingOperation.ChangeTargetCount.Should().Be(expectedPreview ? 1 : null);
+    }
+
+    [Fact]
+    public async Task AgentOperationExecutor_PreviewFailure_KeepsPendingConfirmation()
+    {
+        var catalog = Substitute.For<IAgentCatalogService>();
+        var capability = CreateCapability(AgentCapabilityIds.HabitsBulkWrite, AgentScopes.WriteHabits,
+            AgentRiskClass.High, AgentConfirmationRequirement.FreshConfirmation, isMutation: true);
+        var operation = CreateOperation("bulk_update_habits", capability.Id, true, true,
+            AgentConfirmationRequirement.FreshConfirmation, AgentRiskClass.High);
+        catalog.GetOperation(operation.Id).Returns(operation);
+        catalog.GetCapability(capability.Id).Returns(capability);
+        var pending = new PendingAgentOperation(Guid.NewGuid(), capability.Id, capability.DisplayName,
+            "Bulk update", capability.RiskClass, capability.ConfirmationRequirement, DateTime.UtcNow.AddMinutes(5));
+        var policy = Substitute.For<IAgentPolicyEvaluator>();
+        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+            .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.ConfirmationRequired, capability,
+                "confirmation_required", pending));
+        var previewer = Substitute.For<IPendingOperationChangePreviewer>();
+        previewer.PreviewAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
+            .Returns<PendingOperationChangePreview?>(_ => throw new InvalidOperationException("Preview failed"));
+        var executor = CreateExecutor(catalog, policyEvaluator: policy, changePreviewer: previewer);
+
+        var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
+            UserId, operation.Id, Parse("{}"), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt,
+            IncludeChangePreview: true));
+
+        response.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation);
+        response.PendingOperation!.Changes.Should().BeNull();
+    }
+
     [Fact]
     public async Task AgentOperationExecutor_HashesFingerprintSoLargePayloadsFitTheColumn()
     {
@@ -470,7 +536,8 @@ public class AgentExecutionAndSanitizerTests
         IAgentTargetOwnershipService? ownershipService = null,
         AiToolRegistry? toolRegistry = null,
         IUnitOfWork? unitOfWork = null,
-        IAgentStepUpAuthorizationBridge? stepUpAuthorizationBridge = null)
+        IAgentStepUpAuthorizationBridge? stepUpAuthorizationBridge = null,
+        IPendingOperationChangePreviewer? changePreviewer = null)
     {
         if (stepUpAuthorizationBridge is null)
         {
@@ -493,6 +560,7 @@ public class AgentExecutionAndSanitizerTests
             ownershipService,
             stepUpAuthorizationBridge,
             toolRegistry ?? new AiToolRegistry([]),
+            changePreviewer ?? Substitute.For<IPendingOperationChangePreviewer>(),
             unitOfWork ?? Substitute.For<IUnitOfWork>(),
             NullLogger<AgentOperationExecutor>.Instance);
     }

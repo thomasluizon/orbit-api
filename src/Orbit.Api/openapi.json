@@ -14824,6 +14824,62 @@
           "expiresAtUtc": {
             "type": "string",
             "format": "date-time"
+          },
+          "changes": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PendingOperationChange"
+            }
+          },
+          "changeTargetCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "PendingOperationChange": {
+        "required": [
+          "entityId",
+          "entityName",
+          "field",
+          "oldValue",
+          "newValue",
+          "valueType"
+        ],
+        "type": "object",
+        "properties": {
+          "entityId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "entityName": {
+            "type": "string"
+          },
+          "field": {
+            "type": "string"
+          },
+          "oldValue": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "newValue": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "valueType": {
+            "type": "string"
           }
         }
       },

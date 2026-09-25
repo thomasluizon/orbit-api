@@ -129,7 +129,21 @@ public record PendingAgentOperation(
     string Summary,
     AgentRiskClass RiskClass,
     AgentConfirmationRequirement ConfirmationRequirement,
-    DateTime ExpiresAtUtc);
+    DateTime ExpiresAtUtc,
+    IReadOnlyList<PendingOperationChange>? Changes = null,
+    int? ChangeTargetCount = null);
+
+public record PendingOperationChange(
+    Guid EntityId,
+    string EntityName,
+    string Field,
+    string? OldValue,
+    string? NewValue,
+    string ValueType);
+
+public record PendingOperationChangePreview(
+    IReadOnlyList<PendingOperationChange> Changes,
+    int ChangeTargetCount);
 
 public record PendingAgentOperationConfirmation(
     Guid PendingOperationId,
@@ -158,7 +172,8 @@ public record AgentExecuteOperationRequest(
     IReadOnlyList<string>? GrantedScopes = null,
     bool IsReadOnlyCredential = false,
     string? ConfirmationToken = null,
-    string? CorrelationId = null);
+    string? CorrelationId = null,
+    bool IncludeChangePreview = false);
 
 public record AgentOperationResult(
     string OperationId,
@@ -195,7 +210,11 @@ public record AgentClientContext(
     bool? SupportsHabitListCard = null,
     bool? SupportsGoalListCard = null,
     bool? SupportsMetricsCard = null,
-    string? EntryPointIntent = null);
+    string? EntryPointIntent = null,
+    bool? SupportsPendingOperationChanges = null,
+    bool? SupportsToolSteps = null,
+    bool? SupportsFollowUps = null,
+    string? MessageOrigin = null);
 
 public record AgentContextSnapshot(
     string Plan,

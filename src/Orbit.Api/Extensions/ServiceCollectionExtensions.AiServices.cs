@@ -1,3 +1,4 @@
+using Orbit.Application.Chat;
 using Orbit.Application.Chat.FeatureExplanations;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
@@ -41,6 +42,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAgentAuditService, AgentAuditService>();
         builder.Services.AddScoped<IAgentTargetOwnershipService, AgentTargetOwnershipService>();
         builder.Services.AddScoped<IAgentOperationExecutor, AgentOperationExecutor>();
+        builder.Services.AddScoped<IPendingOperationChangePreviewer, PendingOperationChangePreviewer>();
         builder.Services.AddScoped<Orbit.Api.Mcp.McpExecutorBridge>();
     }
 

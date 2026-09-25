@@ -15,6 +15,7 @@ public partial class AgentOperationExecutor(
     IAgentTargetOwnershipService targetOwnershipService,
     IAgentStepUpAuthorizationBridge stepUpAuthorizationBridge,
     AiToolRegistry toolRegistry,
+    IPendingOperationChangePreviewer changePreviewer,
     IUnitOfWork unitOfWork,
     ILogger<AgentOperationExecutor> logger) : IAgentOperationExecutor
 {
@@ -206,13 +207,30 @@ public partial class AgentOperationExecutor(
                 ShadowReason: policyDecision.ShadowReason),
             cancellationToken);
 
+        var pending = policyDecision.PendingOperation;
+        if (pending is not null && execution.Request.Surface == AgentExecutionSurface.Chat
+            && execution.Request.IncludeChangePreview)
+        {
+            try
+            {
+                var preview = await changePreviewer.PreviewAsync(
+                    execution.Request.UserId, execution.Operation.Id, execution.Arguments, cancellationToken);
+                if (preview is not null)
+                    pending = pending with { Changes = preview.Changes, ChangeTargetCount = preview.ChangeTargetCount };
+            }
+            catch (Exception exception)
+            {
+                logger.LogWarning(exception, "Pending operation change preview failed for {OperationId}", execution.Operation.Id);
+            }
+        }
+
         return AgentOperationResponseFactory.ConfirmationRequired(
             execution.Operation.Id,
             execution.Capability.RiskClass,
             execution.Capability.ConfirmationRequirement,
             execution.Summary,
             policyDecision.Reason,
-            policyDecision.PendingOperation);
+            pending);
     }
 
     private async Task<AgentExecuteOperationResponse> ExecuteToolAsync(

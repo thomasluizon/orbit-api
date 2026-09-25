@@ -334,7 +334,8 @@ public partial class ProcessUserChatCommandHandler
             request.GrantedScopes,
             request.IsReadOnlyCredential,
             request.ConfirmationToken,
-            request.CorrelationId), cancellationToken);
+            request.CorrelationId,
+            IncludeChangePreview: request.ClientContext?.SupportsPendingOperationChanges == true), cancellationToken);
     }
 
     private void LogToolCallOutcome(AiToolCall call, AgentOperationResult operationResult)
