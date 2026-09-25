@@ -7510,7 +7510,8 @@
         "file": "tests/Orbit.Infrastructure.Tests/Persistence/HabitLogReaderTests.cs",
         "references": [
           "Habit",
-          "HabitLog"
+          "HabitLog",
+          "User"
         ]
       },
       {
@@ -8184,8 +8185,8 @@
         "references": [
           "ChecklistTemplate",
           "Habit",
-          "HabitLog",
-          "Notification"
+          "Notification",
+          "User"
         ]
       },
       {
