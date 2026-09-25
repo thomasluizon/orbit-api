@@ -392,7 +392,7 @@ public partial class ProcessUserChatCommandHandler(
 
     private static string? StripAllDirectives(string? message) =>
         message is null ? null : Regex.Replace(message, @"\[\[orbit:[a-z:]+\]\]", string.Empty,
-            RegexOptions.IgnoreCase).Trim();
+            RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)).Trim();
 
     private async Task<ResponseCards> BuildResponseCardsAsync(
         string? aiMessage,
@@ -434,7 +434,8 @@ public partial class ProcessUserChatCommandHandler(
             {
                 var habitMetrics = executionResults.LastSuccessfulPayload<HabitMetrics>("get_habit_metrics");
                 metricsCard = habitMetrics?.HabitId is not null
-                    ? await TryBuildHabitMetricsCardAsync(request.UserId, context.UserToday, habitMetrics, cancellationToken)
+                    ? await TryBuildHabitMetricsCardAsync(request.UserId, context.UserToday, context.User?.TimeZone,
+                        habitMetrics, cancellationToken)
                     : await TryBuildMetricsCardAsync(request.UserId, context.UserToday, cancellationToken);
             }
         }
@@ -506,7 +507,7 @@ public partial class ProcessUserChatCommandHandler(
             return null;
 
         var kinds = Regex.Matches(aiMessage, @"\[\[orbit:records:(notifications|tags|templates|keys)\]\]",
-                RegexOptions.IgnoreCase)
+                RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1))
             .Cast<Match>()
             .Select(match => match.Groups[1].Value.ToLowerInvariant())
             .Distinct(StringComparer.Ordinal);
@@ -541,10 +542,11 @@ public partial class ProcessUserChatCommandHandler(
 
         DaySummaryCard? day = null;
         if (request.ClientContext?.SupportsDaySummaryCard == true
-            && aiMessage?.Contains(StatusCardBuilder.DayDirective, StringComparison.OrdinalIgnoreCase) == true)
+            && aiMessage?.Contains(StatusCardBuilder.DayDirective, StringComparison.OrdinalIgnoreCase) == true
+            && executionResults.LastSuccessfulPayload<DailySummaryResponse>("get_daily_summary") is not null)
         {
             day = await TryBuildDaySummaryCardAsync(request.UserId, context.UserToday,
-                context.User?.CurrentStreak ?? 0, cancellationToken);
+                context.User?.CurrentStreak ?? 0, context.User?.TimeZone, cancellationToken);
         }
 
         var streak = request.ClientContext?.SupportsStreakCard == true
@@ -561,17 +563,18 @@ public partial class ProcessUserChatCommandHandler(
     }
 
     private async Task<DaySummaryCard?> TryBuildDaySummaryCardAsync(
-        Guid userId, DateOnly userToday, int currentStreak, CancellationToken cancellationToken)
+        Guid userId, DateOnly userToday, int currentStreak, string? timeZone, CancellationToken cancellationToken)
     {
         try
         {
             var habits = await data.HabitRepository.FindAsync(
-                h => h.UserId == userId && !h.IsCompleted,
+                h => h.UserId == userId,
                 q => q.Include(h => h.Logs.Where(log => log.Date == userToday)), cancellationToken);
             var weekStartDay = await execution.UserDateService.GetUserWeekStartDayAsync(userId, cancellationToken);
-            var metrics = RetrospectiveMetricsCalculator.Compute(
-                habits.ToList(), userToday, userToday, currentStreak, currentStreak, weekStartDay);
-            var overdue = habits.Count(h => !h.IsGeneral && h.DueDate < userToday);
+            var metrics = RetrospectiveMetricsCalculator.ComputeHistorical(
+                habits.ToList(), userToday, userToday, currentStreak, currentStreak,
+                TimeZoneHelper.FindTimeZone(timeZone), weekStartDay);
+            var overdue = habits.Count(h => !h.IsGeneral && !h.IsCompleted && h.DueDate < userToday);
             return StatusCardBuilder.BuildDay(userToday, metrics, overdue);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -612,6 +615,7 @@ public partial class ProcessUserChatCommandHandler(
     private async Task<MetricsCard?> TryBuildHabitMetricsCardAsync(
         Guid userId,
         DateOnly userToday,
+        string? timeZone,
         HabitMetrics habitMetrics,
         CancellationToken cancellationToken)
     {
@@ -626,8 +630,9 @@ public partial class ProcessUserChatCommandHandler(
                 return null;
 
             var weekStartDay = await execution.UserDateService.GetUserWeekStartDayAsync(userId, cancellationToken);
-            var periodMetrics = RetrospectiveMetricsCalculator.Compute(
-                [habit], dateFrom, userToday, habitMetrics.CurrentStreak, habitMetrics.LongestStreak, weekStartDay);
+            var periodMetrics = RetrospectiveMetricsCalculator.ComputeHistorical(
+                [habit], dateFrom, userToday, habitMetrics.CurrentStreak, habitMetrics.LongestStreak,
+                TimeZoneHelper.FindTimeZone(timeZone), weekStartDay);
             return MetricsCardBuilder.BuildHabit(habitMetrics, periodMetrics);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

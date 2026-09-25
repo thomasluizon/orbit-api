@@ -69,8 +69,12 @@ public static class StatusCardBuilder
             .Take(10)
             .Select(item => new CalendarCardEvent(
                 item.Title,
-                item.StartUtc?.ToString("O", CultureInfo.InvariantCulture) ?? item.StartDate ?? string.Empty,
-                item.EndUtc?.ToString("O", CultureInfo.InvariantCulture) ?? item.EndTime,
+                item.StartTime is null
+                    ? item.StartDate ?? string.Empty
+                    : item.StartUtc?.ToString("O", CultureInfo.InvariantCulture) ?? item.StartDate ?? string.Empty,
+                item.StartTime is null
+                    ? null
+                    : item.EndUtc?.ToString("O", CultureInfo.InvariantCulture) ?? item.EndTime,
                 item.StartTime is null))
             .ToList();
         var sync = payload.AutoSyncState is { } state

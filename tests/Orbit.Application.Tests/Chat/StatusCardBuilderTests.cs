@@ -58,6 +58,23 @@ public class StatusCardBuilderTests
     }
 
     [Fact]
+    public void Calendar_AllDayWithSyntheticUtcStart_KeepsFloatingDate()
+    {
+        var events = new List<CalendarEventItem>
+        {
+            new("event", "Holiday", null, "2026-04-15", null,
+                null, false, null, [],
+                StartUtc: new DateTime(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc))
+        };
+
+        var card = StatusCardBuilder.BuildCalendar(new CalendarOverviewPayload(events, null, []))!;
+
+        card.Events.Should().ContainSingle();
+        card.Events[0].Start.Should().Be("2026-04-15");
+        card.Events[0].IsAllDay.Should().BeTrue();
+    }
+
+    [Fact]
     public void Streak_MissingGatedPayload_OmitsCard()
     {
         StatusCardBuilder.BuildStreak(null).Should().BeNull();

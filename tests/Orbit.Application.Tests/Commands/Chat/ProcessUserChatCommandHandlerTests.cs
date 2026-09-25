@@ -1067,6 +1067,67 @@ public class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_DayDirectiveWithoutSuccessfulSummaryTool_OmitsCard()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "Today [[orbit:day]]" });
+
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(
+            UserId, "How is today?", ClientContext: new AgentClientContext(SupportsDaySummaryCard: true)),
+            CancellationToken.None);
+
+        result.Value.DaySummary.Should().BeNull();
+        result.Value.AiMessage.Should().Be("Today");
+    }
+
+    [Fact]
+    public async Task Handle_FailedDailySummaryTool_OmitsCard()
+    {
+        SetupUserAndPayGate();
+        var tool = ReadTool("get_daily_summary", new ToolResult(false, Error: "PAY_GATE", ErrorCode: "PAY_GATE"));
+        SetupReadToolReply("get_daily_summary", "Today [[orbit:day]]");
+
+        var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
+            UserId, "How is today?", ClientContext: new AgentClientContext(SupportsDaySummaryCard: true)),
+            CancellationToken.None);
+
+        result.Value.DaySummary.Should().BeNull();
+        result.Value.AiMessage.Should().NotContain("[[orbit:day]]");
+    }
+
+    [Fact]
+    public async Task Handle_SuccessfulDailySummary_BuildsCardFromLoggedSchedule()
+    {
+        SetupUserAndPayGate();
+        var habits = Enumerable.Range(0, 2).Select(index =>
+            Habit.Create(new HabitCreateParams(UserId, $"Daily {index}", FrequencyUnit.Day, 1, Today)).Value)
+            .ToList();
+        habits.Add(Habit.Create(new HabitCreateParams(UserId, "Once", null, null, Today)).Value);
+        foreach (var habit in habits)
+            typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
+                habit, new DateTime(2026, 4, 1, 12, 0, 0, DateTimeKind.Utc));
+        habits[0].Log(Today).IsSuccess.Should().BeTrue();
+        habits[2].Log(Today).IsSuccess.Should().BeTrue();
+        _habitRepo.FindAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(habits.AsReadOnly());
+        var tool = ReadTool("get_daily_summary", new ToolResult(true,
+            Payload: new DailySummaryResponse("Summary", string.Empty, false)));
+        SetupReadToolReply("get_daily_summary", "Today [[orbit:day]]");
+
+        var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
+            UserId, "How is today?", ClientContext: new AgentClientContext(SupportsDaySummaryCard: true)),
+            CancellationToken.None);
+
+        result.Value.DaySummary.Should().NotBeNull();
+        result.Value.DaySummary!.Due.Should().Be(3);
+        result.Value.DaySummary.Done.Should().Be(2);
+        result.Value.DaySummary.CompletionRate.Should().Be(67);
+    }
+
+    [Fact]
     public async Task Handle_RecordListKillFlag_OmitsSuccessfulNotificationCard()
     {
         SetupUserAndPayGate();
@@ -1252,7 +1313,9 @@ public class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         var habit = Habit.Create(new HabitCreateParams(UserId, "Read", FrequencyUnit.Day, 1, Today.AddDays(-29))).Value;
-        habit.Log(Today, advanceDueDate: false);
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
+            habit, new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc));
+        habit.Log(Today).IsSuccess.Should().BeTrue();
         _habitRepo.FindOneTrackedAsync(
                 Arg.Any<Expression<Func<Habit, bool>>>(),
                 Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
@@ -1272,6 +1335,8 @@ public class ProcessUserChatCommandHandlerTests
 
         result.Value.MetricsCard!.HabitId.Should().Be(habit.Id);
         result.Value.MetricsCard.Series!.Points.Should().HaveCount(30);
+        result.Value.MetricsCard.Series.Points[^1].Scheduled.Should().Be(1);
+        result.Value.MetricsCard.Series.Points[^1].Completed.Should().Be(1);
         result.Value.MetricsCard.SurfaceId.Should().Be("habit");
     }
 
