@@ -234,7 +234,7 @@ public class StreakGapRepairTests
     [Fact]
     public async Task SelectionContainsFrozenDay_IsUnavailable()
     {
-        _persistedFreezes.Add(StreakFreeze.Create(_user.Id, _today.AddDays(-1)));
+        _persistedFreezes.Add(StreakFreeze.Create(_user.Id, _today.AddDays(-1), StreakFreezeOrigin.Manual));
 
         (await Evaluate()).Should().BeNull();
     }
@@ -481,8 +481,8 @@ public class StreakGapRepairTests
     [Fact]
     public async Task GapExceedsMonthlyAllowance_IsUnavailable()
     {
-        _persistedFreezes.Add(StreakFreeze.Create(_user.Id, new DateOnly(2026, 9, 1)));
-        _persistedFreezes.Add(StreakFreeze.Create(_user.Id, new DateOnly(2026, 9, 2)));
+        _persistedFreezes.Add(StreakFreeze.Create(_user.Id, new DateOnly(2026, 9, 1), StreakFreezeOrigin.Manual));
+        _persistedFreezes.Add(StreakFreeze.Create(_user.Id, new DateOnly(2026, 9, 2), StreakFreezeOrigin.Manual));
 
         (await Evaluate()).Should().BeNull();
     }
@@ -492,13 +492,13 @@ public class StreakGapRepairTests
     {
         var today = new DateOnly(2026, 9, 2);
         SetHistory(today, 2);
-        _persistedFreezes.Add(StreakFreeze.Create(_user.Id, new DateOnly(2026, 8, 20)));
-        _persistedFreezes.Add(StreakFreeze.Create(_user.Id, new DateOnly(2026, 8, 21)));
+        _persistedFreezes.Add(StreakFreeze.Create(_user.Id, new DateOnly(2026, 8, 20), StreakFreezeOrigin.Manual));
+        _persistedFreezes.Add(StreakFreeze.Create(_user.Id, new DateOnly(2026, 8, 21), StreakFreezeOrigin.Manual));
 
         var result = await _service.EvaluateGapRepairAsync(_user.Id, today, [today.AddDays(-2), today.AddDays(-1)]);
 
         result!.CurrentStreak.Should().Be(3);
-        _persistedFreezes.Add(StreakFreeze.Create(_user.Id, new DateOnly(2026, 8, 22)));
+        _persistedFreezes.Add(StreakFreeze.Create(_user.Id, new DateOnly(2026, 8, 22), StreakFreezeOrigin.Manual));
         (await _service.EvaluateGapRepairAsync(_user.Id, today, [today.AddDays(-2), today.AddDays(-1)])).Should().BeNull();
     }
 

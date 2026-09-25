@@ -99,4 +99,28 @@ public class PostHogProductAnalyticsTests
         properties.Should().ContainKey("$set");
         properties.Should().ContainKey("$unset");
     }
+
+    [Fact]
+    public void CaptureAggregateEvent_UsesFixedIdentityAndOnlyAggregateDimensions()
+    {
+        _analytics.CaptureAggregateEvent(
+            "astra_crisis_resources_shown",
+            new Dictionary<string, object>
+            {
+                ["count"] = 1,
+                ["locale"] = "pt",
+                ["delivery_path"] = "stream"
+            });
+
+        var arguments = _postHogClient.ReceivedCalls()
+            .Single(call => call.GetMethodInfo().Name == nameof(IPostHogClient.Capture))
+            .GetArguments();
+        arguments[0].Should().Be("aggregate:astra_crisis_resources");
+        arguments[1].Should().Be("astra_crisis_resources_shown");
+        var properties = arguments[2].Should().BeAssignableTo<Dictionary<string, object>>().Subject;
+        properties.Should().HaveCount(3);
+        properties["count"].Should().Be(1);
+        properties["locale"].Should().Be("pt");
+        properties["delivery_path"].Should().Be("stream");
+    }
 }

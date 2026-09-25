@@ -17,6 +17,7 @@ namespace Orbit.Application.Tests.Services;
 public class AuthSessionServiceTests
 {
     private readonly IGenericRepository<UserSession> _sessionRepository = Substitute.For<IGenericRepository<UserSession>>();
+    private readonly IGenericRepository<UserSessionRefreshToken> _refreshTokenRepository = Substitute.For<IGenericRepository<UserSessionRefreshToken>>();
     private readonly IGenericRepository<User> _userRepository = Substitute.For<IGenericRepository<User>>();
     private readonly ITokenService _tokenService = Substitute.For<ITokenService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
@@ -29,6 +30,7 @@ public class AuthSessionServiceTests
     {
         _service = new AuthSessionService(
             _sessionRepository,
+            _refreshTokenRepository,
             _userRepository,
             _tokenService,
             _unitOfWork,
@@ -64,14 +66,38 @@ public class AuthSessionServiceTests
                 return predicate(_storedSession) ? _storedSession : null;
             });
 
+        _sessionRepository
+            .GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo => _storedSession?.Id == callInfo.Arg<Guid>() ? _storedSession : null);
+
         _userRepository
             .GetByIdAsync(_user.Id, Arg.Any<CancellationToken>())
             .Returns(_user);
 
+        _refreshTokenRepository
+            .FindOneTrackedAsync(
+                Arg.Any<Expression<Func<UserSessionRefreshToken, bool>>>(),
+                Arg.Any<Func<IQueryable<UserSessionRefreshToken>, IQueryable<UserSessionRefreshToken>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                var token = _previousToken;
+                if (token is null)
+                    return null;
+                var predicate = callInfo.Arg<Expression<Func<UserSessionRefreshToken, bool>>>().Compile();
+                return predicate(token) ? token : null;
+            });
+
+        _refreshTokenRepository
+            .AddAsync(Arg.Do<UserSessionRefreshToken>(token => _previousToken = token), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
         _tokenService
-            .GenerateToken(Arg.Any<Guid>(), Arg.Any<string>())
+            .GenerateToken(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>())
             .Returns("access-token-1", "access-token-2", "access-token-3");
     }
+
+    private UserSessionRefreshToken? _previousToken;
 
     [Fact]
     public async Task CreateSessionAsync_WithNullRefreshExpiry_CreatesNonExpiringSession()
@@ -143,9 +169,11 @@ public class AuthSessionServiceTests
     }
 
     [Fact]
-    public async Task RevokeSessionAsync_RevokesStoredSession()
+    public async Task RevokeSessionAsync_AfterRotation_RevokesStoredSessionFromOriginalToken()
     {
         var createResult = await _service.CreateSessionAsync(_user.Id, _user.Email, CancellationToken.None);
+        var refreshResult = await _service.RefreshSessionAsync(createResult.Value.RefreshToken, CancellationToken.None);
+        refreshResult.IsSuccess.Should().BeTrue();
 
         var revokeResult = await _service.RevokeSessionAsync(createResult.Value.RefreshToken, CancellationToken.None);
 

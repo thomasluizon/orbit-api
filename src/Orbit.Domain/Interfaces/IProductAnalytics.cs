@@ -7,6 +7,8 @@ namespace Orbit.Domain.Interfaces;
 /// </summary>
 public interface IProductAnalytics
 {
+    void CaptureAggregateEvent(string eventName, IReadOnlyDictionary<string, object> properties);
+
     void CaptureUserEvent(
         Guid userId,
         string eventName,
