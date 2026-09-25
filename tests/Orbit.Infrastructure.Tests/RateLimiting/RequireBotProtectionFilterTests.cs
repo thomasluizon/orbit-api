@@ -3,6 +3,7 @@ using FluentAssertions;
 using Hangfire;
 using Hangfire.Common;
 using Hangfire.States;
+using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Controllers;
@@ -106,15 +107,28 @@ public class RequireBotProtectionFilterTests
         var handler = new SendCodeCommandHandler(cache, jobs);
         _verifier.VerifyAsync("valid", Arg.Any<CancellationToken>())
             .Returns(new TurnstileVerificationResult(true, []));
-        var context = CreateContext(new AuthController.SendCodeRequest("person@example.com", TurnstileToken: "valid"));
+        var request = new AuthController.SendCodeRequest("person@example.com", TurnstileToken: "valid");
+        var context = CreateContext(request);
+        var mediator = Substitute.For<IMediator>();
+        mediator.Send(Arg.Any<SendCodeCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call => handler.Handle((SendCodeCommand)call[0], CancellationToken.None));
+        var controller = new AuthController(
+            mediator,
+            Substitute.For<IAgentAuditService>(),
+            Substitute.For<ILogger<AuthController>>())
+        {
+            ControllerContext = new ControllerContext { HttpContext = context.HttpContext }
+        };
+        IActionResult? controllerResult = null;
 
         await EnabledFilter().OnActionExecutionAsync(context, async () =>
         {
-            await handler.Handle(new SendCodeCommand("person@example.com"), CancellationToken.None);
+            controllerResult = await controller.SendCode(request, CancellationToken.None);
             return Executed(context);
         });
 
         context.Result.Should().BeNull();
+        controllerResult.Should().BeOfType<OkObjectResult>();
         cache.TryGetValue("verify:person@example.com", out _).Should().BeTrue();
         jobs.Received(1).Create(Arg.Any<Job>(), Arg.Any<IState>());
     }
@@ -175,7 +189,9 @@ public class RequireBotProtectionFilterTests
             return Task.FromResult(Executed(context));
         });
 
-        context.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(503);
+        var result = context.Result.Should().BeOfType<ObjectResult>().Subject;
+        result.StatusCode.Should().Be(503);
+        result.Value.Should().BeEquivalentTo(new { error = "Verification unavailable", requestId = "req_bot_protection" });
         commandRan.Should().BeFalse();
     }
 
