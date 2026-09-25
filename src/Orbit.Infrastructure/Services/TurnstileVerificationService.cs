@@ -18,13 +18,15 @@ public sealed class TurnstileVerificationService(
         CancellationToken cancellationToken = default)
     {
         var client = httpClientFactory.CreateClient(HttpClientName);
+        var idempotencyKey = Guid.NewGuid().ToString("D");
         using var response = await HttpRetryPolicy.SendWithRetryAsync(
             () => client.PostAsync(
                 "turnstile/v0/siteverify",
                 new FormUrlEncodedContent(new Dictionary<string, string>
                 {
                     ["secret"] = options.Value.SecretKey,
-                    ["response"] = token
+                    ["response"] = token,
+                    ["idempotency_key"] = idempotencyKey
                 }),
                 cancellationToken),
             cancellationToken);
