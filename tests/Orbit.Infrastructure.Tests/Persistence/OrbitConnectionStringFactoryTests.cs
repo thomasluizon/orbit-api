@@ -54,6 +54,9 @@ public class OrbitConnectionStringFactoryTests
         result.Host.Should().Be("session");
         result.Port.Should().Be(5432);
         result.MaxPoolSize.Should().Be(5);
+        result.MinPoolSize.Should().Be(0);
+        result.ConnectionIdleLifetime.Should().Be(60);
+        result.KeepAlive.Should().Be(30);
     }
 
     [Theory]
