@@ -2743,7 +2743,7 @@
       "Behaviors": 4,
       "Calendar": 16,
       "Challenges": 15,
-      "Chat": 89,
+      "Chat": 91,
       "ChecklistTemplates": 5,
       "Common": 37,
       "Gamification": 34,
@@ -2956,7 +2956,7 @@
       "Behaviors": 17,
       "Calendar": 21,
       "Challenges": 14,
-      "Chat": 71,
+      "Chat": 73,
       "ChecklistTemplates": 9,
       "Common": 258,
       "Gamification": 45,
@@ -3409,6 +3409,11 @@
         "references": []
       },
       {
+        "testClass": "FollowUpDirectiveTests",
+        "file": "tests/Orbit.Application.Tests/Chat/FollowUpDirectiveTests.cs",
+        "references": []
+      },
+      {
         "testClass": "GoalListCardBuilderTests",
         "file": "tests/Orbit.Application.Tests/Chat/GoalListCardBuilderTests.cs",
         "references": [
@@ -3427,6 +3432,13 @@
         "testClass": "MetricsCardBuilderTests",
         "file": "tests/Orbit.Application.Tests/Chat/MetricsCardBuilderTests.cs",
         "references": []
+      },
+      {
+        "testClass": "PendingOperationChangePreviewerTests",
+        "file": "tests/Orbit.Application.Tests/Chat/PendingOperationChangePreviewerTests.cs",
+        "references": [
+          "Habit"
+        ]
       },
       {
         "testClass": "PromptHabitIndexTests",

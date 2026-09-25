@@ -124,6 +124,27 @@ public partial class ProcessUserChatCommandHandler
         if (hadToolFailure)
             return new ToolRoundResult(MessageResponse(language), HadToolFailure: true);
 
+        if (request.ClientContext?.SupportsToolSteps == true
+            && executionResults.PendingOperations.Count == 0
+            && !executionResults.ActionResults.Any(action => action.Status == ActionStatus.NeedsClarification))
+        {
+            foreach (var call in orderedCalls)
+            {
+                var outcome = outcomesByCallId[call.Id];
+                if (outcome.OperationResult?.Status != AgentOperationStatus.Succeeded
+                    || outcome.ActionResult is { Status: not ActionStatus.Success })
+                    continue;
+
+                var tool = ai.ToolRegistry.GetTool(call.Name);
+                var capability = ai.CatalogService.GetCapabilityByChatTool(call.Name);
+                if (tool is null || capability is null)
+                    continue;
+
+                var access = tool.IsReadOnly ? "read" : "write";
+                executionResults.AddToolStep(capability.Domain, access);
+            }
+        }
+
         var continueResult = await ai.IntentService.ContinueWithToolResultsAsync(aiResponse.ConversationContext!, toolResults, aiStreamSink, cancellationToken);
         if (continueResult.IsFailure)
         {
@@ -334,7 +355,8 @@ public partial class ProcessUserChatCommandHandler
             request.GrantedScopes,
             request.IsReadOnlyCredential,
             request.ConfirmationToken,
-            request.CorrelationId), cancellationToken);
+            request.CorrelationId,
+            IncludeChangePreview: request.ClientContext?.SupportsPendingOperationChanges == true), cancellationToken);
     }
 
     private void LogToolCallOutcome(AiToolCall call, AgentOperationResult operationResult)

@@ -136,6 +136,15 @@ public interface IAgentOperationExecutor
         CancellationToken cancellationToken = default);
 }
 
+public interface IPendingOperationChangePreviewer
+{
+    Task<PendingOperationChangePreview?> PreviewAsync(
+        Guid userId,
+        string operationId,
+        JsonElement arguments,
+        CancellationToken cancellationToken = default);
+}
+
 public interface IDistributedRateLimitService
 {
     Task<DistributedRateLimitDecision> TryAcquireAsync(

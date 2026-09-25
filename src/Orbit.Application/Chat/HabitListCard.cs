@@ -26,10 +26,10 @@ public static partial class HabitListCardBuilder
     public const string PromptInstruction = """
         ## Habit list rendering (this client)
         This app can display the user's habits as a live, interactive card. When the user asks to see or list their habits, or what is due, scheduled, left, or overdue (for example "what are my habits today", "show my habits", "list everything", "o que tenho pra hoje"), do NOT write the habits out as text and do NOT enumerate them. This rule overrides any earlier instruction to list habits from the index.
-        Instead reply with a brief one-line intro and then, on its own final line, exactly ONE directive token:
+        Instead reply with a brief one-line intro and then, on its own line, exactly ONE directive token:
         - [[orbit:habits:today]] - the user's habits due today plus anything overdue.
         - [[orbit:habits:all]] - every active habit.
-        The app replaces the directive with the rendered habit list, so never list the habits yourself when you emit a directive. Emit at most one directive, always as the last thing in your reply. For every other kind of question, answer normally and do not emit a directive.
+        The app replaces the directive with the rendered habit list, so never list the habits yourself when you emit a directive. Emit at most one directive, after the prose and before optional follow-ups. For every other kind of question, answer normally and do not emit a directive.
         """;
 
     public static bool TryExtractScope(string? message, out string scope, out string stripped)

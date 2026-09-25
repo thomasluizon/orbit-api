@@ -19,7 +19,7 @@ public record RecordListCard(
 
 public static class RecordListCardBuilder
 {
-    public const string PromptInstruction = "For a successful record list tool, write one short line without listing records. Finish with the matching directive: [[orbit:records:notifications]], [[orbit:records:tags]], [[orbit:records:templates]], or [[orbit:records:keys]].";
+    public const string PromptInstruction = "For a successful record list tool, write one short line without listing records. Then emit the matching directive before optional follow-ups: [[orbit:records:notifications]], [[orbit:records:tags]], [[orbit:records:templates]], or [[orbit:records:keys]].";
 
     public static RecordListCard BuildNotifications(GetNotificationsResponse response) =>
         new("notifications", response.TotalCount ?? response.Items.Count,

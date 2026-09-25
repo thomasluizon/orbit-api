@@ -60,7 +60,8 @@ public record ChatResponse(
     StreakCard? Streak = null,
     CalendarCard? Calendar = null,
     IReadOnlyList<RecordListCard>? RecordLists = null,
-    AccountRowsCard? AccountRows = null);
+    AccountRowsCard? AccountRows = null,
+    IReadOnlyList<string>? FollowUps = null);
 
 public record ResponseCards(
     string? AiMessage,
@@ -162,6 +163,9 @@ public partial class ProcessUserChatCommandHandler(
         if (crisisTurn)
             return await HandleCrisisTurnAsync(request, detectedCrisisLocales);
 
+        request = ApplyClientKillFlags(request, context.EnabledFeatureFlags);
+        CaptureFollowUpSentEvent(request, context.User);
+
         var userLanguage = GetUserLanguage(context.User);
         var aiStreamFilter = BuildAiStreamFilter(request.StreamSink);
         Func<AiStreamEvent, Task>? aiStreamSink = aiStreamFilter is null
@@ -201,6 +205,7 @@ public partial class ProcessUserChatCommandHandler(
         var iterations = toolLoopResult.Iterations;
         if (toolLoopResult.HadToolFailure)
             executionResults.SanitizeFailedActions(ToolFailureMessage(userLanguage));
+        await EmitToolStepsAsync(request, toolLoopResult, executionResults);
         if (aiStreamFilter is not null)
             await aiStreamFilter.FlushAsync();
         actionsStopwatch.Stop();
@@ -215,7 +220,11 @@ public partial class ProcessUserChatCommandHandler(
         if (IsEmptyTokenBudgetResponse(toolLoopResult.TokenBudgetExceeded, aiResponse.TextMessage))
             return Result.Failure<ChatResponse>(ErrorMessages.AiUnavailable);
 
-        var responseText = StripJsonWrapper(aiResponse.TextMessage);
+        var parsedResponse = FollowUpDirective.Parse(StripJsonWrapper(aiResponse.TextMessage));
+        var followUps = CanEmitFollowUps(request, toolLoopResult, executionResults, aiResponse)
+            ? parsedResponse.FollowUps
+            : null;
+        var responseText = parsedResponse.CardText;
         if (aiResponse.IsTruncated)
             responseText = AppendTruncationNotice(responseText, userLanguage);
         var cards = await TryBuildResponseCardsAsync(
@@ -228,6 +237,9 @@ public partial class ProcessUserChatCommandHandler(
         }
 
         CaptureResponseCardEvents(request, context, cards);
+
+        CaptureChangePreviewEvents(request, context.User, executionResults.PendingOperations);
+        CaptureFollowUpsEmittedEvent(request, context.User, followUps);
 
         RunBackgroundPostResponseWork(
             request.UserId,
@@ -259,10 +271,115 @@ public partial class ProcessUserChatCommandHandler(
             cards.Streak,
             cards.Calendar,
             cards.RecordLists,
-            cards.AccountRows));
+            cards.AccountRows,
+            followUps));
     }
 
     private static string? GetUserLanguage(User? user) => user?.Language;
+
+    private static ProcessUserChatCommand ApplyClientKillFlags(
+        ProcessUserChatCommand request,
+        IReadOnlyList<string> enabledFlags)
+    {
+        if (request.ClientContext is not { } clientContext)
+            return request;
+
+        return request with
+        {
+            ClientContext = clientContext with
+            {
+                SupportsPendingOperationChanges = clientContext.SupportsPendingOperationChanges == true
+                    && !enabledFlags.Contains(FeatureFlagKeys.AstraChangePreviewDisabled, StringComparer.OrdinalIgnoreCase),
+                SupportsToolSteps = clientContext.SupportsToolSteps == true
+                    && !enabledFlags.Contains(FeatureFlagKeys.AstraToolStepsDisabled, StringComparer.OrdinalIgnoreCase),
+                SupportsFollowUps = clientContext.SupportsFollowUps == true
+                    && !enabledFlags.Contains(FeatureFlagKeys.AstraFollowUpsDisabled, StringComparer.OrdinalIgnoreCase)
+            }
+        };
+    }
+
+    private static bool CanEmitFollowUps(
+        ProcessUserChatCommand request,
+        ToolLoopResult toolLoopResult,
+        ToolExecutionAccumulator results,
+        AiResponse aiResponse) =>
+        request.ClientContext?.SupportsFollowUps == true
+        && !aiResponse.IsTruncated
+        && !toolLoopResult.TokenBudgetExceeded
+        && !toolLoopResult.HadToolFailure
+        && results.PendingOperations.Count == 0
+        && !results.ActionResults.Any(action => action.Status == ActionStatus.NeedsClarification);
+
+    private static async Task EmitToolStepsAsync(
+        ProcessUserChatCommand request,
+        ToolLoopResult loopResult,
+        ToolExecutionAccumulator results)
+    {
+        if (request.StreamSink is null || request.ClientContext?.SupportsToolSteps != true
+            || loopResult.HadToolFailure || loopResult.TokenBudgetExceeded
+            || loopResult.FinalResponse.IsTruncated || results.PendingOperations.Count > 0
+            || results.ActionResults.Any(action => action.Status == ActionStatus.NeedsClarification))
+            return;
+
+        foreach (var (domain, access) in results.ToolSteps)
+            await request.StreamSink(ChatStreamEvent.Step(domain, access));
+    }
+
+    private void CaptureFollowUpSentEvent(ProcessUserChatCommand request, User? user)
+    {
+        if (user is null || request.ClientContext?.MessageOrigin != "followUp")
+            return;
+
+        AnalyticsCapture.SafeCaptureUserEvent(
+            execution.ProductAnalytics, logger, request.UserId, user.Plan.ToString(),
+            "astra_follow_up_sent",
+            new Dictionary<string, object>
+            {
+                ["platform"] = request.ClientContext.Platform ?? "unknown"
+            });
+    }
+
+    private void CaptureFollowUpsEmittedEvent(
+        ProcessUserChatCommand request,
+        User? user,
+        IReadOnlyList<string>? followUps)
+    {
+        if (user is null || followUps is null)
+            return;
+
+        AnalyticsCapture.SafeCaptureUserEvent(
+            execution.ProductAnalytics, logger, request.UserId, user.Plan.ToString(),
+            "chat_follow_ups_emitted",
+            new Dictionary<string, object>
+            {
+                ["count"] = followUps.Count,
+                ["platform"] = request.ClientContext?.Platform ?? "unknown"
+            });
+    }
+
+    private void CaptureChangePreviewEvents(
+        ProcessUserChatCommand request,
+        User? user,
+        IReadOnlyList<PendingAgentOperation> pendingOperations)
+    {
+        if (user is null)
+            return;
+
+        foreach (var pending in pendingOperations.Where(item => item.Changes is not null))
+        {
+            AnalyticsCapture.SafeCaptureUserEvent(
+                execution.ProductAnalytics,
+                logger,
+                request.UserId,
+                user.Plan.ToString(),
+                "chat_change_preview_card_emitted",
+                new Dictionary<string, object>
+                {
+                    ["platform"] = request.ClientContext?.Platform ?? "unknown",
+                    ["kind"] = pending.CapabilityId
+                });
+        }
+    }
 
     private static bool IsCrisisTurn(CrisisLocales locales, IReadOnlyList<string> enabledFlags) =>
         locales != CrisisLocales.None

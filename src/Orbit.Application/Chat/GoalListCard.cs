@@ -23,7 +23,7 @@ public static partial class GoalListCardBuilder
 {
     public const string PromptInstruction = """
         ## Goal list rendering (this client)
-        This app can display active goals and their projections. After review_goals succeeds, or when the user asks to list goals, write one short intro without repeating figures, then emit [[orbit:goals]] as the final line. Emit at most one directive. For other questions, answer normally.
+        This app can display active goals and their projections. After review_goals succeeds, or when the user asks to list goals, write one short intro without repeating figures, then emit [[orbit:goals]] before optional follow-ups. Emit at most one directive. For other questions, answer normally.
         """;
 
     public static bool TryExtractDirective(string? message, out string stripped)

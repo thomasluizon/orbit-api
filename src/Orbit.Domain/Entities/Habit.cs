@@ -454,6 +454,15 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         return Result.Success();
     }
 
+    public Result<Habit> PreviewUpdate(HabitUpdateParams p)
+    {
+        var preview = (Habit)MemberwiseClone();
+        var update = preview.Update(p);
+        return update.IsSuccess
+            ? Result.Success(preview)
+            : Result.Failure<Habit>(update.Error);
+    }
+
     public Result ValidateUpdate(HabitUpdateParams p)
     {
         if (string.IsNullOrWhiteSpace(p.Title))

@@ -50,6 +50,9 @@ public partial class ProcessUserChatCommandHandler
             GetEntryPointIntent(request));
 
         systemPrompt = AppendCardPromptInstructions(systemPrompt, request, context, activeToolNames);
+        if (request.ClientContext?.SupportsFollowUps == true)
+            systemPrompt = string.Join(Environment.NewLine, systemPrompt,
+                "After any card directive, end your reply with [[orbit:followups]] followed by two or three short next questions, one per line. Do not add other text after them.");
 
         var toolDeclarations = skipTools
             ? new List<object>()
@@ -218,69 +221,26 @@ public partial class ProcessUserChatCommandHandler
 
     private sealed class ResponseDirectiveStreamFilter(Func<ChatStreamEvent, Task> streamSink)
     {
-        private const string DirectivePrefix = "[[orbit:";
-
-        private string _pending = string.Empty;
+        private ResponseDirectiveParser _parser = new();
 
         public async Task HandleAsync(AiStreamEvent aiEvent)
         {
             if (aiEvent.Kind == AiStreamEventKind.Reset)
             {
-                _pending = string.Empty;
+                _parser = new ResponseDirectiveParser();
                 await streamSink(ChatStreamEvent.Reset());
                 return;
             }
 
-            _pending += aiEvent.Text ?? string.Empty;
-            await DrainAsync(flush: false);
+            await EmitAsync(_parser.Process(aiEvent.Text));
         }
 
-        public Task FlushAsync() => DrainAsync(flush: true);
-
-        private async Task DrainAsync(bool flush)
-        {
-            while (_pending.Length > 0)
-            {
-                var directiveIndex = _pending.IndexOf(DirectivePrefix, StringComparison.OrdinalIgnoreCase);
-                if (directiveIndex >= 0)
-                {
-                    await EmitAsync(_pending[..directiveIndex]);
-                    var closingIndex = _pending.IndexOf("]]", directiveIndex + DirectivePrefix.Length, StringComparison.Ordinal);
-                    if (closingIndex < 0)
-                    {
-                        _pending = flush ? string.Empty : _pending[directiveIndex..];
-                        return;
-                    }
-
-                    _pending = _pending[(closingIndex + 2)..];
-                    continue;
-                }
-
-                var retainedCharacters = DirectivePrefixSuffixLength(_pending);
-                var emittedLength = _pending.Length - retainedCharacters;
-                if (emittedLength == 0)
-                    return;
-
-                await EmitAsync(_pending[..emittedLength]);
-                _pending = flush ? string.Empty : _pending[emittedLength..];
-            }
-        }
+        public Task FlushAsync() => EmitAsync(_parser.Process(null, flush: true));
 
         private async Task EmitAsync(string text)
         {
             if (text.Length > 0)
                 await streamSink(ChatStreamEvent.Delta(text));
-        }
-
-        private static int DirectivePrefixSuffixLength(string text)
-        {
-            for (var length = Math.Min(text.Length, DirectivePrefix.Length - 1); length > 0; length--)
-            {
-                if (text.EndsWith(DirectivePrefix[..length], StringComparison.OrdinalIgnoreCase))
-                    return length;
-            }
-
-            return 0;
         }
     }
 
