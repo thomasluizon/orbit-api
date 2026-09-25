@@ -1,34 +1,39 @@
 using System.ComponentModel;
 using System.Security.Claims;
-using MediatR;
 using ModelContextProtocol.Server;
 using Orbit.Application.ApiKeys.Queries;
 
 namespace Orbit.Api.Mcp.Tools;
 
 /// <summary>
-/// MCP API-key tools. <c>manage_api_keys</c> is a high-risk mutation, so it routes through
-/// <see cref="McpExecutorBridge"/> → <see cref="Orbit.Domain.Interfaces.IAgentOperationExecutor"/>
-/// with <see cref="Orbit.Domain.Models.AgentExecutionSurface.Mcp"/> for shared policy evaluation and
-/// the <c>AgentAuditLogs</c> trail; it requires step-up and forwards a confirmation token. The
-/// <c>get_api_keys</c> read stays on MediatR (its handler self-enforces the Pro pay gate).
+/// MCP API-key tools. Both route through <see cref="McpExecutorBridge"/> →
+/// <see cref="Orbit.Domain.Interfaces.IAgentOperationExecutor"/> with
+/// <see cref="Orbit.Domain.Models.AgentExecutionSurface.Mcp"/> for shared policy evaluation and the
+/// <c>AgentAuditLogs</c> trail, and both forward the caller's confirmation token. The read routes
+/// the same way as the mutation because <c>RequireApiKeyCreationStepUp</c> raises the read's
+/// confirmation requirement to a step-up, and a tool with no pending-operation wrapper would then
+/// need a grant it could never obtain.
 /// </summary>
 [McpServerToolType]
-public class ApiKeyTools(IMediator mediator, McpExecutorBridge executorBridge)
+public class ApiKeyTools(McpExecutorBridge executorBridge)
 {
     [McpServerTool(Name = "get_api_keys"), Description("Get the user's API keys (metadata only, no key material). Requires Pro subscription.")]
     public async Task<string> GetApiKeys(
         ClaimsPrincipal user,
+        [Description("Confirmation token from verify_step_up_agent_operation_v2, required only while API-key step-up is switched on")] string? confirmationToken = null,
         CancellationToken cancellationToken = default)
     {
-        var userId = McpToolHelpers.GetUserId(user);
-        var result = await mediator.Send(new GetApiKeysQuery(userId), cancellationToken);
+        var result = await executorBridge.ExecuteAsync(
+            user,
+            "get_api_keys",
+            new { },
+            confirmationToken,
+            cancellationToken);
 
-        if (result.IsFailure)
-            return $"Error: {result.Error}";
+        if (!result.Succeeded)
+            return result.Message;
 
-        var keys = result.Value;
-        if (keys.Count == 0)
+        if (result.Payload is not IReadOnlyList<ApiKeyResponse> keys || keys.Count == 0)
             return "No API keys.";
 
         var lines = keys.Select(k =>

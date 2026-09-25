@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Orbit.Application.Notifications;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Persistence;
@@ -133,7 +134,7 @@ public partial class StreakFreezeAutoActivationService(
         if (consume.IsFailure)
             return null;
 
-        dbContext.StreakFreezes.Add(StreakFreeze.Create(user.Id, missedDate));
+        dbContext.StreakFreezes.Add(StreakFreeze.Create(user.Id, missedDate, StreakFreezeOrigin.Automatic));
 
         var (title, body) = BuildNotification(user.CurrentStreak, user.Language ?? "en");
         dbContext.Notifications.Add(Notification.Create(user.Id, title, body, NotificationUrls.Progress));

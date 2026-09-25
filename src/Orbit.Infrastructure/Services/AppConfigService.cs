@@ -1,3 +1,4 @@
+﻿using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Domain.Entities;
@@ -28,7 +29,7 @@ public class AppConfigService(OrbitDbContext dbContext, IMemoryCache cache) : IA
             return defaultValue;
         }
 
-        var value = ConvertValue<T>(config.Value, defaultValue);
+        var value = ConvertValue(key, config.Value, defaultValue);
         cache.Set(cacheKey, value, CacheDuration);
         return value;
     }
@@ -48,28 +49,50 @@ public class AppConfigService(OrbitDbContext dbContext, IMemoryCache cache) : IA
         return configs;
     }
 
-    private static T ConvertValue<T>(string raw, T defaultValue)
+    /// <summary>
+    /// Parses a stored row strictly, so a typo cannot silently fall back to the default. A gate
+    /// that a malformed row turns off is worse than no gate, because the runbook read-back then
+    /// reports a value the server never used.
+    /// </summary>
+    private static T ConvertValue<T>(string key, string raw, T defaultValue)
     {
-        try
-        {
-            var targetType = typeof(T);
+        var targetType = typeof(T);
+        var trimmed = raw.Trim();
 
-            if (targetType == typeof(int))
-                return (T)(object)int.Parse(raw);
-            if (targetType == typeof(bool))
-                return (T)(object)bool.Parse(raw);
-            if (targetType == typeof(long))
-                return (T)(object)long.Parse(raw);
-            if (targetType == typeof(double))
-                return (T)(object)double.Parse(raw);
-            if (targetType == typeof(string))
-                return (T)(object)raw;
+        if (targetType == typeof(string))
+            return (T)(object)raw;
 
-            return defaultValue;
-        }
-        catch
+        if (targetType == typeof(bool))
         {
-            return defaultValue;
+            return bool.TryParse(trimmed, out var parsed)
+                ? (T)(object)parsed
+                : throw MalformedRow(key, raw, "true or false");
         }
+
+        if (targetType == typeof(int))
+        {
+            return int.TryParse(trimmed, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+                ? (T)(object)parsed
+                : throw MalformedRow(key, raw, "a whole number");
+        }
+
+        if (targetType == typeof(long))
+        {
+            return long.TryParse(trimmed, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+                ? (T)(object)parsed
+                : throw MalformedRow(key, raw, "a whole number");
+        }
+
+        if (targetType == typeof(double))
+        {
+            return double.TryParse(trimmed, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
+                ? (T)(object)parsed
+                : throw MalformedRow(key, raw, "a decimal number");
+        }
+
+        return defaultValue;
     }
+
+    private static InvalidOperationException MalformedRow(string key, string raw, string expected) =>
+        new($"AppConfigs row '{key}' holds '{raw}', which is not {expected}. Fix the row.");
 }
