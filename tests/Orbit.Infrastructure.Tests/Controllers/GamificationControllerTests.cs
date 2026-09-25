@@ -211,14 +211,15 @@ public class GamificationControllerTests
     }
 
     [Theory]
-    [InlineData(1, 17, 23)]
-    [InlineData(0, 16, 22)]
-    public async Task GetRecap_ClosedWeek_UsesUserWeekStart(int weekStartDay, int startDay, int endDay)
+    [InlineData(0, 17, 23)]
+    [InlineData(1, 16, 22)]
+    public async Task GetRecap_ClosedWeek_ResolvesAnchorIndependentlyOfCurrentPreference(
+        int currentWeekStartDay, int startDay, int endDay)
     {
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>())
             .Returns(new DateOnly(2026, 8, 24));
         _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>())
-            .Returns(weekStartDay);
+            .Returns(currentWeekStartDay);
         _mediator.Send(Arg.Any<GetRecapQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(default(RecapResponse)!));
 
@@ -233,18 +234,20 @@ public class GamificationControllerTests
                 && query.ClosedYear == null
                 && query.ClosedMonth == null),
             Arg.Any<CancellationToken>());
+        await _userDateService.DidNotReceive()
+            .GetUserWeekStartDayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     [Theory]
-    [InlineData(1, 17, ErrorCodes.RecapWeekNotClosed)]
-    [InlineData(1, 18, ErrorCodes.InvalidClosedWeekParameters)]
+    [InlineData(17, ErrorCodes.RecapWeekNotClosed)]
+    [InlineData(18, ErrorCodes.InvalidClosedWeekParameters)]
     public async Task GetRecap_InvalidOrOpenWeek_ReturnsNamedBadRequest(
-        int weekStartDay, int startDay, string errorCode)
+        int startDay, string errorCode)
     {
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>())
             .Returns(new DateOnly(2026, 8, 23));
         _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>())
-            .Returns(weekStartDay);
+            .Returns(1);
 
         var result = await _controller.GetRecap(
             "week", CancellationToken.None, weekStart: new DateOnly(2026, 8, startDay));

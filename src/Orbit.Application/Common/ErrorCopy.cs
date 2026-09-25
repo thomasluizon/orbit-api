@@ -173,7 +173,7 @@ public static class ErrorCopy
         (ErrorCodes.RecapMonthNotClosed, "That month has not finished yet. Come back after it ends to read the recap.", "Esse mês ainda não terminou. Volte depois que ele acabar para ler a retrospectiva."),
         (ErrorCodes.RecapMonthBeforeAccount, "That month is before this account existed.", "Esse mês é anterior à criação desta conta."),
         (ErrorCodes.RecapPeriodBeforeAccount, "That period is before this account existed. Choose a later one.", "Esse período é anterior à criação desta conta. Escolha um período mais recente."),
-        (ErrorCodes.InvalidClosedWeekParameters, "Choose a week that begins on your first weekday.", "Escolha uma semana que comece no seu primeiro dia da semana."),
+        (ErrorCodes.InvalidClosedWeekParameters, "Choose a week that begins on Sunday or Monday.", "Escolha uma semana que comece no domingo ou na segunda-feira."),
         (ErrorCodes.InvalidClosedYearParameters, "Choose a valid year, and use it only with the year period.", "Escolha um ano válido e use apenas com o período de ano."),
         (ErrorCodes.RecapWeekNotClosed, "That week has not finished yet. Come back after it ends to read the recap.", "Essa semana ainda não terminou. Volte depois que ela acabar para ler a retrospectiva."),
         (ErrorCodes.RecapYearNotClosed, "That year has not finished yet. Come back after it ends to read the recap.", "Esse ano ainda não terminou. Volte depois que ele acabar para ler a retrospectiva."),

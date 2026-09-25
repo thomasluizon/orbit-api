@@ -50,6 +50,8 @@ public static class ErrorMessages
     public static readonly AppError SubjectRequired = From(ErrorCodes.SubjectRequired);
     public static readonly AppError MessageRequired = From(ErrorCodes.MessageRequired);
     public static readonly AppError InvalidSession = From(ErrorCodes.InvalidSession);
+    public static readonly AppError SessionCreationFailed = From(ErrorCodes.SessionCreationFailed);
+    public static readonly AppError ValidationError = From(ErrorCodes.ValidationError);
     public static readonly AppError ClarificationValueEmpty = From(ErrorCodes.ClarificationValueEmpty);
     public static readonly AppError ClarificationValueTooLong = From(ErrorCodes.ClarificationValueTooLong);
     public static readonly AppError ClarificationValueNotJsonObject = From(ErrorCodes.ClarificationValueNotJsonObject);
