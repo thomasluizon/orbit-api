@@ -1441,6 +1441,7 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("ConsumedAtUtc")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("CreatedAtUtc")
@@ -1835,6 +1836,10 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("Origin")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<DateOnly>("UsedOnDate")
                         .HasColumnType("date");
 
@@ -2012,6 +2017,9 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.Property<int>("LastFreezeAwardStreak")
                         .HasColumnType("integer");
+
+                    b.Property<DateOnly?>("LastPurgedCompletionDate")
+                        .HasColumnType("date");
 
                     b.Property<int>("Level")
                         .HasColumnType("integer");

@@ -325,6 +325,7 @@ public class OrbitDbContext : DbContext
         modelBuilder.Entity<StreakFreeze>(entity =>
         {
             entity.HasIndex(sf => new { sf.UserId, sf.UsedOnDate }).IsUnique();
+            entity.Property(sf => sf.Origin).HasConversion<string>().HasMaxLength(32);
             entity.HasOne<User>().WithMany().HasForeignKey(sf => sf.UserId).OnDelete(DeleteBehavior.Cascade);
         });
     }
@@ -393,6 +394,7 @@ public class OrbitDbContext : DbContext
             entity.Property(item => item.Summary).HasMaxLength(500);
             entity.Property(item => item.OperationFingerprint).HasMaxLength(256);
             entity.Property(item => item.ConfirmationTokenHash).HasMaxLength(64);
+            entity.Property(item => item.ConsumedAtUtc).IsConcurrencyToken();
             entity.Property(item => item.Surface).HasConversion<string>().HasMaxLength(32);
             entity.Property(item => item.RiskClass).HasConversion<string>().HasMaxLength(32);
             entity.Property(item => item.ConfirmationRequirement).HasConversion<string>().HasMaxLength(32);

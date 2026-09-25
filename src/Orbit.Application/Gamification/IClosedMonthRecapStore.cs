@@ -3,7 +3,7 @@ using Orbit.Domain.Entities;
 namespace Orbit.Application.Gamification;
 
 /// <summary>
-/// Persists the first response computed for an account and resolved closed month so later requests
+/// Persists the first response computed for an account and resolved closed period so later requests
 /// return the same result even when mutable habit cadence data has changed.
 /// </summary>
 public interface IClosedMonthRecapStore

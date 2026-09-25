@@ -14,7 +14,10 @@ public class CreateSubHabitCommandValidator : AbstractValidator<CreateSubHabitCo
         RuleFor(x => x.ParentHabitId)
             .NotEmpty();
 
-        SharedHabitRules.AddTitleRules(RuleFor(x => x.Title));
+        SharedHabitRules.AddTitleRules(
+            RuleFor(x => x.Title),
+            requiredMessage: "Sub-habit title must not be empty",
+            maximumLengthMessage: $"Sub-habit title must not exceed {AppConstants.MaxHabitTitleLength} characters");
 
         SharedHabitRules.AddDescriptionRules(RuleFor(x => x.Description));
 

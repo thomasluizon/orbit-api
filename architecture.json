@@ -2743,10 +2743,10 @@
       "Behaviors": 4,
       "Calendar": 16,
       "Challenges": 15,
-      "Chat": 84,
+      "Chat": 85,
       "ChecklistTemplates": 5,
       "Common": 37,
-      "Gamification": 33,
+      "Gamification": 34,
       "Goals": 35,
       "Habits": 78,
       "Marketing": 4,
@@ -2953,15 +2953,15 @@
       "Accountability": 9,
       "ApiKeys": 16,
       "Auth": 32,
-      "Behaviors": 14,
+      "Behaviors": 17,
       "Calendar": 19,
-      "Challenges": 14,
-      "Chat": 64,
+      "Challenges": 15,
+      "Chat": 65,
       "ChecklistTemplates": 9,
-      "Common": 203,
-      "Gamification": 43,
-      "Goals": 54,
-      "Habits": 93,
+      "Common": 204,
+      "Gamification": 44,
+      "Goals": 55,
+      "Habits": 95,
       "Marketing": 6,
       "Notifications": 21,
       "Profile": 40,
@@ -3365,6 +3365,11 @@
       {
         "testClass": "ChatToolGroupsTests",
         "file": "tests/Orbit.Application.Tests/Chat/ChatToolGroupsTests.cs",
+        "references": []
+      },
+      {
+        "testClass": "CrisisSupportGuardTests",
+        "file": "tests/Orbit.Application.Tests/Chat/CrisisSupportGuardTests.cs",
         "references": []
       },
       {
@@ -5156,6 +5161,11 @@
         ]
       },
       {
+        "testClass": "ClosedPeriodRangeTests",
+        "file": "tests/Orbit.Application.Tests/Queries/Gamification/ClosedPeriodRangeTests.cs",
+        "references": []
+      },
+      {
         "testClass": "GetAchievementsQueryHandlerTests",
         "file": "tests/Orbit.Application.Tests/Queries/Gamification/GetAchievementsQueryHandlerTests.cs",
         "references": [
@@ -6819,6 +6829,10 @@
         "testClass": "IdempotencyBehaviorDbTests",
         "file": "tests/Orbit.Infrastructure.Tests/Behaviors/IdempotencyBehaviorDbTests.cs",
         "references": [
+          "Habit",
+          "HabitLog",
+          "LogHabitCommand",
+          "LogHabitCommandHandler",
           "Tag",
           "User"
         ]
@@ -7500,7 +7514,8 @@
         "file": "tests/Orbit.Infrastructure.Tests/Persistence/HabitLogReaderTests.cs",
         "references": [
           "Habit",
-          "HabitLog"
+          "HabitLog",
+          "User"
         ]
       },
       {
@@ -7977,6 +7992,7 @@
         "testClass": "PendingAgentOperationStoreTests",
         "file": "tests/Orbit.Infrastructure.Tests/Services/PendingAgentOperationStoreTests.cs",
         "references": [
+          "PendingAgentOperationState",
           "User"
         ]
       },
@@ -8183,8 +8199,8 @@
         "references": [
           "ChecklistTemplate",
           "Habit",
-          "HabitLog",
-          "Notification"
+          "Notification",
+          "User"
         ]
       },
       {

@@ -9,6 +9,10 @@ namespace Orbit.Domain.Interfaces;
 /// </summary>
 public interface IHabitLogReader
 {
+    Task<DateOnly?> GetLastCompletionDateAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Loads a habit's logs dated on or after <paramref name="since"/>, ordered newest-first, capped at
     /// <paramref name="limit"/> rows. Ordering and the row cap run server-side in the query.
