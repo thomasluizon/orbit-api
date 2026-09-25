@@ -23,6 +23,20 @@ public class UserTests
     }
 
     [Fact]
+    public void RecordPurgedCompletion_KeepsNewestDate()
+    {
+        var user = CreateValidUser();
+        var latest = new DateOnly(2026, 8, 15);
+
+        user.RecordPurgedCompletion(latest);
+        user.RecordPurgedCompletion(latest.AddDays(-1));
+
+        user.LastPurgedCompletionDate.Should().Be(latest);
+        user.GetLastCompletionDate(null).Should().Be(latest);
+        user.GetLastCompletionDate(latest.AddDays(1)).Should().Be(latest.AddDays(1));
+    }
+
+    [Fact]
     public void Create_EmptyName_ReturnsFailure()
     {
         var result = User.Create("", "thomas@example.com");

@@ -91,7 +91,8 @@ public class GetProfileQueryHandler(
             sf => sf.UserId == request.UserId && sf.UsedOnDate >= windowStart,
             cancellationToken);
         var freezesAvailable = Math.Max(0, AppConstants.MaxStreakFreezesPerMonth - recentFreezes.Count);
-        var lastCompletionDate = await habitLogReader.GetLastCompletionDateAsync(request.UserId, cancellationToken);
+        var liveCompletionDate = await habitLogReader.GetLastCompletionDateAsync(request.UserId, cancellationToken);
+        var lastCompletionDate = user.GetLastCompletionDate(liveCompletionDate);
 
         var publicProfile = new PublicProfileSettings(
             user.PublicProfileSlug is not null,

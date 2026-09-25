@@ -71,6 +71,26 @@ public partial class SyncCleanupService(
 #pragma warning restore ORBIT0004
         var totalPurged = 0;
 
+        var purgedCompletions = await dbContext.HabitLogs
+            .Join(dbContext.Habits.IgnoreQueryFilters(), l => l.HabitId, h => h.Id,
+                (l, h) => new { Log = l, Habit = h })
+            .Where(x => x.Habit.IsDeleted && x.Habit.DeletedAtUtc < cutoff && !x.Habit.IsBadHabit
+                && x.Log.Value > 0 && !x.Log.IsDeleted)
+            .GroupBy(x => x.Habit.UserId)
+            .Select(g => new { UserId = g.Key, Date = g.Max(x => x.Log.Date) })
+            .ToListAsync(ct);
+
+        if (purgedCompletions.Count > 0)
+        {
+            var userIds = purgedCompletions.Select(x => x.UserId).ToArray();
+            var users = await dbContext.Users.IgnoreQueryFilters()
+                .Where(u => userIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, ct);
+
+            foreach (var completion in purgedCompletions)
+                users[completion.UserId].RecordPurgedCompletion(completion.Date);
+        }
+
         totalPurged += await PurgeAsync(dbContext.Habits, h => h.IsDeleted && h.DeletedAtUtc < cutoff, ct);
         totalPurged += await PurgeAsync(dbContext.Goals, g => g.IsDeleted && g.DeletedAtUtc < cutoff, ct);
         totalPurged += await PurgeAsync(dbContext.Tags, t => t.IsDeleted && t.DeletedAtUtc < cutoff, ct);

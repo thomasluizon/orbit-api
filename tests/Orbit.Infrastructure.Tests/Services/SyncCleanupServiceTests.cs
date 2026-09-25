@@ -7,6 +7,7 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
+using Orbit.Infrastructure.Tests.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
@@ -36,15 +37,66 @@ public class SyncCleanupServiceTests
     [Fact]
     public async Task PurgeSoftDeletedEntities_DeletedBeyondWindowPlusMargin_IsPurged()
     {
-        await using var dbContext = CreateInMemoryDbContext();
-        var habit = CreateDeletedHabit(deletedDaysAgo: AppConstants.MaxSyncWindowDays + AppConstants.SyncCleanupMarginDays + 1);
+        using var sqliteFactory = new SqliteOrbitDbContextFactory();
+        var dbContext = sqliteFactory.Context;
+        var user = User.Create("User", "purged@example.com").Value;
+        var completionDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-40);
+        var habit = CreateDeletedHabit(
+            deletedDaysAgo: AppConstants.MaxSyncWindowDays + AppConstants.SyncCleanupMarginDays + 1,
+            userId: user.Id);
+        habit.Log(completionDate, advanceDueDate: false);
+        dbContext.Users.Add(user);
         dbContext.Habits.Add(habit);
         await dbContext.SaveChangesAsync();
+
+        var reader = new HabitLogReader(dbContext);
+        (await reader.GetLastCompletionDateAsync(user.Id)).Should().Be(completionDate);
 
         var service = CreateService(dbContext);
         await service.PurgeSoftDeletedEntities(CancellationToken.None);
 
         (await dbContext.Habits.IgnoreQueryFilters().CountAsync()).Should().Be(0);
+        (await dbContext.HabitLogs.IgnoreQueryFilters().CountAsync()).Should().Be(0);
+        var persistedUser = await dbContext.Users.AsNoTracking().SingleAsync(u => u.Id == user.Id);
+        persistedUser.GetLastCompletionDate(await reader.GetLastCompletionDateAsync(user.Id))
+            .Should().Be(completionDate);
+    }
+
+    [Fact]
+    public async Task PurgeSoftDeletedEntities_ExcludesBadHabitsAndSkipsWithoutLeakingOtherUsersCompletion()
+    {
+        using var sqliteFactory = new SqliteOrbitDbContextFactory();
+        var dbContext = sqliteFactory.Context;
+        var firstUser = User.Create("First", "first@example.com").Value;
+        var secondUser = User.Create("Second", "second@example.com").Value;
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var agedDays = AppConstants.MaxSyncWindowDays + AppConstants.SyncCleanupMarginDays + 1;
+
+        var badHabit = Habit.Create(new HabitCreateParams(
+            firstUser.Id, "Slip", FrequencyUnit.Day, 1, DueDate: today, IsBadHabit: true)).Value;
+        badHabit.Log(today.AddDays(-40), advanceDueDate: false);
+        badHabit.SoftDelete(DateTime.UtcNow.AddDays(-agedDays));
+
+        var skippedHabit = Habit.Create(new HabitCreateParams(
+            firstUser.Id, "Skip", FrequencyUnit.Week, 3, DueDate: today, IsFlexible: true)).Value;
+        skippedHabit.SkipFlexible(today.AddDays(-39));
+        skippedHabit.SoftDelete(DateTime.UtcNow.AddDays(-agedDays));
+
+        var otherHabit = Habit.Create(new HabitCreateParams(
+            secondUser.Id, "Complete", FrequencyUnit.Day, 1, DueDate: today)).Value;
+        var otherCompletionDate = today.AddDays(-38);
+        otherHabit.Log(otherCompletionDate, advanceDueDate: false);
+        otherHabit.SoftDelete(DateTime.UtcNow.AddDays(-agedDays));
+
+        dbContext.Users.AddRange(firstUser, secondUser);
+        dbContext.Habits.AddRange(badHabit, skippedHabit, otherHabit);
+        await dbContext.SaveChangesAsync();
+
+        await CreateService(dbContext).PurgeSoftDeletedEntities(CancellationToken.None);
+
+        var users = await dbContext.Users.AsNoTracking().ToDictionaryAsync(u => u.Id);
+        users[firstUser.Id].LastPurgedCompletionDate.Should().BeNull();
+        users[secondUser.Id].LastPurgedCompletionDate.Should().Be(otherCompletionDate);
     }
 
     [Fact]
@@ -108,10 +160,10 @@ public class SyncCleanupServiceTests
         }
     }
 
-    private static Habit CreateDeletedHabit(double deletedDaysAgo)
+    private static Habit CreateDeletedHabit(double deletedDaysAgo, Guid? userId = null)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Exercise", FrequencyUnit.Day, 1, DueDate: today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(userId ?? UserId, "Exercise", FrequencyUnit.Day, 1, DueDate: today)).Value;
         habit.SoftDelete();
         typeof(Habit)
             .GetProperty(nameof(Habit.DeletedAtUtc))!

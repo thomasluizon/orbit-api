@@ -8185,7 +8185,8 @@
           "ChecklistTemplate",
           "Habit",
           "HabitLog",
-          "Notification"
+          "Notification",
+          "User"
         ]
       },
       {

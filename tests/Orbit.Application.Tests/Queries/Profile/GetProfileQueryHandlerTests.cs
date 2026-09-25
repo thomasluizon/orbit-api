@@ -213,6 +213,38 @@ public class GetProfileQueryHandlerTests
         await _habitLogReader.Received(1).GetLastCompletionDateAsync(UserId, Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task Handle_ReturnsPurgedCompletionWhenLiveLogsAreOlder()
+    {
+        var user = CreateTestUser();
+        var purgedDate = Today.AddDays(-35);
+        user.RecordPurgedCompletion(purgedDate);
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _habitLogReader.GetLastCompletionDateAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(purgedDate.AddDays(-1));
+        StubFreezeRepoEmpty();
+
+        var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
+
+        result.Value.LastCompletionDate.Should().Be(purgedDate);
+    }
+
+    [Fact]
+    public async Task Handle_ReturnsLaterLiveCompletionAfterPurge()
+    {
+        var user = CreateTestUser();
+        user.RecordPurgedCompletion(Today.AddDays(-35));
+        var liveDate = Today.AddDays(-2);
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _habitLogReader.GetLastCompletionDateAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(liveDate);
+        StubFreezeRepoEmpty();
+
+        var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
+
+        result.Value.LastCompletionDate.Should().Be(liveDate);
+    }
+
     [Theory]
     [InlineData(StreakFreezeOrigin.Automatic)]
     [InlineData(StreakFreezeOrigin.Manual)]
