@@ -49,6 +49,65 @@ public class TurnstileVerificationServiceTests
     }
 
     [Fact]
+    public async Task Siteverify_InternalError_RetriesThenAcceptsSuccess()
+    {
+        var attempts = 0;
+        using var client = Client(_ =>
+        {
+            attempts++;
+            var json = attempts == 1
+                ? "{\"success\":false,\"error-codes\":[\"internal-error\"]}"
+                : "{\"success\":true,\"error-codes\":[]}";
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json) });
+        });
+
+        var result = await Service(client).VerifyAsync("client-token");
+
+        result.Success.Should().BeTrue();
+        attempts.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Siteverify_InternalErrorAfterRetries_IsUnavailable()
+    {
+        var attempts = 0;
+        using var client = Client(_ =>
+        {
+            attempts++;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"success\":false,\"error-codes\":[\"internal-error\"]}")
+            });
+        });
+
+        var action = () => Service(client).VerifyAsync("client-token");
+
+        await action.Should().ThrowAsync<HttpRequestException>();
+        attempts.Should().Be(3);
+    }
+
+    [Theory]
+    [InlineData("missing-input-secret")]
+    [InlineData("invalid-input-secret")]
+    public async Task Siteverify_SecretError_IsUnavailableWithoutRetry(string errorCode)
+    {
+        var attempts = 0;
+        using var client = Client(_ =>
+        {
+            attempts++;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent($"{{\"success\":false,\"error-codes\":[\"{errorCode}\"]}}")
+            });
+        });
+
+        var action = () => Service(client).VerifyAsync("client-token");
+
+        await action.Should().ThrowAsync<HttpRequestException>();
+        attempts.Should().Be(1);
+    }
+
+    [Fact]
     public async Task Siteverify_NetworkFailure_ThrowsAfterRetries()
     {
         using var client = Client(_ => throw new HttpRequestException("network down"));

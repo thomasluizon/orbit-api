@@ -1,3 +1,4 @@
+using System.Net;
 using System.Reflection;
 using FluentAssertions;
 using Hangfire;
@@ -21,6 +22,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Waitlist.Commands;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
+using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.RateLimiting;
 
@@ -195,6 +197,36 @@ public class RequireBotProtectionFilterTests
         commandRan.Should().BeFalse();
     }
 
+    [Theory]
+    [InlineData("internal-error")]
+    [InlineData("missing-input-secret")]
+    [InlineData("invalid-input-secret")]
+    public async Task SiteverifyServerFailure_Returns503BeforeCommand(string errorCode)
+    {
+        using var client = new HttpClient(new SiteverifyHandler(errorCode))
+        {
+            BaseAddress = new Uri("https://challenges.cloudflare.com/")
+        };
+        var factory = Substitute.For<IHttpClientFactory>();
+        factory.CreateClient(TurnstileVerificationService.HttpClientName).Returns(client);
+        var options = Options.Create(new BotProtectionSettings { Enabled = true, SecretKey = "test-secret" });
+        var verifier = new TurnstileVerificationService(factory, options);
+        var filter = new RequireBotProtectionFilter(options, verifier, _logger);
+        var context = CreateContext(new AuthController.SendCodeRequest("person@example.com", TurnstileToken: "token"));
+        var commandRan = false;
+
+        await filter.OnActionExecutionAsync(context, () =>
+        {
+            commandRan = true;
+            return Task.FromResult(Executed(context));
+        });
+
+        var result = context.Result.Should().BeOfType<ObjectResult>().Subject;
+        result.StatusCode.Should().Be(503);
+        result.Value.Should().BeEquivalentTo(new { error = "Verification unavailable", requestId = "req_bot_protection" });
+        commandRan.Should().BeFalse();
+    }
+
     [Fact]
     public async Task RateLimitRejectsBeforeBotVerification_WithRetryHeader()
     {
@@ -287,4 +319,15 @@ public class RequireBotProtectionFilterTests
 
     private static ActionExecutedContext Executed(ActionExecutingContext context)
         => new(context, context.Filters, context.Controller);
+
+    private sealed class SiteverifyHandler(string errorCode) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+            => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent($"{{\"success\":false,\"error-codes\":[\"{errorCode}\"]}}")
+            });
+    }
 }

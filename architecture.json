@@ -2940,6 +2940,10 @@
       "file": "src/Orbit.Domain/Entities/UserSession.cs"
     },
     {
+      "entity": "UserSessionRefreshToken",
+      "file": "src/Orbit.Domain/Entities/UserSessionRefreshToken.cs"
+    },
+    {
       "entity": "XpAwardLog",
       "file": "src/Orbit.Domain/Entities/XpAwardLog.cs"
     }
@@ -2948,13 +2952,13 @@
     "featureFolders": {
       "Accountability": 9,
       "ApiKeys": 16,
-      "Auth": 31,
+      "Auth": 32,
       "Behaviors": 14,
       "Calendar": 19,
       "Challenges": 14,
       "Chat": 64,
       "ChecklistTemplates": 9,
-      "Common": 201,
+      "Common": 203,
       "Gamification": 43,
       "Goals": 54,
       "Habits": 93,
@@ -2968,7 +2972,7 @@
       "Tags": 14,
       "Uploads": 4,
       "UserFacts": 8,
-      "Waitlist": 4
+      "Waitlist": 5
     },
     "untested": [],
     "testClasses": [
@@ -5574,7 +5578,8 @@
         "file": "tests/Orbit.Application.Tests/Services/AuthSessionServiceTests.cs",
         "references": [
           "User",
-          "UserSession"
+          "UserSession",
+          "UserSessionRefreshToken"
         ]
       },
       {
@@ -6747,6 +6752,13 @@
         ]
       },
       {
+        "testClass": "UserSessionRefreshTokenTests",
+        "file": "tests/Orbit.Domain.Tests/Entities/UserSessionRefreshTokenTests.cs",
+        "references": [
+          "UserSessionRefreshToken"
+        ]
+      },
+      {
         "testClass": "UserSessionTests",
         "file": "tests/Orbit.Domain.Tests/Entities/UserSessionTests.cs",
         "references": [
@@ -7607,6 +7619,16 @@
         "references": []
       },
       {
+        "testClass": "RequireBotProtectionFilterTests",
+        "file": "tests/Orbit.Infrastructure.Tests/RateLimiting/RequireBotProtectionFilterTests.cs",
+        "references": [
+          "JoinWaitlistCommand",
+          "JoinWaitlistCommandHandler",
+          "SendCodeCommand",
+          "SendCodeCommandHandler"
+        ]
+      },
+      {
         "testClass": "AccountDeletionServiceDbTests",
         "file": "tests/Orbit.Infrastructure.Tests/Services/AccountDeletionServiceDbTests.cs",
         "references": [
@@ -7767,7 +7789,8 @@
         "file": "tests/Orbit.Infrastructure.Tests/Services/AuthSessionServiceConcurrentRefreshTests.cs",
         "references": [
           "User",
-          "UserSession"
+          "UserSession",
+          "UserSessionRefreshToken"
         ]
       },
       {
@@ -7775,7 +7798,17 @@
         "file": "tests/Orbit.Infrastructure.Tests/Services/AuthSessionServiceHasSessionForTokenTests.cs",
         "references": [
           "User",
-          "UserSession"
+          "UserSession",
+          "UserSessionRefreshToken"
+        ]
+      },
+      {
+        "testClass": "AuthSessionServiceLogoutRaceTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Services/AuthSessionServiceLogoutRaceTests.cs",
+        "references": [
+          "User",
+          "UserSession",
+          "UserSessionRefreshToken"
         ]
       },
       {
@@ -7783,7 +7816,8 @@
         "file": "tests/Orbit.Infrastructure.Tests/Services/AuthSessionServiceRevokeAllTests.cs",
         "references": [
           "User",
-          "UserSession"
+          "UserSession",
+          "UserSessionRefreshToken"
         ]
       },
       {
@@ -7791,7 +7825,8 @@
         "file": "tests/Orbit.Infrastructure.Tests/Services/AuthSessionServiceTests.cs",
         "references": [
           "User",
-          "UserSession"
+          "UserSession",
+          "UserSessionRefreshToken"
         ]
       },
       {
@@ -8161,6 +8196,11 @@
           "User",
           "UserFact"
         ]
+      },
+      {
+        "testClass": "TurnstileVerificationServiceTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Services/TurnstileVerificationServiceTests.cs",
+        "references": []
       },
       {
         "testClass": "UserDateServiceTests",
