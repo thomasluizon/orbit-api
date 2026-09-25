@@ -7514,7 +7514,8 @@
         "file": "tests/Orbit.Infrastructure.Tests/Persistence/HabitLogReaderTests.cs",
         "references": [
           "Habit",
-          "HabitLog"
+          "HabitLog",
+          "User"
         ]
       },
       {
@@ -7981,6 +7982,7 @@
         "testClass": "PendingAgentOperationStoreTests",
         "file": "tests/Orbit.Infrastructure.Tests/Services/PendingAgentOperationStoreTests.cs",
         "references": [
+          "PendingAgentOperationState",
           "User"
         ]
       },
@@ -8187,8 +8189,8 @@
         "references": [
           "ChecklistTemplate",
           "Habit",
-          "HabitLog",
-          "Notification"
+          "Notification",
+          "User"
         ]
       },
       {
