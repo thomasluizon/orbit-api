@@ -38,6 +38,8 @@ public static class LocaleHelper
     /// <c>pt;q=0.1,en;q=0.9</c> prefers English while starting with <c>pt</c>. Tags are ranked by
     /// their quality value, which defaults to 1 when absent, and ties keep the order the client
     /// sent. A tag with <c>q=0</c> is a refusal and is dropped.
+    /// Only a strictly higher parsed quality replaces the current tag, so ties retain header order
+    /// without testing floating point equality.
     /// </para>
     /// </summary>
     public static bool IsPortugueseAcceptLanguage(string? acceptLanguage)
@@ -47,8 +49,6 @@ public static class LocaleHelper
 
         var best = default(string);
         var bestQuality = 0d;
-        var position = 0;
-        var bestPosition = 0;
 
         foreach (var entry in acceptLanguage.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
@@ -56,34 +56,38 @@ public static class LocaleHelper
             if (parts.Length == 0)
                 continue;
 
-            var quality = 1d;
-            foreach (var parameter in parts.Skip(1))
-            {
-                if (!parameter.StartsWith("q=", StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                if (double.TryParse(
-                        parameter[2..],
-                        System.Globalization.NumberStyles.Float,
-                        System.Globalization.CultureInfo.InvariantCulture,
-                        out var parsed))
-                {
-                    quality = parsed;
-                }
-            }
-
-            position++;
+            var quality = ParseQuality(parts);
             if (quality <= 0)
                 continue;
 
-            if (best is null || quality > bestQuality || (quality == bestQuality && position < bestPosition))
+            if (best is null || quality > bestQuality)
             {
                 best = parts[0];
                 bestQuality = quality;
-                bestPosition = position;
             }
         }
 
         return IsPortuguese(best);
+    }
+
+    private static double ParseQuality(string[] parts)
+    {
+        var quality = 1d;
+        foreach (var parameter in parts.Skip(1))
+        {
+            if (!parameter.StartsWith("q=", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (double.TryParse(
+                    parameter[2..],
+                    System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var parsed))
+            {
+                quality = parsed;
+            }
+        }
+
+        return quality;
     }
 }

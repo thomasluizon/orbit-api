@@ -86,13 +86,13 @@ public sealed partial class AiSlipAlertMessageService(
     private static Result<(string Title, string Body)> GenerateFallback(string habitTitle, int? peakHour, string language)
     {
         var isPtBr = LocaleHelper.IsPortuguese(language);
-        var body = peakHour.HasValue
-            ? isPtBr
-                ? "Isso costuma aparecer mais tarde hoje. Você pode deixar passar."
-                : "This tends to come up later today. You can let it pass."
-            : isPtBr
-                ? "Hoje é um dos dias em que isso costuma aparecer. Você pode deixar passar."
-                : "Today is one of the days this tends to come up. You can let it pass.";
+        var body = (peakHour.HasValue, isPtBr) switch
+        {
+            (true, true) => "Isso costuma aparecer mais tarde hoje. Você pode deixar passar.",
+            (true, false) => "This tends to come up later today. You can let it pass.",
+            (false, true) => "Hoje é um dos dias em que isso costuma aparecer. Você pode deixar passar.",
+            _ => "Today is one of the days this tends to come up. You can let it pass."
+        };
 
         return Result.Success((FallbackTitle(habitTitle, peakHour, language), body));
     }
@@ -103,13 +103,13 @@ public sealed partial class AiSlipAlertMessageService(
         var sanitizedHabitTitle = SanitizeHeadingTitle(habitTitle);
         var isPtBr = LocaleHelper.IsPortuguese(language);
 
-        return peakHour.HasValue
-            ? isPtBr
-                ? $"Antes do horário de costume: {sanitizedHabitTitle}"
-                : $"Ahead of the usual time for {sanitizedHabitTitle}"
-            : isPtBr
-                ? $"Um lembrete tranquilo: {sanitizedHabitTitle}"
-                : $"A quiet note about {sanitizedHabitTitle}";
+        return (peakHour.HasValue, isPtBr) switch
+        {
+            (true, true) => $"Antes do horário de costume: {sanitizedHabitTitle}",
+            (true, false) => $"Ahead of the usual time for {sanitizedHabitTitle}",
+            (false, true) => $"Um lembrete tranquilo: {sanitizedHabitTitle}",
+            _ => $"A quiet note about {sanitizedHabitTitle}"
+        };
     }
 
     private static string SanitizeHeadingTitle(string habitTitle) =>

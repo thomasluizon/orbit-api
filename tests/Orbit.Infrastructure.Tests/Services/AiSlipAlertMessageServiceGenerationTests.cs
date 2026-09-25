@@ -89,6 +89,30 @@ public class AiSlipAlertMessageServiceGenerationTests
     }
 
     [Fact]
+    public async Task GenerateMessageAsync_BlankResponseEnglishWithoutPeak_ReturnsDayFallback()
+    {
+        var service = BuildService("   ");
+
+        var result = await service.GenerateMessageAsync("Smoking", DayOfWeek.Friday, null, "en");
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Title.Should().Be("A quiet note about Smoking");
+        result.Value.Body.Should().Be("Today is one of the days this tends to come up. You can let it pass.");
+    }
+
+    [Fact]
+    public async Task GenerateMessageAsync_BlankResponsePortugueseWithPeak_ReturnsEarlyFallback()
+    {
+        var service = BuildService("   ");
+
+        var result = await service.GenerateMessageAsync("Smoking", DayOfWeek.Friday, 14, "pt-BR");
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Title.Should().Be("Antes do horário de costume: Smoking");
+        result.Value.Body.Should().Be("Isso costuma aparecer mais tarde hoje. Você pode deixar passar.");
+    }
+
+    [Fact]
     public async Task GenerateMessageAsync_AiCallFailsEnglish_ReturnsEnglishFallback()
     {
         var service = BuildService("boom", HttpStatusCode.BadRequest);

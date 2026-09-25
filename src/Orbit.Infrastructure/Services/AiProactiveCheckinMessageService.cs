@@ -89,13 +89,13 @@ public sealed partial class AiProactiveCheckinMessageService(
         string displayName, int openHabitCount, string language)
     {
         var isPtBr = LocaleHelper.IsPortuguese(language);
-        var body = openHabitCount > 1
-            ? isPtBr
-                ? "Ainda há hábitos abertos hoje. Escolha o mais fácil e conte à Astra quando fizer."
-                : "Some habits are still open today. Pick the easiest one and tell Astra when you do it."
-            : isPtBr
-                ? "Um hábito segue aberto hoje. Conte à Astra quando você fizer."
-                : "One habit is still open today. Tell Astra when you do it.";
+        var body = (openHabitCount > 1, isPtBr) switch
+        {
+            (true, true) => "Ainda há hábitos abertos hoje. Escolha o mais fácil e conte à Astra quando fizer.",
+            (true, false) => "Some habits are still open today. Pick the easiest one and tell Astra when you do it.",
+            (false, true) => "Um hábito segue aberto hoje. Conte à Astra quando você fizer.",
+            _ => "One habit is still open today. Tell Astra when you do it."
+        };
 
         return Result.Success((FallbackTitle(displayName, language), body));
     }
