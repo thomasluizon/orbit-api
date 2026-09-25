@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Orbit.Application.Notifications;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -21,6 +22,8 @@ public partial class ReminderSchedulerService(
     IConfiguration configuration,
     TimeProvider? timeProvider = null) : ScheduledServiceBase, IScheduledJob
 {
+    private const int MaxRelativeLookaheadDays = DomainConstants.MaxReminderMinutesBefore / 1440 + 1;
+
     private readonly TimeSpan _interval = TimeSpan.FromMinutes(
         configuration.GetValue("BackgroundServices:ReminderIntervalMinutes", 1));
 
@@ -64,10 +67,8 @@ public partial class ReminderSchedulerService(
     private async Task ProcessRelativeReminders(OrbitDbContext dbContext, List<PendingReminderPush> pending, CancellationToken ct)
     {
         var nowUtc = (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime;
-#pragma warning disable ORBIT0004
         var minLocalDate = DateOnly.FromDateTime(nowUtc.AddDays(-1));
-        var maxLocalDate = DateOnly.FromDateTime(nowUtc.AddDays(1));
-#pragma warning restore ORBIT0004
+        var maxLocalDate = DateOnly.FromDateTime(nowUtc.AddDays(MaxRelativeLookaheadDays + 1));
         var habits = await dbContext.Habits
             .AsNoTracking()
             .Where(h => !h.IsCompleted && !h.IsGeneral && h.ReminderEnabled && h.DueTime != null
@@ -84,11 +85,9 @@ public partial class ReminderSchedulerService(
             .ToDictionaryAsync(u => u.Id, ct);
 
         var habitIds = habits.Select(h => h.Id).ToList();
-#pragma warning disable ORBIT0004
         var utcToday = DateOnly.FromDateTime(nowUtc);
-#pragma warning restore ORBIT0004
         var minWindowDate = utcToday.AddDays(-1);
-        var maxWindowDate = utcToday.AddDays(1);
+        var maxWindowDate = maxLocalDate;
 
         var loggedHabitDates = (await dbContext.HabitLogs
             .AsNoTracking()
@@ -127,33 +126,41 @@ public partial class ReminderSchedulerService(
         var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
         var userNow = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, tz);
         var userToday = DateOnly.FromDateTime(userNow);
-        var userTimeNow = TimeOnly.FromDateTime(userNow);
 
-        if (!HabitScheduleService.IsHabitDueOnDate(habit, userToday, user.WeekStartDay)) return;
-        if (loggedHabitDates.Contains((habit.Id, userToday))) return;
-
-        foreach (var minutesBefore in habit.ReminderTimes)
+        for (var dayOffset = 0; dayOffset <= MaxRelativeLookaheadDays; dayOffset++)
         {
-            var reminderTime = habit.DueTime!.Value.AddMinutes(-minutesBefore);
-            if (userTimeNow < reminderTime) continue;
-            if (sentReminderSet.Contains((habit.Id, userToday, minutesBefore))) continue;
+            var occurrenceDate = userToday.AddDays(dayOffset);
+            if (!HabitScheduleService.IsHabitDueOnDate(habit, occurrenceDate, user.WeekStartDay)) continue;
+            if (loggedHabitDates.Contains((habit.Id, occurrenceDate))) continue;
 
-            var lang = user.Language ?? "en";
-            var minutesText = FormatReminderText(minutesBefore, lang);
+            var dueLocal = occurrenceDate.ToDateTime(habit.DueTime!.Value);
+            if (tz.IsInvalidTime(dueLocal)) continue;
 
-            var sentReminder = SentReminder.Create(habit.Id, userToday, minutesBefore);
-            var notification = Notification.Create(
-                habit.UserId, habit.Title, minutesText, NotificationUrls.Home, habit.Id);
+            var dueUtc = TimeZoneInfo.ConvertTimeToUtc(dueLocal, tz);
+            foreach (var minutesBefore in habit.ReminderTimes)
+            {
+                var reminderUtc = dueUtc.AddMinutes(-minutesBefore);
+                var reminderLocalDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(reminderUtc, tz));
+                if (reminderLocalDate != userToday || nowUtc < reminderUtc) continue;
+                if (sentReminderSet.Contains((habit.Id, occurrenceDate, minutesBefore))) continue;
 
-            sentReminderSet.Add((habit.Id, userToday, minutesBefore));
+                var lang = user.Language ?? "en";
+                var minutesText = FormatReminderText(minutesBefore, lang);
 
-            if (!await TryRecordReminderAsync(habit, sentReminder, notification, dbContext, ct))
-                continue;
+                var sentReminder = SentReminder.Create(habit.Id, occurrenceDate, minutesBefore);
+                var notification = Notification.Create(
+                    habit.UserId, habit.Title, minutesText, NotificationUrls.Home, habit.Id);
 
-            pending.Add(new PendingReminderPush(habit.UserId, habit.Title, minutesText, habit.Id));
+                sentReminderSet.Add((habit.Id, occurrenceDate, minutesBefore));
 
-            if (logger.IsEnabled(LogLevel.Debug))
-                LogSentReminder(logger, minutesBefore, habit.Id, habit.UserId);
+                if (!await TryRecordReminderAsync(habit, sentReminder, notification, dbContext, ct))
+                    continue;
+
+                pending.Add(new PendingReminderPush(habit.UserId, habit.Title, minutesText, habit.Id));
+
+                if (logger.IsEnabled(LogLevel.Debug))
+                    LogSentReminder(logger, minutesBefore, habit.Id, habit.UserId);
+            }
         }
     }
 

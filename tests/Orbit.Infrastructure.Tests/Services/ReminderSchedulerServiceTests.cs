@@ -446,6 +446,108 @@ public class ReminderSchedulerServiceTests
             user.Id, habit.Title, Arg.Any<string>(), "/", Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData("2027-09-25T09:00:00Z", "UTC", "2027-09-26", 9, 0, 1440)]
+    [InlineData("2027-09-26T09:30:00Z", "Etc/GMT+10", "2027-09-26", 0, 30, 60)]
+    [InlineData("2027-09-25T09:00:00Z", "UTC", "2027-09-25", 9, 0, 0)]
+    [InlineData("2027-09-25T09:00:00Z", "UTC", "2027-10-02", 9, 0, 10080)]
+    [InlineData("2027-09-25T10:30:00Z", "Pacific/Kiritimati", "2027-09-27", 0, 30, 1440)]
+    [InlineData("2027-03-14T06:30:00Z", "America/New_York", "2027-03-14", 3, 30, 60)]
+    public async Task CheckAndSendReminders_RelativeReminder_FiresAtInstantForDueOccurrence(
+        string instant, string timeZoneId, string dueDateText, int dueHour, int dueMinute, int minutesBefore)
+    {
+        await using var dbContext = CreateInMemoryDbContext();
+        var pushService = Substitute.For<IPushNotificationService>();
+        var dueDate = DateOnly.Parse(dueDateText);
+        var reminderInstant = DateTimeOffset.Parse(instant);
+        var clock = new MutableTimeProvider(reminderInstant.AddMinutes(-1));
+
+        var user = User.Create("Thomas", "thomas@test.com").Value;
+        user.SetTimeZone(timeZoneId).IsSuccess.Should().BeTrue();
+        var habit = Habit.Create(new HabitCreateParams(
+            user.Id, "Workout", FrequencyUnit.Day, 1,
+            ReminderEnabled: true,
+            DueDate: dueDate,
+            DueTime: new TimeOnly(dueHour, dueMinute),
+            ReminderTimes: [minutesBefore])).Value;
+
+        dbContext.Users.Add(user);
+        dbContext.Habits.Add(habit);
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext, pushService, clock);
+        await service.CheckAndSendReminders(CancellationToken.None);
+        (await dbContext.SentReminders.CountAsync(r => r.HabitId == habit.Id)).Should().Be(0);
+
+        clock.SetUtcNow(reminderInstant);
+        await service.CheckAndSendReminders(CancellationToken.None);
+        await service.CheckAndSendReminders(CancellationToken.None);
+
+        var sent = await dbContext.SentReminders.Where(r => r.HabitId == habit.Id).ToListAsync();
+        sent.Should().ContainSingle();
+        sent[0].Date.Should().Be(dueDate);
+        sent[0].MinutesBefore.Should().Be(minutesBefore);
+        await pushService.Received(1).SendToUserAsync(
+            user.Id, habit.Title, Arg.Any<string>(), "/", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CheckAndSendReminders_RelativeReminderAfterItsLocalDay_DoesNotSendLate()
+    {
+        await using var dbContext = CreateInMemoryDbContext();
+        var pushService = Substitute.For<IPushNotificationService>();
+        var dueDate = new DateOnly(2027, 9, 26);
+        var clock = new MutableTimeProvider(new DateTimeOffset(2027, 9, 26, 9, 0, 0, TimeSpan.Zero));
+
+        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var habit = Habit.Create(new HabitCreateParams(
+            user.Id, "Report", null, null,
+            ReminderEnabled: true,
+            DueDate: dueDate,
+            DueTime: new TimeOnly(9, 0),
+            ReminderTimes: [1440])).Value;
+
+        dbContext.Users.Add(user);
+        dbContext.Habits.Add(habit);
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext, pushService, clock);
+        await service.CheckAndSendReminders(CancellationToken.None);
+
+        (await dbContext.SentReminders.CountAsync(r => r.HabitId == habit.Id)).Should().Be(0);
+        await pushService.DidNotReceive().SendToUserAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CheckAndSendReminders_RelativeReminder_LoggedBeforeInstant_DoesNotSend()
+    {
+        await using var dbContext = CreateInMemoryDbContext();
+        var pushService = Substitute.For<IPushNotificationService>();
+        var dueDate = new DateOnly(2027, 9, 26);
+        var clock = new MutableTimeProvider(new DateTimeOffset(2027, 9, 25, 9, 0, 0, TimeSpan.Zero));
+
+        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var habit = Habit.Create(new HabitCreateParams(
+            user.Id, "Workout", FrequencyUnit.Day, 1,
+            ReminderEnabled: true,
+            DueDate: dueDate,
+            DueTime: new TimeOnly(9, 0),
+            ReminderTimes: [1440])).Value;
+        habit.Log(dueDate, advanceDueDate: false).IsSuccess.Should().BeTrue();
+
+        dbContext.Users.Add(user);
+        dbContext.Habits.Add(habit);
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext, pushService, clock);
+        await service.CheckAndSendReminders(CancellationToken.None);
+
+        (await dbContext.SentReminders.CountAsync(r => r.HabitId == habit.Id)).Should().Be(0);
+        await pushService.DidNotReceive().SendToUserAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task CheckAndSendReminders_RelativeReminderAlreadySent_DoesNotDoubleSend()
     {
@@ -722,9 +824,13 @@ public class ReminderSchedulerServiceTests
             new ConfigurationBuilder().Build(), timeProvider);
     }
 
-    private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
+    private sealed class MutableTimeProvider(DateTimeOffset now) : TimeProvider
     {
-        public override DateTimeOffset GetUtcNow() => now;
+        private DateTimeOffset _now = now;
+
+        public override DateTimeOffset GetUtcNow() => _now;
+
+        public void SetUtcNow(DateTimeOffset instant) => _now = instant;
     }
 
     private static OrbitDbContext CreateInterceptingDbContext(ISaveChangesInterceptor interceptor) =>
