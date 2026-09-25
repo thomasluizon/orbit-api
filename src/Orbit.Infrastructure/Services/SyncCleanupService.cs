@@ -71,13 +71,24 @@ public partial class SyncCleanupService(
 #pragma warning restore ORBIT0004
         var totalPurged = 0;
 
-        var purgedCompletions = await dbContext.HabitLogs
-            .Join(dbContext.Habits.IgnoreQueryFilters(), l => l.HabitId, h => h.Id,
-                (l, h) => new { Log = l, Habit = h })
-            .Where(x => x.Habit.IsDeleted && x.Habit.DeletedAtUtc < cutoff && !x.Habit.IsBadHabit
-                && x.Log.Value > 0 && !x.Log.IsDeleted)
-            .GroupBy(x => x.Habit.UserId)
-            .Select(g => new { UserId = g.Key, Date = g.Max(x => x.Log.Date) })
+        var purgedCompletions = await dbContext.Database.SqlQuery<PurgedCompletion>($"""
+            WITH RECURSIVE "PurgeHabits" ("Id", "UserId", "IsBadHabit") AS (
+                SELECT h."Id", h."UserId", h."IsBadHabit"
+                FROM "Habits" h
+                WHERE h."IsDeleted" = TRUE AND h."DeletedAtUtc" < {cutoff}
+                UNION
+                SELECT child."Id", child."UserId", child."IsBadHabit"
+                FROM "Habits" child
+                JOIN "PurgeHabits" parent
+                    ON child."ParentHabitId" = parent."Id" AND child."UserId" = parent."UserId"
+            )
+            SELECT h."UserId" AS "UserId", MAX(l."Date") AS "Date"
+            FROM "PurgeHabits" h
+            JOIN "HabitLogs" l ON l."HabitId" = h."Id"
+            WHERE h."IsBadHabit" = FALSE AND CAST(l."Value" AS NUMERIC) > 0
+                AND l."IsDeleted" = FALSE
+            GROUP BY h."UserId"
+            """)
             .ToListAsync(ct);
 
         if (purgedCompletions.Count > 0)
@@ -130,6 +141,12 @@ public partial class SyncCleanupService(
 
         set.RemoveRange(deleted);
         return deleted.Count;
+    }
+
+    private sealed class PurgedCompletion
+    {
+        public Guid UserId { get; set; }
+        public DateOnly Date { get; set; }
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "SyncCleanupService started")]
