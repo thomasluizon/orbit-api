@@ -286,7 +286,7 @@ public class ExportUserDataQueryHandlerTests
         var achievement = UserAchievement.Create(UserId, "first_habit");
         Returns(_userAchievementRepo, achievement);
 
-        var streakFreeze = StreakFreeze.Create(UserId, new DateOnly(2026, 4, 1));
+        var streakFreeze = StreakFreeze.Create(UserId, new DateOnly(2026, 4, 1), StreakFreezeOrigin.Manual);
         Returns(_streakFreezeRepo, streakFreeze);
 
         var referral = Referral.Create(UserId, Guid.NewGuid());
