@@ -124,7 +124,7 @@ public partial class ProcessUserChatCommandHandler
         if (hadToolFailure)
             return new ToolRoundResult(MessageResponse(language), HadToolFailure: true);
 
-        if (request.StreamSink is not null && request.ClientContext?.SupportsToolSteps == true
+        if (request.ClientContext?.SupportsToolSteps == true
             && executionResults.PendingOperations.Count == 0
             && !executionResults.ActionResults.Any(action => action.Status == ActionStatus.NeedsClarification))
         {
@@ -136,8 +136,7 @@ public partial class ProcessUserChatCommandHandler
                     continue;
 
                 var access = tool.IsReadOnly ? "read" : "write";
-                if (executionResults.TryAddToolStep(capability.Domain, access))
-                    await request.StreamSink(ChatStreamEvent.Step(capability.Domain, access));
+                executionResults.AddToolStep(capability.Domain, access);
             }
         }
 

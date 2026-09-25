@@ -13,6 +13,7 @@ public partial class ProcessUserChatCommandHandler
         private readonly HashSet<string> _seenRelatedSurfaces = new(StringComparer.Ordinal);
         private readonly HashSet<string> _calledToolNames = new(StringComparer.Ordinal);
         private readonly HashSet<(string Domain, string Access)> _seenToolSteps = [];
+        private readonly List<(string Domain, string Access)> _toolSteps = [];
 
         public List<ActionResult> ActionResults { get; } = [];
         public List<AgentOperationResult> OperationResults { get; } = [];
@@ -25,7 +26,13 @@ public partial class ProcessUserChatCommandHandler
         /// </summary>
         public IReadOnlyCollection<string> CalledToolNames => _calledToolNames;
 
-        public bool TryAddToolStep(string domain, string access) => _seenToolSteps.Add((domain, access));
+        public IReadOnlyList<(string Domain, string Access)> ToolSteps => _toolSteps;
+
+        public void AddToolStep(string domain, string access)
+        {
+            if (_seenToolSteps.Add((domain, access)))
+                _toolSteps.Add((domain, access));
+        }
 
         /// <summary>
         /// App surface IDs (e.g. "today", "gamification") surfaced by read-only tools such as

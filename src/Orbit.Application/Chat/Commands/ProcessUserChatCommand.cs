@@ -172,6 +172,7 @@ public partial class ProcessUserChatCommandHandler(
         var iterations = toolLoopResult.Iterations;
         if (toolLoopResult.HadToolFailure)
             executionResults.SanitizeFailedActions(ToolFailureMessage(userLanguage));
+        await EmitToolStepsAsync(request, toolLoopResult, executionResults);
         if (aiStreamFilter is not null)
             await aiStreamFilter.FlushAsync();
         actionsStopwatch.Stop();
@@ -280,6 +281,21 @@ public partial class ProcessUserChatCommandHandler(
         && !toolLoopResult.HadToolFailure
         && results.PendingOperations.Count == 0
         && !results.ActionResults.Any(action => action.Status == ActionStatus.NeedsClarification);
+
+    private static async Task EmitToolStepsAsync(
+        ProcessUserChatCommand request,
+        ToolLoopResult loopResult,
+        ToolExecutionAccumulator results)
+    {
+        if (request.StreamSink is null || request.ClientContext?.SupportsToolSteps != true
+            || loopResult.HadToolFailure || loopResult.TokenBudgetExceeded
+            || loopResult.FinalResponse.IsTruncated || results.PendingOperations.Count > 0
+            || results.ActionResults.Any(action => action.Status == ActionStatus.NeedsClarification))
+            return;
+
+        foreach (var (domain, access) in results.ToolSteps)
+            await request.StreamSink(ChatStreamEvent.Step(domain, access));
+    }
 
     private void CaptureFollowUpSentEvent(ProcessUserChatCommand request, User? user)
     {

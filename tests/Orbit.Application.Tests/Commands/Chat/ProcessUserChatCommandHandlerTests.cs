@@ -1392,6 +1392,60 @@ public class ProcessUserChatCommandHandlerTests
         events.Should().NotContain(item => item.Type == "step");
     }
 
+    [Fact]
+    public async Task Handle_LaterToolFailure_EmitsNoEarlierSteps()
+    {
+        SetupUserAndPayGate();
+        var readTool = FakeTool("read_habits_one");
+        readTool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(new ToolResult(true));
+        SetupAiResponse(ToolResponse("read_habits_one", "one", "{}"));
+        _aiIntentService.ContinueWithToolResultsAsync(
+                Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(ToolResponse("create_habit", "two", "{}")));
+        var events = new List<ChatStreamEvent>();
+
+        var result = await CreateHandler(readTool, CreateFailingCreateHabitTool()).Handle(
+            new ProcessUserChatCommand(UserId, "Read then create a habit",
+                ClientContext: new AgentClientContext(SupportsToolSteps: true),
+                StreamSink: streamEvent => { events.Add(streamEvent); return Task.CompletedTask; }),
+            CancellationToken.None);
+
+        result.Value.AiMessage.Should().Be(EnglishToolFailureMessage);
+        events.Should().NotContain(item => item.Type == "step");
+    }
+
+    [Fact]
+    public async Task Handle_FiveToolIterations_DeduplicatesStepsForWholeTurn()
+    {
+        SetupUserAndPayGate();
+        var tool = FakeTool("read_habits_one");
+        tool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(new ToolResult(true));
+        SetupAiResponse(ToolResponse("read_habits_one", "one", "{}"));
+        var continuations = 0;
+        _aiIntentService.ContinueWithToolResultsAsync(
+                Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                continuations++;
+                return Result.Success(continuations == 5
+                    ? new AiResponse { TextMessage = "Done" }
+                    : ToolResponse("read_habits_one", $"call_{continuations}", "{}"));
+            });
+        var events = new List<ChatStreamEvent>();
+
+        var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
+            UserId, "Show habits", ClientContext: new AgentClientContext(SupportsToolSteps: true),
+            StreamSink: streamEvent => { events.Add(streamEvent); return Task.CompletedTask; }), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        events.Count(item => item.Type == "round").Should().Be(5);
+        events.Count(item => item.Type == "step").Should().Be(1);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
