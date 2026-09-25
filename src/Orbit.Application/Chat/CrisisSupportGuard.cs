@@ -16,6 +16,8 @@ public static class CrisisSupportGuard
 {
     public const string EnglishResource = "Call or text 988 (Suicide and Crisis Lifeline)";
     public const string PortugueseResource = "CVV, Ligue 188 (Centro de Valorizacao da Vida)";
+    public const string EnglishSupport = "I'm sorry you're going through this. You deserve support right now.";
+    public const string PortugueseSupport = "Sinto muito que você esteja passando por isso. Você merece apoio agora.";
 
     private static readonly string[] EnglishPhrases =
     [
@@ -51,6 +53,9 @@ public static class CrisisSupportGuard
         CrisisLocales.English | CrisisLocales.Portuguese => "en,pt",
         _ => "en"
     };
+
+    public static string FallbackMessage(CrisisLocales locales) =>
+        locales == CrisisLocales.Portuguese ? PortugueseSupport : EnglishSupport;
 
     public static string EnsureResources(string? reply, CrisisLocales locales, IReadOnlyList<ChatHistoryMessage>? history)
     {

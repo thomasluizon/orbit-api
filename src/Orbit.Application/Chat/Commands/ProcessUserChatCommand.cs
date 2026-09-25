@@ -148,7 +148,9 @@ public partial class ProcessUserChatCommandHandler(
         LogAiIntentServiceCompleted(logger, aiStopwatch.ElapsedMilliseconds);
 
         if (response.IsFailure)
-            return response.PropagateError<ChatResponse>();
+            return crisisTurn
+                ? await CreateCrisisFallbackAsync(request, detectedCrisisLocales)
+                : response.PropagateError<ChatResponse>();
 
         var executionResults = new ToolExecutionAccumulator();
         var actionsStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -175,7 +177,9 @@ public partial class ProcessUserChatCommandHandler(
         LogChangesSaved(logger, saveStopwatch.ElapsedMilliseconds);
 
         if (IsEmptyTokenBudgetResponse(toolLoopResult.TokenBudgetExceeded, aiResponse.TextMessage))
-            return Result.Failure<ChatResponse>(ErrorMessages.AiUnavailable);
+            return crisisTurn
+                ? await CreateCrisisFallbackAsync(request, detectedCrisisLocales)
+                : Result.Failure<ChatResponse>(ErrorMessages.AiUnavailable);
 
         var responseText = StripJsonWrapper(aiResponse.TextMessage);
         if (aiResponse.IsTruncated)
@@ -265,6 +269,15 @@ public partial class ProcessUserChatCommandHandler(
 
     private static bool ShouldExtractFacts(bool crisisTurn, ChatContext context) =>
         !crisisTurn && context.AiMemoryEnabled && context.User is { HasProAccess: true };
+
+    private async Task<Result<ChatResponse>> CreateCrisisFallbackAsync(
+        ProcessUserChatCommand request,
+        CrisisLocales locales)
+    {
+        var message = await CompleteCrisisReplyAsync(
+            request, CrisisSupportGuard.FallbackMessage(locales), locales, "fallback");
+        return Result.Success(new ChatResponse(message, [], CorrelationId: request.CorrelationId));
+    }
 
     private async Task<string> CompleteCrisisReplyAsync(
         ProcessUserChatCommand request,

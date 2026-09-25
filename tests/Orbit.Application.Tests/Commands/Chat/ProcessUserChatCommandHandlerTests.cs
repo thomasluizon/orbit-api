@@ -623,7 +623,9 @@ public class ProcessUserChatCommandHandlerTests
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.AiMessage.Should().Contain(CrisisSupportGuard.EnglishResource);
+        result.Value.AiMessage.Should().Be(
+            "I'm sorry you're going through this. You deserve support right now.\n\n"
+            + CrisisSupportGuard.EnglishResource);
         await _aiIntentService.DidNotReceive().SendWithToolsAsync(
             Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
@@ -639,7 +641,34 @@ public class ProcessUserChatCommandHandlerTests
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.AiMessage.Should().Contain(CrisisSupportGuard.PortugueseResource);
+        result.Value.AiMessage.Should().Be(
+            "Sinto muito que você esteja passando por isso. Você merece apoio agora.\n\n"
+            + CrisisSupportGuard.PortugueseResource);
+    }
+
+    [Fact]
+    public async Task Handle_CrisisFallbackStream_DeliversTextAndRecordsFallbackPath()
+    {
+        SetupUserAndPayGate(payGatePass: false);
+        var events = new List<ChatStreamEvent>();
+
+        var result = await CreateHandler().Handle(
+            new ProcessUserChatCommand(
+                UserId, "I want to hurt myself",
+                StreamSink: streamEvent =>
+                {
+                    events.Add(streamEvent);
+                    return Task.CompletedTask;
+                }),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        events.Select(streamEvent => streamEvent.Type).Should().Equal("reset", "delta");
+        events[1].Text.Should().Be(result.Value.AiMessage);
+        _productAnalytics.Received(1).CaptureAggregateEvent(
+            "astra_crisis_resources_shown",
+            Arg.Is<IReadOnlyDictionary<string, object>>(properties =>
+                (string)properties["delivery_path"] == "fallback"));
     }
 
     [Fact]
