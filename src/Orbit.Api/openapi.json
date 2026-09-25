@@ -14588,6 +14588,12 @@
           "language": {
             "type": "string",
             "default": "en"
+          },
+          "turnstileToken": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -15027,6 +15033,12 @@
           "language": {
             "type": "string",
             "default": "en"
+          },
+          "turnstileToken": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -15042,6 +15054,12 @@
           "language": {
             "type": "string",
             "default": "en"
+          },
+          "turnstileToken": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -15909,6 +15927,12 @@
               "null",
               "string"
             ]
+          },
+          "turnstileToken": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -15930,6 +15954,12 @@
             "default": "en"
           },
           "referralCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "turnstileToken": {
             "type": [
               "null",
               "string"

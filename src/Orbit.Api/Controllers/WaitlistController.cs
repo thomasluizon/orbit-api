@@ -20,10 +20,11 @@ public partial class WaitlistController(
 {
     private readonly WaitlistSettings _settings = waitlistOptions.Value;
 
-    public record JoinWaitlistRequest(string Email, string Language = "en");
+    public record JoinWaitlistRequest(string Email, string Language = "en", string? TurnstileToken = null);
 
     [HttpPost]
     [DistributedRateLimit("waitlist")]
+    [RequireBotProtection]
     [EnableCors("Landing")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

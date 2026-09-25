@@ -175,6 +175,8 @@ Tests use xUnit with FluentAssertions. Unit tests only — there is no integrati
 | Payments | [Stripe](https://stripe.com) + Google Play Billing |
 | Monitoring | [Sentry](https://sentry.io) |
 
+Turnstile remains disabled after deployment. Create a Turnstile widget for `useorbit.org` in the Cloudflare dashboard, then set `BotProtection__SecretKey` in the Render `orbit-api` environment. Once the Android build that sends `turnstileToken` is live in the Play fleet, raise the production `AppConfigs.MinSupportedVersion` row to that build and verify the value. Then set `BotProtection__Enabled=true` in Render and verify token-bearing requests succeed. Existing clients without a token continue to work while the switch is false. The production smoke account bypasses this gate only when both `SMOKE_TEST_EMAIL` and `SMOKE_TEST_CODE` are configured, so knowledge of that address permits sends only to Orbit's own mailbox.
+
 ### Docker
 
 ```bash
