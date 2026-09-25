@@ -25,9 +25,15 @@ public class CalendarEventItemSerializationTests
 
         json.Should().NotContainEquivalentOf("sourceTimeZone");
         json.Should().NotContainEquivalentOf("recurrenceStartUtc");
+        json.Should().NotContainEquivalentOf("expandedOccurrencesUtc");
         json.Should().Contain("endUtc");
         response.RootElement.TryGetProperty("recurrenceTimeZone", out var zone).Should().BeTrue();
         zone.GetString().Should().Be("Europe/Lisbon");
+        response.RootElement.EnumerateObject()
+            .Where(property => property.Value.ValueKind == JsonValueKind.String
+                && property.Value.GetString() == "Europe/Lisbon")
+            .Select(property => property.Name)
+            .Should().Equal("recurrenceTimeZone");
     }
 
     [Fact]
@@ -45,6 +51,8 @@ public class CalendarEventItemSerializationTests
         readBack!.SourceTimeZone.Should().Be("Europe/Lisbon");
         readBack.RecurrenceTimeZone.Should().Be("Europe/Lisbon");
         readBack.RecurrenceStartUtc.Should().Be(new DateTime(2027, 1, 7, 3, 30, 0, DateTimeKind.Utc));
+        readBack.ExpandedOccurrencesUtc.Should().Equal(
+            new DateTime(2027, 1, 7, 3, 30, 0, DateTimeKind.Utc));
         readBack.Id.Should().Be("master-lisbon");
         readBack.EndUtc.Should().Be(new DateTime(2027, 1, 7, 4, 0, 0, DateTimeKind.Utc));
     }
@@ -103,6 +111,7 @@ public class CalendarEventItemSerializationTests
             RecurrenceTimeZone: "Europe/Lisbon")
         {
             SourceTimeZone = "Europe/Lisbon",
-            RecurrenceStartUtc = new DateTime(2027, 1, 7, 3, 30, 0, DateTimeKind.Utc)
+            RecurrenceStartUtc = new DateTime(2027, 1, 7, 3, 30, 0, DateTimeKind.Utc),
+            ExpandedOccurrencesUtc = [new DateTime(2027, 1, 7, 3, 30, 0, DateTimeKind.Utc)]
         };
 }

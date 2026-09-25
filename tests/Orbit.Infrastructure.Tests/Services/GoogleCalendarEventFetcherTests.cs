@@ -237,6 +237,9 @@ public class GoogleCalendarEventFetcherTests
         result[0].StartUtc.Should().Be(new DateTime(2027, 1, 7, 3, 30, 0, DateTimeKind.Utc));
         result[0].RecurrenceRule.Should().Be("RRULE:FREQ=DAILY;BYDAY=TH");
         result[0].SourceTimeZone.Should().Be("Europe/Lisbon");
+        result[0].ExpandedOccurrencesUtc.Should().Equal(
+            new DateTime(2027, 1, 7, 3, 30, 0, DateTimeKind.Utc),
+            new DateTime(2027, 1, 14, 3, 30, 0, DateTimeKind.Utc));
         var response = JsonSerializer.SerializeToElement(result[0], ResponseOptions);
         response.TryGetProperty("recurrenceTimeZone", out var zone).Should().BeTrue();
         zone.GetString().Should().Be("Europe/Lisbon");
@@ -292,6 +295,8 @@ public class GoogleCalendarEventFetcherTests
         result.Should().ContainSingle();
         result[0].StartUtc.Should().Be(new DateTime(2027, 1, 7, 15, 0, 0, DateTimeKind.Utc));
         result[0].RecurrenceStartUtc.Should().Be(new DateTime(2027, 1, 7, 3, 30, 0, DateTimeKind.Utc));
+        result[0].ExpandedOccurrencesUtc.Should().Equal(
+            new DateTime(2027, 1, 7, 3, 30, 0, DateTimeKind.Utc));
     }
 
     [Fact]

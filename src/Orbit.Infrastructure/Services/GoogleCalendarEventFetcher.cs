@@ -105,6 +105,20 @@ internal sealed partial class GoogleCalendarEventFetcher(
         var items = new List<CalendarEventItem>();
         var seenRecurringMasters = new HashSet<string>(StringComparer.Ordinal);
         var masterRecurrenceCache = new Dictionary<string, MasterRecurrence>(StringComparer.Ordinal);
+        var expandedOccurrences = events
+            .Where(ev => ev.RecurringEventId is not null
+                && !string.IsNullOrWhiteSpace(ev.Summary)
+                && !string.Equals(ev.Status, "cancelled", StringComparison.OrdinalIgnoreCase))
+            .GroupBy(ev => ev.RecurringEventId!, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<DateTime>)group
+                    .Select(ev => ev.OriginalStartTime?.DateTimeDateTimeOffset?.UtcDateTime
+                        ?? ev.Start?.DateTimeDateTimeOffset?.UtcDateTime)
+                    .Where(start => start.HasValue)
+                    .Select(start => start!.Value)
+                    .ToList(),
+                StringComparer.Ordinal);
 
         foreach (var ev in events)
         {
@@ -113,7 +127,13 @@ internal sealed partial class GoogleCalendarEventFetcher(
             if (ev.RecurringEventId is { } masterId && !seenRecurringMasters.Add(masterId)) continue;
 
             var recurrence = await ResolveRecurrence(accessToken, calendarId, ev, masterRecurrenceCache, ct);
-            items.Add(MapEvent(ev, calendarId, calendarName, recurrence));
+            var item = MapEvent(ev, calendarId, calendarName, recurrence);
+            if (ev.RecurringEventId is { } recurringId
+                && expandedOccurrences.TryGetValue(recurringId, out var occurrences))
+                item = item with { ExpandedOccurrencesUtc = occurrences };
+            else if (item.IsRecurring && item.RecurrenceStartUtc is { } recurrenceStart)
+                item = item with { ExpandedOccurrencesUtc = [recurrenceStart] };
+            items.Add(item);
         }
 
         return items;
