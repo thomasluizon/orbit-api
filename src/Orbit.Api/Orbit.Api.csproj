@@ -33,7 +33,7 @@
     <PackageReference Include="ModelContextProtocol" Version="1.4.1" />
     <PackageReference Include="PostHog.AspNetCore" Version="2.9.7" />
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="1.4.1" />
-    <PackageReference Include="Scalar.AspNetCore" Version="2.17.9" />
+    <PackageReference Include="Scalar.AspNetCore" Version="2.17.10" />
     <PackageReference Include="Sentry.AspNetCore" Version="6.11.1" />
   </ItemGroup>
 
