@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Options;
 using NSubstitute;
+using Npgsql;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
@@ -23,6 +24,35 @@ namespace Orbit.Infrastructure.Tests.Services;
 /// </summary>
 public class AuthSessionServiceConcurrentRefreshTests
 {
+    [Fact]
+    public async Task RefreshSessionAsync_LosesHistoryInsertRace_ReturnsInvalidSessionAndLeavesContextClean()
+    {
+        var dbName = NewDbName();
+        var (userId, token) = await SeedSessionAsync(dbName);
+
+        var interceptor = new HistoryConflictAfterConcurrentRefreshInterceptor(async () =>
+        {
+            await using var racer = CreateContext(dbName);
+            var winner = await CreateService(racer).RefreshSessionAsync(token, CancellationToken.None);
+            winner.IsSuccess.Should().BeTrue();
+        });
+
+        await using var context = CreateContext(dbName, interceptor);
+        var result = await CreateService(context).RefreshSessionAsync(token, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("INVALID_SESSION");
+        interceptor.SaveAttempts.Should().Be(1);
+        context.ChangeTracker.Entries().Should().NotContain(entry =>
+            entry.State == EntityState.Added || entry.State == EntityState.Modified || entry.State == EntityState.Deleted);
+
+        await using var verify = CreateContext(dbName);
+        verify.UserSessionRefreshTokens.Should().ContainSingle(history =>
+            history.TokenHash == Hash(token));
+        verify.UserSessions.Single(session => session.UserId == userId).TokenHash
+            .Should().NotBe(Hash(token));
+    }
+
     [Fact]
     public async Task RefreshSessionAsync_LosesRotationRaceToConcurrentRefresh_ReturnsInvalidSessionAndRotatesRowOnce()
     {
@@ -166,6 +196,26 @@ public class AuthSessionServiceConcurrentRefreshTests
                 throw new DbUpdateConcurrencyException("simulated stale token");
             }
             return base.SavingChangesAsync(eventData, result, cancellationToken);
+        }
+    }
+
+    private sealed class HistoryConflictAfterConcurrentRefreshInterceptor(Func<Task> onFirstSave) : SaveChangesInterceptor
+    {
+        public int SaveAttempts { get; private set; }
+
+        public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            SaveAttempts++;
+            if (SaveAttempts == 1)
+            {
+                await onFirstSave();
+                throw new DbUpdateException(
+                    "duplicate history hash",
+                    new PostgresException("duplicate history hash", "ERROR", "ERROR", PostgresErrorCodes.UniqueViolation));
+            }
+
+            return await base.SavingChangesAsync(eventData, result, cancellationToken);
         }
     }
 

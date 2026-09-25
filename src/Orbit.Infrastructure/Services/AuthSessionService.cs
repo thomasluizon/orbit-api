@@ -89,6 +89,11 @@ public class AuthSessionService(
             unitOfWork.DiscardChanges();
             return Result.Failure<SessionTokens>(ErrorMessages.InvalidSession);
         }
+        catch (DbUpdateException exception) when (DbUniqueViolation.IsUniqueViolation(exception))
+        {
+            unitOfWork.DiscardChanges();
+            return Result.Failure<SessionTokens>(ErrorMessages.InvalidSession);
+        }
 
         return Result.Success(new SessionTokens(
             tokenService.GenerateToken(user.Id, user.Email, session.Id),
