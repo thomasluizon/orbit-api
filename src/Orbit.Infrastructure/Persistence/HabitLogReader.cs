@@ -6,6 +6,19 @@ namespace Orbit.Infrastructure.Persistence;
 
 public class HabitLogReader(OrbitDbContext context) : IHabitLogReader
 {
+    public Task<DateOnly?> GetLastCompletionDateAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        return context.Habits
+            .AsNoTracking()
+            .IgnoreQueryFilters()
+            .Where(habit => habit.UserId == userId)
+            .SelectMany(habit => context.HabitLogs
+                .Where(log => log.HabitId == habit.Id && log.Value > 0 && !log.IsDeleted))
+            .MaxAsync(log => (DateOnly?)log.Date, cancellationToken);
+    }
+
     public async Task<IReadOnlyList<HabitLog>> ReadRecentLogsAsync(
         Guid habitId,
         DateOnly since,

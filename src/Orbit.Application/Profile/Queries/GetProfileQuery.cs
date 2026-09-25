@@ -56,13 +56,15 @@ public record ProfileResponse(
     bool Uses24HourClock = true,
     PublicProfileSettings? PublicProfile = null,
     bool ProactiveAstraEnabled = false,
-    bool? MarketingEmailConsent = null);
+    bool? MarketingEmailConsent = null,
+    DateOnly? LastCompletionDate = null);
 
 public record GetProfileQuery(Guid UserId) : IRequest<Result<ProfileResponse>>;
 
 public class GetProfileQueryHandler(
     IGenericRepository<User> userRepository,
     IGenericRepository<StreakFreeze> streakFreezeRepository,
+    IHabitLogReader habitLogReader,
     IUserDateService userDateService,
     IFeatureFlagService featureFlagService,
     IPayGateService payGate,
@@ -89,6 +91,7 @@ public class GetProfileQueryHandler(
             sf => sf.UserId == request.UserId && sf.UsedOnDate >= windowStart,
             cancellationToken);
         var freezesAvailable = Math.Max(0, AppConstants.MaxStreakFreezesPerMonth - recentFreezes.Count);
+        var lastCompletionDate = await habitLogReader.GetLastCompletionDateAsync(request.UserId, cancellationToken);
 
         var publicProfile = new PublicProfileSettings(
             user.PublicProfileSlug is not null,
@@ -147,6 +150,7 @@ public class GetProfileQueryHandler(
             TimeFormatResolver.Uses24HourClock(user.TimeZone),
             publicProfile,
             user.ProactiveAstraEnabled,
-            user.MarketingEmailConsent));
+            user.MarketingEmailConsent,
+            lastCompletionDate));
     }
 }
