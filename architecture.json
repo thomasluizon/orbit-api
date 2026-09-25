@@ -2951,7 +2951,7 @@
   "testCoverage": {
     "featureFolders": {
       "Accountability": 9,
-      "ApiKeys": 17,
+      "ApiKeys": 18,
       "Auth": 31,
       "Behaviors": 17,
       "Calendar": 21,

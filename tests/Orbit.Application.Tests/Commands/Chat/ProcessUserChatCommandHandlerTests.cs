@@ -10,6 +10,7 @@ using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
+using Orbit.Application.ApiKeys.Queries;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification.Queries;
 using Orbit.Application.Goals.Services;
@@ -1145,6 +1146,26 @@ public class ProcessUserChatCommandHandlerTests
 
         result.Value.RecordLists.Should().BeNull();
         result.Value.AiMessage.Should().NotContain("[[orbit:records:keys]]");
+    }
+
+    [Fact]
+    public async Task Handle_SuccessfulKeyRead_BuildsProfileRecordCard()
+    {
+        SetupUserAndPayGate();
+        var createdAt = new DateTime(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc);
+        var key = new ApiKeyResponse(Guid.NewGuid(), "Automation", "orb_123", ["read"], true,
+            null, createdAt, null, false);
+        var tool = ReadTool("get_api_keys", new ToolResult(true,
+            Payload: new List<ApiKeyResponse> { key }));
+        SetupReadToolReply("get_api_keys", "Keys [[orbit:records:keys]]");
+
+        var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
+            UserId, "Show API keys",
+            ClientContext: new AgentClientContext(SupportsRecordListCard: true)), CancellationToken.None);
+
+        result.Value.RecordLists.Should().ContainSingle();
+        result.Value.RecordLists![0].SurfaceId.Should().Be("profile");
+        result.Value.RecordLists[0].Items.Single().Detail.Should().Be("orb_123 (active)");
     }
 
     [Fact]
