@@ -53,6 +53,10 @@ public partial class ProcessUserChatCommandHandler
         if (request.ClientContext?.SupportsMetricsCard == true)
             systemPrompt = string.Join(Environment.NewLine, systemPrompt, MetricsCardBuilder.PromptInstruction);
 
+        if (request.ClientContext?.SupportsFollowUps == true)
+            systemPrompt = string.Join(Environment.NewLine, systemPrompt,
+                "End your reply with [[orbit:followups]] followed by two or three short next questions, one per line. Do not add other text after them.");
+
         var activeToolNames = ChatToolGroups.ResolveActiveToolNames(
             ai.ToolRegistry.GetAll().Select(t => t.Name),
             BuildConversationText(request),
@@ -174,19 +178,25 @@ public partial class ProcessUserChatCommandHandler
             "[[orbit:habits:today]]",
             "[[orbit:habits:all]]",
             "[[orbit:goals]]",
-            MetricsCardBuilder.Directive
+            MetricsCardBuilder.Directive,
+            FollowUpDirective.Marker
         ];
 
         private string _pending = string.Empty;
+        private bool _stopped;
 
         public async Task HandleAsync(AiStreamEvent aiEvent)
         {
             if (aiEvent.Kind == AiStreamEventKind.Reset)
             {
                 _pending = string.Empty;
+                _stopped = false;
                 await streamSink(ChatStreamEvent.Reset());
                 return;
             }
+
+            if (_stopped)
+                return;
 
             _pending += aiEvent.Text ?? string.Empty;
             await DrainAsync(flush: false);
@@ -202,6 +212,13 @@ public partial class ProcessUserChatCommandHandler
                 if (directiveIndex >= 0)
                 {
                     await EmitAsync(_pending[..directiveIndex]);
+                    if (_pending.AsSpan(directiveIndex, directiveLength)
+                        .Equals(FollowUpDirective.Marker.AsSpan(), StringComparison.OrdinalIgnoreCase))
+                    {
+                        _pending = string.Empty;
+                        _stopped = true;
+                        return;
+                    }
                     _pending = _pending[(directiveIndex + directiveLength)..];
                     continue;
                 }

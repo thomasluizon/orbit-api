@@ -45,7 +45,8 @@ public record ChatResponse(
     IReadOnlyList<string>? RelatedSurfaces = null,
     HabitListCard? HabitList = null,
     GoalListCard? GoalList = null,
-    MetricsCard? MetricsCard = null);
+    MetricsCard? MetricsCard = null,
+    IReadOnlyList<string>? FollowUps = null);
 
 public record ActionResult(
     string Type,
@@ -130,6 +131,7 @@ public partial class ProcessUserChatCommandHandler(
             return await HandleCrisisTurnAsync(request, detectedCrisisLocales);
 
         request = ApplyClientKillFlags(request, context.EnabledFeatureFlags);
+        CaptureFollowUpSentEvent(request, context.User);
 
         var userLanguage = GetUserLanguage(context.User);
         var aiStreamFilter = BuildAiStreamFilter(request.StreamSink);
@@ -184,7 +186,10 @@ public partial class ProcessUserChatCommandHandler(
         if (IsEmptyTokenBudgetResponse(toolLoopResult.TokenBudgetExceeded, aiResponse.TextMessage))
             return Result.Failure<ChatResponse>(ErrorMessages.AiUnavailable);
 
-        var responseText = StripJsonWrapper(aiResponse.TextMessage);
+        var (responseText, parsedFollowUps) = FollowUpDirective.Extract(StripJsonWrapper(aiResponse.TextMessage));
+        var followUps = CanEmitFollowUps(request, toolLoopResult, executionResults, aiResponse)
+            ? parsedFollowUps
+            : null;
         if (aiResponse.IsTruncated)
             responseText = AppendTruncationNotice(responseText, userLanguage);
         var (aiMessage, habitList, goalList, metricsCard) = await BuildResponseCardsAsync(
@@ -211,6 +216,7 @@ public partial class ProcessUserChatCommandHandler(
         }
 
         CaptureChangePreviewEvents(request, context.User, executionResults.PendingOperations);
+        CaptureFollowUpsEmittedEvent(request, context.User, followUps);
 
         RunBackgroundPostResponseWork(
             request.UserId,
@@ -236,7 +242,8 @@ public partial class ProcessUserChatCommandHandler(
             executionResults.RelatedSurfaces.Count > 0 ? executionResults.RelatedSurfaces : null,
             habitList,
             goalList,
-            metricsCard));
+            metricsCard,
+            followUps));
     }
 
     private static string? GetUserLanguage(User? user) => user?.Language;
@@ -260,6 +267,50 @@ public partial class ProcessUserChatCommandHandler(
                     && !enabledFlags.Contains(FeatureFlagKeys.AstraFollowUpsDisabled, StringComparer.OrdinalIgnoreCase)
             }
         };
+    }
+
+    private static bool CanEmitFollowUps(
+        ProcessUserChatCommand request,
+        ToolLoopResult toolLoopResult,
+        ToolExecutionAccumulator results,
+        AiResponse aiResponse) =>
+        request.ClientContext?.SupportsFollowUps == true
+        && !aiResponse.IsTruncated
+        && !toolLoopResult.TokenBudgetExceeded
+        && !toolLoopResult.HadToolFailure
+        && results.PendingOperations.Count == 0
+        && !results.ActionResults.Any(action => action.Status == ActionStatus.NeedsClarification);
+
+    private void CaptureFollowUpSentEvent(ProcessUserChatCommand request, User? user)
+    {
+        if (user is null || request.ClientContext?.MessageOrigin != "followUp")
+            return;
+
+        AnalyticsCapture.SafeCaptureUserEvent(
+            execution.ProductAnalytics, logger, request.UserId, user.Plan.ToString(),
+            "astra_follow_up_sent",
+            new Dictionary<string, object>
+            {
+                ["platform"] = request.ClientContext.Platform ?? "unknown"
+            });
+    }
+
+    private void CaptureFollowUpsEmittedEvent(
+        ProcessUserChatCommand request,
+        User? user,
+        IReadOnlyList<string>? followUps)
+    {
+        if (user is null || followUps is null)
+            return;
+
+        AnalyticsCapture.SafeCaptureUserEvent(
+            execution.ProductAnalytics, logger, request.UserId, user.Plan.ToString(),
+            "chat_follow_ups_emitted",
+            new Dictionary<string, object>
+            {
+                ["count"] = followUps.Count,
+                ["platform"] = request.ClientContext?.Platform ?? "unknown"
+            });
     }
 
     private void CaptureChangePreviewEvents(

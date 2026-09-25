@@ -12,6 +12,7 @@ public partial class ProcessUserChatCommandHandler
         private readonly List<string> _relatedSurfaces = [];
         private readonly HashSet<string> _seenRelatedSurfaces = new(StringComparer.Ordinal);
         private readonly HashSet<string> _calledToolNames = new(StringComparer.Ordinal);
+        private readonly HashSet<(string Domain, string Access)> _seenToolSteps = [];
 
         public List<ActionResult> ActionResults { get; } = [];
         public List<AgentOperationResult> OperationResults { get; } = [];
@@ -23,6 +24,8 @@ public partial class ProcessUserChatCommandHandler
         /// serve from the shared FAQ cache (only static, user-data-free tools may have run).
         /// </summary>
         public IReadOnlyCollection<string> CalledToolNames => _calledToolNames;
+
+        public bool TryAddToolStep(string domain, string access) => _seenToolSteps.Add((domain, access));
 
         /// <summary>
         /// App surface IDs (e.g. "today", "gamification") surfaced by read-only tools such as

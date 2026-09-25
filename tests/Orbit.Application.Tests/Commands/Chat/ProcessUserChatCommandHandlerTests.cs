@@ -1311,6 +1311,243 @@ public class ProcessUserChatCommandHandlerTests
     }
 
     [Theory]
+    [InlineData(true, false, 1)]
+    [InlineData(false, false, 0)]
+    [InlineData(true, true, 0)]
+    public async Task Handle_TwoHabitReads_GatesDeduplicatedStep(
+        bool supportsSteps, bool disabledByServer, int expectedSteps)
+    {
+        SetupUserAndPayGate();
+        if (disabledByServer)
+            _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
+                .Returns([FeatureFlagKeys.AstraToolStepsDisabled]);
+        var first = FakeTool("read_habits_one");
+        var second = FakeTool("read_habits_two");
+        first.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(new ToolResult(true));
+        second.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(new ToolResult(true));
+        _catalogService.GetCapabilityByChatTool(Arg.Any<string>())
+            .Returns(call => BuildCapability(call.Arg<string>()) with { Domain = "habits" });
+        SetupAiResponse(new AiResponse
+        {
+            ToolCalls =
+            [
+                new AiToolCall(first.Name, "one", ParseArguments("{}")),
+                new AiToolCall(second.Name, "two", ParseArguments("{}"))
+            ],
+            ConversationContext = TestConversationContext
+        });
+        _aiIntentService.ContinueWithToolResultsAsync(
+                Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Done" }));
+        var events = new List<ChatStreamEvent>();
+        var handler = CreateHandler(first, second);
+
+        var result = await handler.Handle(new ProcessUserChatCommand(
+            UserId, "Show habits", ClientContext: new AgentClientContext(SupportsToolSteps: supportsSteps),
+            StreamSink: streamEvent => { events.Add(streamEvent); return Task.CompletedTask; }), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        events.Where(item => item.Type == "step").Should().HaveCount(expectedSteps);
+        if (expectedSteps == 1)
+            events.Single(item => item.Type == "step")
+                .Should().Match<ChatStreamEvent>(item => item.Domain == "habits" && item.Access == "read");
+    }
+
+    [Fact]
+    public async Task Handle_UnknownTool_EmitsNoStep()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(ToolResponse("unknown_tool", "one", "{}"));
+        _aiIntentService.ContinueWithToolResultsAsync(
+                Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Done" }));
+        var events = new List<ChatStreamEvent>();
+
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(
+            UserId, "Show habits", ClientContext: new AgentClientContext(SupportsToolSteps: true),
+            StreamSink: streamEvent => { events.Add(streamEvent); return Task.CompletedTask; }), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        events.Should().NotContain(item => item.Type == "step");
+    }
+
+    [Fact]
+    public async Task Handle_ToolFailure_EmitsNoStepOrFollowUps()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(ToolResponse("create_habit", "one", "{}"));
+        var events = new List<ChatStreamEvent>();
+
+        var result = await CreateHandler(CreateFailingCreateHabitTool()).Handle(new ProcessUserChatCommand(
+            UserId, "Create a habit",
+            ClientContext: new AgentClientContext(SupportsToolSteps: true, SupportsFollowUps: true),
+            StreamSink: streamEvent => { events.Add(streamEvent); return Task.CompletedTask; }), CancellationToken.None);
+
+        result.Value.AiMessage.Should().Be(EnglishToolFailureMessage);
+        result.Value.FollowUps.Should().BeNull();
+        events.Should().NotContain(item => item.Type == "step");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_PendingOperation_EmitsNoStepOrFollowUps(bool previewDisabled)
+    {
+        SetupUserAndPayGate();
+        if (previewDisabled)
+            _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
+                .Returns([FeatureFlagKeys.AstraChangePreviewDisabled]);
+        var tool = FakeTool("bulk_update_habits");
+        const string toolName = "bulk_update_habits";
+        var handler = CreateHandler(tool);
+        var pending = new PendingAgentOperation(Guid.NewGuid(), AgentCapabilityIds.HabitsBulkWrite,
+            "Bulk update", "Update habits", AgentRiskClass.High,
+            AgentConfirmationRequirement.FreshConfirmation, DateTime.UtcNow.AddMinutes(5));
+        _operationExecutor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new AgentExecuteOperationResponse(
+                new AgentOperationResult(toolName, toolName, AgentRiskClass.High,
+                    AgentConfirmationRequirement.FreshConfirmation, AgentOperationStatus.PendingConfirmation),
+                PendingOperation: pending));
+        SetupAiResponse(ToolResponse(toolName, "one", "{}"));
+        _aiIntentService.ContinueWithToolResultsAsync(
+                Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse
+            {
+                TextMessage = "Confirm first.\n[[orbit:followups]]\nWhat changed?\nWhat next?"
+            }));
+        var events = new List<ChatStreamEvent>();
+
+        var result = await handler.Handle(new ProcessUserChatCommand(
+            UserId, "Update habits",
+            ClientContext: new AgentClientContext(
+                SupportsToolSteps: true, SupportsFollowUps: true, SupportsPendingOperationChanges: true),
+            StreamSink: streamEvent => { events.Add(streamEvent); return Task.CompletedTask; }), CancellationToken.None);
+
+        result.Value.PendingOperations.Should().ContainSingle();
+        result.Value.FollowUps.Should().BeNull();
+        events.Should().NotContain(item => item.Type == "step");
+        await _operationExecutor.Received(1).ExecuteAsync(
+            Arg.Is<AgentExecuteOperationRequest>(item => item.IncludeChangePreview == !previewDisabled),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_FollowUpsSplitAcrossCharacters_StripsStreamAndReturnsValidatedItems()
+    {
+        SetupUserAndPayGate();
+        const string response = "Pronto.\n[[orbit:followups]]\nComo foi meu dia?\nQuais hábitos faltam?";
+        _aiIntentService.SendWithToolsAsync(
+                Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                var sink = call.ArgAt<Func<AiStreamEvent, Task>?>(1)!;
+                foreach (var character in response)
+                    await sink(AiStreamEvent.Delta(character.ToString()));
+                return Result.Success(new AiResponse { TextMessage = response });
+            });
+        var events = new List<ChatStreamEvent>();
+        var handler = CreateHandler();
+
+        var result = await handler.Handle(new ProcessUserChatCommand(
+            UserId, "Help me plan", ClientContext: new AgentClientContext(SupportsFollowUps: true),
+            StreamSink: streamEvent => { events.Add(streamEvent); return Task.CompletedTask; }), CancellationToken.None);
+
+        result.Value.FollowUps.Should().Equal("Como foi meu dia?", "Quais hábitos faltam?");
+        string.Concat(events.Where(item => item.Type == "delta").Select(item => item.Text))
+            .Should().Be("Pronto.\n");
+        _productAnalytics.Received(1).CaptureUserEvent(
+            UserId, "chat_follow_ups_emitted", Arg.Any<string>(),
+            Arg.Is<IReadOnlyDictionary<string, object>>(properties =>
+                (int)properties["count"] == 2 && (string)properties["platform"] == "unknown"));
+    }
+
+    [Fact]
+    public async Task Handle_FollowUpOrigin_RecordsSentEvent()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "Ready." });
+
+        await CreateHandler().Handle(new ProcessUserChatCommand(
+            UserId, "What next?", ClientContext: new AgentClientContext(MessageOrigin: "followUp")),
+            CancellationToken.None);
+
+        _productAnalytics.Received(1).CaptureUserEvent(
+            UserId, "astra_follow_up_sent", Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, object>>());
+    }
+
+    [Fact]
+    public async Task Handle_FollowUpMarkerReset_ClearsPartialMarker()
+    {
+        SetupUserAndPayGate();
+        const string response = "Ready.\n[[orbit:followups]]\nWhat changed?\nWhat next?";
+        _aiIntentService.SendWithToolsAsync(
+                Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                var sink = call.ArgAt<Func<AiStreamEvent, Task>?>(1)!;
+                await sink(AiStreamEvent.Delta("[[orbit:fol"));
+                await sink(AiStreamEvent.Reset());
+                foreach (var character in response)
+                    await sink(AiStreamEvent.Delta(character.ToString()));
+                return Result.Success(new AiResponse { TextMessage = response });
+            });
+        var events = new List<ChatStreamEvent>();
+
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(
+            UserId, "Help me plan", ClientContext: new AgentClientContext(SupportsFollowUps: true),
+            StreamSink: streamEvent => { events.Add(streamEvent); return Task.CompletedTask; }), CancellationToken.None);
+
+        result.Value.FollowUps.Should().HaveCount(2);
+        events.Should().Contain(item => item.Type == "reset");
+        string.Concat(events.Where(item => item.Type == "delta").Select(item => item.Text)).Should().Be("Ready.\n");
+    }
+
+    [Fact]
+    public async Task Handle_FollowUpsDisabledByServerFlag_DoesNotReturnItemsOrPrompt()
+    {
+        SetupUserAndPayGate();
+        _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns([FeatureFlagKeys.AstraFollowUpsDisabled]);
+        SetupAiResponse(new AiResponse
+        {
+            TextMessage = "Ready.\n[[orbit:followups]]\nWhat changed?\nWhat next?"
+        });
+
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(
+            UserId, "Help me plan", ClientContext: new AgentClientContext(SupportsFollowUps: true)),
+            CancellationToken.None);
+
+        result.Value.FollowUps.Should().BeNull();
+        result.Value.AiMessage.Should().Be("Ready.");
+        await _aiIntentService.Received(1).SendWithToolsAsync(
+            Arg.Is<AiToolRequest>(item => !item.SystemPrompt.Contains(FollowUpDirective.Marker)),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_TruncatedReply_DoesNotReturnFollowUps()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse
+        {
+            TextMessage = "Ready.\n[[orbit:followups]]\nWhat changed?\nWhat next?",
+            IsTruncated = true
+        });
+
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(
+            UserId, "Help me plan", ClientContext: new AgentClientContext(SupportsFollowUps: true)),
+            CancellationToken.None);
+
+        result.Value.FollowUps.Should().BeNull();
+        result.Value.AiMessage.Should().NotContain(FollowUpDirective.Marker);
+    }
+
+    [Theory]
     [InlineData("[[orbit:habits:today]]")]
     [InlineData("[[orbit:habits:all]]")]
     [InlineData("[[orbit:goals]]")]

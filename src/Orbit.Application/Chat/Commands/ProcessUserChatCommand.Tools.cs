@@ -124,6 +124,23 @@ public partial class ProcessUserChatCommandHandler
         if (hadToolFailure)
             return new ToolRoundResult(MessageResponse(language), HadToolFailure: true);
 
+        if (request.StreamSink is not null && request.ClientContext?.SupportsToolSteps == true
+            && executionResults.PendingOperations.Count == 0
+            && !executionResults.ActionResults.Any(action => action.Status == ActionStatus.NeedsClarification))
+        {
+            foreach (var call in orderedCalls)
+            {
+                var tool = ai.ToolRegistry.GetTool(call.Name);
+                var capability = ai.CatalogService.GetCapabilityByChatTool(call.Name);
+                if (tool is null || capability is null)
+                    continue;
+
+                var access = tool.IsReadOnly ? "read" : "write";
+                if (executionResults.TryAddToolStep(capability.Domain, access))
+                    await request.StreamSink(ChatStreamEvent.Step(capability.Domain, access));
+            }
+        }
+
         var continueResult = await ai.IntentService.ContinueWithToolResultsAsync(aiResponse.ConversationContext!, toolResults, aiStreamSink, cancellationToken);
         if (continueResult.IsFailure)
         {

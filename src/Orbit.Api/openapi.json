@@ -13739,6 +13739,15 @@
                 "$ref": "#/components/schemas/MetricsCard"
               }
             ]
+          },
+          "followUps": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
