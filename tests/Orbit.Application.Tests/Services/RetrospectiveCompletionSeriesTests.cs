@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Orbit.Application.Chat;
 using Orbit.Application.Habits.Services;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Entities;
@@ -81,6 +82,68 @@ public class RetrospectiveCompletionSeriesTests
         series.Points.Should().HaveCount(7);
         series.Points[3].StartDate.Should().Be(new DateOnly(2026, 3, 8));
         series.Points[3].Completed.Should().Be(1);
+    }
+
+    [Fact]
+    public void HistoricalOverdueCompletionOnOffCadenceDay_CountsInDayAndPeriod()
+    {
+        var today = new DateOnly(2026, 4, 3);
+        var anchor = today.AddDays(-1);
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Read", FrequencyUnit.Day, 2, anchor)).Value;
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
+            habit, new DateTime(2026, 4, 1, 12, 0, 0, DateTimeKind.Utc));
+        habit.Log(today).IsSuccess.Should().BeTrue();
+        var zone = TimeZoneInfo.Utc;
+
+        var day = RetrospectiveMetricsCalculator.ComputeHistorical([habit], today, today, 0, 0, zone);
+        day.TotalScheduled.Should().Be(1);
+        day.CompletionRate.Should().Be(100);
+        day.CompletionSeries!.Points.Single().Should().Be(
+            new CompletionSeriesPoint(today, today, 1, 1, 100));
+
+        var period = RetrospectiveMetricsCalculator.ComputeHistorical(
+            [habit], today.AddDays(-29), today, 0, 0, zone);
+        period.TotalScheduled.Should().Be(2);
+        period.CompletionRate.Should().Be(50);
+        period.CompletionSeries!.Points[^1].Should().Be(
+            new CompletionSeriesPoint(today, today, 1, 1, 100));
+        period.CompletionSeries.Points.Sum(point => point.Scheduled).Should().Be(period.TotalScheduled);
+        period.CompletionSeries.Points.Sum(point => point.Completed).Should().Be(1);
+    }
+
+    [Fact]
+    public void LiveRetrospectiveAndMetricsCard_CreditOffCadenceLog()
+    {
+        var today = new DateOnly(2026, 4, 3);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Read", FrequencyUnit.Day, 2, today.AddDays(-1))).Value;
+        habit.Log(today).IsSuccess.Should().BeTrue();
+
+        var metrics = RetrospectiveMetricsCalculator.Compute([habit], today, today, 0, 0);
+        var card = MetricsCardBuilder.Build("week", metrics);
+
+        metrics.TotalScheduled.Should().Be(1);
+        metrics.CompletionRate.Should().Be(100);
+        metrics.CompletionSeries!.Points.Single().Should().Be(
+            new CompletionSeriesPoint(today, today, 1, 1, 100));
+        card.TotalScheduled.Should().Be(1);
+        card.Series!.Points.Single().Completed.Should().Be(1);
+    }
+
+    [Fact]
+    public void UnvalidatedExtraLogs_DoNotCreditMissedOccurrences()
+    {
+        var from = new DateOnly(2026, 4, 1);
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Weekly", FrequencyUnit.Day, 2, from)).Value;
+        habit.Log(from, advanceDueDate: false);
+        habit.Log(from.AddDays(1), advanceDueDate: false);
+
+        var metrics = RetrospectiveMetricsCalculator.Compute([habit], from, from.AddDays(2), 0, 0);
+
+        metrics.TotalScheduled.Should().Be(2);
+        metrics.CompletionRate.Should().Be(50);
+        metrics.CompletionSeries!.Points.Sum(point => point.Completed).Should().Be(1);
+        metrics.TopHabits.Single().CompletionRate.Should().Be(50);
     }
 
     private static Habit Daily(string title, DateOnly dueDate) =>

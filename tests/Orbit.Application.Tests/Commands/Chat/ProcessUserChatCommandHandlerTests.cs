@@ -1128,6 +1128,34 @@ public class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_OverdueOffCadenceLog_BuildsCompletedDayCard()
+    {
+        SetupUserAndPayGate();
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Every other day", FrequencyUnit.Day, 2, Today.AddDays(-1))).Value;
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
+            habit, new DateTime(2026, 4, 1, 12, 0, 0, DateTimeKind.Utc));
+        habit.Log(Today).IsSuccess.Should().BeTrue();
+        _habitRepo.FindAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { habit }.AsReadOnly());
+        var tool = ReadTool("get_daily_summary", new ToolResult(true,
+            Payload: new DailySummaryResponse("Summary", string.Empty, false)));
+        SetupReadToolReply("get_daily_summary", "Today [[orbit:day]]");
+
+        var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
+            UserId, "How is today?", ClientContext: new AgentClientContext(SupportsDaySummaryCard: true)),
+            CancellationToken.None);
+
+        result.Value.DaySummary.Should().NotBeNull();
+        result.Value.DaySummary!.Due.Should().Be(1);
+        result.Value.DaySummary.Done.Should().Be(1);
+        result.Value.DaySummary.CompletionRate.Should().Be(100);
+    }
+
+    [Fact]
     public async Task Handle_RecordListKillFlag_OmitsSuccessfulNotificationCard()
     {
         SetupUserAndPayGate();
@@ -1338,6 +1366,38 @@ public class ProcessUserChatCommandHandlerTests
         result.Value.MetricsCard.Series.Points[^1].Scheduled.Should().Be(1);
         result.Value.MetricsCard.Series.Points[^1].Completed.Should().Be(1);
         result.Value.MetricsCard.SurfaceId.Should().Be("habit");
+    }
+
+    [Fact]
+    public async Task Handle_OverdueOffCadenceLog_BuildsThirtyDayHabitSeries()
+    {
+        SetupUserAndPayGate();
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Every other day", FrequencyUnit.Day, 2, Today.AddDays(-1))).Value;
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
+            habit, new DateTime(2026, 4, 1, 12, 0, 0, DateTimeKind.Utc));
+        habit.Log(Today).IsSuccess.Should().BeTrue();
+        _habitRepo.FindOneTrackedAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(habit);
+        var payload = new HabitMetrics(1, 1, 50, 50, 1, Today, habit.Id, habit.Title);
+        var tool = ReadTool("get_habit_metrics", new ToolResult(true, Payload: payload));
+        SetupAiResponse(ToolResponse("get_habit_metrics", "call_1", "{}"));
+        _aiIntentService.ContinueWithToolResultsAsync(
+                Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Your habit:\n[[orbit:metrics]]" }));
+
+        var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
+            UserId, "How is my habit?",
+            ClientContext: new AgentClientContext(SupportsMetricsCard: true)), CancellationToken.None);
+
+        result.Value.MetricsCard.Should().NotBeNull();
+        result.Value.MetricsCard!.TotalScheduled.Should().Be(2);
+        result.Value.MetricsCard.Series!.Points[^1].Should().Be(
+            new CompletionSeriesPoint(Today, Today, 1, 1, 100));
     }
 
     [Fact]

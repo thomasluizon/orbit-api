@@ -1,3 +1,4 @@
+using Orbit.Application.Common;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Entities;
 
@@ -108,12 +109,38 @@ public static class RetrospectiveMetricsCalculator
                 continue;
             }
 
+            if (habit.FrequencyUnit is not null && !habit.IsFlexible)
+            {
+                var occurrenceDates = scheduledDates.ToHashSet();
+                var resolvedDates = habit.Logs.Where(l => !l.IsDeleted)
+                    .Select(l => l.Date).ToHashSet();
+                var creditedOverdueDates = new HashSet<DateOnly>();
+                var recurrenceStart = habit.ScheduledStartDate ?? habit.DueDate;
+                foreach (var log in habit.Logs.Where(l => !l.IsDeleted
+                    && l.Value > 0
+                    && l.Date >= dateFrom
+                    && l.Date <= dateTo).OrderBy(l => l.Date))
+                {
+                    if (occurrenceDates.Contains(log.Date))
+                        continue;
+
+                    var isScheduled = HabitScheduleService.IsHabitDueOnDateForStreakLookback(
+                        habit, log.Date, recurrenceStart, weekStartDay);
+                    if ((isScheduled || HasUnresolvedPastOccurrence(
+                            habit, log.Date, recurrenceStart, weekStartDay,
+                            resolvedDates, creditedOverdueDates))
+                        && occurrenceDates.Add(log.Date))
+                        scheduledDates.Add(log.Date);
+                }
+            }
+
             totalScheduled += scheduledDates.Count;
             totalCompletions += completedCount;
-            totalMet += Math.Min(completedCount, scheduledDates.Count);
-
-            AccumulateWeekdayConsistency(habit, scheduledDates, weekdayScheduled, weekdayCompleted, dailyScheduled, dailyCompleted, dateFrom);
-            stats.Add(BuildHabitStat(habit, scheduledDates.Count, completedCount));
+            var metCount = AccumulateWeekdayConsistency(
+                habit, scheduledDates, weekdayScheduled, weekdayCompleted,
+                dailyScheduled, dailyCompleted, dateFrom);
+            totalMet += metCount;
+            stats.Add(BuildHabitStat(habit, scheduledDates.Count, completedCount, metCount));
         }
 
         var completionRate = Percent(totalMet, totalScheduled);
@@ -151,10 +178,31 @@ public static class RetrospectiveMetricsCalculator
             BuildCompletionSeries(dateFrom, dateTo, weekStartDay, dailyScheduled, dailyCompleted));
     }
 
-    private static void AccumulateWeekdayConsistency(
+    private static bool HasUnresolvedPastOccurrence(
+        Habit habit, DateOnly logDate, DateOnly recurrenceStart, int weekStartDay,
+        HashSet<DateOnly> resolvedDates, HashSet<DateOnly> creditedOverdueDates)
+    {
+        for (var offset = 1; offset <= AppConstants.DefaultOverdueWindowDays && logDate.DayNumber >= offset; offset++)
+        {
+            var candidate = logDate.AddDays(-offset);
+            if (!resolvedDates.Contains(candidate)
+                && !creditedOverdueDates.Contains(candidate)
+                && HabitScheduleService.IsHabitDueOnDateForStreakLookback(
+                    habit, candidate, recurrenceStart, weekStartDay))
+            {
+                creditedOverdueDates.Add(candidate);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static int AccumulateWeekdayConsistency(
         Habit habit, List<DateOnly> scheduledDates, int[] weekdayScheduled, int[] weekdayCompleted,
         int[] dailyScheduled, int[] dailyCompleted, DateOnly dateFrom)
     {
+        var metCount = 0;
         var completedDates = habit.Logs
             .Where(l => !l.IsDeleted && l.Value > 0)
             .Select(l => l.Date)
@@ -167,10 +215,13 @@ public static class RetrospectiveMetricsCalculator
             dailyScheduled[date.DayNumber - dateFrom.DayNumber]++;
             if (completedDates.Contains(date))
             {
+                metCount++;
                 weekdayCompleted[index]++;
                 dailyCompleted[date.DayNumber - dateFrom.DayNumber]++;
             }
         }
+
+        return metCount;
     }
 
     private static CompletionSeries BuildCompletionSeries(
@@ -203,11 +254,12 @@ public static class RetrospectiveMetricsCalculator
 
     private static DateOnly MinDate(DateOnly first, DateOnly second) => first < second ? first : second;
 
-    private static RetrospectiveHabitStat BuildHabitStat(Habit habit, int scheduledCount, int completedCount) =>
+    private static RetrospectiveHabitStat BuildHabitStat(
+        Habit habit, int scheduledCount, int completedCount, int metCount) =>
         new(
             habit.Title,
             habit.Emoji,
-            Math.Min(100, Percent(completedCount, scheduledCount)),
+            Percent(metCount, scheduledCount),
             completedCount,
             scheduledCount,
             habit.FrequencyUnit is null);
