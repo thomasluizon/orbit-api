@@ -1486,6 +1486,46 @@ public class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_SupportEntryPoint_DeclaresOnlySupportAndCoreToolsOnFirstTurn()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "ok" });
+        var handler = CreateHandler(
+            FakeTool("create_habit"), FakeTool("send_support_request"), FakeTool("manage_subscription"));
+        var clientContext = JsonSerializer.Deserialize<AgentClientContext>(
+            """{"entryPointIntent":"support"}""",
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+        var result = await handler.Handle(
+            new ProcessUserChatCommand(UserId, "my streak reset after I travelled", ClientContext: clientContext),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _aiIntentService.Received(1).SendWithToolsAsync(
+            Arg.Is<AiToolRequest>(request =>
+                ToolNames(request.ToolDeclarations).SequenceEqual(new[] { "create_habit", "send_support_request" })),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WithoutEntryPointOrKeyword_DoesNotDeclareSupportTool()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "ok" });
+        var handler = CreateHandler(FakeTool("create_habit"), FakeTool("send_support_request"));
+
+        var result = await handler.Handle(
+            new ProcessUserChatCommand(UserId, "my streak reset after I travelled"),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _aiIntentService.Received(1).SendWithToolsAsync(
+            Arg.Is<AiToolRequest>(request =>
+                ToolNames(request.ToolDeclarations).SequenceEqual(new[] { "create_habit" })),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_TrivialGreeting_SkipsToolDeclarations()
     {
         SetupUserAndPayGate();
