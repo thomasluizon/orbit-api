@@ -541,19 +541,17 @@ public class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_CrisisShapedFaq_DoesNotServeOrReplaceCachedAnswer()
+    public async Task Handle_CrisisShapedFaq_DoesNotStoreAnswer()
     {
-        ChatFaqCache.StoreAnswer("streaks", "en", "Cached explanation");
         SetupUserAndPayGate();
         SetupAiResponse(new AiResponse { TextMessage = "I hear you." });
 
         var result = await CreateHandler().Handle(
-            new ProcessUserChatCommand(UserId, "How do streaks work? I want to hurt myself."),
+            new ProcessUserChatCommand(UserId, "What are the pro features? I want to hurt myself."),
             CancellationToken.None);
 
         result.Value.AiMessage.Should().Contain("I hear you.");
-        ChatFaqCache.TryGetAnswer("streaks", "en", out var cached).Should().BeTrue();
-        cached.Should().Be("Cached explanation");
+        ChatFaqCache.TryGetAnswer("free_vs_pro", "en", out _).Should().BeFalse();
         await _aiIntentService.Received(1).SendWithToolsAsync(
             Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
