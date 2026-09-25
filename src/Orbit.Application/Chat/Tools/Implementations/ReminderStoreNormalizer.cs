@@ -115,7 +115,7 @@ internal static class ReminderStoreNormalizer
         return Math.Max(minutesBefore, 0);
     }
 
-    internal static ScheduledReminderTime ToScheduledReminder(TimeOnly dueTime, int offsetMinutes)
+    private static ScheduledReminderTime ToScheduledReminder(TimeOnly dueTime, int offsetMinutes)
     {
         var minutes = (int)dueTime.ToTimeSpan().TotalMinutes - offsetMinutes;
         if (minutes >= 0)

@@ -88,24 +88,52 @@ public sealed class PendingOperationChangePreviewer(
         Add("is_flexible", habit.IsFlexible, effective.IsFlexible, "boolean");
         Add("is_completed", habit.IsCompleted, effective.IsCompleted, "boolean");
         Add("reminder_enabled", habit.ReminderEnabled, effective.ReminderEnabled, "boolean");
-        Add("reminder_times", FormatList(habit.ReminderTimes, offset => FormatReminderTime(habit.DueTime, offset)),
-            FormatList(effective.ReminderTimes, offset => FormatReminderTime(effective.DueTime, offset)), "text",
-            !habit.ReminderTimes.SequenceEqual(effective.ReminderTimes));
-        Add("checklist_items", FormatList(habit.ChecklistItems, FormatChecklistItem),
-            FormatList(effective.ChecklistItems, FormatChecklistItem), "text",
-            !habit.ChecklistItems.SequenceEqual(effective.ChecklistItems));
-        Add("scheduled_reminders", FormatList(habit.ScheduledReminders, FormatScheduledReminder),
-            FormatList(effective.ScheduledReminders, FormatScheduledReminder), "text",
-            !habit.ScheduledReminders.SequenceEqual(effective.ScheduledReminders));
+        AddList("reminder_times", habit.ReminderTimes, effective.ReminderTimes, FormatReminderTime);
+        AddList("checklist_items", habit.ChecklistItems, effective.ChecklistItems, FormatChecklistItem);
+        AddList("scheduled_reminders", habit.ScheduledReminders, effective.ScheduledReminders, FormatScheduledReminder);
+
+        void AddList<T>(string field, IReadOnlyList<T> oldValues, IReadOnlyList<T> newValues, Func<T, string> format)
+        {
+            if (oldValues.SequenceEqual(newValues))
+                return;
+
+            var (oldText, newText) = FormatChangedList(oldValues, newValues, format);
+            Add(field, oldText, newText, "text", changed: true);
+        }
     }
 
-    private static string FormatList<T>(IReadOnlyList<T> values, Func<T, string> format)
+    private static (string OldText, string NewText) FormatChangedList<T>(
+        IReadOnlyList<T> oldValues, IReadOnlyList<T> newValues, Func<T, string> format)
     {
-        var entries = values.Take(MaxDisplayedEntries)
+        var firstDifference = 0;
+        while (firstDifference < Math.Min(oldValues.Count, newValues.Count)
+            && EqualityComparer<T>.Default.Equals(oldValues[firstDifference], newValues[firstDifference]))
+            firstDifference++;
+
+        var oldText = FormatListWindow(oldValues, firstDifference, format);
+        var newText = FormatListWindow(newValues, firstDifference, format);
+        if (oldText == newText)
+            newText += " (changed)";
+        return (oldText, newText);
+    }
+
+    private static string FormatListWindow<T>(IReadOnlyList<T> values, int start, Func<T, string> format)
+    {
+        var entries = new List<string>();
+        if (start > 0)
+            entries.Add($"+{start} earlier");
+
+        var displayed = values.Skip(start).Take(MaxDisplayedEntries)
             .Select(value => TruncateEntry(format(value)))
             .ToList();
-        if (values.Count > MaxDisplayedEntries)
-            entries.Add($"+{values.Count - MaxDisplayedEntries} more");
+        if (displayed.Count == 0)
+            entries.Add("(none)");
+        else
+            entries.AddRange(displayed);
+
+        var remaining = values.Count - start - displayed.Count;
+        if (remaining > 0)
+            entries.Add($"+{remaining} more");
         return string.Join(", ", entries);
     }
 
@@ -117,15 +145,7 @@ public sealed class PendingOperationChangePreviewer(
             : string.Concat(singleLine.AsSpan(0, MaxEntryLength - 3), "...");
     }
 
-    private static string FormatReminderTime(TimeOnly? dueTime, int offset)
-    {
-        if (dueTime is null)
-            return $"{offset} min before due";
-
-        var reminder = ReminderStoreNormalizer.ToScheduledReminder(dueTime.Value, offset);
-        var time = reminder.Time.ToString("HH:mm", CultureInfo.InvariantCulture);
-        return reminder.When == ScheduledReminderWhen.DayBefore ? $"day_before {time}" : time;
-    }
+    private static string FormatReminderTime(int offset) => $"{offset} min before due";
 
     private static string FormatScheduledReminder(ScheduledReminderTime reminder) =>
         $"{(reminder.When == ScheduledReminderWhen.DayBefore ? "day_before" : "same_day")} {reminder.Time.ToString("HH:mm", CultureInfo.InvariantCulture)}";
