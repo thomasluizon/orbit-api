@@ -115,8 +115,17 @@ public class PendingAgentOperationStore(
             return false;
 
         entity.MarkConsumed();
-        dbContext.SaveChanges();
-        return true;
+        try
+        {
+            dbContext.SaveChanges();
+            return true;
+        }
+        catch (DbUpdateConcurrencyException exception) when (
+            exception.Entries.Any(entry => ReferenceEquals(entry.Entity, entity)))
+        {
+            dbContext.Entry(entity).State = EntityState.Detached;
+            return false;
+        }
     }
 
     private static PendingAgentOperation Map(PendingAgentOperationState entity)
