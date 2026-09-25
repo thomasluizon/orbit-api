@@ -5647,7 +5647,8 @@
         "file": "tests/Orbit.Application.Tests/Services/Goals/StreakGoalReadSyncerTests.cs",
         "references": [
           "Goal",
-          "Habit"
+          "Habit",
+          "HabitLog"
         ]
       },
       {
