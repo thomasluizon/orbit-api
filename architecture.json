@@ -2743,7 +2743,7 @@
       "Behaviors": 4,
       "Calendar": 16,
       "Challenges": 15,
-      "Chat": 84,
+      "Chat": 85,
       "ChecklistTemplates": 5,
       "Common": 37,
       "Gamification": 33,
@@ -2956,7 +2956,7 @@
       "Behaviors": 14,
       "Calendar": 19,
       "Challenges": 14,
-      "Chat": 64,
+      "Chat": 65,
       "ChecklistTemplates": 9,
       "Common": 256,
       "Gamification": 43,
@@ -3365,6 +3365,11 @@
       {
         "testClass": "ChatToolGroupsTests",
         "file": "tests/Orbit.Application.Tests/Chat/ChatToolGroupsTests.cs",
+        "references": []
+      },
+      {
+        "testClass": "CrisisSupportGuardTests",
+        "file": "tests/Orbit.Application.Tests/Chat/CrisisSupportGuardTests.cs",
         "references": []
       },
       {

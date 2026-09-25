@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using FluentAssertions;
 using MediatR;
 using Microsoft.AspNetCore.Http;
@@ -9,6 +11,7 @@ using Orbit.Api.Controllers;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
 using Orbit.Application.Habits.Queries;
+using Orbit.Application.Habits.Validators;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
@@ -331,17 +334,27 @@ public class HabitsControllerTests
                 return Result.Success(new BulkCreateResult([]));
             });
 
-        var request = new HabitsController.BulkCreateHabitsRequest(
-            [
-                new HabitsController.BulkHabitItemRequest(
-                    "Imported Event",
-                    null,
-                    null,
-                    null,
-                    DueDate: DateOnly.FromDateTime(DateTime.UtcNow),
-                    GoogleEventId: "evt_sync")
-            ],
-            FromSyncReview: true);
+        var request = DeserializeBulkRequest("""
+            {
+              "fromSyncReview": true,
+              "habits": [{
+                "title": "Imported Event",
+                "frequencyUnit": "Day",
+                "frequencyQuantity": 1,
+                "dueDate": "2026-03-02",
+                "days": ["Monday", "Wednesday"],
+                "intervalWeeks": 2,
+                "googleEventId": "evt_sync",
+                "subHabits": [{
+                  "title": "Child",
+                  "frequencyUnit": "Day",
+                  "frequencyQuantity": 1,
+                  "days": ["Monday"],
+                  "intervalWeeks": 3
+                }]
+              }]
+            }
+            """);
 
         var result = await _controller.BulkCreate(request, CancellationToken.None);
 
@@ -350,6 +363,82 @@ public class HabitsControllerTests
         captured!.FromSyncReview.Should().BeTrue();
         captured.Habits.Should().ContainSingle();
         captured.Habits[0].GoogleEventId.Should().Be("evt_sync");
+        captured.Habits[0].Days.Should().Equal(DayOfWeek.Monday, DayOfWeek.Wednesday);
+        captured.Habits[0].IntervalWeeks.Should().Be(2);
+        captured.Habits[0].SubHabits.Should().ContainSingle()
+            .Which.IntervalWeeks.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task BulkCreate_WithoutIntervalWeeks_LeavesCommandValueNull()
+    {
+        BulkCreateHabitsCommand? captured = null;
+        _mediator.Send(Arg.Any<BulkCreateHabitsCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                captured = call.Arg<BulkCreateHabitsCommand>();
+                return Result.Success(new BulkCreateResult([]));
+            });
+
+        var request = new HabitsController.BulkCreateHabitsRequest(
+            [new HabitsController.BulkHabitItemRequest("Existing client", null, null, null)]);
+
+        await _controller.BulkCreate(request, CancellationToken.None);
+
+        captured.Should().NotBeNull();
+        captured!.Habits.Should().ContainSingle().Which.IntervalWeeks.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task BulkCreate_SubHabitIntervalWeeks_ReachesCommand()
+    {
+        BulkCreateHabitsCommand? captured = null;
+        _mediator.Send(Arg.Any<BulkCreateHabitsCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                captured = call.Arg<BulkCreateHabitsCommand>();
+                return Result.Success(new BulkCreateResult([]));
+            });
+
+        var request = DeserializeBulkRequest("""
+            {"habits":[{"title":"Parent","frequencyUnit":"Day","frequencyQuantity":1,
+              "subHabits":[{"title":"Child","frequencyUnit":"Day","frequencyQuantity":1,"intervalWeeks":2}]}]}
+            """);
+
+        await _controller.BulkCreate(request, CancellationToken.None);
+
+        captured.Should().NotBeNull();
+        captured!.Habits.Should().ContainSingle().Which.SubHabits.Should().ContainSingle()
+            .Which.IntervalWeeks.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task BulkCreate_OutOfRangeIntervalWeeks_ReachesSharedValidator()
+    {
+        BulkCreateHabitsCommand? captured = null;
+        _mediator.Send(Arg.Any<BulkCreateHabitsCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                captured = call.Arg<BulkCreateHabitsCommand>();
+                return Result.Success(new BulkCreateResult([]));
+            });
+
+        var request = DeserializeBulkRequest($$"""
+            {"habits":[{"title":"Invalid","frequencyUnit":"Day","frequencyQuantity":1,"intervalWeeks":{{AppConstants.MaxIntervalWeeks + 1}}}]}
+            """);
+
+        await _controller.BulkCreate(request, CancellationToken.None);
+
+        captured.Should().NotBeNull();
+        var validation = new BulkCreateHabitsCommandValidator().Validate(captured!);
+        validation.Errors.Should().Contain(error => error.PropertyName == "Habits[0].IntervalWeeks");
+    }
+
+    private static HabitsController.BulkCreateHabitsRequest DeserializeBulkRequest(string json)
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        options.Converters.Add(new JsonStringEnumConverter());
+        return JsonSerializer.Deserialize<HabitsController.BulkCreateHabitsRequest>(json, options)!;
     }
 
     [Fact]

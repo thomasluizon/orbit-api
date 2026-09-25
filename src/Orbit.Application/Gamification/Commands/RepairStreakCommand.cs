@@ -7,6 +7,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Gamification.Queries;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Gamification.Commands;
@@ -106,7 +107,7 @@ public class RepairStreakCommandHandler(
             repair.RepairedState.LongestStreak,
             repair.RepairedState.LastActiveDate);
         await streakFreezeRepository.AddAsync(
-            StreakFreeze.Create(request.UserId, missedDate),
+            StreakFreeze.Create(request.UserId, missedDate, StreakFreezeOrigin.Manual),
             cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
