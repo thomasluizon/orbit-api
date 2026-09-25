@@ -8108,6 +8108,7 @@
         "file": "tests/Orbit.Infrastructure.Tests/Services/ReminderSchedulerServiceTests.cs",
         "references": [
           "Habit",
+          "Report",
           "SentReminder",
           "User"
         ]

@@ -391,8 +391,8 @@
     },
     "src/Orbit.Infrastructure/Services/ReminderSchedulerService.cs": {
       "ORBIT0004": {
-        "count": 4,
-        "reason": "bucket: widened UTC-date prefetch windows, the minimum and maximum local date across all timezones, plus UTC-date dedupe keys; per-user reminder timing uses the converted user clock."
+        "count": 2,
+        "reason": "bucket: the scheduled-reminder UTC-date prefetch window (minimum local date across all timezones) and its UTC-date dedupe key; relative reminders use the converted user clock only (#695)."
       }
     },
     "src/Orbit.Infrastructure/Services/SlipAlertSchedulerService.cs": {
