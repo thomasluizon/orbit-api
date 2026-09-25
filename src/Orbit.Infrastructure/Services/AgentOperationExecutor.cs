@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Chat.Tools;
@@ -13,33 +13,43 @@ public partial class AgentOperationExecutor(
     IAgentPolicyEvaluator policyEvaluator,
     IAgentAuditService auditService,
     IAgentTargetOwnershipService targetOwnershipService,
+    IAgentStepUpAuthorizationBridge stepUpAuthorizationBridge,
     AiToolRegistry toolRegistry,
     IUnitOfWork unitOfWork,
     ILogger<AgentOperationExecutor> logger) : IAgentOperationExecutor
 {
     private const int MaxToolConcurrencyAttempts = 3;
+    private const string UnknownOperationCapabilityId = "unknown";
     private static readonly JsonElement EmptyArguments = JsonDocument.Parse("{}").RootElement.Clone();
 
     public async Task<AgentExecuteOperationResponse> ExecuteAsync(
         AgentExecuteOperationRequest request,
         CancellationToken cancellationToken = default)
     {
-        var operation = catalogService.GetOperation(request.OperationId);
-        if (operation is null)
-            return AgentOperationResponseFactory.UnknownOperation(request.OperationId);
-
-        var capability = catalogService.GetCapability(operation.CapabilityId)
-            ?? throw new InvalidOperationException($"Operation '{operation.Id}' is mapped to an unknown capability '{operation.CapabilityId}'.");
-
         var arguments = request.Arguments.ValueKind == JsonValueKind.Undefined
             ? EmptyArguments
             : request.Arguments;
+
+        var operation = catalogService.GetOperation(request.OperationId);
+        if (operation is null)
+            return await DenyUnknownOperationAsync(request, arguments, cancellationToken);
+
+        var declaredCapability = catalogService.GetCapability(operation.CapabilityId)
+            ?? throw new InvalidOperationException($"Operation '{operation.Id}' is mapped to an unknown capability '{operation.CapabilityId}'.");
+
+        var escalatedRequirement = await stepUpAuthorizationBridge.GetRequiredConfirmationAsync(
+            declaredCapability.Id,
+            cancellationToken);
+        var capability = escalatedRequirement is { } required
+            ? declaredCapability with { ConfirmationRequirement = required }
+            : declaredCapability;
         var execution = new OperationExecutionContext(
             request,
             operation,
             capability,
             arguments,
-            $"{operation.DisplayName} requested via {request.Surface}");
+            $"{operation.DisplayName} requested via {request.Surface}",
+            escalatedRequirement);
 
         if (!operation.IsAgentExecutable)
             return await DenyDirectUserFlowAsync(execution, cancellationToken);
@@ -72,6 +82,26 @@ public partial class AgentOperationExecutor(
         return await ExecuteToolAsync(tool, execution, policyDecision, cancellationToken);
     }
 
+    private async Task<AgentExecuteOperationResponse> DenyUnknownOperationAsync(
+        AgentExecuteOperationRequest request,
+        JsonElement arguments,
+        CancellationToken cancellationToken)
+    {
+        await TryAuditAsync(
+            new AuditContext(
+                request,
+                UnknownOperationCapabilityId,
+                AgentRiskClass.Low,
+                AgentPolicyDecisionStatus.Denied,
+                AgentOperationStatus.UnsupportedByPolicy,
+                $"Unknown operation '{request.OperationId}' requested via {request.Surface}",
+                RedactArguments(arguments),
+                Error: "unsupported_by_policy"),
+            cancellationToken);
+
+        return AgentOperationResponseFactory.UnknownOperation(request.OperationId);
+    }
+
     private async Task<AgentExecuteOperationResponse> DenyDirectUserFlowAsync(
         OperationExecutionContext execution,
         CancellationToken cancellationToken)
@@ -81,7 +111,8 @@ public partial class AgentOperationExecutor(
         await TryAuditAsync(
             new AuditContext(
                 execution.Request,
-                execution.Capability,
+                execution.Capability.Id,
+                execution.Capability.RiskClass,
                 AgentPolicyDecisionStatus.Denied,
                 AgentOperationStatus.Denied,
                 summary,
@@ -100,7 +131,8 @@ public partial class AgentOperationExecutor(
         await TryAuditAsync(
             new AuditContext(
                 execution.Request,
-                execution.Capability,
+                execution.Capability.Id,
+                execution.Capability.RiskClass,
                 AgentPolicyDecisionStatus.Denied,
                 AgentOperationStatus.Denied,
                 execution.Summary,
@@ -129,7 +161,8 @@ public partial class AgentOperationExecutor(
             operationFingerprint,
             execution.Arguments.GetRawText(),
             execution.Request.ConfirmationToken,
-            IsReadOnlyCredential: execution.Request.IsReadOnlyCredential));
+            IsReadOnlyCredential: execution.Request.IsReadOnlyCredential,
+            ConfirmationRequirementOverride: execution.EscalatedRequirement));
     }
 
     private async Task<AgentExecuteOperationResponse> DenyByPolicyAsync(
@@ -140,7 +173,8 @@ public partial class AgentOperationExecutor(
         await TryAuditAsync(
             new AuditContext(
                 execution.Request,
-                execution.Capability,
+                execution.Capability.Id,
+                execution.Capability.RiskClass,
                 AgentPolicyDecisionStatus.Denied,
                 AgentOperationStatus.Denied,
                 execution.Summary,
@@ -161,7 +195,8 @@ public partial class AgentOperationExecutor(
         await TryAuditAsync(
             new AuditContext(
                 execution.Request,
-                execution.Capability,
+                execution.Capability.Id,
+                execution.Capability.RiskClass,
                 AgentPolicyDecisionStatus.ConfirmationRequired,
                 AgentOperationStatus.PendingConfirmation,
                 execution.Summary,
@@ -196,7 +231,8 @@ public partial class AgentOperationExecutor(
             await TryAuditAsync(
                 new AuditContext(
                     execution.Request,
-                    execution.Capability,
+                    execution.Capability.Id,
+                    execution.Capability.RiskClass,
                     AgentPolicyDecisionStatus.Allowed,
                     AgentOperationStatus.Failed,
                     execution.Summary,
@@ -254,7 +290,8 @@ public partial class AgentOperationExecutor(
         await TryAuditAsync(
             new AuditContext(
                 execution.Request,
-                execution.Capability,
+                execution.Capability.Id,
+                execution.Capability.RiskClass,
                 AgentPolicyDecisionStatus.Allowed,
                 outcomeStatus,
                 execution.Summary,
@@ -313,11 +350,11 @@ public partial class AgentOperationExecutor(
         {
             await auditService.RecordAsync(new AgentAuditEntry(
                 context.Request.UserId,
-                context.Capability.Id,
+                context.CapabilityId,
                 context.Request.OperationId,
                 context.Request.Surface,
                 context.Request.AuthMethod,
-                context.Capability.RiskClass,
+                context.RiskClass,
                 context.PolicyDecision,
                 context.OutcomeStatus,
                 context.Request.CorrelationId,
@@ -346,11 +383,13 @@ public partial class AgentOperationExecutor(
         AgentOperation Operation,
         AgentCapability Capability,
         JsonElement Arguments,
-        string Summary);
+        string Summary,
+        AgentConfirmationRequirement? EscalatedRequirement);
 
     private sealed record AuditContext(
         AgentExecuteOperationRequest Request,
-        AgentCapability Capability,
+        string CapabilityId,
+        AgentRiskClass RiskClass,
         AgentPolicyDecisionStatus PolicyDecision,
         AgentOperationStatus OutcomeStatus,
         string Summary,

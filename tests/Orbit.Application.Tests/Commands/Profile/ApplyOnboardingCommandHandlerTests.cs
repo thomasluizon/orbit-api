@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Application.Common;
+using Orbit.Application.Habits.Services;
 using Orbit.Application.Profile.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -77,6 +78,21 @@ public class ApplyOnboardingCommandHandlerTests
         if (completed)
             task.Log(Today).IsSuccess.Should().BeTrue();
         return task;
+    }
+
+    private static readonly DateOnly FirstMonday = new(2026, 7, 6);
+
+    private static ApplyHabitInput WeekdayHabit(string title, int? intervalWeeks) =>
+        new(title, null, null, FrequencyUnit.Day, 1,
+            Days: [DayOfWeek.Monday], DueDate: FirstMonday, IntervalWeeks: intervalWeeks);
+
+    private List<Habit> CaptureCreatedHabits()
+    {
+        var created = new List<Habit>();
+        _habitRepo
+            .When(repo => repo.AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>()))
+            .Do(call => created.Add(call.ArgAt<Habit>(0)));
+        return created;
     }
 
     private static string SummaryCacheKey() =>
@@ -343,5 +359,91 @@ public class ApplyOnboardingCommandHandlerTests
         result.IsFailure.Should().BeTrue();
         user.HasCompletedOnboarding.Should().BeFalse();
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Apply_WeekdayHabitWithIntervalWeeks_CreatesHabitThatRepeatsEverySecondWeek()
+    {
+        var user = CreateProUser();
+        SetupUser(user);
+        var created = CaptureCreatedHabits();
+
+        var command = new ApplyOnboardingCommand(
+            UserId, [WeekdayHabit("Gym", intervalWeeks: 2)], null, null, null, null);
+
+        var result = await CreateHandler().Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        created.Should().ContainSingle();
+        created[0].IntervalWeeks.Should().Be(2);
+        HabitScheduleService.IsHabitDueOnDate(created[0], FirstMonday).Should().BeTrue();
+        HabitScheduleService.IsHabitDueOnDate(created[0], FirstMonday.AddDays(7)).Should().BeFalse();
+        HabitScheduleService.IsHabitDueOnDate(created[0], FirstMonday.AddDays(14)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Apply_WeekdayHabitWithoutIntervalWeeks_RepeatsEveryWeek()
+    {
+        var user = CreateProUser();
+        SetupUser(user);
+        var created = CaptureCreatedHabits();
+
+        var command = new ApplyOnboardingCommand(
+            UserId, [WeekdayHabit("Gym", intervalWeeks: null)], null, null, null, null);
+
+        var result = await CreateHandler().Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        created.Should().ContainSingle();
+        created[0].IntervalWeeks.Should().BeNull();
+        HabitScheduleService.IsHabitDueOnDate(created[0], FirstMonday).Should().BeTrue();
+        HabitScheduleService.IsHabitDueOnDate(created[0], FirstMonday.AddDays(7)).Should().BeTrue();
+        HabitScheduleService.IsHabitDueOnDate(created[0], FirstMonday.AddDays(14)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Apply_HabitFromClientThatPredatesTheField_CreatesTheSameRecordAsBefore()
+    {
+        var user = CreateProUser();
+        SetupUser(user);
+        var created = CaptureCreatedHabits();
+
+        var legacyInput = new ApplyHabitInput(
+            "Gym", null, null, FrequencyUnit.Day, 1, [DayOfWeek.Monday], false, false, false, FirstMonday);
+
+        var result = await CreateHandler().Handle(
+            new ApplyOnboardingCommand(UserId, [legacyInput], null, null, null, null),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        created.Should().ContainSingle();
+        created[0].IntervalWeeks.Should().BeNull();
+        created[0].Days.Should().Equal(DayOfWeek.Monday);
+        created[0].DueDate.Should().Be(FirstMonday);
+        HabitScheduleService.IsHabitDueOnDate(created[0], FirstMonday.AddDays(7)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Apply_GeneralHabitWithIntervalWeeks_StoresItAndTheScheduleIgnoresIt()
+    {
+        var user = CreateProUser();
+        SetupUser(user);
+        var created = CaptureCreatedHabits();
+
+        var generalInput = new ApplyHabitInput(
+            "Read", null, null, null, null,
+            IsGeneral: true, DueDate: FirstMonday, IntervalWeeks: 2);
+
+        var result = await CreateHandler().Handle(
+            new ApplyOnboardingCommand(UserId, [generalInput], null, null, null, null),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        created.Should().ContainSingle();
+        created[0].IsGeneral.Should().BeTrue();
+        created[0].IntervalWeeks.Should().Be(2);
+        HabitScheduleService.IsHabitDueOnDate(created[0], FirstMonday).Should().BeTrue();
+        HabitScheduleService.IsHabitDueOnDate(created[0], FirstMonday.AddDays(7)).Should().BeFalse();
+        HabitScheduleService.IsHabitDueOnDate(created[0], FirstMonday.AddDays(14)).Should().BeFalse();
     }
 }

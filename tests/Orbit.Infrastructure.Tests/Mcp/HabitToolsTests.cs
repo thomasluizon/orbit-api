@@ -69,7 +69,7 @@ public class HabitToolsTests
         {
             new(Guid.NewGuid(), "Read", null, FrequencyUnit.Day, 1, false, false, false, false,
                 [], null, DateTime.UtcNow, DateOnly.FromDateTime(DateTime.UtcNow), null, null, null,
-                [], false, false, [], [], false, [], [], [], [], false, null, null, false, [])
+                [], false, false, [], [], false, [], [], [], [], false, null, null, false, [], Emoji: "📚")
         };
         var paginated = new PaginatedResponse<HabitScheduleItem>(items, 1, 50, 1, 1);
         _mediator.Send(Arg.Any<GetHabitScheduleQuery>(), Arg.Any<CancellationToken>())
@@ -78,6 +78,7 @@ public class HabitToolsTests
         var result = await _tools.ListHabits(_user, "2026-04-01", "2026-04-07");
 
         result.Should().Contain("Read");
+        result.Should().Contain("Emoji: 📚");
         result.Should().Contain("page 1/1");
     }
 
@@ -112,7 +113,7 @@ public class HabitToolsTests
             habitId, "Exercise", "Go for a run", FrequencyUnit.Day, 1,
             false, false, false, false,
             DateOnly.FromDateTime(DateTime.UtcNow), null, null, null,
-            [], null, false, [], [], [], DateTime.UtcNow, []);
+            [], null, false, [], [], [], DateTime.UtcNow, [], Emoji: "🏃");
 
         _mediator.Send(Arg.Any<GetHabitByIdQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(detail));
@@ -120,6 +121,7 @@ public class HabitToolsTests
         var result = await _tools.GetHabit(_user, habitId.ToString());
 
         result.Should().Contain("Exercise");
+        result.Should().Contain("Emoji: 🏃");
         result.Should().Contain("Active");
     }
 
@@ -177,6 +179,17 @@ public class HabitToolsTests
     }
 
     [Fact]
+    public async Task CreateHabit_WithEmoji_ForwardsEmoji()
+    {
+        StubExecutor(AgentOperationStatus.Succeeded, targetId: Guid.NewGuid().ToString());
+
+        var request = await CapturedRequestAsync(async () =>
+            await _tools.CreateHabit(_user, "Read", "2026-04-01", emoji: "📚"));
+
+        request.Arguments.GetProperty("emoji").GetString().Should().Be("📚");
+    }
+
+    [Fact]
     public async Task UpdateHabit_Success_RoutesThroughExecutor()
     {
         var habitId = Guid.NewGuid();
@@ -204,6 +217,39 @@ public class HabitToolsTests
         var result = await _tools.UpdateHabit(_user, Guid.NewGuid().ToString(), "Title");
 
         result.Should().StartWith("Error: ");
+    }
+
+    [Fact]
+    public async Task UpdateHabit_WithEmoji_ForwardsValue()
+    {
+        StubExecutor(AgentOperationStatus.Succeeded);
+
+        var request = await CapturedRequestAsync(async () =>
+            await _tools.UpdateHabit(_user, Guid.NewGuid().ToString(), "Read", emoji: "📚"));
+
+        request.Arguments.GetProperty("emoji").GetString().Should().Be("📚");
+    }
+
+    [Fact]
+    public async Task UpdateHabit_WithoutEmoji_OmitsField()
+    {
+        StubExecutor(AgentOperationStatus.Succeeded);
+
+        var request = await CapturedRequestAsync(async () =>
+            await _tools.UpdateHabit(_user, Guid.NewGuid().ToString(), "Read"));
+
+        request.Arguments.TryGetProperty("emoji", out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task UpdateHabit_ExplicitNullEmoji_ForwardsNull()
+    {
+        StubExecutor(AgentOperationStatus.Succeeded);
+
+        var request = await CapturedRequestAsync(async () =>
+            await _tools.UpdateHabit(_user, Guid.NewGuid().ToString(), "Read", emoji: null));
+
+        request.Arguments.GetProperty("emoji").ValueKind.Should().Be(System.Text.Json.JsonValueKind.Null);
     }
 
     [Fact]
@@ -511,6 +557,19 @@ public class HabitToolsTests
     }
 
     [Fact]
+    public async Task BulkCreateHabits_WithEmoji_ForwardsParentAndChildEmojis()
+    {
+        StubExecutor(AgentOperationStatus.Succeeded);
+
+        var request = await CapturedRequestAsync(async () =>
+            await _tools.BulkCreateHabits(_user, """[{"title":"Workout","emoji":"🏋️","subHabits":[{"title":"Run","emoji":"🏃"}]}]"""));
+
+        var habit = request.Arguments.GetProperty("habits")[0];
+        habit.GetProperty("emoji").GetString().Should().Be("🏋️");
+        habit.GetProperty("sub_habits")[0].GetProperty("emoji").GetString().Should().Be("🏃");
+    }
+
+    [Fact]
     public async Task BulkDeleteHabits_Success_RoutesThroughExecutor()
     {
         var id = Guid.NewGuid();
@@ -547,11 +606,11 @@ public class HabitToolsTests
         request = await CapturedRequestAsync(async () => result = await _tools.BulkUpdateHabits(
             _user,
             """{"all":true}""",
-            """{"description":"Changed"}"""));
+            """{"emoji":"📚"}"""));
 
         request.OperationId.Should().Be("bulk_update_habits");
         request.Arguments.GetProperty("filter").GetProperty("all").GetBoolean().Should().BeTrue();
-        request.Arguments.GetProperty("updates").GetProperty("description").GetString().Should().Be("Changed");
+        request.Arguments.GetProperty("updates").GetProperty("emoji").GetString().Should().Be("📚");
         result.Should().Contain("250 of 250");
     }
 
