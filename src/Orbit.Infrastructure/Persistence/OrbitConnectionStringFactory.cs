@@ -11,7 +11,9 @@ namespace Orbit.Infrastructure.Persistence;
 /// migrations, the design-time factory, and the Hangfire durable queue use
 /// <c>ConnectionStrings:SessionConnection</c> (the session pooler), falling back to
 /// <c>DefaultConnection</c> when it is unset. The configured <see cref="DatabaseConnectionSettings"/>
-/// pool caps override any pool size present in the raw connection string.
+/// pool caps override any pool size present in the raw connection string. Idle session-pool connections
+/// are pruned after 60 seconds, and open inactive session connections receive keepalive queries after
+/// 30 seconds to detect connections closed by the pooler or network.
 /// </summary>
 public static class OrbitConnectionStringFactory
 {
@@ -28,7 +30,15 @@ public static class OrbitConnectionStringFactory
         if (string.IsNullOrWhiteSpace(sessionConnectionString))
             sessionConnectionString = configuration.GetConnectionString("DefaultConnection");
 
-        return ApplyPoolCap(sessionConnectionString, settings.SessionMaxPoolSize);
+        var cappedConnectionString = ApplyPoolCap(sessionConnectionString, settings.SessionMaxPoolSize);
+        if (string.IsNullOrEmpty(cappedConnectionString))
+            return cappedConnectionString;
+
+        return new NpgsqlConnectionStringBuilder(cappedConnectionString)
+        {
+            ConnectionIdleLifetime = 60,
+            KeepAlive = 30
+        }.ConnectionString;
     }
 
     private static string ApplyPoolCap(string? connectionString, int maxPoolSize)
