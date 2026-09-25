@@ -11,6 +11,25 @@ namespace Orbit.Application.Common;
 /// </summary>
 internal static partial class AnalyticsCapture
 {
+    public static void SafeCaptureAggregateEvent(
+        IProductAnalytics analytics,
+        ILogger logger,
+        string eventName,
+        IReadOnlyDictionary<string, object> properties)
+    {
+        try
+        {
+            analytics.CaptureAggregateEvent(eventName, properties);
+        }
+        catch (Exception ex)
+        {
+            LogAggregateCaptureFailed(logger, ex, eventName);
+        }
+    }
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Product analytics aggregate capture of {EventName} failed")]
+    private static partial void LogAggregateCaptureFailed(ILogger logger, Exception ex, string eventName);
+
     public static void SafeCaptureUserEvent(
         IProductAnalytics analytics,
         ILogger logger,
