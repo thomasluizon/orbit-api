@@ -15458,6 +15458,12 @@
               "string"
             ],
             "format": "int32"
+          },
+          "lastFreezeCoveredOrigin": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

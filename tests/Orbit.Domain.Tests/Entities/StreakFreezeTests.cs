@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 
 namespace Orbit.Domain.Tests.Entities;
 
@@ -11,18 +12,19 @@ public class StreakFreezeTests
         var userId = Guid.NewGuid();
         var date = new DateOnly(2026, 8, 21);
 
-        var freeze = StreakFreeze.Create(userId, date);
+        var freeze = StreakFreeze.Create(userId, date, StreakFreezeOrigin.Automatic);
 
         freeze.UserId.Should().Be(userId);
         freeze.UsedOnDate.Should().Be(date);
         freeze.CreatedAtUtc.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
         freeze.Id.Should().NotBeEmpty();
+        freeze.Origin.Should().Be(StreakFreezeOrigin.Automatic);
     }
 
     [Fact]
     public void Create_EmptyUserId_Throws()
     {
-        var act = () => StreakFreeze.Create(Guid.Empty, new DateOnly(2026, 8, 21));
+        var act = () => StreakFreeze.Create(Guid.Empty, new DateOnly(2026, 8, 21), StreakFreezeOrigin.Manual);
 
         act.Should().Throw<ArgumentException>();
     }
@@ -30,7 +32,7 @@ public class StreakFreezeTests
     [Fact]
     public void Create_MissingDate_Throws()
     {
-        var act = () => StreakFreeze.Create(Guid.NewGuid(), DateOnly.MinValue);
+        var act = () => StreakFreeze.Create(Guid.NewGuid(), DateOnly.MinValue, StreakFreezeOrigin.Manual);
 
         act.Should().Throw<ArgumentOutOfRangeException>();
     }
@@ -41,9 +43,29 @@ public class StreakFreezeTests
         var userId = Guid.NewGuid();
         var date = new DateOnly(2026, 8, 21);
 
-        var first = StreakFreeze.Create(userId, date);
-        var second = StreakFreeze.Create(userId, date);
+        var first = StreakFreeze.Create(userId, date, StreakFreezeOrigin.Manual);
+        var second = StreakFreeze.Create(userId, date, StreakFreezeOrigin.Manual);
 
         first.Id.Should().NotBe(second.Id);
+    }
+
+    [Fact]
+    public void Create_InvalidOrigin_Throws()
+    {
+        var act = () => StreakFreeze.Create(Guid.NewGuid(), new DateOnly(2026, 8, 21),
+            (StreakFreezeOrigin)999);
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
+    public void CreateGap_RecordsManualOrigin()
+    {
+        var today = new DateOnly(2026, 8, 22);
+
+        var result = StreakFreeze.CreateGap(Guid.NewGuid(), [today.AddDays(-1)], today);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().OnlyContain(freeze => freeze.Origin == StreakFreezeOrigin.Manual);
     }
 }
