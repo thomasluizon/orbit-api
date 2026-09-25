@@ -2,10 +2,18 @@ using FluentAssertions;
 using MediatR;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
 using Orbit.Application.Behaviors;
+using Orbit.Application.Challenges.Services;
 using Orbit.Application.Common;
+using Orbit.Application.Goals.Services;
+using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
+using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 
@@ -200,6 +208,89 @@ public class IdempotencyBehaviorDbTests : IDisposable
         (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(0);
     }
 
+    [Fact]
+    public async Task Handle_ConcurrentHabitLog_StoresWinnerAndReplaysWithoutLosingSideEffects()
+    {
+        var today = new DateOnly(2026, 9, 24);
+        var habit = Habit.Create(new HabitCreateParams(
+            _userId, "Race habit", FrequencyUnit.Day, 1, DueDate: today)).Value;
+        _dbContext.Habits.Add(habit);
+        await _dbContext.SaveChangesAsync();
+
+        var userDateService = Substitute.For<IUserDateService>();
+        userDateService.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(today);
+        var streakService = Substitute.For<IUserStreakService>();
+        var gamificationService = Substitute.For<IGamificationService>();
+        var challengeService = Substitute.For<IChallengeProgressService>();
+        var goalService = Substitute.For<IGoalCompletionService>();
+        var mediator = Substitute.For<IMediator>();
+        var payGate = Substitute.For<IPayGateService>();
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var handler = new LogHabitCommandHandler(
+            new LogHabitRepositories(
+                new GenericRepository<Habit>(_dbContext),
+                new GenericRepository<HabitLog>(_dbContext),
+                new GenericRepository<User>(_dbContext)),
+            new LogHabitServices(userDateService, streakService, gamificationService,
+                goalService, challengeService, mediator, payGate),
+            _unitOfWork, cache, NullLogger<LogHabitCommandHandler>.Instance);
+
+        var winnerId = Guid.NewGuid();
+        goalService.SyncDerivedGoalsAsync(
+                _userId, Arg.Any<IReadOnlyCollection<Guid>>(), today,
+                Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                var ct = call.ArgAt<CancellationToken>(4);
+                var now = DateTime.UtcNow;
+                await _dbContext.Database.ExecuteSqlInterpolatedAsync(
+                    $"INSERT INTO \"HabitLogs\" (\"Id\", \"HabitId\", \"Date\", \"Value\", \"CreatedAtUtc\", \"UpdatedAtUtc\", \"IsDeleted\") VALUES ({winnerId}, {habit.Id}, {today}, {1m}, {now}, {now}, {false})", ct);
+                _dbContext.Tags.Add(Tag.Create(_userId, "losing reward", "#ff0000").Value);
+                try
+                {
+                    await _unitOfWork.SaveChangesAsync(ct);
+                }
+                catch (DbUpdateException exception) when (exception.InnerException is SqliteException)
+                {
+                    throw new DbUpdateException("duplicate", new FakeUniqueViolationException());
+                }
+
+                return (IReadOnlyList<GoalCompletionUpdate>)Array.Empty<GoalCompletionUpdate>();
+            });
+
+        var behavior = CreateBehavior<LogHabitCommand, Result<LogHabitResponse>>();
+        var command = new LogHabitCommand(_userId, habit.Id);
+        RequestHandlerDelegate<Result<LogHabitResponse>> next = ct =>
+        {
+            _handlerCalls++;
+            return handler.Handle(command, ct);
+        };
+
+        var first = await behavior.Handle(command, next, CancellationToken.None);
+        var storedBody = await _dbContext.ProcessedRequests
+            .AsNoTracking().Select(record => record.ResponseBody).SingleAsync();
+        var replay = await behavior.Handle(command, next, CancellationToken.None);
+
+        first.IsSuccess.Should().BeTrue();
+        first.Value.LogId.Should().Be(winnerId);
+        first.Value.IsFirstCompletionToday.Should().BeFalse();
+        storedBody.Should().NotBeNullOrEmpty();
+        replay.IsSuccess.Should().BeTrue();
+        replay.Value.Should().BeEquivalentTo(first.Value);
+        _handlerCalls.Should().Be(1);
+        (await _dbContext.HabitLogs.AsNoTracking().CountAsync()).Should().Be(1);
+        (await _dbContext.Tags.AsNoTracking().CountAsync()).Should().Be(0);
+        (await _dbContext.Habits.AsNoTracking().SingleAsync()).DueDate.Should().Be(today);
+        await streakService.DidNotReceive().RecalculateAsync(
+            _userId, cancellationToken: Arg.Any<CancellationToken>());
+        await gamificationService.DidNotReceive().ProcessHabitLogged(
+            _userId, habit.Id, Arg.Any<CancellationToken>());
+        await gamificationService.DidNotReceive().ProcessOnboardingChecklistAsync(
+            _userId, OnboardingChecklistSignal.HabitLogged, Arg.Any<CancellationToken>());
+        await challengeService.DidNotReceive().EvaluateOnHabitLoggedAsync(
+            _userId, habit.Id, Arg.Any<CancellationToken>());
+    }
+
     private IdempotencyBehavior<TRequest, TResponse> CreateBehavior<TRequest, TResponse>(bool hasKey = true)
         where TRequest : class =>
         new(new StubIdempotencyContext(hasKey, _userId, "mutation-key-1"), _store, _unitOfWork);
@@ -229,6 +320,11 @@ public class IdempotencyBehaviorDbTests : IDisposable
     private sealed record PlainResultRequest : IRequest<Result>, IIdempotentCommand;
 
     private sealed record UnmarkedRequest : IRequest<string>;
+
+    private sealed class FakeUniqueViolationException : System.Data.Common.DbException
+    {
+        public override string SqlState => "23505";
+    }
 
     private sealed class StubIdempotencyContext(bool hasKey, Guid userId, string key) : IIdempotencyContext
     {

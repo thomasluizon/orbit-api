@@ -2955,13 +2955,13 @@
       "Auth": 31,
       "Behaviors": 17,
       "Calendar": 19,
-      "Challenges": 14,
+      "Challenges": 15,
       "Chat": 65,
       "ChecklistTemplates": 9,
       "Common": 202,
       "Gamification": 44,
-      "Goals": 54,
-      "Habits": 94,
+      "Goals": 55,
+      "Habits": 95,
       "Marketing": 6,
       "Notifications": 21,
       "Profile": 40,
@@ -6829,6 +6829,10 @@
         "testClass": "IdempotencyBehaviorDbTests",
         "file": "tests/Orbit.Infrastructure.Tests/Behaviors/IdempotencyBehaviorDbTests.cs",
         "references": [
+          "Habit",
+          "HabitLog",
+          "LogHabitCommand",
+          "LogHabitCommandHandler",
           "Tag",
           "User"
         ]
