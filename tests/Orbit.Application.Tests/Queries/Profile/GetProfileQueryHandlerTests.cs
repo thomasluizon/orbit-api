@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Application.Common;
+using Orbit.Application.Chat;
 using Orbit.Application.Profile.Queries;
 using Orbit.Application.Tests.Common;
 using Orbit.Domain.Entities;
@@ -64,6 +65,23 @@ public class GetProfileQueryHandlerTests
             Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
             Arg.Any<CancellationToken>())
             .Returns(new List<StreakFreeze>().AsReadOnly());
+    }
+
+    [Fact]
+    public async Task FreePlanAccountCard_ContainsNoBillingOrUpgradeFields()
+    {
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(CreateFreeUser());
+        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(10);
+        StubFreezeRepoEmpty();
+
+        var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var card = AccountRowsCardBuilder.Plan(result.Value);
+        card.Rows.Single(row => row.Key == "plan").Value.Should().Be("Free");
+        var json = JsonSerializer.Serialize(card, new JsonSerializerOptions(JsonSerializerDefaults.Web)).ToLowerInvariant();
+        json.Should().NotContain("price").And.NotContain("plans")
+            .And.NotContain("checkout").And.NotContain("portal").And.NotContain("upgrade");
     }
 
     [Fact]

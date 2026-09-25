@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Orbit.Application.Chat;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 
 namespace Orbit.Application.Tests.Chat;
 
@@ -65,5 +66,39 @@ public class GoalListCardBuilderTests
         var card = GoalListCardBuilder.Build([goal]);
 
         card.Items.Single().Deadline.Should().BeNull();
+    }
+
+    [Fact]
+    public void Build_LinkedGoalWithDeadline_AddsProjection()
+    {
+        var today = new DateOnly(2026, 9, 30);
+        var goal = CreateGoal("Read", 100, "pages", current: 40, deadline: today.AddDays(30));
+        goal.AddHabit(Habit.Create(new HabitCreateParams(UserId, "Read daily", FrequencyUnit.Day, 1, today)).Value);
+
+        var item = GoalListCardBuilder.Build([goal], today).Items.Single();
+
+        item.DaysToDeadline.Should().Be(30);
+        item.TrackingStatus.Should().Be("on_track");
+        item.ProgressPercentage.Should().Be(40);
+    }
+
+    [Fact]
+    public void Build_NoLinkedHabitsOrKillFlag_LeavesProjectionFieldsNull()
+    {
+        var today = new DateOnly(2026, 9, 30);
+        var goal = CreateGoal("Read", 100, "pages", current: 40, deadline: today.AddDays(30));
+
+        var noHabits = GoalListCardBuilder.Build([goal], today).Items.Single();
+        noHabits.TrackingStatus.Should().BeNull();
+        noHabits.ProgressPercentage.Should().BeNull();
+        noHabits.ProjectedCompletionDate.Should().BeNull();
+        noHabits.DaysToDeadline.Should().BeNull();
+
+        goal.AddHabit(Habit.Create(new HabitCreateParams(UserId, "Read daily", FrequencyUnit.Day, 1, today)).Value);
+        var disabled = GoalListCardBuilder.Build([goal], today, includeProjections: false).Items.Single();
+        disabled.TrackingStatus.Should().BeNull();
+        disabled.ProgressPercentage.Should().BeNull();
+        disabled.ProjectedCompletionDate.Should().BeNull();
+        disabled.DaysToDeadline.Should().BeNull();
     }
 }

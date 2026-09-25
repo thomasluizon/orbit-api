@@ -195,7 +195,13 @@ public record AgentClientContext(
     bool? SupportsHabitListCard = null,
     bool? SupportsGoalListCard = null,
     bool? SupportsMetricsCard = null,
-    string? EntryPointIntent = null);
+    string? EntryPointIntent = null,
+    bool? SupportsPeriodInsightCard = null,
+    bool? SupportsDaySummaryCard = null,
+    bool? SupportsStreakCard = null,
+    bool? SupportsCalendarCard = null,
+    bool? SupportsRecordListCard = null,
+    bool? SupportsAccountRowsCard = null);
 
 public record AgentContextSnapshot(
     string Plan,

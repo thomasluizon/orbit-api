@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Orbit.Application.Habits.Queries;
+using Orbit.Domain.Models;
 
 namespace Orbit.Application.Chat;
 
@@ -12,7 +13,15 @@ public record MetricsCard(
     int CurrentStreak,
     int BestStreak,
     bool HasData,
-    string SurfaceId);
+    string SurfaceId,
+    CompletionSeries? Series = null,
+    string? TopHabitName = null,
+    string? TopHabitEmoji = null,
+    Guid? HabitId = null,
+    string? HabitTitle = null,
+    decimal? WeeklyCompletionRate = null,
+    decimal? MonthlyCompletionRate = null,
+    DateOnly? LastCompletedDate = null);
 
 public static partial class MetricsCardBuilder
 {
@@ -21,8 +30,10 @@ public static partial class MetricsCardBuilder
 
     public const string PromptInstruction = """
         ## Metrics rendering (this client)
-        This app can display one overview card for the user's progress metrics. When the user asks how their current week went, asks for their progress or metrics, or asks for a weekly overview, do NOT write the metric values out as text and do NOT provide a per-habit drill-in. Instead reply with a brief one-line intro and then, on its own final line, exactly ONE directive token: [[orbit:metrics]]. The app replaces the directive with the rendered overview and a chip that opens the progress surface. Emit at most one directive, always as the last thing in your reply. For every other kind of question, answer normally and do not emit a directive.
+        This app can display one card for current week progress. When the user asks about their current week, write one short intro without repeating figures, then emit [[orbit:metrics]] as the final line. Emit at most one directive. For other questions, answer normally.
         """;
+
+    public const string HabitPromptInstruction = "After get_habit_metrics succeeds, write one short line without repeating figures, then emit [[orbit:metrics]] last so the card shows that habit.";
 
     public static bool TryExtractDirective(string? message, out string stripped)
     {
@@ -49,7 +60,28 @@ public static partial class MetricsCardBuilder
             metrics.CurrentStreak,
             metrics.BestStreak,
             metrics.TotalScheduled > 0 || metrics.TotalCompletions > 0 || metrics.ActiveDays > 0 || metrics.BadHabitSlips > 0,
-            ProgressSurfaceId);
+            ProgressSurfaceId,
+            metrics.CompletionSeries,
+            metrics.TopHabits.FirstOrDefault()?.Name,
+            metrics.TopHabits.FirstOrDefault()?.Emoji);
+
+    public static MetricsCard BuildHabit(HabitMetrics habitMetrics, RetrospectiveMetrics periodMetrics) =>
+        new(
+            "habit",
+            periodMetrics.CompletionRate,
+            habitMetrics.TotalCompletions,
+            periodMetrics.TotalScheduled,
+            periodMetrics.ActiveDays,
+            habitMetrics.CurrentStreak,
+            habitMetrics.LongestStreak,
+            periodMetrics.TotalScheduled > 0 || habitMetrics.TotalCompletions > 0,
+            "habit",
+            periodMetrics.CompletionSeries,
+            HabitId: habitMetrics.HabitId,
+            HabitTitle: habitMetrics.HabitTitle,
+            WeeklyCompletionRate: habitMetrics.WeeklyCompletionRate,
+            MonthlyCompletionRate: habitMetrics.MonthlyCompletionRate,
+            LastCompletedDate: habitMetrics.LastCompletedDate);
 
     [GeneratedRegex(@"\[\[orbit:metrics\]\]", RegexOptions.IgnoreCase)]
     private static partial Regex DirectiveRegex();

@@ -7,6 +7,11 @@ using Orbit.Domain.Common;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
+public record CalendarOverviewPayload(
+    IReadOnlyList<CalendarEventItem> Events,
+    CalendarAutoSyncStateResponse? AutoSyncState,
+    IReadOnlyList<CalendarSyncSuggestionItem> Suggestions);
+
 public class GetCalendarOverviewTool(IMediator mediator) : IAiTool
 {
     public string Name => "get_calendar_overview";
@@ -40,24 +45,21 @@ public class GetCalendarOverviewTool(IMediator mediator) : IAiTool
         if (includeAutoSyncState)
         {
             var autoSyncStateResult = await mediator.Send(new GetCalendarAutoSyncStateQuery(userId), ct);
-            if (autoSyncStateResult.IsFailure)
+            if (autoSyncStateResult.IsFailure && autoSyncStateResult.ErrorCode != "PAY_GATE")
                 return ToolResult.FromFailure(autoSyncStateResult);
-
-            autoSyncState = autoSyncStateResult.Value;
+            if (autoSyncStateResult.IsSuccess)
+                autoSyncState = autoSyncStateResult.Value;
         }
 
         var suggestions = includeSuggestions
             ? await mediator.Send(new GetCalendarSyncSuggestionsQuery(userId), ct)
             : Result.Success(new List<CalendarSyncSuggestionItem>());
-        if (suggestions.IsFailure)
+        if (suggestions.IsFailure && suggestions.ErrorCode != Result.PayGateErrorCode)
             return ToolResult.FromFailure(suggestions);
 
-        return new ToolResult(true, Payload: new
-        {
-            events = events.Value,
-            autoSyncState,
-            suggestions = suggestions.Value
-        });
+        return new ToolResult(true, Payload: new CalendarOverviewPayload(
+            events.Value, autoSyncState,
+            suggestions.IsSuccess ? suggestions.Value : []));
     }
 }
 

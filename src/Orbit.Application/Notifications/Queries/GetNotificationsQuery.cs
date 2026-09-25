@@ -17,7 +17,8 @@ public record NotificationItemDto(
 
 public record GetNotificationsResponse(
     IReadOnlyList<NotificationItemDto> Items,
-    int UnreadCount);
+    int UnreadCount,
+    int? TotalCount = null);
 
 public record GetNotificationsQuery(Guid UserId) : IRequest<Result<GetNotificationsResponse>>;
 
@@ -39,6 +40,10 @@ public class GetNotificationsQueryHandler(
             n => n.UserId == request.UserId && !n.IsRead,
             cancellationToken);
 
-        return Result.Success(new GetNotificationsResponse(items, unreadCount));
+        var totalCount = await notificationRepository.CountAsync(
+            n => n.UserId == request.UserId,
+            cancellationToken);
+
+        return Result.Success(new GetNotificationsResponse(items, unreadCount, totalCount));
     }
 }

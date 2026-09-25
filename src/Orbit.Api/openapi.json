@@ -12767,6 +12767,62 @@
       "AccountabilityCadence": {
         "type": "integer"
       },
+      "AccountRow": {
+        "required": [
+          "key",
+          "value",
+          "valueType"
+        ],
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "value": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "valueType": {
+            "type": "string"
+          }
+        }
+      },
+      "AccountRowsCard": {
+        "required": [
+          "kind",
+          "rows"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountRow"
+            }
+          },
+          "referralCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "referralLink": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "surfaceId": {
+            "type": "string",
+            "default": "profile"
+          }
+        }
+      },
       "ActionResult": {
         "required": [
           "type",
@@ -13646,6 +13702,84 @@
           }
         }
       },
+      "CalendarCard": {
+        "required": [
+          "events",
+          "sync"
+        ],
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CalendarCardEvent"
+            }
+          },
+          "sync": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CalendarCardSync"
+              }
+            ]
+          },
+          "surfaceId": {
+            "type": "string",
+            "default": "calendar"
+          }
+        }
+      },
+      "CalendarCardEvent": {
+        "required": [
+          "title",
+          "start",
+          "end",
+          "isAllDay"
+        ],
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "start": {
+            "type": "string"
+          },
+          "end": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isAllDay": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CalendarCardSync": {
+        "required": [
+          "enabled",
+          "status",
+          "lastSyncedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string"
+          },
+          "lastSyncedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
       "ChallengeType": {
         "type": "integer"
       },
@@ -13739,6 +13873,65 @@
                 "$ref": "#/components/schemas/MetricsCard"
               }
             ]
+          },
+          "periodInsight": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PeriodInsightCard"
+              }
+            ]
+          },
+          "daySummary": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DaySummaryCard"
+              }
+            ]
+          },
+          "streak": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/StreakCard"
+              }
+            ]
+          },
+          "calendar": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CalendarCard"
+              }
+            ]
+          },
+          "recordLists": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/RecordListCard"
+            }
+          },
+          "accountRows": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AccountRowsCard"
+              }
+            ]
           }
         }
       },
@@ -13795,6 +13988,69 @@
             "items": {
               "$ref": "#/components/schemas/QuickAction"
             }
+          }
+        }
+      },
+      "CompletionSeries": {
+        "required": [
+          "granularity",
+          "points"
+        ],
+        "type": "object",
+        "properties": {
+          "granularity": {
+            "type": "string"
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CompletionSeriesPoint"
+            }
+          }
+        }
+      },
+      "CompletionSeriesPoint": {
+        "required": [
+          "startDate",
+          "endDate",
+          "scheduled",
+          "completed",
+          "completionRate"
+        ],
+        "type": "object",
+        "properties": {
+          "startDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "scheduled": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "completed": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "completionRate": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -14325,6 +14581,68 @@
       "DayOfWeek": {
         "type": "integer"
       },
+      "DaySummaryCard": {
+        "required": [
+          "date",
+          "due",
+          "done",
+          "completionRate",
+          "overdueCount",
+          "currentStreak"
+        ],
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "due": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "done": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "completionRate": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "overdueCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "currentStreak": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "surfaceId": {
+            "type": "string",
+            "default": "today"
+          }
+        }
+      },
       "ExecutePendingOperationRequest": {
         "required": [
           "confirmationToken"
@@ -14394,6 +14712,36 @@
               "null",
               "string"
             ]
+          },
+          "trackingStatus": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "progressPercentage": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "projectedCompletionDate": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "daysToDeadline": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -14772,6 +15120,66 @@
           },
           "surfaceId": {
             "type": "string"
+          },
+          "series": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CompletionSeries"
+              }
+            ]
+          },
+          "topHabitName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "topHabitEmoji": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "habitId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "habitTitle": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "weeklyCompletionRate": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "monthlyCompletionRate": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "lastCompletedDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
           }
         }
       },
@@ -14824,6 +15232,123 @@
           "expiresAtUtc": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "PeriodInsightCard": {
+        "required": [
+          "period",
+          "dateFrom",
+          "dateTo",
+          "completionRate",
+          "activeDays",
+          "periodDays",
+          "totalCompletions",
+          "totalScheduled",
+          "currentStreak",
+          "bestStreak",
+          "topHabits",
+          "needsAttention",
+          "narrative",
+          "series"
+        ],
+        "type": "object",
+        "properties": {
+          "period": {
+            "type": "string"
+          },
+          "dateFrom": {
+            "type": "string",
+            "format": "date"
+          },
+          "dateTo": {
+            "type": "string",
+            "format": "date"
+          },
+          "completionRate": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "activeDays": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "periodDays": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalCompletions": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalScheduled": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "currentStreak": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "bestStreak": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "topHabits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RetrospectiveHabitStat"
+            }
+          },
+          "needsAttention": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RetrospectiveHabitStat"
+            }
+          },
+          "narrative": {
+            "$ref": "#/components/schemas/RetrospectiveNarrative"
+          },
+          "series": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CompletionSeries"
+              }
+            ]
+          },
+          "surfaceId": {
+            "type": "string",
+            "default": "progress"
           }
         }
       },
@@ -15212,6 +15737,82 @@
           }
         }
       },
+      "RecordListCard": {
+        "required": [
+          "kind",
+          "totalCount",
+          "items"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecordListItem"
+            }
+          },
+          "surfaceId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "RecordListItem": {
+        "required": [
+          "id",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "date": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "isRead": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
       "RefreshSessionOperationRequest": {
         "required": [
           "refreshToken"
@@ -15334,6 +15935,78 @@
         "type": "object",
         "properties": {
           "value": {
+            "type": "string"
+          }
+        }
+      },
+      "RetrospectiveHabitStat": {
+        "required": [
+          "name",
+          "emoji",
+          "completionRate",
+          "completedCount",
+          "scheduledCount"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "emoji": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "completionRate": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "completedCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "scheduledCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "isOneTime": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "RetrospectiveNarrative": {
+        "required": [
+          "highlights",
+          "missed",
+          "trends",
+          "suggestion"
+        ],
+        "type": "object",
+        "properties": {
+          "highlights": {
+            "type": "string"
+          },
+          "missed": {
+            "type": "string"
+          },
+          "trends": {
+            "type": "string"
+          },
+          "suggestion": {
             "type": "string"
           }
         }
@@ -15672,6 +16345,109 @@
           "language": {
             "type": "string",
             "default": "en"
+          }
+        }
+      },
+      "StreakAchievement": {
+        "required": [
+          "id",
+          "iconKey",
+          "earnedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "iconKey": {
+            "type": "string"
+          },
+          "earnedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "StreakCard": {
+        "required": [
+          "currentStreak",
+          "longestStreak",
+          "level",
+          "totalXp",
+          "xpForNextLevel",
+          "lastActiveDate",
+          "isFrozenToday",
+          "recentFreezeDates",
+          "recentAchievements"
+        ],
+        "type": "object",
+        "properties": {
+          "currentStreak": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "longestStreak": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "level": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalXp": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "xpForNextLevel": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "lastActiveDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "isFrozenToday": {
+            "type": "boolean"
+          },
+          "recentFreezeDates": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          "recentAchievements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StreakAchievement"
+            }
+          },
+          "surfaceId": {
+            "type": "string",
+            "default": "progress"
           }
         }
       },

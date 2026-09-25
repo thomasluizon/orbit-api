@@ -30,6 +30,16 @@ public partial class ProcessUserChatCommandHandler
         /// </summary>
         public IReadOnlyList<string> RelatedSurfaces => _relatedSurfaces;
 
+        public T? LastSuccessfulPayload<T>(string toolName) where T : class =>
+            OperationResults
+                .LastOrDefault(operation => operation.OperationId == toolName
+                    && operation.Status == AgentOperationStatus.Succeeded
+                    && operation.Payload is T)?.Payload as T;
+
+        public AgentOperationResult? LastSuccessfulOperation(string toolName) =>
+            OperationResults.LastOrDefault(operation => operation.OperationId == toolName
+                && operation.Status == AgentOperationStatus.Succeeded);
+
         public void SanitizeFailedActions(string error)
         {
             for (var index = 0; index < ActionResults.Count; index++)
