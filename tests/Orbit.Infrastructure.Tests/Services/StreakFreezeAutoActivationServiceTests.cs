@@ -57,6 +57,7 @@ public class StreakFreezeAutoActivationServiceTests
         var freeze = await dbContext.StreakFreezes.AsNoTracking().SingleAsync();
         freeze.UserId.Should().Be(UserId);
         freeze.UsedOnDate.Should().Be(new DateOnly(2026, 6, 3));
+        freeze.Origin.Should().Be(StreakFreezeOrigin.Automatic);
         user.StreakFreezesAccumulated.Should().Be(0);
         (await dbContext.Notifications.AsNoTracking().CountAsync()).Should().Be(1);
         await pushService.Received(1).SendToUserAsync(

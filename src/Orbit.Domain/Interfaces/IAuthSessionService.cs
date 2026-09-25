@@ -17,4 +17,5 @@ public interface IAuthSessionService
     /// throttled per source IP, closing the token-varying rate-limit bypass.
     /// </summary>
     Task<bool> HasSessionForTokenAsync(string refreshToken, CancellationToken cancellationToken = default);
+    Task<bool> IsSessionActiveAsync(Guid sessionId, Guid userId, CancellationToken cancellationToken = default);
 }
