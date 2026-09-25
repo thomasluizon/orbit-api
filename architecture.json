@@ -2746,7 +2746,7 @@
       "Chat": 85,
       "ChecklistTemplates": 5,
       "Common": 36,
-      "Gamification": 33,
+      "Gamification": 34,
       "Goals": 35,
       "Habits": 78,
       "Marketing": 4,
@@ -2953,15 +2953,15 @@
       "Accountability": 9,
       "ApiKeys": 16,
       "Auth": 31,
-      "Behaviors": 14,
+      "Behaviors": 17,
       "Calendar": 19,
       "Challenges": 14,
       "Chat": 65,
       "ChecklistTemplates": 9,
-      "Common": 202,
-      "Gamification": 43,
+      "Common": 203,
+      "Gamification": 44,
       "Goals": 54,
-      "Habits": 93,
+      "Habits": 94,
       "Marketing": 6,
       "Notifications": 21,
       "Profile": 41,
@@ -5171,6 +5171,11 @@
           "ResetAccountCommandHandler",
           "User"
         ]
+      },
+      {
+        "testClass": "ClosedPeriodRangeTests",
+        "file": "tests/Orbit.Application.Tests/Queries/Gamification/ClosedPeriodRangeTests.cs",
+        "references": []
       },
       {
         "testClass": "GetAchievementsQueryHandlerTests",
@@ -7524,7 +7529,8 @@
         "file": "tests/Orbit.Infrastructure.Tests/Persistence/HabitLogReaderTests.cs",
         "references": [
           "Habit",
-          "HabitLog"
+          "HabitLog",
+          "User"
         ]
       },
       {
@@ -7991,6 +7997,7 @@
         "testClass": "PendingAgentOperationStoreTests",
         "file": "tests/Orbit.Infrastructure.Tests/Services/PendingAgentOperationStoreTests.cs",
         "references": [
+          "PendingAgentOperationState",
           "User"
         ]
       },
@@ -8197,8 +8204,8 @@
         "references": [
           "ChecklistTemplate",
           "Habit",
-          "HabitLog",
-          "Notification"
+          "Notification",
+          "User"
         ]
       },
       {

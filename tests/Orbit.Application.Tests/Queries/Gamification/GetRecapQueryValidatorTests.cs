@@ -81,4 +81,39 @@ public class GetRecapQueryValidatorTests
 
         result.IsValid.Should().BeFalse();
     }
+
+    [Fact]
+    public void Validate_ClosedWeekWithCalendarDates_Passes()
+    {
+        var weekStart = new DateOnly(2026, 8, 17);
+        var query = new GetRecapQuery(Guid.NewGuid(), weekStart, weekStart.AddDays(6),
+            "week", ClosedWeekStart: weekStart);
+
+        _validator.Validate(query).IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Validate_ClosedYearWithCalendarDates_Passes()
+    {
+        var query = new GetRecapQuery(Guid.NewGuid(), new DateOnly(2025, 1, 1),
+            new DateOnly(2025, 12, 31), "year", ClosedYear: 2025);
+
+        _validator.Validate(query).IsValid.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("month", 2026, null, null)]
+    [InlineData("week", 2026, null, null)]
+    [InlineData("year", 2026, 1, null)]
+    [InlineData("month", null, null, "2026-08-17")]
+    [InlineData("week", null, null, "2026-08-18")]
+    public void Validate_MismatchedClosedParameters_Fails(
+        string period, int? year, int? month, string? weekStartText)
+    {
+        var weekStart = weekStartText is null ? (DateOnly?)null : DateOnly.Parse(weekStartText);
+        var query = new GetRecapQuery(Guid.NewGuid(), DateFrom, DateTo, period,
+            year, month, weekStart);
+
+        _validator.Validate(query).IsValid.Should().BeFalse();
+    }
 }

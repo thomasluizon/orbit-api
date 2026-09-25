@@ -1,8 +1,11 @@
+using FluentAssertions;
 using FluentValidation.TestHelper;
 using Orbit.Application.Common;
 using Orbit.Application.Profile.Commands;
 using Orbit.Application.Profile.Validators;
 using Orbit.Domain.Enums;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Orbit.Application.Tests.Validators;
 
@@ -111,6 +114,44 @@ public class ApplyHabitInputValidatorTests
     public void FrequencyUnitWithoutQuantity_HasError() =>
         _validator.TestValidate(new ApplyHabitInput("Read", null, null, FrequencyUnit.Day, null))
             .ShouldHaveValidationErrorFor(x => x.FrequencyQuantity);
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(1)]
+    [InlineData(AppConstants.MaxIntervalWeeks)]
+    public void ValidIntervalWeeks_NoError(int? intervalWeeks) =>
+        _validator.TestValidate(
+                new ApplyHabitInput("Read", null, null, FrequencyUnit.Day, 1, IntervalWeeks: intervalWeeks))
+            .ShouldNotHaveValidationErrorFor(x => x.IntervalWeeks);
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(AppConstants.MaxIntervalWeeks + 1)]
+    public void InvalidIntervalWeeks_HasError(int intervalWeeks) =>
+        _validator.TestValidate(
+                new ApplyHabitInput("Read", null, null, FrequencyUnit.Day, 1, IntervalWeeks: intervalWeeks))
+            .ShouldHaveValidationErrorFor(x => x.IntervalWeeks);
+
+    [Fact]
+    public void PayloadWithoutTheIntervalWeeksKey_DeserializesToNullAndStaysValid()
+    {
+        const string legacyPayload =
+            @"{""title"":""Read"",""description"":null,""emoji"":null,""frequencyUnit"":""Day"",""frequencyQuantity"":1,""days"":[""Monday""],""isGeneral"":false,""dueDate"":""2026-07-06""}";
+
+        var input = JsonSerializer.Deserialize<ApplyHabitInput>(legacyPayload, WebJsonOptions)!;
+
+        input.IntervalWeeks.Should().BeNull();
+        input.Title.Should().Be("Read");
+        input.FrequencyUnit.Should().Be(FrequencyUnit.Day);
+        input.FrequencyQuantity.Should().Be(1);
+        input.Days.Should().Equal(DayOfWeek.Monday);
+        input.DueDate.Should().Be(new DateOnly(2026, 7, 6));
+
+        _validator.TestValidate(input).ShouldNotHaveAnyValidationErrors();
+    }
+
+    private static readonly JsonSerializerOptions WebJsonOptions =
+        new(JsonSerializerDefaults.Web) { Converters = { new JsonStringEnumConverter() } };
 }
 
 public class ApplyGoalInputValidatorTests
