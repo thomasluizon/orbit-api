@@ -115,6 +115,20 @@ public partial class ReminderSchedulerService(
         }
     }
 
+    /// <summary>
+    /// The UTC instant a local due time first happens. A repeated fall-back hour resolves to its
+    /// first occurrence, and a time skipped by a spring-forward gap resolves to the moment the clock
+    /// jumps past it, so a reminder is never an hour late and never silently dropped.
+    /// </summary>
+    private static DateTime LocalDueInstantUtc(DateTime dueLocal, TimeZoneInfo tz)
+    {
+        if (tz.IsAmbiguousTime(dueLocal))
+            return DateTime.SpecifyKind(dueLocal - tz.GetAmbiguousTimeOffsets(dueLocal).Max(), DateTimeKind.Utc);
+        if (tz.IsInvalidTime(dueLocal))
+            return DateTime.SpecifyKind(dueLocal - tz.GetUtcOffset(dueLocal.AddDays(-1)), DateTimeKind.Utc);
+        return TimeZoneInfo.ConvertTimeToUtc(dueLocal, tz);
+    }
+
     private async Task ProcessSingleRelativeReminderAsync(
         Habit habit, Dictionary<Guid, User> users,
         HashSet<(Guid HabitId, DateOnly Date)> loggedHabitDates,
@@ -133,10 +147,7 @@ public partial class ReminderSchedulerService(
             if (!HabitScheduleService.IsHabitDueOnDate(habit, occurrenceDate, user.WeekStartDay)) continue;
             if (loggedHabitDates.Contains((habit.Id, occurrenceDate))) continue;
 
-            var dueLocal = occurrenceDate.ToDateTime(habit.DueTime!.Value);
-            if (tz.IsInvalidTime(dueLocal)) continue;
-
-            var dueUtc = TimeZoneInfo.ConvertTimeToUtc(dueLocal, tz);
+            var dueUtc = LocalDueInstantUtc(occurrenceDate.ToDateTime(habit.DueTime!.Value), tz);
             foreach (var minutesBefore in habit.ReminderTimes)
             {
                 var reminderUtc = dueUtc.AddMinutes(-minutesBefore);

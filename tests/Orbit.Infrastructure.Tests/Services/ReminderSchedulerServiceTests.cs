@@ -453,6 +453,8 @@ public class ReminderSchedulerServiceTests
     [InlineData("2027-09-25T09:00:00Z", "UTC", "2027-10-02", 9, 0, 10080)]
     [InlineData("2027-09-25T10:30:00Z", "Pacific/Kiritimati", "2027-09-27", 0, 30, 1440)]
     [InlineData("2027-03-14T06:30:00Z", "America/New_York", "2027-03-14", 3, 30, 60)]
+    [InlineData("2027-11-07T05:30:00Z", "America/New_York", "2027-11-07", 1, 30, 0)]
+    [InlineData("2027-03-14T07:30:00Z", "America/New_York", "2027-03-14", 2, 30, 0)]
     public async Task CheckAndSendReminders_RelativeReminder_FiresAtInstantForDueOccurrence(
         string instant, string timeZoneId, string dueDateText, int dueHour, int dueMinute, int minutesBefore)
     {
