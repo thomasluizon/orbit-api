@@ -221,8 +221,8 @@ public class OAuthControllerTests : IDisposable
         objectResult.StatusCode.Should().Be(400);
         objectResult.Value.Should().BeEquivalentTo(new
         {
-            error = ErrorMessages.TooManyRequests.Message,
-            errorCode = ErrorMessages.TooManyRequests.Code
+            Error = ErrorMessages.TooManyRequests.Message,
+            ErrorCode = ErrorMessages.TooManyRequests.Code
         });
     }
 
@@ -276,8 +276,8 @@ public class OAuthControllerTests : IDisposable
         objectResult.StatusCode.Should().Be(400);
         objectResult.Value.Should().BeEquivalentTo(new
         {
-            error = ErrorMessages.InvalidVerificationCode.Message,
-            errorCode = ErrorMessages.InvalidVerificationCode.Code
+            Error = ErrorMessages.InvalidVerificationCode.Message,
+            ErrorCode = ErrorMessages.InvalidVerificationCode.Code
         });
     }
 
@@ -327,7 +327,7 @@ public class OAuthControllerTests : IDisposable
 
         var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
         var json = JsonSerializer.Serialize(bad.Value);
-        json.Should().Contain("Invalid or expired Google sign-in token");
+        json.Should().Contain(ErrorMessages.InvalidGoogleToken.Message);
     }
 
     [Fact]
@@ -358,7 +358,7 @@ public class OAuthControllerTests : IDisposable
 
         var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
         var json = JsonSerializer.Serialize(bad.Value);
-        json.Should().Contain("Could not retrieve email");
+        json.Should().Contain(ErrorMessages.GoogleEmailUnavailable.Message);
     }
 
     [Fact]
@@ -377,7 +377,7 @@ public class OAuthControllerTests : IDisposable
 
         var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
         var json = JsonSerializer.Serialize(bad.Value);
-        json.Should().Contain("not issued for this application");
+        json.Should().Contain(ErrorMessages.GoogleTokenAudienceMismatch.Message);
     }
 
     [Fact]

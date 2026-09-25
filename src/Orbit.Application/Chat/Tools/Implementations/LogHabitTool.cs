@@ -46,7 +46,7 @@ public class LogHabitTool(
         }
 
         if (targetDate > today)
-            return new ToolResult(false, Error: "Cannot log a future date.");
+            return new ToolResult(false, Error: ErrorMessages.CannotLogFutureDate.Message);
 
         var result = await mediator.Send(new LogHabitCommand(userId, habitId, targetDate), ct);
         if (result.IsFailure)

@@ -11,12 +11,12 @@ public sealed partial class AiProactiveCheckinMessageService(
     AiCompletionClient aiClient,
     ILogger<AiProactiveCheckinMessageService> logger) : IProactiveCheckinMessageService
 {
-    public async Task<Result<(string Title, string Body)>> GenerateMessageAsync(
-        string displayName,
-        IReadOnlyList<string> offTrackHabitTitles,
-        int currentStreak,
-        string language,
-        CancellationToken cancellationToken = default)
+    internal const string SystemPrompt =
+        "You are Astra. You write one check-in push notification for someone whose day still has open habits. "
+        + "You make the next step small and obvious. You never sell, never perform enthusiasm, and never scold.";
+
+    internal static string BuildPrompt(
+        string displayName, IReadOnlyList<string> offTrackHabitTitles, int currentStreak, string language)
     {
         var languageName = LocaleHelper.GetAiLanguageName(language);
         var sanitizedDisplayName = PromptDataSanitizer.SanitizeInline(displayName, AppConstants.MaxUserNameLength);
@@ -25,29 +25,37 @@ public sealed partial class AiProactiveCheckinMessageService(
             ? $"They currently have a {currentStreak}-day streak going."
             : "They do not have an active streak right now.";
 
-        var prompt = $"""
+        return $"""
             User's name: {sanitizedDisplayName}
             They have fallen behind today on these habits: {habitList}
             {streakContext}
 
-            Generate a short, proactive check-in push notification from Astra (their habit coach) that gently nudges them to get back on track before the day ends.
+            Write a check-in push notification that makes it easy to pick one of these back up before the day ends.
 
-            Rules:
-            - Return EXACTLY two lines: first line is the notification title, second line is the body
-            - Title: 5-8 words max, personal and encouraging (use their name when it feels natural)
-            - Body: 1-2 sentences max, supportive and specific to what they fell behind on
-            - Be creative and varied -- don't use the same structure every time
-            - Tone: supportive friend, not preachy or judgmental
-            - Do NOT use emojis
-            - You may use the names "Astra" and "Orbit" but no other brand names
-            - Write ONLY in {languageName}
-            - No quotes or formatting, just plain text
+            Format:
+            - Return EXACTLY two lines. The first line is the notification title, the second line is the body.
+            - Title: at most 8 words. Use their name only where it reads naturally.
+            - Body: one or two sentences. Point at ONE of the open habits, never the whole list.
+            - You may write the names Astra and Orbit. Use no other brand name.
+            - Write ONLY in {languageName}.
+
+            {NotificationVoice.Rules}
             """;
+    }
+
+    public async Task<Result<(string Title, string Body)>> GenerateMessageAsync(
+        string displayName,
+        IReadOnlyList<string> offTrackHabitTitles,
+        int currentStreak,
+        string language,
+        CancellationToken cancellationToken = default)
+    {
+        var prompt = BuildPrompt(displayName, offTrackHabitTitles, currentStreak, language);
 
         try
         {
             var text = await aiClient.CompleteTextAsync(
-                "You are Astra, a supportive habit coach sending a proactive check-in push notification to help someone get back on track with the habits they fell behind on today.",
+                SystemPrompt,
                 prompt,
                 temperature: 0.9,
                 cancellationToken: cancellationToken,
@@ -56,33 +64,48 @@ public sealed partial class AiProactiveCheckinMessageService(
             if (string.IsNullOrWhiteSpace(text))
             {
                 LogEmptyProactiveCheckinResponse(logger);
-                return GenerateFallback(displayName, language);
+                return GenerateFallback(displayName, offTrackHabitTitles.Count, language);
             }
 
             var lines = text.Trim().Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            if (lines.Length >= 2)
-                return Result.Success((lines[0], lines[1]));
-
-            var fallbackTitle = LocaleHelper.IsPortuguese(language)
-                ? $"Ainda dá tempo hoje, {sanitizedDisplayName}"
-                : $"Still time today, {sanitizedDisplayName}";
-            return Result.Success((fallbackTitle, lines[0]));
+            return lines.Length >= 2
+                ? Result.Success((lines[0], lines[1]))
+                : Result.Success((FallbackTitle(displayName, language), lines[0]));
         }
         catch (Exception ex)
         {
             LogProactiveCheckinGenerationFailed(logger, ex);
-            return GenerateFallback(displayName, language);
+            return GenerateFallback(displayName, offTrackHabitTitles.Count, language);
         }
     }
 
-    private static Result<(string Title, string Body)> GenerateFallback(string displayName, string language)
+    /// <summary>
+    /// The copy that ships whenever the model is down, so it claims only what the scheduler and the
+    /// tools can stand behind. <c>ProactiveCheckinSchedulerService</c> sends as soon as one habit is
+    /// off track, which makes a single habit the ordinary case rather than the exception, and
+    /// <c>LogHabitTool</c> records only the habit a person names, so nothing logs "the rest".
+    /// </summary>
+    private static Result<(string Title, string Body)> GenerateFallback(
+        string displayName, int openHabitCount, string language)
+    {
+        var isPtBr = LocaleHelper.IsPortuguese(language);
+        var body = (openHabitCount > 1, isPtBr) switch
+        {
+            (true, true) => "Ainda há hábitos abertos hoje. Escolha o mais fácil e conte à Astra quando fizer.",
+            (true, false) => "Some habits are still open today. Pick the easiest one and tell Astra when you do it.",
+            (false, true) => "Um hábito segue aberto hoje. Conte à Astra quando você fizer.",
+            _ => "One habit is still open today. Tell Astra when you do it."
+        };
+
+        return Result.Success((FallbackTitle(displayName, language), body));
+    }
+
+    private static string FallbackTitle(string displayName, string language)
     {
         var sanitizedDisplayName = PromptDataSanitizer.SanitizeInline(displayName, AppConstants.MaxUserNameLength);
         return LocaleHelper.IsPortuguese(language)
-            ? Result.Success(($"Ainda dá tempo hoje, {sanitizedDisplayName}",
-                "Você ficou para trás em alguns hábitos hoje. A Astra está aqui -- bora retomar?"))
-            : Result.Success(($"Still time today, {sanitizedDisplayName}",
-                "You've fallen behind on a few habits today. Astra's got your back -- let's get back on track."));
+            ? $"Ainda dá tempo hoje, {sanitizedDisplayName}"
+            : $"Still time today, {sanitizedDisplayName}";
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "AI returned empty response for proactive check-in message")]

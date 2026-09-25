@@ -6,6 +6,7 @@ using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
@@ -54,7 +55,7 @@ public class QueryHabitsTool(
     {
         var user = await userRepository.GetByIdAsync(userId, ct);
         if (user is null)
-            return new ToolResult(false, Error: "User not found.");
+            return new ToolResult(false, Error: ErrorMessages.UserNotFound.Message);
 
         var today = HabitMetricsCalculator.GetUserToday(user);
         var filters = ParseFilters(args, today);

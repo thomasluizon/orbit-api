@@ -6,6 +6,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Commands.Profile;
 
@@ -92,7 +93,7 @@ public class ProfileCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("User not found.");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
     }
 
     [Fact]
@@ -221,7 +222,7 @@ public class ProfileCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("User not found.");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
     }
 
     [Fact]
@@ -266,7 +267,7 @@ public class ProfileCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("User not found.");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
     }
 
     [Fact]
@@ -311,7 +312,7 @@ public class ProfileCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("User not found.");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
     }
 
     [Fact]
@@ -346,7 +347,7 @@ public class ProfileCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("User not found.");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
         await accountResetRepo.DidNotReceive().DeleteAllUserDataAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 }

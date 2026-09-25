@@ -4,6 +4,7 @@ using Orbit.Application.Subscriptions.Queries;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Queries.Subscriptions;
 
@@ -59,7 +60,7 @@ public class GetSubscriptionStatusQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("User not found");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
         result.ErrorCode.Should().Be("USER_NOT_FOUND");
     }
 

@@ -5,73 +5,86 @@ namespace Orbit.Infrastructure.Tests.Email;
 
 public class EmailTemplateRendererTests
 {
-    private static EmailLayout Layout(bool gradient = false) => new(
+    private static EmailLayout Layout() => new(
         Lang: "en",
         Preheader: "Preview line",
         Footer: "The Orbit Team",
-        LogoUrl: "https://app.useorbit.org/logo-no-bg.png",
-        GradientHeader: gradient);
+        LogoUrl: "https://app.useorbit.org/logo-no-bg.png");
 
     private static Dictionary<string, string> VerificationCodeTokens() => new()
     {
-        ["heading"] = "Your verification code",
-        ["intro"] = "Use the code below to sign in to Orbit. It expires in 5 minutes.",
+        ["heading"] = "Your sign-in code",
+        ["intro"] = "You asked to sign in to Orbit. Use the code below, or tap the button.",
         ["code"] = "123456",
-        ["cta"] = "Sign in to Orbit",
+        ["cta"] = "Sign in",
         ["signInUrl"] = "https://app.useorbit.org/login?email=user%40test.com&code=123456",
-        ["warning"] = "If you didn't request this code, you can safely ignore this email.",
+        ["warning"] = "If you did not ask for this code, ignore this email.",
         ["footer"] = "The Orbit Team",
     };
 
     private static Dictionary<string, string> WelcomeTokens() => new()
     {
-        ["heading"] = "Welcome aboard, Thomas!",
-        ["intro"] = "We're excited to have you on Orbit.",
-        ["featuresTitle"] = "Here's what you can do:",
-        ["feature1"] = "Create daily, weekly, or custom habits",
-        ["feature2"] = "Track streaks and view your progress",
-        ["feature3"] = "Get AI-powered insights on your routines",
-        ["cta"] = "Get Started",
+        ["heading"] = "You are in, Thomas",
+        ["intro"] = "Orbit keeps one routine in front of you.",
+        ["featuresTitle"] = "Where to start",
+        ["feature1"] = "Add one habit you want to keep.",
+        ["feature2"] = "Tell Astra what you did, in your own words.",
+        ["feature3"] = "Miss a day and Orbit shows you the way back in.",
+        ["cta"] = "Add your first habit",
         ["ctaUrl"] = "https://app.useorbit.org",
         ["footer"] = "The Orbit Team",
     };
 
     private static Dictionary<string, string> AccountDeletionTokens() => new()
     {
-        ["heading"] = "Account deletion",
-        ["intro"] = "You requested to delete your Orbit account.",
-        ["codeLabel"] = "Use the code below to confirm:",
+        ["heading"] = "Delete your Orbit account",
+        ["intro"] = "You asked to delete your Orbit account. This cannot be undone.",
+        ["codeLabel"] = "Enter this code to confirm:",
         ["code"] = "654321",
-        ["warning"] = "If you didn't request this, ignore this email.",
+        ["warning"] = "If you did not ask for this, ignore this email.",
         ["footer"] = "The Orbit Team",
     };
 
     private static Dictionary<string, string> ApiKeyCreationTokens() => new()
     {
         ["heading"] = "Create an API key",
-        ["intro"] = "You requested to create an Orbit API key.",
-        ["codeLabel"] = "Use the code below to confirm:",
+        ["intro"] = "You asked to create an Orbit API key.",
+        ["codeLabel"] = "Enter this code to confirm:",
         ["code"] = "654321",
-        ["warning"] = "If you didn't request this, no API key will be created.",
+        ["warning"] = "If you did not ask for this, ignore this email. No key is created.",
         ["footer"] = "The Orbit Team",
     };
 
     private static Dictionary<string, string> WaitlistConfirmationTokens() => new()
     {
-        ["heading"] = "Confirm your waitlist spot",
-        ["intro"] = "You're almost on the list.",
-        ["cta"] = "Confirm my spot",
+        ["heading"] = "Confirm your place",
+        ["intro"] = "One step left.",
+        ["cta"] = "Confirm my place",
         ["confirmUrl"] = "https://api.useorbit.org/api/waitlist/confirm?token=abc.def",
-        ["warning"] = "If you didn't sign up for the Orbit waitlist, ignore this email.",
+        ["warning"] = "If you did not join the Orbit list, you can ignore this email.",
         ["footer"] = "The Orbit Team",
     };
 
     private static Dictionary<string, string> SupportTokens() => new()
     {
+        ["heading"] = "Support request",
+        ["fromLabel"] = "From",
+        ["subjectLabel"] = "Subject",
         ["fromName"] = "John",
         ["fromEmail"] = "john@test.com",
-        ["subject"] = "Bug Report",
+        ["subject"] = "Bug report",
         ["message"] = "Found a bug",
+        ["footer"] = "Reply to this email to answer them.",
+    };
+
+    private static Dictionary<string, string> TokensFor(string emailName) => emailName switch
+    {
+        "VerificationCode" => VerificationCodeTokens(),
+        "Welcome" => WelcomeTokens(),
+        "AccountDeletion" => AccountDeletionTokens(),
+        "ApiKeyCreation" => ApiKeyCreationTokens(),
+        "WaitlistConfirmation" => WaitlistConfirmationTokens(),
+        _ => SupportTokens(),
     };
 
     [Fact]
@@ -81,7 +94,7 @@ public class EmailTemplateRendererTests
 
         html.Should().NotContain("{{");
         html.Should().Contain("123456");
-        html.Should().Contain("Your verification code");
+        html.Should().Contain("Your sign-in code");
         html.Should().Contain("https://app.useorbit.org/login?email=user%40test.com&code=123456");
     }
 
@@ -95,24 +108,6 @@ public class EmailTemplateRendererTests
         html.Should().Contain("https://app.useorbit.org/logo-no-bg.png");
         html.Should().Contain("The Orbit Team");
         html.Should().Contain("role=\"presentation\"");
-    }
-
-    [Fact]
-    public void RenderHtml_GradientHeader_UsesGradientWithSolidFallback()
-    {
-        var html = EmailTemplateRenderer.RenderHtml("Welcome", Layout(gradient: true), WelcomeTokens());
-
-        html.Should().Contain("linear-gradient(180deg, #22094F 0%, #020618 100%)");
-        html.Should().Contain("bgcolor=\"#22094F\"");
-    }
-
-    [Fact]
-    public void RenderHtml_PlainHeader_UsesCanvasColor()
-    {
-        var html = EmailTemplateRenderer.RenderHtml("VerificationCode", Layout(), VerificationCodeTokens());
-
-        html.Should().NotContain("linear-gradient");
-        html.Should().Contain("bgcolor=\"#020618\"");
     }
 
     [Fact]
@@ -152,7 +147,7 @@ public class EmailTemplateRendererTests
 
         text.Should().NotContain("{{");
         text.Should().Contain("123456");
-        text.Should().Contain("Sign in to Orbit: https://app.useorbit.org/login");
+        text.Should().Contain("Sign in: https://app.useorbit.org/login");
         text.Should().NotContain("<");
     }
 
@@ -165,20 +160,65 @@ public class EmailTemplateRendererTests
     [InlineData("Support")]
     public void AllEmbeddedTemplates_LoadAndRenderWithoutLeftoverTokens(string emailName)
     {
-        var tokens = emailName switch
-        {
-            "VerificationCode" => VerificationCodeTokens(),
-            "Welcome" => WelcomeTokens(),
-            "AccountDeletion" => AccountDeletionTokens(),
-            "ApiKeyCreation" => ApiKeyCreationTokens(),
-            "WaitlistConfirmation" => WaitlistConfirmationTokens(),
-            _ => SupportTokens(),
-        };
+        var tokens = TokensFor(emailName);
 
         var html = EmailTemplateRenderer.RenderHtml(emailName, Layout(), tokens);
         var text = EmailTemplateRenderer.RenderText(emailName, tokens);
 
         html.Should().NotContain("{{");
         text.Should().NotContain("{{");
+    }
+
+    [Theory]
+    [InlineData("VerificationCode")]
+    [InlineData("Welcome")]
+    [InlineData("AccountDeletion")]
+    [InlineData("ApiKeyCreation")]
+    [InlineData("WaitlistConfirmation")]
+    [InlineData("Support")]
+    public void EveryTemplate_CarriesNoBannedDecoration(string emailName)
+    {
+        var html = EmailTemplateRenderer.RenderHtml(emailName, Layout(), TokensFor(emailName));
+
+        html.Should().NotContain("linear-gradient");
+        html.Should().NotContain("box-shadow");
+        html.Should().NotContain("#7F46F7");
+        html.Should().NotContain("#22094F");
+    }
+
+    [Theory]
+    [InlineData("VerificationCode")]
+    [InlineData("Welcome")]
+    [InlineData("AccountDeletion")]
+    [InlineData("ApiKeyCreation")]
+    [InlineData("WaitlistConfirmation")]
+    [InlineData("Support")]
+    public void EveryTemplate_DeclaresBothColorSchemes(string emailName)
+    {
+        var html = EmailTemplateRenderer.RenderHtml(emailName, Layout(), TokensFor(emailName));
+
+        html.Should().Contain("name=\"color-scheme\" content=\"light dark\"");
+        html.Should().Contain("prefers-color-scheme: dark");
+        html.Should().Contain("background-color: #FAFAFA");
+    }
+
+    [Theory]
+    [InlineData("VerificationCode")]
+    [InlineData("Welcome")]
+    [InlineData("WaitlistConfirmation")]
+    public void EveryCallToAction_CarriesTheGrantedAccentFill(string emailName)
+    {
+        var html = EmailTemplateRenderer.RenderHtml(emailName, Layout(), TokensFor(emailName));
+
+        html.Should().Contain("background-color: #C4530F");
+        html.Should().Contain("border-radius: 999px");
+    }
+
+    [Fact]
+    public void RenderLayout_InsertsMarketingBodyVerbatim()
+    {
+        var html = EmailTemplateRenderer.RenderLayout(Layout(), "<p>{{notAToken}}</p>");
+
+        html.Should().Contain("<p>{{notAToken}}</p>");
     }
 }

@@ -147,7 +147,7 @@ public class GetStreakInfoQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("User not found");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
         result.ErrorCode.Should().Be("USER_NOT_FOUND");
     }
 

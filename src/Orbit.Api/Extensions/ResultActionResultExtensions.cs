@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Orbit.Api.Middleware;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 
@@ -90,13 +91,18 @@ public static class ResultActionResultExtensions
     /// resolved from the error code via the authoritative map (404 for not-found,
     /// 403 for forbidden/pay-gate, 409 for conflicts, 500 for server faults); codes
     /// without an intrinsic status fall back to <paramref name="failureStatusCode"/>.
-    /// Every failure carries both the English fallback message and its stable errorCode.
+    /// Every failure carries both its message and its stable errorCode.
+    /// <para>
+    /// The message written here is the English copy. <see cref="LocalizedErrorResultFilter"/>
+    /// then swaps it for the copy that matches the request's language, which is why the
+    /// result's placeholder arguments travel with the body.
+    /// </para>
     /// </summary>
     public static IActionResult ToErrorResult(
         this Result result,
         int failureStatusCode = StatusCodes.Status400BadRequest)
     {
-        return new ObjectResult(new { error = result.Error, errorCode = result.ErrorCode })
+        return new ObjectResult(new ErrorResponse(result.Error, result.ErrorCode) { Args = result.ErrorArgs })
         {
             StatusCode = result.ResolveErrorStatus(failureStatusCode)
         };
@@ -115,6 +121,6 @@ public static class ResultActionResultExtensions
             : failureStatusCode;
 
     /// <summary>Uniform error body for controller-authored failures that bypass Result.</summary>
-    public static object ToErrorBody(this AppError error) =>
-        new { error = error.Message, errorCode = error.Code };
+    public static ErrorResponse ToErrorBody(this AppError error) =>
+        new(error.Message, error.Code) { Args = error.Args };
 }

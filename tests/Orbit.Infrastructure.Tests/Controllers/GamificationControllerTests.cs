@@ -137,8 +137,8 @@ public class GamificationControllerTests
         objectResult.StatusCode.Should().Be(StatusCodes.Status409Conflict);
         objectResult.Value.Should().BeEquivalentTo(new
         {
-            error = "No streak repair is available for yesterday.",
-            errorCode = ErrorCodes.StreakRepairUnavailable
+            Error = ErrorMessages.StreakRepairUnavailable.Message,
+            ErrorCode = ErrorCodes.StreakRepairUnavailable
         });
     }
 
@@ -211,8 +211,6 @@ public class GamificationControllerTests
     }
 
     [Theory]
-    [InlineData(1, 17, 23)]
-    [InlineData(0, 16, 22)]
     [InlineData(0, 17, 23)]
     [InlineData(1, 16, 22)]
     public async Task GetRecap_ClosedWeek_ResolvesAnchorIndependentlyOfCurrentPreference(

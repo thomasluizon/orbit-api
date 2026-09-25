@@ -89,7 +89,7 @@ public class GetCalendarEventsQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("User not found");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
         result.ErrorCode.Should().Be("USER_NOT_FOUND");
     }
 
@@ -105,7 +105,7 @@ public class GetCalendarEventsQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Google Calendar not connected");
+        result.Error.Should().Be(ErrorMessages.CalendarNotConnected.Message);
     }
 
     [Fact]
@@ -182,7 +182,7 @@ public class GetCalendarEventsQueryHandlerTests
         var query = new GetCalendarEventsQuery(UserId);
         var result = await _handler.Handle(query, CancellationToken.None);
 
-        result.Error.Should().Contain("sign in with Google");
+        result.Error.Should().Be(ErrorMessages.CalendarNotConnected.Message);
     }
 
     [Fact]
@@ -1222,7 +1222,7 @@ public class GetCalendarEventsQueryHandlerTests
         var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Google Calendar not connected");
+        result.Error.Should().Be(ErrorMessages.CalendarNotConnected.Message);
         user.GoogleAccessToken.Should().BeNull();
         user.GoogleRefreshToken.Should().BeNull();
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
@@ -1260,7 +1260,7 @@ public class GetCalendarEventsQueryHandlerTests
         var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("Google Calendar connection expired. Please reconnect.");
+        result.Error.Should().Be(ErrorMessages.CalendarReconnectRequired.Message);
         user.GoogleAccessToken.Should().BeNull();
         user.GoogleRefreshToken.Should().BeNull();
         await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());

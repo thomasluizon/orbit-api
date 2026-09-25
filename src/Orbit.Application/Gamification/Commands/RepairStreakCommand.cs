@@ -77,7 +77,7 @@ public class RepairStreakCommandHandler(
             cancellationToken);
         var unlocked = user.HasProAccess || enabledFlags.Contains(FeatureFlagKeys.GamificationFreeTier);
         if (!unlocked)
-            return Result.PayGateFailure("Streak insights are a Pro feature. Upgrade to unlock!");
+            return Result.PayGateFailure(ErrorMessages.ProFeature.Message);
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var missedDate = today.AddDays(-1);

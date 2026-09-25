@@ -164,7 +164,7 @@ public class ApplyOnboardingCommandHandlerTests
         var result = await CreateHandler().Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("User not found.");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -285,7 +285,7 @@ public class ApplyOnboardingCommandHandlerTests
         var result = await CreateHandler().Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("Deadline cannot be in the past.");
+        result.Error.Should().Be(ErrorMessages.DeadlineInPast.Message);
         user.HasCompletedOnboarding.Should().BeFalse();
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }

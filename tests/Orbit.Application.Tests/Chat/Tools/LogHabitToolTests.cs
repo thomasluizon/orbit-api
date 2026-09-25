@@ -9,6 +9,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Chat.Tools;
 
@@ -66,7 +67,7 @@ public class LogHabitToolTests
         var attackerResult = await _tool.ExecuteAsync(ArgsFor(habit.Id), attackerId, CancellationToken.None);
 
         attackerResult.Success.Should().BeFalse();
-        attackerResult.Error.Should().Contain("does not belong");
+        attackerResult.Error.Should().Be(ErrorMessages.HabitNotOwned.Message);
         await _mediator.DidNotReceive().Send(Arg.Any<LogHabitCommand>(), Arg.Any<CancellationToken>());
     }
 
@@ -111,7 +112,7 @@ public class LogHabitToolTests
         var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "date": "2026-04-10"}""");
 
         result.Success.Should().BeFalse();
-        result.Error.Should().Contain("future");
+        result.Error.Should().Be(ErrorMessages.CannotLogFutureDate.Message);
     }
 
     [Fact]

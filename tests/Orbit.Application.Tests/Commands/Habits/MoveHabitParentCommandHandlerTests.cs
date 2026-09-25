@@ -161,7 +161,7 @@ public class MoveHabitParentCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("descendant");
+        result.Error.Should().Be(ErrorMessages.CircularReference.Message);
     }
 
     [Fact]
@@ -178,7 +178,7 @@ public class MoveHabitParentCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("Habit not found.");
+        result.Error.Should().Be(ErrorMessages.HabitNotFound.Message);
     }
 
     [Fact]
@@ -204,7 +204,7 @@ public class MoveHabitParentCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("nesting depth");
+        result.Error.Should().Be(ErrorMessages.MaxDepthReached.Format(5).Message);
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 

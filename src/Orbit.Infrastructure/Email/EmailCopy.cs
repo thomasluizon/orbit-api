@@ -1,3 +1,5 @@
+using Orbit.Application.Common;
+
 namespace Orbit.Infrastructure.Email;
 
 /// <summary>
@@ -14,6 +16,15 @@ public static class EmailCopy
         string Subject, string Heading, string Intro, string FeaturesTitle,
         string Feature1, string Feature2, string Feature3, string Cta, string Footer, string Preheader);
 
+    /// <summary>
+    /// The intro states the grace window and the way back out of it, because confirming
+    /// deletion deactivates the account rather than erasing it:
+    /// <c>ConfirmAccountDeletionCommandHandler</c> schedules removal at most
+    /// <see cref="AppConstants.MaxDeletionGraceDays"/> days out, and signing in again calls
+    /// <c>User.CancelDeactivation</c>. Copy that promised an immediate and permanent wipe was
+    /// wrong in both directions: it told somebody a returning sign-in was impossible, and it
+    /// told somebody who wanted a real wipe that it had already happened.
+    /// </summary>
     public sealed record AccountDeletionCopy(
         string Subject, string Heading, string Intro, string CodeLabel, string Warning, string Footer, string Preheader);
 
@@ -23,20 +34,27 @@ public static class EmailCopy
     public sealed record WaitlistConfirmationCopy(
         string Subject, string Heading, string Intro, string Cta, string Warning, string Footer, string Preheader);
 
+    /// <summary>
+    /// The support relay is addressed to the Orbit inbox rather than to a customer,
+    /// so it carries no locale pair: it renders in English for whoever answers it.
+    /// </summary>
+    public sealed record SupportCopy(
+        string Heading, string FromLabel, string SubjectLabel, string Footer);
+
     public static VerificationCodeCopy VerificationCode(bool isPtBr)
     {
         var intro = isPtBr
-            ? "Use o código abaixo para entrar no Orbit. Ele expira em 5 minutos."
-            : "Use the code below to sign in to Orbit. It expires in 5 minutes.";
+            ? "Você pediu para entrar no Orbit. Use o código abaixo, ou toque no botão. Ele vale pelos próximos 5 minutos."
+            : "You asked to sign in to Orbit. Use the code below, or tap the button. It works for the next 5 minutes.";
 
         return new VerificationCodeCopy(
-            Subject: isPtBr ? "Seu código de verificação do Orbit" : "Your Orbit verification code",
-            Heading: isPtBr ? "Seu código de verificação" : "Your verification code",
+            Subject: isPtBr ? "Seu código de acesso do Orbit" : "Your Orbit sign-in code",
+            Heading: isPtBr ? "Seu código de acesso" : "Your sign-in code",
             Intro: intro,
-            Cta: isPtBr ? "Entrar no Orbit" : "Sign in to Orbit",
+            Cta: isPtBr ? "Entrar" : "Sign in",
             Warning: isPtBr
-                ? "Se você não solicitou este código, pode ignorar este e-mail."
-                : "If you didn't request this code, you can safely ignore this email.",
+                ? "Se você não pediu este código, ignore este e-mail. Ninguém entra na sua conta sem ele."
+                : "If you did not ask for this code, ignore this email. Nobody can sign in without it.",
             Footer: TeamFooter(isPtBr),
             Preheader: intro);
     }
@@ -44,18 +62,24 @@ public static class EmailCopy
     public static WelcomeCopy Welcome(bool isPtBr, string userName)
     {
         var intro = isPtBr
-            ? "Estamos animados em ter você no Orbit. Agora você pode construir hábitos melhores, acompanhar seu progresso e manter suas metas em dia."
-            : "We're excited to have you on Orbit. You're now ready to build better habits, track your progress, and stay on top of your goals.";
+            ? "O Orbit mantém uma rotina à sua frente e ajuda você a retomar depois de uma falha."
+            : "Orbit keeps one routine in front of you, and helps you pick it back up after a miss.";
 
         return new WelcomeCopy(
-            Subject: isPtBr ? "Boas-vindas ao Orbit!" : "Welcome to Orbit!",
-            Heading: isPtBr ? $"Boas-vindas, {userName}!" : $"Welcome aboard, {userName}!",
+            Subject: isPtBr ? "Boas-vindas ao Orbit" : "Welcome to Orbit",
+            Heading: isPtBr ? $"Tudo pronto, {userName}" : $"You are in, {userName}",
             Intro: intro,
-            FeaturesTitle: isPtBr ? "O que você pode fazer:" : "Here's what you can do:",
-            Feature1: isPtBr ? "Crie hábitos diários, semanais ou personalizados" : "Create daily, weekly, or custom habits",
-            Feature2: isPtBr ? "Acompanhe sequências e veja seu progresso" : "Track streaks and view your progress",
-            Feature3: isPtBr ? "Receba insights de IA sobre suas rotinas" : "Get AI-powered insights on your routines",
-            Cta: isPtBr ? "Começar" : "Get Started",
+            FeaturesTitle: isPtBr ? "Por onde começar" : "Where to start",
+            Feature1: isPtBr
+                ? "Adicione um hábito que você quer manter. Um já basta para começar."
+                : "Add one habit you want to keep. One is enough to start.",
+            Feature2: isPtBr
+                ? "Conte à Astra o que você fez, com suas palavras, e ela registra o resto."
+                : "Tell Astra what you did, in your own words, and it records the rest.",
+            Feature3: isPtBr
+                ? "Se você perder um dia, o Orbit mostra o caminho de volta."
+                : "Miss a day and Orbit shows you the way back in.",
+            Cta: isPtBr ? "Adicionar meu primeiro hábito" : "Add your first habit",
             Footer: TeamFooter(isPtBr),
             Preheader: intro);
     }
@@ -63,17 +87,17 @@ public static class EmailCopy
     public static AccountDeletionCopy AccountDeletion(bool isPtBr)
     {
         var intro = isPtBr
-            ? "Você solicitou a exclusão da sua conta Orbit. Essa ação é irreversível. Todos os seus dados serão permanentemente excluídos, incluindo hábitos, histórico, conversas e configurações."
-            : "You requested to delete your Orbit account. This action is irreversible. All your data will be permanently deleted, including habits, history, conversations, and settings.";
+            ? $"Você pediu para excluir sua conta Orbit. O Orbit desativa a conta primeiro e apaga tudo de vez em até {AppConstants.MaxDeletionGraceDays} dias. Entre de novo enquanto ela está desativada e a conta volta com tudo dentro."
+            : $"You asked to delete your Orbit account. Orbit deactivates it first, then removes it for good within {AppConstants.MaxDeletionGraceDays} days. Sign in again while it is deactivated and the account comes back with everything in it.";
 
         return new AccountDeletionCopy(
-            Subject: isPtBr ? "Confirme a exclusão da sua conta Orbit" : "Confirm your Orbit account deletion",
-            Heading: isPtBr ? "Exclusão de conta" : "Account deletion",
+            Subject: isPtBr ? "Confirme a exclusão da sua conta Orbit" : "Confirm that you want to delete your Orbit account",
+            Heading: isPtBr ? "Excluir sua conta Orbit" : "Delete your Orbit account",
             Intro: intro,
-            CodeLabel: isPtBr ? "Use o código abaixo para confirmar:" : "Use the code below to confirm:",
+            CodeLabel: isPtBr ? "Digite este código para confirmar:" : "Enter this code to confirm:",
             Warning: isPtBr
-                ? "Se você não solicitou isso, ignore este e-mail. Sua conta permanecerá segura."
-                : "If you didn't request this, ignore this email. Your account will remain safe.",
+                ? "Se você não pediu isso, ignore este e-mail. Sua conta continua como está."
+                : "If you did not ask for this, ignore this email. Your account stays as it is.",
             Footer: TeamFooter(isPtBr),
             Preheader: intro);
     }
@@ -81,17 +105,17 @@ public static class EmailCopy
     public static ApiKeyCreationCopy ApiKeyCreation(bool isPtBr)
     {
         var intro = isPtBr
-            ? "Você solicitou a criação de uma chave de API do Orbit. Essa chave pode acessar sua conta por meio de ferramentas de agentes conectadas. Este código expira em 10 minutos."
-            : "You requested to create an Orbit API key. This key can access your account through connected agent tools. This code expires in 10 minutes.";
+            ? "Você pediu para criar uma chave de API do Orbit. Uma chave permite que uma ferramenta conectada leia e altere seus dados no Orbit. Este código vale pelos próximos 10 minutos."
+            : "You asked to create an Orbit API key. A key lets a connected tool read and change your Orbit data. This code works for the next 10 minutes.";
 
         return new ApiKeyCreationCopy(
-            Subject: isPtBr ? "Confirme a criação da sua chave de API do Orbit" : "Confirm your Orbit API key creation",
+            Subject: isPtBr ? "Confirme sua nova chave de API do Orbit" : "Confirm your new Orbit API key",
             Heading: isPtBr ? "Criar uma chave de API" : "Create an API key",
             Intro: intro,
-            CodeLabel: isPtBr ? "Use o código abaixo para confirmar:" : "Use the code below to confirm:",
+            CodeLabel: isPtBr ? "Digite este código para confirmar:" : "Enter this code to confirm:",
             Warning: isPtBr
-                ? "Se você não solicitou isso, ignore este e-mail. Nenhuma chave de API será criada."
-                : "If you didn't request this, ignore this email. No API key will be created.",
+                ? "Se você não pediu isso, ignore este e-mail. Nenhuma chave é criada."
+                : "If you did not ask for this, ignore this email. No key is created.",
             Footer: TeamFooter(isPtBr),
             Preheader: intro);
     }
@@ -99,20 +123,26 @@ public static class EmailCopy
     public static WaitlistConfirmationCopy WaitlistConfirmation(bool isPtBr)
     {
         var intro = isPtBr
-            ? "Você está quase na lista. Toque no botão abaixo para confirmar sua vaga no Orbit para iPhone. Avisaremos assim que estiver pronto."
-            : "You're almost on the list. Tap the button below to confirm your spot for Orbit on iPhone. We'll email you the moment it's ready.";
+            ? "Falta um passo. Confirme sua vaga na lista do Orbit para iPhone, e a gente escreve para você no dia em que abrir."
+            : "One step left. Confirm your place on the list for Orbit on iPhone, and we write to you the day it opens.";
 
         return new WaitlistConfirmationCopy(
-            Subject: isPtBr ? "Confirme sua vaga na lista de espera do Orbit para iOS" : "Confirm your spot on the Orbit iOS waitlist",
-            Heading: isPtBr ? "Confirme sua vaga na lista de espera" : "Confirm your waitlist spot",
+            Subject: isPtBr ? "Confirme sua vaga na lista do Orbit para iOS" : "Confirm your place on the Orbit iOS list",
+            Heading: isPtBr ? "Confirme sua vaga" : "Confirm your place",
             Intro: intro,
-            Cta: isPtBr ? "Confirmar minha vaga" : "Confirm my spot",
+            Cta: isPtBr ? "Confirmar minha vaga" : "Confirm my place",
             Warning: isPtBr
-                ? "Se você não se inscreveu na lista de espera do Orbit, pode ignorar este e-mail com segurança."
-                : "If you didn't sign up for the Orbit waitlist, you can safely ignore this email.",
+                ? "Se você não entrou na lista do Orbit, pode ignorar este e-mail."
+                : "If you did not join the Orbit list, you can ignore this email.",
             Footer: TeamFooter(isPtBr),
             Preheader: intro);
     }
+
+    public static SupportCopy Support() => new(
+        Heading: "Support request",
+        FromLabel: "From",
+        SubjectLabel: "Subject",
+        Footer: "Reply to this email to answer them.");
 
     private static string TeamFooter(bool isPtBr) => isPtBr ? "Equipe Orbit" : "The Orbit Team";
 }

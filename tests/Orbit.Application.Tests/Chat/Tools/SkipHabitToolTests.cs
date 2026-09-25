@@ -9,6 +9,7 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Persistence;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Chat.Tools;
 
@@ -74,7 +75,7 @@ public class SkipHabitToolTests
         var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}"}""");
 
         result.Success.Should().BeFalse();
-        result.Error.Should().Contain("completed");
+        result.Error.Should().Be(ErrorMessages.CannotSkipCompletedHabit.Message);
     }
 
     [Fact]
@@ -86,7 +87,7 @@ public class SkipHabitToolTests
         var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}"}""");
 
         result.Success.Should().BeFalse();
-        result.Error.Should().Contain("not yet due");
+        result.Error.Should().Be(ErrorMessages.HabitNotYetDue.Message);
     }
 
     [Fact]
@@ -98,7 +99,7 @@ public class SkipHabitToolTests
         var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "date": "2026-04-10"}""");
 
         result.Success.Should().BeFalse();
-        result.Error.Should().Contain("future");
+        result.Error.Should().Be(ErrorMessages.CannotSkipFutureDate.Message);
     }
 
     [Fact]
