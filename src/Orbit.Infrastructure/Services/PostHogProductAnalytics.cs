@@ -12,6 +12,14 @@ public sealed partial class PostHogProductAnalytics(
     IPostHogClient postHogClient,
     ILogger<PostHogProductAnalytics> logger) : IProductAnalytics
 {
+    public void CaptureAggregateEvent(string eventName, IReadOnlyDictionary<string, object> properties)
+    {
+        postHogClient.Capture(
+            "aggregate:astra_crisis_resources",
+            eventName,
+            new Dictionary<string, object>(properties));
+    }
+
     public void CaptureUserEvent(
         Guid userId,
         string eventName,
