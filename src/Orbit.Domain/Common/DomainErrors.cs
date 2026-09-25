@@ -93,6 +93,8 @@ public static class DomainErrors
     public static readonly AppError GoalAlreadyActive = new("GOAL_ALREADY_ACTIVE", "Goal is already active.");
 
     public static readonly AppError ClosedMonthRangeInvalid = new("CLOSED_MONTH_RANGE_INVALID", "A closed month must span one complete calendar month.");
+    public static readonly AppError ClosedWeekRangeInvalid = new("CLOSED_WEEK_RANGE_INVALID", "A closed week must span seven calendar days.");
+    public static readonly AppError ClosedYearRangeInvalid = new("CLOSED_YEAR_RANGE_INVALID", "A closed year must span one complete calendar year.");
     public static readonly AppError ClosedMonthRecapResponseInvalid = new("CLOSED_MONTH_RECAP_RESPONSE_INVALID", "A closed month recap response must be a JSON object.");
 
     public static readonly AppError ChallengeTargetRequired = new("CHALLENGE_TARGET_REQUIRED", "A goal challenge must have a target count greater than 0.");
