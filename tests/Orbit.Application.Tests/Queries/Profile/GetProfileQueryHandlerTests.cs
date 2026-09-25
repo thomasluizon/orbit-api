@@ -213,15 +213,17 @@ public class GetProfileQueryHandlerTests
         await _habitLogReader.Received(1).GetLastCompletionDateAsync(UserId, Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task Handle_FreezeWithoutCompletion_ReturnsNullDate()
+    [Theory]
+    [InlineData(StreakFreezeOrigin.Automatic)]
+    [InlineData(StreakFreezeOrigin.Manual)]
+    public async Task Handle_FreezeWithoutCompletion_ReturnsNullDate(StreakFreezeOrigin origin)
     {
         var user = CreateTestUser();
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
         _streakFreezeRepo.FindAsync(
                 Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
                 Arg.Any<CancellationToken>())
-            .Returns(new List<StreakFreeze> { StreakFreeze.Create(UserId, Today) }.AsReadOnly());
+            .Returns(new List<StreakFreeze> { StreakFreeze.Create(UserId, Today, origin) }.AsReadOnly());
 
         var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
 
