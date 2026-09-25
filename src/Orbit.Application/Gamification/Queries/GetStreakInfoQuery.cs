@@ -27,7 +27,8 @@ public record StreakInfoResponse(
     DateOnly? RepairDate,
     int RepairsRemainingThisMonth,
     DateOnly? LastFreezeCoveredDate = null,
-    int? FreezeBankRemaining = null);
+    int? FreezeBankRemaining = null,
+    string? LastFreezeCoveredOrigin = null);
 
 public record GetStreakInfoQuery(Guid UserId) : IRequest<Result<StreakInfoResponse>>, IConcurrencyRetryable;
 
@@ -113,9 +114,8 @@ public class GetStreakInfoQueryHandler(
             .Select(sf => sf.UsedOnDate)
             .OrderByDescending(d => d)
             .ToList();
-        DateOnly? lastFreezeCoveredDate = recentFreezeDates.Count > 0
-            ? recentFreezeDates[0]
-            : null;
+        var lastFreeze = recentFreezes.MaxBy(sf => sf.UsedOnDate);
+        DateOnly? lastFreezeCoveredDate = lastFreeze?.UsedOnDate;
         int? freezeBankRemaining = lastFreezeCoveredDate.HasValue
             ? user.StreakFreezesAccumulated
             : null;
@@ -138,6 +138,7 @@ public class GetStreakInfoQueryHandler(
             repairDate,
             freezesAvailableToUse,
             lastFreezeCoveredDate,
-            freezeBankRemaining));
+            freezeBankRemaining,
+            lastFreeze?.Origin?.ToString().ToLowerInvariant()));
     }
 }

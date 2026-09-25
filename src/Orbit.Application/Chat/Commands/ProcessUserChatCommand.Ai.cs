@@ -55,7 +55,8 @@ public partial class ProcessUserChatCommandHandler
 
         var activeToolNames = ChatToolGroups.ResolveActiveToolNames(
             ai.ToolRegistry.GetAll().Select(t => t.Name),
-            BuildConversationText(request));
+            BuildConversationText(request),
+            request.ClientContext?.EntryPointIntent);
 
         var toolDeclarations = skipTools
             ? new List<object>()
