@@ -8180,6 +8180,7 @@
           "GetStreakInfoQueryHandler",
           "Habit",
           "HabitLog",
+          "RepairStreakGapCommand",
           "RepairStreakGapCommandHandler",
           "StreakFreeze",
           "User"

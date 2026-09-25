@@ -21,6 +21,7 @@ public class ColorSchemeRoundTripTests
 {
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IGenericRepository<StreakFreeze> _streakFreezeRepo = Substitute.For<IGenericRepository<StreakFreeze>>();
+    private readonly IHabitLogReader _habitLogReader = Substitute.For<IHabitLogReader>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IFeatureFlagService _featureFlagService = Substitute.For<IFeatureFlagService>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
@@ -48,6 +49,7 @@ public class ColorSchemeRoundTripTests
         _readHandler = new GetProfileQueryHandler(
             _userRepo,
             _streakFreezeRepo,
+            _habitLogReader,
             _userDateService,
             _featureFlagService,
             _payGate,

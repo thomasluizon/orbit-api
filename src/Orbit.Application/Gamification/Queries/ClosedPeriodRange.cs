@@ -7,9 +7,9 @@ public readonly record struct ClosedPeriod(DateOnly DateFrom, DateOnly DateTo);
 
 public static class ClosedPeriodRange
 {
-    public static Result<ClosedPeriod> ResolveWeek(DateOnly weekStart, DateOnly userToday, int weekStartDay)
+    public static Result<ClosedPeriod> ResolveWeek(DateOnly weekStart, DateOnly userToday)
     {
-        if ((int)weekStart.DayOfWeek != weekStartDay
+        if (weekStart.DayOfWeek is not (DayOfWeek.Sunday or DayOfWeek.Monday)
             || weekStart.DayNumber > DateOnly.MaxValue.DayNumber - 6)
             return Result.Failure<ClosedPeriod>(ErrorMessages.InvalidClosedWeekParameters);
 

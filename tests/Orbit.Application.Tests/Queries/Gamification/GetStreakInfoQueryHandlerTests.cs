@@ -43,6 +43,11 @@ public class GetStreakInfoQueryHandlerTests
             Today.AddDays(-1),
             Arg.Any<CancellationToken>())
             .Returns(StreakRepairEvaluation.Unavailable(Today.AddDays(-1)));
+        _userStreakService.GetRepairableGapDatesAsync(
+            UserId,
+            Today,
+            Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<DateOnly>());
     }
 
     private static User CreateTestUser()
@@ -98,6 +103,7 @@ public class GetStreakInfoQueryHandlerTests
         result.Value.RepairsRemainingThisMonth.Should().Be(0);
         result.Value.LastFreezeCoveredDate.Should().BeNull();
         result.Value.FreezeBankRemaining.Should().BeNull();
+        result.Value.RepairableGapDates.Should().BeEmpty();
     }
 
     [Fact]
@@ -308,5 +314,26 @@ public class GetStreakInfoQueryHandlerTests
             Arg.Is<IReadOnlyDictionary<string, object>>(properties =>
                 (string)properties["missed_date"] == "2026-04-02"
                 && (int)properties["remaining_bank"] == 1));
+    }
+
+    [Fact]
+    public async Task Handle_AppendsRepairableGapDates()
+    {
+        var user = CreateTestUser();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _streakFreezeRepo.FindAsync(
+            Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<StreakFreeze>().AsReadOnly());
+        var dates = new[] { Today.AddDays(-8), Today.AddDays(-1) };
+        _userStreakService.GetRepairableGapDatesAsync(
+            UserId,
+            Today,
+            Arg.Any<CancellationToken>())
+            .Returns(dates);
+
+        var result = await _handler.Handle(new GetStreakInfoQuery(UserId), CancellationToken.None);
+
+        result.Value.RepairableGapDates.Should().Equal(dates);
     }
 }
