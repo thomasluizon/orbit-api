@@ -43,7 +43,7 @@ jobs:
           fi
 
       - name: Publish the gating matrix
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: gating-matrix
           path: gating-matrix.json
