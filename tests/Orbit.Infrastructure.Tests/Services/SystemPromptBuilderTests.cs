@@ -172,6 +172,21 @@ public class SystemPromptBuilderTests
     }
 
     [Fact]
+    public void BuildStatic_IncludesCrisisResponseExactlyOnce()
+    {
+        var prompt = new SystemPromptBuilder().BuildStatic(
+            new PromptBuildRequest(Array.Empty<Habit>(), Array.Empty<UserFact>()));
+
+        prompt.Split("## Crisis Response", StringSplitOptions.None).Should().HaveCount(2);
+        prompt.Should().Contain("Call or text 988");
+        prompt.Should().Contain("CVV, Ligue 188");
+        prompt.IndexOf("## Crisis Response", StringComparison.Ordinal)
+            .Should().BeGreaterThan(prompt.IndexOf("## Core Rules", StringComparison.Ordinal));
+        prompt.IndexOf("## Crisis Response", StringComparison.Ordinal)
+            .Should().BeLessThan(prompt.IndexOf("## Structuring Strategy", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void BuildStatic_OrdersEncouragingToneAfterIdentityAndBeforeRules()
     {
         var builder = new SystemPromptBuilder();

@@ -4,6 +4,7 @@ using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification.Queries;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using System.Linq.Expressions;
@@ -152,8 +153,8 @@ public class GetStreakInfoQueryHandlerTests
 
         var freezes = new List<StreakFreeze>
         {
-            StreakFreeze.Create(UserId, Today.AddDays(-1)),
-            StreakFreeze.Create(UserId, Today.AddDays(-3))
+            StreakFreeze.Create(UserId, Today.AddDays(-1), StreakFreezeOrigin.Automatic),
+            StreakFreeze.Create(UserId, Today.AddDays(-3), StreakFreezeOrigin.Manual)
         };
         _streakFreezeRepo.FindAsync(
             Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
@@ -171,6 +172,30 @@ public class GetStreakInfoQueryHandlerTests
         result.Value.IsFrozenToday.Should().BeFalse();
         result.Value.LastFreezeCoveredDate.Should().Be(Today.AddDays(-1));
         result.Value.FreezeBankRemaining.Should().Be(0);
+        result.Value.LastFreezeCoveredOrigin.Should().Be("automatic");
+    }
+
+    [Fact]
+    public async Task Handle_UnrecordedLatestFreeze_LeavesOriginUnknown()
+    {
+        var user = CreateTestUser();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        var freezes = new List<StreakFreeze>
+        {
+            StreakFreeze.Create(UserId, Today.AddDays(-1), StreakFreezeOrigin.Automatic),
+            StreakFreeze.Create(UserId, Today.AddDays(-2), StreakFreezeOrigin.Automatic)
+        };
+        typeof(StreakFreeze).GetProperty(nameof(StreakFreeze.Origin))!
+            .SetValue(freezes[0], null);
+        _streakFreezeRepo.FindAsync(
+            Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
+            Arg.Any<CancellationToken>()).Returns(freezes.AsReadOnly());
+
+        var result = await _handler.Handle(new GetStreakInfoQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.LastFreezeCoveredDate.Should().Be(Today.AddDays(-1));
+        result.Value.LastFreezeCoveredOrigin.Should().BeNull();
     }
 
     [Fact]
@@ -181,7 +206,7 @@ public class GetStreakInfoQueryHandlerTests
 
         var freezes = new List<StreakFreeze>
         {
-            StreakFreeze.Create(UserId, Today)
+            StreakFreeze.Create(UserId, Today, StreakFreezeOrigin.Manual)
         };
         _streakFreezeRepo.FindAsync(
             Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
@@ -204,9 +229,9 @@ public class GetStreakInfoQueryHandlerTests
 
         var freezes = new List<StreakFreeze>
         {
-            StreakFreeze.Create(UserId, Today.AddDays(-1)),
-            StreakFreeze.Create(UserId, Today.AddDays(-5)),
-            StreakFreeze.Create(UserId, Today.AddDays(-10))
+            StreakFreeze.Create(UserId, Today.AddDays(-1), StreakFreezeOrigin.Manual),
+            StreakFreeze.Create(UserId, Today.AddDays(-5), StreakFreezeOrigin.Manual),
+            StreakFreeze.Create(UserId, Today.AddDays(-10), StreakFreezeOrigin.Manual)
         };
         _streakFreezeRepo.FindAsync(
             Arg.Any<Expression<Func<StreakFreeze, bool>>>(),

@@ -210,7 +210,7 @@ public class GetStreakHistoryQueryHandlerTests
             new DateOnly(2026, 3, 16), new DateOnly(2026, 3, 17), new DateOnly(2026, 3, 18),
             new DateOnly(2026, 3, 20));
         ArrangeHabits(habit);
-        ArrangeFreezes(StreakFreeze.Create(UserId, new DateOnly(2026, 3, 19)));
+        ArrangeFreezes(StreakFreeze.Create(UserId, new DateOnly(2026, 3, 19), StreakFreezeOrigin.Manual));
 
         var query = new GetStreakHistoryQuery(UserId, start, Today);
         var result = await _handler.Handle(query, CancellationToken.None);

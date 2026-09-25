@@ -10,6 +10,7 @@ using Orbit.Application.Gamification.Commands;
 using Orbit.Application.Gamification.Queries;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
@@ -118,6 +119,7 @@ public class RepairStreakGapCommandHandlerTests
         _user.LastActiveDate.Should().Be(Dates[^1]);
         _user.StreakFreezesAccumulated.Should().Be(0);
         staged.Should().OnlyContain(freeze => freeze.UserId == _user.Id);
+        staged.Should().OnlyContain(freeze => freeze.Origin == StreakFreezeOrigin.Manual);
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
 
         _user.UpdateStreak(Today);
