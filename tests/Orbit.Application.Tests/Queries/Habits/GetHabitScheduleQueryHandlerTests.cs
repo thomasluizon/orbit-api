@@ -116,6 +116,34 @@ public class GetHabitScheduleQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Items.Should().BeEmpty();
         result.Value.TotalCount.Should().Be(0);
+        await _pageLoader.DidNotReceiveWithAnyArgs().LoadAsync(default!, default, default, default);
+    }
+
+    [Fact]
+    public async Task Handle_YearlyFlexibleHabit_LoadsFactsAndPageLogsFromWindowStart()
+    {
+        var selectedDay = new DateOnly(2026, 12, 31);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Yearly flexible", FrequencyUnit.Year, 1,
+            new DateOnly(2026, 1, 1), IsFlexible: true)).Value;
+        SetupHabits(habit);
+
+        var result = await _handler.Handle(
+            new GetHabitScheduleQuery(UserId, selectedDay, selectedDay),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Items.Should().ContainSingle(item => item.Id == habit.Id);
+        await _scheduleLogReader.Received(1).ReadDaysAsync(
+            Arg.Is<IReadOnlyCollection<Guid>>(ids => ids.Contains(habit.Id)),
+            new DateOnly(2026, 1, 1),
+            selectedDay,
+            Arg.Any<CancellationToken>());
+        await _pageLoader.Received(1).LoadAsync(
+            Arg.Is<IReadOnlyCollection<Habit>>(habits => habits.Single().Id == habit.Id),
+            new DateOnly(2026, 1, 1),
+            selectedDay,
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
