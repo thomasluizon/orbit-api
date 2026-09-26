@@ -24,8 +24,6 @@ public record PlayVerifyResponse(
     string? SubscriptionInterval,
     DateTime? PlanExpiresAt);
 
-public record AdRewardResponse(int BonusMessagesGranted, int TotalBonusMessages, int NewLimit);
-
 public record PlanPriceDto(long UnitAmount, string Currency);
 
 public record PlansResponse(

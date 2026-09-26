@@ -74,6 +74,8 @@ public class ChecklistUserFactPlatformToolTests
 
         manageSubscriptionTool.Name.Should().Be("manage_subscription");
         JsonSerializer.Serialize(manageSubscriptionTool.GetParameterSchema()).Should().Contain("create_portal");
+        JsonSerializer.Serialize(manageSubscriptionTool.GetParameterSchema()).Should().NotContain("claim_ad_reward");
+        manageSubscriptionTool.Description.ToLowerInvariant().Should().NotContain("ad reward");
 
         apiKeysTool.Name.Should().Be("get_api_keys");
         apiKeysTool.IsReadOnly.Should().BeTrue();
@@ -613,43 +615,17 @@ public class ChecklistUserFactPlatformToolTests
         result.EntityName.Should().Be("Created billing portal session");
     }
 
-    [Fact]
-    public async Task ManageSubscriptionTool_ClaimsAdReward()
-    {
-        var mediator = Substitute.For<IMediator>();
-        mediator.Send(Arg.Any<ClaimAdRewardCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(new AdRewardResponse(5, 10, 55)));
-        var tool = new ManageSubscriptionTool(mediator);
-
-        var result = await tool.ExecuteAsync(Parse("""{"action":"claim_ad_reward"}"""), UserId, CancellationToken.None);
-
-        result.Success.Should().BeTrue();
-        result.EntityName.Should().Be("Claimed ad reward");
-    }
-
-    [Fact]
-    public async Task ManageSubscriptionTool_HandlesAdRewardFailure()
-    {
-        var mediator = Substitute.For<IMediator>();
-        mediator.Send(Arg.Any<ClaimAdRewardCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<AdRewardResponse>("reward_failed"));
-        var tool = new ManageSubscriptionTool(mediator);
-
-        var result = await tool.ExecuteAsync(Parse("""{"action":"claim_ad_reward"}"""), UserId, CancellationToken.None);
-
-        result.Success.Should().BeFalse();
-        result.Error.Should().Be("reward_failed");
-    }
-
-    [Fact]
-    public async Task ManageSubscriptionTool_RejectsUnsupportedAction()
+    [Theory]
+    [InlineData("unknown")]
+    [InlineData("claim_ad_reward")]
+    public async Task ManageSubscriptionTool_RejectsUnsupportedAction(string action)
     {
         var tool = new ManageSubscriptionTool(Substitute.For<IMediator>());
 
-        var result = await tool.ExecuteAsync(Parse("""{"action":"unknown"}"""), UserId, CancellationToken.None);
+        var result = await tool.ExecuteAsync(Parse($$"""{"action":"{{action}}"}"""), UserId, CancellationToken.None);
 
         result.Success.Should().BeFalse();
-        result.Error.Should().Be("Unsupported action 'unknown'.");
+        result.Error.Should().Be($"Unsupported action '{action}'.");
     }
 
     [Fact]

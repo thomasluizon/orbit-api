@@ -85,18 +85,6 @@ public partial class SubscriptionController(
         return result.ToPayGateAwareResult(v => Ok(v));
     }
 
-    [HttpPost("ad-reward")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> ClaimAdReward(CancellationToken cancellationToken)
-    {
-        var command = new ClaimAdRewardCommand(HttpContext.GetUserId());
-        var result = await mediator.Send(command, cancellationToken);
-        return result.ToPayGateAwareResult(v => Ok(v));
-    }
-
 #pragma warning disable S6932 // Raw Request.Body and Request.Headers needed for Stripe webhook signature verification
     [HttpPost("webhook")]
     [AllowAnonymous]

@@ -7,7 +7,6 @@ using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Commands;
 using Orbit.Application.Goals.Services;
-using Orbit.Application.Subscriptions.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -18,81 +17,6 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 
 public class ConcurrencyRetryTests
 {
-    private const int AdRewardDailyCap = 3;
-    private const int AdRewardBonusPerClaim = 5;
-
-    [Fact]
-    public async Task ClaimAdReward_ConflictThenAtCapOnReload_DoesNotOverGrant()
-    {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var dbName = NewDbName();
-        Guid userId;
-
-        await using (var seed = CreateContext(dbName))
-        {
-            var seedUser = CreateFreeUser();
-            seedUser.GrantAdReward(today, dailyCap: AdRewardDailyCap);
-            seedUser.GrantAdReward(today, dailyCap: AdRewardDailyCap);
-            seed.Users.Add(seedUser);
-            await seed.SaveChangesAsync();
-            userId = seedUser.Id;
-        }
-
-        var interceptor = new ConflictOnceInterceptor(onFirstSave: () =>
-        {
-            using var racer = CreateContext(dbName);
-            var racedUser = racer.Users.Single(u => u.Id == userId);
-            racedUser.GrantAdReward(today, dailyCap: AdRewardDailyCap);
-            racer.SaveChanges();
-        });
-
-        await using var context = CreateContext(dbName, interceptor);
-        var handler = new ClaimAdRewardCommandHandler(
-            new GenericRepository<User>(context), new UnitOfWork(context, new DatabaseConnectionSettings()), StubToday(today), StubLimit());
-
-        var result = await handler.Handle(new ClaimAdRewardCommand(userId), CancellationToken.None);
-
-        interceptor.SaveAttempts.Should().Be(1);
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be(DomainErrors.AdRewardLimitReached.Code);
-
-        await using var verify = CreateContext(dbName);
-        var persisted = verify.Users.Single(u => u.Id == userId);
-        persisted.AdRewardsClaimedToday.Should().Be(AdRewardDailyCap);
-        persisted.AdRewardBonusMessages.Should().Be(AdRewardBonusPerClaim * AdRewardDailyCap);
-    }
-
-    [Fact]
-    public async Task ClaimAdReward_ConflictThenStillUnderCap_RetriesAndGrantsOnce()
-    {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var dbName = NewDbName();
-        Guid userId;
-
-        await using (var seed = CreateContext(dbName))
-        {
-            var seedUser = CreateFreeUser();
-            seed.Users.Add(seedUser);
-            await seed.SaveChangesAsync();
-            userId = seedUser.Id;
-        }
-
-        var interceptor = new ConflictOnceInterceptor();
-        await using var context = CreateContext(dbName, interceptor);
-        var handler = new ClaimAdRewardCommandHandler(
-            new GenericRepository<User>(context), new UnitOfWork(context, new DatabaseConnectionSettings()), StubToday(today), StubLimit());
-
-        var result = await handler.Handle(new ClaimAdRewardCommand(userId), CancellationToken.None);
-
-        interceptor.SaveAttempts.Should().Be(2);
-        result.IsSuccess.Should().BeTrue();
-
-        await using var verify = CreateContext(dbName);
-        var persisted = verify.Users.Single(u => u.Id == userId);
-        persisted.AdRewardsClaimedToday.Should().Be(1);
-        persisted.AdRewardBonusMessages.Should().Be(AdRewardBonusPerClaim);
-    }
-
     [Fact]
     public async Task UpdateGoalProgress_Conflict_RetriesAndWritesOneCoherentLog()
     {
@@ -369,13 +293,6 @@ public class ConcurrencyRetryTests
         service.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(today);
         service.GetUserWeekStartDayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(1);
         return service;
-    }
-
-    private static IPayGateService StubLimit()
-    {
-        var payGate = Substitute.For<IPayGateService>();
-        payGate.GetAiMessageLimit(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(25);
-        return payGate;
     }
 
     private sealed class ConflictOnceInterceptor(Action? onFirstSave = null) : SaveChangesInterceptor

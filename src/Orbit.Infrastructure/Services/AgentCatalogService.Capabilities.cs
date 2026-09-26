@@ -820,7 +820,7 @@ public partial class AgentCatalogService
             CreateCapability(
                 AgentCapabilityIds.SubscriptionsManage,
                 "Manage Subscription",
-                "Creates checkout and billing portal sessions or claims ad rewards.",
+                "Creates checkout and billing portal sessions.",
                 "subscriptions",
                 AgentScopes.ManageSubscriptions,
                 AgentRiskClass.High,
@@ -833,7 +833,6 @@ public partial class AgentCatalogService
                 [
                     "SubscriptionController.CreateCheckout",
                     "SubscriptionController.CreatePortal",
-                    "SubscriptionController.ClaimAdReward",
                     "SubscriptionController.HandleWebhook",
                     "SubscriptionController.VerifyPlayPurchase",
                     "SubscriptionController.HandlePlayNotification"

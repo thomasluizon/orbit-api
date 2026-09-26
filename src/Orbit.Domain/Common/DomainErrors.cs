@@ -29,8 +29,6 @@ public static class DomainErrors
     public static readonly AppError InvalidThemePreference = new("INVALID_THEME_PREFERENCE", "Invalid theme preference. Must be 'dark' or 'light'.");
     public static readonly AppError InvalidColorScheme = new("INVALID_COLOR_SCHEME", "Invalid color scheme.");
     public static readonly AppError InvalidWeekStartDay = new("INVALID_WEEK_START_DAY", "Week start day must be 0 (Sunday) or 1 (Monday)");
-    public static readonly AppError ProUsersDoNotSeeAds = new("PRO_USERS_NO_ADS", "Pro users do not see ads");
-    public static readonly AppError AdRewardLimitReached = new("AD_REWARD_LIMIT_REACHED", "Daily ad reward limit reached");
     public static readonly AppError NoStreakFreezesAccumulated = new("NO_STREAK_FREEZES", "No streak freezes accumulated");
     public static readonly AppError InvalidStreakGap = new("INVALID_STREAK_GAP", "Select consecutive dates ending yesterday.");
     public static readonly AppError InsufficientStreakFreezes = new("INSUFFICIENT_STREAK_FREEZES", "There are not enough banked freezes to repair the entire gap.");

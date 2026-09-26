@@ -63,8 +63,6 @@ public static class AppConstants
     public const int MaxCalendarRangeDays = 62;
     public const int MaxSelectedCalendars = 50;
     public const int MaxPageSize = 200;
-    public const int AdRewardBonusMessages = 5;
-    public const int AdRewardDailyCap = 3;
     public const int MaxStreakFreezesPerMonth = 3;
     public const int MaxStreakFreezesAccumulated = 3;
     public const int StreakDaysPerFreeze = 7;
