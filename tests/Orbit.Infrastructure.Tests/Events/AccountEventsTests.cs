@@ -2,10 +2,14 @@ using System.Security.Claims;
 using System.Text;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
+using NSubstitute;
+using Orbit.Api.Controllers;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Events;
 using Orbit.Infrastructure.Configuration;
@@ -71,6 +75,36 @@ public class AccountEventsTests
                 first.SessionClosed.IsCancellationRequested.Should().BeTrue();
                 second.SessionClosed.IsCancellationRequested.Should().BeFalse();
             }
+        }
+    }
+
+    [Fact]
+    public void Bus_EvictsOldEvents_ReleasesLeases_AndClosesOnlyRequestedAccount()
+    {
+        var bus = new InMemoryAccountEventBus();
+        var userId = Guid.NewGuid();
+        var otherId = Guid.NewGuid();
+        var sessionId = Guid.NewGuid();
+        bus.TrySubscribe(userId, sessionId, null, out var first).Should().BeTrue();
+        bus.TrySubscribe(otherId, Guid.NewGuid(), null, out var other).Should().BeTrue();
+        using (other!.Lease)
+        {
+            bus.Publish(userId, new AccountEventPayload(1, []));
+            first!.Reader.TryRead(out var oldest).Should().BeTrue();
+            for (var i = 0; i < 256; i++)
+                bus.Publish(userId, new AccountEventPayload(1, []));
+
+            bus.TrySubscribe(userId, sessionId, oldest!.Id, out var expired).Should().BeTrue();
+            using (expired!.Lease)
+                expired.Resync.Should().BeTrue();
+
+            bus.CloseAccount(userId);
+            first.SessionClosed.IsCancellationRequested.Should().BeTrue();
+            other.SessionClosed.IsCancellationRequested.Should().BeFalse();
+            first.Lease.Dispose();
+            bus.TrySubscribe(userId, Guid.NewGuid(), null, out var replacement).Should().BeTrue();
+            using (replacement!.Lease)
+                replacement.SessionClosed.IsCancellationRequested.Should().BeFalse();
         }
     }
 
@@ -148,6 +182,105 @@ public class AccountEventsTests
             item!.Data.Changes.Should().Contain(change => change.Kind == "habit" && change.Ids.Contains(habit.Id));
             item.Data.Changes.Should().Contain(change => change.Kind == "tag" && change.Ids.Contains(tag.Id));
         }
+    }
+
+    [Fact]
+    public async Task Collector_PublishesNotificationOnlyCreatesReadsAndDeletesAfterCommit()
+    {
+        var bus = new InMemoryAccountEventBus();
+        var collector = new AccountEventCollector(bus, new HttpContextAccessor());
+        using var factory = new SqliteOrbitDbContextFactory(collector, new AccountEventTransactionInterceptor(collector));
+        var context = factory.Context;
+        var user = User.Create("Owner", "notification-owner@example.com").Value;
+        var other = User.Create("Other", "notification-other@example.com").Value;
+        context.Users.AddRange(user, other);
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+
+        bus.TrySubscribe(user.Id, Guid.NewGuid(), null, out var ownerStream).Should().BeTrue();
+        bus.TrySubscribe(other.Id, Guid.NewGuid(), null, out var otherStream).Should().BeTrue();
+        using (ownerStream!.Lease)
+        using (otherStream!.Lease)
+        {
+            var notification = Notification.Create(user.Id, "Reminder", "Body");
+            await using (var transaction = await context.Database.BeginTransactionAsync())
+            {
+                context.Notifications.Add(notification);
+                await context.SaveChangesAsync();
+                ownerStream.Reader.TryRead(out _).Should().BeFalse();
+                await transaction.CommitAsync();
+            }
+            AssertNotificationChange(ownerStream, notification.Id, "create");
+            otherStream.Reader.TryRead(out _).Should().BeFalse();
+
+            notification.MarkAsRead();
+            await context.SaveChangesAsync();
+            AssertNotificationChange(ownerStream, notification.Id, "update");
+
+            notification.SoftDelete();
+            await context.SaveChangesAsync();
+            AssertNotificationChange(ownerStream, notification.Id, "delete");
+
+            var rolledBack = Notification.Create(user.Id, "Rolled back", "Body");
+            Func<Task> rollback = () => new UnitOfWork(context, new DatabaseConnectionSettings(), collector)
+                .ExecuteInTransactionAsync(async ct =>
+                {
+                    context.Notifications.Add(rolledBack);
+                    await context.SaveChangesAsync(ct);
+                    throw new InvalidOperationException("rollback");
+                });
+            await rollback.Should().ThrowAsync<InvalidOperationException>();
+            ownerStream.Reader.TryRead(out _).Should().BeFalse();
+            otherStream.Reader.TryRead(out _).Should().BeFalse();
+        }
+    }
+
+    [Fact]
+    public async Task SyncBatch_NotificationRead_PublishesCommittedChange()
+    {
+        var bus = new InMemoryAccountEventBus();
+        var collector = new AccountEventCollector(bus, new HttpContextAccessor());
+        using var factory = new SqliteOrbitDbContextFactory(collector, new AccountEventTransactionInterceptor(collector));
+        var context = factory.Context;
+        var user = User.Create("Owner", "batch-notification@example.com").Value;
+        var notification = Notification.Create(user.Id, "Reminder", "Body");
+        context.Users.Add(user);
+        context.Notifications.Add(notification);
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+
+        bus.TrySubscribe(user.Id, Guid.NewGuid(), null, out var stream).Should().BeTrue();
+        using (stream!.Lease)
+        {
+            var httpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity([
+                    new Claim(ClaimTypes.NameIdentifier, user.Id.ToString())
+                ], "test"))
+            };
+            var controller = new SyncController(context, Substitute.For<ILogger<SyncController>>(), collector)
+            {
+                ControllerContext = new ControllerContext { HttpContext = httpContext }
+            };
+            var request = new SyncController.SyncBatchRequest([
+                new SyncController.SyncMutation("notification", "read", notification.Id, null)
+            ]);
+
+            var result = await controller.ProcessBatch(request, CancellationToken.None);
+
+            result.Should().BeOfType<OkObjectResult>();
+            AssertNotificationChange(stream, notification.Id, "update");
+            context.Notifications.Single().IsRead.Should().BeTrue();
+        }
+    }
+
+    private static void AssertNotificationChange(AccountEventSubscription stream, Guid notificationId, string op)
+    {
+        stream.Reader.TryRead(out var item).Should().BeTrue();
+        item!.Type.Should().Be("changes");
+        item.Data.Changes.Should().ContainSingle().Which.Should().BeEquivalentTo(
+            new AccountChange("notification", op, [notificationId]));
+        stream.Reader.TryRead(out _).Should().BeFalse();
     }
 
     [Fact]
@@ -249,5 +382,54 @@ public class AccountEventsTests
         };
         Action useTicketAsApiToken = () => validator.ValidateToken(ticket, apiValidation, out _);
         useTicketAsApiToken.Should().Throw<SecurityTokenInvalidAudienceException>();
+    }
+
+    [Theory]
+    [InlineData(false, true, true)]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, false)]
+    public void Ticket_RejectsMissingRequiredClaims(bool user, bool session, bool expiry)
+    {
+        var settings = new JwtSettings
+        {
+            SecretKey = "test-secret-key-that-is-at-least-32-bytes-long-for-hmac",
+            Issuer = "test-issuer",
+            Audience = "test-audience"
+        };
+        var claims = new List<Claim>();
+        if (user) claims.Add(new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()));
+        if (session) claims.Add(new Claim("orbit_session_id", Guid.NewGuid().ToString()));
+        if (expiry) claims.Add(new Claim("exp", DateTimeOffset.UtcNow.AddMinutes(5).ToUnixTimeSeconds().ToString()));
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, "test"));
+        var service = new EventTicketService(Options.Create(settings));
+
+        Action create = () => service.Create(principal);
+        create.Should().Throw<UnauthorizedAccessException>();
+    }
+
+    [Fact]
+    public void Ticket_RejectsInvalidExpiry_AndResolvesOriginalAccessExpiry()
+    {
+        var settings = new JwtSettings
+        {
+            SecretKey = "test-secret-key-that-is-at-least-32-bytes-long-for-hmac",
+            Issuer = "test-issuer",
+            Audience = "test-audience"
+        };
+        var service = new EventTicketService(Options.Create(settings));
+        var invalid = new ClaimsPrincipal(new ClaimsIdentity([
+            new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
+            new Claim("orbit_session_id", Guid.NewGuid().ToString()),
+            new Claim("exp", "invalid")
+        ], "test"));
+        Action create = () => service.Create(invalid);
+        create.Should().Throw<UnauthorizedAccessException>();
+
+        var expiry = DateTimeOffset.UtcNow.AddMinutes(5).ToUnixTimeSeconds();
+        var ticketPrincipal = new ClaimsPrincipal(new ClaimsIdentity([
+            new Claim("orbit_access_exp", expiry.ToString()),
+            new Claim("exp", DateTimeOffset.UtcNow.AddSeconds(60).ToUnixTimeSeconds().ToString())
+        ], "test"));
+        EventTicketService.GetStreamExpiry(ticketPrincipal).ToUnixTimeSeconds().Should().Be(expiry);
     }
 }

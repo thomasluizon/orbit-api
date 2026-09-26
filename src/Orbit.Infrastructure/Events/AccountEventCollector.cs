@@ -173,6 +173,10 @@ public sealed class AccountEventCollector(IAccountEventBus bus, IHttpContextAcce
                     userId = template.UserId;
                     kind = "checklistTemplate";
                     break;
+                case Notification notification:
+                    userId = notification.UserId;
+                    kind = "notification";
+                    break;
                 case User user:
                     userId = user.Id;
                     kind = "profile";
