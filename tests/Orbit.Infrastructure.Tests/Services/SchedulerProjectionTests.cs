@@ -43,6 +43,229 @@ public class SchedulerProjectionTests
         await push.Received(1).SendToUserAsync(user.Id, "Relative", "Due now", "/", Arg.Any<CancellationToken>());
         await push.Received(1).SendToUserAsync(user.Id, "Scheduled", "Due today", "/", Arg.Any<CancellationToken>());
         reads.AssertNarrowHabitAndUserReads();
+
+        reads.Clear();
+        await service.CheckAndSendReminders(CancellationToken.None);
+        reads.Commands.Should().ContainSingle();
+        reads.Commands[0].Should().NotContain("\"Title\"")
+            .And.NotContain("\"HabitLogs\"")
+            .And.NotContain("\"SentReminders\"");
+    }
+
+    [Theory]
+    [InlineData("create")]
+    [InlineData("update")]
+    [InlineData("delete")]
+    [InlineData("restore")]
+    [InlineData("complete")]
+    [InlineData("toggle")]
+    public async Task ReminderTick_HabitChanges_RefreshCachedCandidates(string change)
+    {
+        var reads = new SchedulerReadInterceptor();
+        using var factory = new SqliteOrbitDbContextFactory(reads);
+        var db = factory.Context;
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var user = User.Create("Alex", "alex@test.com").Value;
+        var habit = Habit.Create(new HabitCreateParams(user.Id, "Reminder", FrequencyUnit.Day, 1,
+            today, ReminderEnabled: change != "toggle",
+            EndDate: change == "complete" ? today : null,
+            ScheduledReminders: [new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(0, 0))])).Value;
+        if (change == "restore") habit.SoftDelete();
+        db.Users.Add(user);
+        if (change != "create") db.Habits.Add(habit);
+        await db.SaveChangesAsync();
+
+        var service = new ReminderSchedulerService(Scope(db, Substitute.For<IPushNotificationService>()),
+            NullLogger<ReminderSchedulerService>.Instance, new ConfigurationBuilder().Build());
+        await service.CheckAndSendReminders(CancellationToken.None);
+        reads.Clear();
+
+        switch (change)
+        {
+            case "create": db.Habits.Add(habit); break;
+            case "update": habit.Update(UpdateParams(habit, "Edited reminder", true)).IsSuccess.Should().BeTrue(); break;
+            case "delete": habit.SoftDelete(); break;
+            case "restore": habit.Restore(); break;
+            case "complete": habit.AdvanceDueDate(today).IsSuccess.Should().BeTrue(); break;
+            case "toggle": habit.Update(UpdateParams(habit, habit.Title, true)).IsSuccess.Should().BeTrue(); break;
+        }
+        await db.SaveChangesAsync();
+        reads.Clear();
+
+        await service.CheckAndSendReminders(CancellationToken.None);
+
+        reads.Commands.Should().Contain(c => c.Contains("FROM \"Habits\"", StringComparison.Ordinal)
+            && c.Contains("\"Title\"", StringComparison.Ordinal));
+        if (change is "create" or "restore" or "toggle")
+            (await db.SentReminders.CountAsync(r => r.HabitId == habit.Id)).Should().Be(1);
+    }
+
+    private static HabitUpdateParams UpdateParams(Habit habit, string title, bool enabled) =>
+        new(title, habit.Description, habit.FrequencyUnit, habit.FrequencyQuantity,
+            habit.Days.ToList(), habit.IsBadHabit, habit.DueDate,
+            DueTime: habit.DueTime, ReminderEnabled: enabled);
+
+    [Fact]
+    public async Task ReminderTick_UserLanguageChange_RefreshesBeforeReminder()
+    {
+        var reads = new SchedulerReadInterceptor();
+        using var factory = new SqliteOrbitDbContextFactory(reads);
+        var db = factory.Context;
+        var clock = new MutableTimeProvider(new DateTimeOffset(2027, 9, 26, 8, 59, 0, TimeSpan.Zero));
+        var user = User.Create("Alex", "alex@test.com").Value;
+        var habit = Habit.Create(new HabitCreateParams(user.Id, "Water", FrequencyUnit.Day, 1,
+            new DateOnly(2027, 9, 26), DueTime: new TimeOnly(9, 0), ReminderEnabled: true,
+            ReminderTimes: [0])).Value;
+        db.Users.Add(user);
+        db.Habits.Add(habit);
+        await db.SaveChangesAsync();
+        var push = Substitute.For<IPushNotificationService>();
+        var service = new ReminderSchedulerService(Scope(db, push), NullLogger<ReminderSchedulerService>.Instance,
+            new ConfigurationBuilder().Build(), clock);
+        await service.CheckAndSendReminders(CancellationToken.None);
+
+        user.SetLanguage("pt-BR");
+        await db.SaveChangesAsync();
+        clock.Set(new DateTimeOffset(2027, 9, 26, 9, 0, 0, TimeSpan.Zero));
+        reads.Clear();
+        await service.CheckAndSendReminders(CancellationToken.None);
+
+        reads.Commands.Should().Contain(c => c.Contains("\"Title\"", StringComparison.Ordinal));
+        await push.Received(1).SendToUserAsync(user.Id, habit.Title, "Agora", "/", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReminderTick_EditedReminderTime_SendsOnNextTick()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var db = factory.Context;
+        var clock = new MutableTimeProvider(new DateTimeOffset(2027, 9, 26, 8, 59, 0, TimeSpan.Zero));
+        var user = User.Create("Alex", "alex@test.com").Value;
+        var habit = Habit.Create(new HabitCreateParams(user.Id, "Water", FrequencyUnit.Day, 1,
+            new DateOnly(2027, 9, 26), ReminderEnabled: true,
+            ScheduledReminders: [new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(10, 0))])).Value;
+        db.Users.Add(user);
+        db.Habits.Add(habit);
+        await db.SaveChangesAsync();
+        var push = Substitute.For<IPushNotificationService>();
+        var service = new ReminderSchedulerService(Scope(db, push), NullLogger<ReminderSchedulerService>.Instance,
+            new ConfigurationBuilder().Build(), clock);
+        await service.CheckAndSendReminders(CancellationToken.None);
+
+        habit.Update(new HabitUpdateParams(habit.Title, habit.Description, habit.FrequencyUnit,
+            habit.FrequencyQuantity, habit.Days.ToList(), habit.IsBadHabit, habit.DueDate,
+            ReminderEnabled: true,
+            ScheduledReminders: [new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(9, 0))]))
+            .IsSuccess.Should().BeTrue();
+        await db.SaveChangesAsync();
+        clock.Set(new DateTimeOffset(2027, 9, 26, 9, 0, 0, TimeSpan.Zero));
+        await service.CheckAndSendReminders(CancellationToken.None);
+
+        (await db.SentReminders.CountAsync(r => r.HabitId == habit.Id)).Should().Be(1);
+        await push.Received(1).SendToUserAsync(user.Id, habit.Title, "Due today", "/",
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReminderTick_NewLog_RefreshesBeforeReminder()
+    {
+        var reads = new SchedulerReadInterceptor();
+        using var factory = new SqliteOrbitDbContextFactory(reads);
+        var db = factory.Context;
+        var clock = new MutableTimeProvider(new DateTimeOffset(2027, 9, 26, 8, 59, 0, TimeSpan.Zero));
+        var user = User.Create("Alex", "alex@test.com").Value;
+        var habit = Habit.Create(new HabitCreateParams(user.Id, "Water", FrequencyUnit.Day, 1,
+            new DateOnly(2027, 9, 26), DueTime: new TimeOnly(9, 0), ReminderEnabled: true,
+            ReminderTimes: [0])).Value;
+        db.Users.Add(user);
+        db.Habits.Add(habit);
+        await db.SaveChangesAsync();
+        var push = Substitute.For<IPushNotificationService>();
+        var service = new ReminderSchedulerService(Scope(db, push), NullLogger<ReminderSchedulerService>.Instance,
+            new ConfigurationBuilder().Build(), clock);
+        await service.CheckAndSendReminders(CancellationToken.None);
+
+        var log = habit.Log(new DateOnly(2027, 9, 26)).Value;
+        db.HabitLogs.Add(log);
+        await db.SaveChangesAsync();
+        clock.Set(new DateTimeOffset(2027, 9, 26, 9, 0, 0, TimeSpan.Zero));
+        reads.Clear();
+        await service.CheckAndSendReminders(CancellationToken.None);
+
+        reads.Commands.Should().Contain(c => c.Contains("FROM \"HabitLogs\"", StringComparison.Ordinal));
+        (await db.SentReminders.CountAsync()).Should().Be(0);
+        await push.DidNotReceive().SendToUserAsync(Arg.Any<Guid>(), Arg.Any<string>(),
+            Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReminderTick_TwoInstances_OnlyOneSends()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var db = factory.Context;
+        var clock = new MutableTimeProvider(new DateTimeOffset(2027, 9, 26, 8, 59, 0, TimeSpan.Zero));
+        var user = User.Create("Alex", "alex@test.com").Value;
+        var habit = Habit.Create(new HabitCreateParams(user.Id, "Water", FrequencyUnit.Day, 1,
+            new DateOnly(2027, 9, 26), ReminderEnabled: true,
+            ScheduledReminders: [new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(9, 0))])).Value;
+        db.Users.Add(user);
+        db.Habits.Add(habit);
+        await db.SaveChangesAsync();
+
+        await using var firstDb = factory.CreateContext();
+        await using var secondDb = factory.CreateContext();
+        var firstPush = Substitute.For<IPushNotificationService>();
+        var secondPush = Substitute.For<IPushNotificationService>();
+        var first = new ReminderSchedulerService(Scope(firstDb, firstPush),
+            NullLogger<ReminderSchedulerService>.Instance, new ConfigurationBuilder().Build(), clock);
+        var second = new ReminderSchedulerService(Scope(secondDb, secondPush),
+            NullLogger<ReminderSchedulerService>.Instance, new ConfigurationBuilder().Build(), clock);
+        await first.CheckAndSendReminders(CancellationToken.None);
+        await second.CheckAndSendReminders(CancellationToken.None);
+
+        clock.Set(new DateTimeOffset(2027, 9, 26, 9, 0, 0, TimeSpan.Zero));
+        await first.CheckAndSendReminders(CancellationToken.None);
+        await second.CheckAndSendReminders(CancellationToken.None);
+
+        (await db.SentReminders.CountAsync(r => r.HabitId == habit.Id)).Should().Be(1);
+        await firstPush.Received(1).SendToUserAsync(user.Id, habit.Title, "Due today", "/",
+            Arg.Any<CancellationToken>());
+        await secondPush.DidNotReceive().SendToUserAsync(Arg.Any<Guid>(), Arg.Any<string>(),
+            Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReminderTick_UnchangedCandidates_ReloadAfterOneHour()
+    {
+        var reads = new SchedulerReadInterceptor();
+        using var factory = new SqliteOrbitDbContextFactory(reads);
+        var db = factory.Context;
+        var clock = new MutableTimeProvider(new DateTimeOffset(2027, 9, 26, 8, 0, 0, TimeSpan.Zero));
+        var user = User.Create("Alex", "alex@test.com").Value;
+        db.Users.Add(user);
+        db.Habits.Add(Habit.Create(new HabitCreateParams(user.Id, "Water", FrequencyUnit.Day, 1,
+            new DateOnly(2027, 9, 26), ReminderEnabled: true,
+            ScheduledReminders: [new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(12, 0))])).Value);
+        await db.SaveChangesAsync();
+        var service = new ReminderSchedulerService(Scope(db, Substitute.For<IPushNotificationService>()),
+            NullLogger<ReminderSchedulerService>.Instance, new ConfigurationBuilder().Build(), clock);
+        await service.CheckAndSendReminders(CancellationToken.None);
+
+        clock.Set(new DateTimeOffset(2027, 9, 26, 9, 0, 0, TimeSpan.Zero));
+        reads.Clear();
+        await service.CheckAndSendReminders(CancellationToken.None);
+
+        reads.Commands.Should().Contain(c => c.Contains("FROM \"Habits\"", StringComparison.Ordinal)
+            && c.Contains("\"Title\"", StringComparison.Ordinal));
+    }
+
+    private sealed class MutableTimeProvider(DateTimeOffset now) : TimeProvider
+    {
+        private DateTimeOffset _now = now;
+
+        public override DateTimeOffset GetUtcNow() => _now;
+
+        public void Set(DateTimeOffset now) => _now = now;
     }
 
     [Fact]

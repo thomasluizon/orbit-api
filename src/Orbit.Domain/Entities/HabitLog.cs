@@ -17,6 +17,14 @@ public class HabitLog : Entity, ITimestamped, ISoftDeletable
 
     private HabitLog() { }
 
+    public static HabitLog FromSummaryRead(Guid habitId, DateOnly date, decimal value)
+    {
+        if (habitId == Guid.Empty)
+            throw new ArgumentException("Summary log habit id must be set.");
+
+        return new HabitLog { HabitId = habitId, Date = date, Value = value };
+    }
+
     public static HabitLog FromScheduleRead(
         Guid id,
         Guid habitId,

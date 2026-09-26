@@ -8,6 +8,7 @@ public static class HabitScheduleProjection
     public static IQueryable<HabitScheduleSnapshot> Select(IQueryable<Habit> query) =>
         query.Select(habit => new HabitScheduleSnapshot(
             habit.Id,
+            habit.UserId,
             habit.ParentHabitId,
             habit.FrequencyUnit,
             habit.FrequencyQuantity,
