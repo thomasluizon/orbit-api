@@ -177,6 +177,71 @@ public class AiControllerTests
     }
 
     [Fact]
+    public async Task RefreshPendingOperationPreview_ForApiKeyUser_ReturnsForbid()
+    {
+        SetUser(isApiKey: true);
+
+        var result = await _controller.RefreshPendingOperationPreview(Guid.NewGuid(), CancellationToken.None);
+
+        result.Should().BeOfType<ForbidResult>();
+        _pendingOperationStore.DidNotReceiveWithAnyArgs().GetExecution(default, default);
+    }
+
+    [Fact]
+    public async Task RefreshPendingOperationPreview_ReturnsFreshPreviewWithoutExecuting()
+    {
+        var pendingId = Guid.NewGuid();
+        var arguments = JsonDocument.Parse("""{"habits":[{"title":"First"}]}""").RootElement.Clone();
+        _pendingOperationStore.GetExecution(UserId, pendingId).Returns(new PendingAgentOperationExecution(
+            pendingId, AgentCapabilityIds.HabitsBulkWrite, "bulk_create_habits", arguments,
+            AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation,
+            PreviewFingerprint: "old"));
+        var item = new PendingOperationItem("0", null, "First", [], "item-state");
+        _changePreviewer.PreviewAsync(UserId, "bulk_create_habits", arguments,
+                Arg.Any<CancellationToken>())
+            .Returns(new PendingOperationChangePreview([], 1, [item], "fresh"));
+        _pendingOperationStore.Revise(UserId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<string>(), "fresh").Returns(true);
+
+        var result = await _controller.RefreshPendingOperationPreview(pendingId, CancellationToken.None);
+
+        var response = result.Should().BeOfType<OkObjectResult>().Subject.Value
+            .Should().BeOfType<PendingOperationRevisionResult>().Subject;
+        response.Preview!.Items.Should().ContainSingle().Which.ItemId.Should().Be("0");
+        response.Preview.ChangeTargetCount.Should().Be(1);
+        response.Preview.PreviewFingerprint.Should().Be("fresh");
+        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+        await _auditService.Received(1).RecordAsync(
+            Arg.Is<AgentAuditEntry>(entry => entry.TargetId == pendingId.ToString()
+                && entry.OutcomeStatus == AgentOperationStatus.Succeeded),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(false, 404, "pending_operation_not_found")]
+    [InlineData(true, 409, "preview_unavailable")]
+    public async Task RefreshPendingOperationPreview_ReturnsExplicitFailure(
+        bool exists, int status, string error)
+    {
+        var pendingId = Guid.NewGuid();
+        if (exists)
+        {
+            var arguments = JsonDocument.Parse("{}").RootElement.Clone();
+            _pendingOperationStore.GetExecution(UserId, pendingId).Returns(new PendingAgentOperationExecution(
+                pendingId, AgentCapabilityIds.HabitsBulkWrite, "bulk_create_habits", arguments,
+                AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation));
+        }
+
+        var result = await _controller.RefreshPendingOperationPreview(pendingId, CancellationToken.None);
+
+        var response = result.Should().BeAssignableTo<ObjectResult>().Subject;
+        response.StatusCode.Should().Be(status);
+        response.Value.Should().BeOfType<PendingOperationRevisionResult>()
+            .Which.Error.Should().Be(error);
+        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+    }
+
+    [Fact]
     public async Task ConfirmPendingOperation_NotFound_ReturnsNotFoundAndAudits()
     {
         var pendingOperationId = Guid.NewGuid();

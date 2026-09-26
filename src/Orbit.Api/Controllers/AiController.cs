@@ -110,6 +110,34 @@ public class AiController(
     public record VerifyStepUpRequest([property: JsonRequired] Guid ChallengeId, string Code);
     public record ExecutePendingOperationRequest(string ConfirmationToken);
 
+    [HttpPost("pending-operations/{id:guid}/preview/refresh")]
+    [DistributedRateLimit("ai-operations")]
+    [ProducesResponseType(typeof(PendingOperationRevisionResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(PendingOperationRevisionResult), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(PendingOperationRevisionResult), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RefreshPendingOperationPreview(Guid id, CancellationToken cancellationToken)
+    {
+        if (HttpContext.User.GetAgentAuthMethod() == AgentAuthMethod.ApiKey)
+            return Forbid();
+
+        var userId = HttpContext.GetUserId();
+        var result = await revisionService.RefreshAsync(userId, id, cancellationToken);
+        await auditService.RecordAsync(new AgentAuditEntry(
+            userId, AgentCapabilityIds.ChatInteract, nameof(RefreshPendingOperationPreview),
+            AgentExecutionSurface.Metadata, HttpContext.User.GetAgentAuthMethod(),
+            AgentRiskClass.Destructive,
+            result.IsSuccess ? AgentPolicyDecisionStatus.Allowed : AgentPolicyDecisionStatus.Denied,
+            result.IsSuccess ? AgentOperationStatus.Succeeded : AgentOperationStatus.Failed,
+            HttpContext.TraceIdentifier, "Refresh pending agent operation preview",
+            TargetId: id.ToString(), Error: result.Error), cancellationToken);
+
+        if (result.IsSuccess)
+            return Ok(result);
+        if (result.Error == "pending_operation_not_found")
+            return NotFound(result);
+        return Conflict(result);
+    }
+
     [HttpPost("pending-operations/{id:guid}/revise")]
     [DistributedRateLimit("ai-operations")]
     public async Task<IActionResult> RevisePendingOperation(

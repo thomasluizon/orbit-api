@@ -28,6 +28,28 @@ public sealed class PendingOperationRevisionService(
     IPendingOperationChangePreviewer previewer,
     IValidator<RevisePendingOperationRequest> validator)
 {
+    public async Task<PendingOperationRevisionResult> RefreshAsync(
+        Guid userId, Guid pendingOperationId, CancellationToken cancellationToken)
+    {
+        var execution = store.GetExecution(userId, pendingOperationId);
+        if (execution is null)
+            return Failure("pending_operation_not_found");
+
+        var preview = await previewer.PreviewAsync(userId, execution.OperationId,
+            execution.Arguments, cancellationToken);
+        if (preview?.Items is null || string.IsNullOrWhiteSpace(preview.PreviewFingerprint))
+            return Failure("preview_unavailable");
+
+        var argumentsJson = execution.Arguments.GetRawText();
+        var operationFingerprint = AgentOperationFingerprint.Compute(
+            execution.OperationId, argumentsJson);
+        if (!store.Revise(userId, pendingOperationId, operationFingerprint,
+            argumentsJson, operationFingerprint, preview.PreviewFingerprint))
+            return Failure("revision_conflict");
+
+        return new PendingOperationRevisionResult(true, null, pendingOperationId, preview);
+    }
+
     public async Task<PendingOperationRevisionResult> ReviseAsync(
         Guid userId, Guid pendingOperationId, RevisePendingOperationRequest request,
         CancellationToken cancellationToken)
