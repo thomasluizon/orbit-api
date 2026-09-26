@@ -158,8 +158,13 @@ public partial class BulkLogHabitsCommandHandler(
                     Error: ErrorMessages.NotScheduledOnDate.Message, ErrorCode: ErrorMessages.NotScheduledOnDate.Code);
         }
 
-        if (habit.Logs.Any(l => l.Date == targetDate))
+        if (!habit.IsFlexible && habit.Logs.Any(l => l.Date == targetDate))
             return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Success, HabitId: habitId);
+
+        if (habit.IsFlexible
+            && HabitScheduleService.GetRemainingCompletions(habit, targetDate, habit.Logs, weekStartDay) <= 0)
+            return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
+                Error: ErrorMessages.AllInstancesDone.Message, ErrorCode: ErrorMessages.AllInstancesDone.Code);
 
         var shouldAdvanceDueDate = targetDate >= today;
         var logResult = habit.Log(

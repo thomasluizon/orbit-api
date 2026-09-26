@@ -188,7 +188,14 @@ public class Habit : Entity, ITimestamped, ISoftDeletable, IHabitSchedule
         if (!IsBadHabit && !IsFlexible && _logs.Exists(l => l.Date == date && !l.IsDeleted))
             return Result.Failure<HabitLog>(DomainErrors.AlreadyLoggedForDate);
 
-        var log = HabitLog.Create(Id, date, 1, note, isSlip: IsBadHabit);
+        var completionOrdinal = IsFlexible
+            ? _logs.Where(l => l.Date == date && l.Value > 0)
+                .Select(l => l.CompletionOrdinal)
+                .DefaultIfEmpty(-1)
+                .Max() + 1
+            : 0;
+        var log = HabitLog.Create(Id, date, 1, note, isSlip: IsBadHabit,
+            completionOrdinal: completionOrdinal);
         _logs.Add(log);
 
         if (FrequencyUnit is null && !IsGeneral)
