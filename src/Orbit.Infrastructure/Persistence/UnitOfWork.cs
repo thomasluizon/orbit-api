@@ -1,10 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Events;
 using Orbit.Infrastructure.Configuration;
 
 namespace Orbit.Infrastructure.Persistence;
 
-public sealed class UnitOfWork(OrbitDbContext context, DatabaseConnectionSettings databaseSettings)
+public sealed class UnitOfWork(OrbitDbContext context, DatabaseConnectionSettings databaseSettings, IAccountEventCollector? eventCollector = null)
     : IUnitOfWork, IAsyncDisposable
 {
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
@@ -58,6 +59,7 @@ public sealed class UnitOfWork(OrbitDbContext context, DatabaseConnectionSetting
                 catch
                 {
                     context.ChangeTracker.Clear();
+                    eventCollector?.Clear();
                     throw;
                 }
             });

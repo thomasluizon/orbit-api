@@ -920,7 +920,7 @@ public partial class AgentCatalogService
                 isMutation: false,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                controllerActions: ["SyncController.GetChangesV2"]),
+                controllerActions: ["SyncController.GetChangesV2", "EventsController.Stream", "EventsController.CreateTicket"]),
 
             CreateCapability(
                 AgentCapabilityIds.SyncWrite,

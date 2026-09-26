@@ -33,7 +33,7 @@ public class AccountDeletionServiceDbTests : IDisposable
         var serviceProvider = new ServiceCollection()
             .AddSingleton(_dbContext)
             .AddSingleton<IUnitOfWork>(new UnitOfWork(_dbContext, new DatabaseConnectionSettings()))
-            .AddSingleton<IAccountResetRepository>(new AccountResetRepository(_dbContext))
+            .AddSingleton<IAccountResetRepository>(new AccountResetRepository(_dbContext, NSubstitute.Substitute.For<Orbit.Domain.Events.IAccountEventCollector>()))
             .BuildServiceProvider();
 
         _service = new AccountDeletionService(
@@ -58,7 +58,7 @@ public class AccountDeletionServiceDbTests : IDisposable
             SentProactiveCheckin.Create(userId, DateOnly.FromDateTime(DateTime.UtcNow)));
         await _dbContext.SaveChangesAsync();
 
-        await new AccountResetRepository(_dbContext).DeleteAllUserDataAsync(userId);
+        await new AccountResetRepository(_dbContext, NSubstitute.Substitute.For<Orbit.Domain.Events.IAccountEventCollector>()).DeleteAllUserDataAsync(userId);
 
         (await _dbContext.SentProactiveCheckins.AnyAsync(p => p.UserId == userId))
             .Should().BeFalse();
