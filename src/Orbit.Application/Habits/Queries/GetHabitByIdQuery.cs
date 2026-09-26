@@ -118,7 +118,7 @@ public class GetHabitByIdQueryHandler(
             habit.Position,
             habit.ReminderEnabled,
             habit.ReminderTimes,
-            habit.ScheduledReminders,
+            habit.GetScheduledRemindersForLegacyClients(),
             habit.ChecklistItems,
             habit.CreatedAtUtc,
             children,

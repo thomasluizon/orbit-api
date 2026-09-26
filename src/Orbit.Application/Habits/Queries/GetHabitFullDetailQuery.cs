@@ -71,7 +71,7 @@ public class GetHabitFullDetailQueryHandler(
             habit.IsBadHabit, isCompleted, habit.IsGeneral, habit.IsFlexible,
             habit.DueDate, habit.DueTime, habit.DueEndTime, habit.EndDate,
             habit.Days.ToList(), habit.Position,
-            habit.ReminderEnabled, habit.ReminderTimes, habit.ScheduledReminders,
+            habit.ReminderEnabled, habit.ReminderTimes, habit.GetScheduledRemindersForLegacyClients(),
             habit.ChecklistItems, habit.CreatedAtUtc, children,
             Emoji: habit.Emoji,
             IntervalWeeks: habit.IntervalWeeks,

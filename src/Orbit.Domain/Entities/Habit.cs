@@ -91,6 +91,12 @@ public class Habit : Entity, ITimestamped, ISoftDeletable, IHabitSchedule
     public IReadOnlyList<ChecklistItem> ChecklistItems { get; private set; } = [];
     public IReadOnlyList<ScheduledReminderTime> ScheduledReminders { get; private set; } = [];
     public IReadOnlyList<RelativeReminderTime> RelativeReminders { get; private set; } = [];
+    public IReadOnlyList<ScheduledReminderTime> GetScheduledRemindersForLegacyClients() =>
+        DueTime.HasValue
+            ? RelativeReminders.Where(r => r.When.HasValue)
+                .Select(r => new ScheduledReminderTime(r.When!.Value, r.Time!.Value))
+                .ToList()
+            : ScheduledReminders;
     public DateOnly? EndDate { get; private set; }
     public int? Position { get; private set; }
     public string? GoogleEventId { get; private set; }
@@ -602,7 +608,11 @@ public class Habit : Entity, ITimestamped, ISoftDeletable, IHabitSchedule
 
         if (DueTime.HasValue && ScheduledReminders.Count > 0)
         {
-            RelativeReminders = RelativeReminders.Concat(ScheduledReminders.Select(RelativeReminderTime.FromScheduled)).Distinct().ToList();
+            var clockReminders = ScheduledReminders.Select(RelativeReminderTime.FromScheduled);
+            RelativeReminders = (p.ScheduledReminders is not null && p.RelativeReminders is null
+                    ? RelativeReminders.Where(r => !r.When.HasValue)
+                    : RelativeReminders)
+                .Concat(clockReminders).Distinct().ToList();
             ScheduledReminders = [];
         }
 

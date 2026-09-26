@@ -291,7 +291,7 @@ internal static class HabitScheduleFilters
             h.Days.ToList(), h.Position, h.CreatedAtUtc,
             h.DueDate, h.DueTime, h.DueEndTime, h.EndDate,
             scheduledDates, isOverdue,
-            h.ReminderEnabled, h.ReminderTimes, h.ScheduledReminders, h.SlipAlertEnabled,
+            h.ReminderEnabled, h.ReminderTimes, h.GetScheduledRemindersForLegacyClients(), h.SlipAlertEnabled,
             h.ChecklistItems, MapTags(h), MapGoals(h),
             MapChildren(h.Id, ctx),
             HasSubHabits(h.Id, ctx.ChildLookup),

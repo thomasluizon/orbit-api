@@ -340,7 +340,7 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
             habit.IsFlexible,
             habit.SlipAlertEnabled,
             habit.ChecklistItems,
-            habit.ScheduledReminders,
+            habit.GetScheduledRemindersForLegacyClients(),
             habit.EndDate,
             habit.Position,
             habit.ParentHabitId,
