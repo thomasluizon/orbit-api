@@ -53,12 +53,19 @@ public partial class ProactiveCheckinSchedulerService(
         var pushService = scope.ServiceProvider.GetRequiredService<IPushNotificationService>();
         var messageService = scope.ServiceProvider.GetRequiredService<IProactiveCheckinMessageService>();
 
-        var candidates = (await dbContext.Users
+        var nowUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
+        var candidates = await dbContext.Users
             .AsNoTracking()
-            .Where(u => u.ProactiveAstraEnabled)
-            .ToListAsync(ct))
-            .Where(u => u.HasProAccess)
-            .ToList();
+            .Where(u => u.ProactiveAstraEnabled
+                && (u.IsLifetimePro || (u.Plan == Orbit.Domain.Enums.UserPlan.Pro
+                    && u.PlanExpiresAt.HasValue && u.PlanExpiresAt.Value > nowUtc)
+                    || (u.TrialEndsAt.HasValue && u.TrialEndsAt.Value > nowUtc)))
+            .Select(u => new SchedulerUser
+            {
+                Id = u.Id, Name = u.Name, TimeZone = u.TimeZone, Language = u.Language,
+                CurrentStreak = u.CurrentStreak
+            })
+            .ToListAsync(ct);
 
         if (candidates.Count == 0) return;
 
@@ -78,7 +85,7 @@ public partial class ProactiveCheckinSchedulerService(
     }
 
     private sealed record ProactiveCheckinContext(
-        Dictionary<Guid, List<Habit>> HabitsByUser,
+        Dictionary<Guid, List<SchedulerHabit>> HabitsByUser,
         HashSet<(Guid HabitId, DateOnly Date)> LoggedHabitDates,
         HashSet<(Guid UserId, DateOnly Date)> SentDates,
         IPushNotificationService PushService,
@@ -89,7 +96,7 @@ public partial class ProactiveCheckinSchedulerService(
         OrbitDbContext dbContext,
         IPushNotificationService pushService,
         IProactiveCheckinMessageService messageService,
-        List<User> candidates,
+        List<SchedulerUser> candidates,
         CancellationToken ct)
     {
         var userIds = candidates.Select(u => u.Id).ToList();
@@ -105,6 +112,11 @@ public partial class ProactiveCheckinSchedulerService(
                 && !h.IsCompleted && !h.IsGeneral
                 && h.DueDate <= windowCeiling
                 && (!h.EndDate.HasValue || h.EndDate.Value >= windowFloor))
+            .Select(h => new SchedulerHabit
+            {
+                Id = h.Id, UserId = h.UserId, Title = h.Title,
+                DueDate = h.DueDate, EndDate = h.EndDate
+            })
             .ToListAsync(ct);
         var habitsByUser = habits.GroupBy(h => h.UserId).ToDictionary(g => g.Key, g => g.ToList());
 
@@ -130,7 +142,7 @@ public partial class ProactiveCheckinSchedulerService(
             habitsByUser, loggedHabitDates, sentDates, pushService, messageService, dbContext);
     }
 
-    private async Task ProcessUserCheckinAsync(User user, ProactiveCheckinContext ctx, CancellationToken ct)
+    private async Task ProcessUserCheckinAsync(SchedulerUser user, ProactiveCheckinContext ctx, CancellationToken ct)
     {
         var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
         var userNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);

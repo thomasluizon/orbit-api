@@ -59,6 +59,13 @@ public partial class SlipAlertSchedulerService(
             .AsNoTracking()
             .Where(h => !h.IsCompleted && h.IsBadHabit && h.SlipAlertEnabled
                 && (!h.EndDate.HasValue || h.EndDate.Value >= endDateFloor))
+            .Select(h => new SchedulerHabit
+            {
+                Id = h.Id, UserId = h.UserId, Title = h.Title,
+                DueDate = h.DueDate, EndDate = h.EndDate, ScheduledStartDate = h.ScheduledStartDate,
+                FrequencyUnit = h.FrequencyUnit, FrequencyQuantity = h.FrequencyQuantity,
+                IntervalWeeks = h.IntervalWeeks, IsFlexible = h.IsFlexible, Days = h.Days
+            })
             .ToListAsync(ct);
 
         if (habits.Count == 0) return;
@@ -67,6 +74,11 @@ public partial class SlipAlertSchedulerService(
         var users = await dbContext.Users
             .AsNoTracking()
             .Where(u => userIds.Contains(u.Id))
+            .Select(u => new SchedulerUser
+            {
+                Id = u.Id, TimeZone = u.TimeZone, Language = u.Language,
+                WeekStartDay = u.WeekStartDay
+            })
             .ToDictionaryAsync(u => u.Id, ct);
 
         var habitIds = habits.Select(h => h.Id).ToList();
@@ -74,17 +86,21 @@ public partial class SlipAlertSchedulerService(
         var sentWeeksByHabit = (await dbContext.SentSlipAlerts
             .AsNoTracking()
             .Where(a => habitIds.Contains(a.HabitId) && a.WeekStart >= sentAlertFloor)
+            .Select(a => new { a.HabitId, a.WeekStart })
             .ToListAsync(ct))
             .GroupBy(a => a.HabitId)
             .ToDictionary(g => g.Key, g => g.Select(a => a.WeekStart).ToHashSet());
 
         var logCutoff = utcDate.AddDays(-60);
+        var createdAtUtcCutoff = TimeProvider.System.GetUtcNow().UtcDateTime.AddDays(-60);
         var allLogs = await dbContext.HabitLogs
             .AsNoTracking()
-            .Where(l => habitIds.Contains(l.HabitId) && l.Date >= logCutoff)
+            .Where(l => habitIds.Contains(l.HabitId) && l.Date >= logCutoff && l.Value > 0
+                && l.CreatedAtUtc >= createdAtUtcCutoff)
+            .Select(l => new { l.HabitId, l.Value, l.CreatedAtUtc })
             .ToListAsync(ct);
         var logsByHabit = allLogs.GroupBy(l => l.HabitId)
-            .ToDictionary(g => g.Key, g => g.ToList());
+            .ToDictionary(g => g.Key, g => g.Select(l => new SlipPatternLog(l.Value, l.CreatedAtUtc)).ToList());
 
         var context = new SlipAlertContext(users, logsByHabit, sentWeeksByHabit,
             pushService, messageService, dbContext);
@@ -103,15 +119,15 @@ public partial class SlipAlertSchedulerService(
     }
 
     private sealed record SlipAlertContext(
-        Dictionary<Guid, User> Users,
-        Dictionary<Guid, List<HabitLog>> LogsByHabit,
+        Dictionary<Guid, SchedulerUser> Users,
+        Dictionary<Guid, List<SlipPatternLog>> LogsByHabit,
         Dictionary<Guid, HashSet<DateOnly>> SentWeeksByHabit,
         IPushNotificationService PushService,
         ISlipAlertMessageService MessageService,
         OrbitDbContext DbContext);
 
     private async Task ProcessHabitSlipAlertAsync(
-        Habit habit, SlipAlertContext ctx, CancellationToken ct)
+        SchedulerHabit habit, SlipAlertContext ctx, CancellationToken ct)
     {
         if (!ctx.Users.TryGetValue(habit.UserId, out var user)) return;
 
@@ -181,7 +197,7 @@ public partial class SlipAlertSchedulerService(
     }
 
     private async Task<bool> TryRecordSentAlertAsync(
-        Habit habit, DateOnly weekStart, string title, string body,
+        SchedulerHabit habit, DateOnly weekStart, string title, string body,
         OrbitDbContext dbContext, CancellationToken ct)
     {
         await dbContext.SentSlipAlerts.AddAsync(SentSlipAlert.Create(habit.Id, weekStart), ct);

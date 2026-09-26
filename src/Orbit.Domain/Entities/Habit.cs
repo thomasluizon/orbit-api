@@ -1,5 +1,6 @@
 using Orbit.Domain.Common;
 using Orbit.Domain.Enums;
+using Orbit.Domain.Interfaces;
 using Orbit.Domain.ValueObjects;
 
 #pragma warning disable S6964 // Domain entity with private setters - not a model-bound DTO
@@ -54,7 +55,7 @@ public record HabitUpdateParams(
     DateOnly? UserToday = null,
     int? IntervalWeeks = null);
 
-public class Habit : Entity, ITimestamped, ISoftDeletable
+public class Habit : Entity, ITimestamped, ISoftDeletable, IHabitSchedule
 {
     private const int DaysInWeek = 7;
     private const int YearsInGregorianCycle = 400;
