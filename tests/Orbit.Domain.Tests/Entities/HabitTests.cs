@@ -1681,6 +1681,77 @@ public class HabitTests
         habit.ChecklistItems.Should().AllSatisfy(item => item.IsChecked.Should().BeFalse());
     }
 
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public void Log_RecurringChecklist_ResetsForFlexibleAndWithoutAdvance(bool isFlexible, bool advanceDueDate)
+    {
+        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Routine", FrequencyUnit.Day, 1,
+            DueDate: Today, IsFlexible: isFlexible,
+            ChecklistItems: [new ChecklistItem("Step", true)])).Value;
+
+        habit.Log(Today, advanceDueDate: advanceDueDate).IsSuccess.Should().BeTrue();
+
+        habit.ChecklistItems.Should().ContainSingle().Which.IsChecked.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Log_OneTimeChecklist_KeepsChecks()
+    {
+        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Task", null, null,
+            DueDate: Today, ChecklistItems: [new ChecklistItem("Step", true)])).Value;
+
+        habit.Log(Today).IsSuccess.Should().BeTrue();
+
+        habit.ChecklistItems.Should().ContainSingle().Which.IsChecked.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Create_GeneralWithEndDate_Fails()
+    {
+        var result = Habit.Create(new HabitCreateParams(ValidUserId, "General", null, null,
+            DueDate: Today, IsGeneral: true, EndDate: Today.AddDays(1)));
+
+        result.IsFailure.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Update_GeneralWithEndDate_Fails()
+    {
+        var habit = CreateGeneralHabit();
+
+        var result = habit.Update(new HabitUpdateParams("General", null, null, null, null, false,
+            Today, IsGeneral: true, EndDate: Today.AddDays(1)));
+
+        result.IsFailure.Should().BeTrue();
+        habit.EndDate.Should().BeNull();
+    }
+
+    [Fact]
+    public void Update_GeneralWithStaleEndDate_ClearsItWhenOmitted()
+    {
+        var habit = CreateGeneralHabit();
+        var endDateProperty = typeof(Habit).GetProperty(nameof(Habit.EndDate))
+            ?? throw new InvalidOperationException("Habit.EndDate was not found");
+        endDateProperty.SetValue(habit, Today.AddDays(1));
+
+        var result = habit.Update(new HabitUpdateParams("General", null, null, null, null, false,
+            Today, IsGeneral: true));
+
+        result.IsSuccess.Should().BeTrue();
+        habit.EndDate.Should().BeNull();
+    }
+
+    [Fact]
+    public void Create_RecurringWithEndDate_Succeeds()
+    {
+        var result = Habit.Create(new HabitCreateParams(ValidUserId, "Routine", FrequencyUnit.Day, 1,
+            DueDate: Today, EndDate: Today.AddDays(1)));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.EndDate.Should().Be(Today.AddDays(1));
+    }
+
     [Fact]
     public void PostponeTo_UpdatesDueDate()
     {

@@ -205,7 +205,7 @@ public class CreateHabitCommandValidatorTests
     }
 
     [Fact]
-    public void Validate_GeneralHabitWithEndDate_NoError()
+    public void Validate_GeneralHabitWithEndDate_HasError()
     {
         var command = ValidCommand() with
         {
@@ -217,7 +217,7 @@ public class CreateHabitCommandValidatorTests
 
         var result = _validator.TestValidate(command);
 
-        result.ShouldNotHaveValidationErrorFor(x => x.Options != null ? x.Options.EndDate : null);
+        result.ShouldHaveValidationErrorFor(x => x.Options != null ? x.Options.EndDate : null);
     }
 
     [Fact]
