@@ -10,6 +10,8 @@ public static class HabitMetricsCalculator
     // Horizon must exceed the largest streak-achievement target (1000-day StreakImmortal) or those achievements can never hit 100%. https://github.com/thomasluizon/orbit-api/pull/419
     private const int MaxStreakHorizonDays = 1100;
 
+    public static DateOnly GetStreakLogCutoff(DateOnly today) => today.AddDays(-2 * MaxStreakHorizonDays);
+
     public static HabitMetrics Calculate(
         Habit habit,
         DateOnly today,

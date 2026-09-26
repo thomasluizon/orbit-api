@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
@@ -29,10 +30,12 @@ internal static class GoalDetailLoader
     {
         var userToday = await userDateService.GetUserTodayAsync(userId, cancellationToken);
         var weekStartDay = await userDateService.GetUserWeekStartDayAsync(userId, cancellationToken);
+        var logCutoff = HabitMetricsCalculator.GetStreakLogCutoff(userToday);
+        // ProgressHistory returns every goal progress entry. https://github.com/thomasluizon/orbit-tickets/issues/743
         var goals = await goalRepository.FindAsync(
             g => g.Id == goalId && g.UserId == userId,
             q => q.Include(g => g.ProgressLogs)
-                  .Include(g => g.Habits).ThenInclude(h => h.Logs),
+                  .Include(g => g.Habits).ThenInclude(h => h.Logs.Where(log => log.Date >= logCutoff)),
             cancellationToken);
         var goal = goals.Count > 0 ? goals[0] : null;
 
