@@ -1,5 +1,6 @@
 using FluentAssertions;
 using NSubstitute;
+using Orbit.Application.Habits.Services;
 using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -26,11 +27,11 @@ public class UserStreakServiceTests
         _sut = new UserStreakService(
             new UserStreakRepositories(
                 _userRepository,
-                _habitRepository,
                 _habitLogRepository,
                 _streakFreezeRepository),
             _userDateService,
-            _feedEmitter);
+            _feedEmitter,
+            new HabitScheduleSnapshotStore(_habitRepository));
     }
 
     /// <summary>

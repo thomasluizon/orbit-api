@@ -245,6 +245,62 @@ public class StreakProjectionQueryTests
         }
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(996)]
+    public async Task SharedSchedule_ProjectsOnlyRuleEligibleHabitsOnce(int excludedHabitCount)
+    {
+        var counter = new CountingDbCommandInterceptor();
+        using var factory = new SqliteOrbitDbContextFactory(counter);
+        var user = User.Create("Schedule User", $"schedule-{Guid.NewGuid():N}@example.com").Value;
+        var today = new DateOnly(2026, 4, 3);
+        var streakHabit = CreateHabit(user.Id, today);
+        var achievementHabit = Habit.Create(new HabitCreateParams(
+            user.Id, "Bad habit", FrequencyUnit.Day, 1, today, IsBadHabit: true)).Value;
+        var habits = new List<Habit> { streakHabit, achievementHabit };
+        for (var index = 0; index < excludedHabitCount; index++)
+        {
+            var excluded = Habit.Create(new HabitCreateParams(
+                user.Id, "Completed bad habit", FrequencyUnit.Day, 1, today, IsBadHabit: true)).Value;
+            if (index < 930)
+            {
+                for (var day = 0; day < 5; day++)
+                    excluded.Log(today.AddDays(-day), advanceDueDate: false).IsSuccess.Should().BeTrue();
+            }
+            typeof(Habit).GetProperty(nameof(Habit.IsCompleted))!.SetValue(excluded, true);
+            habits.Add(excluded);
+        }
+        factory.Context.Users.Add(user);
+        factory.Context.Habits.AddRange(habits);
+        await factory.Context.SaveChangesAsync();
+
+        var repository = new GenericRepository<Habit>(factory.Context);
+        var store = new HabitScheduleSnapshotStore(repository);
+        counter.Reset();
+        var first = await store.GetAsync(user.Id, CancellationToken.None);
+        var second = await store.GetAsync(user.Id, CancellationToken.None);
+
+        first.Select(snapshot => snapshot.Id).Should().BeEquivalentTo([
+            streakHabit.Id, achievementHabit.Id]);
+        second.Should().BeSameAs(first);
+        counter.CommandCount.Should().Be(1);
+        counter.Commands.Should().ContainSingle().Which.Rows.Should().Be(2);
+        var sql = counter.Commands.Single().Sql;
+        sql.Should().Contain("\"IsDeleted\"")
+            .And.Contain("\"IsBadHabit\"")
+            .And.Contain("\"IsCompleted\"")
+            .And.Contain("\"IsGeneral\"")
+            .And.Contain("\"ParentHabitId\"")
+            .And.Contain("\"Days\"")
+            .And.NotContain("\"Description\"")
+            .And.NotContain("\"Emoji\"");
+        if (excludedHabitCount > 0)
+        {
+            factory.Context.HabitLogs.Count().Should().Be(4650);
+            _output.WriteLine(sql);
+        }
+    }
+
     private static Habit CreateHabit(Guid userId, DateOnly start)
     {
         var habit = Habit.Create(new HabitCreateParams(userId, "Daily", FrequencyUnit.Day, 1, start)).Value;

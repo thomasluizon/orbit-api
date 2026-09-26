@@ -33,8 +33,9 @@ public class StreakGapRepairTests
 
     public StreakGapRepairTests()
     {
-        _service = new(new(_users, _habits, _logs, _freezes), _dateService,
-            Substitute.For<IFriendFeedEventEmitter>());
+        _service = new(new(_users, _logs, _freezes), _dateService,
+            Substitute.For<IFriendFeedEventEmitter>(),
+            new Orbit.Application.Habits.Services.HabitScheduleSnapshotStore(_habits));
         _users.FindOneTrackedAsync(Arg.Any<Expression<Func<User, bool>>>(),
             Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>()).Returns(_user);
         _users.FindAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>()).Returns([_user]);

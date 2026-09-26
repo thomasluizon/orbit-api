@@ -35,7 +35,8 @@ public partial class GamificationService(
     IXpAwarder xpAwarder,
     IUnitOfWork unitOfWork,
     IFeatureFlagService featureFlagService,
-    ILogger<GamificationService> logger) : IGamificationService
+    ILogger<GamificationService> logger,
+    HabitScheduleSnapshotStore scheduleSnapshots) : IGamificationService
 {
     // Streak window covers the 1000-day StreakImmortal target; volume window covers the 2500-completion Unstoppable target. Both must exceed their largest achievement target or those achievements can never be granted. https://github.com/thomasluizon/orbit-api/pull/419
     private const int StreakLogWindowDays = 1100;
@@ -150,16 +151,20 @@ public partial class GamificationService(
         User user, HashSet<string> earned, DateOnly today, CancellationToken ct)
     {
         var perfectStreakCutoff = today.AddDays(-AchievementChecks.PerfectStreakWindowDays);
-        var allUserHabits = (await repos.HabitRepository.ProjectAsync(
-            h => h.UserId == user.Id, HabitScheduleProjection.Select, ct))
+        var allUserHabits = (await scheduleSnapshots.GetAsync(user.Id, ct))
+            .Where(snapshot => !snapshot.IsCompleted && !snapshot.IsGeneral && snapshot.ParentHabitId == null)
             .Select(Habit.FromScheduleSnapshot)
             .ToList();
-        var allHabitIds = allUserHabits.Select(h => h.Id).ToList();
+        var perfectHabitIds = allUserHabits.Select(h => h.Id).ToList();
         var completedDates = (await repos.HabitLogRepository.ProjectAsync(
-            log => allHabitIds.Contains(log.HabitId) && log.Date >= perfectStreakCutoff && log.Date <= today,
+            log => perfectHabitIds.Contains(log.HabitId) && log.Date >= perfectStreakCutoff && log.Date <= today,
             query => query.Select(log => new HabitCompletionDate(log.HabitId, log.Date)).Distinct(), ct))
             .Select(log => (log.HabitId, log.Date))
             .ToHashSet();
+
+        var allHabitIds = await repos.HabitRepository.ProjectAsync(
+            h => h.UserId == user.Id,
+            query => query.Select(habit => habit.Id), ct);
 
         var totalLogCutoff = today.AddDays(-TotalCompletionWindowDays);
         var totalLogCount = earned.Contains(AchievementDefinitions.Liftoff) && earned.Contains(AchievementDefinitions.Unstoppable)
