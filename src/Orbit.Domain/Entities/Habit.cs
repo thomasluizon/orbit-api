@@ -149,6 +149,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     public static Habit FromScheduleSnapshot(HabitScheduleSnapshot snapshot) => new()
     {
         Id = snapshot.Id,
+        UserId = snapshot.UserId,
         ParentHabitId = snapshot.ParentHabitId,
         FrequencyUnit = snapshot.FrequencyUnit,
         FrequencyQuantity = snapshot.FrequencyQuantity,

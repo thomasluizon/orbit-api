@@ -1,14 +1,176 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using NSubstitute;
+using Orbit.Application.Gamification.Queries;
+using Orbit.Application.Gamification.Services;
+using Orbit.Application.Gamification;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
+using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Persistence;
+using Xunit.Abstractions;
 
 namespace Orbit.Infrastructure.Tests.Persistence;
 
 public class StreakProjectionQueryTests
 {
+    private readonly ITestOutputHelper _output;
+
+    public StreakProjectionQueryTests(ITestOutputHelper output) => _output = output;
+
+    [Fact]
+    public async Task LargeAccount_ProjectsFiveHistoryDatesAndFiveHundredAchievementRows()
+    {
+        var counter = new CountingDbCommandInterceptor();
+        using var factory = new SqliteOrbitDbContextFactory(counter);
+        var today = new DateOnly(2026, 4, 3);
+        var user = User.Create("Large User", "large@example.com").Value;
+        user.SetStripeSubscription("sub", DateTime.UtcNow.AddYears(1));
+        factory.Context.Users.Add(user);
+        for (var index = 0; index < 1000; index++)
+        {
+            var habit = Habit.Create(new HabitCreateParams(
+                user.Id, $"Habit {index}", FrequencyUnit.Day, 1, today.AddDays(-4),
+                IsBadHabit: index >= 100)).Value;
+            typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
+                .SetValue(habit, today.AddDays(-4).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+            if (index < 930)
+            {
+                for (var day = 4; day >= 0; day--)
+                    habit.Log(today.AddDays(-day), advanceDueDate: false);
+            }
+            factory.Context.Habits.Add(habit);
+        }
+        await factory.Context.SaveChangesAsync();
+        factory.Context.ChangeTracker.Clear();
+        var logRepository = new GenericRepository<HabitLog>(factory.Context);
+        var habitRepository = new GenericRepository<Habit>(factory.Context);
+        var userDates = Substitute.For<IUserDateService>();
+        userDates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(today);
+        var achievementService = new AchievementProgressService(
+            habitRepository, logRepository, new GenericRepository<Goal>(factory.Context), userDates);
+
+        counter.Reset();
+        var metrics = await achievementService.LoadAsync(user,
+            new HashSet<string> { AchievementDefinitions.EarlyBird, AchievementDefinitions.NightOwl },
+            CancellationToken.None);
+
+        metrics.CurrentStreak.Should().Be(5);
+        metrics.TotalCompletions.Should().Be(4650);
+        var achievementRead = counter.Commands.Single(command =>
+            command.Sql.Contains("HabitLogs", StringComparison.Ordinal)
+            && command.Sql.Split("FROM", 2)[0].Contains("\"Value\"", StringComparison.Ordinal));
+        achievementRead.Rows.Should().Be(500);
+        _output.WriteLine($"Achievement SQL: {achievementRead.Sql}");
+
+        var flags = Substitute.For<IFeatureFlagService>();
+        flags.GetEnabledKeysForUserAsync(user.Id, Arg.Any<CancellationToken>())
+            .Returns(new List<string>());
+        var handler = new GetStreakHistoryQueryHandler(
+            new GenericRepository<User>(factory.Context), habitRepository, logRepository,
+            new GenericRepository<StreakFreeze>(factory.Context), flags);
+
+        counter.Reset();
+        var history = await handler.Handle(
+            new GetStreakHistoryQuery(user.Id, today.AddDays(-4), today), CancellationToken.None);
+
+        history.IsSuccess.Should().BeTrue();
+        history.Value.Points.Select(point => point.Streak).Should().Equal(1, 2, 3, 4, 5);
+        var historyRead = counter.Commands.Single(command =>
+            command.Sql.Contains("HabitLogs", StringComparison.Ordinal));
+        historyRead.Rows.Should().Be(5);
+        _output.WriteLine($"History SQL: {historyRead.Sql}");
+    }
+
+    [Fact]
+    public async Task AchievementProgress_ReadsOnlyGoodHabitStreakEvidence()
+    {
+        var counter = new CountingDbCommandInterceptor();
+        using var factory = new SqliteOrbitDbContextFactory(counter);
+        var today = new DateOnly(2026, 4, 3);
+        var user = User.Create("Progress User", "progress@example.com").Value;
+        var good = Habit.Create(new HabitCreateParams(
+            user.Id, "Flexible", FrequencyUnit.Day, 2, today.AddDays(-2), IsFlexible: true)).Value;
+        good.Log(today.AddDays(-1), advanceDueDate: false);
+        good.Log(today.AddDays(-1), advanceDueDate: false);
+        good.Log(today, advanceDueDate: false);
+        good.Log(today, advanceDueDate: false);
+        good.Log(today.AddDays(-2), advanceDueDate: false);
+        good.Unlog(today.AddDays(-2));
+        var bad = Habit.Create(new HabitCreateParams(
+            user.Id, "Bad", FrequencyUnit.Day, 1, today.AddDays(-2), IsBadHabit: true)).Value;
+        bad.Log(today.AddDays(-1), advanceDueDate: false);
+        bad.Log(today, advanceDueDate: false);
+        factory.Context.Users.Add(user);
+        factory.Context.Habits.AddRange(good, bad);
+        await factory.Context.SaveChangesAsync();
+        factory.Context.ChangeTracker.Clear();
+        var userDates = Substitute.For<IUserDateService>();
+        userDates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(today);
+        var service = new AchievementProgressService(
+            new GenericRepository<Habit>(factory.Context),
+            new GenericRepository<HabitLog>(factory.Context),
+            new GenericRepository<Goal>(factory.Context),
+            userDates);
+
+        counter.Reset();
+        var metrics = await service.LoadAsync(user,
+            new HashSet<string> { AchievementDefinitions.EarlyBird, AchievementDefinitions.NightOwl },
+            CancellationToken.None);
+
+        metrics.CurrentStreak.Should().Be(2);
+        metrics.TotalCompletions.Should().Be(6);
+        var logRead = counter.Commands.Single(command =>
+            command.Sql.Contains("HabitLogs", StringComparison.Ordinal)
+            && command.Sql.Split("FROM", 2)[0].Contains("\"Value\"", StringComparison.Ordinal));
+        logRead.Rows.Should().Be(4);
+        logRead.Sql.Split("FROM", 2)[0].Should().Contain("\"HabitId\"")
+            .And.Contain("\"Date\"").And.Contain("\"Value\"")
+            .And.NotContain("\"IsDeleted\"").And.NotContain("\"Note\"");
+    }
+
+    [Fact]
+    public async Task StreakHistory_ProjectsDistinctCompletionDatesInSql()
+    {
+        var counter = new CountingDbCommandInterceptor();
+        using var factory = new SqliteOrbitDbContextFactory(counter);
+        var today = new DateOnly(2026, 4, 3);
+        var user = User.Create("History User", "history@example.com").Value;
+        user.SetStripeSubscription("sub", DateTime.UtcNow.AddYears(1));
+        var first = CreateHabit(user.Id, today.AddDays(-2));
+        var second = CreateHabit(user.Id, today.AddDays(-2));
+        foreach (var date in new[] { today.AddDays(-2), today.AddDays(-1), today })
+            first.Log(date, advanceDueDate: false);
+        second.Log(today.AddDays(-1), advanceDueDate: false);
+        second.Log(today, advanceDueDate: false);
+        factory.Context.Users.Add(user);
+        factory.Context.Habits.AddRange(first, second);
+        await factory.Context.SaveChangesAsync();
+        factory.Context.ChangeTracker.Clear();
+        var featureFlags = Substitute.For<IFeatureFlagService>();
+        featureFlags.GetEnabledKeysForUserAsync(user.Id, Arg.Any<CancellationToken>())
+            .Returns(new List<string>());
+        var handler = new GetStreakHistoryQueryHandler(
+            new GenericRepository<User>(factory.Context),
+            new GenericRepository<Habit>(factory.Context),
+            new GenericRepository<HabitLog>(factory.Context),
+            new GenericRepository<StreakFreeze>(factory.Context),
+            featureFlags);
+
+        counter.Reset();
+        var result = await handler.Handle(
+            new GetStreakHistoryQuery(user.Id, today.AddDays(-2), today), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Points.Select(point => point.Streak).Should().Equal(1, 2, 3);
+        var logRead = counter.Commands.Single(command => command.Sql.Contains("HabitLogs", StringComparison.Ordinal));
+        logRead.Sql.Should().Contain("SELECT DISTINCT");
+        logRead.Sql.Split("FROM", 2)[0].Should().Contain("\"Date\"")
+            .And.NotContain("\"Note\"").And.NotContain("\"HabitId\"");
+        logRead.Rows.Should().Be(3);
+    }
+
     [Fact]
     public async Task ScheduleProjection_KeepsScheduledDatesWithoutLoadingUnusedHabitColumns()
     {
