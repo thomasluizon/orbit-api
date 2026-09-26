@@ -13,7 +13,6 @@ namespace Orbit.Application.Tests.Commands.Profile;
 public class SetColorSchemeCommandHandlerTests
 {
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
-    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly SetColorSchemeCommandHandler _handler;
 
@@ -21,9 +20,7 @@ public class SetColorSchemeCommandHandlerTests
 
     public SetColorSchemeCommandHandlerTests()
     {
-        _payGate.CanManagePremiumColors(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(Result.Success()));
-        _handler = new SetColorSchemeCommandHandler(_userRepo, _payGate, _unitOfWork);
+        _handler = new SetColorSchemeCommandHandler(_userRepo, _unitOfWork);
     }
 
     private void SetupUserFound(User user)
@@ -53,6 +50,21 @@ public class SetColorSchemeCommandHandlerTests
         var command = new SetColorSchemeCommand(UserId, "purple");
 
         var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.ColorScheme.Should().Be(ColorSchemes.Granted);
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_FreeUser_SavesAccentWithoutProPrompt()
+    {
+        var user = User.Create("Free User", "free@example.com").Value;
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        user.HasProAccess.Should().BeFalse();
+        SetupUserFound(user);
+
+        var result = await _handler.Handle(new SetColorSchemeCommand(UserId, "blue"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         user.ColorScheme.Should().Be(ColorSchemes.Granted);

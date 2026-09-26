@@ -14,6 +14,19 @@ public class AgentCatalogServiceTests
     private readonly AgentCatalogService _catalogService = new();
 
     [Fact]
+    public void SetColorScheme_ChatAndMcpCapabilities_DoNotRequirePro()
+    {
+        var chatCapability = _catalogService.GetCapabilityByChatTool("set_color_scheme");
+        var mcpCapability = _catalogService.GetCapabilityByMcpTool("set_color_scheme");
+
+        chatCapability.Should().NotBeNull();
+        mcpCapability.Should().NotBeNull();
+        chatCapability!.Id.Should().Be(mcpCapability!.Id);
+        chatCapability.PlanRequirement.Should().BeNull();
+        chatCapability.DisplayName.Should().NotContain("Premium");
+    }
+
+    [Fact]
     public void EveryControllerAction_IsMappedToTheCatalog()
     {
         var controllerActionKeys = typeof(Orbit.Api.Controllers.ChatController).Assembly

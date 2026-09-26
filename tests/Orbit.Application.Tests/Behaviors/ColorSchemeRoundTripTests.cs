@@ -34,8 +34,6 @@ public class ColorSchemeRoundTripTests
 
     public ColorSchemeRoundTripTests()
     {
-        _payGate.CanManagePremiumColors(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(Result.Success()));
         _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(20);
         _featureFlagService.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Array.Empty<string>());
@@ -45,7 +43,7 @@ public class ColorSchemeRoundTripTests
             Arg.Any<CancellationToken>())
             .Returns(new List<StreakFreeze>().AsReadOnly());
 
-        _writeHandler = new SetColorSchemeCommandHandler(_userRepo, _payGate, _unitOfWork);
+        _writeHandler = new SetColorSchemeCommandHandler(_userRepo, _unitOfWork);
         _readHandler = new GetProfileQueryHandler(
             _userRepo,
             _streakFreezeRepo,

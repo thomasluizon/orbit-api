@@ -93,11 +93,6 @@ public interface IPayGateService
     Task<Result> CanManageProactiveAstra(Guid userId, CancellationToken ct = default);
 
     /// <summary>
-    /// Checks if the user can manage premium color schemes (Pro-only feature).
-    /// </summary>
-    Task<Result> CanManagePremiumColors(Guid userId, CancellationToken ct = default);
-
-    /// <summary>
     /// Checks if the user can read AI memory facts (Pro-only feature).
     /// </summary>
     Task<Result> CanReadUserFacts(Guid userId, CancellationToken ct = default);
