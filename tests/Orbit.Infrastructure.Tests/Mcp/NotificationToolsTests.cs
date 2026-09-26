@@ -4,6 +4,8 @@ using MediatR;
 using NSubstitute;
 using Orbit.Api.Mcp;
 using Orbit.Api.Mcp.Tools;
+using Orbit.Application.Chat;
+using Orbit.Application.Chat.Queries;
 using Orbit.Application.Notifications.Queries;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
@@ -86,6 +88,25 @@ public class NotificationToolsTests
             .Returns(Result.Success(response));
 
         var result = await _tools.GetNotifications(_user);
+
+        result.Should().Contain("New friend request");
+        result.Should().NotContain("Alice Johnson");
+        result.Should().NotContain("wants to be your friend");
+    }
+
+    [Fact]
+    public async Task GetNotificationPage_OmitsBodyThatEmbedsAnotherUserName()
+    {
+        var userId = Guid.Parse(_user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var cursor = RecordListCursor.Create(userId, "notifications", 10);
+        var response = new GetNotificationsResponse(
+            [Item("New friend request", "Alice Johnson wants to be your friend.", isRead: false)],
+            1, 11);
+        _mediator.Send(Arg.Any<GetRecordListPageQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(RecordListCardBuilder.BuildNotificationPage(response, userId, 10)));
+        var tools = new RecordPageTools(_mediator, new McpExecutorBridge(_executor));
+
+        var result = await tools.GetNotificationPage(_user, cursor);
 
         result.Should().Contain("New friend request");
         result.Should().NotContain("Alice Johnson");

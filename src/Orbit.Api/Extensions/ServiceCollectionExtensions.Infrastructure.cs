@@ -227,6 +227,7 @@ public static partial class ServiceCollectionExtensions
             .WithTools<ProfileTools>()
             .WithTools<GamificationTools>()
             .WithTools<NotificationTools>()
+            .WithTools<RecordPageTools>()
             .WithTools<SubscriptionTools>()
             .WithTools<UserFactTools>()
             .WithTools<CalendarTools>()

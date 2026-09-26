@@ -1254,7 +1254,8 @@ public class ProcessUserChatCommandHandlerTests
 
         result.Value.RecordLists.Should().ContainSingle();
         result.Value.RecordLists![0].SurfaceId.Should().Be("profile");
-        result.Value.RecordLists[0].Items.Single().Detail.Should().Be("orb_123 (active)");
+        result.Value.RecordLists[0].Items.Single().Detail.Should().Be("orb_123");
+        result.Value.RecordLists[0].Items.Single().State.Should().Be("active");
     }
 
     [Fact]

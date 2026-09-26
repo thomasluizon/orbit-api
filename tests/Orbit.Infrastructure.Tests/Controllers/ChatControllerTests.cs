@@ -3,10 +3,13 @@ using FluentAssertions;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Api.Controllers;
 using Orbit.Application.Chat.Commands;
+using Orbit.Application.Chat;
+using Orbit.Application.Chat.Queries;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 
@@ -30,6 +33,38 @@ public class ChatControllerTests
         {
             HttpContext = new DefaultHttpContext { User = principal }
         };
+    }
+
+    [Fact]
+    public async Task GetRecordListPage_AuthorizedRoute_UsesClaimAndReturnsCard()
+    {
+        typeof(ChatController).GetCustomAttributes(typeof(AuthorizeAttribute), true).Should().NotBeEmpty();
+        typeof(ChatController).GetMethod(nameof(ChatController.GetRecordListPage))!
+            .GetCustomAttributes(typeof(HttpGetAttribute), true).Cast<HttpGetAttribute>()
+            .Single().Template.Should().Be("records/{kind}");
+        GetRecordListPageQuery? captured = null;
+        var card = new RecordListCard("tags", 1, [new RecordListItem(Guid.NewGuid().ToString(), "Health")]);
+        _mediator.Send(Arg.Do<GetRecordListPageQuery>(query => captured = query), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(card));
+
+        var response = await _controller.GetRecordListPage("tags", "cursor", CancellationToken.None);
+
+        response.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(card);
+        captured.Should().Be(new GetRecordListPageQuery(UserId, "tags", "cursor"));
+    }
+
+    [Fact]
+    public async Task GetRecordListPage_ForeignCursor_ReturnsNotFound()
+    {
+        var foreignCursor = RecordListCursor.Create(Guid.NewGuid(), "notifications", 10);
+        var handler = new GetRecordListPageQueryHandler(_mediator);
+        _mediator.Send(Arg.Any<GetRecordListPageQuery>(), Arg.Any<CancellationToken>())
+            .Returns(call => handler.Handle(call.Arg<GetRecordListPageQuery>(), CancellationToken.None));
+
+        var response = await _controller.GetRecordListPage("notifications", foreignCursor, CancellationToken.None);
+
+        response.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(404);
+        await _mediator.DidNotReceiveWithAnyArgs().Send(default(Orbit.Application.Notifications.Queries.GetNotificationsQuery)!, default);
     }
 
     [Fact]

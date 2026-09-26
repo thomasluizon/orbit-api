@@ -107,4 +107,29 @@ public class StatusCardBuilderTests
         card.RecentFreezeDates.Should().ContainSingle().Which.Should().Be(freezeDate);
         card.RecentAchievements.Should().HaveCount(6);
     }
+
+    [Fact]
+    public void Streak_TwoEarned_FillsSixWithCatalogOrderedUnearned()
+    {
+        var today = new DateOnly(2026, 9, 25);
+        var earnedAt = new DateTime(2026, 9, 25, 12, 0, 0, DateTimeKind.Utc);
+        var achievements = Enumerable.Range(0, 10).Select(index => new AchievementDto(
+            $"achievement-{index}", "Name", "Description", "habit", "common", 10,
+            "star", index is 2 or 7, index is 2 or 7 ? earnedAt.AddDays(index) : null)).ToList();
+        var profile = new GamificationProfileResponse(
+            120, 3, "Level", "level", 100, 200, 80, 8, 8,
+            achievements, [], 5, 9, today, true, false,
+            new NextRewardCarrot(4, "Next", 80, null));
+        var streak = new StreakInfoResponse(
+            5, 9, today, 1, 2, 3, true, [],
+            0, 3, 0, 2, true, false, null, 0);
+
+        var card = StatusCardBuilder.BuildStreak(new GamificationOverviewPayload(profile,
+            new AchievementsResponse(achievements), streak))!;
+
+        card.RecentAchievements.Select(item => item.Id).Should().Equal("achievement-7", "achievement-2");
+        card.AchievementDiscs!.Select(item => item.Id).Should().Equal(
+            "achievement-7", "achievement-2", "achievement-0", "achievement-1", "achievement-3", "achievement-4");
+        card.AchievementDiscs!.Count(item => item.EarnedAt.HasValue).Should().Be(2);
+    }
 }
