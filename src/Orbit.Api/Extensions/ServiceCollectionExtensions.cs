@@ -113,6 +113,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<ISocialGraphReader, SocialGraphReader>();
         builder.Services.AddScoped<IHabitLogReader, HabitLogReader>();
         builder.Services.AddScoped<IHabitScheduleLogReader, HabitScheduleLogReader>();
+        builder.Services.AddScoped<IHabitSummaryLogReader, HabitSummaryLogReader>();
         builder.Services.AddScoped<IHabitSchedulePageLoader, HabitSchedulePageLoader>();
         builder.Services.AddScoped<Orbit.Application.Challenges.Services.IChallengeProgressService, Orbit.Application.Challenges.Services.ChallengeProgressService>();
         builder.Services.AddScoped<Orbit.Application.Challenges.Services.ChallengeProgressRepositories>(sp =>

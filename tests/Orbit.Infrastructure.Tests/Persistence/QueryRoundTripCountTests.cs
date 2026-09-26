@@ -27,8 +27,8 @@ public class QueryRoundTripCountTests
         user.SetTimeZone("UTC");
         context.Users.Add(user);
 
-        var overdue = Habit.Create(new HabitCreateParams(userId, "Overdue", FrequencyUnit.Day, 1,
-            DueDate: today.AddDays(-3))).Value;
+        var overdue = Habit.Create(new HabitCreateParams(userId, "Overdue", FrequencyUnit.Week, 1,
+            DueDate: today.AddDays(-10))).Value;
         var skippedToday = Habit.Create(new HabitCreateParams(userId, "Skipped today", FrequencyUnit.Day, 1,
             DueDate: today.AddDays(-3))).Value;
         var skippedEarlier = Habit.Create(new HabitCreateParams(userId, "Skipped earlier", FrequencyUnit.Day, 1,
@@ -37,13 +37,16 @@ public class QueryRoundTripCountTests
             DueDate: today.AddDays(-10), IsBadHabit: true)).Value;
         context.Habits.AddRange(overdue, skippedToday, skippedEarlier, bad);
         context.HabitLogs.AddRange(
-            HabitLog.FromScheduleRead(Guid.NewGuid(), overdue.Id, today.AddDays(-3), 1, 0, DateTime.UtcNow),
+            HabitLog.FromScheduleRead(Guid.NewGuid(), overdue.Id, today.AddDays(-10), 1, 0, DateTime.UtcNow),
             HabitLog.FromScheduleRead(Guid.NewGuid(), overdue.Id, today.AddDays(-2), 0, 0, DateTime.UtcNow),
             HabitLog.FromScheduleRead(Guid.NewGuid(), skippedToday.Id, today, 0, 0, DateTime.UtcNow),
             HabitLog.FromScheduleRead(Guid.NewGuid(), skippedEarlier.Id, today.AddDays(-1), 0, 0, DateTime.UtcNow),
             HabitLog.FromScheduleRead(Guid.NewGuid(), bad.Id, today.AddDays(-5), 1, 0, DateTime.UtcNow));
         await context.SaveChangesAsync();
         context.ChangeTracker.Clear();
+        var directLogs = await new HabitSummaryLogReader(context).ReadAsync(
+            [new HabitSummaryLogWindow(overdue.Id, today.AddDays(-10), today)]);
+        directLogs.Should().HaveCount(2);
 
         var payGate = Substitute.For<IPayGateService>();
         payGate.CanUseDailySummary(userId, Arg.Any<CancellationToken>()).Returns(Orbit.Domain.Common.Result.Success());
@@ -62,6 +65,7 @@ public class QueryRoundTripCountTests
             new GenericRepository<Habit>(context),
             new GenericRepository<User>(context),
             new GenericRepository<HabitLog>(context),
+            new HabitSummaryLogReader(context),
             payGate, summaryService, new MemoryCache(new MemoryCacheOptions()));
 
         var result = await handler.Handle(new GetDailySummaryQuery(userId, today, today, "en"),
@@ -71,10 +75,38 @@ public class QueryRoundTripCountTests
         receivedHabits!.Select(habit => habit.Title).Should().BeEquivalentTo(
             ["Overdue", "Skipped earlier", "Bad habit"]);
         receivedHabits!.Single(habit => habit.Id == overdue.Id).Logs.Select(log => (log.Date, log.Value))
-            .Should().Contain((today.AddDays(-2), 0));
-        receivedHabits!.Single(habit => habit.Id == skippedEarlier.Id).Logs.Select(log => (log.Date, log.Value))
-            .Should().Contain((today.AddDays(-1), 0));
+            .Should().Contain((today.AddDays(-10), 1));
+        receivedContext!.ResolvedDueDateHabitIds.Should().Contain(overdue.Id);
         receivedContext!.LastBadHabitSlipDates[bad.Id].Should().Be(today.AddDays(-5));
+    }
+
+    [Fact]
+    public async Task DailySummaryLogReader_SelectsThreeColumnsAndRequestedRowsAtAccountScale()
+    {
+        var counter = new CountingDbCommandInterceptor();
+        using var factory = new SqliteOrbitDbContextFactory(counter);
+        var userId = await SeedHabits(factory.Context, 1000, logsPerHabit: 4,
+            withGoals: false, extraLogHabitCount: 650);
+        var habitIds = await factory.Context.Habits.AsNoTracking()
+            .Where(habit => habit.UserId == userId)
+            .Select(habit => habit.Id)
+            .ToListAsync();
+        var windows = habitIds.Select(id => new HabitSummaryLogWindow(
+            id, DateFrom.AddDays(4), DateFrom.AddDays(4))).ToList();
+
+        counter.Reset();
+        var logs = await new HabitSummaryLogReader(factory.Context).ReadAsync(windows);
+
+        logs.Should().HaveCount(650);
+        counter.Commands.Should().ContainSingle();
+        counter.Commands[0].Rows.Should().Be(650);
+        counter.Commands[0].Sql.Should().Contain("SELECT DISTINCT l.\"HabitId\", l.\"Date\", l.\"Value\"");
+        counter.Commands[0].Sql.Should().NotContain("l.\"Note\"")
+            .And.NotContain("l.\"CreatedAtUtc\"")
+            .And.NotContain("l.\"UpdatedAtUtc\"")
+            .And.NotContain("l.\"DeletedAtUtc\"")
+            .And.NotContain("l.\"IsSlip\"")
+            .And.NotContain("l.\"CompletionOrdinal\"");
     }
 
     [Fact]
@@ -94,7 +126,7 @@ public class QueryRoundTripCountTests
         var large = await CountDailySummaryLoad(habitCount: 25);
 
         large.Should().Be(small);
-        large.Should().BeLessThanOrEqualTo(3);
+        large.Should().BeLessThanOrEqualTo(4);
     }
 
     [Fact]
@@ -136,14 +168,23 @@ public class QueryRoundTripCountTests
         var counter = new CountingDbCommandInterceptor();
         using var factory = new SqliteOrbitDbContextFactory(counter);
         var userId = await SeedHabits(factory.Context, habitCount, logsPerHabit: 8, withGoals: true);
+        var payGate = Substitute.For<IPayGateService>();
+        payGate.CanUseDailySummary(userId, Arg.Any<CancellationToken>()).Returns(Orbit.Domain.Common.Result.Success());
+        var summaryService = Substitute.For<ISummaryService>();
+        summaryService.GenerateSummaryAsync(Arg.Any<IEnumerable<Habit>>(), Arg.Any<DailySummaryContext>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Orbit.Domain.Common.Result.Success(new DailySummaryContent("Summary", string.Empty)));
+        var handler = new GetDailySummaryQueryHandler(
+            new GenericRepository<Habit>(factory.Context),
+            new GenericRepository<User>(factory.Context),
+            new GenericRepository<HabitLog>(factory.Context),
+            new HabitSummaryLogReader(factory.Context),
+            payGate, summaryService, new MemoryCache(new MemoryCacheOptions()));
 
         counter.Reset();
-        await new GenericRepository<Habit>(factory.Context).FindAsync(
-            habit => habit.UserId == userId && !habit.IsGeneral,
-            query => query
-                .Include(habit => habit.Logs.Where(log => log.Date >= DateFrom && log.Date <= DateTo))
-                .Include(habit => habit.Goals),
+        var result = await handler.Handle(new GetDailySummaryQuery(userId, DateFrom, DateTo, "en"),
             CancellationToken.None);
+        result.IsSuccess.Should().BeTrue();
         return counter.CommandCount;
     }
 
@@ -186,7 +227,8 @@ public class QueryRoundTripCountTests
         return counter.CommandCount;
     }
 
-    private static async Task<Guid> SeedHabits(OrbitDbContext context, int habitCount, int logsPerHabit, bool withGoals)
+    private static async Task<Guid> SeedHabits(OrbitDbContext context, int habitCount, int logsPerHabit,
+        bool withGoals, int extraLogHabitCount = 0)
     {
         var userId = Guid.NewGuid();
         var user = User.Create("Bench User", $"bench-{userId:N}@example.com").Value;
@@ -198,7 +240,8 @@ public class QueryRoundTripCountTests
             var habit = Habit.Create(new HabitCreateParams(
                 userId, $"Habit {index}", FrequencyUnit.Day, 1, DueDate: DateFrom)).Value;
 
-            for (var offset = 0; offset < logsPerHabit; offset++)
+            var logCount = logsPerHabit + (index < extraLogHabitCount ? 1 : 0);
+            for (var offset = 0; offset < logCount; offset++)
                 habit.Log(DateFrom.AddDays(offset), advanceDueDate: false);
 
             if (withGoals)
