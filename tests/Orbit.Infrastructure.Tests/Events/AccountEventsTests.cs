@@ -4,12 +4,14 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Events;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Events;
 using Orbit.Infrastructure.Persistence;
+using Orbit.Infrastructure.Services;
 using Orbit.Infrastructure.Tests.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Events;
@@ -197,29 +199,40 @@ public class AccountEventsTests
     }
 
     [Fact]
-    public void Ticket_HasDedicatedAudience_AndExpiresAfterSixtySeconds()
+    public async Task Ticket_HasDedicatedAudience_AndExpiresAfterSixtySeconds()
     {
         var settings = new JwtSettings
         {
             SecretKey = "test-secret-key-that-is-at-least-32-bytes-long-for-hmac",
             Issuer = "test-issuer",
-            Audience = "test-audience"
+            Audience = "test-audience",
+            ExpiryMinutes = 15
         };
         var service = new EventTicketService(Options.Create(settings));
         var userId = Guid.NewGuid();
         var sessionId = Guid.NewGuid();
-        var accessExpiry = DateTimeOffset.UtcNow.AddMinutes(15).ToUnixTimeSeconds();
-        var principal = new ClaimsPrincipal(new ClaimsIdentity([
-            new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
-            new Claim("orbit_session_id", sessionId.ToString()),
-            new Claim("exp", accessExpiry.ToString())
-        ], "test"));
+        var accessToken = new JwtTokenService(Options.Create(settings))
+            .GenerateToken(userId, "owner@example.com", sessionId);
+        var accessValidation = await new JsonWebTokenHandler().ValidateTokenAsync(accessToken, new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = settings.Issuer,
+            ValidAudience = settings.Audience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(settings.SecretKey)),
+            ClockSkew = TimeSpan.Zero
+        });
+        accessValidation.IsValid.Should().BeTrue();
+        var principal = new ClaimsPrincipal(accessValidation.ClaimsIdentity);
+        var accessExpiry = principal.FindFirst("exp")!.Value;
 
         var (ticket, expiresAtUtc) = service.Create(principal);
         var jwt = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler().ReadJwtToken(ticket);
         jwt.Audiences.Should().ContainSingle().Which.Should().Be(EventTicketService.AudienceFor(settings));
         jwt.Claims.Should().Contain(claim => claim.Type == "orbit_session_id" && claim.Value == sessionId.ToString());
-        jwt.Claims.Should().Contain(claim => claim.Type == "orbit_access_exp" && claim.Value == accessExpiry.ToString());
+        jwt.Claims.Should().Contain(claim => claim.Type == "orbit_access_exp" && claim.Value == accessExpiry);
         (expiresAtUtc - DateTime.UtcNow).Should().BeCloseTo(TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(3));
 
         var validator = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
