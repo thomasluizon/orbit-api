@@ -1,11 +1,17 @@
 using FluentValidation;
+using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
+using Orbit.Domain.Entities;
+using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Habits.Validators;
 
 public class UpdateHabitCommandValidator : AbstractValidator<UpdateHabitCommand>
 {
-    public UpdateHabitCommandValidator()
+    private static readonly TitleValidator HabitTitleValidator = new(false);
+    private static readonly TitleValidator SubHabitTitleValidator = new(true);
+
+    public UpdateHabitCommandValidator(IGenericRepository<Habit> habitRepository)
     {
         RuleFor(x => x.UserId)
             .NotEmpty();
@@ -13,7 +19,22 @@ public class UpdateHabitCommandValidator : AbstractValidator<UpdateHabitCommand>
         RuleFor(x => x.HabitId)
             .NotEmpty();
 
-        SharedHabitRules.AddTitleRules(RuleFor(x => x.Title));
+        RuleFor(x => x).CustomAsync(async (command, context, cancellationToken) =>
+        {
+            var title = command.Title;
+            var isEmpty = string.IsNullOrWhiteSpace(title);
+            if (!isEmpty && title.Length <= AppConstants.MaxHabitTitleLength)
+                return;
+
+            var habit = await habitRepository.FindOneTrackedAsync(
+                h => h.Id == command.HabitId && h.UserId == command.UserId,
+                cancellationToken: cancellationToken);
+            var titleValidator = habit?.ParentHabitId is not null
+                ? SubHabitTitleValidator
+                : HabitTitleValidator;
+            foreach (var failure in titleValidator.Validate(command).Errors)
+                context.AddFailure(failure);
+        });
 
         SharedHabitRules.AddDescriptionRules(RuleFor(x => x.Description));
 
@@ -65,5 +86,18 @@ public class UpdateHabitCommandValidator : AbstractValidator<UpdateHabitCommand>
         });
 
         SharedHabitRules.AddGoalIdsRules(this, x => x.GoalIds);
+    }
+
+    private sealed class TitleValidator : AbstractValidator<UpdateHabitCommand>
+    {
+        public TitleValidator(bool isChild)
+        {
+            SharedHabitRules.AddTitleRules(
+                RuleFor(x => x.Title),
+                requiredMessage: isChild ? "Sub-habit title must not be empty" : null,
+                maximumLengthMessage: isChild
+                    ? $"Sub-habit title must not exceed {AppConstants.MaxHabitTitleLength} characters"
+                    : null);
+        }
     }
 }
