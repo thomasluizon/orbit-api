@@ -3,6 +3,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Goals.Queries;
@@ -16,7 +17,7 @@ internal record GoalDetailResult(Goal Goal, DateOnly UserToday, int WeekStartDay
 
 /// <summary>
 /// Loads a single owner-scoped goal with its progress logs and windowed habit logs, applies the
-/// read-time streak sync, and projects the shared <see cref="GoalDetailDto"/>. Returns null when the
+/// read-time progress sync, and projects the shared <see cref="GoalDetailDto"/>. Returns null when the
 /// goal is not found so callers can surface their own typed failure.
 /// </summary>
 internal static class GoalDetailLoader
@@ -42,7 +43,16 @@ internal static class GoalDetailLoader
         if (goal is null)
             return null;
 
-        GoalProgressSyncService.ApplyReadValue(goal, userToday, weekStartDay);
+        if (goal.Type == GoalType.Standard && goal.HasActiveLinkedHabits && goal.Status == GoalStatus.Active)
+        {
+            var counts = await GoalStandardCompletionReader.ReadCountsAsync(
+                goalRepository, userId, [goal.Id], cancellationToken);
+            GoalProgressSyncService.ApplyReadValue(goal, counts.GetValueOrDefault(goal.Id));
+        }
+        else
+        {
+            GoalProgressSyncService.ApplyReadValue(goal, userToday, weekStartDay);
+        }
 
         var progressPercentage = goal.TargetValue > 0
             ? Math.Min(100, Math.Round(goal.CurrentValue / goal.TargetValue * 100, 1))

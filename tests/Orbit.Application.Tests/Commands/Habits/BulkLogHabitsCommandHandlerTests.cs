@@ -532,6 +532,16 @@ public class BulkLogHabitsCommandHandlerTests
             Arg.Any<Expression<Func<Goal, bool>>>(),
             Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
             Arg.Any<CancellationToken>()).Returns(goals);
+        goalRepo.ProjectAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<GoalStandardCompletionCount>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var predicate = call.ArgAt<Expression<Func<Goal, bool>>>(0).Compile();
+                var projection = call.ArgAt<Func<IQueryable<Goal>, IQueryable<GoalStandardCompletionCount>>>(1);
+                return projection(goals.Where(predicate).AsQueryable()).ToList();
+            });
         goalRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),
             Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
