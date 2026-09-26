@@ -37,6 +37,14 @@ public class GenericRepository<T>(OrbitDbContext context) : IGenericRepository<T
         return await query.ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<TResult>> ProjectAsync<TResult>(
+        Expression<Func<T, bool>> predicate,
+        Func<IQueryable<T>, IQueryable<TResult>> projection,
+        CancellationToken cancellationToken = default)
+    {
+        return await projection(_dbSet.AsNoTracking().Where(predicate)).ToListAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<T>> FindIgnoringFiltersAsync(
         Expression<Func<T, bool>> predicate,
         Func<IQueryable<T>, IQueryable<T>>? includes = null,

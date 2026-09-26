@@ -302,10 +302,10 @@ public class UserStreakService(
 
         var completionDateSet = streakEligibleHabitIds.Count == 0
             ? new HashSet<DateOnly>()
-            : (await repos.HabitLogs.FindAsync(
+            : (await repos.HabitLogs.ProjectAsync(
                 l => streakEligibleHabitIds.Contains(l.HabitId) && l.Value > 0 && l.Date >= lookbackStart,
+                query => query.Select(log => log.Date).Distinct(),
                 cancellationToken))
-                .Select(log => log.Date)
                 .ToHashSet();
 
         var freezeDateSet = (await repos.StreakFreezes.FindAsync(
