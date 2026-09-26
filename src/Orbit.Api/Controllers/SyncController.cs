@@ -6,6 +6,7 @@ using Orbit.Api.Extensions;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
+using Orbit.Domain.Events;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Api.Controllers;
@@ -13,7 +14,7 @@ namespace Orbit.Api.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/[controller]")]
-public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncController> logger) : ControllerBase
+public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncController> logger, IAccountEventCollector? eventCollector = null) : ControllerBase
 {
     private static readonly TimeSpan MaxSyncWindow = TimeSpan.FromDays(AppConstants.MaxSyncWindowDays);
 
@@ -301,6 +302,7 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
                         catch
                         {
                             dbContext.ChangeTracker.Clear();
+                            eventCollector?.Clear();
                             throw;
                         }
                     });

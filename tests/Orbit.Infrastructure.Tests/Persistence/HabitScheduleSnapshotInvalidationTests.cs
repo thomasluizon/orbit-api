@@ -103,7 +103,7 @@ public class HabitScheduleSnapshotInvalidationTests
 
         var snapshots = new HabitScheduleSnapshotStore(new GenericRepository<Habit>(context));
         HabitScheduleSnapshotInvalidation.Attach(context, snapshots);
-        var unitOfWork = new UnitOfWork(context, new DatabaseConnectionSettings(), snapshots);
+        var unitOfWork = new UnitOfWork(context, new DatabaseConnectionSettings(), scheduleSnapshots: snapshots);
         var firstAttempt = () => HabitCeilingLock.ExecuteAsync(unitOfWork, user.Id, async token =>
         {
             var schedule = await snapshots.GetAsync(user.Id, token);
@@ -143,7 +143,7 @@ public class HabitScheduleSnapshotInvalidationTests
         await context.SaveChangesAsync();
 
         var snapshots = new HabitScheduleSnapshotStore(new GenericRepository<Habit>(context));
-        var unitOfWork = new UnitOfWork(context, new DatabaseConnectionSettings(), snapshots);
+        var unitOfWork = new UnitOfWork(context, new DatabaseConnectionSettings(), scheduleSnapshots: snapshots);
         var before = await snapshots.GetAsync(user.Id, CancellationToken.None);
 
         await using (var editor = factory.CreateContext())
