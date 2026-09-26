@@ -240,7 +240,6 @@ public static partial class ServiceCollectionExtensions
                 {
                     var sessionClaim = context.Principal?.FindFirst("orbit_session_id")?.Value;
                     if (sessionClaim is null)
-                        // Pre-deploy tokens remain valid for 168 hours during the compatibility window.
                         return;
 
                     var userClaim = context.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
