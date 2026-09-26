@@ -166,9 +166,6 @@ public class PayGateService(
     public Task<Result> CanManageProactiveAstra(Guid userId, CancellationToken ct = default) =>
         RequireProAccess(userId, "Proactive Astra check-ins are a Pro feature. Upgrade to unlock!", ct);
 
-    public Task<Result> CanManagePremiumColors(Guid userId, CancellationToken ct = default) =>
-        RequireProAccess(userId, "Premium color schemes are a Pro feature. Upgrade to unlock!", ct);
-
     public Task<Result> CanReadUserFacts(Guid userId, CancellationToken ct = default) =>
         RequireProAccess(userId, "AI memory is a Pro feature. Upgrade to unlock!", ct);
 

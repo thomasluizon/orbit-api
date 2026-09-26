@@ -33,8 +33,6 @@ public class ProfileCommandHandlerTests
             .Returns(Task.FromResult(Result.Success()));
         _payGate.CanManageAiSummary(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result.Success()));
-        _payGate.CanManagePremiumColors(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(Result.Success()));
         _payGate.CanManageProactiveAstra(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result.Success()));
         _unitOfWork.ExecuteInTransactionAsync(
@@ -201,7 +199,7 @@ public class ProfileCommandHandlerTests
         var user = CreateTestUser();
         SetupUserFound(user);
 
-        var handler = new SetColorSchemeCommandHandler(_userRepo, _payGate, _unitOfWork);
+        var handler = new SetColorSchemeCommandHandler(_userRepo, _unitOfWork);
         var command = new SetColorSchemeCommand(UserId, "purple");
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -216,7 +214,7 @@ public class ProfileCommandHandlerTests
     {
         SetupUserNotFound();
 
-        var handler = new SetColorSchemeCommandHandler(_userRepo, _payGate, _unitOfWork);
+        var handler = new SetColorSchemeCommandHandler(_userRepo, _unitOfWork);
         var command = new SetColorSchemeCommand(UserId, "purple");
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -231,7 +229,7 @@ public class ProfileCommandHandlerTests
         var user = CreateTestUser();
         SetupUserFound(user);
 
-        var handler = new SetColorSchemeCommandHandler(_userRepo, _payGate, _unitOfWork);
+        var handler = new SetColorSchemeCommandHandler(_userRepo, _unitOfWork);
         var command = new SetColorSchemeCommand(UserId, null);
 
         var result = await handler.Handle(command, CancellationToken.None);

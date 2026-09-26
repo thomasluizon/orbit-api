@@ -465,7 +465,7 @@ public partial class AgentCatalogService
 
             CreateCapability(
                 AgentCapabilityIds.ProfilePremiumAppearanceWrite,
-                "Write Premium Appearance",
+                "Write Color Scheme",
                 "Accepts a color-scheme write from an older app. Orbit renders one accent, so the stored value becomes the granted one and nothing looks different.",
                 "profile",
                 AgentScopes.WriteProfilePreferences,
@@ -473,7 +473,6 @@ public partial class AgentCatalogService
                 isMutation: true,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                planRequirement: "Pro",
                 chatTools: ["set_color_scheme"],
                 mcpTools: ["set_color_scheme"],
                 controllerActions: ["ProfileController.SetColorScheme"]),

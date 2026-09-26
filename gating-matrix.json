@@ -1,0 +1,428 @@
+{
+  "provenance": {
+    "generatedFrom": "f884a39dd587",
+    "baselineRef": null,
+    "baselineSha": null,
+    "inputFiles": 1129,
+    "generatorVersion": 2
+  },
+  "note": "A live AppConfigs row overrides its compiled default at runtime. This offline artifact does not claim live values.",
+  "gates": [
+    {
+      "capability": "CanAccessCalendar",
+      "enforcingMethod": "PayGateService.CanAccessCalendar",
+      "planRequirement": "Pro",
+      "quotaLiftedByPlan": null,
+      "appConfigs": [],
+      "featureFlags": []
+    },
+    {
+      "capability": "CanCreateApiKeys",
+      "enforcingMethod": "PayGateService.CanCreateApiKeys",
+      "planRequirement": "Pro",
+      "quotaLiftedByPlan": null,
+      "appConfigs": [],
+      "featureFlags": []
+    },
+    {
+      "capability": "CanCreateHabits",
+      "enforcingMethod": "PayGateService.CanCreateHabits",
+      "planRequirement": null,
+      "quotaLiftedByPlan": null,
+      "appConfigs": [
+        {
+          "key": "FreeMaxHabits",
+          "compiledDefault": 1000,
+          "compiledDefaultExpression": "AppConstants.DefaultFreeMaxHabits"
+        }
+      ],
+      "featureFlags": []
+    },
+    {
+      "capability": "CanCreateSubHabits",
+      "enforcingMethod": "PayGateService.CanCreateSubHabits",
+      "planRequirement": "Pro",
+      "quotaLiftedByPlan": null,
+      "appConfigs": [
+        {
+          "key": "SubHabitsProOnly",
+          "compiledDefault": true,
+          "compiledDefaultExpression": "true"
+        }
+      ],
+      "featureFlags": []
+    },
+    {
+      "capability": "CanManageAiMemory",
+      "enforcingMethod": "PayGateService.CanManageAiMemory",
+      "planRequirement": "Pro",
+      "quotaLiftedByPlan": null,
+      "appConfigs": [],
+      "featureFlags": []
+    },
+    {
+      "capability": "CanManageAiSummary",
+      "enforcingMethod": "PayGateService.CanManageAiSummary",
+      "planRequirement": "Pro",
+      "quotaLiftedByPlan": null,
+      "appConfigs": [],
+      "featureFlags": []
+    },
+    {
+      "capability": "CanManageApiKeys",
+      "enforcingMethod": "PayGateService.CanManageApiKeys",
+      "planRequirement": "Pro",
+      "quotaLiftedByPlan": null,
+      "appConfigs": [],
+      "featureFlags": []
+    },
+    {
+      "capability": "CanManageCalendar",
+      "enforcingMethod": "PayGateService.CanManageCalendar",
+      "planRequirement": "Pro",
+      "quotaLiftedByPlan": null,
+      "appConfigs": [],
+      "featureFlags": []
+    },
+    {
+      "capability": "CanManageProactiveAstra",
+      "enforcingMethod": "PayGateService.CanManageProactiveAstra",
+      "planRequirement": "Pro",
+      "quotaLiftedByPlan": null,
+      "appConfigs": [],
+      "featureFlags": []
+    },
+    {
+      "capability": "CanManageUserFacts",
+      "enforcingMethod": "PayGateService.CanManageUserFacts",
+      "planRequirement": "Pro",
+      "quotaLiftedByPlan": null,
+      "appConfigs": [],
+      "featureFlags": []
+    },
+    {
+      "capability": "CanReadApiKeys",
+      "enforcingMethod": "PayGateService.CanReadApiKeys",
+      "planRequirement": "Pro",
+      "quotaLiftedByPlan": null,
+      "appConfigs": [],
+      "featureFlags": []
+    },
+    {
+      "capability": "CanReadUserFacts",
+      "enforcingMethod": "PayGateService.CanReadUserFacts",
+      "planRequirement": "Pro",
+      "quotaLiftedByPlan": null,
+      "appConfigs": [],
+      "featureFlags": []
+    },
+    {
+      "capability": "CanSendAiMessage",
+      "enforcingMethod": "PayGateService.CanSendAiMessage",
+      "planRequirement": null,
+      "quotaLiftedByPlan": "Pro",
+      "appConfigs": [
+        {
+          "key": "FreeAiMessagesPerDay",
+          "compiledDefault": 5,
+          "compiledDefaultExpression": "AppConstants.DefaultFreeAiMessages"
+        },
+        {
+          "key": "ProAiMessagesPerDay",
+          "compiledDefault": 50,
+          "compiledDefaultExpression": "AppConstants.DefaultProAiMessages"
+        }
+      ],
+      "featureFlags": []
+    },
+    {
+      "capability": "CanUseDailySummary",
+      "enforcingMethod": "PayGateService.CanUseDailySummary",
+      "planRequirement": "Pro",
+      "quotaLiftedByPlan": null,
+      "appConfigs": [
+        {
+          "key": "DailySummaryProOnly",
+          "compiledDefault": true,
+          "compiledDefaultExpression": "true"
+        }
+      ],
+      "featureFlags": []
+    },
+    {
+      "capability": "CanUseGoalReview",
+      "enforcingMethod": "PayGateService.CanUseGoalReview",
+      "planRequirement": "Pro",
+      "quotaLiftedByPlan": null,
+      "appConfigs": [],
+      "featureFlags": []
+    },
+    {
+      "capability": "CanUseRetrospective",
+      "enforcingMethod": "PayGateService.CanUseRetrospective",
+      "planRequirement": "Pro",
+      "quotaLiftedByPlan": null,
+      "appConfigs": [
+        {
+          "key": "RetrospectiveProOnly",
+          "compiledDefault": true,
+          "compiledDefaultExpression": "true"
+        }
+      ],
+      "featureFlags": []
+    },
+    {
+      "capability": "CanUseSlipAlerts",
+      "enforcingMethod": "PayGateService.CanUseSlipAlerts",
+      "planRequirement": "Pro",
+      "quotaLiftedByPlan": null,
+      "appConfigs": [],
+      "featureFlags": []
+    },
+    {
+      "capability": "CanUseSmartReschedule",
+      "enforcingMethod": "PayGateService.CanUseSmartReschedule",
+      "planRequirement": "Pro",
+      "quotaLiftedByPlan": null,
+      "appConfigs": [
+        {
+          "key": "SmartRescheduleProOnly",
+          "compiledDefault": true,
+          "compiledDefaultExpression": "true"
+        }
+      ],
+      "featureFlags": []
+    },
+    {
+      "capability": "GetAiMessageLimit",
+      "enforcingMethod": "PayGateService.GetAiMessageLimit",
+      "planRequirement": null,
+      "quotaLiftedByPlan": null,
+      "appConfigs": [
+        {
+          "key": "FreeAiMessagesPerDay",
+          "compiledDefault": 5,
+          "compiledDefaultExpression": "AppConstants.DefaultFreeAiMessages"
+        },
+        {
+          "key": "ProAiMessagesPerDay",
+          "compiledDefault": 50,
+          "compiledDefaultExpression": "AppConstants.DefaultProAiMessages"
+        }
+      ],
+      "featureFlags": []
+    },
+    {
+      "capability": "TryConsumeAiMessage",
+      "enforcingMethod": "PayGateService.TryConsumeAiMessage",
+      "planRequirement": null,
+      "quotaLiftedByPlan": "Pro",
+      "appConfigs": [
+        {
+          "key": "FreeAiMessagesPerDay",
+          "compiledDefault": 5,
+          "compiledDefaultExpression": "AppConstants.DefaultFreeAiMessages"
+        },
+        {
+          "key": "ProAiMessagesPerDay",
+          "compiledDefault": 50,
+          "compiledDefaultExpression": "AppConstants.DefaultProAiMessages"
+        }
+      ],
+      "featureFlags": []
+    }
+  ],
+  "appConfigs": [
+    {
+      "key": "DailySummaryProOnly",
+      "compiledDefault": true,
+      "compiledDefaultExpression": "true",
+      "seededInMigrations": true
+    },
+    {
+      "key": "FreeAiMessagesPerDay",
+      "compiledDefault": 5,
+      "compiledDefaultExpression": "AppConstants.DefaultFreeAiMessages",
+      "seededInMigrations": true
+    },
+    {
+      "key": "FreeMaxHabits",
+      "compiledDefault": 1000,
+      "compiledDefaultExpression": "AppConstants.DefaultFreeMaxHabits",
+      "seededInMigrations": true
+    },
+    {
+      "key": "MaxHabitDepth",
+      "compiledDefault": 5,
+      "compiledDefaultExpression": "AppConstants.MaxHabitDepth",
+      "seededInMigrations": true
+    },
+    {
+      "key": "MaxReferrals",
+      "compiledDefault": 10,
+      "compiledDefaultExpression": "AppConstants.DefaultMaxReferrals",
+      "seededInMigrations": true
+    },
+    {
+      "key": "MaxTagsPerHabit",
+      "compiledDefault": 5,
+      "compiledDefaultExpression": "AppConstants.MaxTagsPerHabit",
+      "seededInMigrations": true
+    },
+    {
+      "key": "MaxUserFacts",
+      "compiledDefault": 50,
+      "compiledDefaultExpression": "AppConstants.MaxUserFacts",
+      "seededInMigrations": true
+    },
+    {
+      "key": "MinSupportedVersion",
+      "compiledDefault": "0.0.0",
+      "compiledDefaultExpression": "\"0.0.0\"",
+      "seededInMigrations": true
+    },
+    {
+      "key": "ProAiMessagesPerDay",
+      "compiledDefault": 50,
+      "compiledDefaultExpression": "AppConstants.DefaultProAiMessages",
+      "seededInMigrations": true
+    },
+    {
+      "key": "ReferralRewardDays",
+      "compiledDefault": null,
+      "compiledDefaultExpression": null,
+      "seededInMigrations": true
+    },
+    {
+      "key": "RequireApiKeyCreationStepUp",
+      "compiledDefault": false,
+      "compiledDefaultExpression": "false",
+      "seededInMigrations": true
+    },
+    {
+      "key": "RetrospectiveProOnly",
+      "compiledDefault": true,
+      "compiledDefaultExpression": "true",
+      "seededInMigrations": false
+    },
+    {
+      "key": "SmartRescheduleProOnly",
+      "compiledDefault": true,
+      "compiledDefaultExpression": "true",
+      "seededInMigrations": false
+    },
+    {
+      "key": "SubHabitsProOnly",
+      "compiledDefault": true,
+      "compiledDefaultExpression": "true",
+      "seededInMigrations": true
+    }
+  ],
+  "featureFlags": [
+    {
+      "key": "ai_chat",
+      "enabled": true,
+      "planRequirement": "Free",
+      "quotaLiftedByPlan": null,
+      "declaredInCode": false
+    },
+    {
+      "key": "ai_retrospective",
+      "enabled": true,
+      "planRequirement": "Pro",
+      "quotaLiftedByPlan": null,
+      "declaredInCode": false
+    },
+    {
+      "key": "ai_summary",
+      "enabled": true,
+      "planRequirement": "Pro",
+      "quotaLiftedByPlan": null,
+      "declaredInCode": false
+    },
+    {
+      "key": "api_keys",
+      "enabled": true,
+      "planRequirement": "Pro",
+      "quotaLiftedByPlan": null,
+      "declaredInCode": false
+    },
+    {
+      "key": "bulk_operations",
+      "enabled": true,
+      "planRequirement": null,
+      "quotaLiftedByPlan": null,
+      "declaredInCode": false
+    },
+    {
+      "key": "calendar_integration",
+      "enabled": true,
+      "planRequirement": "Pro",
+      "quotaLiftedByPlan": null,
+      "declaredInCode": false
+    },
+    {
+      "key": "checklist_templates",
+      "enabled": true,
+      "planRequirement": null,
+      "quotaLiftedByPlan": null,
+      "declaredInCode": false
+    },
+    {
+      "key": "gamification_free_tier",
+      "enabled": true,
+      "planRequirement": null,
+      "quotaLiftedByPlan": null,
+      "declaredInCode": true
+    },
+    {
+      "key": "goal_tracking",
+      "enabled": true,
+      "planRequirement": null,
+      "quotaLiftedByPlan": null,
+      "declaredInCode": false
+    },
+    {
+      "key": "habit_duplication",
+      "enabled": true,
+      "planRequirement": null,
+      "quotaLiftedByPlan": null,
+      "declaredInCode": false
+    },
+    {
+      "key": "offline_mode",
+      "enabled": true,
+      "planRequirement": null,
+      "quotaLiftedByPlan": null,
+      "declaredInCode": false
+    },
+    {
+      "key": "push_notifications",
+      "enabled": true,
+      "planRequirement": null,
+      "quotaLiftedByPlan": null,
+      "declaredInCode": false
+    },
+    {
+      "key": "scheduled_reminders",
+      "enabled": true,
+      "planRequirement": null,
+      "quotaLiftedByPlan": null,
+      "declaredInCode": false
+    },
+    {
+      "key": "slip_alerts",
+      "enabled": true,
+      "planRequirement": "Pro",
+      "quotaLiftedByPlan": null,
+      "declaredInCode": false
+    },
+    {
+      "key": "sub_habits",
+      "enabled": true,
+      "planRequirement": "Pro",
+      "quotaLiftedByPlan": null,
+      "declaredInCode": false
+    }
+  ]
+}

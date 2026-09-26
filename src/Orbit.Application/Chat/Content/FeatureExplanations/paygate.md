@@ -29,7 +29,6 @@ Upgrading to Pro unlocks:
 - The daily AI summary
 - AI memory
 - Calendar integration
-- Premium color schemes
 - Streak freezes
 - Gamification: XP, levels, and achievements
 - Retrospectives
