@@ -463,10 +463,21 @@ public class HabitsControllerTests
     [Fact]
     public async Task BulkDelete_Success_ReturnsOk()
     {
+        var parentId = Guid.NewGuid();
+        var childId = Guid.NewGuid();
         _mediator.Send(Arg.Any<BulkDeleteHabitsCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(default(BulkDeleteResult)!));
-        var result = await _controller.BulkDelete(new HabitsController.BulkDeleteHabitsRequest([Guid.NewGuid()]), CancellationToken.None);
-        result.Should().BeOfType<OkObjectResult>();
+            .Returns(Result.Success(new BulkDeleteResult([
+                new BulkDeleteItemResult(0, BulkItemStatus.Success, parentId,
+                    CascadedHabitIds: [childId])
+            ])));
+        var result = await _controller.BulkDelete(new HabitsController.BulkDeleteHabitsRequest([parentId]), CancellationToken.None);
+        var response = System.Text.Json.JsonSerializer.SerializeToElement(result.Should().BeOfType<OkObjectResult>().Subject.Value);
+        var item = response.GetProperty("Results")[0];
+        item.GetProperty("Index").GetInt32().Should().Be(0);
+        item.GetProperty("Status").GetInt32().Should().Be((int)BulkItemStatus.Success);
+        item.GetProperty("HabitId").GetGuid().Should().Be(parentId);
+        item.GetProperty("Error").ValueKind.Should().Be(System.Text.Json.JsonValueKind.Null);
+        item.GetProperty("CascadedHabitIds")[0].GetGuid().Should().Be(childId);
     }
 
     [Fact]

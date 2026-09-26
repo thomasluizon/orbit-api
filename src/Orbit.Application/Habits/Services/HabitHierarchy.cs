@@ -16,4 +16,24 @@ internal static class HabitHierarchy
             foreach (var descendant in SelfAndDescendants(child, childrenByParentId))
                 yield return descendant;
     }
+
+    public static IReadOnlyList<Habit> SoftDeleteSubtree(
+        Habit root,
+        ILookup<Guid?, Habit> childrenByParentId,
+        HashSet<Guid> deletedIds,
+        DateTime deletedAtUtc)
+    {
+        var deleted = new List<Habit>();
+        foreach (var habit in SelfAndDescendants(root, childrenByParentId))
+        {
+            if (!deletedIds.Add(habit.Id))
+                continue;
+
+            habit.RemoveAllGoals();
+            habit.SoftDelete(deletedAtUtc);
+            deleted.Add(habit);
+        }
+
+        return deleted;
+    }
 }

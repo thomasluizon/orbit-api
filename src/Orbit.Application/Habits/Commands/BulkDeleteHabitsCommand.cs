@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -18,7 +19,8 @@ public record BulkDeleteItemResult(
     int Index,
     BulkItemStatus Status,
     Guid HabitId,
-    string? Error = null);
+    string? Error = null,
+    IReadOnlyList<Guid>? CascadedHabitIds = null);
 
 public class BulkDeleteHabitsCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -31,14 +33,17 @@ public class BulkDeleteHabitsCommandHandler(
     {
         var results = new List<BulkDeleteItemResult>();
 
-        var habits = await habitRepository.FindTrackedAsync(
-            h => request.HabitIds.Contains(h.Id) && h.UserId == request.UserId,
-            query => query.Include(h => h.Goals),
-            cancellationToken);
-        var habitDict = habits.ToDictionary(h => h.Id);
-
         await HabitCeilingLock.ExecuteAsync(unitOfWork, request.UserId, async ct =>
         {
+            var userHabits = await habitRepository.FindTrackedAsync(
+                h => h.UserId == request.UserId,
+                query => query.Include(h => h.Goals),
+                ct);
+            var habitDict = userHabits.ToDictionary(h => h.Id);
+            var childrenByParentId = userHabits.ToLookup(h => h.ParentHabitId);
+            var deletedIds = new HashSet<Guid>();
+            var deletedAtUtc = DateTime.UtcNow;
+
             for (int i = 0; i < request.HabitIds.Count; i++)
             {
                 var habitId = request.HabitIds[i];
@@ -53,12 +58,16 @@ public class BulkDeleteHabitsCommandHandler(
                     continue;
                 }
 
-                habit.RemoveAllGoals();
-                habit.SoftDelete();
+                var cascadedHabitIds = HabitHierarchy.SoftDeleteSubtree(
+                        habit, childrenByParentId, deletedIds, deletedAtUtc)
+                    .Where(deleted => deleted.Id != habitId)
+                    .Select(deleted => deleted.Id)
+                    .ToList();
                 results.Add(new BulkDeleteItemResult(
                     Index: i,
                     Status: BulkItemStatus.Success,
-                    HabitId: habitId));
+                    HabitId: habitId,
+                    CascadedHabitIds: cascadedHabitIds));
             }
 
             await unitOfWork.SaveChangesAsync(ct);
