@@ -219,7 +219,7 @@ function allowlist(root) {
     !entry || typeof entry.path !== "string" || !entry.path || typeof entry.reason !== "string" || !entry.reason ||
     !["machine-path", "owner-name", "dated-anecdote", "comment-length"].includes(entry.rule) ||
     (entry.scope === "directory"
-      ? entry.match !== null || !entry.path.endsWith("/") || !["owner-name", "dated-anecdote"].includes(entry.rule) ||
+      ? entry.match !== null || !entry.path.endsWith("/") || entry.rule === "machine-path" ||
         (entry.exclude !== undefined && (!Array.isArray(entry.exclude) ||
           entry.exclude.some((prefix) => typeof prefix !== "string" || !prefix.startsWith(entry.path) || !prefix.endsWith("/"))))
       : entry.scope !== undefined || typeof entry.match !== "string" || !entry.match))) {
