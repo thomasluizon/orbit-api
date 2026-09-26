@@ -8,6 +8,28 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 public class OrbitConnectionStringFactoryTests
 {
     [Fact]
+    public void KeepsOneConnectionWarmPerPool_WithinConfiguredCaps()
+    {
+        var configuration = BuildConfiguration(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:DefaultConnection"] = "Host=request;Minimum Pool Size=0;Connection Idle Lifetime=60",
+            ["ConnectionStrings:SessionConnection"] = "Host=session;Minimum Pool Size=0;Connection Idle Lifetime=60",
+            ["Database:EfMaxPoolSize"] = "10",
+            ["Database:SessionMaxPoolSize"] = "5"
+        });
+
+        var request = new NpgsqlConnectionStringBuilder(OrbitConnectionStringFactory.ForRequestPath(configuration));
+        var session = new NpgsqlConnectionStringBuilder(OrbitConnectionStringFactory.ForSession(configuration));
+
+        request.MinPoolSize.Should().Be(1);
+        request.MaxPoolSize.Should().Be(10);
+        request.ConnectionIdleLifetime.Should().Be(300);
+        session.MinPoolSize.Should().Be(1);
+        session.MaxPoolSize.Should().Be(5);
+        session.ConnectionIdleLifetime.Should().Be(300);
+    }
+
+    [Fact]
     public void ForRequestPath_AppliesEfPoolCap_AndPreservesEndpointAndParams()
     {
         var configuration = BuildConfiguration(new Dictionary<string, string?>
@@ -20,7 +42,7 @@ public class OrbitConnectionStringFactoryTests
         var result = new NpgsqlConnectionStringBuilder(OrbitConnectionStringFactory.ForRequestPath(configuration));
 
         result.MaxPoolSize.Should().Be(10);
-        result.MinPoolSize.Should().Be(0);
+        result.MinPoolSize.Should().Be(1);
         result.Host.Should().Be("db.example.com");
         result.Port.Should().Be(6543);
         result.NoResetOnClose.Should().BeTrue();
@@ -54,8 +76,8 @@ public class OrbitConnectionStringFactoryTests
         result.Host.Should().Be("session");
         result.Port.Should().Be(5432);
         result.MaxPoolSize.Should().Be(5);
-        result.MinPoolSize.Should().Be(0);
-        result.ConnectionIdleLifetime.Should().Be(60);
+        result.MinPoolSize.Should().Be(1);
+        result.ConnectionIdleLifetime.Should().Be(300);
         result.KeepAlive.Should().Be(30);
     }
 

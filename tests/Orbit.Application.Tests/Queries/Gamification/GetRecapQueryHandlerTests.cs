@@ -322,6 +322,40 @@ public class GetRecapQueryHandlerTests
     }
 
     [Theory]
+    [InlineData(2025, 1, 6, 0, 0)]
+    [InlineData(2025, 1, 5, 1, 2)]
+    public async Task Handle_ClosedWeekCacheMiss_UsesAnchorWeekStartForIntervalSchedule(
+        int year, int month, int day, int currentWeekStartDay, int expectedScheduled)
+    {
+        var user = CreateUser("UTC", new DateTime(2024, 12, 1, 12, 0, 0, DateTimeKind.Utc));
+        user.SetWeekStartDay(currentWeekStartDay).IsSuccess.Should().BeTrue();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId,
+            "Walk",
+            FrequencyUnit.Day,
+            1,
+            DueDate: new DateOnly(2025, 1, 5),
+            Days: [DayOfWeek.Sunday, DayOfWeek.Monday],
+            IntervalWeeks: 2)).Value;
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
+            habit, new DateTime(2024, 12, 1, 12, 0, 0, DateTimeKind.Utc));
+        StubHabits(habit);
+
+        var weekStart = new DateOnly(year, month, day);
+        var result = await _handler.Handle(new GetRecapQuery(
+            UserId, weekStart, weekStart.AddDays(6), "week", ClosedWeekStart: weekStart),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Metrics.TotalScheduled.Should().Be(expectedScheduled);
+        _storedResponseJson.Should().NotBeNull();
+        JsonSerializer.Deserialize<RecapResponse>(_storedResponseJson!, new JsonSerializerOptions(JsonSerializerDefaults.Web))!
+            .Metrics.TotalScheduled.Should().Be(expectedScheduled);
+    }
+
+    [Theory]
     [InlineData(true)]
     [InlineData(false)]
     public async Task Handle_ClosedWeekOrYearEntirelyBeforeLocalizedAccountDate_ReturnsFailure(bool week)

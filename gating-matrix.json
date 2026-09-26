@@ -1,9 +1,9 @@
 {
   "provenance": {
-    "generatedFrom": "f884a39dd587",
+    "generatedFrom": "100211b110a7",
     "baselineRef": null,
     "baselineSha": null,
-    "inputFiles": 1129,
+    "inputFiles": 1152,
     "generatorVersion": 2
   },
   "note": "A live AppConfigs row overrides its compiled default at runtime. This offline artifact does not claim live values.",
@@ -147,14 +147,6 @@
           "compiledDefaultExpression": "true"
         }
       ],
-      "featureFlags": []
-    },
-    {
-      "capability": "CanUseGoalReview",
-      "enforcingMethod": "PayGateService.CanUseGoalReview",
-      "planRequirement": "Pro",
-      "quotaLiftedByPlan": null,
-      "appConfigs": [],
       "featureFlags": []
     },
     {

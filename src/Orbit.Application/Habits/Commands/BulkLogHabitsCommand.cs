@@ -14,7 +14,10 @@ public record BulkLogItem(Guid HabitId, DateOnly? Date = null) : IBulkHabitItem;
 
 public record BulkLogHabitsCommand(
     Guid UserId,
-    IReadOnlyList<BulkLogItem> Items) : IRequest<Result<BulkLogResult>>, IBulkHabitCommand<BulkLogItem>, IIdempotentCommand;
+    IReadOnlyList<BulkLogItem> Items) : IRequest<Result<BulkLogResult>>, IBulkHabitCommand<BulkLogItem>, IIdempotentCommand, IIdempotencyFingerprint
+{
+    public string IdempotencyFingerprint => BulkHabitCommandFingerprint.Create(Items, item => item.Date);
+}
 
 public record BulkLogResult(IReadOnlyList<BulkLogItemResult> Results);
 

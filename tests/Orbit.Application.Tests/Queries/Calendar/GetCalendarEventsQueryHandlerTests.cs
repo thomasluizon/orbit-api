@@ -688,7 +688,9 @@ public class GetCalendarEventsQueryHandlerTests
     }
 
     /// <summary>
-    /// A source clock gap must not reject a series whose projected date stays fixed.
+    /// <c>America/New_York</c> and <c>America/Chicago</c> hold different rules, so the walk really
+    /// runs, and they stay exactly one hour apart all year, so the account-local date can never move.
+    /// The source zone still loses 02:30 to its spring-forward gap, and the series must survive.
     /// </summary>
     [Fact]
     public async Task Handle_ByDaySeriesOnAWallClockTheSourceGapRemoves_IsKeptWhenTheDateCannotMove()

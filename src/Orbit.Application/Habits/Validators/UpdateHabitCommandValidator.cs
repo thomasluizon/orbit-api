@@ -64,8 +64,7 @@ public class UpdateHabitCommandValidator : AbstractValidator<UpdateHabitCommand>
 
         SharedHabitRules.AddOneTimeTaskEndDateRules(this,
             x => x.Options != null ? x.Options.EndDate : null,
-            x => x.FrequencyUnit,
-            x => x.IsGeneral != false);
+            x => x.FrequencyUnit);
 
         SharedHabitRules.AddGeneralHabitRules(this,
             x => x.IsGeneral,
