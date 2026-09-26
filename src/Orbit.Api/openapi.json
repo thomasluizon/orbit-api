@@ -11789,7 +11789,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/subscriptions/webhook": {

@@ -162,8 +162,8 @@ public partial class AgentCatalogService
             new AppSurface(
                 "subscriptions",
                 "Billing And Subscriptions",
-                "Shows plans, billing details, checkout flows, and ad reward actions.",
-                ["Read plan and billing state.", "Open checkout or portal only after explicit confirmation and step-up authorization.", "Claim ad rewards from the subscription surface when eligible."],
+                "Shows plans, billing details, and checkout flows.",
+                ["Read plan and billing state.", "Open checkout or portal only after explicit confirmation and step-up authorization."],
                 ["Billing mutations require step-up authorization.", "Internal Stripe identifiers are never exposed to AI."],
                 [AgentCapabilityIds.SubscriptionsRead, AgentCapabilityIds.SubscriptionsManage],
                 ["SubscriptionController.GetStatus", "SubscriptionController.CreateCheckout"])
