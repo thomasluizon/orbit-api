@@ -30,7 +30,9 @@ public record HabitChildResponse(
     bool IsOverdue,
     IReadOnlyList<HabitChildResponse> Children,
     string? Emoji = null,
-    int? IntervalWeeks = null);
+    int? IntervalWeeks = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    DateTime? CreatedAtUtc = null);
 
 public record HabitDetailResponse(
     Guid Id,
@@ -201,7 +203,8 @@ internal static class HabitDetailChildMapper
         DetermineOverdueStatus(child, userToday, weekStartDay, descendantLogsByHabitId),
         MapChildren(child, userToday, weekStartDay, descendantLogsByHabitId),
         Emoji: child.Emoji,
-        IntervalWeeks: child.IntervalWeeks);
+        IntervalWeeks: child.IntervalWeeks,
+        CreatedAtUtc: child.CreatedAtUtc);
 
     private static bool GetResponseCompletion(
         Habit habit,

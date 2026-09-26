@@ -6,6 +6,8 @@ using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using System.Reflection;
+using System.Text.Json;
 
 namespace Orbit.Application.Tests.Queries.Habits;
 
@@ -959,9 +961,17 @@ public class GetHabitScheduleQueryHandlerTests
     [Fact]
     public async Task Handle_NoDateRange_IncludesChildrenForParent()
     {
-        var parent = CreateTestHabit(title: "Parent", dueDate: Today);
-        var child = CreateTestHabit(title: "Child", dueDate: Today, parentHabitId: parent.Id);
-        SetupHabits(parent, child);
+        var parent = CreateTestHabit(title: "Parent", dueDate: Today.AddDays(-2));
+        var child = CreateTestHabit(title: "Child", dueDate: Today.AddDays(-3), parentHabitId: parent.Id);
+        var grandchild = CreateTestHabit(title: "Grandchild", dueDate: Today.AddDays(-4), parentHabitId: child.Id);
+        var parentCreated = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc);
+        var childCreated = parentCreated.AddDays(1);
+        var grandchildCreated = childCreated.AddDays(1);
+        var createdAtProperty = typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc), BindingFlags.Instance | BindingFlags.Public)!;
+        createdAtProperty.SetValue(parent, parentCreated);
+        createdAtProperty.SetValue(child, childCreated);
+        createdAtProperty.SetValue(grandchild, grandchildCreated);
+        SetupHabits(parent, child, grandchild);
 
         var query = new GetHabitScheduleQuery(UserId);
         var result = await _handler.Handle(query, CancellationToken.None);
@@ -969,6 +979,14 @@ public class GetHabitScheduleQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Items.Should().HaveCount(1);
         result.Value.Items[0].Children.Should().HaveCount(1);
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result.Value.Items[0], new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        var childJson = json.RootElement.GetProperty("children")[0];
+        childJson.GetProperty("createdAtUtc").GetDateTime().Should().Be(childCreated);
+        childJson.GetProperty("children")[0].GetProperty("createdAtUtc").GetDateTime().Should().Be(grandchildCreated);
+        var legacyChildJson = JsonSerializer.Serialize(result.Value.Items[0].Children[0] with { CreatedAtUtc = null },
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        using var legacyJson = JsonDocument.Parse(legacyChildJson);
+        legacyJson.RootElement.TryGetProperty("createdAtUtc", out _).Should().BeFalse();
     }
 
     [Fact]

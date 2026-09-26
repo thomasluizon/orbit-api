@@ -485,7 +485,8 @@ internal static class HabitScheduleFilters
             instances,
             ComputeSearchMatches(c, ctx),
             Emoji: c.Emoji,
-            IntervalWeeks: c.IntervalWeeks);
+            IntervalWeeks: c.IntervalWeeks,
+            CreatedAtUtc: c.CreatedAtUtc);
     }
 
     private static bool GetResponseCompletion(Habit habit, DateOnly? userToday)
