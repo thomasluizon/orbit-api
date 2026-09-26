@@ -16,6 +16,27 @@ public class HabitLog : Entity, ITimestamped, ISoftDeletable
 
     private HabitLog() { }
 
+    public static HabitLog FromScheduleRead(
+        Guid id,
+        Guid habitId,
+        DateOnly date,
+        decimal value,
+        DateTime createdAtUtc)
+    {
+        if (id == Guid.Empty || habitId == Guid.Empty)
+            throw new ArgumentException("Schedule log ids must be set.");
+
+        return new HabitLog
+        {
+            Id = id,
+            HabitId = habitId,
+            Date = date,
+            Value = value,
+            CreatedAtUtc = createdAtUtc,
+            UpdatedAtUtc = createdAtUtc
+        };
+    }
+
     internal static HabitLog Create(Guid habitId, DateOnly date, decimal value, string? note = null, bool isSlip = false)
     {
         return new HabitLog
