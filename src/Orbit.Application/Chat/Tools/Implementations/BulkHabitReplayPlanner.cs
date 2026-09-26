@@ -1,6 +1,4 @@
 using System.Globalization;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Common;
@@ -41,15 +39,7 @@ public sealed class BulkHabitReplayPlanner(
                     CultureInfo.InvariantCulture, DateTimeStyles.None, out _)))
             return new ToolResult(false, Error: "date must use YYYY-MM-DD format.");
 
-        var hasDate = args.TryGetProperty("date", out var receivedDate);
-        var invocation = JsonSerializer.Serialize(new
-        {
-            filter,
-            hasDate,
-            date = hasDate ? receivedDate.GetRawText() : null
-        });
-        var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(invocation)));
-        var plan = await GetOrCreateAsync(userId, commandType, fingerprint, async token =>
+        var plan = await GetOrCreateAsync(userId, commandType, async token =>
         {
             var date = !args.TryGetProperty("date", out var selectedDate) || selectedDate.ValueKind == JsonValueKind.Null
                 ? await userDateService.GetUserTodayAsync(userId, token)
@@ -73,7 +63,6 @@ public sealed class BulkHabitReplayPlanner(
     public async Task<BulkHabitReplayPlan?> GetOrCreateAsync(
         Guid userId,
         string commandType,
-        string invocationFingerprint,
         Func<CancellationToken, Task<BulkHabitReplayPlan>> createPlan,
         CancellationToken cancellationToken)
     {
@@ -81,7 +70,7 @@ public sealed class BulkHabitReplayPlanner(
             || keyUserId != userId)
             return await createPlan(cancellationToken);
 
-        var planType = $"{commandType}:plan:{invocationFingerprint}";
+        var planType = $"{commandType}:plan";
         var planOrdinal = idempotencyContext.NextRequestOrdinal(planType);
         var stored = await idempotencyStore.FindResponseBodyAsync(
             userId, idempotencyKey, planType, planOrdinal, cancellationToken);
