@@ -104,6 +104,36 @@ public class GetGoalReviewQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_Deadline_UsesInvariantCalendarInReviewContext()
+    {
+        var goal = Goal.Create(new Goal.CreateGoalParams(
+            UserId, "Run", 10, "miles", Deadline: new DateOnly(2026, 12, 31))).Value;
+        _goalRepo.FindAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Goal> { goal }.AsReadOnly());
+        string? capturedContext = null;
+        _reviewService.GenerateReviewAsync(
+            Arg.Do<string>(context => capturedContext = context), "en", Arg.Any<CancellationToken>())
+            .Returns(Result.Success("Review content"));
+        var previousCulture = CultureInfo.CurrentCulture;
+
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("ar-SA");
+            var result = await _handler.Handle(new GetGoalReviewQuery(UserId, "en"), CancellationToken.None);
+
+            result.IsSuccess.Should().BeTrue();
+            capturedContext.Should().Contain("Deadline: 2026-12-31");
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previousCulture;
+        }
+    }
+
+    [Fact]
     public async Task Handle_RefreshesStreakGoalValue_BeforeBuildingContext()
     {
         var streakGoal = Goal.Create(new Goal.CreateGoalParams(

@@ -73,6 +73,27 @@ public class GoalReviewToolTests
     }
 
     [Fact]
+    public async Task SuccessfulReview_Deadline_UsesInvariantCalendar()
+    {
+        var goal = Goal.Create(new Goal.CreateGoalParams(
+            UserId, "Run", 10, "miles", Deadline: new DateOnly(2026, 12, 31))).Value;
+        SetupGoals(goal);
+        var previousCulture = CultureInfo.CurrentCulture;
+
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("ar-SA");
+            var result = await Execute("{}");
+
+            result.EntityName.Should().Contain("Deadline: 2026-12-31");
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previousCulture;
+        }
+    }
+
+    [Fact]
     public async Task NoGoals_ReturnsNoGoalsMessage()
     {
         SetupGoals();

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using FluentAssertions;
@@ -99,6 +100,37 @@ public class AgentCatalogServiceTests
         prompt.Should().Contain("Tags: focus");
         prompt.Should().NotContain("Orbit Agent Policy");
         prompt.Should().NotContain("Product Surface Snapshot");
+    }
+
+    [Fact]
+    public void BuildDynamicSupplement_PreservesSafeContextTextUnderForeignCulture()
+    {
+        var snapshot = new Orbit.Domain.Models.AgentContextSnapshot(
+            "pro", "en", "America/Sao_Paulo", true, false, 0, "dark", "blue", true, false, "Idle",
+            FeatureFlags: ["api_keys"], TagNames: ["focus"], ChecklistTemplateNames: ["Morning Reset"],
+            RecentHabitTitles: ["Morning Run"], RecentGoalTitles: ["Read books"],
+            ClientContext: new Orbit.Domain.Models.AgentClientContext(
+                "android", "en-US", "12h", "today", ShowGeneralOnToday: true));
+        var previousCulture = CultureInfo.CurrentCulture;
+
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("ar-SA");
+            var prompt = _catalogService.BuildDynamicSupplement(snapshot);
+
+            prompt.Should().Contain("Plan: pro\nLanguage: en\nTimezone: America/Sao_Paulo\n");
+            prompt.Should().Contain("AI memory: enabled\nAI summary: disabled\nWeek starts on: Sunday\n");
+            prompt.Should().Contain("Theme: dark\nColor scheme: blue\nGoogle Calendar connected: yes\n");
+            prompt.Should().Contain("Calendar auto-sync: disabled (Idle)\n");
+            prompt.Should().Contain("Feature flags: api_keys\nTags: focus\nChecklist templates: Morning Reset\n");
+            prompt.Should().Contain("Recent habits: Morning Run\nRecent goals: Read books\n");
+            prompt.Should().Contain("Platform: android\nLocale: en-US\nTime format: 12h\n");
+            prompt.Should().Contain("Current app area: today\nShow general on today: True\n");
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previousCulture;
+        }
     }
 
     [Fact]

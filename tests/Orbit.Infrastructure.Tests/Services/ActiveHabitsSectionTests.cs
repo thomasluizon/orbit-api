@@ -1,3 +1,4 @@
+using System.Globalization;
 using FluentAssertions;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -294,6 +295,47 @@ public class ActiveHabitsSectionTests
         result.Should().Contain("1 general");
         result.Should().Contain("1 due today");
         result.Should().Contain("1 overdue");
+    }
+
+    [Fact]
+    public void Build_CountsSummary_PreservesPromptHeaderUnderForeignCulture()
+    {
+        var context = CreateContext(habits: [CreateHabit("Read", isGeneral: true)]);
+        var previousCulture = CultureInfo.CurrentCulture;
+
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("ar-SA");
+            var result = _sut.Build(context);
+
+            result.Should().Contain("## User's Habits (1 total, 1 general, 0 due today, 0 overdue)");
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previousCulture;
+        }
+    }
+
+    [Fact]
+    public void Build_LinkedGoal_PreservesGoalLabelUnderForeignCulture()
+    {
+        var habit = CreateHabit("Morning run");
+        var goal = Goal.Create(ValidUserId, "Run a marathon", 42, "km").Value;
+        habit.AddGoal(goal);
+        var context = CreateContext(habits: [habit]);
+        var previousCulture = CultureInfo.CurrentCulture;
+
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("ar-SA");
+            var result = _sut.Build(context);
+
+            result.Should().Contain("Goals: \"Run a marathon\"");
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previousCulture;
+        }
     }
 
     [Fact]

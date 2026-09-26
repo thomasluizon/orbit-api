@@ -3696,7 +3696,8 @@
         "testClass": "QueryGoalsToolTests",
         "file": "tests/Orbit.Application.Tests/Chat/Tools/QueryGoalsToolTests.cs",
         "references": [
-          "Goal"
+          "Goal",
+          "Habit"
         ]
       },
       {
@@ -7673,14 +7674,18 @@
         "testClass": "ActiveGoalsSectionTests",
         "file": "tests/Orbit.Infrastructure.Tests/Services/ActiveGoalsSectionTests.cs",
         "references": [
-          "Goal"
+          "Goal",
+          "Habit",
+          "User"
         ]
       },
       {
         "testClass": "ActiveHabitsSectionTests",
         "file": "tests/Orbit.Infrastructure.Tests/Services/ActiveHabitsSectionTests.cs",
         "references": [
-          "Habit"
+          "Goal",
+          "Habit",
+          "User"
         ]
       },
       {

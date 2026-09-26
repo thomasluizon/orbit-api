@@ -79,6 +79,36 @@ public class QueryGoalsToolTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_Deadline_UsesInvariantCalendar()
+    {
+        var goal = Goal.Create(new Goal.CreateGoalParams(
+            UserId, "Run", 10, "miles", "Race training", Deadline: new DateOnly(2026, 12, 31))).Value;
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Morning run", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        goal.AddHabit(habit);
+        _goalRepository.FindAsync(
+            Arg.Any<System.Linq.Expressions.Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<Goal>>([goal]));
+        var previousCulture = CultureInfo.CurrentCulture;
+
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("ar-SA");
+            var result = await Execute("{}");
+
+            result.EntityName.Should().Contain("Deadline: 2026-12-31");
+            result.EntityName.Should().Contain("Description: Race training");
+            result.EntityName.Should().Contain("Linked habits: Morning run");
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previousCulture;
+        }
+    }
+
+    [Fact]
     public async Task ExecuteAsync_ReturnsNoGoalsMessage_WhenSearchMisses()
     {
         var activeGoal = Goal.Create(new Goal.CreateGoalParams(
