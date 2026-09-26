@@ -103,9 +103,19 @@ public class GetHabitWidgetQueryHandlerTests
             Today.AddDays(-AppConstants.MaxRangeDays - 1),
             AppConstants.MaxRangeDays + 34);
         SetupHabits(habit);
+        var scheduleLogReader = Substitute.For<IHabitScheduleLogReader>();
+        scheduleLogReader.ReadDaysAsync(
+            Arg.Any<IReadOnlyCollection<Guid>>(),
+            Arg.Any<DateOnly>(),
+            Arg.Any<DateOnly>(),
+            Arg.Any<CancellationToken>()).Returns(Array.Empty<HabitScheduleLogDay>());
+        scheduleLogReader.ReadResolvedDueDateIdsAsync(
+            Arg.Any<IReadOnlyCollection<Guid>>(),
+            Arg.Any<CancellationToken>()).Returns(new HashSet<Guid>());
         var scheduleHandler = new GetHabitScheduleQueryHandler(
             _habitRepository,
-            _habitLogRepository,
+            scheduleLogReader,
+            Substitute.For<IHabitSchedulePageLoader>(),
             _userDateService,
             _unitOfWork);
 

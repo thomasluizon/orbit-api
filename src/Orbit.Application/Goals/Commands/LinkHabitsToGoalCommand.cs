@@ -4,6 +4,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -28,9 +29,10 @@ public class LinkHabitsToGoalCommandHandler(
             return Result.Failure(ErrorMessages.MaxHabitsPerGoal.Format(AppConstants.MaxHabitsPerGoal));
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var logCutoff = HabitMetricsCalculator.GetStreakLogCutoff(today);
         var goal = await goalRepository.FindOneTrackedAsync(
             g => g.Id == request.GoalId && g.UserId == request.UserId,
-            q => q.Include(g => g.Habits).ThenInclude(h => h.Logs),
+            q => q.Include(g => g.Habits).ThenInclude(h => h.Logs.Where(log => log.Date >= logCutoff)),
             cancellationToken);
 
         if (goal is null)
@@ -38,7 +40,7 @@ public class LinkHabitsToGoalCommandHandler(
 
         var habits = await habitRepository.FindTrackedAsync(
             h => request.HabitIds.Contains(h.Id) && h.UserId == request.UserId,
-            q => q.Include(h => h.Logs),
+            q => q.Include(h => h.Logs.Where(log => log.Date >= logCutoff)),
             cancellationToken);
 
         var habitsResolved = OwnershipValidation.AllResolved(request.HabitIds, habits, h => h.Id, ErrorMessages.HabitNotFound);

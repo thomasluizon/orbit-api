@@ -5,6 +5,7 @@ using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using Orbit.Infrastructure.Services;
 using System.Linq.Expressions;
 
@@ -270,10 +271,17 @@ public class GetStreakHistoryQueryHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(user);
         userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
-        habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(habits.ToList());
-        habitLogRepo.FindAsync(Arg.Any<Expression<Func<HabitLog, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(habits.SelectMany(h => h.Logs.Where(l => l.Value > 0)).ToList());
+        habitRepo.ProjectAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<HabitScheduleSnapshot>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(habits.Select(HabitScheduleSnapshot.FromHabit).ToList());
+        habitLogRepo.ProjectAsync(
+            Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<Func<IQueryable<HabitLog>, IQueryable<DateOnly>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<IQueryable<HabitLog>, IQueryable<DateOnly>>>(1)(
+                habits.SelectMany(habit => habit.Logs.Where(log => log.Value > 0)).AsQueryable()).ToList());
         freezeRepo.FindAsync(Arg.Any<Expression<Func<StreakFreeze, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(new List<StreakFreeze>());
 

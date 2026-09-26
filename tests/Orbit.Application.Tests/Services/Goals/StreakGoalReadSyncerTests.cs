@@ -42,6 +42,16 @@ public class GoalProgressReadSyncerTests
             Arg.Any<Expression<Func<Goal, bool>>>(),
             Arg.Any<CancellationToken>())
             .Returns(goals.ToList().AsReadOnly());
+        _goalRepo.ProjectAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<GoalStandardCompletionCount>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var predicate = call.ArgAt<Expression<Func<Goal, bool>>>(0).Compile();
+                var projection = call.ArgAt<Func<IQueryable<Goal>, IQueryable<GoalStandardCompletionCount>>>(1);
+                return projection(goals.Where(predicate).AsQueryable()).ToList();
+            });
         _goalRepo.FindAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),
             Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),

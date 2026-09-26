@@ -134,6 +134,10 @@ public class SkipHabitToolTests
 
         result.Success.Should().BeTrue();
         await _habitLogRepo.Received(1).AddAsync(Arg.Any<HabitLog>(), Arg.Any<CancellationToken>());
+        await _habitLogRepo.Received(1).FindAsync(
+            Arg.Is<Expression<Func<HabitLog, bool>>>(predicate =>
+                predicate.Compile()(habit.Logs.Single())),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -194,6 +198,10 @@ public class SkipHabitToolTests
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>()
         ).Returns(habit);
+        _habitLogRepo.FindAsync(
+            Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<CancellationToken>()).Returns(call =>
+            habit.Logs.Where(call.ArgAt<Expression<Func<HabitLog, bool>>>(0).Compile()).ToList());
     }
 
     private void SetupHabitNotFound()
