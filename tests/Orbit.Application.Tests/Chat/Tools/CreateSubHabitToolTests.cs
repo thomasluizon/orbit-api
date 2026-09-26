@@ -4,6 +4,7 @@ using MediatR;
 using NSubstitute;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Domain.Enums;
 using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Common;
 
@@ -165,7 +166,7 @@ public class CreateSubHabitToolTests
     }
 
     [Fact]
-    public async Task DueTimedSubHabit_WithScheduledReminders_ConvertsToOffsetsAndClearsScheduledStore()
+    public async Task DueTimedSubHabit_WithScheduledReminders_PassesClockTimeToDomain()
     {
         _mediator.Send(Arg.Any<CreateSubHabitCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(Guid.NewGuid()));
@@ -186,15 +187,13 @@ public class CreateSubHabitToolTests
         await _mediator.Received(1).Send(
             Arg.Is<CreateSubHabitCommand>(cmd =>
                 cmd.Options != null &&
-                cmd.Options.ReminderTimes != null &&
-                cmd.Options.ReminderTimes.Contains(30) &&
                 cmd.Options.ScheduledReminders != null &&
-                cmd.Options.ScheduledReminders.Count == 0),
+                cmd.Options.ScheduledReminders.Any(r => r.When == ScheduledReminderWhen.SameDay && r.Time == new TimeOnly(7, 30))),
             Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task DueTimedSubHabit_WithDayBeforeScheduledReminder_ConvertsToCrossDayOffset()
+    public async Task DueTimedSubHabit_WithDayBeforeScheduledReminder_PassesClockTimeToDomain()
     {
         _mediator.Send(Arg.Any<CreateSubHabitCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(Guid.NewGuid()));
@@ -215,10 +214,8 @@ public class CreateSubHabitToolTests
         await _mediator.Received(1).Send(
             Arg.Is<CreateSubHabitCommand>(cmd =>
                 cmd.Options != null &&
-                cmd.Options.ReminderTimes != null &&
-                cmd.Options.ReminderTimes.Contains(720) &&
                 cmd.Options.ScheduledReminders != null &&
-                cmd.Options.ScheduledReminders.Count == 0),
+                cmd.Options.ScheduledReminders.Any(r => r.When == ScheduledReminderWhen.DayBefore && r.Time == new TimeOnly(20, 0))),
             Arg.Any<CancellationToken>());
     }
 

@@ -472,7 +472,7 @@ public class CreateHabitToolTests
     }
 
     [Fact]
-    public async Task WithDueTimeAndScheduledReminders_PersistsOffsetsAndEmptiesScheduledStore()
+    public async Task WithDueTimeAndScheduledReminders_PreservesClockTimeInRelativeStore()
     {
         var result = await Execute("""
         {
@@ -489,13 +489,13 @@ public class CreateHabitToolTests
         await _habitRepo.Received(1).AddAsync(
             Arg.Is<Habit>(habit =>
                 habit.Title == "Standup"
-                && habit.ReminderTimes.Contains(30)
+                && habit.RelativeReminders.Any(r => r.When == ScheduledReminderWhen.SameDay && r.Time == new TimeOnly(7, 30))
                 && habit.ScheduledReminders.Count == 0),
             Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task WithDueTimeAndDayBeforeScheduledReminder_ConvertsToCrossDayOffset()
+    public async Task WithDueTimeAndDayBeforeScheduledReminder_PreservesClockTime()
     {
         var result = await Execute("""
         {
@@ -512,7 +512,7 @@ public class CreateHabitToolTests
         await _habitRepo.Received(1).AddAsync(
             Arg.Is<Habit>(habit =>
                 habit.Title == "Standup"
-                && habit.ReminderTimes.Contains(720)
+                && habit.RelativeReminders.Any(r => r.When == ScheduledReminderWhen.DayBefore && r.Time == new TimeOnly(20, 0))
                 && habit.ScheduledReminders.Count == 0),
             Arg.Any<CancellationToken>());
     }

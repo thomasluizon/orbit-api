@@ -27,7 +27,8 @@ public partial class HabitsController
         bool IsFlexible = false,
         IReadOnlyList<Guid>? GoalIds = null,
         string? Emoji = null,
-        int? IntervalWeeks = null);
+        int? IntervalWeeks = null,
+        IReadOnlyList<RelativeReminderTime>? RelativeReminders = null);
 
     public record UpdateHabitRequest(
         string Title,
@@ -50,7 +51,8 @@ public partial class HabitsController
         bool? IsFlexible = null,
         IReadOnlyList<Guid>? GoalIds = null,
         string? Emoji = null,
-        int? IntervalWeeks = null);
+        int? IntervalWeeks = null,
+        IReadOnlyList<RelativeReminderTime>? RelativeReminders = null);
 
     public record UpdateChecklistRequest(IReadOnlyList<ChecklistItem> ChecklistItems);
 
@@ -83,7 +85,8 @@ public partial class HabitsController
         string? GoogleEventId = null,
         string? Emoji = null,
         IReadOnlyList<string>? Tags = null,
-        int? IntervalWeeks = null);
+        int? IntervalWeeks = null,
+        IReadOnlyList<RelativeReminderTime>? RelativeReminders = null);
 
     public record BulkDeleteHabitsRequest(IReadOnlyList<Guid> HabitIds);
 
@@ -132,7 +135,8 @@ public partial class HabitsController
         IReadOnlyList<Guid>? TagIds = null,
         DateOnly? EndDate = null,
         bool IsFlexible = false,
-        string? Emoji = null);
+        string? Emoji = null,
+        IReadOnlyList<RelativeReminderTime>? RelativeReminders = null);
 
     public record LinkGoalsRequest(List<Guid> GoalIds);
 

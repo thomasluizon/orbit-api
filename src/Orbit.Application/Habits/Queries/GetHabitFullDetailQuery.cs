@@ -71,14 +71,15 @@ public class GetHabitFullDetailQueryHandler(
             habit.IsBadHabit, isCompleted, habit.IsGeneral, habit.IsFlexible,
             habit.DueDate, habit.DueTime, habit.DueEndTime, habit.EndDate,
             habit.Days.ToList(), habit.Position,
-            habit.ReminderEnabled, habit.ReminderTimes, habit.ScheduledReminders,
+            habit.ReminderEnabled, habit.ReminderTimes, habit.GetScheduledRemindersForLegacyClients(),
             habit.ChecklistItems, habit.CreatedAtUtc, children,
             Emoji: habit.Emoji,
             IntervalWeeks: habit.IntervalWeeks,
             LinkedGoals: habit.ParentHabitId.HasValue
                 ? habit.Goals.Select(goal => new LinkedGoalDto(goal.Id, goal.Title)).ToList()
                 : null,
-            SlipAlertEnabled: habit.ParentHabitId.HasValue ? habit.SlipAlertEnabled : null);
+            SlipAlertEnabled: habit.ParentHabitId.HasValue ? habit.SlipAlertEnabled : null,
+            RelativeReminders: habit.RelativeReminders);
 
         var metrics = HabitMetricsCalculator.Calculate(
             habit,

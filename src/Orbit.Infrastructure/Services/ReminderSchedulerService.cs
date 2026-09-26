@@ -32,7 +32,8 @@ public partial class ReminderSchedulerService(
         FrequencyUnit = h.FrequencyUnit, FrequencyQuantity = h.FrequencyQuantity,
         IntervalWeeks = h.IntervalWeeks, IsFlexible = h.IsFlexible, Days = h.Days,
         DueTime = h.DueTime, ReminderTimes = h.ReminderTimes,
-        ScheduledReminders = h.ScheduledReminders
+        ScheduledReminders = h.ScheduledReminders,
+        RelativeReminders = h.RelativeReminders
     };
 
     private static readonly Expression<Func<User, SchedulerUser>> UserProjection = u => new SchedulerUser
@@ -127,10 +128,20 @@ public partial class ReminderSchedulerService(
             .Select(r => (r.HabitId, r.Date, r.MinutesBefore))
             .ToHashSet();
 
+        var sentClockKeys = await dbContext.SentReminders
+            .AsNoTracking()
+            .Where(r => habitIds.Contains(r.HabitId) && r.ReminderTimeUtc != null
+                && r.Date >= minWindowDate && r.Date <= maxWindowDate)
+            .Select(r => new { r.HabitId, r.Date, r.ReminderTimeUtc, r.When })
+            .ToListAsync(ct);
+        var sentClockSet = sentClockKeys
+            .Select(r => (r.HabitId, r.Date, Time: r.ReminderTimeUtc!.Value, r.When))
+            .ToHashSet();
+
         foreach (var habit in habits)
         {
             await ProcessSingleRelativeReminderAsync(
-                habit, users, loggedHabitDates, sentReminderSet, pending, dbContext, nowUtc, ct);
+                habit, users, loggedHabitDates, sentReminderSet, sentClockSet, pending, dbContext, nowUtc, ct);
         }
     }
 
@@ -148,10 +159,19 @@ public partial class ReminderSchedulerService(
         return TimeZoneInfo.ConvertTimeToUtc(dueLocal, tz);
     }
 
+    private static DateTime LocalReminderInstantUtc(DateTime reminderLocal, TimeZoneInfo tz)
+    {
+        while (tz.IsInvalidTime(reminderLocal))
+            reminderLocal = reminderLocal.AddMinutes(1);
+
+        return LocalDueInstantUtc(reminderLocal, tz);
+    }
+
     private async Task ProcessSingleRelativeReminderAsync(
         SchedulerHabit habit, Dictionary<Guid, SchedulerUser> users,
         HashSet<(Guid HabitId, DateOnly Date)> loggedHabitDates,
         HashSet<(Guid HabitId, DateOnly Date, int MinutesBefore)> sentReminderSet,
+        HashSet<(Guid HabitId, DateOnly Date, TimeOnly Time, ScheduledReminderWhen? When)> sentClockSet,
         List<PendingReminderPush> pending, OrbitDbContext dbContext, DateTime nowUtc, CancellationToken ct)
     {
         if (!users.TryGetValue(habit.UserId, out var user)) return;
@@ -160,14 +180,15 @@ public partial class ReminderSchedulerService(
         var userNow = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, tz);
         var userToday = DateOnly.FromDateTime(userNow);
 
-        for (var dayOffset = 0; dayOffset <= MaxRelativeLookaheadDays; dayOffset++)
+        for (var dayOffset = -1; dayOffset <= MaxRelativeLookaheadDays; dayOffset++)
         {
             var occurrenceDate = userToday.AddDays(dayOffset);
             if (!HabitScheduleService.IsHabitDueOnDate(habit, occurrenceDate, user.WeekStartDay)) continue;
             if (loggedHabitDates.Contains((habit.Id, occurrenceDate))) continue;
 
             var dueUtc = LocalDueInstantUtc(occurrenceDate.ToDateTime(habit.DueTime!.Value), tz);
-            foreach (var minutesBefore in habit.ReminderTimes)
+            foreach (var minutesBefore in habit.ReminderTimes.Concat(
+                habit.RelativeReminders.Where(r => r.MinutesBefore.HasValue).Select(r => r.MinutesBefore!.Value)).Distinct())
             {
                 var reminderUtc = dueUtc.AddMinutes(-minutesBefore);
                 var reminderLocalDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(reminderUtc, tz));
@@ -175,7 +196,9 @@ public partial class ReminderSchedulerService(
                 if (sentReminderSet.Contains((habit.Id, occurrenceDate, minutesBefore))) continue;
 
                 var lang = user.Language ?? "en";
-                var minutesText = FormatReminderText(minutesBefore, lang);
+                var minutesText = minutesBefore < 0
+                    ? FormatScheduledReminderText(ScheduledReminderWhen.SameDay, lang)
+                    : FormatReminderText(minutesBefore, lang);
 
                 var sentReminder = SentReminder.Create(habit.Id, occurrenceDate, minutesBefore);
                 var notification = Notification.Create(
@@ -190,6 +213,32 @@ public partial class ReminderSchedulerService(
 
                 if (logger.IsEnabled(LogLevel.Debug))
                     LogSentReminder(logger, minutesBefore, habit.Id, habit.UserId);
+            }
+
+            foreach (var reminder in habit.RelativeReminders.Where(r => r.When.HasValue)
+                .Concat(habit.ScheduledReminders.Select(Domain.ValueObjects.RelativeReminderTime.FromScheduled)).Distinct())
+            {
+                var sendDate = reminder.When == ScheduledReminderWhen.DayBefore
+                    ? occurrenceDate.AddDays(-1) : occurrenceDate;
+                if (sendDate != userToday) continue;
+
+                var sendUtc = LocalReminderInstantUtc(sendDate.ToDateTime(reminder.Time!.Value), tz);
+                if (nowUtc < sendUtc) continue;
+
+                var clockKey = (habit.Id, sendDate, reminder.Time.Value, reminder.When);
+                if (sentClockSet.Contains(clockKey)
+                    || sentClockSet.Contains((habit.Id, sendDate, reminder.Time.Value, null))) continue;
+
+                var lang = user.Language ?? "en";
+                var body = FormatScheduledReminderText(reminder.When!.Value, lang);
+                var sentReminder = SentReminder.Create(habit.Id, sendDate, 0, reminder.Time, reminder.When);
+                var notification = Notification.Create(habit.UserId, habit.Title, body, NotificationUrls.Home, habit.Id);
+                sentClockSet.Add(clockKey);
+
+                if (!await TryRecordReminderAsync(habit, sentReminder, notification, dbContext, ct))
+                    continue;
+
+                pending.Add(new PendingReminderPush(habit.UserId, habit.Title, body, habit.Id));
             }
         }
     }

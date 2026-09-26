@@ -269,6 +269,37 @@ public class CreateHabitCommandValidatorTests
     }
 
     [Fact]
+    public void Validate_RelativeReminders_AcceptsSignedAndClockForms()
+    {
+        var command = ValidCommand() with
+        {
+            Options = new HabitCommandOptions(
+                DueTime: new TimeOnly(9, 0),
+                RelativeReminders:
+                [
+                    new(MinutesBefore: -60),
+                    new(When: DayBefore, Time: new TimeOnly(20, 0))
+                ])
+        };
+
+        _validator.TestValidate(command).ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact]
+    public void Validate_RelativeReminders_RejectsIncompleteForm()
+    {
+        var command = ValidCommand() with
+        {
+            Options = new HabitCommandOptions(
+                DueTime: new TimeOnly(9, 0),
+                RelativeReminders: [new(When: DayBefore)])
+        };
+
+        _validator.TestValidate(command)
+            .ShouldHaveValidationErrorFor(x => x.Options != null ? x.Options.RelativeReminders : null);
+    }
+
+    [Fact]
     public void Validate_ScheduledReminders_Over5_HasError()
     {
         var command = ValidCommand() with
