@@ -138,3 +138,24 @@ test("XML build files have their comments checked", () => {
     } finally { rmSync(root, { recursive: true, force: true }) }
   }
 })
+
+test("an even number of backslashes closes a YAML string before a dated comment", () => {
+  const root = make("sample.yml", String.raw`value: "foo\\\\" # ${date}` + "\n")
+  try {
+    const result = run(root, ["--all"])
+    assert.equal(result.status, 1)
+    assert.match(result.stderr, /sample\.yml:1: dated-anecdote/)
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test("staged content is checked after its working copy is deleted", () => {
+  const root = make("sample.md")
+  try {
+    writeFileSync(join(root, "sample.md"), `On ${date}, it failed.\n`)
+    git(root, "add", "sample.md")
+    rmSync(join(root, "sample.md"))
+    const result = run(root, ["--staged"])
+    assert.equal(result.status, 1)
+    assert.match(result.stderr, /sample\.md:1: dated-anecdote/)
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
