@@ -59,7 +59,8 @@ public record HabitDetailResponse(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<LinkedGoalDto>? LinkedGoals = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    bool? SlipAlertEnabled = null);
+    bool? SlipAlertEnabled = null,
+    IReadOnlyList<RelativeReminderTime>? RelativeReminders = null);
 
 public record GetHabitByIdQuery(Guid UserId, Guid HabitId) : IRequest<Result<HabitDetailResponse>>;
 
@@ -117,12 +118,13 @@ public class GetHabitByIdQueryHandler(
             habit.Position,
             habit.ReminderEnabled,
             habit.ReminderTimes,
-            habit.ScheduledReminders,
+            habit.GetScheduledRemindersForLegacyClients(),
             habit.ChecklistItems,
             habit.CreatedAtUtc,
             children,
             Emoji: habit.Emoji,
-            IntervalWeeks: habit.IntervalWeeks));
+            IntervalWeeks: habit.IntervalWeeks,
+            RelativeReminders: habit.RelativeReminders));
     }
 }
 

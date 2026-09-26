@@ -30,7 +30,8 @@ public record HabitCreateParams(
     int? Position = null,
     string? GoogleEventId = null,
     string? Emoji = null,
-    int? IntervalWeeks = null);
+    int? IntervalWeeks = null,
+    IReadOnlyList<RelativeReminderTime>? RelativeReminders = null);
 
 public record HabitUpdateParams(
     string Title,
@@ -53,7 +54,8 @@ public record HabitUpdateParams(
     IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null,
     string? Emoji = null,
     DateOnly? UserToday = null,
-    int? IntervalWeeks = null);
+    int? IntervalWeeks = null,
+    IReadOnlyList<RelativeReminderTime>? RelativeReminders = null);
 
 public class Habit : Entity, ITimestamped, ISoftDeletable
 {
@@ -88,6 +90,13 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     public bool SlipAlertEnabled { get; private set; }
     public IReadOnlyList<ChecklistItem> ChecklistItems { get; private set; } = [];
     public IReadOnlyList<ScheduledReminderTime> ScheduledReminders { get; private set; } = [];
+    public IReadOnlyList<RelativeReminderTime> RelativeReminders { get; private set; } = [];
+    public IReadOnlyList<ScheduledReminderTime> GetScheduledRemindersForLegacyClients() =>
+        DueTime.HasValue
+            ? RelativeReminders.Where(r => r.When.HasValue)
+                .Select(r => new ScheduledReminderTime(r.When!.Value, r.Time!.Value))
+                .ToList()
+            : ScheduledReminders;
     public DateOnly? EndDate { get; private set; }
     public int? Position { get; private set; }
     public string? GoogleEventId { get; private set; }
@@ -189,6 +198,10 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         if (reminderTimesValidation is not null)
             return Result.Failure<Habit>(reminderTimesValidation);
 
+        var relativeValidation = ValidateCreateRelativeReminders(p);
+        if (relativeValidation is not null)
+            return Result.Failure<Habit>(relativeValidation);
+
         return Result.Success(new Habit
         {
             UserId = p.UserId,
@@ -211,10 +224,13 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             DueEndTime = p.DueEndTime,
             ParentHabitId = p.ParentHabitId,
             ReminderEnabled = p.ReminderEnabled,
-            ReminderTimes = p.ReminderTimes ?? [15],
+            ReminderTimes = p.ReminderTimes ?? (p.DueTime.HasValue && (p.ScheduledReminders is { Count: > 0 } || p.RelativeReminders is { Count: > 0 }) ? [] : [15]),
             SlipAlertEnabled = p.SlipAlertEnabled,
             ChecklistItems = p.ChecklistItems ?? [],
-            ScheduledReminders = p.ScheduledReminders ?? [],
+            ScheduledReminders = p.DueTime.HasValue ? [] : p.ScheduledReminders ?? [],
+            RelativeReminders = p.DueTime.HasValue
+                ? (p.RelativeReminders ?? []).Concat((p.ScheduledReminders ?? []).Select(RelativeReminderTime.FromScheduled)).Distinct().ToList()
+                : p.RelativeReminders ?? [],
             EndDate = p.EndDate,
             Position = p.Position,
             GoogleEventId = p.GoogleEventId,
@@ -526,8 +542,22 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         if (validation.IsFailure)
             return validation;
 
+        var previousDueTime = DueTime;
         ApplyRequiredUpdates(p);
         ApplyOptionalUpdates(p);
+
+        if (!previousDueTime.HasValue && DueTime.HasValue && p.ReminderTimes is null && RelativeReminders.Count > 0)
+            ReminderTimes = [];
+
+        if (!DueTime.HasValue && previousDueTime.HasValue && RelativeReminders.Count > 0)
+        {
+            ScheduledReminders = ScheduledReminders.Concat(RelativeReminders.Select(r =>
+                r.When.HasValue
+                    ? new ScheduledReminderTime(r.When.Value, r.Time!.Value)
+                    : OffsetToScheduled(previousDueTime.Value, r.MinutesBefore!.Value)))
+                .Distinct().ToList();
+            RelativeReminders = [];
+        }
 
         UpdatedAtUtc = DateTime.UtcNow;
         return Result.Success();
@@ -540,6 +570,19 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         return update.IsSuccess
             ? Result.Success(preview)
             : Result.Failure<Habit>(update.Error);
+    }
+
+    private static AppError? ValidateCreateRelativeReminders(HabitCreateParams p)
+    {
+        var validation = HabitInvariants.ValidateRelativeReminders(p.RelativeReminders);
+        if (validation is not null)
+            return validation;
+
+        if (p.DueTime.HasValue)
+            return (p.RelativeReminders?.Count ?? 0) + (p.ScheduledReminders?.Count ?? 0) <= DomainConstants.MaxRelativeReminders
+                ? null : DomainErrors.InvalidRelativeReminders;
+
+        return p.RelativeReminders is { Count: > 0 } ? DomainErrors.InvalidRelativeReminders : null;
     }
 
     public Result ValidateUpdate(HabitUpdateParams p)
@@ -579,6 +622,20 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         var scheduledReminderValidation = HabitInvariants.ValidateScheduledReminders(p.ScheduledReminders);
         if (scheduledReminderValidation is not null)
             return scheduledReminderValidation;
+
+        var relativeValidation = HabitInvariants.ValidateRelativeReminders(p.RelativeReminders);
+        if (relativeValidation is not null)
+            return relativeValidation;
+
+        if (!p.DueTime.HasValue && !DueTime.HasValue && p.RelativeReminders is { Count: > 0 })
+            return DomainErrors.InvalidRelativeReminders;
+
+        var relativeCount = p.RelativeReminders is not null
+            ? p.RelativeReminders.Count
+            : RelativeReminders.Count(r => !r.When.HasValue)
+                + (p.ScheduledReminders?.Count ?? RelativeReminders.Count(r => r.When.HasValue) + ScheduledReminders.Count);
+        if (p.DueTime.HasValue && relativeCount > DomainConstants.MaxRelativeReminders)
+            return DomainErrors.InvalidRelativeReminders;
 
         return HabitInvariants.ValidateReminderTimes(p.ReminderTimes);
     }
@@ -636,6 +693,19 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             ChecklistItems = p.ChecklistItems;
         if (p.ScheduledReminders is not null)
             ScheduledReminders = p.ScheduledReminders;
+        if (p.RelativeReminders is not null)
+            RelativeReminders = p.RelativeReminders;
+
+        if (DueTime.HasValue)
+        {
+            if (p.RelativeReminders is null && p.ScheduledReminders is not null)
+                RelativeReminders = RelativeReminders.Where(r => !r.When.HasValue)
+                    .Concat(p.ScheduledReminders.Select(RelativeReminderTime.FromScheduled)).Distinct().ToList();
+            else if (p.RelativeReminders is null && ScheduledReminders.Count > 0)
+                RelativeReminders = RelativeReminders.Concat(ScheduledReminders.Select(RelativeReminderTime.FromScheduled))
+                    .Distinct().ToList();
+            ScheduledReminders = [];
+        }
 
         if (p.ClearEndDate == true || IsGeneral)
             EndDate = null;
@@ -644,6 +714,14 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
 
         if ((p.ClearEndDate == true || p.EndDate.HasValue) && FrequencyUnit is not null)
             RecomputeCompletionForEndDate();
+    }
+
+    private static ScheduledReminderTime OffsetToScheduled(TimeOnly dueTime, int minutesBefore)
+    {
+        var minutes = (int)dueTime.ToTimeSpan().TotalMinutes - minutesBefore;
+        var when = minutes >= 0 ? ScheduledReminderWhen.SameDay : ScheduledReminderWhen.DayBefore;
+        var localMinutes = ((minutes % 1440) + 1440) % 1440;
+        return new ScheduledReminderTime(when, TimeOnly.FromTimeSpan(TimeSpan.FromMinutes(localMinutes)));
     }
 
     private void RecomputeCompletionForEndDate()

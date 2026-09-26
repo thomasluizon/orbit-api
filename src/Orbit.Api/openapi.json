@@ -13882,6 +13882,15 @@
               "string"
             ],
             "format": "int32"
+          },
+          "relativeReminders": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/RelativeReminderTime"
+            }
           }
         }
       },
@@ -14663,6 +14672,15 @@
               "string"
             ],
             "format": "int32"
+          },
+          "relativeReminders": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/RelativeReminderTime"
+            }
           }
         }
       },
@@ -14800,6 +14818,15 @@
               "null",
               "string"
             ]
+          },
+          "relativeReminders": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/RelativeReminderTime"
+            }
           }
         }
       },
@@ -16300,6 +16327,37 @@
           }
         }
       },
+      "RelativeReminderTime": {
+        "type": "object",
+        "properties": {
+          "minutesBefore": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "when": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ScheduledReminderWhen"
+              }
+            ]
+          },
+          "time": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "time"
+          }
+        }
+      },
       "ReorderGoalsRequest": {
         "required": [
           "positions"
@@ -17497,6 +17555,15 @@
               "string"
             ],
             "format": "int32"
+          },
+          "relativeReminders": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/RelativeReminderTime"
+            }
           }
         }
       },

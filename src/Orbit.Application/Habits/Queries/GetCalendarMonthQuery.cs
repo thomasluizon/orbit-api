@@ -187,14 +187,15 @@ public class GetCalendarMonthQueryHandler(
             habit.Days.ToList(), habit.Position, habit.CreatedAtUtc,
             habit.DueDate, habit.DueTime, habit.DueEndTime, habit.EndDate,
             scheduledDates, isOverdue,
-            habit.ReminderEnabled, habit.ReminderTimes, habit.ScheduledReminders,
+            habit.ReminderEnabled, habit.ReminderTimes, habit.GetScheduledRemindersForLegacyClients(),
             habit.SlipAlertEnabled, habit.ChecklistItems,
             habit.Tags.Select(t => new HabitTagItem(t.Id, t.Name, t.Color)).ToList(),
             habit.Goals.Select(g => new LinkedGoalDto(g.Id, g.Title)).ToList(),
             children, children.Count > 0,
             flexibleTarget, flexibleCompleted, isLoggedInRange, instances,
             Emoji: habit.Emoji,
-            IntervalWeeks: habit.IntervalWeeks);
+            IntervalWeeks: habit.IntervalWeeks,
+            RelativeReminders: habit.RelativeReminders);
     }
 
     private static (int? Target, int? Completed) CalculateFlexibleProgress(

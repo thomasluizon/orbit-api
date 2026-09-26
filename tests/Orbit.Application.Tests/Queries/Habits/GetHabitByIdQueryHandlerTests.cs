@@ -5,6 +5,7 @@ using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.ValueObjects;
 using Orbit.Infrastructure.Persistence;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -80,6 +81,30 @@ public class GetHabitByIdQueryHandlerTests
         result.Value.FrequencyUnit.Should().Be(FrequencyUnit.Day);
         result.Value.FrequencyQuantity.Should().Be(1);
         result.Value.DueDate.Should().Be(Today);
+    }
+
+    [Fact]
+    public async Task Handle_LegacyEmptyScheduledEdit_DoesNotReturnFoldedClockReminder()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Timed Habit", FrequencyUnit.Day, 1, Today,
+            DueTime: new TimeOnly(9, 0), ReminderTimes: [30],
+            ScheduledReminders: [new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(8, 45))])).Value;
+        habit.Update(new HabitUpdateParams(
+            habit.Title, habit.Description, FrequencyUnit.Day, 1, null, false, null,
+            DueTime: habit.DueTime, ScheduledReminders: [])).IsSuccess.Should().BeTrue();
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { habit }.AsReadOnly());
+
+        var result = await _handler.Handle(new GetHabitByIdQuery(UserId, habit.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.ScheduledReminders.Should().BeEmpty();
+        result.Value.RelativeReminders.Should().BeEmpty();
+        result.Value.ReminderTimes.Should().Equal(30);
     }
 
     [Fact]

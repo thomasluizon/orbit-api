@@ -102,6 +102,7 @@ public class CreateSubHabitCommandHandler(
             IsFlexible: opts.IsFlexible,
             EndDate: opts.EndDate,
             ScheduledReminders: opts.ScheduledReminders,
+            RelativeReminders: opts.RelativeReminders,
             Position: nextPosition,
             IntervalWeeks: intervalWeeks));
 

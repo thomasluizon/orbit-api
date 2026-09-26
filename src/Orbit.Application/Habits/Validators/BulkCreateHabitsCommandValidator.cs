@@ -33,6 +33,7 @@ public class BulkCreateHabitsCommandValidator : AbstractValidator<BulkCreateHabi
                 .When(h => h.FrequencyUnit is not null);
 
             SharedHabitRules.AddIntervalWeeksRules(habit.RuleFor(h => h.IntervalWeeks));
+            SharedHabitRules.AddRelativeReminderRules(habit.RuleFor(h => h.RelativeReminders));
 
             habit.RuleFor(h => h.Tags)
                 .Must(tags => tags!.Count <= AppConstants.MaxTagsPerHabit)

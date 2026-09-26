@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Orbit.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    partial class OrbitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260926170829_FoldDueTimeScheduledReminders")]
+    partial class FoldDueTimeScheduledReminders
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1320,10 +1323,6 @@ namespace Orbit.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<int>("CompletionOrdinal")
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0);
-
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -1357,7 +1356,7 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasIndex(new[] { "HabitId", "Date" }, "IX_HabitLogs_HabitId_Date");
 
-                    b.HasIndex(new[] { "HabitId", "Date", "CompletionOrdinal" }, "IX_HabitLogs_HabitId_Date_Completed")
+                    b.HasIndex(new[] { "HabitId", "Date" }, "IX_HabitLogs_HabitId_Date_Completed")
                         .IsUnique()
                         .HasFilter("\"Value\" > 0 AND NOT \"IsDeleted\"");
 
@@ -1477,14 +1476,6 @@ namespace Orbit.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
-
-                    b.Property<string>("PreviewFingerprint")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<int>("RevisionNumber")
-                        .IsConcurrencyToken()
-                        .HasColumnType("integer");
 
                     b.Property<string>("RiskClass")
                         .IsRequired()

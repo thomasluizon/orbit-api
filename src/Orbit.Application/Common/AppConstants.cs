@@ -32,6 +32,7 @@ public static class AppConstants
     public const int DefaultOverdueWindowDays = 7;
     public const int MaxScheduledReminders = DomainConstants.MaxScheduledReminders;
     public const int MaxReminderTimes = DomainConstants.MaxReminderTimes;
+    public const int MaxRelativeReminders = DomainConstants.MaxRelativeReminders;
     public const int MaxReminderMinutesBefore = DomainConstants.MaxReminderMinutesBefore;
     public const int MaxIntervalWeeks = DomainConstants.MaxIntervalWeeks;
     public const int MaxPushSubscriptionsPerUser = 5;
