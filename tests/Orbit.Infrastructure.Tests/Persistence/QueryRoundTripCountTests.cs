@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Entities;
@@ -13,6 +14,68 @@ public class QueryRoundTripCountTests
 {
     private static readonly DateOnly DateFrom = new(2026, 6, 1);
     private static readonly DateOnly DateTo = new(2026, 6, 30);
+
+    [Fact]
+    public async Task DailySummaryRead_PreservesOverdueSkipsAndPriorBadHabitSlip()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var context = factory.Context;
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var userId = Guid.NewGuid();
+        var user = User.Create("Summary User", $"summary-{userId:N}@example.com").Value;
+        typeof(User).GetProperty("Id")!.SetValue(user, userId);
+        user.SetTimeZone("UTC");
+        context.Users.Add(user);
+
+        var overdue = Habit.Create(new HabitCreateParams(userId, "Overdue", FrequencyUnit.Day, 1,
+            DueDate: today.AddDays(-3))).Value;
+        var skippedToday = Habit.Create(new HabitCreateParams(userId, "Skipped today", FrequencyUnit.Day, 1,
+            DueDate: today.AddDays(-3))).Value;
+        var skippedEarlier = Habit.Create(new HabitCreateParams(userId, "Skipped earlier", FrequencyUnit.Day, 1,
+            DueDate: today.AddDays(-3))).Value;
+        var bad = Habit.Create(new HabitCreateParams(userId, "Bad habit", FrequencyUnit.Day, 1,
+            DueDate: today.AddDays(-10), IsBadHabit: true)).Value;
+        context.Habits.AddRange(overdue, skippedToday, skippedEarlier, bad);
+        context.HabitLogs.AddRange(
+            HabitLog.FromScheduleRead(Guid.NewGuid(), overdue.Id, today.AddDays(-3), 1, 0, DateTime.UtcNow),
+            HabitLog.FromScheduleRead(Guid.NewGuid(), overdue.Id, today.AddDays(-2), 0, 0, DateTime.UtcNow),
+            HabitLog.FromScheduleRead(Guid.NewGuid(), skippedToday.Id, today, 0, 0, DateTime.UtcNow),
+            HabitLog.FromScheduleRead(Guid.NewGuid(), skippedEarlier.Id, today.AddDays(-1), 0, 0, DateTime.UtcNow),
+            HabitLog.FromScheduleRead(Guid.NewGuid(), bad.Id, today.AddDays(-5), 1, 0, DateTime.UtcNow));
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+
+        var payGate = Substitute.For<IPayGateService>();
+        payGate.CanUseDailySummary(userId, Arg.Any<CancellationToken>()).Returns(Orbit.Domain.Common.Result.Success());
+        var summaryService = Substitute.For<ISummaryService>();
+        IReadOnlyList<Habit>? receivedHabits = null;
+        DailySummaryContext? receivedContext = null;
+        summaryService.GenerateSummaryAsync(Arg.Any<IEnumerable<Habit>>(), Arg.Any<DailySummaryContext>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                receivedHabits = call.ArgAt<IEnumerable<Habit>>(0).ToList();
+                receivedContext = call.ArgAt<DailySummaryContext>(1);
+                return Orbit.Domain.Common.Result.Success(new DailySummaryContent("Pinned summary", string.Empty));
+            });
+        var handler = new GetDailySummaryQueryHandler(
+            new GenericRepository<Habit>(context),
+            new GenericRepository<User>(context),
+            new GenericRepository<HabitLog>(context),
+            payGate, summaryService, new MemoryCache(new MemoryCacheOptions()));
+
+        var result = await handler.Handle(new GetDailySummaryQuery(userId, today, today, "en"),
+            CancellationToken.None);
+
+        result.Value.Summary.Should().Be("Pinned summary");
+        receivedHabits!.Select(habit => habit.Title).Should().BeEquivalentTo(
+            ["Overdue", "Skipped earlier", "Bad habit"]);
+        receivedHabits!.Single(habit => habit.Id == overdue.Id).Logs.Select(log => (log.Date, log.Value))
+            .Should().Contain((today.AddDays(-2), 0));
+        receivedHabits!.Single(habit => habit.Id == skippedEarlier.Id).Logs.Select(log => (log.Date, log.Value))
+            .Should().Contain((today.AddDays(-1), 0));
+        receivedContext!.LastBadHabitSlipDates[bad.Id].Should().Be(today.AddDays(-5));
+    }
 
     [Fact]
     public async Task RetrospectiveHabitLoad_RoundTripCount_IsInvariantToHabitVolume()
