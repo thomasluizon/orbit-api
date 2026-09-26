@@ -1,14 +1,58 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using NSubstitute;
+using Orbit.Application.Gamification.Queries;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
+using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Persistence;
 
 public class StreakProjectionQueryTests
 {
+    [Fact]
+    public async Task StreakHistory_ProjectsDistinctCompletionDatesInSql()
+    {
+        var counter = new CountingDbCommandInterceptor();
+        using var factory = new SqliteOrbitDbContextFactory(counter);
+        var today = new DateOnly(2026, 4, 3);
+        var user = User.Create("History User", "history@example.com").Value;
+        user.SetStripeSubscription("sub", DateTime.UtcNow.AddYears(1));
+        var first = CreateHabit(user.Id, today.AddDays(-2));
+        var second = CreateHabit(user.Id, today.AddDays(-2));
+        foreach (var date in new[] { today.AddDays(-2), today.AddDays(-1), today })
+            first.Log(date, advanceDueDate: false);
+        second.Log(today.AddDays(-1), advanceDueDate: false);
+        second.Log(today, advanceDueDate: false);
+        factory.Context.Users.Add(user);
+        factory.Context.Habits.AddRange(first, second);
+        await factory.Context.SaveChangesAsync();
+        factory.Context.ChangeTracker.Clear();
+        var featureFlags = Substitute.For<IFeatureFlagService>();
+        featureFlags.GetEnabledKeysForUserAsync(user.Id, Arg.Any<CancellationToken>())
+            .Returns(new List<string>());
+        var handler = new GetStreakHistoryQueryHandler(
+            new GenericRepository<User>(factory.Context),
+            new GenericRepository<Habit>(factory.Context),
+            new GenericRepository<HabitLog>(factory.Context),
+            new GenericRepository<StreakFreeze>(factory.Context),
+            featureFlags);
+
+        counter.Reset();
+        var result = await handler.Handle(
+            new GetStreakHistoryQuery(user.Id, today.AddDays(-2), today), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Points.Select(point => point.Streak).Should().Equal(1, 2, 3);
+        var logRead = counter.Commands.Single(command => command.Sql.Contains("HabitLogs", StringComparison.Ordinal));
+        logRead.Sql.Should().Contain("SELECT DISTINCT");
+        logRead.Sql.Split("FROM", 2)[0].Should().Contain("\"Date\"")
+            .And.NotContain("\"Note\"").And.NotContain("\"HabitId\"");
+        logRead.Rows.Should().Be(3);
+    }
+
     [Fact]
     public async Task ScheduleProjection_KeepsScheduledDatesWithoutLoadingUnusedHabitColumns()
     {

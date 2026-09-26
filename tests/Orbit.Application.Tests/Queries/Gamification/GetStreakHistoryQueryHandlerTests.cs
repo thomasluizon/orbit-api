@@ -85,10 +85,14 @@ public class GetStreakHistoryQueryHandlerTests
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<CancellationToken>())
             .Returns(list);
-        _habitLogRepo.FindAsync(
+        _habitLogRepo.ProjectAsync(
             Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<Func<IQueryable<HabitLog>, IQueryable<DateOnly>>>(),
             Arg.Any<CancellationToken>())
-            .Returns(list.SelectMany(h => h.Logs.Where(l => l.Value > 0 && !l.IsDeleted)).ToList());
+            .Returns(call => call.ArgAt<Func<IQueryable<HabitLog>, IQueryable<DateOnly>>>(1)(
+                list.SelectMany(h => h.Logs.Where(l => !l.IsDeleted))
+                    .Where(call.ArgAt<Expression<Func<HabitLog, bool>>>(0).Compile())
+                    .AsQueryable()).ToList());
     }
 
     private void ArrangeFreezes(params StreakFreeze[] freezes)
@@ -146,11 +150,14 @@ public class GetStreakHistoryQueryHandlerTests
             .Returns(new List<Habit> { ownedHabit });
 
         Expression<Func<HabitLog, bool>>? readFilter = null;
-        _habitLogRepo.FindAsync(Arg.Any<Expression<Func<HabitLog, bool>>>(), Arg.Any<CancellationToken>())
+        _habitLogRepo.ProjectAsync(
+            Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<Func<IQueryable<HabitLog>, IQueryable<DateOnly>>>(),
+            Arg.Any<CancellationToken>())
             .Returns(call =>
             {
                 readFilter = call.Arg<Expression<Func<HabitLog, bool>>>();
-                return (IReadOnlyList<HabitLog>)new List<HabitLog>();
+                return (IReadOnlyList<DateOnly>)new List<DateOnly>();
             });
 
         await _handler.Handle(new GetStreakHistoryQuery(UserId, Today.AddDays(-2), Today), CancellationToken.None);

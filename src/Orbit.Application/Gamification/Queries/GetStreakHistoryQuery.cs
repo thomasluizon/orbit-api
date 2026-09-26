@@ -44,11 +44,11 @@ public class GetStreakHistoryQueryHandler(
 
         var completionDates = streakEligibleHabitIds.Count == 0
             ? new HashSet<DateOnly>()
-            : (await habitLogRepository.FindAsync(
+            : (await habitLogRepository.ProjectAsync(
                 l => streakEligibleHabitIds.Contains(l.HabitId) && l.Value > 0
                     && l.Date >= seedFrom && l.Date <= request.DateTo,
+                query => query.Select(log => log.Date).Distinct(),
                 cancellationToken))
-                .Select(log => log.Date)
                 .ToHashSet();
 
         var freezeDates = (await streakFreezeRepository.FindAsync(

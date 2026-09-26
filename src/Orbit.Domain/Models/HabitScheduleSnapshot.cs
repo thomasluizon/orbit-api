@@ -5,6 +5,7 @@ namespace Orbit.Domain.Models;
 
 public sealed record HabitScheduleSnapshot(
     Guid Id,
+    Guid UserId,
     Guid? ParentHabitId,
     FrequencyUnit? FrequencyUnit,
     int? FrequencyQuantity,
@@ -24,6 +25,7 @@ public sealed record HabitScheduleSnapshot(
 {
     public static HabitScheduleSnapshot FromHabit(Habit habit) => new(
         habit.Id,
+        habit.UserId,
         habit.ParentHabitId,
         habit.FrequencyUnit,
         habit.FrequencyQuantity,

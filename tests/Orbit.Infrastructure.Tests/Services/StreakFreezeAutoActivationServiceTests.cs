@@ -229,11 +229,23 @@ public class StreakFreezeAutoActivationServiceTests
     [Fact]
     public async Task ActivateMissedDayFreezes_QueryCount_IsInvariantToCandidateVolume()
     {
-        var small = await CountActivationQueriesAsync(candidateCount: 2);
-        var large = await CountActivationQueriesAsync(candidateCount: 20);
+        var small = await ReadActivationQueriesAsync(candidateCount: 2);
+        var large = await ReadActivationQueriesAsync(candidateCount: 20);
 
-        large.Should().Be(small);
-        large.Should().BeLessThanOrEqualTo(5);
+        large.QueryCount.Should().Be(small.QueryCount);
+        large.QueryCount.Should().BeLessThanOrEqualTo(5);
+    }
+
+    [Fact]
+    public async Task ActivateMissedDayFreezes_ProjectsDistinctCompletionPairsInSql()
+    {
+        var (_, commands) = await ReadActivationQueriesAsync(candidateCount: 2);
+        var completionRead = commands.Single(command => command.Sql.Contains("HabitLogs", StringComparison.Ordinal));
+
+        completionRead.Sql.Should().Contain("SELECT DISTINCT").And.Contain("FROM \"Habits\"");
+        completionRead.Sql.Split("FROM", 2)[0].Should().Contain("\"UserId\"").And.Contain("\"Date\"")
+            .And.NotContain("\"Note\"").And.NotContain("\"Value\"");
+        completionRead.Rows.Should().Be(6);
     }
 
     [Fact]
@@ -344,7 +356,7 @@ public class StreakFreezeAutoActivationServiceTests
                 Arg.Any<CancellationToken>())
             .Returns(today);
 
-    private static async Task<int> CountActivationQueriesAsync(int candidateCount)
+    private static async Task<(int QueryCount, IReadOnlyList<CapturedDbCommand> Commands)> ReadActivationQueriesAsync(int candidateCount)
     {
         var counter = new CountingDbCommandInterceptor();
         using var factory = new SqliteOrbitDbContextFactory(counter);
@@ -376,7 +388,7 @@ public class StreakFreezeAutoActivationServiceTests
 
         counter.Reset();
         await service.ActivateMissedDayFreezes(CancellationToken.None);
-        return counter.CommandCount;
+        return (counter.CommandCount, counter.Commands);
     }
 
     private static OrbitDbContext CreateDbContext() =>
