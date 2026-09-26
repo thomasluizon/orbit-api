@@ -6,6 +6,7 @@ using NSubstitute.ExceptionExtensions;
 using Npgsql;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification;
+using Orbit.Application.Gamification.Models;
 using Orbit.Application.Gamification.Services;
 using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
@@ -172,14 +173,28 @@ public class GamificationServiceTests
             Arg.Any<Expression<Func<HabitLog, bool>>>(),
             Arg.Any<CancellationToken>())
             .Returns(habits.Sum(h => h.Logs.Count));
+
+        var logs = habits.SelectMany(habit => habit.Logs).ToList();
+        _habitLogRepo.ProjectAsync(
+            Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<Func<IQueryable<HabitLog>, IQueryable<LoggedHabitLog>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<IQueryable<HabitLog>, IQueryable<LoggedHabitLog>>>(1)(logs.AsQueryable()).ToList());
+        _habitLogRepo.ProjectAsync(
+            Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<Func<IQueryable<HabitLog>, IQueryable<HabitCompletionDate>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<IQueryable<HabitLog>, IQueryable<HabitCompletionDate>>>(1)(logs.AsQueryable()).ToList());
+        SetupHabitLogs();
     }
 
     private void SetupHabitLogs(params HabitLog[] logs)
     {
-        _habitLogRepo.FindAsync(
+        _habitLogRepo.ProjectAsync(
             Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<Func<IQueryable<HabitLog>, IQueryable<DateTime>>>(),
             Arg.Any<CancellationToken>())
-            .Returns(logs.ToList());
+            .Returns(call => call.ArgAt<Func<IQueryable<HabitLog>, IQueryable<DateTime>>>(1)(logs.AsQueryable()).ToList());
     }
 
     private void SetupHabitCount(int count)
@@ -811,9 +826,12 @@ public class GamificationServiceTests
         results.Should().HaveCount(3);
         results.Should().AllSatisfy(r => r.XpEarned.Should().Be(10 + 1));
         user.TotalXp.Should().Be(initialXp + 3 * (10 + 1));
+        await _habitLogRepo.Received(1).ProjectAsync(
+            Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<Func<IQueryable<HabitLog>, IQueryable<LoggedHabitLog>>>(),
+            Arg.Any<CancellationToken>());
         await _habitRepo.Received(2).FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
-            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>());
         await _achievementRepo.Received(1).FindAsync(
             Arg.Any<Expression<Func<UserAchievement, bool>>>(),
