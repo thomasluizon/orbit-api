@@ -127,3 +127,14 @@ test("the Guards and Lefthook commands reject planted text and pass its removal"
     assert.equal(run(root, ["--base", "origin/main"]).status, 0)
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
+
+test("XML build files have their comments checked", () => {
+  for (const name of ["Sample.csproj", "Directory.Build.props", "nuget.config"]) {
+    const root = make(name, `<Project>\n  <!-- ${date} -->\n</Project>\n`)
+    try {
+      const all = run(root, ["--all"])
+      assert.equal(all.status, 1)
+      assert.match(all.stderr, new RegExp(`${name.replace(".", "\\.")}:2: dated-anecdote`))
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  }
+})

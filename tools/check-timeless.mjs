@@ -18,7 +18,7 @@ const session = new RegExp("\\bses" + "sion[\\s:_-]*[a-f0-9]{8,}\\b", "i")
 const prose = new Set([".md", ".mdx", ".txt"])
 const js = new Set([".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".cs"])
 const typedJs = new Set([".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"])
-const html = new Set([".html", ".htm", ".svg", ".xml", ".astro"])
+const html = new Set([".html", ".htm", ".svg", ".xml", ".astro", ".csproj", ".fsproj", ".props", ".targets", ".resx", ".config", ".nuspec", ".slnx", ".runsettings", ".xaml", ".xsd", ".xslt", ".plist"])
 const hash = new Set([".yml", ".yaml", ".sh", ".bash", ".zsh", ".toml", ".properties", ".editorconfig", ".gitignore"])
 const parsers = new Map()
 
@@ -77,10 +77,40 @@ function comments(text, path, root) {
   const extension = extname(path).toLowerCase()
   const lines = text.split("\n")
   const found = []
+  let markup = text
+  if (extension === ".astro") {
+    const regions = []
+    const opening = /^---[ \t]*\r?\n/.exec(text)
+    if (opening) {
+      const closing = /^---[ \t]*\r?$/gm
+      closing.lastIndex = opening[0].length
+      const fence = closing.exec(text)
+      if (fence) regions.push([opening[0].length, fence.index])
+    }
+    const withoutFrontmatter = regions.reduce((body, [start, end]) =>
+      body.slice(0, start) + body.slice(start, end).replace(/[^\r\n]/g, " ") + body.slice(end), text)
+    const scripts = /<script\b(?:[^>"']|"[^"]*"|'[^']*')*>([\s\S]*?)<\/script\s*>/gi
+    for (const match of withoutFrontmatter.matchAll(scripts)) {
+      const openingTag = /^<script\b(?:[^>"']|"[^"]*"|'[^']*')*>/i.exec(match[0])[0]
+      const start = match.index + openingTag.length
+      regions.push([start, start + match[1].length])
+    }
+    if (regions.length) {
+      const parser = typescript(root)
+      if (!parser) throw new Error(`TypeScript is required to check ${path}`)
+      for (const [start, end] of regions) {
+        const offset = text.slice(0, start).split("\n").length - 1
+        found.push(...parsedComments(text.slice(start, end), `${path}.ts`, parser)
+          .map((item) => ({ ...item, line: item.line + offset })))
+      }
+      markup = regions.reduce((body, [start, end]) =>
+        body.slice(0, start) + body.slice(start, end).replace(/[^\r\n]/g, " ") + body.slice(end), text)
+    }
+  }
   if (html.has(extension)) {
     const pattern = /<!--([\s\S]*?)-->/g
-    for (const match of text.matchAll(pattern)) {
-      const line = text.slice(0, match.index).split("\n").length
+    for (const match of markup.matchAll(pattern)) {
+      const line = markup.slice(0, match.index).split("\n").length
       found.push({ line, text: match[1], length: match[0].split("\n").length })
     }
   } else if (hash.has(extension) || path.endsWith(".gitignore")) {
@@ -126,6 +156,8 @@ function comments(text, path, root) {
       }
       if (state === "line" || state === "block") found.push({ line: start, text: value, length: lines.length - start + 1, singleLine: state === "line" })
     }
+  }
+  if (js.has(extension) || extension === ".astro") {
     let group = []
     for (const item of found.filter((item) => item.length === 1 && (item.singleLine ?? item.text.startsWith("//"))).sort((a, b) => a.line - b.line)) {
       if (group.length && item.line !== group.at(-1).line + 1) { if (group.length > 6) found.push({ line: group[0].line, text: group.map((part) => part.text).join("\n"), length: group.length, block: true }); group = [] }
@@ -155,7 +187,7 @@ function findings(path, content, root = ROOT) {
         results.push({ path, line: section.line + section.text.slice(0, hit.index).split("\n").length - 1, rule, match: hit[0] })
       }
     }
-    if (js.has(extname(path).toLowerCase()) && section.length > 6 && (section.block || section.text.includes("\n"))) {
+    if ((js.has(extname(path).toLowerCase()) || extname(path).toLowerCase() === ".astro") && section.length > 6 && (section.block || section.text.includes("\n"))) {
       results.push({ path, line: section.line, end: section.line + section.length - 1, rule: "comment-length", match: `${section.length} lines` })
     }
   }
