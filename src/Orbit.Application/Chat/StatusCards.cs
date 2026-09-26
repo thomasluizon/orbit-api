@@ -9,13 +9,16 @@ public record DaySummaryCard(
     DateOnly Date, int Due, int Done, int? CompletionRate,
     int OverdueCount, int CurrentStreak, string SurfaceId = "today");
 
-public record StreakAchievement(string Id, string IconKey, DateTime? EarnedAt);
+public record StreakAchievement(string Id, string IconKey, DateTime EarnedAt);
+
+public record StreakAchievementDisc(string Id, string IconKey, DateTime? EarnedAt);
 
 public record StreakCard(
     int CurrentStreak, int LongestStreak, int Level, int TotalXp, int XpForNextLevel,
     DateOnly? LastActiveDate, bool IsFrozenToday, IReadOnlyList<DateOnly> RecentFreezeDates,
     IReadOnlyList<StreakAchievement> RecentAchievements,
-    string SurfaceId = "progress");
+    string SurfaceId = "progress",
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<StreakAchievementDisc>? AchievementDiscs = null);
 
 public record CalendarCardEvent(string Title, string Start, string? End, bool IsAllDay);
 
@@ -47,14 +50,21 @@ public static class StatusCardBuilder
             return null;
 
         var achievements = payload.Achievements?.Achievements ?? profile.Achievements;
+        var earned = achievements.Where(item => item.EarnedAtUtc.HasValue)
+            .OrderByDescending(item => item.EarnedAtUtc).ToList();
+        var discs = earned.Concat(achievements.Where(item => !item.EarnedAtUtc.HasValue))
+            .Take(6)
+            .Select(item => new StreakAchievementDisc(item.Id, item.IconKey, item.EarnedAtUtc))
+            .ToList();
         return new StreakCard(
             streak.CurrentStreak, streak.LongestStreak, profile.Level, profile.TotalXp,
             profile.XpForNextLevel, streak.LastActiveDate, streak.IsFrozenToday,
             streak.RecentFreezeDates,
-            achievements.OrderByDescending(item => item.EarnedAtUtc)
+            earned
                 .Take(6)
-                .Select(item => new StreakAchievement(item.Id, item.IconKey, item.EarnedAtUtc))
-                .ToList());
+                .Select(item => new StreakAchievement(item.Id, item.IconKey, item.EarnedAtUtc!.Value))
+                .ToList(),
+            AchievementDiscs: discs);
     }
 
     public static CalendarCard? BuildCalendar(CalendarOverviewPayload? payload)

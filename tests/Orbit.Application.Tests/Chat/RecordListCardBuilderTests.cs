@@ -56,4 +56,36 @@ public class RecordListCardBuilderTests
         json.RootElement.EnumerateObject().Select(property => property.Name)
             .Should().BeEquivalentTo(["id", "title", "detail", "date", "state"]);
     }
+
+    [Fact]
+    public void Keys_RevokedState_OmitsEnglishSuffixAndOverridesExpiry()
+    {
+        var now = new DateTime(2026, 9, 25, 12, 0, 0, DateTimeKind.Utc);
+        var key = new ApiKeyResponse(Guid.NewGuid(), "Automation", "orb_123", ["read"],
+            true, now.AddDays(-1), now.AddDays(-7), null, true);
+
+        var item = RecordListCardBuilder.BuildKeys([key], now).Items.Single();
+
+        item.State.Should().Be("revoked");
+        item.Detail.Should().Be("orb_123");
+        item.Detail.Should().NotContain("revoked");
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("not-base64!!")]
+    [InlineData("a")]
+    public void Cursor_RejectsMalformedInput(string cursor)
+    {
+        RecordListCursor.TryRead(cursor, Guid.NewGuid(), "tags", out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Cursor_RejectsWrongPageBoundary()
+    {
+        var userId = Guid.NewGuid();
+
+        RecordListCursor.TryRead(RecordListCursor.Create(userId, "tags", 11), userId, "tags", out _)
+            .Should().BeFalse();
+    }
 }

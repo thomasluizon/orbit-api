@@ -49,6 +49,12 @@ public class RecordPageTools(IMediator mediator, McpExecutorBridge executorBridg
     private async Task<string> GetPage(ClaimsPrincipal user, string kind, string cursor, CancellationToken cancellationToken)
     {
         var result = await mediator.Send(new GetRecordListPageQuery(McpToolHelpers.GetUserId(user), kind, cursor), cancellationToken);
-        return result.IsSuccess ? JsonSerializer.Serialize(result.Value, JsonOptions) : $"Error: {result.Error}";
+        if (result.IsFailure)
+            return $"Error: {result.Error}";
+
+        var card = kind == "notifications"
+            ? result.Value with { Items = result.Value.Items.Select(item => item with { Detail = null }).ToList() }
+            : result.Value;
+        return JsonSerializer.Serialize(card, JsonOptions);
     }
 }

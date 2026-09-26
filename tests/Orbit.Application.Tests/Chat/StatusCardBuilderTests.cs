@@ -127,8 +127,9 @@ public class StatusCardBuilderTests
         var card = StatusCardBuilder.BuildStreak(new GamificationOverviewPayload(profile,
             new AchievementsResponse(achievements), streak))!;
 
-        card.RecentAchievements.Select(item => item.Id).Should().Equal(
+        card.RecentAchievements.Select(item => item.Id).Should().Equal("achievement-7", "achievement-2");
+        card.AchievementDiscs!.Select(item => item.Id).Should().Equal(
             "achievement-7", "achievement-2", "achievement-0", "achievement-1", "achievement-3", "achievement-4");
-        card.RecentAchievements.Count(item => item.EarnedAt.HasValue).Should().Be(2);
+        card.AchievementDiscs!.Count(item => item.EarnedAt.HasValue).Should().Be(2);
     }
 }

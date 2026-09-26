@@ -16566,6 +16566,26 @@
             "type": "string"
           },
           "earnedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "StreakAchievementDisc": {
+        "required": [
+          "id",
+          "iconKey",
+          "earnedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "iconKey": {
+            "type": "string"
+          },
+          "earnedAt": {
             "type": [
               "null",
               "string"
@@ -16654,6 +16674,15 @@
           "surfaceId": {
             "type": "string",
             "default": "progress"
+          },
+          "achievementDiscs": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/StreakAchievementDisc"
+            }
           }
         }
       },

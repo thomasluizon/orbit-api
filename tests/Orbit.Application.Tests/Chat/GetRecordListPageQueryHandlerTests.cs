@@ -3,7 +3,10 @@ using MediatR;
 using NSubstitute;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Queries;
+using Orbit.Application.ApiKeys.Queries;
+using Orbit.Application.ChecklistTemplates.Queries;
 using Orbit.Application.Notifications.Queries;
+using Orbit.Application.Tags.Queries;
 using Orbit.Domain.Common;
 
 namespace Orbit.Application.Tests.Chat;
@@ -58,5 +61,66 @@ public class GetRecordListPageQueryHandlerTests
         accountResult.IsFailure.Should().BeTrue();
         kindResult.IsFailure.Should().BeTrue();
         await mediator.DidNotReceiveWithAnyArgs().Send(default(GetNotificationsQuery)!, default);
+    }
+
+    [Theory]
+    [InlineData("tags")]
+    [InlineData("templates")]
+    [InlineData("keys")]
+    public async Task ReferenceRecords_PageFromElevenThroughLastPage(string kind)
+    {
+        var userId = Guid.NewGuid();
+        var now = new DateTime(2026, 9, 25, 12, 0, 0, DateTimeKind.Utc);
+        var tags = Enumerable.Range(0, 23).Select(index =>
+            new TagResponse(Guid.NewGuid(), $"Tag {index}", "#ffffff")).ToList();
+        var templates = Enumerable.Range(0, 23).Select(index =>
+            new ChecklistTemplateResponse(Guid.NewGuid(), $"Template {index}", ["Step"])).ToList();
+        var keys = Enumerable.Range(0, 23).Select(index =>
+            new ApiKeyResponse(Guid.NewGuid(), $"Key {index}", $"orb_{index}", ["read"], true,
+                null, now, null, false)).ToList();
+        var mediator = Substitute.For<IMediator>();
+        mediator.Send(Arg.Any<GetTagsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success<IReadOnlyList<TagResponse>>(tags));
+        mediator.Send(Arg.Any<GetChecklistTemplatesQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success<IReadOnlyList<ChecklistTemplateResponse>>(templates));
+        mediator.Send(Arg.Any<GetApiKeysQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success<IReadOnlyList<ApiKeyResponse>>(keys));
+        var handler = new GetRecordListPageQueryHandler(mediator);
+        var card = kind switch
+        {
+            "tags" => RecordListCardBuilder.BuildTags(tags, userId),
+            "templates" => RecordListCardBuilder.BuildTemplates(templates, userId),
+            _ => RecordListCardBuilder.BuildKeys(keys, now, userId)
+        };
+
+        card.Items.Should().HaveCount(10);
+        card.TotalCount.Should().Be(23);
+        for (var offset = 10; offset < 23; offset += 10)
+        {
+            var result = await handler.Handle(new GetRecordListPageQuery(userId, kind, card.NextCursor!), CancellationToken.None);
+            result.IsSuccess.Should().BeTrue();
+            card = result.Value;
+            card.Items.Should().HaveCount(Math.Min(10, 23 - offset));
+        }
+
+        card.NextCursor.Should().BeNull();
+        var exhausted = await handler.Handle(new GetRecordListPageQuery(userId, kind,
+            RecordListCursor.Create(userId, kind, 30)), CancellationToken.None);
+        exhausted.IsFailure.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Notifications_ExhaustedCursor_ReturnsFailure()
+    {
+        var userId = Guid.NewGuid();
+        var mediator = Substitute.For<IMediator>();
+        mediator.Send(Arg.Any<GetNotificationsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new GetNotificationsResponse([], 0, 10)));
+        var handler = new GetRecordListPageQueryHandler(mediator);
+
+        var result = await handler.Handle(new GetRecordListPageQuery(userId, "notifications",
+            RecordListCursor.Create(userId, "notifications", 10)), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
     }
 }

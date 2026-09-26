@@ -2966,25 +2966,25 @@
   "testCoverage": {
     "featureFolders": {
       "Accountability": 9,
-      "ApiKeys": 18,
+      "ApiKeys": 20,
       "Auth": 31,
       "Behaviors": 17,
       "Calendar": 21,
       "Challenges": 14,
-      "Chat": 74,
-      "ChecklistTemplates": 9,
+      "Chat": 77,
+      "ChecklistTemplates": 10,
       "Common": 258,
       "Gamification": 45,
       "Goals": 54,
       "Habits": 97,
       "Marketing": 6,
-      "Notifications": 24,
+      "Notifications": 25,
       "Profile": 41,
       "Referrals": 15,
       "Social": 36,
       "Subscriptions": 18,
       "Support": 4,
-      "Tags": 16,
+      "Tags": 17,
       "Uploads": 4,
       "UserFacts": 8,
       "Waitlist": 4
@@ -3432,9 +3432,13 @@
         "testClass": "GetRecordListPageQueryHandlerTests",
         "file": "tests/Orbit.Application.Tests/Chat/GetRecordListPageQueryHandlerTests.cs",
         "references": [
+          "GetApiKeysQuery",
+          "GetChecklistTemplatesQuery",
           "GetNotificationsQuery",
           "GetRecordListPageQuery",
-          "GetRecordListPageQueryHandler"
+          "GetRecordListPageQueryHandler",
+          "GetTagsQuery",
+          "Tag"
         ]
       },
       {
@@ -6176,6 +6180,13 @@
         ]
       },
       {
+        "testClass": "GetRecordListPageQueryValidatorTests",
+        "file": "tests/Orbit.Application.Tests/Validators/GetRecordListPageQueryValidatorTests.cs",
+        "references": [
+          "GetRecordListPageQuery"
+        ]
+      },
+      {
         "testClass": "GetRescheduleSuggestionQueryValidatorTests",
         "file": "tests/Orbit.Application.Tests/Validators/GetRescheduleSuggestionQueryValidatorTests.cs",
         "references": [
@@ -7035,6 +7046,9 @@
         "testClass": "ChatControllerTests",
         "file": "tests/Orbit.Infrastructure.Tests/Controllers/ChatControllerTests.cs",
         "references": [
+          "GetNotificationsQuery",
+          "GetRecordListPageQuery",
+          "GetRecordListPageQueryHandler",
           "ProcessUserChatCommand",
           "User"
         ]
@@ -7433,6 +7447,7 @@
         "file": "tests/Orbit.Infrastructure.Tests/Mcp/NotificationToolsTests.cs",
         "references": [
           "GetNotificationsQuery",
+          "GetRecordListPageQuery",
           "Notification",
           "User"
         ]
@@ -7442,6 +7457,14 @@
         "file": "tests/Orbit.Infrastructure.Tests/Mcp/ProfileToolsTests.cs",
         "references": [
           "GetProfileQuery",
+          "User"
+        ]
+      },
+      {
+        "testClass": "RecordPageToolsTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Mcp/RecordPageToolsTests.cs",
+        "references": [
+          "GetRecordListPageQuery",
           "User"
         ]
       },
