@@ -72,6 +72,8 @@ public sealed class PendingOperationChangePreviewerTests
         preview!.Items.Should().HaveCount(2);
         preview.Items!.SelectMany(item => item.Fields).Select(change => change.Field)
             .Should().OnlyContain(value => value == field);
+        preview.Items.SelectMany(item => item.Fields).Select(change => change.IsEditable)
+            .Should().OnlyContain(value => value == (field == "date"));
     }
 
     [Theory]
@@ -108,6 +110,21 @@ public sealed class PendingOperationChangePreviewerTests
         preview.Items!.Select(item => item.ItemId).Should().Equal("0", "1");
         preview.Items.SelectMany(item => item.Fields).Select(field => field.Field)
             .Should().OnlyContain(field => field == "title");
+        preview.Items[0].Fields[0].IsEditable.Should().BeTrue();
+        preview.Items[0].Fields[0].ProposedValue!.Value.GetString().Should().Be("One");
+    }
+
+    [Fact]
+    public async Task PreviewAsync_Create_PreservesNestedProposedValues()
+    {
+        var preview = await Preview("bulk_create_habits", """{"habits":[{"title":"One","checklist_items":[{"text":"First","is_checked":true}],"sub_habits":[{"title":"Child"}]}]}""");
+
+        var fields = preview!.Items![0].Fields;
+        fields.Single(field => field.Field == "checklist_items").ProposedValue!.Value[0]
+            .GetProperty("is_checked").GetBoolean().Should().BeTrue();
+        fields.Single(field => field.Field == "sub_habits").ProposedValue!.Value[0]
+            .GetProperty("title").GetString().Should().Be("Child");
+        fields.Should().OnlyContain(field => field.IsEditable);
     }
 
     [Fact]
@@ -161,6 +178,9 @@ public sealed class PendingOperationChangePreviewerTests
 
         preview!.Changes.Should().ContainSingle().Which.Should().Match<Orbit.Domain.Models.PendingOperationChange>(
             row => row.Field == "reminder_times" && row.OldValue == "(none)" && row.NewValue == "30 min before due");
+        preview.Items![0].Fields.Single(field => field.Field == "reminder_times")
+            .ProposedValue!.Value.EnumerateArray().Select(value => value.GetInt32())
+            .Should().Equal(30);
         habit.ReminderTimes.Should().BeEmpty();
     }
 
@@ -195,6 +215,12 @@ public sealed class PendingOperationChangePreviewerTests
             row => row.Field == "checklist_items"
                 && row.OldValue == "One, Two, Three, +2 more"
                 && row.NewValue == "Alpha, Beta, Gamma, +2 more");
+        var serialized = JsonSerializer.SerializeToElement(preview.Items![0].Fields[0],
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        serialized.GetProperty("isEditable").GetBoolean().Should().BeTrue();
+        serialized.GetProperty("proposedValue").EnumerateArray()
+            .Select(item => item.GetProperty("text").GetString())
+            .Should().Equal("Alpha", "Beta", "Gamma", "Delta", "Epsilon");
     }
 
     [Fact]
@@ -232,6 +258,11 @@ public sealed class PendingOperationChangePreviewerTests
             row => row.Field == "scheduled_reminders"
                 && row.OldValue == "+4 earlier, same_day 12:00"
                 && row.NewValue == "+4 earlier, same_day 12:30");
+        var proposed = preview.Items![0].Fields.Single(field => field.Field == "scheduled_reminders")
+            .ProposedValue!.Value;
+        proposed.GetArrayLength().Should().Be(5);
+        proposed[4].GetProperty("when").GetString().Should().Be("same_day");
+        proposed[4].GetProperty("time").GetString().Should().Be("12:30");
     }
 
     [Fact]

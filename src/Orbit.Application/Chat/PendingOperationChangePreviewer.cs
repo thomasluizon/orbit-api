@@ -118,7 +118,9 @@ public sealed class PendingOperationChangePreviewer(
                 : field == "date" ? today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) : null;
         return new PendingOperationChange(habit.Id, habit.Title, field,
             field == "emoji" ? habit.Emoji : null, value,
-            field == "emoji" ? "emoji" : field == "date" ? "date" : "action");
+            field == "emoji" ? "emoji" : field == "date" ? "date" : "action",
+            field == "delete" ? null : JsonSerializer.SerializeToElement(value),
+            field != "delete");
     }
 
     private static void AddProposedFields(List<PendingOperationChange> fields, Habit habit,
@@ -138,7 +140,7 @@ public sealed class PendingOperationChangePreviewer(
                 continue;
             var value = property.Value.ToString();
             fields.Add(new PendingOperationChange(habit.Id, habit.Title,
-                property.Name, value, value, "text"));
+                property.Name, value, value, "text", property.Value.Clone(), true));
         }
     }
 
@@ -245,7 +247,8 @@ public sealed class PendingOperationChangePreviewer(
             var fields = habit.ValueKind == JsonValueKind.Object
                 ? habit.EnumerateObject().Where(property => CreateFields.Contains(property.Name))
                     .Select(property => new PendingOperationChange(
-                    Guid.Empty, name, property.Name, null, property.Value.ToString(), "text")).ToList()
+                    Guid.Empty, name, property.Name, null, property.Value.ToString(), "text",
+                    property.Value.Clone(), true)).ToList()
                 : [];
             var itemId = habit.ValueKind == JsonValueKind.Object
                 && habit.TryGetProperty("preview_item_id", out var storedId)
@@ -275,11 +278,17 @@ public sealed class PendingOperationChangePreviewer(
 
     private static void AddChanges(List<PendingOperationChange> rows, Habit habit, Habit effective)
     {
-        void Add(string field, object? oldValue, object? newValue, string valueType, bool? changed = null)
+        void Add(string field, object? oldValue, object? newValue, string valueType,
+            bool? changed = null, JsonElement? typedValue = null, bool isEditable = true)
         {
             if (changed ?? !Equals(oldValue, newValue))
                 rows.Add(new PendingOperationChange(
-                    habit.Id, habit.Title, field, Format(oldValue), Format(newValue), valueType));
+                    habit.Id, habit.Title, field, Format(oldValue), Format(newValue), valueType,
+                    typedValue ?? JsonSerializer.SerializeToElement(newValue switch
+                    {
+                        DateOnly or TimeOnly or FrequencyUnit => Format(newValue),
+                        _ => newValue
+                    }), isEditable));
         }
 
         Add("title", habit.Title, effective.Title, "text");
@@ -288,25 +297,33 @@ public sealed class PendingOperationChangePreviewer(
         Add("frequency_unit", habit.FrequencyUnit, effective.FrequencyUnit, "text");
         Add("frequency_quantity", habit.FrequencyQuantity, effective.FrequencyQuantity, "number");
         Add("interval_weeks", habit.IntervalWeeks, effective.IntervalWeeks, "number");
-        Add("days", string.Join(", ", habit.Days), string.Join(", ", effective.Days), "text");
+        Add("days", string.Join(", ", habit.Days), string.Join(", ", effective.Days), "text",
+            typedValue: JsonSerializer.SerializeToElement(effective.Days.Select(day => day.ToString())));
         Add("due_date", habit.DueDate, effective.DueDate, "date");
         Add("end_date", habit.EndDate, effective.EndDate, "date");
         Add("due_time", habit.DueTime, effective.DueTime, "time");
         Add("is_bad_habit", habit.IsBadHabit, effective.IsBadHabit, "boolean");
         Add("is_flexible", habit.IsFlexible, effective.IsFlexible, "boolean");
-        Add("is_completed", habit.IsCompleted, effective.IsCompleted, "boolean");
+        Add("is_completed", habit.IsCompleted, effective.IsCompleted, "boolean", isEditable: false);
         Add("reminder_enabled", habit.ReminderEnabled, effective.ReminderEnabled, "boolean");
-        AddList("reminder_times", habit.ReminderTimes, effective.ReminderTimes, FormatReminderTime);
-        AddList("checklist_items", habit.ChecklistItems, effective.ChecklistItems, FormatChecklistItem);
-        AddList("scheduled_reminders", habit.ScheduledReminders, effective.ScheduledReminders, FormatScheduledReminder);
+        AddList("reminder_times", habit.ReminderTimes, effective.ReminderTimes,
+            FormatReminderTime, JsonSerializer.SerializeToElement(effective.ReminderTimes));
+        AddList("checklist_items", habit.ChecklistItems, effective.ChecklistItems,
+            FormatChecklistItem, JsonSerializer.SerializeToElement(effective.ChecklistItems.Select(item =>
+                new { text = item.Text, is_checked = item.IsChecked })));
+        AddList("scheduled_reminders", habit.ScheduledReminders, effective.ScheduledReminders,
+            FormatScheduledReminder, JsonSerializer.SerializeToElement(effective.ScheduledReminders.Select(item =>
+                new { when = item.When == ScheduledReminderWhen.DayBefore ? "day_before" : "same_day",
+                    time = item.Time.ToString("HH:mm", CultureInfo.InvariantCulture) })));
 
-        void AddList<T>(string field, IReadOnlyList<T> oldValues, IReadOnlyList<T> newValues, Func<T, string> format)
+        void AddList<T>(string field, IReadOnlyList<T> oldValues, IReadOnlyList<T> newValues,
+            Func<T, string> format, JsonElement typedValue)
         {
             if (oldValues.SequenceEqual(newValues))
                 return;
 
             var (oldText, newText) = FormatChangedList(oldValues, newValues, format);
-            Add(field, oldText, newText, "text", changed: true);
+            Add(field, oldText, newText, "text", changed: true, typedValue: typedValue);
         }
     }
 
