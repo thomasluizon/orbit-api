@@ -12,6 +12,12 @@
         "hooks": [
           { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/git-guardrails.mjs\"" }
         ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/forbid-stale-text.mjs\"" }
+        ]
       }
     ]
   }

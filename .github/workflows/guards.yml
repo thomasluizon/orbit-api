@@ -18,6 +18,23 @@ permissions:
   pull-requests: read
 
 jobs:
+  timeless:
+    name: Timeless Text
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Check changed text
+        if: github.event_name == 'pull_request'
+        run: node tools/check-timeless.mjs --base origin/${{ github.base_ref }}
+      - name: Check tracked text
+        if: github.event_name == 'push'
+        run: node tools/check-timeless.mjs --all
+
   dashes:
     name: Dash Ban
     runs-on: ubuntu-latest
