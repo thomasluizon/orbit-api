@@ -692,33 +692,97 @@ public class IdempotencyBehaviorDbTests : IDisposable
     }
 
     [Fact]
-    public async Task Handle_IdenticalBulkLogInvocations_GetSeparatePlans()
+    public async Task Handle_IdenticalBulkLogInvocations_ApplyTwiceAndReplayByPosition()
     {
         var today = new DateOnly(2026, 9, 24);
-        var habit = Habit.Create(new HabitCreateParams(_userId, "Repeated", FrequencyUnit.Day, 1, DueDate: today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(_userId, "Repeated", FrequencyUnit.Week, 2,
+            DueDate: today, IsFlexible: true)).Value;
         _dbContext.Habits.Add(habit);
         await _dbContext.SaveChangesAsync();
-        var mediator = Substitute.For<IMediator>();
-        mediator.Send(Arg.Any<BulkLogHabitsCommand>(), Arg.Any<CancellationToken>())
-            .Returns(call =>
-            {
-                var item = call.Arg<BulkLogHabitsCommand>().Items.Single();
-                return Task.FromResult(Result.Success(new BulkLogResult(
-                    [new BulkLogItemResult(0, BulkItemStatus.Success, item.HabitId, Guid.NewGuid())])));
-            });
+        var dateService = CreateUserDateService(today);
+        var streakService = Substitute.For<IUserStreakService>();
+        var gamificationService = Substitute.For<IGamificationService>();
+        var goalService = Substitute.For<IGoalCompletionService>();
+        goalService.SyncDerivedGoalsAsync(
+                _userId, Arg.Any<IReadOnlyCollection<Guid>>(), today,
+                Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .Returns((IReadOnlyList<GoalCompletionUpdate>)Array.Empty<GoalCompletionUpdate>());
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var handler = new BulkLogHabitsCommandHandler(
+            new GenericRepository<Habit>(_dbContext), new GenericRepository<HabitLog>(_dbContext),
+            new BulkLogServices(dateService, streakService, gamificationService),
+            goalService, _unitOfWork, cache, NullLogger<BulkLogHabitsCommandHandler>.Instance);
         var context = new StubIdempotencyContext(true, _userId, "identical-invocations", trackOrdinals: true);
-        var tool = new BulkLogHabitsTool(mediator, new GenericRepository<Habit>(_dbContext),
-            CreateUserDateService(today), new BulkHabitReplayPlanner(context, _store, _unitOfWork));
-        var args = JsonSerializer.SerializeToElement(new { habit_ids = new[] { habit.Id } });
+        var behavior = new IdempotencyBehavior<BulkLogHabitsCommand, Result<BulkLogResult>>(
+            context, _store, _unitOfWork);
+        var command = new BulkLogHabitsCommand(_userId, [new BulkLogItem(habit.Id, today)]);
+        RequestHandlerDelegate<Result<BulkLogResult>> next = ct =>
+        {
+            _handlerCalls++;
+            return handler.Handle(command, ct);
+        };
 
-        (await tool.ExecuteAsync(args, _userId, CancellationToken.None)).Success.Should().BeTrue();
-        (await tool.ExecuteAsync(args, _userId, CancellationToken.None)).Success.Should().BeTrue();
+        var first = await behavior.Handle(command, next, CancellationToken.None);
+        var second = await behavior.Handle(command, next, CancellationToken.None);
+
+        first.Value.Results.Should().ContainSingle(item => item.Status == BulkItemStatus.Success && item.LogId != null);
+        second.Value.Results.Should().ContainSingle(item => item.Status == BulkItemStatus.Success && item.LogId != null);
+        second.Value.Results.Single().LogId!.Value.Should().NotBe(first.Value.Results.Single().LogId!.Value);
+        _handlerCalls.Should().Be(2);
+        (await _dbContext.HabitLogs.AsNoTracking().CountAsync(log => log.HabitId == habit.Id && log.Value == 1))
+            .Should().Be(2);
         context.ResetOrdinals();
-        (await tool.ExecuteAsync(args, _userId, CancellationToken.None)).Success.Should().BeTrue();
-        (await tool.ExecuteAsync(args, _userId, CancellationToken.None)).Success.Should().BeTrue();
+        var firstReplay = await behavior.Handle(command, next, CancellationToken.None);
+        var secondReplay = await behavior.Handle(command, next, CancellationToken.None);
 
+        firstReplay.Value.Results.Should().BeEquivalentTo(first.Value.Results);
+        secondReplay.Value.Results.Should().BeEquivalentTo(second.Value.Results);
+        _handlerCalls.Should().Be(2);
+        (await _dbContext.HabitLogs.AsNoTracking().CountAsync(log => log.HabitId == habit.Id && log.Value == 1))
+            .Should().Be(2);
         (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(2);
-        await mediator.Received(4).Send(Arg.Any<BulkLogHabitsCommand>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_IdenticalBulkSkipInvocations_ApplyTwiceAndReplayByPosition()
+    {
+        var today = new DateOnly(2026, 9, 24);
+        var habit = Habit.Create(new HabitCreateParams(_userId, "Repeated skip", FrequencyUnit.Week, 2,
+            DueDate: today, IsFlexible: true)).Value;
+        _dbContext.Habits.Add(habit);
+        await _dbContext.SaveChangesAsync();
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var handler = new BulkSkipHabitsCommandHandler(
+            new GenericRepository<Habit>(_dbContext), new GenericRepository<HabitLog>(_dbContext),
+            CreateUserDateService(today), _unitOfWork, cache);
+        var context = new StubIdempotencyContext(true, _userId, "identical-skip-invocations", trackOrdinals: true);
+        var behavior = new IdempotencyBehavior<BulkSkipHabitsCommand, Result<BulkSkipResult>>(
+            context, _store, _unitOfWork);
+        var command = new BulkSkipHabitsCommand(_userId, [new BulkSkipItem(habit.Id, today)]);
+        RequestHandlerDelegate<Result<BulkSkipResult>> next = ct =>
+        {
+            _handlerCalls++;
+            return handler.Handle(command, ct);
+        };
+
+        var first = await behavior.Handle(command, next, CancellationToken.None);
+        var second = await behavior.Handle(command, next, CancellationToken.None);
+
+        first.Value.Results.Should().ContainSingle(item => item.Status == BulkItemStatus.Success);
+        second.Value.Results.Should().ContainSingle(item => item.Status == BulkItemStatus.Success);
+        _handlerCalls.Should().Be(2);
+        (await _dbContext.HabitLogs.AsNoTracking().CountAsync(log => log.HabitId == habit.Id && log.Value == 0))
+            .Should().Be(2);
+        context.ResetOrdinals();
+        var firstReplay = await behavior.Handle(command, next, CancellationToken.None);
+        var secondReplay = await behavior.Handle(command, next, CancellationToken.None);
+
+        firstReplay.Value.Results.Should().BeEquivalentTo(first.Value.Results);
+        secondReplay.Value.Results.Should().BeEquivalentTo(second.Value.Results);
+        _handlerCalls.Should().Be(2);
+        (await _dbContext.HabitLogs.AsNoTracking().CountAsync(log => log.HabitId == habit.Id && log.Value == 0))
+            .Should().Be(2);
+        (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(2);
     }
 
     [Theory]
@@ -1203,7 +1267,12 @@ public class IdempotencyBehaviorDbTests : IDisposable
                 }
 
                 foreach (var index in entityType.GetIndexes())
-                    index.SetFilter(null);
+                {
+                    if (entityType.ClrType == typeof(HabitLog) && index.IsUnique)
+                        index.SetFilter("CAST(\"Value\" AS REAL) > 0 AND NOT \"IsDeleted\"");
+                    else
+                        index.SetFilter(null);
+                }
             }
         }
     }

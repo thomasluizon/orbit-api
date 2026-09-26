@@ -15,16 +15,17 @@ public class HabitScheduleReadTests
         var logId = Guid.NewGuid();
         var createdAtUtc = new DateTime(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc);
 
-        var missingLogId = () => HabitLog.FromScheduleRead(Guid.Empty, habitId, DueDate, 2, createdAtUtc);
-        var missingHabitId = () => HabitLog.FromScheduleRead(logId, Guid.Empty, DueDate, 2, createdAtUtc);
+        var missingLogId = () => HabitLog.FromScheduleRead(Guid.Empty, habitId, DueDate, 2, 1, createdAtUtc);
+        var missingHabitId = () => HabitLog.FromScheduleRead(logId, Guid.Empty, DueDate, 2, 1, createdAtUtc);
         missingLogId.Should().Throw<ArgumentException>();
         missingHabitId.Should().Throw<ArgumentException>();
 
-        var log = HabitLog.FromScheduleRead(logId, habitId, DueDate, 2, createdAtUtc);
+        var log = HabitLog.FromScheduleRead(logId, habitId, DueDate, 2, 1, createdAtUtc);
         log.Id.Should().Be(logId);
         log.HabitId.Should().Be(habitId);
         log.Date.Should().Be(DueDate);
         log.Value.Should().Be(2);
+        log.CompletionOrdinal.Should().Be(1);
         log.CreatedAtUtc.Should().Be(createdAtUtc);
         log.UpdatedAtUtc.Should().Be(createdAtUtc);
     }
@@ -37,9 +38,9 @@ public class HabitScheduleReadTests
         var other = CreateHabit(userId);
         var existing = habit.Log(DueDate, advanceDueDate: false).Value;
         var replacement = HabitLog.FromScheduleRead(
-            Guid.NewGuid(), habit.Id, DueDate.AddDays(1), 1, DateTime.UtcNow);
+            Guid.NewGuid(), habit.Id, DueDate.AddDays(1), 1, 0, DateTime.UtcNow);
         var foreign = HabitLog.FromScheduleRead(
-            Guid.NewGuid(), other.Id, DueDate, 1, DateTime.UtcNow);
+            Guid.NewGuid(), other.Id, DueDate, 1, 0, DateTime.UtcNow);
 
         habit.LoadScheduleLogsForRead([replacement]);
         habit.Logs.Should().ContainSingle().Which.Id.Should().Be(replacement.Id);
