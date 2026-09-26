@@ -35,6 +35,17 @@ public sealed class PendingOperationChangePreviewerTests
     }
 
     [Fact]
+    public async Task PreviewAsync_BulkDelete_ReturnsTargetPreview()
+    {
+        Setup([CreateHabit("One", null), CreateHabit("Two", null)]);
+
+        var preview = await Preview("bulk_delete_habits", """{"filter":{"all":true}}""");
+
+        preview.Should().NotBeNull();
+        preview!.ChangeTargetCount.Should().Be(2);
+    }
+
+    [Fact]
     public async Task PreviewAsync_FortyMatches_ListsTenEntitiesAndTotal()
     {
         Setup(Enumerable.Range(1, 40).Select(index => CreateHabit($"Habit {index}", null)).ToArray());
