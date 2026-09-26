@@ -69,6 +69,33 @@ public class StreakFreezeAutoActivationServiceTests
     }
 
     [Fact]
+    public async Task ActivateMissedDayFreezes_RepeatedDeletedAndSkippedLogs_RepairsOnlyTheMissingDay()
+    {
+        await using var dbContext = CreateDbContext();
+        var pushService = Substitute.For<IPushNotificationService>();
+        var userDateService = Substitute.For<IUserDateService>();
+        ConfigureToday(userDateService, Today);
+        var user = await SeedEligibleUserAsync(dbContext, Today);
+        var flexible = Habit.Create(new HabitCreateParams(
+            UserId, "Flexible", FrequencyUnit.Week, 3,
+            DueDate: Today.AddDays(-6), IsFlexible: true)).Value;
+        flexible.Log(Today.AddDays(-2), advanceDueDate: false);
+        flexible.Log(Today.AddDays(-2), advanceDueDate: false);
+        flexible.Log(Today.AddDays(-1), advanceDueDate: false);
+        flexible.Unlog(Today.AddDays(-1));
+        flexible.SkipFlexible(Today.AddDays(-1));
+        dbContext.Habits.Add(flexible);
+        await dbContext.SaveChangesAsync();
+        var service = CreateService(dbContext, pushService, userDateService);
+
+        await service.ActivateMissedDayFreezes(CancellationToken.None);
+
+        (await dbContext.StreakFreezes.AsNoTracking().SingleAsync()).UsedOnDate
+            .Should().Be(Today.AddDays(-1));
+        user.StreakFreezesAccumulated.Should().Be(0);
+    }
+
+    [Fact]
     public async Task ActivateMissedDayFreezes_SecondPass_DoesNotSpendOrNotifyAgain()
     {
         await using var dbContext = CreateDbContext();

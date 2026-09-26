@@ -76,7 +76,7 @@ public class AchievementProgressServiceTests
             Arg.Any<CancellationToken>())
             .Returns(call => call.ArgAt<Func<IQueryable<Habit>, IQueryable<HabitScheduleSnapshot>>>(1)(
                 habits.AsQueryable()).ToList());
-        var logs = habits.SelectMany(habit => habit.Logs).ToList();
+        var logs = habits.SelectMany(habit => habit.Logs).Where(log => !log.IsDeleted).ToList();
         _habitLogRepo.ProjectAsync(
             Arg.Any<Expression<Func<HabitLog, bool>>>(),
             Arg.Any<Func<IQueryable<HabitLog>, IQueryable<HabitMetricLog>>>(),
@@ -184,5 +184,30 @@ public class AchievementProgressServiceTests
 
         metrics.CurrentStreak.Should().Be(2);
         badHabitRawStreak.Should().BeGreaterThan(2);
+    }
+
+    [Fact]
+    public async Task LoadAsync_RepeatedDeletedAndSkippedLogs_PreservesFlexibleStreak()
+    {
+        var user = CreateUser();
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Flexible", FrequencyUnit.Day, 2,
+            DueDate: Today.AddDays(-2), IsFlexible: true)).Value;
+        var start = Today.AddDays(-2);
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
+            .SetValue(habit, start.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+        habit.Log(Today.AddDays(-1), advanceDueDate: false);
+        habit.Log(Today.AddDays(-1), advanceDueDate: false);
+        habit.Log(Today, advanceDueDate: false);
+        habit.Unlog(Today);
+        habit.Log(Today, advanceDueDate: false);
+        habit.Log(Today, advanceDueDate: false);
+        habit.SkipFlexible(Today);
+        StubHabits(habit);
+        StubCounts();
+
+        var metrics = await _service.LoadAsync(user, new HashSet<string>(), CancellationToken.None);
+
+        metrics.CurrentStreak.Should().Be(2);
     }
 }

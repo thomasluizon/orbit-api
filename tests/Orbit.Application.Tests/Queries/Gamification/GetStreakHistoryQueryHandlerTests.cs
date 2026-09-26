@@ -88,7 +88,7 @@ public class GetStreakHistoryQueryHandlerTests
         _habitLogRepo.FindAsync(
             Arg.Any<Expression<Func<HabitLog, bool>>>(),
             Arg.Any<CancellationToken>())
-            .Returns(list.SelectMany(h => h.Logs.Where(l => l.Value > 0)).ToList());
+            .Returns(list.SelectMany(h => h.Logs.Where(l => l.Value > 0 && !l.IsDeleted)).ToList());
     }
 
     private void ArrangeFreezes(params StreakFreeze[] freezes)
@@ -112,6 +112,29 @@ public class GetStreakHistoryQueryHandlerTests
         result.Value.Points.Should().HaveCount(3);
         result.Value.Points.Select(p => p.Streak).Should().Equal(1, 2, 3);
         result.Value.Points[2].Date.Should().Be(Today);
+    }
+
+    [Fact]
+    public async Task Handle_RepeatedDeletedAndSkippedLogs_CountsEachCompletedDateOnce()
+    {
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(CreateProUser());
+        var first = CreateDailyHabit(Today.AddDays(-2));
+        var second = CreateDailyHabit(Today.AddDays(-2));
+        Log(first, Today.AddDays(-2), Today.AddDays(-1));
+        Log(second, Today.AddDays(-2), Today.AddDays(-1));
+        second.Log(Today, advanceDueDate: false);
+        second.Unlog(Today);
+        var flexible = Habit.Create(new HabitCreateParams(
+            UserId, "Flexible", FrequencyUnit.Week, 2,
+            DueDate: Today.AddDays(-2), IsFlexible: true)).Value;
+        flexible.SkipFlexible(Today);
+        ArrangeHabits(first, second, flexible);
+
+        var result = await _handler.Handle(
+            new GetStreakHistoryQuery(UserId, Today.AddDays(-2), Today), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Points.Select(point => point.Streak).Should().Equal(1, 2, 2);
     }
 
     [Fact]
