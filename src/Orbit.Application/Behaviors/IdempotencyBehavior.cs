@@ -28,12 +28,19 @@ public sealed class IdempotencyBehavior<TRequest, TResponse>(
 
         var requestType = RequestType;
         var requestOrdinal = 0;
+        int? legacyOrdinal = null;
         if (request is IIdempotencyFingerprint fingerprint)
+        {
             requestType = $"{RequestType}:{fingerprint.IdempotencyFingerprint}";
+            legacyOrdinal = idempotencyContext.NextRequestOrdinal(RequestType);
+        }
         else
             requestOrdinal = idempotencyContext.NextRequestOrdinal(RequestType);
         var storedResponse = await idempotencyStore.FindResponseBodyAsync(
             userId, idempotencyKey, requestType, requestOrdinal, cancellationToken);
+        if (storedResponse is null && legacyOrdinal is { } ordinal)
+            storedResponse = await idempotencyStore.FindResponseBodyAsync(
+                userId, idempotencyKey, RequestType, ordinal, cancellationToken);
         if (storedResponse is not null)
             return Deserialize(storedResponse);
 
