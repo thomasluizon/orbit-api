@@ -22,5 +22,11 @@ jobs:
           node-version: 22
       - name: Regenerate architecture map
         run: node tools/arch-map.mjs
-      - name: Fail on drift
-        run: git diff --exit-code architecture.json architecture.html
+      - name: Publish architecture map
+        uses: actions/upload-artifact@v7
+        with:
+          name: architecture-map
+          path: |
+            architecture.json
+            architecture.html
+          if-no-files-found: error

@@ -4,6 +4,9 @@ Instructions for Codex CLI workers. Claude Code reads CLAUDE.md; this file holds
 worker contract and DEFERS to `CLAUDE.md` (same directory) for repo conventions. Read
 CLAUDE.md before writing code.
 
+Run `node tools/arch-map.mjs` before reading `architecture.json` or `architecture.html`.
+Both files are generated locally and are not committed.
+
 Pullfrog reviews every pull request from GitHub Actions. Its review instructions live in
 the Pullfrog console, never in a repository file, because a pull request can edit any
 file on its own head. Nothing here configures that review.

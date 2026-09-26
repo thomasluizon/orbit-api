@@ -10,6 +10,8 @@
 
 Clean architecture, four projects: `Orbit.Api` → `Orbit.Application` → `Orbit.Domain` ← `Orbit.Infrastructure`. CQRS via MediatR. Commands and queries live per-feature folder in `Orbit.Application`. Domain entities use factory methods (`Habit.Create()`, `User.Create()`). Generic repository + Unit of Work in Infrastructure. Each project has a scoped `CLAUDE.md` — read those when editing inside that project.
 
+Run `node tools/arch-map.mjs` before reading `architecture.json` or `architecture.html`. Both maps are generated locally and are not committed. The `arch-map` workflow runs the generator and publishes both maps as an artifact.
+
 ## Cross-cutting hard rules
 
 These apply everywhere — they override project-local conventions if they conflict.
