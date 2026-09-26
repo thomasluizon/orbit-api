@@ -99,7 +99,8 @@ public static class AchievementChecks
         DateOnly today,
         HashSet<string> earned,
         User user,
-        List<(UserAchievement Entity, AchievementDefinition Definition)> newAchievements)
+        List<(UserAchievement Entity, AchievementDefinition Definition)> newAchievements,
+        IReadOnlySet<(Guid HabitId, DateOnly Date)>? completedDates = null)
     {
         if (earned.Contains(AchievementDefinitions.PerfectDay)) return;
 
@@ -114,7 +115,8 @@ public static class AchievementChecks
             .ToList();
         if (scheduledToday.Count == 0) return;
 
-        var allDone = scheduledToday.All(h => h.Logs.Any(l => l.Date == today));
+        var allDone = scheduledToday.All(h => completedDates?.Contains((h.Id, today))
+            ?? h.Logs.Any(l => l.Date == today));
         if (allDone)
             TryGrant(AchievementDefinitions.PerfectDay, user, earned, newAchievements);
     }
@@ -124,7 +126,8 @@ public static class AchievementChecks
         DateOnly today,
         HashSet<string> earned,
         User user,
-        List<(UserAchievement Entity, AchievementDefinition Definition)> newAchievements)
+        List<(UserAchievement Entity, AchievementDefinition Definition)> newAchievements,
+        IReadOnlySet<(Guid HabitId, DateOnly Date)>? completedDates = null)
     {
         var eligibleHabits = allUserHabits
             .Where(h => !h.IsCompleted && !h.IsGeneral && h.ParentHabitId == null)
@@ -144,7 +147,8 @@ public static class AchievementChecks
                 continue;
             }
 
-            var allDone = scheduledForDay.All(h => h.Logs.Any(l => l.Date == day));
+            var allDone = scheduledForDay.All(h => completedDates?.Contains((h.Id, day))
+                ?? h.Logs.Any(l => l.Date == day));
             if (!allDone) break;
 
             consecutivePerfectDays++;
@@ -164,15 +168,26 @@ public static class AchievementChecks
         IReadOnlyList<HabitLog> logsWithRecentCreationTimes,
         TimeZoneInfo userTz)
     {
+        CheckTimeBasedAchievements(user, earned, newAchievements,
+            logsWithRecentCreationTimes.Select(log => log.CreatedAtUtc).ToList(), userTz);
+    }
+
+    public static void CheckTimeBasedAchievements(
+        User user,
+        HashSet<string> earned,
+        List<(UserAchievement Entity, AchievementDefinition Definition)> newAchievements,
+        IReadOnlyList<DateTime> logsWithRecentCreationTimes,
+        TimeZoneInfo userTz)
+    {
         var checkEarly = !earned.Contains(AchievementDefinitions.EarlyBird);
         var checkNight = !earned.Contains(AchievementDefinitions.NightOwl);
         if (!checkEarly && !checkNight) return;
 
         if (checkEarly)
         {
-            var earlyCount = logsWithRecentCreationTimes.Count(l =>
+            var earlyCount = logsWithRecentCreationTimes.Count(createdAtUtc =>
             {
-                var userTime = TimeZoneInfo.ConvertTimeFromUtc(l.CreatedAtUtc, userTz);
+                var userTime = TimeZoneInfo.ConvertTimeFromUtc(createdAtUtc, userTz);
                 return userTime.Hour < 7;
             });
             if (earlyCount >= TargetFor(AchievementDefinitions.EarlyBird))
@@ -181,9 +196,9 @@ public static class AchievementChecks
 
         if (checkNight)
         {
-            var nightCount = logsWithRecentCreationTimes.Count(l =>
+            var nightCount = logsWithRecentCreationTimes.Count(createdAtUtc =>
             {
-                var userTime = TimeZoneInfo.ConvertTimeFromUtc(l.CreatedAtUtc, userTz);
+                var userTime = TimeZoneInfo.ConvertTimeFromUtc(createdAtUtc, userTz);
                 return userTime.Hour >= 22;
             });
             if (nightCount >= TargetFor(AchievementDefinitions.NightOwl))

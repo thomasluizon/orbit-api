@@ -17,6 +17,7 @@ public class GetHabitMetricsQueryHandler(
 {
     public async Task<Result<HabitMetrics>> Handle(GetHabitMetricsQuery request, CancellationToken cancellationToken)
     {
+        // TotalCompletions and LastCompletedDate cover the complete habit history. https://github.com/thomasluizon/orbit-tickets/issues/743
         var habit = await habitRepository.FindOneTrackedAsync(
             h => h.Id == request.HabitId && h.UserId == request.UserId,
             q => q.Include(h => h.Logs),

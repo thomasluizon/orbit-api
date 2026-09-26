@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification.Models;
 using Orbit.Application.Habits.Services;
@@ -37,17 +36,25 @@ public class AchievementProgressService(
         var userTimeZone = TimeZoneHelper.FindTimeZone(user.TimeZone);
 
         var streakLogCutoff = today.AddDays(-StreakLogWindowDays);
-        var habits = await habitRepository.FindAsync(
-            h => h.UserId == user.Id,
-            q => q.Include(h => h.Logs.Where(l => l.Date >= streakLogCutoff)),
-            cancellationToken);
+        var habits = (await habitRepository.ProjectAsync(
+            h => h.UserId == user.Id, HabitScheduleProjection.Select, cancellationToken))
+            .Select(Habit.FromScheduleSnapshot)
+            .ToList();
         var habitIds = habits.Select(h => h.Id).ToList();
+        IReadOnlyList<HabitMetricLog> streakLogs = habitIds.Count == 0
+            ? []
+            : await habitLogRepository.ProjectAsync(
+                l => habitIds.Contains(l.HabitId) && l.Date >= streakLogCutoff,
+                query => query.Select(log => new HabitMetricLog(log.HabitId, log.Date, log.Value, log.IsDeleted)),
+                cancellationToken);
+        var logsByHabit = streakLogs.ToLookup(log => log.HabitId);
 
         // Streak achievements are granted PER-HABIT and ONLY for good habits (GamificationService awards CheckConsistencyAchievements exclusively when !IsBadHabit; a bad-habit "streak" is consecutive ABSTINENCE days, opposite semantics), so progress is the MAX single-GOOD-habit streak (not the union user.CurrentStreak, not a bad habit's abstinence run); the 1100-day window mirrors GamificationService.StreakLogWindowDays so progress equals grant and stays within the calculator's 1100-day horizon, keeping the 1000-day StreakImmortal reachable. https://github.com/thomasluizon/orbit-api/pull/419
         var goodHabits = habits.Where(h => !h.IsBadHabit).ToList();
         var maxCurrentStreak = goodHabits.Count == 0
             ? 0
-            : goodHabits.Max(h => HabitMetricsCalculator.Calculate(h, today, user.WeekStartDay, userTimeZone).CurrentStreak);
+            : goodHabits.Max(h => HabitMetricsCalculator.CalculateProjected(
+                h, logsByHabit[h.Id].ToList(), today, user.WeekStartDay, userTimeZone).CurrentStreak);
 
         var totalCompletionCutoff = today.AddDays(-TotalCompletionWindowDays);
         var totalCompletions = habitIds.Count == 0
@@ -81,14 +88,15 @@ public class AchievementProgressService(
             return (0, 0);
 
         var createdAtUtcCutoff = DateTime.UtcNow.AddDays(-TimeOfDayWindowDays);
-        var logs = await habitLogRepository.FindAsync(
-            l => habitIds.Contains(l.HabitId) && l.CreatedAtUtc >= createdAtUtcCutoff, cancellationToken);
+        var logs = await habitLogRepository.ProjectAsync(
+            l => habitIds.Contains(l.HabitId) && l.CreatedAtUtc >= createdAtUtcCutoff,
+            query => query.Select(log => log.CreatedAtUtc), cancellationToken);
 
         var early = 0;
         var night = 0;
-        foreach (var log in logs)
+        foreach (var createdAtUtc in logs)
         {
-            var localHour = TimeZoneInfo.ConvertTimeFromUtc(log.CreatedAtUtc, userTimeZone).Hour;
+            var localHour = TimeZoneInfo.ConvertTimeFromUtc(createdAtUtc, userTimeZone).Hour;
             if (localHour < EarlyBeforeHour)
                 early++;
             else if (localHour >= NightFromHour)

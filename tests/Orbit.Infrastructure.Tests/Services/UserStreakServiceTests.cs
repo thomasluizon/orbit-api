@@ -65,14 +65,22 @@ public class UserStreakServiceTests
 
     private void SetupHabits(List<Habit> habits)
     {
-        _habitRepository.FindAsync(
+        _habitRepository.ProjectAsync(
             Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<HabitScheduleSnapshot>>>(),
             Arg.Any<CancellationToken>())
-            .Returns(habits);
+            .Returns(call => call.ArgAt<Func<IQueryable<Habit>, IQueryable<HabitScheduleSnapshot>>>(1)(
+                habits.AsQueryable()).ToList());
         _habitLogRepository.FindAsync(
             Arg.Any<System.Linq.Expressions.Expression<Func<HabitLog, bool>>>(),
             Arg.Any<CancellationToken>())
             .Returns(habits.SelectMany(h => h.Logs).ToList());
+        _habitLogRepository.ProjectAsync(
+            Arg.Any<System.Linq.Expressions.Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<Func<IQueryable<HabitLog>, IQueryable<DateOnly>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<IQueryable<HabitLog>, IQueryable<DateOnly>>>(1)(
+                habits.SelectMany(h => h.Logs).AsQueryable()).ToList());
     }
 
     /// <summary>
@@ -147,6 +155,27 @@ public class UserStreakServiceTests
         result!.CurrentStreak.Should().Be(3);
         result.LongestStreak.Should().Be(3);
         user.CurrentStreak.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task CalculateAsync_DuplicateCompletionLogs_ProjectsDistinctDatesAndKeepsStreak()
+    {
+        var today = new DateOnly(2026, 4, 3);
+        var user = User.Create("Alex", "alex@test.com").Value;
+        var habit = CreateDailyHabitLoggedOn(
+            [today.AddDays(-1), today], today.AddDays(-1));
+        var secondHabit = CreateDailyHabitLoggedOn([today], today.AddDays(-1));
+        SetupUser(user, today);
+        SetupHabits([habit, secondHabit]);
+        SetupFreezes([]);
+
+        var result = await _sut.CalculateAsync(UserId);
+
+        result!.CurrentStreak.Should().Be(2);
+        await _habitLogRepository.Received(1).ProjectAsync(
+            Arg.Any<System.Linq.Expressions.Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<Func<IQueryable<HabitLog>, IQueryable<DateOnly>>>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
