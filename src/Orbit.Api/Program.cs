@@ -1,5 +1,7 @@
 using Orbit.Api.Extensions;
+using Orbit.Application.Common;
 
+ValidationLanguageConfiguration.ConfigureEnglishDefaults();
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.AddFilter("LuckyPennySoftware.MediatR.License", LogLevel.None);
 builder.Logging.AddFilter("Microsoft.AspNetCore.DataProtection", LogLevel.Error);
