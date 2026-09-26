@@ -44,6 +44,7 @@ public class HealHabitModelDataMigrationTests
         };
         var storedJson = JsonSerializer.Serialize(scheduled);
         storedJson.Should().Contain("\"When\":\"same_day\"");
+        storedJson.Should().Contain("\"Time\":\"09:00:00\"");
         var storedScheduled = JsonSerializer.Deserialize<List<ScheduledReminderTime>>(storedJson)!;
         var storedOffsets = JsonSerializer.Deserialize<List<int>>("[15]")!;
 
