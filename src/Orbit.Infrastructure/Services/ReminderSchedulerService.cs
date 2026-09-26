@@ -226,7 +226,8 @@ public partial class ReminderSchedulerService(
                 if (nowUtc < sendUtc) continue;
 
                 var clockKey = (habit.Id, sendDate, reminder.Time.Value, reminder.When);
-                if (sentClockSet.Contains(clockKey)) continue;
+                if (sentClockSet.Contains(clockKey)
+                    || sentClockSet.Contains((habit.Id, sendDate, reminder.Time.Value, null))) continue;
 
                 var lang = user.Language ?? "en";
                 var body = FormatScheduledReminderText(reminder.When!.Value, lang);

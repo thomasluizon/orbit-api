@@ -1110,6 +1110,19 @@ public class HabitTests
     }
 
     [Fact]
+    public void Update_NoDueTimeWithRelativeReminder_ReturnsFailure()
+    {
+        var habit = CreateValidHabit();
+
+        var result = habit.Update(new HabitUpdateParams(
+            habit.Title, habit.Description, FrequencyUnit.Day, 1, null, false, null,
+            RelativeReminders: [new RelativeReminderTime(MinutesBefore: -60)]));
+
+        result.IsFailure.Should().BeTrue();
+        habit.RelativeReminders.Should().BeEmpty();
+    }
+
+    [Fact]
     public void Update_MixedHabitWithNoReminderFields_FoldsExistingScheduledReminders()
     {
         var habit = CreateValidHabit();

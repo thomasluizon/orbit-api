@@ -535,6 +535,9 @@ public class Habit : Entity, ITimestamped, ISoftDeletable, IHabitSchedule
         if (relativeValidation is not null)
             return relativeValidation;
 
+        if (!p.DueTime.HasValue && !DueTime.HasValue && p.RelativeReminders is { Count: > 0 })
+            return DomainErrors.InvalidRelativeReminders;
+
         if (p.DueTime.HasValue && (p.RelativeReminders?.Count ?? RelativeReminders.Count) + (p.ScheduledReminders?.Count ?? ScheduledReminders.Count) > DomainConstants.MaxRelativeReminders)
             return DomainErrors.InvalidRelativeReminders;
 
