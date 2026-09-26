@@ -4241,7 +4241,8 @@
           "CreateHabitCommandHandler",
           "Goal",
           "Habit",
-          "Tag"
+          "Tag",
+          "User"
         ]
       },
       {
@@ -4918,7 +4919,8 @@
         "testClass": "HabitCeilingLockTests",
         "file": "tests/Orbit.Application.Tests/Common/HabitCeilingLockTests.cs",
         "references": [
-          "Habit"
+          "Habit",
+          "User"
         ]
       },
       {

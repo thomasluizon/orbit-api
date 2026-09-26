@@ -190,17 +190,30 @@ public class CreateHabitCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_HabitLimitReached_ReturnsNeutralFailure()
+    public async Task Handle_HabitLimitReached_ReturnsCodedFailure()
     {
-        _payGate.CanCreateHabits(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure("Habit limit reached"));
+        var userRepository = Substitute.For<IGenericRepository<User>>();
+        var appConfig = Substitute.For<IAppConfigService>();
+        userRepository.GetByIdAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(User.Create("Test User", "test@example.com").Value);
+        appConfig.GetAsync(AppConfigKeys.FreeMaxHabits, AppConstants.DefaultFreeMaxHabits, Arg.Any<CancellationToken>())
+            .Returns(AppConstants.DefaultFreeMaxHabits);
+        _habitRepo.CountAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(AppConstants.DefaultFreeMaxHabits);
+        var repos = new CreateHabitRepositories(_habitRepo, _tagRepo, _goalRepo);
+        var handler = new CreateHabitCommandHandler(
+            repos, _userDateService,
+            new PayGateService(_habitRepo, userRepository, appConfig, _userDateService),
+            _gamificationService, _goalCompletionService, _unitOfWork, _cache,
+            Substitute.For<ILogger<CreateHabitCommandHandler>>());
 
         var command = new CreateHabitCommand(UserId, "New habit", null, FrequencyUnit.Day, 1);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().BeNull();
+        result.ErrorCode.Should().Be("HABIT_LIMIT_REACHED");
+        result.Error.Should().Be("You've reached the 1000 habit limit.");
         await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
     }
 

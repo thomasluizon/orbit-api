@@ -22,7 +22,7 @@ public class PayGateService(
             h => h.UserId == userId && h.ParentHabitId == null && !h.IsCompleted, ct);
 
         if (activeHabitCount + count > maxHabits)
-            return Result.Failure($"You've reached the {maxHabits} habit limit.");
+            return Result.Failure(ErrorMessages.HabitLimitReached.Format(maxHabits));
 
         return Result.Success();
     }

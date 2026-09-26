@@ -6,6 +6,7 @@ public static class ErrorCodes
 {
     public const string UserNotFound = "USER_NOT_FOUND";
     public const string HabitNotFound = "HABIT_NOT_FOUND";
+    public const string HabitLimitReached = "HABIT_LIMIT_REACHED";
     public const string ParentHabitNotFound = "PARENT_HABIT_NOT_FOUND";
     public const string TargetParentNotFound = "TARGET_PARENT_NOT_FOUND";
     public const string TagNotFound = "TAG_NOT_FOUND";
