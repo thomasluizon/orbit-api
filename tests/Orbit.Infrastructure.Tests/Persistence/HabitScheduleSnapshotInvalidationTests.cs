@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Commands;
 using Orbit.Application.Habits.Services;
@@ -86,6 +87,79 @@ public class HabitScheduleSnapshotInvalidationTests
         after.Should().BeSameAs(before);
         counter.Commands.Count(command => command.Sql.Contains("\"IsBadHabit\"", StringComparison.Ordinal)
             && command.Sql.Contains("\"IsGeneral\"", StringComparison.Ordinal)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task RolledBackTransaction_RechecksScheduleEditedBetweenAttempts()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var context = factory.Context;
+        var today = new DateOnly(2026, 4, 3);
+        var user = User.Create("Repair User", "repair-retry@example.com").Value;
+        var habit = Habit.Create(new HabitCreateParams(user.Id, "Daily", FrequencyUnit.Day, 1, today)).Value;
+        context.Users.Add(user);
+        context.Habits.Add(habit);
+        await context.SaveChangesAsync();
+
+        var snapshots = new HabitScheduleSnapshotStore(new GenericRepository<Habit>(context));
+        HabitScheduleSnapshotInvalidation.Attach(context, snapshots);
+        var unitOfWork = new UnitOfWork(context, new DatabaseConnectionSettings(), snapshots);
+        var firstAttempt = () => HabitCeilingLock.ExecuteAsync(unitOfWork, user.Id, async token =>
+        {
+            var schedule = await snapshots.GetAsync(user.Id, token);
+            schedule.Single().FrequencyUnit.Should().Be(FrequencyUnit.Day);
+            user.SetStreakState(1, 1, today);
+            await unitOfWork.SaveChangesAsync(token);
+            throw new InvalidOperationException("Retry after a failed commit");
+        }, CancellationToken.None);
+
+        await firstAttempt.Should().ThrowAsync<InvalidOperationException>();
+
+        await using (var editor = factory.CreateContext())
+        {
+            var editedHabit = await editor.Habits.SingleAsync(candidate => candidate.Id == habit.Id);
+            var edit = editedHabit.Update(new HabitUpdateParams(
+                "Friday", null, FrequencyUnit.Day, 1, [DayOfWeek.Friday], false, today));
+            edit.IsSuccess.Should().BeTrue();
+            await editor.SaveChangesAsync();
+        }
+
+        var retrySchedule = await HabitCeilingLock.ExecuteAsync(unitOfWork, user.Id,
+            token => snapshots.GetAsync(user.Id, token), CancellationToken.None);
+
+        retrySchedule.Single().Days.Should().ContainSingle().Which.Should().Be(DayOfWeek.Friday);
+    }
+
+    [Fact]
+    public async Task ResetTracking_RechecksScheduleEditedOutsideScope()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var context = factory.Context;
+        var today = new DateOnly(2026, 4, 3);
+        var user = User.Create("Repair User", "repair-reset@example.com").Value;
+        var habit = Habit.Create(new HabitCreateParams(user.Id, "Daily", FrequencyUnit.Day, 1, today)).Value;
+        context.Users.Add(user);
+        context.Habits.Add(habit);
+        await context.SaveChangesAsync();
+
+        var snapshots = new HabitScheduleSnapshotStore(new GenericRepository<Habit>(context));
+        var unitOfWork = new UnitOfWork(context, new DatabaseConnectionSettings(), snapshots);
+        var before = await snapshots.GetAsync(user.Id, CancellationToken.None);
+
+        await using (var editor = factory.CreateContext())
+        {
+            var editedHabit = await editor.Habits.SingleAsync(candidate => candidate.Id == habit.Id);
+            editedHabit.Update(new HabitUpdateParams(
+                "Friday", null, FrequencyUnit.Day, 1, [DayOfWeek.Friday], false, today))
+                .IsSuccess.Should().BeTrue();
+            await editor.SaveChangesAsync();
+        }
+
+        unitOfWork.ResetTracking();
+        var after = await snapshots.GetAsync(user.Id, CancellationToken.None);
+
+        after.Should().NotBeSameAs(before);
+        after.Single().Days.Should().ContainSingle().Which.Should().Be(DayOfWeek.Friday);
     }
 
     [Fact]

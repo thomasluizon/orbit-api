@@ -76,7 +76,10 @@ public static partial class ServiceCollectionExtensions
                 .AddInterceptors(serviceProvider.GetRequiredService<SlowQueryCommandInterceptor>()));
 
         builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
-        builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+        builder.Services.AddScoped<IUnitOfWork>(sp => new UnitOfWork(
+            sp.GetRequiredService<OrbitDbContext>(),
+            sp.GetRequiredService<DatabaseConnectionSettings>(),
+            sp.GetRequiredService<HabitScheduleSnapshotStore>()));
         builder.Services.AddScoped<IAccountResetRepository, AccountResetRepository>();
         builder.Services.AddScoped<IFoundingAchievementReader, FoundingAchievementReader>();
         builder.Services.AddScoped<IIdempotencyStore, IdempotencyStore>();
