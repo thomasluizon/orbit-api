@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -31,14 +32,17 @@ public class BulkDeleteHabitsCommandHandler(
     {
         var results = new List<BulkDeleteItemResult>();
 
-        var habits = await habitRepository.FindTrackedAsync(
-            h => request.HabitIds.Contains(h.Id) && h.UserId == request.UserId,
-            query => query.Include(h => h.Goals),
-            cancellationToken);
-        var habitDict = habits.ToDictionary(h => h.Id);
-
         await HabitCeilingLock.ExecuteAsync(unitOfWork, request.UserId, async ct =>
         {
+            var userHabits = await habitRepository.FindTrackedAsync(
+                h => h.UserId == request.UserId,
+                query => query.Include(h => h.Goals),
+                ct);
+            var habitDict = userHabits.ToDictionary(h => h.Id);
+            var childrenByParentId = userHabits.ToLookup(h => h.ParentHabitId);
+            var deletedIds = new HashSet<Guid>();
+            var deletedAtUtc = DateTime.UtcNow;
+
             for (int i = 0; i < request.HabitIds.Count; i++)
             {
                 var habitId = request.HabitIds[i];
@@ -53,12 +57,14 @@ public class BulkDeleteHabitsCommandHandler(
                     continue;
                 }
 
-                habit.RemoveAllGoals();
-                habit.SoftDelete();
-                results.Add(new BulkDeleteItemResult(
-                    Index: i,
-                    Status: BulkItemStatus.Success,
-                    HabitId: habitId));
+                foreach (var deleted in HabitHierarchy.SoftDeleteSubtree(
+                    habit, childrenByParentId, deletedIds, deletedAtUtc))
+                {
+                    results.Add(new BulkDeleteItemResult(
+                        Index: i,
+                        Status: BulkItemStatus.Success,
+                        HabitId: deleted.Id));
+                }
             }
 
             await unitOfWork.SaveChangesAsync(ct);
