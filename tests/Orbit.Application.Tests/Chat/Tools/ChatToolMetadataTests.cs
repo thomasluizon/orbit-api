@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -30,8 +31,10 @@ public class ChatToolMetadataTests
             NullLogger<BulkUpdateHabitEmojisTool>.Instance);
         var bulkUpdateHabitsTool = new BulkUpdateHabitsTool(mediator);
         var bulkRescheduleHabitsTool = new BulkRescheduleHabitsTool(mediator);
-        var bulkLogHabitsTool = new BulkLogHabitsTool(Substitute.For<IMediator>(), Repo<Habit>(), userDateService);
-        var bulkSkipHabitsTool = new BulkSkipHabitsTool(Substitute.For<IMediator>(), Repo<Habit>(), userDateService);
+        var replayPlanner = new BulkHabitReplayPlanner(Substitute.For<IIdempotencyContext>(),
+            Substitute.For<IIdempotencyStore>(), unitOfWork);
+        var bulkLogHabitsTool = new BulkLogHabitsTool(Substitute.For<IMediator>(), Repo<Habit>(), userDateService, replayPlanner);
+        var bulkSkipHabitsTool = new BulkSkipHabitsTool(Substitute.For<IMediator>(), Repo<Habit>(), userDateService, replayPlanner);
         var createGoalTool = new CreateGoalTool(Repo<Goal>(), unitOfWork);
         var createHabitTool = new CreateHabitTool(Repo<Habit>(), Repo<Tag>(), Repo<Goal>(), userDateService, payGateService, unitOfWork);
         var createSubHabitTool = new CreateSubHabitTool(mediator);

@@ -10,7 +10,8 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 public sealed class BulkLogHabitsTool(
     IMediator mediator,
     IGenericRepository<Habit> habitRepository,
-    IUserDateService userDateService) : IAiTool
+    IUserDateService userDateService,
+    BulkHabitReplayPlanner replayPlanner) : IAiTool
 {
     public string Name => "bulk_log_habits";
 
@@ -26,16 +27,21 @@ public sealed class BulkLogHabitsTool(
         var (filter, filterError) = BulkHabitToolArguments.ParseActionFilter(args);
         if (filterError is not null)
             return new ToolResult(false, Error: filterError);
-        var targetDateResult = await ResolveDateAsync(args, userId, ct);
-        if (targetDateResult.Error is not null)
-            return new ToolResult(false, Error: targetDateResult.Error);
+        var dateError = ValidateDate(args);
+        if (dateError is not null)
+            return new ToolResult(false, Error: dateError);
 
-        var habits = await BulkHabitSelection.LoadAsync(habitRepository, userId, filter!, ct);
-        if (habits.Count == 0)
+        var plan = await replayPlanner.GetOrCreateAsync(userId, typeof(BulkLogHabitsCommand).FullName!, async token =>
+        {
+            var date = await ResolveDateAsync(args, userId, token);
+            var habits = await BulkHabitSelection.LoadAsync(habitRepository, userId, filter!, token);
+            return new BulkHabitReplayPlan(date, habits.Select(habit => habit.Id).ToArray());
+        }, ct);
+        if (plan.HabitIds.Count == 0)
             return new ToolResult(false, Error: "No matching habits found to log.");
 
         return await BulkUpdateHabitsTool.ExecuteInChunksAsync(
-            habits.Select(habit => new BulkLogItem(habit.Id, targetDateResult.Date)).ToList(),
+            plan.HabitIds.Select(id => new BulkLogItem(id, plan.Date)).ToList(),
             (items, cancellationToken) => mediator.Send(
                 new BulkLogHabitsCommand(userId, items),
                 cancellationToken),
@@ -44,17 +50,23 @@ public sealed class BulkLogHabitsTool(
             ct);
     }
 
-    private async Task<(DateOnly Date, string? Error)> ResolveDateAsync(
+    private static string? ValidateDate(JsonElement args)
+    {
+        if (!args.TryGetProperty("date", out var dateElement) || dateElement.ValueKind == JsonValueKind.Null)
+            return null;
+        return dateElement.ValueKind == JsonValueKind.String
+            && DateOnly.TryParseExact(dateElement.GetString(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _)
+            ? null
+            : "date must use YYYY-MM-DD format.";
+    }
+
+    private async Task<DateOnly> ResolveDateAsync(
         JsonElement args,
         Guid userId,
         CancellationToken cancellationToken)
     {
-        var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
         if (!args.TryGetProperty("date", out var dateElement) || dateElement.ValueKind == JsonValueKind.Null)
-            return (today, null);
-        if (dateElement.ValueKind != JsonValueKind.String
-            || !DateOnly.TryParseExact(dateElement.GetString(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
-            return (default, "date must use YYYY-MM-DD format.");
-        return (date, null);
+            return await userDateService.GetUserTodayAsync(userId, cancellationToken);
+        return DateOnly.ParseExact(dateElement.GetString()!, "yyyy-MM-dd", CultureInfo.InvariantCulture);
     }
 }
