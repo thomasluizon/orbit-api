@@ -38,6 +38,19 @@ public class SubscriptionControllerTests
     }
 
     [Fact]
+    public void ClaimAdReward_RouteRemainsAvailableAndDeprecated()
+    {
+        var routes = typeof(SubscriptionController).GetMethods()
+            .Where(method => method.GetCustomAttributes(typeof(HttpPostAttribute), false)
+                .Cast<HttpPostAttribute>()
+                .Any(attribute => attribute.Template == "ad-reward"))
+            .ToArray();
+
+        routes.Should().ContainSingle();
+        routes[0].GetCustomAttributes(typeof(ObsoleteAttribute), false).Should().ContainSingle();
+    }
+
+    [Fact]
     public async Task CreateCheckout_Success_ReturnsOk()
     {
         _mediator.Send(Arg.Any<CreateCheckoutCommand>(), Arg.Any<CancellationToken>())

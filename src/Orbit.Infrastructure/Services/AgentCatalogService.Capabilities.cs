@@ -820,7 +820,7 @@ public partial class AgentCatalogService
             CreateCapability(
                 AgentCapabilityIds.SubscriptionsManage,
                 "Manage Subscription",
-                "Creates checkout and billing portal sessions or claims ad rewards.",
+                "Creates checkout and billing portal sessions.",
                 "subscriptions",
                 AgentScopes.ManageSubscriptions,
                 AgentRiskClass.High,
