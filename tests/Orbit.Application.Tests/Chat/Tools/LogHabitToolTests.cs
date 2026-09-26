@@ -103,6 +103,33 @@ public class LogHabitToolTests
     }
 
     [Fact]
+    public async Task FlexibleHabit_RejectsLogAfterWindowTarget()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Flexible", FrequencyUnit.Week, 2, DueDate: Today, IsFlexible: true)).Value;
+        habit.Log(Today).IsSuccess.Should().BeTrue();
+        SetupHabitFound(habit);
+        _mediator.Send(Arg.Any<LogHabitCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var command = call.ArgAt<LogHabitCommand>(0);
+                var log = habit.Log(command.Date!.Value);
+                var response = log.IsSuccess
+                    ? Result.Success(new LogHabitResponse(log.Value.Id, false, 0))
+                    : Result.Failure<LogHabitResponse>(log.Error, log.ErrorCode!);
+                return Task.FromResult(response);
+            });
+
+        var accepted = await Execute($$$"""{"habit_id": "{{{habit.Id}}}"}""");
+        var rejected = await Execute($$$"""{"habit_id": "{{{habit.Id}}}"}""");
+
+        accepted.Success.Should().BeTrue();
+        rejected.Success.Should().BeFalse();
+        rejected.Error.Should().Be("All instances for this period have already been completed or skipped.");
+        habit.Logs.Count(log => log.Value > 0).Should().Be(2);
+    }
+
+    [Fact]
     public async Task FutureDate_ReturnsError()
     {
         var habit = CreateHabit("Water", FrequencyUnit.Day, 1);

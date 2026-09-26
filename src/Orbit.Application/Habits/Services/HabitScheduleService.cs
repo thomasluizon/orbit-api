@@ -457,11 +457,10 @@ public static class HabitScheduleService
     /// </summary>
     public static int GetRemainingCompletions(Habit habit, DateOnly target, IReadOnlyCollection<HabitLog> logs, int weekStartDay)
     {
-        var targetCount = habit.FrequencyQuantity ?? 1;
-        var skipped = GetSkippedInWindow(habit, target, logs, weekStartDay);
-        var adjustedTarget = Math.Max(0, targetCount - skipped);
-        var completed = GetCompletedInWindow(habit, target, logs, weekStartDay);
-        return Math.Max(0, adjustedTarget - completed);
+        if (!IsActiveIntervalWeek(habit, target, weekStartDay))
+            return habit.FrequencyQuantity ?? 1;
+
+        return habit.GetRemainingCompletions(target, logs, weekStartDay);
     }
 
     public static List<HabitInstanceItem> GetInstances(
