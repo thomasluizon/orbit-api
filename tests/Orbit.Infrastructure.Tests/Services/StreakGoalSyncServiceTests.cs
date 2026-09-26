@@ -429,6 +429,8 @@ public class StreakGoalSyncServiceTests
             new XpAwarder(new GenericRepository<XpAwardLog>(dbContext)),
             unitOfWork,
             Substitute.For<IFeatureFlagService>(),
-            NullLogger<GamificationService>.Instance);
+            NullLogger<GamificationService>.Instance,
+            new Orbit.Application.Habits.Services.HabitScheduleSnapshotStore(
+                new GenericRepository<Habit>(dbContext)));
     }
 }

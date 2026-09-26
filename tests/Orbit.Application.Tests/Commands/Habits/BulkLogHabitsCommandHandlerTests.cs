@@ -8,6 +8,7 @@ using Orbit.Application.Gamification;
 using Orbit.Application.Gamification.Services;
 using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Commands;
+using Orbit.Application.Habits.Services;
 using Orbit.Application.Social.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -602,7 +603,8 @@ public class BulkLogHabitsCommandHandlerTests
             new XpAwarder(xpAwardRepo),
             unitOfWork,
             featureFlags,
-            Substitute.For<ILogger<GamificationService>>());
+            Substitute.For<ILogger<GamificationService>>(),
+            new HabitScheduleSnapshotStore(habitRepo));
         var gamification = Substitute.For<IGamificationService>();
         gamification.ProcessGoalCompleted(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(call => realGamification.ProcessGoalCompleted(
