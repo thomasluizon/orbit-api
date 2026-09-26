@@ -202,8 +202,12 @@ public sealed class PendingOperationRevisionService(
         var revisedHabits = new JsonArray();
         foreach (var item in selected)
         {
-            if (!int.TryParse(item.ItemId, out var index) || index < 0 || index >= habits.Count
-                || habits[index] is not JsonObject habit)
+            var habit = habits.OfType<JsonObject>().FirstOrDefault(candidate =>
+                candidate["preview_item_id"]?.ToString() == item.ItemId);
+            if (habit is null && int.TryParse(item.ItemId, out var index)
+                && index >= 0 && index < habits.Count)
+                habit = habits[index] as JsonObject;
+            if (habit is null)
                 return false;
             var copy = (JsonObject)habit.DeepClone();
             if (!ApplyEdits(copy, item.Edits))
@@ -226,7 +230,10 @@ public sealed class PendingOperationRevisionService(
         var items = new JsonArray();
         foreach (var item in selected)
         {
-            var copy = (JsonObject)updates.DeepClone();
+            var previous = root["revised_items"] as JsonArray;
+            var previousUpdates = previous?.OfType<JsonObject>().FirstOrDefault(candidate =>
+                candidate["habit_id"]?.ToString() == item.ItemId)?["updates"] as JsonObject;
+            var copy = (JsonObject)(previousUpdates ?? updates).DeepClone();
             if (!ApplyEdits(copy, item.Edits))
                 return false;
             items.Add(new JsonObject
@@ -279,6 +286,11 @@ public sealed class PendingOperationRevisionService(
         foreach (var item in selected)
         {
             var target = new JsonObject { ["habit_id"] = item.ItemId };
+            var previous = root["revised_items"] as JsonArray;
+            var previousEmoji = previous?.OfType<JsonObject>().FirstOrDefault(candidate =>
+                candidate["habit_id"]?.ToString() == item.ItemId);
+            if (previousEmoji?.ContainsKey("emoji") == true)
+                target["emoji"] = previousEmoji["emoji"]?.DeepClone();
             if (item.Edits is { ValueKind: JsonValueKind.Object } edits
                 && edits.TryGetProperty("emoji", out var emoji))
             {

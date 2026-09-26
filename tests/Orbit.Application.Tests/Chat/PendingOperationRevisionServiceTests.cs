@@ -114,6 +114,48 @@ public sealed class PendingOperationRevisionServiceTests
             Arg.Any<string>(), Arg.Any<string>());
     }
 
+    [Fact]
+    public async Task ReviseAsync_CanEditRetainedCreateItemAgain()
+    {
+        var pendingId = Guid.NewGuid();
+        var arguments = JsonDocument.Parse("""{"habits":[{"title":"One"},{"title":"Two"}]}""")
+            .RootElement.Clone();
+        var current = new PendingAgentOperationExecution(pendingId,
+            AgentCapabilityIds.HabitsBulkWrite, "bulk_create_habits", arguments,
+            AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation);
+        _store.GetExecution(_userId, pendingId).Returns(_ => current);
+        _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<string>(), Arg.Any<string>()).Returns(call =>
+            {
+                current = current with
+                {
+                    Arguments = JsonDocument.Parse(call.ArgAt<string>(3)).RootElement.Clone(),
+                    PreviewFingerprint = call.ArgAt<string>(5)
+                };
+                return true;
+            });
+        var previewer = new PendingOperationChangePreviewer(_habits, _dateService);
+        var service = new PendingOperationRevisionService(_store, previewer,
+            new RevisePendingOperationRequestValidator());
+        var original = await previewer.PreviewAsync(_userId, "bulk_create_habits", arguments);
+        using var firstEdit = JsonDocument.Parse("{\"title\":\"Second\"}");
+
+        var first = await service.ReviseAsync(_userId, pendingId,
+            new RevisePendingOperationRequest(original!.PreviewFingerprint!,
+                [new("1", firstEdit.RootElement.Clone())]), CancellationToken.None);
+        using var secondEdit = JsonDocument.Parse("{\"title\":\"Final\"}");
+        var second = await service.ReviseAsync(_userId, pendingId,
+            new RevisePendingOperationRequest(first.Preview!.PreviewFingerprint!,
+                [new("1", secondEdit.RootElement.Clone())]), CancellationToken.None);
+
+        first.IsSuccess.Should().BeTrue();
+        second.IsSuccess.Should().BeTrue();
+        current.Arguments.GetProperty("habits")[0].GetProperty("title").GetString()
+            .Should().Be("Final");
+        current.Arguments.GetProperty("habits")[0].GetProperty("preview_item_id").GetString()
+            .Should().Be("1");
+    }
+
     private void SetupHabits(IReadOnlyList<Habit> habits)
     {
         _dateService.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>())
