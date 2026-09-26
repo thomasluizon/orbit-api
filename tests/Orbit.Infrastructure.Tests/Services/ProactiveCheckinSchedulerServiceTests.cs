@@ -14,13 +14,6 @@ using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
-/// <summary>
-/// DB-backed behavior tests for ProactiveCheckinSchedulerService: an off-track, opted-in Pro user
-/// inside the send window receives exactly one push and a dedup row; free / opted-out / on-track /
-/// already-sent / out-of-window users receive nothing; and a unique-violation on the dedup write
-/// skips the push. The send window is made deterministic via config (hour 0 + a full-day interval
-/// always matches; a 12-hour-away hour never matches) so the tests do not depend on wall-clock time.
-/// </summary>
 public class ProactiveCheckinSchedulerServiceTests
 {
     private const int AlwaysInWindowHour = 0;
@@ -79,7 +72,7 @@ public class ProactiveCheckinSchedulerServiceTests
         var messageService = CreateMessageService();
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         dbContext.Users.Add(user);
         dbContext.Habits.Add(CreateOffTrackHabit(user.Id, today));
         await dbContext.SaveChangesAsync();
@@ -257,7 +250,7 @@ public class ProactiveCheckinSchedulerServiceTests
         await pushService.DidNotReceive().SendToUserAsync(
             Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
 
-    private static User CreateOptedInProUser(string name = "Thomas", string email = "thomas@test.com")
+    private static User CreateOptedInProUser(string name = "Alex", string email = "alex@test.com")
     {
         var user = User.Create(name, email).Value;
         user.SetProactiveAstraEnabled(true);

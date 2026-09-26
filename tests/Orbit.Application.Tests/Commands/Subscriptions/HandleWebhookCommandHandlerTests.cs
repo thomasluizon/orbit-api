@@ -97,7 +97,7 @@ public class HandleWebhookCommandHandlerTests
     {
         var subscriptionId = "sub_test_123";
         var customerId = "cus_test_456";
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
 
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
@@ -153,7 +153,7 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_CheckoutSessionCompleted_ClearsReferralCoupon()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         user.SetReferralCoupon("coupon_test");
 
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
@@ -178,7 +178,7 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_SubscriptionDeleted_CancelsSubscription()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddMonths(1));
 
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
@@ -220,7 +220,7 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_SubscriptionDeleted_CancellationRequested_RecordsCanceledReason()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddMonths(1));
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
@@ -240,7 +240,7 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_SubscriptionUpdated_Active_UpdatesExpiry()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddMonths(1));
 
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
@@ -261,7 +261,7 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_SubscriptionUpdated_Canceled_CancelsSubscription()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddMonths(1));
 
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
@@ -287,7 +287,7 @@ public class HandleWebhookCommandHandlerTests
     public async Task Handle_SubscriptionUpdated_CanceledForPayment_RecordsPaymentFailure(
         string cancellationReason)
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddMonths(1));
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
@@ -308,7 +308,7 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_SubscriptionUpdated_Unpaid_CancelsSubscription()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddMonths(1));
 
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
@@ -349,7 +349,7 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_InvoicePaid_RenewsSubscription()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddMonths(1));
 
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
@@ -418,7 +418,7 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_ReservesProcessedEventViaConstraint_WithoutCheckThenInsertPreCheck()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
             Arg.Any<CancellationToken>())
@@ -445,7 +445,7 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_DuplicateEvent_UniqueViolationOnSave_IsIdempotentSuccess()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
             Arg.Any<CancellationToken>())
@@ -474,7 +474,7 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_SaveThrowsConcurrencyConflict_PropagatesInsteadOfSwallowingAsFailure()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
             Arg.Any<CancellationToken>())
@@ -499,7 +499,7 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_ThroughRetryBehavior_ConcurrencyConflictThenSuccess_UpgradesProAndRetries()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
             Arg.Any<CancellationToken>())
@@ -533,7 +533,7 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_CheckoutSessionCompleted_ClearsStalePlayPurchaseToken()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         user.SetPlaySubscription("stale_play_token", DateTime.UtcNow.AddMonths(1));
 
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
@@ -558,7 +558,7 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_CheckoutSessionCompleted_YearlySubMissingPeriodEnd_FallsBackToOneYearNotOneMonth()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
 
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
@@ -597,7 +597,7 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_InvoicePaymentFailed_RecordsReasonWithoutDowngradingProUser()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddMonths(1));
         user.IsPro.Should().BeTrue();
 
@@ -621,7 +621,7 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_InvoicePaymentFailed_WhenPlayOwnsEntitlement_DoesNotRecordStripeReason()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddMonths(1));
         user.SetPlaySubscription("tok_play", DateTime.UtcNow.AddMonths(2), SubscriptionInterval.Monthly);
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
@@ -644,7 +644,7 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_OlderInvoicePaymentFailedAfterPaid_DoesNotRestoreReason()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddMonths(1));
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
@@ -677,7 +677,7 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_CheckoutSessionCompleted_StripeApiErrorFetchingSubscription_ReturnsStripeApiFailure()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
             Arg.Any<CancellationToken>())
@@ -701,7 +701,7 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_SubscriptionFetchThrowsOperationCanceled_PropagatesNotSwallowedAsFailure()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
             Arg.Any<CancellationToken>())
@@ -760,7 +760,7 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_CheckoutSessionCompleted_SubscriptionWithNoItems_FallsBackToMonthlyOneMonth()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
             Arg.Any<CancellationToken>())
@@ -783,7 +783,7 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_CheckoutSessionCompleted_UnusualIntervalDefaultsToMonthlyButKeepsItemPeriodEnd()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
             Arg.Any<CancellationToken>())
@@ -821,7 +821,7 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_CheckoutSessionCompleted_CapturesSubscriptionStarted()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
             Arg.Any<CancellationToken>())
@@ -842,7 +842,7 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_CheckoutSessionCompleted_AnnualPlan_CapturesSubscriptionStarted()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
             Arg.Any<CancellationToken>())
@@ -863,7 +863,7 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_InvoicePaid_CapturesSubscriptionRenewed()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddMonths(1));
 
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
@@ -885,7 +885,7 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_SubscriptionDeleted_CapturesSubscriptionCanceled()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddMonths(1));
 
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
@@ -904,7 +904,7 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_SubscriptionUpdated_CapturesSubscriptionUpdated()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddMonths(1));
 
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
@@ -923,7 +923,7 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_CaptureThrows_WebhookStillSucceedsSoStripeDoesNotRetry()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
             Arg.Any<CancellationToken>())
@@ -949,7 +949,7 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_ReplayedEventDedupedByProcessedStripeEvent_DoesNotCaptureASecondTime()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
             Arg.Any<CancellationToken>())
@@ -975,7 +975,7 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_NoOpAnalyticsBound_CapturesNothingAndLeavesHandlerResultUnchanged()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
             Arg.Any<CancellationToken>())

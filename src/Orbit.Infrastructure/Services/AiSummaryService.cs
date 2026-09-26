@@ -64,13 +64,6 @@ public sealed partial class AiSummaryService(
 
     private sealed record DailySummaryJson(string? Summary);
 
-    /// <summary>
-    /// Selects the habits the summary should reason about: anything logged on the viewed day
-    /// (completed today), plus anything still open — not completed and with a
-    /// <see cref="Habit.DueDate"/> on or before the user's today (due today or overdue). Habits due
-    /// only in the future, and tasks already completed on an earlier day, are excluded. Each child
-    /// is evaluated on its own merit so a non-due child never rides in on a due parent.
-    /// </summary>
     private static List<Habit> SelectScheduledHabits(
         IEnumerable<Habit> allHabits,
         DateOnly userToday,
@@ -270,13 +263,6 @@ public sealed partial class AiSummaryService(
     private static bool IsDoneInRange(Habit habit, DateOnly dateFrom, DateOnly dateTo) =>
         HabitScheduleService.HasCompletedLogInRange(habit, dateFrom, dateTo);
 
-    /// <summary>
-    /// The summary's single inclusion rule: a habit is relevant when it was logged on the viewed
-    /// day (completed today), or it is still open — not completed and due on or before the user's
-    /// today (due today or overdue). "Done" is decided purely by a dated completion log, never by
-    /// the sticky <see cref="Habit.IsCompleted"/> flag, so a task completed on an earlier day (still
-    /// flagged completed, but with no log today) is excluded.
-    /// </summary>
     private static bool IsRelevant(
         Habit habit,
         DateOnly dateFrom,

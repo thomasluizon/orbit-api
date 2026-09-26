@@ -247,7 +247,7 @@ public class ProcessUserChatCommandHandlerTests
 
     private void SetupUserAndPayGate(User? user = null, bool payGatePass = true)
     {
-        user ??= User.Create("Thomas", "thomas@test.com").Value;
+        user ??= User.Create("Alex", "thomas@test.com").Value;
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
         _payGate.TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>())
             .Returns(payGatePass ? Result.Success() : Result.PayGateFailure("AI message limit reached."));
@@ -503,7 +503,7 @@ public class ProcessUserChatCommandHandlerTests
     [Fact]
     public async Task Handle_AiServiceFails_RetainsConsumedQuota()
     {
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "thomas@test.com").Value;
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
         for (var i = 0; i < 4; i++)
             user.IncrementAiMessageCount(Today);
@@ -753,7 +753,7 @@ public class ProcessUserChatCommandHandlerTests
     [Fact]
     public async Task Handle_CrisisDisclosure_DoesNotSubmitFactExtraction()
     {
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "thomas@test.com").Value;
         user.StartTrial(DateTime.UtcNow.AddDays(1));
         SetupUserAndPayGate(user);
         SetupAiResponse(new AiResponse { TextMessage = "I'm listening." });
@@ -1448,7 +1448,7 @@ public class ProcessUserChatCommandHandlerTests
     [Fact]
     public async Task Handle_ProUser_AppliesFreshStreakValueBeforeBuildingPromptContext()
     {
-        var proUser = User.Create("Thomas", "thomas@test.com").Value;
+        var proUser = User.Create("Alex", "thomas@test.com").Value;
         proUser.StartTrial(DateTime.UtcNow.AddDays(5));
         SetupUserAndPayGate(proUser);
 
@@ -2584,7 +2584,7 @@ public class ProcessUserChatCommandHandlerTests
     [Fact]
     public async Task Handle_ProductionCreateHabitFailure_DoesNotExposeToolSchemaArguments()
     {
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "thomas@test.com").Value;
         user.SetLanguage("pt-BR");
         SetupUserAndPayGate(user);
         var tool = CreateFailingCreateHabitTool();
@@ -2615,7 +2615,7 @@ public class ProcessUserChatCommandHandlerTests
         string language,
         string expectedMessage)
     {
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "thomas@test.com").Value;
         user.SetLanguage(language);
         SetupUserAndPayGate(user);
         var attempts = 0;
@@ -2722,7 +2722,7 @@ public class ProcessUserChatCommandHandlerTests
     [Fact]
     public async Task Handle_ProductionTwoHabitFailure_PreservesSuccessfulSiblingAndSanitizesFailedAction()
     {
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "thomas@test.com").Value;
         user.SetLanguage("pt-BR");
         SetupUserAndPayGate(user);
         var adaptationAttempts = 0;
@@ -3335,7 +3335,7 @@ public class ProcessUserChatCommandHandlerTests
     [Fact]
     public async Task Handle_AiMemoryDisabled_DoesNotLoadFacts()
     {
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "thomas@test.com").Value;
         user.SetAiMemory(false);
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
         _payGate.TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>()).Returns(Result.Success());
@@ -3922,7 +3922,7 @@ public class ProcessUserChatCommandHandlerTests
 
         private static User CreateFreeUserSnapshot(int messageCount)
         {
-            var user = User.Create("Thomas", "thomas@test.com").Value;
+            var user = User.Create("Alex", "thomas@test.com").Value;
             user.StartTrial(DateTime.UtcNow.AddDays(-1));
             for (var i = 0; i < messageCount; i++)
                 user.IncrementAiMessageCount(Today);

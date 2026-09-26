@@ -6,13 +6,6 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Accountability.Services;
 
-/// <summary>
-/// Reusable accountability-pair reads and the linked-habit replacement shared by the accountability
-/// handlers: locating the single non-ended pair between two users regardless of direction, resolving a
-/// pair the caller participates in, counting a user's active pairs against the cap, and replacing a
-/// participant's linked habits after validating each habit belongs to them. Lookups return null on a
-/// miss so callers can map it to a uniform not-found (no enumeration).
-/// </summary>
 public class AccountabilityPairService(
     IGenericRepository<AccountabilityPair> pairRepository,
     IGenericRepository<AccountabilityPairHabit> pairHabitRepository,

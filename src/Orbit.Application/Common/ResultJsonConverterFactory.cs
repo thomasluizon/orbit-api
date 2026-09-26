@@ -4,13 +4,6 @@ using Orbit.Domain.Common;
 
 namespace Orbit.Application.Common;
 
-/// <summary>
-/// Round-trips <see cref="Result"/> and <see cref="Result{T}"/> through System.Text.Json for the
-/// idempotency ledger. The default reflection converter cannot: <see cref="Result{T}.Value"/> throws on
-/// a failed result and the non-generic <see cref="Result"/> has no public constructor. This converter
-/// reads <c>Value</c> only when the result succeeded and rebuilds via the factory methods, so a cached
-/// success or failure replays without crashing. See thomasluizon/orbit-ui-mobile#243.
-/// </summary>
 public sealed class ResultJsonConverterFactory : JsonConverterFactory
 {
     public override bool CanConvert(Type typeToConvert) =>

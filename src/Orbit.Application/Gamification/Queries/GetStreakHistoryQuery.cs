@@ -16,13 +16,6 @@ public record GetStreakHistoryQuery(
     DateOnly DateFrom,
     DateOnly DateTo) : IRequest<Result<StreakHistoryResponse>>;
 
-/// <summary>
-/// Day-by-day streak series for the requested range, computed with the same schedule-aware engine that
-/// produces <see cref="User.CurrentStreak"/>: only scheduled (expected) days can break or extend a streak,
-/// off-days are skipped rather than reset, and freezes bridge missed days. The value on DateTo equals the
-/// user's live current streak. Seeds from a lookback before the range so the streak entering the window is
-/// correct. Pro-gated like the streak/gamification surfaces.
-/// </summary>
 public class GetStreakHistoryQueryHandler(
     IGenericRepository<User> userRepository,
     IGenericRepository<Habit> habitRepository,

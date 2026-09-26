@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
@@ -15,7 +16,6 @@ namespace Orbit.Application.Tests.Chat.Tools;
 public class GoalReviewToolTests
 {
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
-    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IGoalProgressReadSyncer _goalProgressReadSyncer = Substitute.For<IGoalProgressReadSyncer>();
     private readonly GoalReviewTool _tool;
@@ -25,8 +25,7 @@ public class GoalReviewToolTests
 
     public GoalReviewToolTests()
     {
-        _tool = new GoalReviewTool(_goalRepo, _payGate, _userDateService, _goalProgressReadSyncer);
-        _payGate.CanUseGoalReview(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _tool = new GoalReviewTool(_goalRepo, _userDateService, _goalProgressReadSyncer);
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
         _goalProgressReadSyncer.ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>())
             .Returns(new Dictionary<Guid, int>());
@@ -52,6 +51,49 @@ public class GoalReviewToolTests
     }
 
     [Fact]
+    public async Task SuccessfulReview_DecimalProgress_UsesInvariantCulture()
+    {
+        var goal = Goal.Create(UserId, "Run", 10.5m, "miles").Value;
+        goal.UpdateProgress(3.5m);
+        SetupGoals(goal);
+        var previousCulture = CultureInfo.CurrentCulture;
+
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("pt-BR");
+            var result = await Execute("{}");
+
+            result.Success.Should().BeTrue();
+            result.EntityName.Should().Contain("3.5/10.5 miles");
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previousCulture;
+        }
+    }
+
+    [Fact]
+    public async Task SuccessfulReview_Deadline_UsesInvariantCalendar()
+    {
+        var goal = Goal.Create(new Goal.CreateGoalParams(
+            UserId, "Run", 10, "miles", Deadline: new DateOnly(2026, 12, 31))).Value;
+        SetupGoals(goal);
+        var previousCulture = CultureInfo.CurrentCulture;
+
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("ar-SA");
+            var result = await Execute("{}");
+
+            result.EntityName.Should().Contain("Deadline: 2026-12-31");
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previousCulture;
+        }
+    }
+
+    [Fact]
     public async Task NoGoals_ReturnsNoGoalsMessage()
     {
         SetupGoals();
@@ -63,16 +105,15 @@ public class GoalReviewToolTests
     }
 
     [Fact]
-    public async Task FreeUser_ReturnsPayGateFailureBeforeLoadingGoals()
+    public async Task FreeUser_ReturnsGoalSummary()
     {
-        _payGate.CanUseGoalReview(UserId, Arg.Any<CancellationToken>())
-            .Returns(Result.PayGateFailure("Goal reviews are a Pro feature"));
+        SetupGoals(Goal.Create(UserId, "Read books", 12, "books").Value);
 
         var result = await Execute("{}");
 
-        result.Success.Should().BeFalse();
-        result.ErrorCode.Should().Be(Result.PayGateErrorCode);
-        await _goalRepo.DidNotReceive().FindAsync(
+        result.Success.Should().BeTrue();
+        result.EntityName.Should().Contain("Read books");
+        await _goalRepo.Received(1).FindAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),
             Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
             Arg.Any<CancellationToken>());

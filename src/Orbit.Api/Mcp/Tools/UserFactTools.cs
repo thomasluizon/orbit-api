@@ -6,14 +6,6 @@ using Orbit.Application.UserFacts.Queries;
 
 namespace Orbit.Api.Mcp.Tools;
 
-/// <summary>
-/// MCP user-fact tools. <c>delete_user_fact</c> routes through <see cref="McpExecutorBridge"/> →
-/// <see cref="Orbit.Domain.Interfaces.IAgentOperationExecutor"/> with
-/// <see cref="Orbit.Domain.Models.AgentExecutionSurface.Mcp"/> for shared policy evaluation and the
-/// <c>AgentAuditLogs</c> trail, mapping to the plural <c>delete_user_facts</c> chat tool. Because
-/// that capability is destructive, the method accepts and forwards a confirmation token. The
-/// <c>get_user_facts</c> read stays on MediatR.
-/// </summary>
 [McpServerToolType]
 public class UserFactTools(IMediator mediator, McpExecutorBridge executorBridge)
 {

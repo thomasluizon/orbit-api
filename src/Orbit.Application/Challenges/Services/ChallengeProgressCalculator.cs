@@ -3,13 +3,6 @@ using Orbit.Domain.Enums;
 
 namespace Orbit.Application.Challenges.Services;
 
-/// <summary>
-/// Pure read-side shared-progress math for challenges, mirroring <c>HabitMetricsCalculator</c>: a log
-/// counts only when its <c>Value</c> is greater than 0 (0 is a skip). CoopGoal progress is the count of
-/// qualifying logs across all contributing habits in the window; StreakTogether is the run of consecutive
-/// days on which every contributing participant logged, lenient about an unfinished today, reset by any
-/// single miss. A contributing participant is an active participant who has linked at least one habit.
-/// </summary>
 public static class ChallengeProgressCalculator
 {
     public static int CalculateCoopGoalProgress(

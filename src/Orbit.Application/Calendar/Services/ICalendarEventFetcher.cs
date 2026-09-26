@@ -4,35 +4,12 @@ namespace Orbit.Application.Calendar.Services;
 
 public interface ICalendarEventFetcher
 {
-    /// <summary>
-    /// Fetches Google Calendar events for the next 60 days across the user's calendars and maps
-    /// them into <see cref="CalendarEventItem"/> instances tagged with their source calendar.
-    /// When <paramref name="selectedCalendarIds"/> is null the user's owned, non-deleted,
-    /// non-hidden calendars are used; when non-null only calendars whose id is in that set are
-    /// fetched (still skipping deleted/hidden/inaccessible ones). A single calendar that fails
-    /// (e.g. transient or permission error) is logged and skipped rather than failing the whole
-    /// fetch. The concrete implementation lives in Infrastructure and owns Google SDK construction,
-    /// so Application only passes an OAuth access token.
-    /// Throws <see cref="CalendarProviderException"/> when the initial calendar-list call fails;
-    /// the Kind field tells callers whether to force a reconnect or retry later.
-    /// </summary>
-    /// <param name="accessToken">Google OAuth 2.0 access token for the calling user.</param>
-    /// <param name="selectedCalendarIds">Explicit calendar-id allow-list, or null to use all owned calendars.</param>
-    /// <param name="updatedMin">If provided, Google returns only events created/modified after this UTC timestamp.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<List<CalendarEventItem>> FetchAsync(
         string accessToken,
         IReadOnlyCollection<string>? selectedCalendarIds,
         DateTime? updatedMin,
         CancellationToken ct);
 
-    /// <summary>
-    /// Lists every non-deleted, non-hidden calendar on the user's calendar list as
-    /// <see cref="CalendarListItem"/> instances for a settings picker. Throws
-    /// <see cref="CalendarProviderException"/> on provider errors.
-    /// </summary>
-    /// <param name="accessToken">Google OAuth 2.0 access token for the calling user.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<List<CalendarListItem>> ListCalendarsAsync(string accessToken, CancellationToken ct);
 }
 

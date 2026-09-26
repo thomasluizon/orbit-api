@@ -1,20 +1,4 @@
 #!/usr/bin/env node
-/**
- * Gate repository-root entries by location, not by guessed filename patterns.
- *
- * Vendored from orbit-ui-mobile (ORB-170). The logic is identical in all three Orbit repositories;
- * only root-allowlist.json differs, because each repository's root differs.
- *
- * The allowlist is deliberately a closed set: every unlisted root file AND every unlisted root
- * directory fails regardless of its name, extension, or leading dot. Adding a legitimate root entry
- * therefore requires a visible data change instead of another pattern that only recognizes shapes
- * already seen.
- *
- * Entries that are gitignored are declared anyway when they legitimately appear on a real checkout:
- * a local .env, the IDE directories, and the test, mutation and benchmark output this repository's
- * own .gitignore already blesses. A gate that fires on those would block every commit, which was
- * measured in ORB-170 before .env was declared.
- */
 
 import { readdirSync, readFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"

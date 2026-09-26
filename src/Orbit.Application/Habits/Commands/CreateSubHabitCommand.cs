@@ -8,13 +8,6 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Habits.Commands;
 
-/// <param name="InheritParentFrequency">
-/// When true, unset cadence fields inherit from the parent. The parent's week interval is inherited
-/// only when the child supplies no cadence field of its own.
-/// Only the AI chat tool (which treats an unspecified frequency as "match the parent") opts into
-/// this; the REST API always sends the user's explicit choice, where an unset frequency means the
-/// user picked "one-time".
-/// </param>
 public record CreateSubHabitCommand(
     Guid UserId,
     Guid ParentHabitId,

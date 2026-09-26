@@ -14,7 +14,7 @@ public record BulkLogItem(Guid HabitId, DateOnly? Date = null) : IBulkHabitItem;
 
 public record BulkLogHabitsCommand(
     Guid UserId,
-    IReadOnlyList<BulkLogItem> Items) : IRequest<Result<BulkLogResult>>, IBulkHabitCommand<BulkLogItem>;
+    IReadOnlyList<BulkLogItem> Items) : IRequest<Result<BulkLogResult>>, IBulkHabitCommand<BulkLogItem>, IIdempotentCommand;
 
 public record BulkLogResult(IReadOnlyList<BulkLogItemResult> Results);
 

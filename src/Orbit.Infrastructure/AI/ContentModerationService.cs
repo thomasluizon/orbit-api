@@ -9,13 +9,6 @@ using Orbit.Infrastructure.Configuration;
 
 namespace Orbit.Infrastructure.AI;
 
-/// <summary>
-/// Screens text via the OpenAI moderation endpoint (free, not metered), reusing the existing AI
-/// credential. The OpenAI SDK exposes no moderation client, so this calls the REST endpoint directly.
-/// Never throws: any transport, timeout, non-success, or parse failure is surfaced as
-/// <see cref="ModerationResult.Unavailable"/> so the caller can fail open, while a definitive provider
-/// decision sets <see cref="ModerationResult.Flagged"/>.
-/// </summary>
 public partial class ContentModerationService(
     HttpClient httpClient,
     IOptions<AiSettings> aiSettings,

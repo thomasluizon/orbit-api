@@ -6,15 +6,6 @@ using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace Orbit.Analyzers;
 
-/// <summary>
-/// Requires every concrete MVC controller (a non-abstract class ending in <c>Controller</c> that
-/// derives from <c>ControllerBase</c>) to declare its authorization posture explicitly: an
-/// <c>[Authorize]</c> or <c>[AllowAnonymous]</c> attribute at class level (own or inherited from a
-/// base controller), or one of the two on every action. The orbit-api default is <c>[Authorize]</c>
-/// at class level; <c>[AllowAnonymous]</c> is reserved for truly public endpoints (auth flows,
-/// health, signature-verified webhooks). Skips compilations that do not reference ASP.NET Core
-/// authorization, so only Orbit.Api is analyzed.
-/// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class ControllerAuthorizationAnalyzer : DiagnosticAnalyzer
 {

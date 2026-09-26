@@ -171,14 +171,6 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
         return Result.Success(justCompleted);
     }
 
-    /// <summary>
-    /// Syncs a streak goal's current value to the computed streak length. When
-    /// <paramref name="allowCompletion"/> is true (write paths and the hosted sweep) it auto-completes
-    /// the goal once the target is reached and the success value reports that Active to Completed
-    /// transition so callers can fire completion side effects exactly once. When false (read paths)
-    /// it refreshes the value for display only, never flipping Status, so a read can surface the live
-    /// streak without persisting a completion the read has no gamification to honour.
-    /// </summary>
     public Result<bool> SyncStreakProgress(int currentStreak, bool allowCompletion = true)
     {
         if (Type != GoalType.Streak)
@@ -195,13 +187,6 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
         return Result.Success(justCompleted);
     }
 
-    /// <summary>
-    /// Syncs a linked Standard goal to the number of positive, active completion logs created for
-    /// its linked habits on or after the goal started. Completions are used because TargetValue is
-    /// a count; counting distinct days would undercount quantities, while counting currently
-    /// completed habits would discard history. When <paramref name="allowCompletion"/> is false,
-    /// read paths refresh the displayed value without changing status or firing write-side effects.
-    /// </summary>
     public Result<bool> SyncStandardProgress(int completionCount, bool allowCompletion = true)
     {
         if (Type != GoalType.Standard)
@@ -240,13 +225,6 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
         FirstCompletedAtUtc ??= completedAtUtc;
     }
 
-    /// <summary>
-    /// Applies an edit to the goal's core fields and reports the status transition the new target
-    /// triggered, if any. The transition is returned rather than acted on so the caller can run the
-    /// completion pipeline (gamification, progress log) exactly once on <see cref="GoalEditTransition.Completed"/>
-    /// and reopen cleanly on <see cref="GoalEditTransition.Reopened"/>, matching the dedicated
-    /// progress and status commands.
-    /// </summary>
     public Result<GoalEditTransition> Update(string title, string? description, decimal targetValue, string unit, DateOnly? deadline)
     {
         var coreFieldsValidation = GoalInvariants.ValidateCoreFields(title, targetValue, unit);

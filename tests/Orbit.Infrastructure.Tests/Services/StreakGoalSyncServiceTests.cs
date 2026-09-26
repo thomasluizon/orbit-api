@@ -32,7 +32,7 @@ public class StreakGoalSyncServiceTests
     public async Task SyncActiveGoals_StreakAdvancesCurrentValueFromLinkedHabitLogs()
     {
         await using var dbContext = CreateInMemoryDbContext();
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         var habit = CreateDailyHabitLoggedLastDays(user.Id, days: 3);
         var goal = CreateStreakGoal(user.Id, target: 7);
         goal.AddHabit(habit);
@@ -55,7 +55,7 @@ public class StreakGoalSyncServiceTests
     public async Task SyncActiveGoals_StreakReachesTarget_AutoCompletesAndGamifiesOnce()
     {
         await using var dbContext = CreateInMemoryDbContext();
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         var habit = CreateDailyHabitLoggedLastDays(user.Id, days: 3);
         var goal = CreateStreakGoal(user.Id, target: 3);
         goal.AddHabit(habit);
@@ -80,7 +80,7 @@ public class StreakGoalSyncServiceTests
     {
         using var factory = new SqliteOrbitDbContextFactory();
         var dbContext = factory.Context;
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         user.GrantLifetimePro();
         var habit = Habit.Create(new HabitCreateParams(
             user.Id, "Exercise", FrequencyUnit.Day, 2, DueDate: Today, IsFlexible: true)).Value;
@@ -124,7 +124,7 @@ public class StreakGoalSyncServiceTests
     {
         using var factory = new SqliteOrbitDbContextFactory();
         var dbContext = factory.Context;
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         var habit = Habit.Create(new HabitCreateParams(
             user.Id, "Exercise", FrequencyUnit.Day, 2, DueDate: Today, IsFlexible: true)).Value;
         var goal = Goal.Create(user.Id, "Exercise twice", 2, "sessions").Value;
@@ -213,7 +213,7 @@ public class StreakGoalSyncServiceTests
     public async Task SyncActiveGoals_StreakAlreadySyncedToday_LeavesValueAndSkipsGamification()
     {
         await using var dbContext = CreateInMemoryDbContext();
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         var habit = CreateDailyHabitLoggedLastDays(user.Id, days: 3);
         var goal = CreateStreakGoal(user.Id, target: 7);
         goal.AddHabit(habit);
@@ -266,7 +266,7 @@ public class StreakGoalSyncServiceTests
     public async Task SyncActiveGoals_StreakWithNoLinkedHabits_LeavesGoalUntouched()
     {
         await using var dbContext = CreateInMemoryDbContext();
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         var goal = CreateStreakGoal(user.Id, target: 7);
 
         dbContext.Users.Add(user);
@@ -285,7 +285,7 @@ public class StreakGoalSyncServiceTests
     public async Task SyncActiveGoals_ManualStandardWithNoLinkedHabits_LeavesGoalUntouched()
     {
         await using var dbContext = CreateInMemoryDbContext();
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         var goal = Goal.Create(user.Id, "Exercise seven times", 7, "sessions").Value;
         goal.UpdateProgress(2);
 

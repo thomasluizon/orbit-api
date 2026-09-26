@@ -154,19 +154,6 @@ public partial class GetCalendarSyncSuggestionsQueryHandler(
         }
     }
 
-    /// <summary>
-    /// Title plus projected local date plus projected local time, so a habit imported before
-    /// <c>GoogleEventId</c> existed can still be matched to its event.
-    /// </summary>
-    /// <remarks>
-    /// The key only proves a prior import when exactly one candidate carries it, and several ordinary
-    /// shapes make two candidates share one: the same meeting held in two synced calendars, two
-    /// same-named events at one time, and the repeated hour of a fall-back transition, where 05:30 and
-    /// 06:30 UTC both project to 01:30 local. At most one of them is the habit the user already
-    /// imported. Excluding on an ambiguous key hides a real event with no way back, so an ambiguous key
-    /// excludes nothing and the user dismisses the duplicate instead. This mirrors the
-    /// <c>group.Count() == 1</c> guard the auto-sync reconciler already applies to the same key.
-    /// </remarks>
     private static string BuildLegacyMatchKey(string title, string? startDate, string? startTime)
     {
         return $"{title.Trim().ToLowerInvariant()}|{startDate ?? ""}|{startTime ?? ""}";

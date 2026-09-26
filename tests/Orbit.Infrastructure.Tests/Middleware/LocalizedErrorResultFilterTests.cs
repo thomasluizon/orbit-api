@@ -15,13 +15,6 @@ using NSubstitute;
 
 namespace Orbit.Infrastructure.Tests.Middleware;
 
-/// <summary>
-/// The filter is the one seam that keeps a domain guard's developer-facing sentence off the
-/// wire, so these tests drive it through the real result pipeline rather than calling the
-/// catalog directly. The language side is driven through the real
-/// <see cref="RequestLanguageResolver"/> over a substituted repository, because the defect these
-/// cover was the resolver reading the wrong input rather than the filter misapplying it.
-/// </summary>
 public class LocalizedErrorResultFilterTests
 {
     private static ResultExecutingContext ContextFor(

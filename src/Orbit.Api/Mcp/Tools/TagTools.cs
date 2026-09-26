@@ -6,15 +6,6 @@ using Orbit.Application.Tags.Queries;
 
 namespace Orbit.Api.Mcp.Tools;
 
-/// <summary>
-/// MCP tag tools. Mutations route through <see cref="McpExecutorBridge"/> →
-/// <see cref="Orbit.Domain.Interfaces.IAgentOperationExecutor"/> with
-/// <see cref="Orbit.Domain.Models.AgentExecutionSurface.Mcp"/> for shared policy evaluation and the
-/// <c>AgentAuditLogs</c> trail; each forwards a snake_case argument object matching its backing
-/// <c>IAiTool</c> schema. <c>assign_tags</c> routes via the chat tool's id path (forwarding
-/// <c>tag_ids</c>), preserving the MCP id-based external contract. The <c>list_tags</c> read stays
-/// on MediatR.
-/// </summary>
 [McpServerToolType]
 public class TagTools(IMediator mediator, McpExecutorBridge executorBridge)
 {

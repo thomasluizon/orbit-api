@@ -7,6 +7,7 @@
     ".env.example",
     ".gitattributes",
     ".gitignore",
+    ".oasdiff.yaml",
     "AGENTS.md",
     "CLAUDE.md",
     "CodeMetricsConfig.txt",

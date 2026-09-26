@@ -6,14 +6,6 @@ using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace Orbit.Analyzers;
 
-/// <summary>
-/// Forbids narration comments. Code must read without prose. The only comments allowed are
-/// XML-doc comments (<c>///</c> or <c>/** */</c>, which document a symbol's intent and contract)
-/// and a WHY note that links an upstream issue/PR/doc URL (a real external constraint). Everything
-/// else is reported as an error and stripped by the fixer. Trivia-based, so <c>//</c> sequences
-/// inside strings, verbatim strings, and interpolations are never touched. Generated code (EF
-/// migrations, designer files) is excluded.
-/// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class NoCommentsAnalyzer : DiagnosticAnalyzer
 {

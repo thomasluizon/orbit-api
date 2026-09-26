@@ -1,15 +1,4 @@
 #!/usr/bin/env node
-/**
- * Pre-push guard: reject a push whose remote ref is a protected branch.
- *
- * Reads git's pre-push stdin format, one line per ref being pushed:
- *   <local ref> <local sha> <remote ref> <remote sha>
- *
- * Lives in a script rather than an inline lefthook `run:` block because a
- * multi-line shell script in that field fails to parse on Windows
- * ("syntax error: unexpected end of file"), which made the guard reject
- * every push instead of only the protected ones.
- */
 
 const PROTECTED = new Set(['refs/heads/main', 'refs/heads/master']);
 

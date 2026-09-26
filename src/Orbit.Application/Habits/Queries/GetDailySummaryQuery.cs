@@ -131,13 +131,6 @@ public class GetDailySummaryQueryHandler(
     private static bool HasSkipLogInRange(Habit habit, DateOnly dateFrom, DateOnly dateTo) =>
         habit.Logs.Any(l => l.Date >= dateFrom && l.Date <= dateTo && l.Value == 0);
 
-    /// <summary>
-    /// Returns the most-recent slip date (a completion log, <c>Value &gt; 0</c>) on or before
-    /// <paramref name="userToday"/> for each bad habit, keyed by habit id. The habits' own
-    /// <see cref="Habit.Logs"/> are date-windowed to the summary range and therefore cannot answer
-    /// "days since last slip" for a slip that fell outside that window, so this runs a separate
-    /// query scoped to bad-habit slip rows. Habits with no slip on record are absent from the map.
-    /// </summary>
     private async Task<IReadOnlyDictionary<Guid, DateOnly>> LoadLastBadHabitSlipDates(
         IReadOnlyList<Habit> habits, DateOnly userToday, CancellationToken cancellationToken)
     {
@@ -166,5 +159,5 @@ public class GetDailySummaryQueryHandler(
     }
 
     private static string CacheKey(Guid userId, DateOnly date, string language, string timeBucket) =>
-        $"summary:{userId}:{date:yyyy-MM-dd}:{language}:{timeBucket}";
+        string.Create(System.Globalization.CultureInfo.InvariantCulture, $"summary:{userId}:{date:yyyy-MM-dd}:{language}:{timeBucket}");
 }

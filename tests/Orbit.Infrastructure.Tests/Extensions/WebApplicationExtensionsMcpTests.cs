@@ -14,13 +14,6 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Infrastructure.Tests.Extensions;
 
-/// <summary>
-/// The MCP selective-auth pre-parse helpers. The middleware buffers the body
-/// and parses it once; both the unauthenticated-method probe and the tool-call
-/// extractor read that single parsed document. These tests pin the
-/// classification behavior and prove non-object / malformed bodies degrade to a
-/// pass-through instead of throwing.
-/// </summary>
 public class WebApplicationExtensionsMcpTests
 {
     [Theory]

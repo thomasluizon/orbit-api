@@ -99,13 +99,6 @@ public interface IAgentStepUpService
         CancellationToken cancellationToken = default);
 }
 
-/// <summary>
-/// Joins the agent step-up flow to an authorization concept that is also reachable over HTTP.
-/// The implementation raises a capability's confirmation requirement while its concept is switched
-/// on, and opens its own grant once a caller satisfies that step-up, so both doors end in one grant
-/// instead of two parallel checks. A capability the implementation does not own answers
-/// <c>null</c> and keeps the catalog's static requirement.
-/// </summary>
 public interface IAgentStepUpAuthorizationBridge
 {
     Task<AgentConfirmationRequirement?> GetRequiredConfirmationAsync(

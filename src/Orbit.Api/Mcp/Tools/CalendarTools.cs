@@ -6,13 +6,6 @@ using Orbit.Application.Calendar.Queries;
 
 namespace Orbit.Api.Mcp.Tools;
 
-/// <summary>
-/// MCP calendar tools. <c>manage_calendar_sync</c> is a destructive mutation, so it routes through
-/// <see cref="McpExecutorBridge"/> → <see cref="Orbit.Domain.Interfaces.IAgentOperationExecutor"/>
-/// with <see cref="Orbit.Domain.Models.AgentExecutionSurface.Mcp"/> for shared policy evaluation
-/// (confirmation gating, read-only-credential denial) and the <c>AgentAuditLogs</c> trail; it
-/// forwards a confirmation token. The <c>get_calendar_events</c> read stays on MediatR.
-/// </summary>
 [McpServerToolType]
 public class CalendarTools(IMediator mediator, McpExecutorBridge executorBridge)
 {

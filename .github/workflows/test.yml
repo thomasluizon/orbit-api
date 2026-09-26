@@ -142,12 +142,7 @@ jobs:
         with:
           node-version: 22
 
-      # thomasluizon/orbit-tickets#228. The five ORBIT analyzers already fail the build; the hole was
-      # the escape hatch, because one `#pragma warning disable` plus a comment turned any of them off
-      # and the comment was the entire requirement. The 50 ORBIT0004 sites carried exactly two
-      # justification strings, character for character, both pointing at a mutable GitHub issue
-      # nothing in CI read. This job is reused rather than a new one added, because it is already a
-      # required status check on `main` and a new context would need a branch-protection edit.
+      # The closed allowlist makes every analyzer suppression visible in the diff.
       - name: Every analyzer suppression under src/ is declared in the closed allowlist
         run: node tools/check-suppression-allowlist.mjs
 
@@ -210,7 +205,7 @@ jobs:
 
       - name: Detect breaking API changes
         if: steps.base-spec.outputs.exists == 'true'
-        uses: oasdiff/oasdiff-action/breaking@2649ebe137aeb72a95707671204e829f86e091fc # v0.1.13
+        uses: oasdiff/oasdiff-action/breaking@5e81b5c380accc6b523f9d32a637ca630e33620b # v0.1.17
         with:
           base: "origin/${{ github.base_ref }}:src/Orbit.Api/openapi.json"
           revision: "src/Orbit.Api/openapi.json"

@@ -11,7 +11,7 @@ effort: medium
 
 # Security reviewer (orbit-api)
 
-Reads `C:\Users\thoma\Documents\Programming\Projects\orbit-api\src\` (via absolute paths) and reports security issues.
+Reads `src/` from the `orbit-api` repository root and reports security issues.
 
 Manual only. Nothing invokes this agent automatically. Invoke it by name when you want a security review of API code, or let `/audit-security` use it as a security lens.
 

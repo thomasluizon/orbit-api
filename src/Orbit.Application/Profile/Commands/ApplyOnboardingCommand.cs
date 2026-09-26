@@ -51,14 +51,6 @@ public record ApplyOnboardingCommand(
     int? WeekStartDay,
     string? ColorScheme) : IRequest<Result<ApplyOnboardingResponse>>, IConcurrencyRetryable;
 
-/// <summary>
-/// Applies the buffer of answers a user built during pre-auth onboarding in a single transaction:
-/// creates the habits (trimmed to the shared habit allowance), an optional first log, an optional
-/// goal, week-start/color preferences, and flips <c>HasCompletedOnboarding</c>. Idempotent
-/// by construction — an already-onboarded user is a no-op (<c>Applied:false</c>) — so the client can
-/// flush unconditionally after any successful auth and retry safely under the concurrency pipeline.
-/// </summary>
-/// <summary>Groups the repositories the onboarding-apply handler touches to keep its constructor small.</summary>
 public record ApplyOnboardingRepositories(
     IGenericRepository<User> Users,
     IGenericRepository<Habit> Habits,

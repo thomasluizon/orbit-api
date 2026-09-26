@@ -688,10 +688,7 @@ public class GetCalendarEventsQueryHandlerTests
     }
 
     /// <summary>
-    /// <c>America/New_York</c> and <c>America/Chicago</c> hold different rules, so the walk really
-    /// runs, and they stay exactly one hour apart all year, so the account-local date can never move.
-    /// The source zone still loses 02:30 to its own spring-forward gap on 2027-03-14, and the series
-    /// must survive that date.
+    /// A source clock gap must not reject a series whose projected date stays fixed.
     /// </summary>
     [Fact]
     public async Task Handle_ByDaySeriesOnAWallClockTheSourceGapRemoves_IsKeptWhenTheDateCannotMove()
@@ -725,18 +722,6 @@ public class GetCalendarEventsQueryHandlerTests
         result.Value[0].RecurrenceRule.Should().Be("RRULE:FREQ=WEEKLY;BYDAY=TH");
     }
 
-    /// <summary>
-    /// Lebanon ends its summer time at 00:00 local, so 23:00 to 23:59 on that Saturday happens twice
-    /// in <c>Asia/Beirut</c>. The earlier instant is 23:30 in <c>Europe/Athens</c> and the later one is
-    /// 00:30 the next day, because Athens keeps its own offset for three more hours. Every other date
-    /// of the year holds the two zones on the same clock, so the repeated hour is the only reason this
-    /// series can show the account a different weekday, and it is enough to withhold it.
-    /// </summary>
-    /// <remarks>
-    /// The series starts the Friday after Lebanon's 2026 transition, so the repeated hour it fails on
-    /// is 2027-10-30, exactly 365 days later. That also pins the length of the walk: a
-    /// <c>ProbeDays</c> of 364 or less never reaches the only date that decides this series.
-    /// </remarks>
     [Fact]
     public async Task Handle_ByDaySeriesInsideARepeatedHourWhoseTwoInstantsDisagree_OmitsEvent()
     {

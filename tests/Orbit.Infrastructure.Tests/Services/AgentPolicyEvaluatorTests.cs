@@ -28,7 +28,7 @@ public class AgentPolicyEvaluatorTests : IDisposable
             .Options;
 
         _dbContext = new OrbitDbContext(options);
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         _userId = user.Id;
         _dbContext.Users.Add(user);
         _dbContext.AppFeatureFlags.Add(AppFeatureFlag.Create("api_keys", true, "Pro", "API keys"));

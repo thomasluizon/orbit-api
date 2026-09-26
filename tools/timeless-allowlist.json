@@ -1,0 +1,4 @@
+[
+  { "path": "LICENSE", "rule": "owner-name", "match": "Thomas", "reason": "Legal copyright and trademark holder" },
+  { "path": "tools/timeless-allowlist.json", "rule": "owner-name", "match": "Thomas", "reason": "Exact substring documents the legal exception" }
+]

@@ -6,13 +6,6 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Social.Services;
 
-/// <summary>
-/// Classifies a gamification milestone into a <see cref="FriendFeedEvent"/> and appends it. Streak
-/// milestones fire for every user as their streak crosses a tier; achievement-backed events arrive
-/// only from the Pro achievement path. Emission is gated on the actor's social opt-in and de-duped
-/// against already-stored events (an in-memory pre-check; the partial unique indexes are the backstop),
-/// so an ordinary daily log that crosses no new tier writes nothing.
-/// </summary>
 public class FriendFeedEmitter(IGenericRepository<FriendFeedEvent> feedEventRepository) : IFriendFeedEventEmitter
 {
     private static readonly Dictionary<string, int> VolumeCompletionCounts = new()

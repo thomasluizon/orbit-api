@@ -9,6 +9,8 @@ pre-commit:
       stage_fixed: true
     dashes:
       run: node tools/check-dashes.mjs --files {staged_files}
+    timeless:
+      run: node tools/check-timeless.mjs --staged
     suppression-allowlist:
       run: node tools/check-suppression-allowlist.mjs
 pre-push:

@@ -6,16 +6,6 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Behaviors;
 
-/// <summary>
-/// Makes replays of opt-in <see cref="IIdempotentCommand"/> mutations that carry an <c>Idempotency-Key</c>
-/// header exactly-once: a replayed request (a retry after a lost network ACK, routine on mobile) returns the
-/// stored response instead of re-executing the handler. The reservation row is flushed first — isolating a
-/// ledger unique-violation from the handler's own constraints — then commits in one transaction with the
-/// handler's mutation, so a crash cannot leave the mutation applied without its idempotency record. A
-/// concurrent duplicate loses the unique-index race and replays the winner's response. The ledger key is
-/// scoped by request type so one key reused across two commands can't cross wires. See
-/// thomasluizon/orbit-ui-mobile#243.
-/// </summary>
 public sealed class IdempotencyBehavior<TRequest, TResponse>(
     IIdempotencyContext idempotencyContext,
     IIdempotencyStore idempotencyStore,
@@ -36,7 +26,9 @@ public sealed class IdempotencyBehavior<TRequest, TResponse>(
             || !idempotencyContext.TryGetRequestKey(out var userId, out var idempotencyKey))
             return await next(cancellationToken);
 
-        var storedResponse = await idempotencyStore.FindResponseBodyAsync(userId, idempotencyKey, RequestType, cancellationToken);
+        var requestOrdinal = idempotencyContext.NextRequestOrdinal(RequestType);
+        var storedResponse = await idempotencyStore.FindResponseBodyAsync(
+            userId, idempotencyKey, RequestType, requestOrdinal, cancellationToken);
         if (storedResponse is not null)
             return Deserialize(storedResponse);
 
@@ -45,7 +37,7 @@ public sealed class IdempotencyBehavior<TRequest, TResponse>(
         {
             await unitOfWork.ExecuteInTransactionAsync(async transactionToken =>
             {
-                var reservation = idempotencyStore.Reserve(userId, idempotencyKey, RequestType);
+                var reservation = idempotencyStore.Reserve(userId, idempotencyKey, RequestType, requestOrdinal);
                 await unitOfWork.SaveChangesAsync(transactionToken);
                 response = await next(transactionToken);
                 reservation.SetResponseBody(Serialize(response));
@@ -54,7 +46,8 @@ public sealed class IdempotencyBehavior<TRequest, TResponse>(
         }
         catch (DbUpdateException exception) when (DbUniqueViolation.IsUniqueViolation(exception))
         {
-            var racedResponse = await idempotencyStore.FindResponseBodyAsync(userId, idempotencyKey, RequestType, cancellationToken);
+            var racedResponse = await idempotencyStore.FindResponseBodyAsync(
+                userId, idempotencyKey, RequestType, requestOrdinal, cancellationToken);
             if (racedResponse is null)
                 throw;
 

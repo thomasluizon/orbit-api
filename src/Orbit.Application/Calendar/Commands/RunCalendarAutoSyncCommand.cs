@@ -162,13 +162,6 @@ public partial class RunCalendarAutoSyncCommandHandler(
         return Result.Success(new CalendarAutoSyncResult(newSuggestions, reconciled, GoogleCalendarAutoSyncStatus.Idle));
     }
 
-    /// <summary>
-    /// Backfills <c>GoogleEventId</c> on a habit imported before that column existed, by matching
-    /// title plus day plus time. A habit holds account-local values, so the fetched event is projected
-    /// into the account timezone first. <c>GetCalendarSyncSuggestionsQuery</c> builds the same key from
-    /// the same projection, so a suggestion the query hides as already imported is the suggestion this
-    /// pass links.
-    /// </summary>
     private async Task<int> ReconcileExistingHabits(
         User user, List<CalendarEventItem> fetched, TimeZoneInfo timeZone, DateTime utcNow, CancellationToken ct)
     {

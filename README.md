@@ -175,6 +175,14 @@ Tests use xUnit with FluentAssertions. Unit tests only — there is no integrati
 | Payments | [Stripe](https://stripe.com) + Google Play Billing |
 | Monitoring | [Sentry](https://sentry.io) |
 
+Turnstile remains disabled after deployment. Create a Turnstile widget for `useorbit.org` in the Cloudflare dashboard and set `BotProtection__SecretKey` in the Render `orbit-api` environment. Keep `BotProtection__Enabled` unset or false until all three conditions hold:
+
+1. The deployed web sign-in sends `turnstileToken` for both send-code and verify-code. Check production requests and the deployed web version. Check `APP_VERSION` in every deployed environment of the Orbit web project in Vercel before raising the version floor. An unset `APP_VERSION` fails open; a set value must be at least the proposed floor.
+2. The Android build sends `turnstileToken` for both calls and is live on the Google Play track. Check the Play Console release and active version distribution. Only then raise the production `AppConfigs.MinSupportedVersion` row to that build using a guarded update, and read the row back to verify the exact value. Allow up to 30 minutes for the per-process cache to apply the floor.
+3. The deployed landing waitlist sends `turnstileToken` in the `/api/waitlist` body. The source at `orbit-landing-page/src/scripts/waitlist.ts` already does this on `main`; check the deployed form request and confirm `PUBLIC_TURNSTILE_SITE_KEY` is set for the landing deployment.
+
+Then set `BotProtection__Enabled=true` in the Render `orbit-api` environment. Verify token-bearing web and Android sign-in and the landing waitlist succeed, while tokenless requests to all five protected routes return 400. Monitor HTTP 426 traffic and client reports for 24 hours after the version-floor raise. Existing clients without a token continue to work while the switch is false. The production smoke account bypasses this gate only when both `SMOKE_TEST_EMAIL` and `SMOKE_TEST_CODE` are configured, so knowledge of that address permits sends only to Orbit's own mailbox.
+
 ### Docker
 
 ```bash

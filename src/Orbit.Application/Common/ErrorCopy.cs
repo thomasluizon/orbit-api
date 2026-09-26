@@ -2,26 +2,6 @@ using Orbit.Domain.Common;
 
 namespace Orbit.Application.Common;
 
-/// <summary>
-/// The user-facing counterpart of every error code, in both shipped languages.
-/// <para>
-/// This exists because two different sets of strings can reach a screen. The constants in
-/// <see cref="ErrorMessages"/> are written as copy, but the ones in
-/// <see cref="DomainErrors"/> are the sentences a domain guard was written with, and a guard
-/// firing is an ordinary event rather than a defect. On 2026-08-05 an external tester read
-/// <c>Days can only be set when frequency quantity is 1.</c> verbatim, in English, inside a
-/// pt-BR interface. The domain message stays developer-facing; the text a person reads is
-/// selected here, by error code, and never by matching on English prose.
-/// </para>
-/// <para>
-/// Every entry answers what happened and what the person can do next, in that order. The
-/// catalog is total over <see cref="ErrorCodes"/>, <see cref="ErrorMessages"/> and
-/// <see cref="DomainErrors"/>, and <c>ErrorCopyTests</c> fails in CI when a new error constant
-/// arrives without its copy. Totality over those three catalogs is not reachability: a
-/// FluentValidation message never passes through here, because the validation handler writes its
-/// own body rather than an <c>ErrorResponse</c>.
-/// </para>
-/// </summary>
 public static class ErrorCopy
 {
     /// <summary>Accounts, sessions, sign-in and the emailed confirmation codes.</summary>
@@ -321,18 +301,6 @@ public static class ErrorCopy
         (DomainErrors.InvalidWeekStartDay.Code, "Choose Sunday or Monday as the first day of the week.", "Escolha domingo ou segunda como primeiro dia da semana."),
     ];
 
-    /// <summary>
-    /// The variant a code renders when the failure carries a count, selected by the presence of
-    /// arguments rather than by a second error code.
-    /// <para>
-    /// The trailing <c>Remaining attempts: {0}</c> is a wire contract, not prose. Orbit 1.3.31 and
-    /// the web step-up screen read the count out of the message with
-    /// <c>/remaining attempts:\s*(\d+)\s*$/i</c> and then render it from their own localized
-    /// plural strings, so the sentence itself never reaches a screen. It stays byte-identical in
-    /// both languages for that reason: a translated token would lose the count for every pt-BR
-    /// reader the moment the language stops being English.
-    /// </para>
-    /// </summary>
     private static readonly (string Code, string En, string PtBr)[] CountedVariants =
     [
         (ErrorCodes.InvalidVerificationCode,
@@ -348,15 +316,6 @@ public static class ErrorCopy
     /// <summary>Every error code this API can return, paired with its copy in both languages.</summary>
     public static IReadOnlyDictionary<string, (string En, string PtBr)> All => Catalog;
 
-    /// <summary>
-    /// The English copy for <paramref name="code"/>, which <see cref="ErrorMessages"/> takes as
-    /// each constant's message so one sentence is never written in two files. Throws on an unknown
-    /// code rather than shipping a developer sentence to a screen. <see cref="ErrorMessages"/> is a
-    /// static class of static readonly fields, so that throw surfaces as a
-    /// <see cref="TypeInitializationException"/> on the first request that touches the class rather
-    /// than at startup. <c>ErrorCopyTests</c> is what keeps it off a live request, by failing in CI
-    /// on any constant that arrives without copy.
-    /// </summary>
     public static string Resolve(string code, bool isPtBr)
     {
         var copy = Catalog.TryGetValue(code, out var found)

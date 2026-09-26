@@ -3,15 +3,6 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Tests.Common;
 
-/// <summary>
-/// An <see cref="IUnitOfWork"/> whose advisory lock really serializes, so a test can run two
-/// handlers concurrently and observe that one waits for the other. The lock is held for the
-/// lifetime of the surrounding transaction, exactly like <c>pg_advisory_xact_lock</c>.
-///
-/// Every acquisition and every save appends to <see cref="Order"/>, which is what lets a test
-/// assert an INTERLEAVING rather than merely a call count. A test that only checks the two
-/// handlers both ran proves nothing about the race between them.
-/// </summary>
 internal sealed class SerializingUnitOfWork : IUnitOfWork
 {
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new();

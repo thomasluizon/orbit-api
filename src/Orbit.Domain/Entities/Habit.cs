@@ -187,7 +187,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         if (!IsBadHabit && !IsFlexible && _logs.Exists(l => l.Date == date && !l.IsDeleted))
             return Result.Failure<HabitLog>(DomainErrors.AlreadyLoggedForDate);
 
-        var log = HabitLog.Create(Id, date, 1, note);
+        var log = HabitLog.Create(Id, date, 1, note, isSlip: IsBadHabit);
         _logs.Add(log);
 
         if (FrequencyUnit is null && !IsGeneral)
@@ -412,7 +412,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         if (FrequencyUnit is null)
             return Result.Failure<HabitLog>(DomainErrors.CannotSkipOneTimeTask);
 
-        var log = HabitLog.Create(Id, date, 0, null);
+        var log = HabitLog.Create(Id, date, 0);
         _logs.Add(log);
         UpdatedAtUtc = DateTime.UtcNow;
         return Result.Success(log);

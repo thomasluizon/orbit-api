@@ -4,13 +4,6 @@ using ModelContextProtocol.Server;
 
 namespace Orbit.Api.Mcp.Tools;
 
-/// <summary>
-/// MCP account tools. <c>manage_account</c> is a high-risk mutation (account reset and deletion
-/// lifecycle), so it routes through <see cref="McpExecutorBridge"/> →
-/// <see cref="Orbit.Domain.Interfaces.IAgentOperationExecutor"/> with
-/// <see cref="Orbit.Domain.Models.AgentExecutionSurface.Mcp"/> for shared policy evaluation and the
-/// <c>AgentAuditLogs</c> trail; it requires step-up and forwards a confirmation token.
-/// </summary>
 [McpServerToolType]
 public class AccountTools(McpExecutorBridge executorBridge)
 {

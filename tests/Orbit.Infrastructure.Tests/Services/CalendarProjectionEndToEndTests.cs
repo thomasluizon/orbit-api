@@ -55,10 +55,7 @@ public class CalendarProjectionEndToEndTests
     }
 
     /// <summary>
-    /// <c>GoogleCalendarApi</c> asks for 60 days, so a January fetch of a <c>Europe/Lisbon</c> 03:30
-    /// <c>BYDAY=TH</c> series never reaches the 2027-03-29 Lisbon transition. Every occurrence inside
-    /// that window is Thursday in <c>America/Sao_Paulo</c> too, and every occurrence after it is
-    /// Wednesday 23:30, so a window that proves nothing must not admit the series.
+    /// A fetch window before the timezone transition cannot prove the recurrence safe.
     /// </summary>
     [Fact]
     public async Task ByDaySeriesWhoseTransitionFallsOutsideTheFetchWindow_IsWithheld()

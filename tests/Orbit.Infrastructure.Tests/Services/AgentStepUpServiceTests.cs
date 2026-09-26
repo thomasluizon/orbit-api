@@ -28,7 +28,7 @@ public class AgentStepUpServiceTests : IDisposable
 
         _dbContext = new OrbitDbContext(options);
 
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         _userId = user.Id;
 
         _dbContext.Users.Add(user);

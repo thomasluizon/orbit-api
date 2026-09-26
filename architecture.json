@@ -2760,7 +2760,7 @@
       "Challenges": 15,
       "Chat": 93,
       "ChecklistTemplates": 5,
-      "Common": 37,
+      "Common": 38,
       "Gamification": 34,
       "Goals": 35,
       "Habits": 78,
@@ -2967,16 +2967,16 @@
     "featureFolders": {
       "Accountability": 9,
       "ApiKeys": 20,
-      "Auth": 31,
+      "Auth": 32,
       "Behaviors": 17,
       "Calendar": 21,
-      "Challenges": 14,
-      "Chat": 77,
+      "Challenges": 15,
+      "Chat": 78,
       "ChecklistTemplates": 10,
-      "Common": 258,
+      "Common": 260,
       "Gamification": 45,
-      "Goals": 54,
-      "Habits": 97,
+      "Goals": 55,
+      "Habits": 99,
       "Marketing": 6,
       "Notifications": 25,
       "Profile": 41,
@@ -2987,7 +2987,7 @@
       "Tags": 17,
       "Uploads": 4,
       "UserFacts": 8,
-      "Waitlist": 4
+      "Waitlist": 5
     },
     "untested": [],
     "testClasses": [
@@ -3777,7 +3777,8 @@
         "testClass": "QueryGoalsToolTests",
         "file": "tests/Orbit.Application.Tests/Chat/Tools/QueryGoalsToolTests.cs",
         "references": [
-          "Goal"
+          "Goal",
+          "Habit"
         ]
       },
       {
@@ -5024,7 +5025,6 @@
         "testClass": "PayGateServiceTests",
         "file": "tests/Orbit.Application.Tests/Common/PayGateServiceTests.cs",
         "references": [
-          "Goal",
           "Habit",
           "User"
         ]
@@ -5735,7 +5735,8 @@
         "file": "tests/Orbit.Application.Tests/Services/Goals/StreakGoalReadSyncerTests.cs",
         "references": [
           "Goal",
-          "Habit"
+          "Habit",
+          "HabitLog"
         ]
       },
       {
@@ -6937,6 +6938,15 @@
         "testClass": "IdempotencyBehaviorDbTests",
         "file": "tests/Orbit.Infrastructure.Tests/Behaviors/IdempotencyBehaviorDbTests.cs",
         "references": [
+          "BulkLogHabitsCommand",
+          "BulkLogHabitsCommandHandler",
+          "BulkSkipHabitsCommand",
+          "BulkSkipHabitsCommandHandler",
+          "Habit",
+          "HabitLog",
+          "LogHabitCommand",
+          "LogHabitCommandHandler",
+          "ProcessedRequest",
           "Tag",
           "User"
         ]
@@ -7371,6 +7381,8 @@
         "testClass": "HttpIdempotencyContextTests",
         "file": "tests/Orbit.Infrastructure.Tests/Idempotency/HttpIdempotencyContextTests.cs",
         "references": [
+          "BulkLogHabitsCommand",
+          "BulkSkipHabitsCommand",
           "User"
         ]
       },
@@ -7760,6 +7772,16 @@
         "references": []
       },
       {
+        "testClass": "RequireBotProtectionFilterTests",
+        "file": "tests/Orbit.Infrastructure.Tests/RateLimiting/RequireBotProtectionFilterTests.cs",
+        "references": [
+          "JoinWaitlistCommand",
+          "JoinWaitlistCommandHandler",
+          "SendCodeCommand",
+          "SendCodeCommandHandler"
+        ]
+      },
+      {
         "testClass": "AccountDeletionServiceDbTests",
         "file": "tests/Orbit.Infrastructure.Tests/Services/AccountDeletionServiceDbTests.cs",
         "references": [
@@ -7779,10 +7801,21 @@
         ]
       },
       {
+        "testClass": "ActiveGoalsSectionTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Services/ActiveGoalsSectionTests.cs",
+        "references": [
+          "Goal",
+          "Habit",
+          "User"
+        ]
+      },
+      {
         "testClass": "ActiveHabitsSectionTests",
         "file": "tests/Orbit.Infrastructure.Tests/Services/ActiveHabitsSectionTests.cs",
         "references": [
-          "Habit"
+          "Goal",
+          "Habit",
+          "User"
         ]
       },
       {
@@ -8236,6 +8269,7 @@
         "file": "tests/Orbit.Infrastructure.Tests/Services/ReminderSchedulerServiceTests.cs",
         "references": [
           "Habit",
+          "Report",
           "SentReminder",
           "User"
         ]
@@ -8341,6 +8375,11 @@
           "User",
           "UserFact"
         ]
+      },
+      {
+        "testClass": "TurnstileVerificationServiceTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Services/TurnstileVerificationServiceTests.cs",
+        "references": []
       },
       {
         "testClass": "UserDateServiceTests",

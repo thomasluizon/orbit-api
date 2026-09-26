@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using System.Security.Claims;
 using MediatR;
 using ModelContextProtocol.Server;
@@ -7,15 +8,6 @@ using Orbit.Domain.Enums;
 
 namespace Orbit.Api.Mcp.Tools;
 
-/// <summary>
-/// MCP goal tools. Mutations route through <see cref="McpExecutorBridge"/> →
-/// <see cref="Orbit.Domain.Interfaces.IAgentOperationExecutor"/> with
-/// <see cref="Orbit.Domain.Models.AgentExecutionSurface.Mcp"/>, sharing the policy evaluation
-/// (read-only-credential denial, ownership pre-check, Pro/feature-flag gating) and the
-/// <c>AgentAuditLogs</c> trail used by every other agent surface; each forwards a snake_case
-/// argument object matching its backing <c>IAiTool</c> schema and formats the result into the
-/// legacy string contract. Read/query tools stay on MediatR.
-/// </summary>
 [McpServerToolType]
 public class GoalTools(IMediator mediator, McpExecutorBridge executorBridge)
 {
@@ -41,9 +33,9 @@ public class GoalTools(IMediator mediator, McpExecutorBridge executorBridge)
             return "No goals found.";
 
         var lines = goals.Items.Select(g =>
-            $"- {g.Title} (id: {g.Id}) | {g.CurrentValue}/{g.TargetValue} {g.Unit} ({g.ProgressPercentage:F0}%)" +
+            string.Create(CultureInfo.InvariantCulture, $"- {g.Title} (id: {g.Id}) | {g.CurrentValue}/{g.TargetValue} {g.Unit} ({g.ProgressPercentage:F0}%)") +
             $" | Status: {g.Status}" +
-            (g.Deadline is not null ? $" | Deadline: {g.Deadline}" : "") +
+            (g.Deadline is not null ? string.Create(CultureInfo.InvariantCulture, $" | Deadline: {g.Deadline}") : "") +
             (g.TrackingStatus is not null ? $" | Tracking: {g.TrackingStatus}" : ""));
 
         return $"Goals ({goals.TotalCount}):\n{string.Join("\n", lines)}";
@@ -91,14 +83,14 @@ public class GoalTools(IMediator mediator, McpExecutorBridge executorBridge)
 
         var g = result.Value;
         var goalSummary = $"Title: {g.Title}\nID: {g.Id}\n" +
-                   $"Progress: {g.CurrentValue}/{g.TargetValue} {g.Unit} ({g.ProgressPercentage:F1}%)\n" +
+                   string.Create(CultureInfo.InvariantCulture, $"Progress: {g.CurrentValue}/{g.TargetValue} {g.Unit} ({g.ProgressPercentage:F1}%)\n") +
                    $"Status: {g.Status}\n" +
                    (g.Description is not null ? $"Description: {g.Description}\n" : "") +
-                   (g.Deadline is not null ? $"Deadline: {g.Deadline}\n" : "") +
-                   $"Created: {g.CreatedAtUtc:yyyy-MM-dd}\n" +
-                   (g.CompletedAtUtc is not null ? $"Completed: {g.CompletedAtUtc:yyyy-MM-dd}\n" : "") +
+                   (g.Deadline is not null ? string.Create(CultureInfo.InvariantCulture, $"Deadline: {g.Deadline}\n") : "") +
+                   string.Create(CultureInfo.InvariantCulture, $"Created: {g.CreatedAtUtc:yyyy-MM-dd}\n") +
+                   (g.CompletedAtUtc is not null ? string.Create(CultureInfo.InvariantCulture, $"Completed: {g.CompletedAtUtc:yyyy-MM-dd}\n") : "") +
                    (g.LinkedHabits.Count > 0 ? $"Linked habits: {string.Join(", ", g.LinkedHabits.Select(h => $"{h.Title} ({h.Id})"))}\n" : "") +
-                   (g.ProgressHistory.Count > 0 ? $"Recent progress: {string.Join(", ", g.ProgressHistory.Take(5).Select(p => $"{p.PreviousValue}->{p.Value}"))}\n" : "");
+                   (g.ProgressHistory.Count > 0 ? $"Recent progress: {string.Join(", ", g.ProgressHistory.Take(5).Select(p => string.Create(CultureInfo.InvariantCulture, $"{p.PreviousValue}->{p.Value}")))}\n" : "");
         return goalSummary;
     }
 
@@ -158,7 +150,7 @@ public class GoalTools(IMediator mediator, McpExecutorBridge executorBridge)
         }, confirmationToken: null, cancellationToken);
 
         return result.Succeeded
-            ? $"Updated progress for goal {goalId} to {currentValue}"
+            ? string.Create(CultureInfo.InvariantCulture, $"Updated progress for goal {goalId} to {currentValue}")
             : result.Message;
     }
 
@@ -228,23 +220,23 @@ public class GoalTools(IMediator mediator, McpExecutorBridge executorBridge)
 
         var m = result.Value;
         var metricsSummary = $"Metrics for goal {goalId}:\n" +
-                   $"Progress: {m.ProgressPercentage:F1}%\n" +
-                   $"Velocity: {m.VelocityPerDay:F2}/day\n" +
+                   string.Create(CultureInfo.InvariantCulture, $"Progress: {m.ProgressPercentage:F1}%\n") +
+                   string.Create(CultureInfo.InvariantCulture, $"Velocity: {m.VelocityPerDay:F2}/day\n") +
                    $"Tracking: {m.TrackingStatus}\n" +
-                   (m.ProjectedCompletionDate is not null ? $"Projected completion: {m.ProjectedCompletionDate}\n" : "") +
+                   (m.ProjectedCompletionDate is not null ? string.Create(CultureInfo.InvariantCulture, $"Projected completion: {m.ProjectedCompletionDate}\n") : "") +
                    (m.DaysToDeadline is not null ? $"Days to deadline: {m.DaysToDeadline}\n" : "");
 
         if (m.HabitAdherence.Count > 0)
         {
             metricsSummary += "Linked habit performance:\n" +
                     string.Join("\n", m.HabitAdherence.Select(h =>
-                        $"  - {h.HabitTitle}: weekly {h.WeeklyCompletionRate:F0}%, streak {h.CurrentStreak}d"));
+                        string.Create(CultureInfo.InvariantCulture, $"  - {h.HabitTitle}: weekly {h.WeeklyCompletionRate:F0}%, streak {h.CurrentStreak}d")));
         }
 
         return metricsSummary;
     }
 
-    [McpServerTool(Name = "get_goal_review"), Description("Get an AI-generated review of all active goals. Requires Pro subscription.")]
+    [McpServerTool(Name = "get_goal_review"), Description("Get an AI-generated review of all active goals.")]
     public async Task<string> GetGoalReview(
         ClaimsPrincipal user,
         [Description("Language code (en, pt-BR)")] string language = "en",

@@ -8,13 +8,6 @@ using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.AI;
 
-/// <summary>
-/// Singleton recorder that converts one completion's tokens into a dollar cost from the configured
-/// per-model price map and atomically UPSERTs it into the daily
-/// (date, model, purpose, optional user) aggregate via a child DI scope, so the singleton AI client
-/// never holds a scoped DbContext. Best-effort: any write failure is logged once at Warning and
-/// swallowed so the user's AI response is never affected.
-/// </summary>
 public sealed partial class AiUsageRecorder(
     IServiceScopeFactory scopeFactory,
     IOptions<AiSettings> options,

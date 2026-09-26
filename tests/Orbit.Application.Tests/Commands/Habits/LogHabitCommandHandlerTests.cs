@@ -713,6 +713,7 @@ public class LogHabitCommandHandlerTests
         result.Value.CurrentStreak.Should().Be(4);
         result.Value.XpEarned.Should().BeNull();
         result.Value.NewAchievementIds.Should().BeNull();
+        _unitOfWork.Received(1).DiscardChanges();
         await _gamificationService.DidNotReceive().ProcessHabitLogged(
             Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
         await _userStreakService.DidNotReceive().RecalculateAsync(

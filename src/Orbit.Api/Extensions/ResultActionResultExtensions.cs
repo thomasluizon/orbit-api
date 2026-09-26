@@ -86,18 +86,6 @@ public static class ResultActionResultExtensions
         return result.IsSuccess ? onSuccess(result.Value) : result.ToErrorResult(failureStatusCode);
     }
 
-    /// <summary>
-    /// Serializes a failed result as the uniform error payload. The HTTP status is
-    /// resolved from the error code via the authoritative map (404 for not-found,
-    /// 403 for forbidden/pay-gate, 409 for conflicts, 500 for server faults); codes
-    /// without an intrinsic status fall back to <paramref name="failureStatusCode"/>.
-    /// Every failure carries both its message and its stable errorCode.
-    /// <para>
-    /// The message written here is the English copy. <see cref="LocalizedErrorResultFilter"/>
-    /// then swaps it for the copy that matches the request's language, which is why the
-    /// result's placeholder arguments travel with the body.
-    /// </para>
-    /// </summary>
     public static IActionResult ToErrorResult(
         this Result result,
         int failureStatusCode = StatusCodes.Status400BadRequest)

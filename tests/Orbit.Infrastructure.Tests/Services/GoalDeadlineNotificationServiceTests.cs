@@ -168,15 +168,17 @@ public class GoalDeadlineNotificationServiceTests
         body.Should().NotContain("em 1 dias");
     }
 
-    [Fact]
-    public void FormatDeadlineBody_DecimalProgress_FormatsCorrectly()
+    [Theory]
+    [InlineData("en", "3.5/10 miles")]
+    [InlineData("pt-BR", "3,5/10 miles")]
+    public void FormatDeadlineBody_DecimalProgress_FormatsCorrectly(string language, string expectedProgress)
     {
         var goal = CreateGoal(targetValue: 10, unit: "miles");
         goal.UpdateProgress(3.5m);
 
-        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue, 3, "en");
+        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue, 3, language);
 
-        body.Should().Contain("3.5/10 miles");
+        body.Should().Contain(expectedProgress);
     }
 
     [Fact]
@@ -255,7 +257,7 @@ public class GoalDeadlineNotificationServiceTests
     {
         await using var dbContext = CreateInMemoryDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
 
         var goal = Goal.Create(new Goal.CreateGoalParams(
             user.Id, "Avoid doom scrolling", 7, "days",
@@ -289,7 +291,7 @@ public class GoalDeadlineNotificationServiceTests
     {
         await using var dbContext = CreateInMemoryDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
 
         var goal = Goal.Create(new Goal.CreateGoalParams(
             user.Id, "Avoid doom scrolling", 2, "days",
@@ -317,7 +319,7 @@ public class GoalDeadlineNotificationServiceTests
     {
         await using var dbContext = CreateInMemoryDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         var goal = Goal.Create(new Goal.CreateGoalParams(
             user.Id,
             "Read books",
@@ -553,7 +555,7 @@ public class GoalDeadlineNotificationServiceTests
     }
 
     private static async Task<(User User, Goal Goal)> SeedDeadlineGoalAsync(
-        OrbitDbContext dbContext, int deadlineInDays, string name = "Thomas", string email = "thomas@test.com")
+        OrbitDbContext dbContext, int deadlineInDays, string name = "Alex", string email = "alex@test.com")
     {
         var user = User.Create(name, email).Value;
         var goal = Goal.Create(new Goal.CreateGoalParams(
