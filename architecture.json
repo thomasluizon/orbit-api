@@ -2952,7 +2952,7 @@
     "featureFolders": {
       "Accountability": 9,
       "ApiKeys": 16,
-      "Auth": 32,
+      "Auth": 33,
       "Behaviors": 17,
       "Calendar": 19,
       "Challenges": 15,
@@ -2965,7 +2965,7 @@
       "Marketing": 6,
       "Notifications": 21,
       "Profile": 40,
-      "Referrals": 13,
+      "Referrals": 14,
       "Social": 36,
       "Subscriptions": 18,
       "Support": 4,
@@ -7950,6 +7950,18 @@
           "Habit",
           "Notification",
           "User"
+        ]
+      },
+      {
+        "testClass": "GoogleAuthFirstLoginRaceTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Services/GoogleAuthFirstLoginRaceTests.cs",
+        "references": [
+          "GoogleAuthCommand",
+          "GoogleAuthCommandHandler",
+          "ProcessReferralCodeCommand",
+          "User",
+          "UserSession",
+          "UserSessionRefreshToken"
         ]
       },
       {

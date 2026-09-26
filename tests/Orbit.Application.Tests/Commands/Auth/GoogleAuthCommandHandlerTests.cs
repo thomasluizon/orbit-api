@@ -219,6 +219,22 @@ public class GoogleAuthCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Email.Should().Be(TestEmail);
         await _userRepo.Received(1).AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
+        _unitOfWork.Received(1).ResetTracking();
+    }
+
+    [Fact]
+    public async Task Handle_UniqueViolationWithoutMatchingUser_Propagates()
+    {
+        SetupGoogleTokenResponse(TestEmail, "Google User");
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DbUpdateException("duplicate", new FakeUniqueViolationException()));
+
+        var act = () => _handler.Handle(new GoogleAuthCommand("valid-token"), CancellationToken.None);
+
+        await act.Should().ThrowAsync<DbUpdateException>();
+        _unitOfWork.Received(1).ResetTracking();
+        await _authSessionService.DidNotReceive().CreateSessionAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
