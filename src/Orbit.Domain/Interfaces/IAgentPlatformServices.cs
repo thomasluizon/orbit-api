@@ -47,6 +47,9 @@ public interface IPendingAgentOperationStore
 
     PendingAgentOperationConfirmation? Confirm(Guid userId, Guid pendingOperationId);
     PendingAgentOperationExecution? GetExecution(Guid userId, Guid pendingOperationId);
+    bool Revise(Guid userId, Guid pendingOperationId, string expectedFingerprint,
+        string argumentsJson, string operationFingerprint, string previewFingerprint);
+    bool Cancel(Guid userId, Guid pendingOperationId, string expectedFingerprint);
     bool TryConsumeFreshConfirmation(
         Guid userId,
         string capabilityId,
@@ -136,6 +139,12 @@ public interface IPendingOperationChangePreviewer
         string operationId,
         JsonElement arguments,
         CancellationToken cancellationToken = default);
+}
+
+public interface IDestructiveOperationPreviewer
+{
+    Task<PendingOperationChangePreview?> PreviewAsync(Guid userId, string operationId,
+        JsonElement arguments, CancellationToken cancellationToken = default);
 }
 
 public interface IDistributedRateLimitService

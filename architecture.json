@@ -155,6 +155,15 @@
     },
     {
       "controller": "AiController",
+      "action": "RevisePendingOperation",
+      "httpMethod": "POST",
+      "routeTemplate": "/api/ai/pending-operations/{id:guid}/revise",
+      "authorization": "Authorize (class)",
+      "mediatrRequest": null,
+      "responseDto": null
+    },
+    {
+      "controller": "AiController",
       "action": "MarkPendingOperationStepUp",
       "httpMethod": "POST",
       "routeTemplate": "/api/ai/pending-operations/{id:guid}/step-up",
@@ -2758,7 +2767,7 @@
       "Behaviors": 4,
       "Calendar": 16,
       "Challenges": 15,
-      "Chat": 93,
+      "Chat": 95,
       "ChecklistTemplates": 5,
       "Common": 38,
       "Gamification": 34,
@@ -2971,12 +2980,12 @@
       "Behaviors": 17,
       "Calendar": 21,
       "Challenges": 15,
-      "Chat": 78,
+      "Chat": 80,
       "ChecklistTemplates": 10,
       "Common": 260,
       "Gamification": 45,
       "Goals": 55,
-      "Habits": 99,
+      "Habits": 100,
       "Marketing": 6,
       "Notifications": 25,
       "Profile": 41,
@@ -3469,6 +3478,13 @@
         ]
       },
       {
+        "testClass": "PendingOperationRevisionServiceTests",
+        "file": "tests/Orbit.Application.Tests/Chat/PendingOperationRevisionServiceTests.cs",
+        "references": [
+          "Habit"
+        ]
+      },
+      {
         "testClass": "PromptHabitIndexTests",
         "file": "tests/Orbit.Application.Tests/Chat/PromptHabitIndexTests.cs",
         "references": [
@@ -3549,6 +3565,13 @@
         "file": "tests/Orbit.Application.Tests/Chat/Tools/BulkUpdateHabitEmojisToolTests.cs",
         "references": [
           "Habit"
+        ]
+      },
+      {
+        "testClass": "BulkUpdateHabitsToolRevisionTests",
+        "file": "tests/Orbit.Application.Tests/Chat/Tools/BulkUpdateHabitsToolRevisionTests.cs",
+        "references": [
+          "BulkUpdateHabitsCommand"
         ]
       },
       {
@@ -8010,6 +8033,14 @@
         "references": [
           "AppConfig",
           "Habit"
+        ]
+      },
+      {
+        "testClass": "DestructiveOperationPreviewerTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Services/DestructiveOperationPreviewerTests.cs",
+        "references": [
+          "Notification",
+          "UserFact"
         ]
       },
       {

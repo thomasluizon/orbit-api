@@ -7,6 +7,31 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 internal static class BulkHabitToolArguments
 {
+    public static (IReadOnlyList<(Guid HabitId, DateOnly Date)>? Items, string? Error)
+        ParseRevisedDatedItems(JsonElement args)
+    {
+        if (!args.TryGetProperty("revised_items", out var values)
+            || values.ValueKind != JsonValueKind.Array || values.GetArrayLength() == 0)
+            return (null, "revised_items must be a non-empty array.");
+        var items = new List<(Guid HabitId, DateOnly Date)>();
+        var seen = new HashSet<Guid>();
+        foreach (var value in values.EnumerateArray())
+        {
+            if (value.ValueKind != JsonValueKind.Object
+                || !value.TryGetProperty("habit_id", out var idValue)
+                || idValue.ValueKind != JsonValueKind.String
+                || !Guid.TryParse(idValue.GetString(), out var id)
+                || !seen.Add(id)
+                || !value.TryGetProperty("date", out var dateValue)
+                || dateValue.ValueKind != JsonValueKind.String
+                || !DateOnly.TryParseExact(dateValue.GetString(), "yyyy-MM-dd",
+                    CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+                return (null, "revised_items contains an invalid habit or date.");
+            items.Add((id, date));
+        }
+        return (items, null);
+    }
+
     public static (BulkHabitFilter? Filter, string? Error) ParseRequiredFilter(JsonElement args)
     {
         if (!args.TryGetProperty("filter", out var filterElement) || filterElement.ValueKind != JsonValueKind.Object)

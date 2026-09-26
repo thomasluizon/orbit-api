@@ -12,6 +12,8 @@ public class PendingAgentOperationState : Entity
     public string DisplayName { get; private set; } = null!;
     public string Summary { get; private set; } = null!;
     public string OperationFingerprint { get; private set; } = null!;
+    public string? PreviewFingerprint { get; private set; }
+    public int RevisionNumber { get; private set; }
     public AgentExecutionSurface Surface { get; private set; }
     public AgentRiskClass RiskClass { get; private set; }
     public AgentConfirmationRequirement ConfirmationRequirement { get; private set; }
@@ -77,6 +79,36 @@ public class PendingAgentOperationState : Entity
     public void MarkConsumed()
     {
         ConsumedAtUtc = DateTime.UtcNow;
+    }
+
+    public bool Revise(string argumentsJson, string operationFingerprint, string previewFingerprint, DateTime utcNow)
+    {
+        if (IsExpired(utcNow) || ConsumedAtUtc.HasValue
+            || string.IsNullOrWhiteSpace(argumentsJson)
+            || string.IsNullOrWhiteSpace(operationFingerprint)
+            || string.IsNullOrWhiteSpace(previewFingerprint)
+            || previewFingerprint.Length > 256
+            || AgentOperationFingerprint.Compute(OperationId, argumentsJson) != operationFingerprint)
+            return false;
+
+        ArgumentsJson = argumentsJson;
+        OperationFingerprint = operationFingerprint;
+        PreviewFingerprint = previewFingerprint;
+        ConfirmationTokenHash = null;
+        ConfirmedAtUtc = null;
+        StepUpSatisfiedAtUtc = null;
+        RevisionNumber++;
+        return true;
+    }
+
+    public bool Cancel(DateTime utcNow)
+    {
+        if (IsExpired(utcNow) || ConsumedAtUtc.HasValue)
+            return false;
+        ConsumedAtUtc = utcNow;
+        ConfirmationTokenHash = null;
+        RevisionNumber++;
+        return true;
     }
 }
 

@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 using Orbit.Api.Controllers;
+using Orbit.Application.Chat;
 using Orbit.Application.Chat.Models;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
@@ -22,6 +23,7 @@ public class AiControllerTests
     private readonly IAgentStepUpService _stepUpService = Substitute.For<IAgentStepUpService>();
     private readonly IAgentAuditService _auditService = Substitute.For<IAgentAuditService>();
     private readonly IAgentOperationExecutor _operationExecutor = Substitute.For<IAgentOperationExecutor>();
+    private readonly IPendingOperationChangePreviewer _changePreviewer = Substitute.For<IPendingOperationChangePreviewer>();
     private readonly IValidator<ResolveClarificationRequest> _resolveClarificationValidator =
         Substitute.For<IValidator<ResolveClarificationRequest>>();
     private readonly AiController _controller;
@@ -36,6 +38,9 @@ public class AiControllerTests
             _stepUpService,
             _auditService,
             _operationExecutor,
+            new PendingOperationRevisionService(_pendingOperationStore,
+                _changePreviewer,
+                Substitute.For<IValidator<RevisePendingOperationRequest>>()),
             _resolveClarificationValidator);
 
         var claims = new[] { new Claim(ClaimTypes.NameIdentifier, UserId.ToString()) };
@@ -366,6 +371,27 @@ public class AiControllerTests
                 request.Arguments.ValueKind == JsonValueKind.Object &&
                 request.Arguments.GetProperty("habit_id").GetString() == "habit-123"),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ExecutePendingOperation_ChangedTargetReturnsConflictWithoutExecuting()
+    {
+        var pendingOperationId = Guid.NewGuid();
+        var arguments = JsonDocument.Parse("""{"filter":{"all":true}}""").RootElement.Clone();
+        _pendingOperationStore.GetExecution(UserId, pendingOperationId)
+            .Returns(new PendingAgentOperationExecution(pendingOperationId,
+                AgentCapabilityIds.HabitsBulkDelete, "bulk_delete_habits", arguments,
+                AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation,
+                PreviewFingerprint: "old-state"));
+        _changePreviewer.PreviewAsync(UserId, "bulk_delete_habits", Arg.Any<JsonElement>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new PendingOperationChangePreview([], 0, [], "new-state"));
+
+        var result = await _controller.ExecutePendingOperation(pendingOperationId,
+            new AiController.ExecutePendingOperationRequest("agc_token"), CancellationToken.None);
+
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(409);
+        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
     }
 
     [Fact]

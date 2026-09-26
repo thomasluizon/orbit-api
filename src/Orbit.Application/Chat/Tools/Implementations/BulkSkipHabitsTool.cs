@@ -23,6 +23,18 @@ public sealed class BulkSkipHabitsTool(
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
+        if (args.TryGetProperty("revised_items", out _))
+        {
+            var (revised, revisedError) = BulkHabitToolArguments.ParseRevisedDatedItems(args);
+            if (revisedError is not null)
+                return new ToolResult(false, Error: revisedError);
+            return await BulkUpdateHabitsTool.ExecuteInChunksAsync(
+                revised!.Select(item => new BulkSkipItem(item.HabitId, item.Date)).ToList(),
+                (items, token) => mediator.Send(new BulkSkipHabitsCommand(userId, items), token),
+                result => result.Results.Count(item => item.Status == BulkItemStatus.Success),
+                "Skipped", ct);
+        }
+
         var (filter, filterError) = BulkHabitToolArguments.ParseActionFilter(args);
         if (filterError is not null)
             return new ToolResult(false, Error: filterError);

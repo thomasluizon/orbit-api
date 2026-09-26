@@ -131,7 +131,16 @@ public record PendingAgentOperation(
     AgentConfirmationRequirement ConfirmationRequirement,
     DateTime ExpiresAtUtc,
     IReadOnlyList<PendingOperationChange>? Changes = null,
-    int? ChangeTargetCount = null);
+    int? ChangeTargetCount = null,
+    IReadOnlyList<PendingOperationItem>? Items = null,
+    string? PreviewFingerprint = null);
+
+public record PendingOperationItem(
+    string ItemId,
+    Guid? EntityId,
+    string EntityName,
+    IReadOnlyList<PendingOperationChange> Fields,
+    string StateFingerprint);
 
 public record PendingOperationChange(
     Guid EntityId,
@@ -143,7 +152,9 @@ public record PendingOperationChange(
 
 public record PendingOperationChangePreview(
     IReadOnlyList<PendingOperationChange> Changes,
-    int ChangeTargetCount);
+    int ChangeTargetCount,
+    IReadOnlyList<PendingOperationItem>? Items = null,
+    string? PreviewFingerprint = null);
 
 public record PendingAgentOperationConfirmation(
     Guid PendingOperationId,
@@ -156,7 +167,8 @@ public record PendingAgentOperationExecution(
     string OperationId,
     JsonElement Arguments,
     AgentExecutionSurface Surface,
-    AgentConfirmationRequirement ConfirmationRequirement);
+    AgentConfirmationRequirement ConfirmationRequirement,
+    string? PreviewFingerprint = null);
 
 public record AgentStepUpChallenge(
     Guid ChallengeId,

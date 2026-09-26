@@ -812,6 +812,49 @@
         }
       }
     },
+    "/api/ai/pending-operations/{id}/revise": {
+      "post": {
+        "tags": [
+          "Ai"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevisePendingOperationRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevisePendingOperationRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevisePendingOperationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/ai/pending-operations/{id}/confirm": {
       "post": {
         "tags": [
@@ -15391,6 +15434,21 @@
               "string"
             ],
             "format": "int32"
+          },
+          "items": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PendingOperationItem"
+            }
+          },
+          "previewFingerprint": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -15428,6 +15486,40 @@
             ]
           },
           "valueType": {
+            "type": "string"
+          }
+        }
+      },
+      "PendingOperationItem": {
+        "required": [
+          "itemId",
+          "entityId",
+          "entityName",
+          "fields",
+          "stateFingerprint"
+        ],
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "string"
+          },
+          "entityId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "entityName": {
+            "type": "string"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PendingOperationChange"
+            }
+          },
+          "stateFingerprint": {
             "type": "string"
           }
         }
@@ -16217,6 +16309,36 @@
           },
           "suggestion": {
             "type": "string"
+          }
+        }
+      },
+      "RevisedPendingOperationItem": {
+        "required": [
+          "itemId"
+        ],
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "string"
+          },
+          "edits": { }
+        }
+      },
+      "RevisePendingOperationRequest": {
+        "required": [
+          "previewFingerprint",
+          "items"
+        ],
+        "type": "object",
+        "properties": {
+          "previewFingerprint": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RevisedPendingOperationItem"
+            }
           }
         }
       },

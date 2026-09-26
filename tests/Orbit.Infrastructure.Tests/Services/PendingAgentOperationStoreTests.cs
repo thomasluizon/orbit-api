@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Orbit.Domain.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Orbit.Domain.Entities;
@@ -98,5 +99,57 @@ public class PendingAgentOperationStoreTests : IDisposable
         using var verifyContext = factory.CreateContext();
         verifyContext.PendingAgentOperations.Single(item => item.Id == pending.Id)
             .ConsumedAtUtc.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void Revise_InvalidatesIssuedTokenAndStoresOnlyRevisedArguments()
+    {
+        var capability = _catalogService.GetCapability(AgentCapabilityIds.HabitsBulkWrite)!;
+        const string originalJson = "{\"filter\":{\"all\":true},\"updates\":{\"emoji\":\"A\"}}";
+        const string revisedJson = "{\"revised_items\":[]}";
+        var originalFingerprint = AgentOperationFingerprint.Compute("bulk_update_habits", originalJson);
+        var revisedFingerprint = AgentOperationFingerprint.Compute("bulk_update_habits", revisedJson);
+        var pending = _store.Create(_userId, capability, "bulk_update_habits", originalJson,
+            "Update habits", originalFingerprint, AgentExecutionSurface.Chat);
+        var confirmation = _store.Confirm(_userId, pending.Id)!;
+
+        _store.Revise(_userId, pending.Id, originalFingerprint, revisedJson,
+            revisedFingerprint, "preview-state").Should().BeTrue();
+
+        _store.TryConsumeFreshConfirmation(_userId, capability.Id, originalFingerprint,
+            confirmation.ConfirmationToken, false).Should().BeFalse();
+        var execution = _store.GetExecution(_userId, pending.Id)!;
+        execution.Arguments.GetProperty("revised_items").ValueKind.Should().Be(System.Text.Json.JsonValueKind.Array);
+        execution.PreviewFingerprint.Should().Be("preview-state");
+    }
+
+    [Fact]
+    public void Cancel_RejectsAnyLaterConfirmationOrExecution()
+    {
+        var capability = _catalogService.GetCapability(AgentCapabilityIds.HabitsBulkDelete)!;
+        const string json = "{\"habit_ids\":[]}";
+        var fingerprint = AgentOperationFingerprint.Compute("bulk_delete_habits", json);
+        var pending = _store.Create(_userId, capability, "bulk_delete_habits", json,
+            "Delete habits", fingerprint, AgentExecutionSurface.Chat);
+
+        _store.Cancel(_userId, pending.Id, fingerprint).Should().BeTrue();
+
+        _store.Confirm(_userId, pending.Id).Should().BeNull();
+        _store.GetExecution(_userId, pending.Id).Should().BeNull();
+    }
+
+    [Fact]
+    public void Revise_RejectsFingerprintThatDoesNotMatchPayload()
+    {
+        var capability = _catalogService.GetCapability(AgentCapabilityIds.HabitsBulkWrite)!;
+        const string json = "{\"filter\":{\"all\":true}}";
+        var fingerprint = AgentOperationFingerprint.Compute("bulk_update_habits", json);
+        var pending = _store.Create(_userId, capability, "bulk_update_habits", json,
+            "Update habits", fingerprint, AgentExecutionSurface.Chat);
+
+        _store.Revise(_userId, pending.Id, fingerprint, "{\"revised_items\":[]}",
+            "incorrect", "preview-state").Should().BeFalse();
+
+        _store.GetExecution(_userId, pending.Id)!.Arguments.GetRawText().Should().Be(json);
     }
 }

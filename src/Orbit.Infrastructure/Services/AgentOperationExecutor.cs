@@ -216,7 +216,13 @@ public partial class AgentOperationExecutor(
                 var preview = await changePreviewer.PreviewAsync(
                     execution.Request.UserId, execution.Operation.Id, execution.Arguments, cancellationToken);
                 if (preview is not null)
-                    pending = pending with { Changes = preview.Changes, ChangeTargetCount = preview.ChangeTargetCount };
+                    pending = pending with
+                    {
+                        Changes = preview.Changes,
+                        ChangeTargetCount = preview.ChangeTargetCount,
+                        Items = preview.Items,
+                        PreviewFingerprint = preview.PreviewFingerprint
+                    };
             }
             catch (Exception exception)
             {
