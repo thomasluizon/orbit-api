@@ -667,6 +667,47 @@ public class IdempotencyBehaviorDbTests : IDisposable
     }
 
     [Fact]
+    public async Task Handle_BulkSkipLegacyRow_ReplaysWithoutAppendingAnotherSkipLog()
+    {
+        var today = new DateOnly(2026, 9, 24);
+        var habit = Habit.Create(new HabitCreateParams(_userId, "Flexible skip", FrequencyUnit.Week, 3,
+            DueDate: today, IsFlexible: true)).Value;
+        _dbContext.Habits.Add(habit);
+        await _dbContext.SaveChangesAsync();
+
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var handler = new BulkSkipHabitsCommandHandler(
+            new GenericRepository<Habit>(_dbContext), new GenericRepository<HabitLog>(_dbContext),
+            CreateUserDateService(today), _unitOfWork, cache);
+        var command = new BulkSkipHabitsCommand(_userId, [new BulkSkipItem(habit.Id, today)]);
+        var context = new StubIdempotencyContext(true, _userId, "legacy-skip-key", trackOrdinals: true);
+        var behavior = new IdempotencyBehavior<BulkSkipHabitsCommand, Result<BulkSkipResult>>(
+            context, _store, _unitOfWork);
+        RequestHandlerDelegate<Result<BulkSkipResult>> next = ct =>
+        {
+            _handlerCalls++;
+            return handler.Handle(command, ct);
+        };
+
+        var first = await behavior.Handle(command, next, CancellationToken.None);
+        var currentRow = await _dbContext.ProcessedRequests.SingleAsync();
+        var legacyRow = ProcessedRequest.Create(_userId, "legacy-skip-key", typeof(BulkSkipHabitsCommand).FullName!, 0);
+        legacyRow.SetResponseBody(currentRow.ResponseBody);
+        _dbContext.ProcessedRequests.Remove(currentRow);
+        _dbContext.ProcessedRequests.Add(legacyRow);
+        await _dbContext.SaveChangesAsync();
+        context.ResetOrdinals();
+
+        var replay = await behavior.Handle(command, next, CancellationToken.None);
+
+        replay.Value.Results.Should().BeEquivalentTo(first.Value.Results);
+        _handlerCalls.Should().Be(1);
+        (await _dbContext.HabitLogs.AsNoTracking().CountAsync(log => log.HabitId == habit.Id && log.Value == 0))
+            .Should().Be(1);
+        (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
     public async Task Handle_BulkLogReplay_ReturnsFirstResultWithoutWritingSecondLogs()
     {
         var today = new DateOnly(2026, 9, 24);
