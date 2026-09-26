@@ -148,7 +148,9 @@ public record PendingOperationChange(
     string Field,
     string? OldValue,
     string? NewValue,
-    string ValueType);
+    string ValueType,
+    JsonElement? ProposedValue = null,
+    bool IsEditable = false);
 
 public record PendingOperationChangePreview(
     IReadOnlyList<PendingOperationChange> Changes,

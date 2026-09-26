@@ -55,7 +55,8 @@ public sealed class PendingOperationRevisionService(
                 continue;
             if (edits.ValueKind != JsonValueKind.Object)
                 return Failure("invalid_edits");
-            var allowed = offered[item.ItemId].Fields.Select(field => field.Field)
+            var allowed = offered[item.ItemId].Fields.Where(field => field.IsEditable)
+                .Select(field => field.Field)
                 .ToHashSet(StringComparer.Ordinal);
             if (edits.EnumerateObject().Any(field => !allowed.Contains(field.Name)))
                 return Failure("field_not_offered");

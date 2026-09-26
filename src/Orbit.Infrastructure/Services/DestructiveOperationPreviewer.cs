@@ -95,7 +95,9 @@ public sealed class DestructiveOperationPreviewer(OrbitDbContext dbContext) : ID
         var newValue = action == "set_auto_sync" && arguments.TryGetProperty("enabled", out var enabled)
             ? enabled.ToString() : null;
         var change = new PendingOperationChange(userId, "Calendar sync", field,
-            oldValue, newValue, action == "set_auto_sync" ? "boolean" : "action");
+            oldValue, newValue, action == "set_auto_sync" ? "boolean" : "action",
+            action == "set_auto_sync" && arguments.TryGetProperty("enabled", out var proposed)
+                ? proposed.Clone() : null, action == "set_auto_sync");
         var item = new PendingOperationItem(userId.ToString(), userId, "Calendar sync", [change],
             AgentOperationFingerprint.Compute(operationId, JsonSerializer.Serialize(new
             {
