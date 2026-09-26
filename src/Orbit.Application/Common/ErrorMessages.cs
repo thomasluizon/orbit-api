@@ -10,7 +10,7 @@ public static class ErrorMessages
 
     public static readonly AppError UserNotFound = From(ErrorCodes.UserNotFound);
     public static readonly AppError HabitNotFound = From(ErrorCodes.HabitNotFound);
-    public static readonly AppError HabitLimitReached = new(ErrorCodes.HabitLimitReached, "You've reached the {0} habit limit.");
+    public static readonly AppError HabitLimitReached = From(ErrorCodes.HabitLimitReached);
     public static readonly AppError ParentHabitNotFound = From(ErrorCodes.ParentHabitNotFound);
     public static readonly AppError TargetParentNotFound = From(ErrorCodes.TargetParentNotFound);
     public static readonly AppError TagNotFound = From(ErrorCodes.TagNotFound);
