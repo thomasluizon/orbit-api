@@ -235,7 +235,17 @@ public class Habit : Entity, ITimestamped, ISoftDeletable, IHabitSchedule
         if (!IsBadHabit && !IsFlexible && _logs.Exists(l => l.Date == date && !l.IsDeleted))
             return Result.Failure<HabitLog>(DomainErrors.AlreadyLoggedForDate);
 
-        var log = HabitLog.Create(Id, date, 1, note, isSlip: IsBadHabit);
+        if (IsFlexible && GetRemainingCompletions(date, _logs, weekStartDay) <= 0)
+            return Result.Failure<HabitLog>(DomainErrors.AllInstancesDone);
+
+        var completionOrdinal = IsFlexible
+            ? _logs.Where(l => l.Date == date && l.Value > 0)
+                .Select(l => l.CompletionOrdinal)
+                .DefaultIfEmpty(-1)
+                .Max() + 1
+            : 0;
+        var log = HabitLog.Create(Id, date, 1, note, isSlip: IsBadHabit,
+            completionOrdinal: completionOrdinal);
         _logs.Add(log);
 
         if (FrequencyUnit is null && !IsGeneral)
@@ -253,6 +263,27 @@ public class Habit : Entity, ITimestamped, ISoftDeletable, IHabitSchedule
 
         UpdatedAtUtc = DateTime.UtcNow;
         return Result.Success(log);
+    }
+
+    public int GetRemainingCompletions(DateOnly date, IReadOnlyCollection<HabitLog> logs, int weekStartDay)
+    {
+        var windowStart = FrequencyUnit switch
+        {
+            Enums.FrequencyUnit.Week => date.AddDays(-(((int)date.DayOfWeek - weekStartDay + 7) % 7)),
+            Enums.FrequencyUnit.Month => new DateOnly(date.Year, date.Month, 1),
+            Enums.FrequencyUnit.Year => new DateOnly(date.Year, 1, 1),
+            _ => date
+        };
+        var windowEnd = FrequencyUnit switch
+        {
+            Enums.FrequencyUnit.Week => windowStart.AddDays(6),
+            Enums.FrequencyUnit.Month => new DateOnly(date.Year, date.Month, DateTime.DaysInMonth(date.Year, date.Month)),
+            Enums.FrequencyUnit.Year => new DateOnly(date.Year, 12, 31),
+            _ => date
+        };
+        var windowLogs = logs.Where(log => !log.IsDeleted && log.Date >= windowStart && log.Date <= windowEnd).ToList();
+        var adjustedTarget = Math.Max(0, (FrequencyQuantity ?? 1) - windowLogs.Count(log => log.Value == 0));
+        return Math.Max(0, adjustedTarget - windowLogs.Count(log => log.Value > 0));
     }
 
     public Result AdvanceDueDate(DateOnly today, int weekStartDay = 1)

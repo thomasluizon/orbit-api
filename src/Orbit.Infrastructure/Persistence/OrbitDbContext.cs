@@ -844,9 +844,10 @@ public class OrbitDbContext : DbContext
     {
         modelBuilder.Entity<HabitLog>(entity =>
         {
+            entity.Property(l => l.CompletionOrdinal).HasDefaultValue(0);
             entity.HasIndex(l => new { l.HabitId, l.Date }, "IX_HabitLogs_HabitId_Date");
 
-            entity.HasIndex(l => new { l.HabitId, l.Date }, "IX_HabitLogs_HabitId_Date_Completed")
+            entity.HasIndex(l => new { l.HabitId, l.Date, l.CompletionOrdinal }, "IX_HabitLogs_HabitId_Date_Completed")
                 .HasFilter("\"Value\" > 0 AND NOT \"IsDeleted\"")
                 .IsUnique();
 

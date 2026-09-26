@@ -110,7 +110,7 @@ public static class ErrorMessages
     public static readonly AppError CannotSkipFutureDate = new(ErrorCodes.CannotSkipFutureDate, "Cannot skip a future date.");
     public static readonly AppError HabitNotYetDue = new(ErrorCodes.HabitNotYetDue, "Cannot skip a habit that is not yet due.");
     public static readonly AppError NotScheduledOnDate = new(ErrorCodes.NotScheduledOnDate, "Habit is not scheduled on this date.");
-    public static readonly AppError AllInstancesDone = new(ErrorCodes.AllInstancesDone, "All instances for this period have already been completed or skipped.");
+    public static readonly AppError AllInstancesDone = DomainErrors.AllInstancesDone;
     public static readonly AppError CannotLogFutureDate = new(ErrorCodes.CannotLogFutureDate, "Cannot log a future date.");
     public static readonly AppError BeyondOverdueWindow = new(ErrorCodes.BeyondOverdueWindow, "Cannot log a date beyond the overdue window.");
     public static readonly AppError SelfParent = new(ErrorCodes.SelfParent, "A habit cannot be its own parent.");
