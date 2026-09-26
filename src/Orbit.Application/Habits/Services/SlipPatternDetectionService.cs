@@ -13,6 +13,12 @@ public static class SlipPatternDetectionService
         IReadOnlyList<HabitLog> logs,
         Guid habitId,
         TimeZoneInfo userTimeZone)
+        => DetectPattern(logs.Select(l => new SlipPatternLog(l.Value, l.CreatedAtUtc)).ToList(), habitId, userTimeZone);
+
+    public static SlipPattern? DetectPattern(
+        IReadOnlyList<SlipPatternLog> logs,
+        Guid habitId,
+        TimeZoneInfo userTimeZone)
     {
         var createdAtUtcCutoff = DateTime.UtcNow.AddDays(-LookbackDays);
         var recentLogs = logs.Where(l => l.Value > 0 && l.CreatedAtUtc >= createdAtUtcCutoff).ToList();
@@ -66,3 +72,5 @@ public static class SlipPatternDetectionService
         return strongest;
     }
 }
+
+public sealed record SlipPatternLog(decimal Value, DateTime CreatedAtUtc);
