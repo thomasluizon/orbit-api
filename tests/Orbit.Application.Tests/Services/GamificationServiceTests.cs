@@ -219,6 +219,11 @@ public class GamificationServiceTests
             habits.Add(excluded);
         }
         SetupUserHabits(habits.ToArray());
+        _habitLogRepo.CountAsync(
+            Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(call => habits.SelectMany(habit => habit.Logs).AsQueryable()
+                .Count(call.ArgAt<Expression<Func<HabitLog, bool>>>(0)));
         _habitRepo.ProjectAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<HabitScheduleSnapshot>>>(),
