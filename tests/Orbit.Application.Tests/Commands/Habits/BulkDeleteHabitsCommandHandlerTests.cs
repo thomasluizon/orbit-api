@@ -85,8 +85,12 @@ public class BulkDeleteHabitsCommandHandlerTests
         parent.IsDeleted.Should().BeTrue();
         child.IsDeleted.Should().BeTrue();
         child.DeletedAtUtc.Should().Be(parent.DeletedAtUtc);
-        result.Value.Results.Select(item => item.HabitId).Should().BeEquivalentTo([parent.Id, child.Id]);
-        result.Value.Results.Should().OnlyContain(item => item.Status == BulkItemStatus.Success);
+        result.Value.Results.Should().ContainSingle()
+            .Which.Should().Match<BulkDeleteItemResult>(item =>
+                item.Index == 0 && item.HabitId == parent.Id && item.Status == BulkItemStatus.Success);
+        var response = System.Text.Json.JsonSerializer.SerializeToElement(result.Value);
+        response.GetProperty("Results")[0].GetProperty("CascadedHabitIds")
+            .EnumerateArray().Select(id => id.GetGuid()).Should().Equal(child.Id);
     }
 
     [Fact]
@@ -112,7 +116,10 @@ public class BulkDeleteHabitsCommandHandlerTests
         var result = await _handler.Handle(new BulkDeleteHabitsCommand(UserId, [parent.Id]), CancellationToken.None);
 
         habits.Should().HaveCount(111).And.OnlyContain(habit => habit.IsDeleted);
-        result.Value.Results.Select(item => item.HabitId).Should().BeEquivalentTo(habits.Select(habit => habit.Id));
+        result.Value.Results.Should().ContainSingle().Which.HabitId.Should().Be(parent.Id);
+        var response = System.Text.Json.JsonSerializer.SerializeToElement(result.Value);
+        response.GetProperty("Results")[0].GetProperty("CascadedHabitIds")
+            .EnumerateArray().Select(id => id.GetGuid()).Should().BeEquivalentTo(habits.Skip(1).Select(habit => habit.Id));
     }
 
     [Fact]
@@ -132,8 +139,12 @@ public class BulkDeleteHabitsCommandHandlerTests
         var result = await _handler.Handle(
             new BulkDeleteHabitsCommand(UserId, [parent.Id, child.Id, parent.Id]), CancellationToken.None);
 
-        result.Value.Results.Select(item => item.HabitId).Should().Equal(parent.Id, child.Id, grandchild.Id);
+        result.Value.Results.Select(item => item.HabitId).Should().Equal(parent.Id, child.Id, parent.Id);
+        result.Value.Results.Select(item => item.Index).Should().Equal(0, 1, 2);
         result.Value.Results.Should().OnlyContain(item => item.Status == BulkItemStatus.Success);
+        var response = System.Text.Json.JsonSerializer.SerializeToElement(result.Value);
+        response.GetProperty("Results")[0].GetProperty("CascadedHabitIds")
+            .EnumerateArray().Select(id => id.GetGuid()).Should().Equal(child.Id, grandchild.Id);
         new[] { parent, child, grandchild }.Should().OnlyContain(habit => habit.IsDeleted);
         await _userStreakService.Received(1).RecalculateAsync(UserId, cancellationToken: Arg.Any<CancellationToken>());
     }

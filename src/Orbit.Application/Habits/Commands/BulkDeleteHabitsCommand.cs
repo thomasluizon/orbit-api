@@ -19,7 +19,8 @@ public record BulkDeleteItemResult(
     int Index,
     BulkItemStatus Status,
     Guid HabitId,
-    string? Error = null);
+    string? Error = null,
+    IReadOnlyList<Guid>? CascadedHabitIds = null);
 
 public class BulkDeleteHabitsCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -57,14 +58,16 @@ public class BulkDeleteHabitsCommandHandler(
                     continue;
                 }
 
-                foreach (var deleted in HabitHierarchy.SoftDeleteSubtree(
-                    habit, childrenByParentId, deletedIds, deletedAtUtc))
-                {
-                    results.Add(new BulkDeleteItemResult(
-                        Index: i,
-                        Status: BulkItemStatus.Success,
-                        HabitId: deleted.Id));
-                }
+                var cascadedHabitIds = HabitHierarchy.SoftDeleteSubtree(
+                        habit, childrenByParentId, deletedIds, deletedAtUtc)
+                    .Where(deleted => deleted.Id != habitId)
+                    .Select(deleted => deleted.Id)
+                    .ToList();
+                results.Add(new BulkDeleteItemResult(
+                    Index: i,
+                    Status: BulkItemStatus.Success,
+                    HabitId: habitId,
+                    CascadedHabitIds: cascadedHabitIds));
             }
 
             await unitOfWork.SaveChangesAsync(ct);
