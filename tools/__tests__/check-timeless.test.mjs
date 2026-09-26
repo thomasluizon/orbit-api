@@ -174,3 +174,28 @@ test("a directory entry may exempt comment-length but never machine-path", () =>
     assert.equal(run(root, ["--all"]).status, 2)
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
+
+test("a comment inside an empty call is checked", () => {
+  const root = make("sample.mjs")
+  try {
+    writeFileSync(join(root, "sample.mjs"), `run(/* ${date} */)\n`)
+    git(root, "add", "sample.mjs")
+    const all = run(root, ["--all"])
+    assert.equal(all.status, 1)
+    assert.ok(all.stderr.includes("sample.mjs:1: dated-anecdote"))
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test("the hook reports findings an edit introduces, not lines it keeps", () => {
+  const line = `const value = new Date("${date}T12:00:00.000Z")`
+  const root = make("sample.mjs", `${line}\n`)
+  try {
+    const wrapped = hook(root, "sample.mjs", `/*\n${line}\n*/\n`)
+    assert.equal(wrapped.status, 2)
+    writeFileSync(join(root, "sample.mjs"), `// ${date}\nconst other = 1\n`)
+    git(root, "add", "sample.mjs")
+    git(root, "commit", "-qm", "existing comment")
+    const moved = hook(root, "sample.mjs", `const other = 1\n// ${date}\n`)
+    assert.equal(moved.status, 0)
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
