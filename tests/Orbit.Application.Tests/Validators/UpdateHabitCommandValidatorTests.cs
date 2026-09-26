@@ -1,5 +1,6 @@
 using FluentValidation.TestHelper;
 using FluentAssertions;
+using System.Globalization;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
@@ -117,27 +118,36 @@ public class UpdateHabitCommandValidatorTests
     [InlineData(true, "The length of 'Title' must be 200 characters or fewer. You entered 201 characters.")]
     public async Task Validate_TopLevelTitle_UsesHabitMessage(bool tooLong, string expectedMessage)
     {
-        var command = ValidCommand();
-        var habit = Habit.Create(new HabitCreateParams(
-            command.UserId, "Original habit", FrequencyUnit.Day, 1,
-            DueDate: new DateOnly(2026, 9, 26))).Value;
-        command = command with
+        var previousCulture = CultureInfo.CurrentUICulture;
+        CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("en-US");
+        try
         {
-            HabitId = habit.Id,
-            Title = tooLong ? new string('a', AppConstants.MaxHabitTitleLength + 1) : ""
-        };
-        _habitRepository.FindOneTrackedAsync(
-                Arg.Any<Expression<Func<Habit, bool>>>(),
-                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
-                Arg.Any<CancellationToken>())
-            .Returns(call => call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile()(habit)
-                ? habit
-                : null);
+            var command = ValidCommand();
+            var habit = Habit.Create(new HabitCreateParams(
+                command.UserId, "Original habit", FrequencyUnit.Day, 1,
+                DueDate: new DateOnly(2026, 9, 26))).Value;
+            command = command with
+            {
+                HabitId = habit.Id,
+                Title = tooLong ? new string('a', AppConstants.MaxHabitTitleLength + 1) : ""
+            };
+            _habitRepository.FindOneTrackedAsync(
+                    Arg.Any<Expression<Func<Habit, bool>>>(),
+                    Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+                    Arg.Any<CancellationToken>())
+                .Returns(call => call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile()(habit)
+                    ? habit
+                    : null);
 
-        var result = await _validator.TestValidateAsync(command);
+            var result = await _validator.TestValidateAsync(command);
 
-        result.Errors.Single(e => e.PropertyName == nameof(UpdateHabitCommand.Title))
-            .ErrorMessage.Should().Be(expectedMessage);
+            result.Errors.Single(e => e.PropertyName == nameof(UpdateHabitCommand.Title))
+                .ErrorMessage.Should().Be(expectedMessage);
+        }
+        finally
+        {
+            CultureInfo.CurrentUICulture = previousCulture;
+        }
     }
 
     [Fact]
