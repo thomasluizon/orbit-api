@@ -43,6 +43,36 @@ public sealed class PendingOperationChangePreviewerTests
 
         preview!.ChangeTargetCount.Should().Be(40);
         preview.Changes.Select(row => row.EntityId).Distinct().Should().HaveCount(10);
+        preview.Items.Should().HaveCount(40);
+        preview.Items!.Select(item => item.ItemId).Should().OnlyHaveUniqueItems();
+        preview.PreviewFingerprint.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Theory]
+    [InlineData("bulk_delete_habits", "delete")]
+    [InlineData("bulk_log_habits", "log")]
+    [InlineData("bulk_skip_habits", "skip")]
+    [InlineData("bulk_update_habit_emojis", "emoji")]
+    public async Task PreviewAsync_BulkActions_ListEachTarget(string operationId, string field)
+    {
+        Setup([CreateHabit("One", null), CreateHabit("Two", null)]);
+
+        var preview = await Preview(operationId, """{"filter":{"all":true}}""");
+
+        preview!.Items.Should().HaveCount(2);
+        preview.Items!.SelectMany(item => item.Fields).Select(change => change.Field)
+            .Should().OnlyContain(value => value == field);
+    }
+
+    [Fact]
+    public async Task PreviewAsync_Create_UsesStableInputIndexes()
+    {
+        var preview = await Preview("bulk_create_habits", """{"habits":[{"title":"One"},{"title":"Two"}]}""");
+
+        preview!.Items.Should().HaveCount(2);
+        preview.Items!.Select(item => item.ItemId).Should().Equal("0", "1");
+        preview.Items.SelectMany(item => item.Fields).Select(field => field.Field)
+            .Should().OnlyContain(field => field == "title");
     }
 
     [Fact]

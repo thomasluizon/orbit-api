@@ -15391,6 +15391,21 @@
               "string"
             ],
             "format": "int32"
+          },
+          "items": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PendingOperationItem"
+            }
+          },
+          "previewFingerprint": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -15428,6 +15443,40 @@
             ]
           },
           "valueType": {
+            "type": "string"
+          }
+        }
+      },
+      "PendingOperationItem": {
+        "required": [
+          "itemId",
+          "entityId",
+          "entityName",
+          "fields",
+          "stateFingerprint"
+        ],
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "string"
+          },
+          "entityId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "entityName": {
+            "type": "string"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PendingOperationChange"
+            }
+          },
+          "stateFingerprint": {
             "type": "string"
           }
         }
