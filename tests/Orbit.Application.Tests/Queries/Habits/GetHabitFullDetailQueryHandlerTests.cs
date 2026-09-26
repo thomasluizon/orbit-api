@@ -205,9 +205,20 @@ public class GetHabitFullDetailQueryHandlerTests
             DueDate: Today,
             IsGeneral: true,
             ParentHabitId: parent.Id)).Value;
+        var grandchild = Habit.Create(new HabitCreateParams(
+            UserId, "Grandchild", null, null,
+            DueDate: Today.AddDays(-4), ParentHabitId: child.Id)).Value;
+        var parentCreated = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc);
+        var childCreated = parentCreated.AddDays(1);
+        var grandchildCreated = childCreated.AddDays(1);
+        var createdAtProperty = typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!;
+        createdAtProperty.SetValue(parent, parentCreated);
+        createdAtProperty.SetValue(child, childCreated);
+        createdAtProperty.SetValue(grandchild, grandchildCreated);
         var log = child.Log(Today).Value;
         var user = CreateTestUser();
         AttachChild(parent, child);
+        AttachChild(child, grandchild);
 
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -231,6 +242,10 @@ public class GetHabitFullDetailQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Habit.Children.Should().ContainSingle();
         result.Value.Habit.Children[0].IsCompleted.Should().BeTrue();
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result.Value.Habit, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        var childJson = json.RootElement.GetProperty("children")[0];
+        childJson.GetProperty("createdAtUtc").GetDateTime().Should().Be(childCreated);
+        childJson.GetProperty("children")[0].GetProperty("createdAtUtc").GetDateTime().Should().Be(grandchildCreated);
     }
 
     [Fact]

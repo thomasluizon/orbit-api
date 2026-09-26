@@ -7,6 +7,7 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.ValueObjects;
+using System.Text.Json.Serialization;
 
 namespace Orbit.Application.Habits.Queries;
 
@@ -79,7 +80,9 @@ public record HabitScheduleChildItem(
     IReadOnlyList<HabitInstanceItem> Instances,
     IReadOnlyList<SearchMatchField>? SearchMatches = null,
     string? Emoji = null,
-    int? IntervalWeeks = null);
+    int? IntervalWeeks = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    DateTime? CreatedAtUtc = null);
 
 public record GetHabitScheduleQuery(
     Guid UserId,

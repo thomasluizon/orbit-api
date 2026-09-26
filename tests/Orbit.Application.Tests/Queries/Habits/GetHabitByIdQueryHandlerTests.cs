@@ -9,6 +9,7 @@ using Orbit.Domain.ValueObjects;
 using Orbit.Infrastructure.Persistence;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Text.Json;
 
 namespace Orbit.Application.Tests.Queries.Habits;
 
@@ -238,8 +239,17 @@ public class GetHabitByIdQueryHandlerTests
             DueDate: Today,
             IsGeneral: true,
             ParentHabitId: parent.Id)).Value;
+        var grandchild = CreateOneTimeHabit("Grandchild", Today.AddDays(-4), child.Id);
+        var parentCreated = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc);
+        var childCreated = parentCreated.AddDays(1);
+        var grandchildCreated = childCreated.AddDays(1);
+        var createdAtProperty = typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!;
+        createdAtProperty.SetValue(parent, parentCreated);
+        createdAtProperty.SetValue(child, childCreated);
+        createdAtProperty.SetValue(grandchild, grandchildCreated);
         var log = child.Log(Today).Value;
         AttachChild(parent, child);
+        AttachChild(child, grandchild);
 
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -262,6 +272,10 @@ public class GetHabitByIdQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Children.Should().ContainSingle();
         result.Value.Children[0].IsCompleted.Should().BeTrue();
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result.Value, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        var childJson = json.RootElement.GetProperty("children")[0];
+        childJson.GetProperty("createdAtUtc").GetDateTime().Should().Be(childCreated);
+        childJson.GetProperty("children")[0].GetProperty("createdAtUtc").GetDateTime().Should().Be(grandchildCreated);
     }
 
     [Fact]

@@ -257,7 +257,8 @@ public class GetCalendarMonthQueryHandler(
             grandchildren, grandchildren.Count > 0,
             flexTarget, flexCompleted, isLoggedInRange, instances,
             Emoji: child.Emoji,
-            IntervalWeeks: child.IntervalWeeks);
+            IntervalWeeks: child.IntervalWeeks,
+            CreatedAtUtc: child.CreatedAtUtc);
     }
 
     private static bool HasAnyDescendantDue(
