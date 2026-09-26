@@ -1,9 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Events;
 
 namespace Orbit.Infrastructure.Persistence;
 
-public class AccountResetRepository(OrbitDbContext context) : IAccountResetRepository
+public class AccountResetRepository(OrbitDbContext context, IAccountEventCollector eventCollector) : IAccountResetRepository
 {
     public async Task DeleteAllUserDataAsync(Guid userId, CancellationToken cancellationToken = default)
     {
@@ -157,5 +158,7 @@ public class AccountResetRepository(OrbitDbContext context) : IAccountResetRepos
             .IgnoreQueryFilters()
             .Where(h => h.UserId == userId)
             .ExecuteDeleteAsync(cancellationToken);
+
+        eventCollector.MarkResync(userId);
     }
 }

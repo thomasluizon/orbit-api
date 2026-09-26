@@ -199,7 +199,7 @@ public partial class AgentCatalogService
                 ["Call sync changes with a recent timestamp.", "Process redacted DTOs.", "Send mutations in batch for server-wins resolution."],
                 ["Version 2 payloads are curated and redacted.", "The legacy raw sync payload remains for compatibility during migration."],
                 [AgentCapabilityIds.SyncRead, AgentCapabilityIds.SyncWrite],
-                ["SyncController.GetChangesV2", "SyncController.ProcessBatch"])
+                ["SyncController.GetChangesV2", "SyncController.ProcessBatch", "EventsController.Stream", "EventsController.CreateTicket"])
         ];
     }
 }

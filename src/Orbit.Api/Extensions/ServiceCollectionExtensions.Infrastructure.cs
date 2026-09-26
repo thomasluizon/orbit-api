@@ -195,7 +195,7 @@ public static partial class ServiceCollectionExtensions
             options.AddDefaultPolicy(policy =>
             {
                 policy.WithOrigins(firstPartyOrigins)
-                      .WithHeaders("Authorization", "Content-Type", "Mcp-Session-Id")
+                      .WithHeaders("Authorization", "Content-Type", "Mcp-Session-Id", "Last-Event-ID", "X-Orbit-Event-Origin")
                       .WithMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
                       .AllowCredentials();
             });
