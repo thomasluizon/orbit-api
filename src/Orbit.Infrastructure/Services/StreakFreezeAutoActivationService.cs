@@ -162,17 +162,17 @@ public partial class StreakFreezeAutoActivationService(
         var lookbackStart = userTodayById.Values
             .Min()
             .AddDays(-AppConstants.MaxStreakLookbackDays);
-        var eligibleHabits = (await HabitScheduleProjection.Select(dbContext.Habits
+        var eligibleHabits = await HabitScheduleProjection.SelectForFreeze(dbContext.Habits
             .AsNoTracking()
             .Where(habit => candidateIds.Contains(habit.UserId)
                 && !habit.IsDeleted
                 && !habit.IsBadHabit))
-            .ToListAsync(cancellationToken))
-            .Select(Habit.FromScheduleSnapshot)
-            .ToList();
+            .ToListAsync(cancellationToken);
         var eligibleHabitsByUser = eligibleHabits
             .GroupBy(habit => habit.UserId)
-            .ToDictionary(group => group.Key, group => group.ToList());
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(habit => Habit.FromScheduleSnapshot(habit.Snapshot, habit.UserId)).ToList());
 
         var completionPairs = await (
             from log in dbContext.HabitLogs.AsNoTracking()

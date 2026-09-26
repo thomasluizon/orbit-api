@@ -38,7 +38,7 @@ public class AchievementProgressService(
         var streakLogCutoff = today.AddDays(-StreakLogWindowDays);
         var habits = (await habitRepository.ProjectAsync(
             h => h.UserId == user.Id, HabitScheduleProjection.Select, cancellationToken))
-            .Select(Habit.FromScheduleSnapshot)
+            .Select(snapshot => Habit.FromScheduleSnapshot(snapshot, user.Id))
             .ToList();
         var habitIds = habits.Select(h => h.Id).ToList();
         var goodHabits = habits.Where(h => !h.IsBadHabit).ToList();
