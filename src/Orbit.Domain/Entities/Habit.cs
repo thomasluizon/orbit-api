@@ -225,7 +225,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable, IHabitSchedule
             DueEndTime = p.DueEndTime,
             ParentHabitId = p.ParentHabitId,
             ReminderEnabled = p.ReminderEnabled,
-            ReminderTimes = p.ReminderTimes ?? (p.DueTime.HasValue && p.ScheduledReminders is { Count: > 0 } ? [] : [15]),
+            ReminderTimes = p.ReminderTimes ?? (p.DueTime.HasValue && (p.ScheduledReminders is { Count: > 0 } || p.RelativeReminders is { Count: > 0 }) ? [] : [15]),
             SlipAlertEnabled = p.SlipAlertEnabled,
             ChecklistItems = p.ChecklistItems ?? [],
             ScheduledReminders = p.DueTime.HasValue ? [] : p.ScheduledReminders ?? [],
@@ -622,7 +622,11 @@ public class Habit : Entity, ITimestamped, ISoftDeletable, IHabitSchedule
         if (!p.DueTime.HasValue && !DueTime.HasValue && p.RelativeReminders is { Count: > 0 })
             return DomainErrors.InvalidRelativeReminders;
 
-        if (p.DueTime.HasValue && (p.RelativeReminders?.Count ?? RelativeReminders.Count) + (p.ScheduledReminders?.Count ?? ScheduledReminders.Count) > DomainConstants.MaxRelativeReminders)
+        var relativeCount = p.RelativeReminders is not null
+            ? p.RelativeReminders.Count
+            : RelativeReminders.Count(r => !r.When.HasValue)
+                + (p.ScheduledReminders?.Count ?? RelativeReminders.Count(r => r.When.HasValue) + ScheduledReminders.Count);
+        if (p.DueTime.HasValue && relativeCount > DomainConstants.MaxRelativeReminders)
             return DomainErrors.InvalidRelativeReminders;
 
         return HabitInvariants.ValidateReminderTimes(p.ReminderTimes);
@@ -684,13 +688,14 @@ public class Habit : Entity, ITimestamped, ISoftDeletable, IHabitSchedule
         if (p.RelativeReminders is not null)
             RelativeReminders = p.RelativeReminders;
 
-        if (DueTime.HasValue && ScheduledReminders.Count > 0)
+        if (DueTime.HasValue)
         {
-            var clockReminders = ScheduledReminders.Select(RelativeReminderTime.FromScheduled);
-            RelativeReminders = (p.ScheduledReminders is not null && p.RelativeReminders is null
-                    ? RelativeReminders.Where(r => !r.When.HasValue)
-                    : RelativeReminders)
-                .Concat(clockReminders).Distinct().ToList();
+            if (p.RelativeReminders is null && p.ScheduledReminders is not null)
+                RelativeReminders = RelativeReminders.Where(r => !r.When.HasValue)
+                    .Concat(p.ScheduledReminders.Select(RelativeReminderTime.FromScheduled)).Distinct().ToList();
+            else if (p.RelativeReminders is null && ScheduledReminders.Count > 0)
+                RelativeReminders = RelativeReminders.Concat(ScheduledReminders.Select(RelativeReminderTime.FromScheduled))
+                    .Distinct().ToList();
             ScheduledReminders = [];
         }
 

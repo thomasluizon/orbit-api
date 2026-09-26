@@ -179,6 +179,11 @@ public partial class ReminderSchedulerService(
         var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
         var userNow = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, tz);
         var userToday = DateOnly.FromDateTime(userNow);
+        var sentInstants = sentReminderSet.Where(r => r.HabitId == habit.Id)
+            .Select(r => LocalDueInstantUtc(r.Date.ToDateTime(habit.DueTime!.Value), tz).AddMinutes(-r.MinutesBefore))
+            .Concat(sentClockSet.Where(r => r.HabitId == habit.Id)
+                .Select(r => LocalReminderInstantUtc(r.Date.ToDateTime(r.Time), tz)))
+            .ToHashSet();
 
         for (var dayOffset = -1; dayOffset <= MaxRelativeLookaheadDays; dayOffset++)
         {
@@ -193,7 +198,8 @@ public partial class ReminderSchedulerService(
                 var reminderUtc = dueUtc.AddMinutes(-minutesBefore);
                 var reminderLocalDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(reminderUtc, tz));
                 if (reminderLocalDate != userToday || nowUtc < reminderUtc) continue;
-                if (sentReminderSet.Contains((habit.Id, occurrenceDate, minutesBefore))) continue;
+                if (sentReminderSet.Contains((habit.Id, occurrenceDate, minutesBefore))
+                    || sentInstants.Contains(reminderUtc)) continue;
 
                 var lang = user.Language ?? "en";
                 var minutesText = minutesBefore < 0
@@ -209,6 +215,7 @@ public partial class ReminderSchedulerService(
                 if (!await TryRecordReminderAsync(habit, sentReminder, notification, dbContext, ct))
                     continue;
 
+                sentInstants.Add(reminderUtc);
                 pending.Add(new PendingReminderPush(habit.UserId, habit.Title, minutesText, habit.Id));
 
                 if (logger.IsEnabled(LogLevel.Debug))
@@ -226,7 +233,7 @@ public partial class ReminderSchedulerService(
                 if (nowUtc < sendUtc) continue;
 
                 var clockKey = (habit.Id, sendDate, reminder.Time.Value, reminder.When);
-                if (sentClockSet.Contains(clockKey)
+                if (sentInstants.Contains(sendUtc) || sentClockSet.Contains(clockKey)
                     || sentClockSet.Contains((habit.Id, sendDate, reminder.Time.Value, null))) continue;
 
                 var lang = user.Language ?? "en";
@@ -238,6 +245,7 @@ public partial class ReminderSchedulerService(
                 if (!await TryRecordReminderAsync(habit, sentReminder, notification, dbContext, ct))
                     continue;
 
+                sentInstants.Add(sendUtc);
                 pending.Add(new PendingReminderPush(habit.UserId, habit.Title, body, habit.Id));
             }
         }
