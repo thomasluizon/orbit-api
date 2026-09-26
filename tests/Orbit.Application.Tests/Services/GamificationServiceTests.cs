@@ -8,11 +8,13 @@ using Orbit.Application.Common;
 using Orbit.Application.Gamification;
 using Orbit.Application.Gamification.Models;
 using Orbit.Application.Gamification.Services;
+using Orbit.Application.Habits.Services;
 using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
+using Orbit.Infrastructure.Services;
 using System.Linq.Expressions;
 
 namespace Orbit.Application.Tests.Services;
@@ -32,6 +34,7 @@ public class GamificationServiceTests
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IFeatureFlagService _featureFlagService = Substitute.For<IFeatureFlagService>();
     private readonly IFoundingAchievementReader _foundingAchievementReader = Substitute.For<IFoundingAchievementReader>();
+    private readonly HabitScheduleSnapshotStore _snapshotStore;
     private readonly GamificationService _sut;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -43,9 +46,11 @@ public class GamificationServiceTests
         var repos = new GamificationRepositories(
             _userRepo, _habitRepo, _habitLogRepo, _goalRepo, _achievementRepo, _notificationRepo, _xpAwardLogRepo,
             _foundingAchievementReader);
+        _snapshotStore = new HabitScheduleSnapshotStore(_habitRepo);
         _sut = new GamificationService(
             repos, new GamificationNotifiers(_pushService, _feedEmitter), _userDateService, new XpAwarder(_xpAwardLogRepo), _unitOfWork,
-            _featureFlagService, Substitute.For<ILogger<GamificationService>>());
+            _featureFlagService, Substitute.For<ILogger<GamificationService>>(),
+            _snapshotStore);
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);
@@ -161,6 +166,12 @@ public class GamificationServiceTests
     {
         _habitRepo.ProjectAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Guid>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<IQueryable<Habit>, IQueryable<Guid>>>(1)(
+                habits.AsQueryable()).ToList());
+        _habitRepo.ProjectAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<HabitScheduleSnapshot>>>(),
             Arg.Any<CancellationToken>())
             .Returns(call => call.ArgAt<Func<IQueryable<Habit>, IQueryable<HabitScheduleSnapshot>>>(1)(
@@ -183,6 +194,66 @@ public class GamificationServiceTests
             Arg.Any<CancellationToken>())
             .Returns(call => call.ArgAt<Func<IQueryable<HabitLog>, IQueryable<HabitCompletionDate>>>(1)(logs.AsQueryable()).ToList());
         SetupHabitLogs();
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(996)]
+    public async Task LoggedHabit_SharedSchedulePreservesStreakXpLevelAndAchievements(int extraHabitCount)
+    {
+        var user = CreateProUser();
+        typeof(User).GetProperty(nameof(User.Id))!.SetValue(user, UserId);
+        user.AddXp(20);
+        SetupUserLookup(user);
+        SetupNoEarnedAchievements();
+
+        var logged = CreateTestHabit();
+        logged.Log(Today);
+        var habits = new List<Habit> { logged };
+        for (var index = 0; index < extraHabitCount; index++)
+        {
+            var excluded = CreateTestHabit(isBadHabit: true);
+            if (index == 0)
+                excluded.Log(Today.AddDays(-10), advanceDueDate: false);
+            typeof(Habit).GetProperty(nameof(Habit.IsCompleted))!.SetValue(excluded, true);
+            habits.Add(excluded);
+        }
+        SetupUserHabits(habits.ToArray());
+        _habitRepo.ProjectAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<HabitScheduleSnapshot>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<IQueryable<Habit>, IQueryable<HabitScheduleSnapshot>>>(1)(
+                habits.AsQueryable().Where(call.ArgAt<Expression<Func<Habit, bool>>>(0))).ToList());
+        _habitLogRepo.ProjectAsync(
+            Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<Func<IQueryable<HabitLog>, IQueryable<DateOnly>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<IQueryable<HabitLog>, IQueryable<DateOnly>>>(1)(
+                logged.Logs.AsQueryable().Where(call.ArgAt<Expression<Func<HabitLog, bool>>>(0))).ToList());
+        var freezeRepo = Substitute.For<IGenericRepository<StreakFreeze>>();
+        freezeRepo.FindAsync(Arg.Any<Expression<Func<StreakFreeze, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<StreakFreeze>());
+        var streak = new UserStreakService(
+            new UserStreakRepositories(_userRepo, _habitLogRepo, freezeRepo),
+            _userDateService,
+            _feedEmitter,
+            _snapshotStore);
+
+        var streakState = await streak.RecalculateAsync(UserId);
+        var result = await _sut.ProcessHabitLogged(UserId, logged.Id);
+
+        streakState!.CurrentStreak.Should().Be(1);
+        result!.XpEarned.Should().Be(11);
+        result.NewAchievementIds.Should().BeEquivalentTo(extraHabitCount == 0
+            ? [AchievementDefinitions.Liftoff, AchievementDefinitions.Comeback]
+            : [AchievementDefinitions.Comeback]);
+        user.TotalXp.Should().Be(extraHabitCount == 0 ? 106 : 81);
+        user.Level.Should().Be(extraHabitCount == 0 ? 2 : 1);
+        await _habitRepo.Received(2).ProjectAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<HabitScheduleSnapshot>>>(),
+            Arg.Any<CancellationToken>());
     }
 
     private void SetupHabitLogs(params HabitLog[] logs)

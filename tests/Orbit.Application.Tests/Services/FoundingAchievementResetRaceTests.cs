@@ -78,7 +78,9 @@ public class FoundingAchievementResetRaceTests
             new XpAwarder(xpAwardLogRepository),
             unitOfWork,
             featureFlagService,
-            Substitute.For<ILogger<GamificationService>>());
+            Substitute.For<ILogger<GamificationService>>(),
+            new Orbit.Application.Habits.Services.HabitScheduleSnapshotStore(
+                Substitute.For<IGenericRepository<Habit>>()));
         var resetHandler = new ResetAccountCommandHandler(
             userRepository,
             accountResetRepository,

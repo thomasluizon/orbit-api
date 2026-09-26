@@ -18,6 +18,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Gamification;
 using Orbit.Application.Gamification.Services;
 using Orbit.Application.Goals.Services;
+using Orbit.Application.Habits.Services;
 using Orbit.Application.Habits.Validators;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Configuration;
@@ -86,6 +87,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAgentStepUpAuthorizationBridge>(sp =>
             sp.GetRequiredService<Orbit.Application.ApiKeys.Services.ApiKeyManagementAuthorization>());
         builder.Services.AddScoped<IUserDateService, UserDateService>();
+        builder.Services.AddScoped<HabitScheduleSnapshotStore>();
         builder.Services.AddScoped<IUserStreakService, UserStreakService>();
         builder.Services.AddScoped<IGoalProgressReadSyncer, GoalProgressReadSyncer>();
         builder.Services.AddScoped<IGoalCompletionService, GoalCompletionService>();
@@ -170,7 +172,6 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<Orbit.Infrastructure.Services.UserStreakRepositories>(sp =>
             new Orbit.Infrastructure.Services.UserStreakRepositories(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.HabitLog>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.StreakFreeze>>()));
         builder.Services.AddScoped<Orbit.Application.Profile.Queries.ExportUserDataRepositories>(sp =>
