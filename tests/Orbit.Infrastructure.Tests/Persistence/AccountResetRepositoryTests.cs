@@ -29,7 +29,7 @@ public class AccountResetRepositoryTests : IDisposable
 
         _dbContext = new SqliteCompatOrbitDbContext(options);
         _dbContext.Database.EnsureCreated();
-        _repository = new AccountResetRepository(_dbContext);
+        _repository = new AccountResetRepository(_dbContext, NSubstitute.Substitute.For<Orbit.Domain.Events.IAccountEventCollector>());
     }
 
     public void Dispose()
