@@ -43,6 +43,7 @@ internal static class AuthUserProvisioning
         }
         catch (DbUpdateException exception) when (DbUniqueViolation.IsUniqueViolation(exception))
         {
+            unitOfWork.ResetTracking();
             var raced = await userRepository.FindOneTrackedIgnoringFiltersAsync(
                 u => u.Email == email,
                 cancellationToken);
