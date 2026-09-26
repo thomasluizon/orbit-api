@@ -6,6 +6,7 @@ using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using System.Linq;
 using System.Linq.Expressions;
 
@@ -69,10 +70,12 @@ public class AchievementProgressServiceTests
 
     private void StubHabits(params Habit[] habits)
     {
-        _habitRepo.FindAsync(
+        _habitRepo.ProjectAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<HabitScheduleSnapshot>>>(),
             Arg.Any<CancellationToken>())
-            .Returns(habits.ToList());
+            .Returns(call => call.ArgAt<Func<IQueryable<Habit>, IQueryable<HabitScheduleSnapshot>>>(1)(
+                habits.AsQueryable()).ToList());
         var logs = habits.SelectMany(habit => habit.Logs).ToList();
         _habitLogRepo.ProjectAsync(
             Arg.Any<Expression<Func<HabitLog, bool>>>(),

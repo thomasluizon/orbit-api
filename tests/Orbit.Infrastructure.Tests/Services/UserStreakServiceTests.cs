@@ -65,10 +65,12 @@ public class UserStreakServiceTests
 
     private void SetupHabits(List<Habit> habits)
     {
-        _habitRepository.FindAsync(
+        _habitRepository.ProjectAsync(
             Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<HabitScheduleSnapshot>>>(),
             Arg.Any<CancellationToken>())
-            .Returns(habits);
+            .Returns(call => call.ArgAt<Func<IQueryable<Habit>, IQueryable<HabitScheduleSnapshot>>>(1)(
+                habits.AsQueryable()).ToList());
         _habitLogRepository.FindAsync(
             Arg.Any<System.Linq.Expressions.Expression<Func<HabitLog, bool>>>(),
             Arg.Any<CancellationToken>())

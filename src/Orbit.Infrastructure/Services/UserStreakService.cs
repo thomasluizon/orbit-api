@@ -294,7 +294,10 @@ public class UserStreakService(
     private async Task<(HashSet<DateOnly> CompletionDates, HashSet<DateOnly> FreezeDates, List<Habit> EligibleHabits)>
         LoadStreakDataAsync(Guid userId, DateOnly lookbackStart, CancellationToken cancellationToken)
     {
-        var allHabits = await repos.Habits.FindAsync(h => h.UserId == userId, cancellationToken);
+        var allHabits = (await repos.Habits.ProjectAsync(
+            h => h.UserId == userId, HabitScheduleProjection.Select, cancellationToken))
+            .Select(Habit.FromScheduleSnapshot)
+            .ToList();
         var streakEligibleHabitIds = allHabits
             .Where(h => !h.IsDeleted && !h.IsBadHabit)
             .Select(h => h.Id)

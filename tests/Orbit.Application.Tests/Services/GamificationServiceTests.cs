@@ -12,6 +12,7 @@ using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using System.Linq.Expressions;
 
 namespace Orbit.Application.Tests.Services;
@@ -158,16 +159,12 @@ public class GamificationServiceTests
 
     private void SetupUserHabits(params Habit[] habits)
     {
-        _habitRepo.FindAsync(
+        _habitRepo.ProjectAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
-            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<HabitScheduleSnapshot>>>(),
             Arg.Any<CancellationToken>())
-            .Returns(habits.ToList());
-
-        _habitRepo.FindAsync(
-            Arg.Any<Expression<Func<Habit, bool>>>(),
-            Arg.Any<CancellationToken>())
-            .Returns(habits.ToList());
+            .Returns(call => call.ArgAt<Func<IQueryable<Habit>, IQueryable<HabitScheduleSnapshot>>>(1)(
+                habits.AsQueryable()).ToList());
 
         _habitLogRepo.CountAsync(
             Arg.Any<Expression<Func<HabitLog, bool>>>(),
@@ -830,8 +827,9 @@ public class GamificationServiceTests
             Arg.Any<Expression<Func<HabitLog, bool>>>(),
             Arg.Any<Func<IQueryable<HabitLog>, IQueryable<LoggedHabitLog>>>(),
             Arg.Any<CancellationToken>());
-        await _habitRepo.Received(2).FindAsync(
+        await _habitRepo.Received(2).ProjectAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<HabitScheduleSnapshot>>>(),
             Arg.Any<CancellationToken>());
         await _achievementRepo.Received(1).FindAsync(
             Arg.Any<Expression<Func<UserAchievement, bool>>>(),

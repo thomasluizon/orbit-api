@@ -36,9 +36,10 @@ public class AchievementProgressService(
         var userTimeZone = TimeZoneHelper.FindTimeZone(user.TimeZone);
 
         var streakLogCutoff = today.AddDays(-StreakLogWindowDays);
-        var habits = await habitRepository.FindAsync(
-            h => h.UserId == user.Id,
-            cancellationToken);
+        var habits = (await habitRepository.ProjectAsync(
+            h => h.UserId == user.Id, HabitScheduleProjection.Select, cancellationToken))
+            .Select(Habit.FromScheduleSnapshot)
+            .ToList();
         var habitIds = habits.Select(h => h.Id).ToList();
         IReadOnlyList<HabitMetricLog> streakLogs = habitIds.Count == 0
             ? []
