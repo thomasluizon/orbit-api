@@ -2,7 +2,10 @@ using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
+using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using System.Linq.Expressions;
 
 namespace Orbit.Application.Tests.Common;
 
@@ -59,14 +62,19 @@ public class HabitCeilingLockTests
         var liveHabitCount = 999;
         var reactivated = false;
         var unitOfWork = new SerializingUnitOfWork();
-        var payGate = Substitute.For<IPayGateService>();
+        var habitRepository = Substitute.For<IGenericRepository<Habit>>();
+        var userRepository = Substitute.For<IGenericRepository<User>>();
+        var appConfig = Substitute.For<IAppConfigService>();
+        var userDateService = Substitute.For<IUserDateService>();
+        userRepository.GetByIdAsync(Guid.Empty, Arg.Any<CancellationToken>())
+            .Returns(User.Create("Test User", "test@example.com").Value);
+        appConfig.GetAsync(AppConfigKeys.FreeMaxHabits, AppConstants.DefaultFreeMaxHabits, Arg.Any<CancellationToken>())
+            .Returns(ceiling);
+        habitRepository.CountAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(_ => liveHabitCount);
+        var payGate = new PayGateService(habitRepository, userRepository, appConfig, userDateService);
         var creationGateCompleted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseCreation = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        payGate.CanCreateHabits(Guid.Empty, 1, Arg.Any<CancellationToken>())
-            .Returns(_ => liveHabitCount < ceiling
-                ? Result.Success()
-                : Result.Failure("You've reached the 1000 habit limit."));
-
         var creation = HabitCeilingLock.ExecuteAsync(
             unitOfWork,
             Guid.Empty,
@@ -106,6 +114,7 @@ public class HabitCeilingLockTests
 
         creationResult.IsSuccess.Should().BeTrue();
         reactivationResult.IsFailure.Should().BeTrue();
+        reactivationResult.ErrorCode.Should().Be("HABIT_LIMIT_REACHED");
         reactivationResult.Error.Should().Be("You've reached the 1000 habit limit.");
         reactivated.Should().BeFalse();
         liveHabitCount.Should().Be(ceiling);
