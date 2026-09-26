@@ -407,7 +407,7 @@ public class IdempotencyBehaviorDbTests : IDisposable
                 var ct = call.ArgAt<CancellationToken>(4);
                 var now = DateTime.UtcNow;
                 await _dbContext.Database.ExecuteSqlInterpolatedAsync(
-                    $"INSERT INTO \"HabitLogs\" (\"Id\", \"HabitId\", \"Date\", \"Value\", \"CreatedAtUtc\", \"UpdatedAtUtc\", \"IsDeleted\") VALUES ({winnerId}, {habit.Id}, {today}, {1m}, {now}, {now}, {false})", ct);
+                    $"INSERT INTO \"HabitLogs\" (\"Id\", \"HabitId\", \"Date\", \"Value\", \"CreatedAtUtc\", \"UpdatedAtUtc\", \"IsDeleted\", \"IsSlip\") VALUES ({winnerId}, {habit.Id}, {today}, {1m}, {now}, {now}, {false}, {false})", ct);
                 _dbContext.Tags.Add(Tag.Create(_userId, "losing reward", "#ff0000").Value);
                 try
                 {
