@@ -20,7 +20,8 @@ public class QueryRoundTripCountTests
     [Fact]
     public async Task DailySummaryRead_PreservesOverdueSkipsAndPriorBadHabitSlip()
     {
-        using var factory = new SqliteOrbitDbContextFactory();
+        var counter = new CountingDbCommandInterceptor();
+        using var factory = new SqliteOrbitDbContextFactory(counter);
         var context = factory.Context;
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var userId = Guid.NewGuid();
@@ -73,8 +74,18 @@ public class QueryRoundTripCountTests
             new HabitSummaryLogReader(context),
             payGate, summaryService, new MemoryCache(new MemoryCacheOptions()));
 
+        counter.Reset();
         var result = await handler.Handle(new GetDailySummaryQuery(userId, today, today, "en"),
             CancellationToken.None);
+
+        var logCommands = counter.Commands.Where(command => command.Sql.Contains("\"HabitLogs\"", StringComparison.Ordinal)).ToList();
+        logCommands.Should().HaveCount(2);
+        logCommands.Should().OnlyContain(command => !command.Sql.Contains("\"Note\"", StringComparison.Ordinal)
+            && !command.Sql.Contains("\"CreatedAtUtc\"", StringComparison.Ordinal)
+            && !command.Sql.Contains("\"UpdatedAtUtc\"", StringComparison.Ordinal)
+            && !command.Sql.Contains("\"DeletedAtUtc\"", StringComparison.Ordinal)
+            && !command.Sql.Contains("\"IsSlip\"", StringComparison.Ordinal)
+            && !command.Sql.Contains("\"CompletionOrdinal\"", StringComparison.Ordinal));
 
         result.Value.Summary.Should().Be("Pinned summary");
         receivedHabits!.Select(habit => habit.Title).Should().BeEquivalentTo(
