@@ -26,9 +26,14 @@ public sealed class IdempotencyBehavior<TRequest, TResponse>(
             || !idempotencyContext.TryGetRequestKey(out var userId, out var idempotencyKey))
             return await next(cancellationToken);
 
-        var requestOrdinal = idempotencyContext.NextRequestOrdinal(RequestType);
+        var requestType = RequestType;
+        var requestOrdinal = 0;
+        if (request is IIdempotencyFingerprint fingerprint)
+            requestType = $"{RequestType}:{fingerprint.IdempotencyFingerprint}";
+        else
+            requestOrdinal = idempotencyContext.NextRequestOrdinal(RequestType);
         var storedResponse = await idempotencyStore.FindResponseBodyAsync(
-            userId, idempotencyKey, RequestType, requestOrdinal, cancellationToken);
+            userId, idempotencyKey, requestType, requestOrdinal, cancellationToken);
         if (storedResponse is not null)
             return Deserialize(storedResponse);
 
@@ -37,7 +42,7 @@ public sealed class IdempotencyBehavior<TRequest, TResponse>(
         {
             await unitOfWork.ExecuteInTransactionAsync(async transactionToken =>
             {
-                var reservation = idempotencyStore.Reserve(userId, idempotencyKey, RequestType, requestOrdinal);
+                var reservation = idempotencyStore.Reserve(userId, idempotencyKey, requestType, requestOrdinal);
                 await unitOfWork.SaveChangesAsync(transactionToken);
                 response = await next(transactionToken);
                 reservation.SetResponseBody(Serialize(response));
@@ -47,7 +52,7 @@ public sealed class IdempotencyBehavior<TRequest, TResponse>(
         catch (DbUpdateException exception) when (DbUniqueViolation.IsUniqueViolation(exception))
         {
             var racedResponse = await idempotencyStore.FindResponseBodyAsync(
-                userId, idempotencyKey, RequestType, requestOrdinal, cancellationToken);
+                userId, idempotencyKey, requestType, requestOrdinal, cancellationToken);
             if (racedResponse is null)
                 throw;
 

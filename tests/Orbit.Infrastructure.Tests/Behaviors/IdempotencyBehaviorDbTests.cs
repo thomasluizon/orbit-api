@@ -279,8 +279,95 @@ public class IdempotencyBehaviorDbTests : IDisposable
         (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(3);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_FirstChunkCommittedThenSelectionShrinks_RetryProcessesRemainingHabits(bool skip)
+    {
+        var today = new DateOnly(2026, 9, 24);
+        var habits = Enumerable.Range(1, 250).Select(index => Habit.Create(new HabitCreateParams(
+            _userId, $"Habit {index}", null, null, DueDate: today)).Value).ToArray();
+        _dbContext.Habits.AddRange(habits);
+        await _dbContext.SaveChangesAsync();
+
+        var dateService = CreateUserDateService(today);
+        var mediator = Substitute.For<IMediator>();
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var habitRepository = new GenericRepository<Habit>(_dbContext);
+        var logRepository = new GenericRepository<HabitLog>(_dbContext);
+        var context = new StubIdempotencyContext(true, _userId, "partial-http-key", trackOrdinals: true);
+        var commandCalls = 0;
+        var interrupt = true;
+        if (skip)
+        {
+            var handler = new BulkSkipHabitsCommandHandler(habitRepository, logRepository, dateService, _unitOfWork, cache);
+            var behavior = new IdempotencyBehavior<BulkSkipHabitsCommand, Result<BulkSkipResult>>(context, _store, _unitOfWork);
+            mediator.Send(Arg.Any<BulkSkipHabitsCommand>(), Arg.Any<CancellationToken>())
+                .Returns(call =>
+                {
+                    var command = call.Arg<BulkSkipHabitsCommand>();
+                    if (++commandCalls == 2 && interrupt)
+                        return Task.FromException<Result<BulkSkipResult>>(new OperationCanceledException());
+                    return behavior.Handle(command, ct =>
+                    {
+                        _handlerCalls++;
+                        return handler.Handle(command, ct);
+                    }, call.Arg<CancellationToken>());
+                });
+        }
+        else
+        {
+            var goalService = Substitute.For<IGoalCompletionService>();
+            goalService.SyncDerivedGoalsAsync(_userId, Arg.Any<IReadOnlyCollection<Guid>>(), today,
+                    Arg.Any<bool>(), Arg.Any<CancellationToken>())
+                .Returns((IReadOnlyList<GoalCompletionUpdate>)Array.Empty<GoalCompletionUpdate>());
+            var handler = new BulkLogHabitsCommandHandler(habitRepository, logRepository,
+                new BulkLogServices(dateService, Substitute.For<IUserStreakService>(), Substitute.For<IGamificationService>()),
+                goalService, _unitOfWork, cache, NullLogger<BulkLogHabitsCommandHandler>.Instance);
+            var behavior = new IdempotencyBehavior<BulkLogHabitsCommand, Result<BulkLogResult>>(context, _store, _unitOfWork);
+            mediator.Send(Arg.Any<BulkLogHabitsCommand>(), Arg.Any<CancellationToken>())
+                .Returns(call =>
+                {
+                    var command = call.Arg<BulkLogHabitsCommand>();
+                    if (++commandCalls == 2 && interrupt)
+                        return Task.FromException<Result<BulkLogResult>>(new OperationCanceledException());
+                    return behavior.Handle(command, ct =>
+                    {
+                        _handlerCalls++;
+                        return handler.Handle(command, ct);
+                    }, call.Arg<CancellationToken>());
+                });
+        }
+
+        var args = JsonSerializer.SerializeToElement(new { filter = new { all = true } });
+        var tool = skip
+            ? (Orbit.Application.Chat.Tools.IAiTool)new BulkSkipHabitsTool(mediator, habitRepository, dateService)
+            : new BulkLogHabitsTool(mediator, habitRepository, dateService);
+        await FluentActions.Invoking(() => tool.ExecuteAsync(args, _userId, CancellationToken.None))
+            .Should().ThrowAsync<OperationCanceledException>();
+        _handlerCalls.Should().Be(1);
+        interrupt = false;
+        if (skip)
+        {
+            foreach (var habit in habits.Take(100))
+                _dbContext.HabitLogs.Add(habit.Log(today).Value);
+            await _dbContext.SaveChangesAsync();
+        }
+        context.ResetOrdinals();
+        var replay = await tool.ExecuteAsync(args, _userId, CancellationToken.None);
+
+        replay.Success.Should().BeTrue();
+        replay.EntityName.Should().Contain(skip ? "Skipped 150 of 150" : "Logged 150 of 150");
+        _handlerCalls.Should().Be(3);
+        (await _dbContext.Habits.AsNoTracking().CountAsync(habit => habit.DueDate > today || habit.IsCompleted))
+            .Should().Be(250);
+        (await _dbContext.HabitLogs.AsNoTracking().Select(log => log.HabitId).Distinct().CountAsync())
+            .Should().Be(skip ? 100 : 250);
+        (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(3);
+    }
+
     [Fact]
-    public async Task Handle_ChatRetryAfterLocalMidnight_ReplaysOriginalBulkLog()
+    public async Task Handle_ChatRetryAfterLocalMidnight_LogsNewTargetDate()
     {
         var firstDay = new DateOnly(2026, 9, 24);
         var currentDay = firstDay;
@@ -321,11 +408,11 @@ public class IdempotencyBehaviorDbTests : IDisposable
         var replay = await tool.ExecuteAsync(args, _userId, CancellationToken.None);
 
         first.Success.Should().BeTrue();
-        replay.EntityName.Should().Be(first.EntityName);
-        JsonSerializer.Serialize(replay.Payload).Should().Be(JsonSerializer.Serialize(first.Payload));
-        _handlerCalls.Should().Be(1);
-        (await _dbContext.HabitLogs.AsNoTracking().CountAsync()).Should().Be(1);
-        (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(1);
+        replay.EntityName.Should().Contain("Logged 1 of 1");
+        _handlerCalls.Should().Be(2);
+        (await _dbContext.HabitLogs.AsNoTracking().Select(log => log.Date).ToListAsync())
+            .Should().BeEquivalentTo([firstDay, currentDay]);
+        (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(2);
     }
 
     [Fact]
