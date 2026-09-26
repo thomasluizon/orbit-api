@@ -118,7 +118,7 @@ public class AuthSessionServiceLogoutRaceTests
     private static async Task<(User User, UserSession Session, string Token)> SeedAsync(string databaseName)
     {
         const string token = "original-device-token";
-        var user = User.Create("Thomas", $"{Guid.NewGuid():N}@example.com").Value;
+        var user = User.Create("Alex", $"{Guid.NewGuid():N}@example.com").Value;
         var session = UserSession.Create(user.Id, Hash(token), null).Value;
         await using var context = CreateContext(databaseName);
         context.Users.Add(user);

@@ -79,7 +79,7 @@ public class ProactiveCheckinSchedulerServiceTests
         var messageService = CreateMessageService();
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         dbContext.Users.Add(user);
         dbContext.Habits.Add(CreateOffTrackHabit(user.Id, today));
         await dbContext.SaveChangesAsync();
@@ -257,7 +257,7 @@ public class ProactiveCheckinSchedulerServiceTests
         await pushService.DidNotReceive().SendToUserAsync(
             Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
 
-    private static User CreateOptedInProUser(string name = "Thomas", string email = "thomas@test.com")
+    private static User CreateOptedInProUser(string name = "Alex", string email = "alex@test.com")
     {
         var user = User.Create(name, email).Value;
         user.SetProactiveAstraEnabled(true);

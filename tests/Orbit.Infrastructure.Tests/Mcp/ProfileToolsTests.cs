@@ -51,7 +51,7 @@ public class ProfileToolsTests
     {
         var profile = new ProfileResponse(
             Guid.NewGuid(),
-            "Thomas", "thomas@example.com", "America/Sao_Paulo",
+            "Alex", "alex@example.com", "America/Sao_Paulo",
             true, true, true, true, true, true, true, true, "pt-BR", "Pro", true, false, null, null,
             5, 100, false, false, false, null, null, false, 1, 500, 5, "Achiever",
             0, 10, 12, 2, null, null,
@@ -62,8 +62,8 @@ public class ProfileToolsTests
 
         var result = await _tools.GetProfile(_user);
 
-        result.Should().Contain("Thomas");
-        result.Should().Contain("thomas@example.com");
+        result.Should().Contain("Alex");
+        result.Should().Contain("alex@example.com");
         result.Should().Contain("Pro");
         result.Should().Contain("Monday");
     }

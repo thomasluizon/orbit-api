@@ -72,7 +72,7 @@ public class McpConfirmationGateTests : IDisposable
             .Options;
         _dbContext = new OrbitDbContext(options);
 
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddDays(30), SubscriptionInterval.Monthly);
         _userId = user.Id;
         _dbContext.Users.Add(user);

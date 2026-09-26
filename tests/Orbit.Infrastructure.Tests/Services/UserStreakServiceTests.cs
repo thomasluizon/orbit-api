@@ -109,7 +109,7 @@ public class UserStreakServiceTests
     [Fact]
     public async Task RecalculateAsync_NoHabits_ResetsStreakState()
     {
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         user.SetStreakState(5, 7, new DateOnly(2026, 4, 3));
 
         SetupUser(user, new DateOnly(2026, 4, 10));
@@ -129,7 +129,7 @@ public class UserStreakServiceTests
     [Fact]
     public async Task RecalculateAsync_DailyHabit_CompletionsAndFreeze_PreservesAndContinuesStreak()
     {
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         var habit = Habit.Create(new HabitCreateParams(UserId, "Run", FrequencyUnit.Day, 1, DueDate: new DateOnly(2026, 4, 1))).Value;
         BackdateCreation(habit, new DateOnly(2026, 4, 1));
 
@@ -154,7 +154,7 @@ public class UserStreakServiceTests
     {
         var startedOn = new DateOnly(2026, 6, 1);
         var today = new DateOnly(2026, 6, 3);
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         var habit = Habit.Create(new HabitCreateParams(
             UserId,
             "Run",
@@ -191,7 +191,7 @@ public class UserStreakServiceTests
     [Fact]
     public async Task CalculateAsync_DailyHabit_ReturnsFreshStateWithoutMutatingUserOrEmittingEvent()
     {
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         user.SetStreakState(1, 9, new DateOnly(2026, 4, 1));
         var habit = CreateDailyHabitLoggedOn(
             [new DateOnly(2026, 4, 1), new DateOnly(2026, 4, 2), new DateOnly(2026, 4, 3)],
@@ -233,7 +233,7 @@ public class UserStreakServiceTests
     [Fact]
     public async Task RecalculateAsync_WeekdayOnlyHabit_StreakContinuesAcrossWeekend()
     {
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         var weekdays = new List<DayOfWeek>
         {
             DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday
@@ -264,7 +264,7 @@ public class UserStreakServiceTests
     [Fact]
     public async Task RecalculateAsync_MissedExpectedDay_StopsStreak()
     {
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         var habit = Habit.Create(new HabitCreateParams(UserId, "Run", FrequencyUnit.Day, 1, DueDate: new DateOnly(2026, 4, 1))).Value;
         BackdateCreation(habit, new DateOnly(2026, 4, 1));
 
@@ -287,7 +287,7 @@ public class UserStreakServiceTests
     [Fact]
     public async Task RecalculateAsync_MixedDailyAndWeekdayHabits_RequiresAtLeastOneLogPerExpectedDay()
     {
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         var daily = Habit.Create(new HabitCreateParams(UserId, "Water", FrequencyUnit.Day, 1, DueDate: new DateOnly(2026, 4, 6))).Value;
         BackdateCreation(daily, new DateOnly(2026, 4, 6));
         var weekdayHabit = Habit.Create(new HabitCreateParams(
@@ -317,7 +317,7 @@ public class UserStreakServiceTests
     [Fact]
     public async Task RecalculateAsync_FreezeBridgesMissedExpectedDay()
     {
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         var habit = Habit.Create(new HabitCreateParams(UserId, "Run", FrequencyUnit.Day, 1, DueDate: new DateOnly(2026, 4, 1))).Value;
         BackdateCreation(habit, new DateOnly(2026, 4, 1));
 
@@ -339,7 +339,7 @@ public class UserStreakServiceTests
     [Fact]
     public async Task RecalculateAsync_OnlyBadHabits_DoesNotIncreaseStreak()
     {
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         var bad = Habit.Create(new HabitCreateParams(
             UserId, "Smoke", FrequencyUnit.Day, 1,
             IsBadHabit: true,
@@ -362,7 +362,7 @@ public class UserStreakServiceTests
     [Fact]
     public async Task EvaluateRepairAsync_RecentScheduledMissWithBankedFreeze_ReturnsRepairedState()
     {
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         user.SetStreakState(5, 5, new DateOnly(2026, 4, 5));
         SetBankedFreezes(user, 1);
 
@@ -394,7 +394,7 @@ public class UserStreakServiceTests
     [Fact]
     public async Task RecalculateAsync_RecentMissWithBankedFreeze_DoesNotSpendFreeze()
     {
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         user.SetStreakState(5, 5, new DateOnly(2026, 4, 5));
         SetBankedFreezes(user, 1);
 
@@ -420,7 +420,7 @@ public class UserStreakServiceTests
     [Fact]
     public async Task EvaluateRepairAsync_GapTooLargeForOneFreeze_IsUnavailable()
     {
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         user.SetStreakState(4, 4, new DateOnly(2026, 4, 4));
         SetBankedFreezes(user, 1);
 
@@ -445,7 +445,7 @@ public class UserStreakServiceTests
     [Fact]
     public async Task EvaluateRepairAsync_NoBankedFreeze_IsUnavailable()
     {
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         user.SetStreakState(5, 5, new DateOnly(2026, 4, 5));
         SetBankedFreezes(user, 0);
 
@@ -470,7 +470,7 @@ public class UserStreakServiceTests
     [Fact]
     public async Task EvaluateRepairAsync_CompletionAlreadyCoversYesterday_IsUnavailable()
     {
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         user.SetStreakState(6, 6, new DateOnly(2026, 4, 6));
         SetBankedFreezes(user, 1);
 
@@ -496,7 +496,7 @@ public class UserStreakServiceTests
     [Fact]
     public async Task EvaluateRepairAsync_MonthlyFreezeCapReached_IsUnavailable()
     {
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         user.SetStreakState(5, 5, new DateOnly(2026, 4, 5));
         SetBankedFreezes(user, 1);
 

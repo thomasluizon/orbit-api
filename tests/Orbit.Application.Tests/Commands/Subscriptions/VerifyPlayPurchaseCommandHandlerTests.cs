@@ -56,7 +56,7 @@ public class VerifyPlayPurchaseCommandHandlerTests
     public async Task Handle_VerifiedPaymentState_UpdatesReasonWithoutLosingAccess(
         string subscriptionState, SubscriptionLapseReason? expectedReason)
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         var expiresAt = DateTime.UtcNow.AddMonths(1);
         user.SetPlaySubscription("play_token_123", expiresAt, SubscriptionInterval.Monthly);
         user.RecordSubscriptionLapseReason(SubscriptionSource.GooglePlay, SubscriptionLapseReason.PaymentFailed);
@@ -88,7 +88,7 @@ public class VerifyPlayPurchaseCommandHandlerTests
     [Fact]
     public async Task Handle_ActivePurchase_GrantsProAndAcknowledges()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         StubUser(user);
         StubVerify(ActiveState());
 
@@ -106,7 +106,7 @@ public class VerifyPlayPurchaseCommandHandlerTests
     [Fact]
     public async Task Handle_AlreadyAcknowledged_DoesNotAcknowledgeAgain()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         StubUser(user);
         StubVerify(ActiveState(acknowledged: true));
 
@@ -118,7 +118,7 @@ public class VerifyPlayPurchaseCommandHandlerTests
     [Fact]
     public async Task Handle_InactivePurchase_ReturnsFailureAndDoesNotGrant()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         StubUser(user);
         StubVerify(new PlaySubscriptionState(false, DateTime.UtcNow.AddMonths(-1), null, false, "orbit_pro", null, null));
 
@@ -133,7 +133,7 @@ public class VerifyPlayPurchaseCommandHandlerTests
     [Fact]
     public async Task Handle_NonConfiguredProduct_ReturnsFailureAndDoesNotGrant()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         StubUser(user);
         StubVerify(new PlaySubscriptionState(
             true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, false, "different_product", null, UserId.ToString()));
@@ -149,7 +149,7 @@ public class VerifyPlayPurchaseCommandHandlerTests
     [Fact]
     public async Task Handle_UnrecognizedBasePlan_ReturnsFailureAndDoesNotGrant()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         StubUser(user);
         StubVerify(new PlaySubscriptionState(
             true, DateTime.UtcNow.AddMonths(1), null, false, "orbit_pro", null, UserId.ToString()));
@@ -165,7 +165,7 @@ public class VerifyPlayPurchaseCommandHandlerTests
     [Fact]
     public async Task Handle_AccountMismatch_ReturnsFailureAndDoesNotGrant()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         StubUser(user);
         StubVerify(new PlaySubscriptionState(
             true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, false, "orbit_pro", null, Guid.NewGuid().ToString()));
@@ -184,7 +184,7 @@ public class VerifyPlayPurchaseCommandHandlerTests
     [Fact]
     public async Task Handle_ActivePurchase_InvokesCouponConsumerBeforeLinkingToken()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         StubUser(user);
         StubVerify(ActiveState());
         string? tokenWhenConsumerRan = "unset";
@@ -206,7 +206,7 @@ public class VerifyPlayPurchaseCommandHandlerTests
     [Fact]
     public async Task Handle_StripeCoversLaterPeriod_StillInvokesCouponConsumer()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddMonths(6));
         StubUser(user);
         StubVerify(ActiveState());
@@ -220,7 +220,7 @@ public class VerifyPlayPurchaseCommandHandlerTests
     [Fact]
     public async Task Handle_NullState_ReturnsFailure()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         StubUser(user);
         StubVerify(null);
 
@@ -233,7 +233,7 @@ public class VerifyPlayPurchaseCommandHandlerTests
     [Fact]
     public async Task Handle_VerifyThrows_ReturnsFailure()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         StubUser(user);
         _playBilling.VerifyAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new BillingProviderException("boom"));
@@ -247,7 +247,7 @@ public class VerifyPlayPurchaseCommandHandlerTests
     [Fact]
     public async Task Handle_TokenAlreadyOwnedByAnotherUser_ReturnsAccountMismatch()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         StubUser(user);
         StubVerify(ActiveState());
         _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
@@ -264,7 +264,7 @@ public class VerifyPlayPurchaseCommandHandlerTests
     [Fact]
     public async Task Handle_StripeCoversLaterPeriod_LinksTokenAndAcknowledgesWithoutShorteningExpiry()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         var stripeExpiry = DateTime.UtcNow.AddMonths(6);
         user.SetStripeSubscription("sub_123", stripeExpiry);
         StubUser(user);
@@ -284,7 +284,7 @@ public class VerifyPlayPurchaseCommandHandlerTests
     [Fact]
     public async Task Handle_ReferralCoupon_CancelledOnlyAfterSaveSucceeds()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         StubUser(user);
         StubVerify(ActiveState());
         _referralConsumer.ConsumeOnNewPurchase(user, Arg.Any<PlaySubscriptionState>(), "play_token_123")
@@ -303,7 +303,7 @@ public class VerifyPlayPurchaseCommandHandlerTests
     [Fact]
     public async Task Handle_ReferralCoupon_SaveFails_CouponNotCancelled()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         StubUser(user);
         StubVerify(ActiveState());
         _referralConsumer.ConsumeOnNewPurchase(user, Arg.Any<PlaySubscriptionState>(), "play_token_123")

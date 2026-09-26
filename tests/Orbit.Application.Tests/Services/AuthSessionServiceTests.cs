@@ -23,7 +23,7 @@ public class AuthSessionServiceTests
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly AuthSessionService _service;
 
-    private readonly User _user = User.Create("Thomas", "thomas@example.com").Value;
+    private readonly User _user = User.Create("Alex", "alex@example.com").Value;
     private UserSession? _storedSession;
 
     public AuthSessionServiceTests()

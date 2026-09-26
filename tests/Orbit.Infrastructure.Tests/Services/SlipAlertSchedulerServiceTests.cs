@@ -199,7 +199,7 @@ public class SlipAlertSchedulerServiceTests
         var pushService = Substitute.For<IPushNotificationService>();
         var messageService = Substitute.For<ISlipAlertMessageService>();
 
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         var habit = Habit.Create(new HabitCreateParams(
             user.Id, "Doom scrolling", FrequencyUnit.Day, 1,
             IsBadHabit: true, IsFlexible: true, SlipAlertEnabled: true,
@@ -234,7 +234,7 @@ public class SlipAlertSchedulerServiceTests
         var pushService = Substitute.For<IPushNotificationService>();
         var messageService = Substitute.For<ISlipAlertMessageService>();
 
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         user.SetWeekStartDay(0);
         var habit = CreateSlipAlertBadHabit(user.Id);
 
@@ -271,7 +271,7 @@ public class SlipAlertSchedulerServiceTests
                 Arg.Any<string>(), Arg.Any<DayOfWeek>(), Arg.Any<int?>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result.Success<(string Title, string Body)>(("Title", "Body"))));
 
-        var (user, habit) = SeedInWindowSlipHabit(dbContext, "Thomas", "thomas@test.com", "Doom scrolling");
+        var (user, habit) = SeedInWindowSlipHabit(dbContext, "Alex", "alex@test.com", "Doom scrolling");
         await dbContext.SaveChangesAsync();
 
         var firstPush = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

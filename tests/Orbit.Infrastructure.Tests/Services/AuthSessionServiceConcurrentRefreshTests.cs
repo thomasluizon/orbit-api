@@ -127,7 +127,7 @@ public class AuthSessionServiceConcurrentRefreshTests
     private static async Task<(Guid UserId, string Token)> SeedSessionAsync(string dbName)
     {
         const string token = "shared-refresh-token";
-        var user = User.Create("Thomas", $"{Guid.NewGuid():N}@example.com").Value;
+        var user = User.Create("Alex", $"{Guid.NewGuid():N}@example.com").Value;
         var session = UserSession.Create(user.Id, Hash(token), DateTime.UtcNow.AddDays(90)).Value;
 
         await using var seed = CreateContext(dbName);
