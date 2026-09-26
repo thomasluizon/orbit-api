@@ -156,6 +156,32 @@ public sealed class PendingOperationRevisionServiceTests
             .Should().Be("1");
     }
 
+    [Fact]
+    public async Task ReviseAsync_RejectAllCancelsPendingOperation()
+    {
+        var habit = CreateHabit("First");
+        SetupHabits([habit]);
+        var pendingId = Guid.NewGuid();
+        var arguments = JsonDocument.Parse("""{"filter":{"all":true}}""").RootElement.Clone();
+        _store.GetExecution(_userId, pendingId).Returns(new PendingAgentOperationExecution(
+            pendingId, AgentCapabilityIds.HabitsBulkDelete, "bulk_delete_habits", arguments,
+            AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation));
+        _store.Cancel(_userId, pendingId, Arg.Any<string>()).Returns(true);
+        var previewer = new PendingOperationChangePreviewer(_habits, _dateService);
+        var preview = await previewer.PreviewAsync(_userId, "bulk_delete_habits", arguments);
+        var service = new PendingOperationRevisionService(_store, previewer,
+            new RevisePendingOperationRequestValidator());
+
+        var result = await service.ReviseAsync(_userId, pendingId,
+            new RevisePendingOperationRequest(preview!.PreviewFingerprint!, []),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Cancelled.Should().BeTrue();
+        _store.Received(1).Cancel(_userId, pendingId, Arg.Any<string>());
+        _store.DidNotReceiveWithAnyArgs().Revise(default, default, default!, default!, default!, default!);
+    }
+
     private void SetupHabits(IReadOnlyList<Habit> habits)
     {
         _dateService.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>())
