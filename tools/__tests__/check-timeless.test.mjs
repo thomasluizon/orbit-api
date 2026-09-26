@@ -138,3 +138,26 @@ test("XML build files have their comments checked", () => {
     } finally { rmSync(root, { recursive: true, force: true }) }
   }
 })
+
+test("a comment after an escaped backslash in a YAML string fails", () => {
+  const root = make("sample.yml", "value: clean\n")
+  try {
+    writeFileSync(join(root, "sample.yml"), `value: "foo\\\\" # ${date}\n`)
+    git(root, "add", "sample.yml")
+    const all = run(root, ["--all"])
+    assert.equal(all.status, 1)
+    assert.ok(all.stderr.includes("sample.yml:1: dated-anecdote"))
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test("--staged checks a staged file whose working copy is gone", () => {
+  const root = make("sample.md")
+  try {
+    writeFileSync(join(root, "sample.md"), `Ask ${owner}.\n`)
+    git(root, "add", "sample.md")
+    rmSync(join(root, "sample.md"))
+    const staged = run(root, ["--staged"])
+    assert.equal(staged.status, 1)
+    assert.ok(staged.stderr.includes("sample.md:1: owner-name"))
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
