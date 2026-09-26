@@ -1,6 +1,5 @@
 using FluentValidation.TestHelper;
 using FluentAssertions;
-using System.Globalization;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
@@ -9,6 +8,7 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
+using System.Globalization;
 
 namespace Orbit.Application.Tests.Validators;
 
@@ -119,7 +119,7 @@ public class UpdateHabitCommandValidatorTests
     public async Task Validate_TopLevelTitle_UsesHabitMessage(bool tooLong, string expectedMessage)
     {
         var previousCulture = CultureInfo.CurrentUICulture;
-        CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("en-US");
+        CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("pt-BR");
         try
         {
             var command = ValidCommand();
