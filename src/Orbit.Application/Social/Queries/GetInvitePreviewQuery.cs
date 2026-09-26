@@ -7,14 +7,6 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Social.Queries;
 
-/// <summary>
-/// Resolves a referral code to its owner so a signed-in user opening an invite link can see who
-/// invited them before sending a friend request. Mirrors the friend-request guards: the caller must
-/// have social enabled, and an unknown/malformed code, a private (opted-out) owner, or a block in
-/// either direction all map to a uniform not-found so the endpoint never enumerates accounts.
-/// <see cref="InvitePreviewView.IsSelf"/> marks the caller's own code; IsAlreadyFriend / HasPendingRequest
-/// read the single friendship row between the two users, in either direction.
-/// </summary>
 public record InvitePreviewView(
     string Handle,
     string DisplayName,

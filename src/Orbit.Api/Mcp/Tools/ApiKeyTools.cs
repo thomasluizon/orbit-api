@@ -5,15 +5,6 @@ using Orbit.Application.ApiKeys.Queries;
 
 namespace Orbit.Api.Mcp.Tools;
 
-/// <summary>
-/// MCP API-key tools. Both route through <see cref="McpExecutorBridge"/> →
-/// <see cref="Orbit.Domain.Interfaces.IAgentOperationExecutor"/> with
-/// <see cref="Orbit.Domain.Models.AgentExecutionSurface.Mcp"/> for shared policy evaluation and the
-/// <c>AgentAuditLogs</c> trail, and both forward the caller's confirmation token. The read routes
-/// the same way as the mutation because <c>RequireApiKeyCreationStepUp</c> raises the read's
-/// confirmation requirement to a step-up, and a tool with no pending-operation wrapper would then
-/// need a grant it could never obtain.
-/// </summary>
 [McpServerToolType]
 public class ApiKeyTools(McpExecutorBridge executorBridge)
 {

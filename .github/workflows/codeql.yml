@@ -2,17 +2,6 @@ name: CodeQL
 
 # CodeQL advanced setup, replacing default setup (ORB-164).
 #
-# Default setup does not run on Dependabot pull requests (github/codeql-action
-# issue 2858), so the three contexts branch protection requires on main,
-# "Analyze (csharp)", "Analyze (javascript-typescript)" and "Analyze (actions)",
-# never reported on a Dependabot head and every Dependabot pull request stayed
-# permanently BLOCKED. An advanced-setup workflow is an ordinary workflow, so it
-# triggers on a Dependabot head like every other job in this repository, and the
-# job-level permissions block below is honoured there. GitHub's "Troubleshooting
-# Dependabot on GitHub Actions" documents both halves: a Dependabot-triggered run
-# "receives a read-only GITHUB_TOKEN and does not have access to any secrets", and
-# "you can use the permissions key in your workflow to increase the access for the
-# token", which is exactly what the analyze job does for security-events.
 #
 # The job name is load bearing. A matrix job produces one check run per leg,
 # named by interpolating the job name, so "Analyze (${{ matrix.language }})"

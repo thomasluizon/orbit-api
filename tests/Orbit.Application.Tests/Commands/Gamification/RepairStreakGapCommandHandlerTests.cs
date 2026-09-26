@@ -51,20 +51,6 @@ public class RepairStreakGapCommandHandlerTests
             });
     }
 
-    /**
-     * The consistency boundary, asserted by ORDER rather than by presence.
-     *
-     * Eligibility is decided from the habits, the logs and the schedule derived from them, and the save
-     * then spends the freeze bank. User.xmin cannot hold those together, because a schedule-only habit
-     * edit commits without touching the user row and the optimistic token never fires. So the repair
-     * has to hold the SAME per-user advisory lock every habit writer holds: UpdateHabitCommand,
-     * LogHabitCommand, CreateHabitCommand, MoveHabitParentCommand and RestoreHabitCommand all take
-     * HabitCeilingLock.ForUser. The key is taken from that shared helper here for exactly that reason,
-     * so a rename cannot leave this passing against a lock nobody else holds.
-     *
-     * Lock, then evaluate, then save, in that order and inside one transaction, is what makes a
-     * concurrent cadence or due-date change unable to land between the eligibility read and the spend.
-     */
     [Fact]
     public async Task Repair_LocksBeforeEvaluatingAndSpends_SoAScheduleEditCannotLandBetweenThem()
     {

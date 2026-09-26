@@ -6,18 +6,6 @@ using Orbit.Application.Notifications.Queries;
 
 namespace Orbit.Api.Mcp.Tools;
 
-/// <summary>
-/// MCP notification tools. Mutations route through <see cref="McpExecutorBridge"/> →
-/// <see cref="Orbit.Domain.Interfaces.IAgentOperationExecutor"/> with
-/// <see cref="Orbit.Domain.Models.AgentExecutionSurface.Mcp"/> for shared policy evaluation and the
-/// <c>AgentAuditLogs</c> trail. <c>mark_notification_read</c>/<c>mark_all_notifications_read</c> map
-/// to the consolidated <c>update_notifications</c> chat tool and <c>delete_notification</c> maps to
-/// <c>delete_notifications</c>, each via an <c>action</c> discriminator; the destructive delete
-/// accepts and forwards a confirmation token. Push-subscription management
-/// (<c>subscribe_push</c>/<c>unsubscribe_push</c>/<c>test_push</c>) maps to the same
-/// <c>update_notifications</c> chat tool via its <c>action</c> discriminator. The
-/// <c>get_notifications</c> read stays on MediatR.
-/// </summary>
 [McpServerToolType]
 public class NotificationTools(IMediator mediator, McpExecutorBridge executorBridge)
 {

@@ -15,13 +15,6 @@ using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
-/// <summary>
-/// Concurrency contract of refresh-token rotation: when two refreshes race on the same token, exactly
-/// one may rotate the session; the loser must be rejected with INVALID_SESSION, never double-rotate.
-/// The Postgres <c>xmin</c> token enforces this in production, but the EF in-memory provider does not
-/// honour concurrency tokens, so the losing writer's <see cref="DbUpdateConcurrencyException"/> is
-/// injected with a save interceptor — the same shape Postgres raises on a stale token.
-/// </summary>
 public class AuthSessionServiceConcurrentRefreshTests
 {
     [Fact]

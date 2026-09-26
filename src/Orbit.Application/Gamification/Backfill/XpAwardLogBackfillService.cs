@@ -7,14 +7,6 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Gamification.Backfill;
 
-/// <summary>
-/// One-time, idempotent backfill that reconstructs each user's historical <see cref="XpAwardLog"/>
-/// rows by replaying the real award curve — habit XP (10 + the recomputed per-habit streak on each
-/// completion's date), goal-completion XP (+100 at completion), and achievement XP (+reward at unlock)
-/// — then pins the cumulative tail to the user's stored <c>TotalXp</c> with a single
-/// <see cref="XpAwardSource.Reconciliation"/> row for any drift. Skips any user that already has rows,
-/// and only writes audit rows (never mutates <c>TotalXp</c>), so re-running is a no-op.
-/// </summary>
 public class XpAwardLogBackfillService(
     IGenericRepository<User> userRepository,
     IGenericRepository<Habit> habitRepository,

@@ -3,14 +3,6 @@ using System.Text.Json.Nodes;
 
 namespace Orbit.Infrastructure.Services;
 
-/// <summary>
-/// Masks the values of sensitive JSON properties (verification codes, tokens,
-/// passwords, secrets, user names, marketing broadcast bodies) before an argument
-/// payload is persisted to the agent audit trail, so neither a secret nor personal
-/// data can land in <c>AgentAuditLogs.RedactedArguments</c>. Both the structured
-/// agent-operation path and the legacy MCP audit path route through this. A body that
-/// does not parse as JSON is masked whole rather than stored raw.
-/// </summary>
 public static class AgentAuditRedactor
 {
     private const int MaxLength = 1000;

@@ -2,8 +2,7 @@ namespace Orbit.Application.Common;
 
 /// <summary>
 /// Persists and retrieves idempotency-ledger records so a replayed client mutation (identified by an
-/// Idempotency-Key) returns its original response instead of re-executing. See
-/// thomasluizon/orbit-ui-mobile#243.
+/// Idempotency-Key) returns its original response instead of re-executing.
 /// </summary>
 public interface IIdempotencyStore
 {

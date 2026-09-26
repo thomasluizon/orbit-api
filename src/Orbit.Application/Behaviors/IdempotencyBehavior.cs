@@ -6,16 +6,6 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Behaviors;
 
-/// <summary>
-/// Makes replays of opt-in <see cref="IIdempotentCommand"/> mutations that carry an <c>Idempotency-Key</c>
-/// header exactly-once: a replayed request (a retry after a lost network ACK, routine on mobile) returns the
-/// stored response instead of re-executing the handler. The reservation row is flushed first — isolating a
-/// ledger unique-violation from the handler's own constraints — then commits in one transaction with the
-/// handler's mutation, so a crash cannot leave the mutation applied without its idempotency record. A
-/// concurrent duplicate loses the unique-index race and replays the winner's response. The ledger key is
-/// scoped by request type and command position so one key reused across commands can't cross wires. See
-/// thomasluizon/orbit-ui-mobile#243.
-/// </summary>
 public sealed class IdempotencyBehavior<TRequest, TResponse>(
     IIdempotencyContext idempotencyContext,
     IIdempotencyStore idempotencyStore,

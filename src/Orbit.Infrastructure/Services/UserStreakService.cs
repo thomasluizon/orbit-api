@@ -96,13 +96,6 @@ public class UserStreakService(
         if (user is null)
             return null;
 
-        /**
-         * ONE window, and it is the streak engine's own. Eligibility must be decided over exactly the
-         * history CalculateStateAsync computes from, or a repair can be accepted on evidence the engine
-         * cannot see: the response, and the next RecalculateAsync, would recompute a zero streak and
-         * persist it AFTER the freeze was spent. A yearly predecessor sits 366 days back, outside this
-         * window, so a yearly gap stays unrepairable rather than repairable-then-silently-undone.
-         */
         var lookbackStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
         var gapStart = dates.Min();
         if (gapStart <= lookbackStart)
@@ -231,14 +224,6 @@ public class UserStreakService(
         if (repairedStreak <= currentStreak)
             return null;
 
-        /**
-         * The predecessor travels WITH the state. The handler restores the award cursor against it, and
-         * deriving it there as `gapStart - 1` was the same calendar-versus-schedule mistake one layer up.
-         * The streak AS OF the predecessor, which bounds the fallback award cursor. Without it the
-         * domain rounded the full repaired streak down and marked milestones crossed AFTER the gap as
-         * already awarded, so a row with no saved snapshot spent a freeze and never received the one it
-         * had just earned.
-         */
         var (preGapStreak, _) = HabitScheduleService.ComputeStreakAsOf(
             expectedDates, completions, freezes, lookbackStart, precedingDate);
         return new UserStreakState(repairedStreak,

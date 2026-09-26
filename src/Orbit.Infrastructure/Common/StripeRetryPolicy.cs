@@ -3,14 +3,6 @@ using Stripe;
 
 namespace Orbit.Infrastructure.Common;
 
-/// <summary>
-/// Bounded retry for Stripe SDK calls. Retries only transient failures — connection/network errors
-/// and timeouts (which the Stripe SDK surfaces as the raw <see cref="HttpRequestException"/> /
-/// <see cref="OperationCanceledException"/>) and rate-limit (429) or 5xx server responses (surfaced
-/// as a <see cref="StripeException"/> carrying the HTTP status) — with exponential backoff, giving up
-/// after <see cref="MaxRetries"/> retries. Business errors (card declined, invalid request,
-/// authentication — any 4xx other than 429) surface to the caller unretried, as does user cancellation.
-/// </summary>
 public static class StripeRetryPolicy
 {
     public const int MaxRetries = 2;

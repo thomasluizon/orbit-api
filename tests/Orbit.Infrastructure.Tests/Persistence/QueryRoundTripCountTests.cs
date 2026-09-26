@@ -9,14 +9,6 @@ using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Persistence;
 
-/// <summary>
-/// Guards the filtered-include and batched read paths against N+1 regressions by asserting their SQL
-/// round-trip count is invariant to how many rows are seeded. Runs on SQLite (real SQL, counted by
-/// <see cref="CountingDbCommandInterceptor"/>) rather than a per-row check, so a future edit that turns
-/// a filtered <c>Include</c> or an <c>IN</c>-list batch load into a per-habit query fails the invariance
-/// assertion. Mirrors the exact include shapes of <c>GetRetrospectiveQuery</c>,
-/// <c>GetDailySummaryQuery</c>, and <c>ExportUserDataQuery</c>.
-/// </summary>
 public class QueryRoundTripCountTests
 {
     private static readonly DateOnly DateFrom = new(2026, 6, 1);

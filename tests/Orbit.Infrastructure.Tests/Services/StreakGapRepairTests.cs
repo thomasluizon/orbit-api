@@ -342,15 +342,6 @@ public class StreakGapRepairTests
         (await _service.EvaluateGapRepairAsync(_user.Id, _today, [_today.AddDays(-1)])).Should().BeNull();
     }
 
-    /// <summary>
-    /// A yearly gap is REFUSED, deliberately, and this pins why. Its predecessor sits 366 days back,
-    /// outside the window the streak engine itself computes from. Accepting it on widened history was
-    /// worse than refusing it: the response and the next RecalculateAsync both run on the ordinary
-    /// window, would see yesterday's freeze without the preceding completion, and would persist a zero
-    /// streak AFTER the freeze had been spent. Eligibility is decided over exactly the history that can
-    /// represent the result. Yearly support needs the engine's own window widened, which is its own
-    /// change.
-    /// </summary>
     [Fact]
     public async Task YearlyGapWhosePredecessorSitsBeyondTheStreakWindow_IsRefused()
     {
@@ -389,17 +380,6 @@ public class StreakGapRepairTests
         state.PrecedingScheduledDate.Should().NotBe(_today.AddDays(-2));
     }
 
-    /// <summary>
-    /// A second decrease must not replace the snapshot taken at the FIRST one. The first break saves
-    /// the cursor identifying the still-repairable gap; a later decrease happens while the streak is
-    /// already broken, and overwriting swapped (7, the day before the gap) for (0, today), after which
-    /// repair fell through to the derived cursor and skipped a milestone that was never granted.
-    ///
-    /// Asserted on the entity rather than through RecalculateAsync deliberately: this fixture cannot
-    /// produce the increase-then-decrease the bug needs, because Unlog leaves the recalculated streak
-    /// at 1 rather than returning it to 0, so a service-level version of this test passes with the fix
-    /// reverted and proves nothing. The handler-level regression below covers the wiring.
-    /// </summary>
     [Fact]
     public void ASecondDecrease_KeepsTheSnapshotFromTheFirstBreak()
     {

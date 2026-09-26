@@ -8,18 +8,6 @@ using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace Orbit.Analyzers;
 
-/// <summary>
-/// Guards user-facing dates against the server clock. Inside the Orbit.Api, Orbit.Application,
-/// Orbit.Domain, and Orbit.Infrastructure assemblies it reports two shapes:
-/// <c>DateOnly.FromDateTime(DateTime.UtcNow...)</c> (a calendar date derived from the raw UTC
-/// instant, always wrong for a user-facing "today" and reported with no exemption, in all four
-/// assemblies), and any other <c>DateTime.UtcNow</c> read (reported outside Orbit.Domain unless the
-/// source line names an <c>*AtUtc</c> timestamp or a cache key, or the value feeds
-/// <c>TimeZoneInfo</c> conversion into a user's timezone - the sanctioned pattern behind
-/// <c>IUserDateService</c>). Orbit.Domain keeps the pre-analyzer hook's exemption for plain
-/// instants (entity timestamps and plan-expiry checks). Generated code (EF migrations, designer
-/// files) is excluded.
-/// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class UtcNowUserFacingDateAnalyzer : DiagnosticAnalyzer
 {

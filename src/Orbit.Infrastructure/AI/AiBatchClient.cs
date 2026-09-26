@@ -12,14 +12,6 @@ using Orbit.Infrastructure.Configuration;
 
 namespace Orbit.Infrastructure.AI;
 
-/// <summary>
-/// Thin wrapper over the OpenAI .NET SDK's <see cref="OpenAIFileClient"/> and
-/// <see cref="BatchClient"/> for the fact-extraction Batch API flow. Constructed from
-/// <see cref="AiSettings"/>, mirroring <see cref="AiCompletionClient"/>'s endpoint / credential /
-/// retry configuration but using the longer <see cref="AiSettings.BatchNetworkTimeoutSeconds"/> for
-/// whole-file up/download. The Batch + Files surface is pre-release (OPENAI001), suppressed
-/// file-wide here so the experimental API stays contained to this adapter.
-/// </summary>
 public sealed class AiBatchClient : IAiBatchClient
 {
     private const string ChatCompletionsEndpoint = "/v1/chat/completions";

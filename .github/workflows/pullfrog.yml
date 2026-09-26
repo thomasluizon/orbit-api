@@ -49,22 +49,13 @@ jobs:
       # VERTEX_LOCATION: global
       # VERTEX_MODEL_ID: <vertex-model-id>
 
-      # for any OpenAI-compatible endpoint - LiteLLM, Cloudflare AI Gateway,
-      # self-hosted vLLM (https://docs.pullfrog.com/openai-compatible)
-      # OPENAI_COMPATIBLE_BASE_URL: https://litellm.example.com/v1
-      # OPENAI_COMPATIBLE_API_KEY: ${{ secrets.OPENAI_COMPATIBLE_API_KEY }}
-      # OPENAI_COMPATIBLE_MODEL: <model-id>
-      # both limits are required - set them to the real limits of that model
-      # OPENAI_COMPATIBLE_CONTEXT: "128000"
-      # OPENAI_COMPATIBLE_MAX_OUTPUT: "16384"
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
           fetch-depth: 1
-      # Codex is the reviewer. Model and effort come from the Pullfrog repository config.
-      # Published pullfrog 0.1.83 resolves gpt-sol to openai/gpt-6-sol. Both steps pin the commit the
-      # v0 tag named on 2026-09-26 (release 0.1.83), because a moving tag is an unpinned dependency.
+      # Model and effort come from the Pullfrog repository config.
+      # Both steps pin the same commit because a moving tag is an unpinned dependency.
       - name: Run agent
         id: codex
         uses: pullfrog/pullfrog@e9f81154ce83828fc8208d624c5ca9a1174d8909 # v0, release 0.1.83

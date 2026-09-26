@@ -4,15 +4,6 @@ using System.Text;
 
 namespace Orbit.Application.Chat;
 
-/// <summary>
-/// Process-wide response cache for a small curated set of static, general feature-FAQ questions
-/// ("how do streaks work", "what is a streak freeze", …) in English and Portuguese. The cached value
-/// is a real prior model answer (so it stays conversational and localized), keyed by FAQ + locale, so
-/// the second user to ask a general feature question is served instantly without a model round-trip.
-/// Only general feature questions are matched — never anything referencing a user's own data — and only
-/// pure-text answers from tool-free turns are stored, so a cached answer is safe to share across users.
-/// The key space is bounded by the curated FAQ set times the supported locales.
-/// </summary>
 public static class ChatFaqCache
 {
     private static readonly ConcurrentDictionary<string, string> Cache = new(StringComparer.Ordinal);

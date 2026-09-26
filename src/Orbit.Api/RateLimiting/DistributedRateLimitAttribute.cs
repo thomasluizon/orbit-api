@@ -128,13 +128,6 @@ public sealed partial class DistributedRateLimitFilter(
     private static readonly HashSet<string> EmailPartitionedPolicies =
         new(StringComparer.OrdinalIgnoreCase) { "auth", "waitlist" };
 
-    /// <summary>
-    /// For unauthenticated requests under an email-partitioned policy (<c>auth</c>, <c>waitlist</c>),
-    /// partitions by the request's normalized email so OTP and waitlist flows can't be throttled by
-    /// a shared proxy IP or bypassed by rotating forwarded-IP headers. The key is prefixed with the
-    /// policy name so each policy keeps its own bucket. Returns false when the policy isn't email
-    /// partitioned or no email-bearing argument is present, so the caller falls back to IP partitioning.
-    /// </summary>
     public static bool TryResolveEmailPartitionKey(
         string policyName,
         IEnumerable<object?> actionArguments,
@@ -170,15 +163,6 @@ public sealed partial class DistributedRateLimitFilter(
     private static readonly HashSet<string> RefreshTokenPartitionedPolicies =
         new(StringComparer.OrdinalIgnoreCase) { "refresh" };
 
-    /// <summary>
-    /// For unauthenticated requests under the <c>refresh</c> policy, extracts the request's refresh token
-    /// when it matches the exact server-issued shape (<see cref="RefreshTokenRules.IsWellFormed"/>). Format
-    /// alone is not enough to earn a per-session bucket: the caller additionally confirms the token maps to
-    /// a real stored session before partitioning by it, so a malformed OR well-formed-but-forged token —
-    /// the "vary the body to mint a fresh, never-throttled bucket" bypass, which is as cheap for an attacker
-    /// as minting a real token — never yields a private bucket and instead falls back to per-IP throttling.
-    /// Returns false when the policy isn't refresh partitioned or no well-formed refresh token is present.
-    /// </summary>
     public static bool TryExtractRefreshToken(
         string policyName,
         IEnumerable<object?> actionArguments,

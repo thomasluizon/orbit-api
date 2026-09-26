@@ -6,14 +6,6 @@ using Orbit.Application.ChecklistTemplates.Queries;
 
 namespace Orbit.Api.Mcp.Tools;
 
-/// <summary>
-/// MCP checklist-template tools. Mutations (<c>create_checklist_template</c>/
-/// <c>delete_checklist_template</c>) route through <see cref="McpExecutorBridge"/> →
-/// <see cref="Orbit.Domain.Interfaces.IAgentOperationExecutor"/> with
-/// <see cref="Orbit.Domain.Models.AgentExecutionSurface.Mcp"/> for shared policy evaluation and the
-/// <c>AgentAuditLogs</c> trail, forwarding a snake_case argument object matching each backing chat
-/// tool schema. The <c>get_checklist_templates</c> read stays on MediatR.
-/// </summary>
 [McpServerToolType]
 public class ChecklistTemplateTools(IMediator mediator, McpExecutorBridge executorBridge)
 {

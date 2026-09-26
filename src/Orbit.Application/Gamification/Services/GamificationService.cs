@@ -218,13 +218,6 @@ public partial class GamificationService(
         HashSet<string> Earned,
         List<(UserAchievement Entity, AchievementDefinition Definition)> New);
 
-    /// <summary>
-    /// Grants the base + streak XP and runs every generic completion achievement check for a good
-    /// habit log. Bad-habit logs never reach this because logging a habit you are trying to quit is a slip,
-    /// not progress, so it earns no XP and no generic achievements (only <c>BadHabitBreaker</c>,
-    /// evaluated separately, rewards a sustained abstinence streak). XP and achievements are awarded
-    /// whenever gamification is unlocked, including for free users under the free-tier flag. Returns the XP awarded.
-    /// </summary>
     private async Task<int> AwardLoggedHabitXpAndAchievementsAsync(
         User user, Habit habit, AchievementAccumulator accumulator, LoggedHabitsContext context, DateOnly today,
         int currentStreak, CancellationToken ct)
@@ -316,13 +309,6 @@ public partial class GamificationService(
         }, ct);
     }
 
-    /// <summary>
-    /// Advances the onboarding setup-checklist flags from a single signal and, once all three
-    /// (habit created, habit logged, Astra used) are set, marks the checklist complete. The signal
-    /// and completion flags apply to every user un-gated so the client card hides consistently.
-    /// The <see cref="AchievementDefinitions.OnboardingComplete"/> achievement follows the same
-    /// gamification unlock predicate as the rest of the catalog. Short-circuits once the checklist is already complete.
-    /// </summary>
     public async Task ProcessOnboardingChecklistAsync(
         Guid userId, OnboardingChecklistSignal signal, CancellationToken ct = default)
     {

@@ -5,14 +5,6 @@ using Orbit.Infrastructure.Configuration;
 
 namespace Orbit.Infrastructure.Persistence;
 
-/// <summary>
-/// Logs a warning for any database command whose measured execution exceeds
-/// <see cref="DatabaseConnectionSettings.SlowQueryThresholdMilliseconds"/>, making slow queries observable in
-/// the application logs (Render) without turning on EF's per-command Information logging in production. The
-/// measured duration includes the network round trip and client-side materialization; for server-side timing
-/// only, set PostgreSQL's <c>log_min_duration_statement</c> on the Supabase side as a complement:
-/// https://supabase.com/docs/guides/telemetry/logs#database-logs
-/// </summary>
 public sealed partial class SlowQueryCommandInterceptor(
     ILogger<SlowQueryCommandInterceptor> logger,
     DatabaseConnectionSettings databaseSettings) : DbCommandInterceptor

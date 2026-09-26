@@ -16,16 +16,6 @@ using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Persistence;
 
-/// <summary>
-/// Exercises the optimistic-concurrency conflict handling that backs the xmin-tokened User/Goal
-/// mutations. The EF in-memory provider does not enforce xmin, so the stale-token conflict is
-/// injected with a save interceptor that throws <see cref="DbUpdateConcurrencyException"/> (the same
-/// shape Postgres raises on a stale token); a lost-delete race is reproduced without an interceptor
-/// because the provider does raise a genuine conflict when a tracked row is deleted underneath.
-/// Tests assert the HANDLERS' response to a conflict — retry-with-re-evaluation for counters/progress,
-/// a clean conflict result when it persists, and that a non-concurrency failure is never retried —
-/// not real xmin token behavior, which is unreachable in this harness.
-/// </summary>
 public class ConcurrencyRetryTests
 {
     private const int AdRewardDailyCap = 3;

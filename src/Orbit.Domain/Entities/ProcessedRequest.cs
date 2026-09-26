@@ -6,7 +6,7 @@ namespace Orbit.Domain.Entities;
 /// Idempotency ledger for client-initiated mutations. Records that a request carrying a given client
 /// <c>Idempotency-Key</c> (a mobile offline-queue mutation id) was processed for a user and stores the
 /// serialized response, so a replay — a retry after a lost network ACK, routine on mobile — returns the
-/// original outcome instead of re-executing the mutation. See thomasluizon/orbit-ui-mobile#243.
+/// original outcome instead of re-executing the mutation.
 /// </summary>
 public class ProcessedRequest : Entity
 {
