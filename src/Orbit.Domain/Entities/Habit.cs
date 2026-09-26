@@ -195,9 +195,10 @@ public class Habit : Entity, ITimestamped, ISoftDeletable, IHabitSchedule
         {
             IsCompleted = true;
         }
-        else if (FrequencyUnit is not null && !IsFlexible && advanceDueDate)
+        else if (FrequencyUnit is not null)
         {
-            AdvanceDueDate(date, weekStartDay);
+            if (!IsFlexible && advanceDueDate)
+                AdvanceDueDate(date, weekStartDay);
 
             if (ChecklistItems.Count > 0)
                 ChecklistItems = ChecklistItems.Select(i => i with { IsChecked = false }).ToList();
@@ -479,7 +480,8 @@ public class Habit : Entity, ITimestamped, ISoftDeletable, IHabitSchedule
 
         var dateValidation = HabitInvariants.ValidateDateOptions(
             p.DueTime ?? DueTime, p.DueEndTime ?? DueEndTime,
-            p.ClearEndDate == true ? null : (p.EndDate ?? EndDate),
+            effectiveIsGeneral && p.EndDate.HasValue ? p.EndDate
+                : p.ClearEndDate == true || effectiveIsGeneral ? null : (p.EndDate ?? EndDate),
             p.FrequencyUnit, effectiveIsGeneral, p.DueDate ?? DueDate);
         if (dateValidation is not null)
             return dateValidation;
@@ -549,7 +551,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable, IHabitSchedule
         if (p.ScheduledReminders is not null)
             ScheduledReminders = p.ScheduledReminders;
 
-        if (p.ClearEndDate == true)
+        if (p.ClearEndDate == true || IsGeneral)
             EndDate = null;
         else if (p.EndDate.HasValue)
             EndDate = p.EndDate.Value;
