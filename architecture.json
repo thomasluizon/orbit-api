@@ -7670,6 +7670,13 @@
         ]
       },
       {
+        "testClass": "ActiveGoalsSectionTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Services/ActiveGoalsSectionTests.cs",
+        "references": [
+          "Goal"
+        ]
+      },
+      {
         "testClass": "ActiveHabitsSectionTests",
         "file": "tests/Orbit.Infrastructure.Tests/Services/ActiveHabitsSectionTests.cs",
         "references": [
