@@ -89,7 +89,7 @@ function comments(text, path, root) {
     }
     const withoutFrontmatter = regions.reduce((body, [start, end]) =>
       body.slice(0, start) + body.slice(start, end).replace(/[^\r\n]/g, " ") + body.slice(end), text)
-    const scripts = /<script\b(?:[^>"']|"[^"]*"|'[^']*')*>([\s\S]*?)<\/script\b[^>]*>/gi
+    const scripts = /<script\b(?:[^>"']|"[^"]*"|'[^']*')*>([\s\S]*?)<\/script(?:[\t\n\f\r /][^>]*)?>/gi
     for (const match of withoutFrontmatter.matchAll(scripts)) {
       const openingTag = /^<script\b(?:[^>"']|"[^"]*"|'[^']*')*>/i.exec(match[0])[0]
       const start = match.index + openingTag.length
