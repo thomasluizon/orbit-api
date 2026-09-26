@@ -12,7 +12,10 @@ public record BulkSkipItem(Guid HabitId, DateOnly? Date = null) : IBulkHabitItem
 
 public record BulkSkipHabitsCommand(
     Guid UserId,
-    IReadOnlyList<BulkSkipItem> Items) : IRequest<Result<BulkSkipResult>>, IBulkHabitCommand<BulkSkipItem>, IIdempotentCommand;
+    IReadOnlyList<BulkSkipItem> Items) : IRequest<Result<BulkSkipResult>>, IBulkHabitCommand<BulkSkipItem>, IIdempotentCommand, IIdempotencyFingerprint
+{
+    public string IdempotencyFingerprint => BulkHabitCommandFingerprint.Create(Items, item => item.Date);
+}
 
 public record BulkSkipResult(IReadOnlyList<BulkSkipItemResult> Results);
 
