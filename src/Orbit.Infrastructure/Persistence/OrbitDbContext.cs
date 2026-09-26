@@ -252,7 +252,8 @@ public class OrbitDbContext : DbContext
     {
         modelBuilder.Entity<ProcessedRequest>(entity =>
         {
-            entity.HasIndex(request => new { request.UserId, request.IdempotencyKey, request.RequestType }).IsUnique();
+            entity.HasIndex(request => new { request.UserId, request.IdempotencyKey, request.RequestType,
+                request.RequestOrdinal }).IsUnique();
             entity.HasIndex(request => request.CreatedAtUtc);
             entity.Property(request => request.IdempotencyKey).IsRequired().HasMaxLength(200);
             entity.Property(request => request.RequestType).IsRequired().HasMaxLength(256);

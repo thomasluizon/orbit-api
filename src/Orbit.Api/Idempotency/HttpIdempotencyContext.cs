@@ -13,6 +13,18 @@ public sealed class HttpIdempotencyContext(IHttpContextAccessor httpContextAcces
 {
     private const string IdempotencyKeyHeaderName = "Idempotency-Key";
     private const int MaxKeyLength = 200;
+    private readonly Dictionary<string, int> _nextOrdinalByType = new(StringComparer.Ordinal);
+    private readonly object _ordinalLock = new();
+
+    public int NextRequestOrdinal(string requestType)
+    {
+        lock (_ordinalLock)
+        {
+            _nextOrdinalByType.TryGetValue(requestType, out var ordinal);
+            _nextOrdinalByType[requestType] = checked(ordinal + 1);
+            return ordinal;
+        }
+    }
 
     public bool TryGetRequestKey(out Guid userId, [NotNullWhen(true)] out string idempotencyKey)
     {

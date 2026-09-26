@@ -7,4 +7,6 @@ namespace Orbit.Application.Common;
 public interface IIdempotencyContext
 {
     bool TryGetRequestKey(out Guid userId, out string idempotencyKey);
+
+    int NextRequestOrdinal(string requestType);
 }

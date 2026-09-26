@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using MediatR;
 using Microsoft.Data.Sqlite;
@@ -6,6 +7,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Orbit.Application.Behaviors;
+using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Challenges.Services;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
@@ -166,6 +168,167 @@ public class IdempotencyBehaviorDbTests : IDisposable
     }
 
     [Fact]
+    public async Task Handle_SameKeyDifferentCommandsOfOneType_BothExecute()
+    {
+        var context = new StubIdempotencyContext(true, _userId, "mutation-key-1", trackOrdinals: true);
+        var behavior = new IdempotencyBehavior<NamedRequest, string>(context, _store, _unitOfWork);
+
+        var first = await behavior.Handle(new NamedRequest("first"), CountingHandler("first"), CancellationToken.None);
+        var second = await behavior.Handle(new NamedRequest("second"), CountingHandler("second"), CancellationToken.None);
+
+        context.ResetOrdinals();
+
+        first.Should().Be("first");
+        second.Should().Be("second");
+        (await behavior.Handle(new NamedRequest("first"), CountingHandler("changed"), CancellationToken.None))
+            .Should().Be("first");
+        (await behavior.Handle(new NamedRequest("second"), CountingHandler("changed"), CancellationToken.None))
+            .Should().Be("second");
+        _handlerCalls.Should().Be(2);
+        (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Handle_ReplayOfRowWrittenBeforeOrdinalScoping_ReturnsStoredResponse()
+    {
+        var legacy = ProcessedRequest.Create(
+            _userId, "mutation-key-1", typeof(NamedRequest).FullName!, 0);
+        legacy.SetResponseBody(JsonSerializer.Serialize("stored-before-deploy"));
+        _dbContext.ProcessedRequests.Add(legacy);
+        await _dbContext.SaveChangesAsync();
+        var behavior = CreateBehavior<NamedRequest, string>();
+
+        var replay = await behavior.Handle(new NamedRequest("first"), CountingHandler("executed-again"), CancellationToken.None);
+
+        replay.Should().Be("stored-before-deploy");
+        _handlerCalls.Should().Be(0);
+        (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_SharedKey250Habits_AllChunksApplyOnceAndReplay(bool skip)
+    {
+        var today = new DateOnly(2026, 9, 24);
+        var habits = Enumerable.Range(1, 250).Select(index => Habit.Create(new HabitCreateParams(
+            _userId, $"Habit {index}", skip ? FrequencyUnit.Week : FrequencyUnit.Day,
+            skip ? 3 : 1, DueDate: today, IsFlexible: skip)).Value).ToArray();
+        _dbContext.Habits.AddRange(habits);
+        await _dbContext.SaveChangesAsync();
+
+        var dateService = CreateUserDateService(today);
+        var mediator = Substitute.For<IMediator>();
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var habitRepository = new GenericRepository<Habit>(_dbContext);
+        var logRepository = new GenericRepository<HabitLog>(_dbContext);
+        var context = new StubIdempotencyContext(true, _userId, "shared-http-key", trackOrdinals: true);
+        if (skip)
+        {
+            var handler = new BulkSkipHabitsCommandHandler(habitRepository, logRepository, dateService, _unitOfWork, cache);
+            var behavior = new IdempotencyBehavior<BulkSkipHabitsCommand, Result<BulkSkipResult>>(context, _store, _unitOfWork);
+            mediator.Send(Arg.Any<BulkSkipHabitsCommand>(), Arg.Any<CancellationToken>())
+                .Returns(call =>
+                {
+                    var command = call.Arg<BulkSkipHabitsCommand>();
+                    return behavior.Handle(command, ct =>
+                    {
+                        _handlerCalls++;
+                        return handler.Handle(command, ct);
+                    }, call.Arg<CancellationToken>());
+                });
+        }
+        else
+        {
+            var goalService = Substitute.For<IGoalCompletionService>();
+            goalService.SyncDerivedGoalsAsync(_userId, Arg.Any<IReadOnlyCollection<Guid>>(), today,
+                    Arg.Any<bool>(), Arg.Any<CancellationToken>())
+                .Returns((IReadOnlyList<GoalCompletionUpdate>)Array.Empty<GoalCompletionUpdate>());
+            var handler = new BulkLogHabitsCommandHandler(habitRepository, logRepository,
+                new BulkLogServices(dateService, Substitute.For<IUserStreakService>(), Substitute.For<IGamificationService>()),
+                goalService, _unitOfWork, cache, NullLogger<BulkLogHabitsCommandHandler>.Instance);
+            var behavior = new IdempotencyBehavior<BulkLogHabitsCommand, Result<BulkLogResult>>(context, _store, _unitOfWork);
+            mediator.Send(Arg.Any<BulkLogHabitsCommand>(), Arg.Any<CancellationToken>())
+                .Returns(call =>
+                {
+                    var command = call.Arg<BulkLogHabitsCommand>();
+                    return behavior.Handle(command, ct =>
+                    {
+                        _handlerCalls++;
+                        return handler.Handle(command, ct);
+                    }, call.Arg<CancellationToken>());
+                });
+        }
+
+        var args = JsonSerializer.SerializeToElement(new { habit_ids = habits.Select(habit => habit.Id).ToArray() });
+        var tool = skip
+            ? (Orbit.Application.Chat.Tools.IAiTool)new BulkSkipHabitsTool(mediator, habitRepository, dateService)
+            : new BulkLogHabitsTool(mediator, habitRepository, dateService);
+        var first = await tool.ExecuteAsync(args, _userId, CancellationToken.None);
+        context.ResetOrdinals();
+        var replay = await tool.ExecuteAsync(args, _userId, CancellationToken.None);
+
+        first.Success.Should().BeTrue();
+        first.EntityName.Should().Contain("250 of 250");
+        replay.EntityName.Should().Be(first.EntityName);
+        JsonSerializer.Serialize(replay.Payload).Should().Be(JsonSerializer.Serialize(first.Payload));
+        _handlerCalls.Should().Be(3);
+        (await _dbContext.HabitLogs.AsNoTracking().CountAsync()).Should().Be(250);
+        (await _dbContext.HabitLogs.AsNoTracking().Select(log => log.HabitId).Distinct().CountAsync()).Should().Be(250);
+        (await _dbContext.HabitLogs.AsNoTracking().CountAsync(log => log.Value == 0)).Should().Be(skip ? 250 : 0);
+        (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(3);
+    }
+
+    [Fact]
+    public async Task Handle_ChatRetryAfterLocalMidnight_ReplaysOriginalBulkLog()
+    {
+        var firstDay = new DateOnly(2026, 9, 24);
+        var currentDay = firstDay;
+        var habit = Habit.Create(new HabitCreateParams(
+            _userId, "Daily habit", FrequencyUnit.Day, 1, DueDate: firstDay)).Value;
+        _dbContext.Habits.Add(habit);
+        await _dbContext.SaveChangesAsync();
+
+        var dateService = Substitute.For<IUserDateService>();
+        dateService.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(_ => currentDay);
+        dateService.GetUserWeekStartDayAsync(_userId, Arg.Any<CancellationToken>()).Returns(1);
+        var mediator = Substitute.For<IMediator>();
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var habitRepository = new GenericRepository<Habit>(_dbContext);
+        var goalService = Substitute.For<IGoalCompletionService>();
+        goalService.SyncDerivedGoalsAsync(_userId, Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(),
+                Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .Returns((IReadOnlyList<GoalCompletionUpdate>)Array.Empty<GoalCompletionUpdate>());
+        var handler = new BulkLogHabitsCommandHandler(habitRepository, new GenericRepository<HabitLog>(_dbContext),
+            new BulkLogServices(dateService, Substitute.For<IUserStreakService>(), Substitute.For<IGamificationService>()),
+            goalService, _unitOfWork, cache, NullLogger<BulkLogHabitsCommandHandler>.Instance);
+        var behavior = CreateBehavior<BulkLogHabitsCommand, Result<BulkLogResult>>(key: "chat-retry");
+        mediator.Send(Arg.Any<BulkLogHabitsCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var command = call.Arg<BulkLogHabitsCommand>();
+                return behavior.Handle(command, ct =>
+                {
+                    _handlerCalls++;
+                    return handler.Handle(command, ct);
+                }, call.Arg<CancellationToken>());
+            });
+        var tool = new BulkLogHabitsTool(mediator, habitRepository, dateService);
+        var args = JsonSerializer.SerializeToElement(new { habit_ids = new[] { habit.Id } });
+
+        var first = await tool.ExecuteAsync(args, _userId, CancellationToken.None);
+        currentDay = firstDay.AddDays(1);
+        var replay = await tool.ExecuteAsync(args, _userId, CancellationToken.None);
+
+        first.Success.Should().BeTrue();
+        replay.EntityName.Should().Be(first.EntityName);
+        JsonSerializer.Serialize(replay.Payload).Should().Be(JsonSerializer.Serialize(first.Payload));
+        _handlerCalls.Should().Be(1);
+        (await _dbContext.HabitLogs.AsNoTracking().CountAsync()).Should().Be(1);
+        (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
     public async Task Handle_UnmarkedRequest_BypassesLedgerEvenWithKey()
     {
         var behavior = new IdempotencyBehavior<UnmarkedRequest, string>(
@@ -291,9 +454,148 @@ public class IdempotencyBehaviorDbTests : IDisposable
             _userId, habit.Id, Arg.Any<CancellationToken>());
     }
 
-    private IdempotencyBehavior<TRequest, TResponse> CreateBehavior<TRequest, TResponse>(bool hasKey = true)
+    [Fact]
+    public async Task Handle_BulkSkipReplay_ReturnsFirstResultWithoutWritingSecondLogs()
+    {
+        var today = new DateOnly(2026, 9, 24);
+        var habits = new[]
+        {
+            Habit.Create(new HabitCreateParams(_userId, "First skip", FrequencyUnit.Week, 3,
+                DueDate: today, IsFlexible: true)).Value,
+            Habit.Create(new HabitCreateParams(_userId, "Second skip", FrequencyUnit.Week, 3,
+                DueDate: today, IsFlexible: true)).Value
+        };
+        _dbContext.Habits.AddRange(habits);
+        await _dbContext.SaveChangesAsync();
+
+        var dateService = CreateUserDateService(today);
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var handler = new BulkSkipHabitsCommandHandler(
+            new GenericRepository<Habit>(_dbContext), new GenericRepository<HabitLog>(_dbContext),
+            dateService, _unitOfWork, cache);
+        var command = new BulkSkipHabitsCommand(_userId, habits.Select(h => new BulkSkipItem(h.Id)).ToList());
+        var behavior = CreateBehavior<BulkSkipHabitsCommand, Result<BulkSkipResult>>();
+        RequestHandlerDelegate<Result<BulkSkipResult>> next = ct =>
+        {
+            _handlerCalls++;
+            return handler.Handle(command, ct);
+        };
+
+        var first = await behavior.Handle(command, next, CancellationToken.None);
+        var replay = await behavior.Handle(command, next, CancellationToken.None);
+
+        first.IsSuccess.Should().BeTrue();
+        first.Value.Results.Should().AllSatisfy(item => item.Status.Should().Be(BulkItemStatus.Success));
+        replay.Value.Results.Should().BeEquivalentTo(first.Value.Results);
+        _handlerCalls.Should().Be(1);
+        foreach (var habit in habits)
+            (await _dbContext.HabitLogs.AsNoTracking().CountAsync(log => log.HabitId == habit.Id && log.Value == 0))
+                .Should().Be(1);
+        (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Handle_BulkLogReplay_ReturnsFirstResultWithoutWritingSecondLogs()
+    {
+        var today = new DateOnly(2026, 9, 24);
+        var habits = new[]
+        {
+            Habit.Create(new HabitCreateParams(_userId, "First log", FrequencyUnit.Day, 1,
+                DueDate: today)).Value,
+            Habit.Create(new HabitCreateParams(_userId, "Second log", FrequencyUnit.Day, 1,
+                DueDate: today)).Value
+        };
+        _dbContext.Habits.AddRange(habits);
+        await _dbContext.SaveChangesAsync();
+
+        var dateService = CreateUserDateService(today);
+        var streakService = Substitute.For<IUserStreakService>();
+        var gamificationService = Substitute.For<IGamificationService>();
+        var goalService = Substitute.For<IGoalCompletionService>();
+        goalService.SyncDerivedGoalsAsync(
+                _userId, Arg.Any<IReadOnlyCollection<Guid>>(), today,
+                Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .Returns((IReadOnlyList<GoalCompletionUpdate>)Array.Empty<GoalCompletionUpdate>());
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var handler = new BulkLogHabitsCommandHandler(
+            new GenericRepository<Habit>(_dbContext), new GenericRepository<HabitLog>(_dbContext),
+            new BulkLogServices(dateService, streakService, gamificationService),
+            goalService, _unitOfWork, cache, NullLogger<BulkLogHabitsCommandHandler>.Instance);
+        var command = new BulkLogHabitsCommand(_userId, habits.Select(h => new BulkLogItem(h.Id)).ToList());
+        var behavior = CreateBehavior<BulkLogHabitsCommand, Result<BulkLogResult>>();
+        RequestHandlerDelegate<Result<BulkLogResult>> next = ct =>
+        {
+            _handlerCalls++;
+            return handler.Handle(command, ct);
+        };
+
+        var first = await behavior.Handle(command, next, CancellationToken.None);
+        var replay = await behavior.Handle(command, next, CancellationToken.None);
+
+        first.IsSuccess.Should().BeTrue();
+        first.Value.Results.Should().AllSatisfy(item => item.Status.Should().Be(BulkItemStatus.Success));
+        first.Value.Results.Should().AllSatisfy(item => item.LogId.Should().NotBeNull());
+        replay.Value.Results.Should().BeEquivalentTo(first.Value.Results);
+        _handlerCalls.Should().Be(1);
+        foreach (var habit in habits)
+            (await _dbContext.HabitLogs.AsNoTracking().CountAsync(log => log.HabitId == habit.Id))
+                .Should().Be(1);
+        (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Handle_BulkSkipDistinctKeys_BothApply()
+    {
+        var today = new DateOnly(2026, 9, 24);
+        var habits = new[]
+        {
+            Habit.Create(new HabitCreateParams(_userId, "First chunk", FrequencyUnit.Week, 3,
+                DueDate: today, IsFlexible: true)).Value,
+            Habit.Create(new HabitCreateParams(_userId, "Second chunk", FrequencyUnit.Week, 3,
+                DueDate: today, IsFlexible: true)).Value
+        };
+        _dbContext.Habits.AddRange(habits);
+        await _dbContext.SaveChangesAsync();
+
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var handler = new BulkSkipHabitsCommandHandler(
+            new GenericRepository<Habit>(_dbContext), new GenericRepository<HabitLog>(_dbContext),
+            CreateUserDateService(today), _unitOfWork, cache);
+        var firstCommand = new BulkSkipHabitsCommand(_userId, [new BulkSkipItem(habits[0].Id)]);
+        var secondCommand = new BulkSkipHabitsCommand(_userId, [new BulkSkipItem(habits[1].Id)]);
+        var firstBehavior = CreateBehavior<BulkSkipHabitsCommand, Result<BulkSkipResult>>(key: "chunk-1");
+        var secondBehavior = CreateBehavior<BulkSkipHabitsCommand, Result<BulkSkipResult>>(key: "chunk-2");
+
+        var first = await firstBehavior.Handle(firstCommand, ct =>
+        {
+            _handlerCalls++;
+            return handler.Handle(firstCommand, ct);
+        }, CancellationToken.None);
+        var second = await secondBehavior.Handle(secondCommand, ct =>
+        {
+            _handlerCalls++;
+            return handler.Handle(secondCommand, ct);
+        }, CancellationToken.None);
+
+        first.Value.Results.Should().ContainSingle(item => item.Status == BulkItemStatus.Success);
+        second.Value.Results.Should().ContainSingle(item => item.Status == BulkItemStatus.Success);
+        _handlerCalls.Should().Be(2);
+        (await _dbContext.HabitLogs.AsNoTracking().CountAsync(log => log.Value == 0)).Should().Be(2);
+        (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(2);
+    }
+
+    private IUserDateService CreateUserDateService(DateOnly today)
+    {
+        var dateService = Substitute.For<IUserDateService>();
+        dateService.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(today);
+        dateService.GetUserWeekStartDayAsync(_userId, Arg.Any<CancellationToken>()).Returns(1);
+        return dateService;
+    }
+
+    private IdempotencyBehavior<TRequest, TResponse> CreateBehavior<TRequest, TResponse>(
+        bool hasKey = true, string key = "mutation-key-1")
         where TRequest : class =>
-        new(new StubIdempotencyContext(hasKey, _userId, "mutation-key-1"), _store, _unitOfWork);
+        new(new StubIdempotencyContext(hasKey, _userId, key), _store, _unitOfWork);
 
     private RequestHandlerDelegate<string> CreateTagHandler() =>
         async ct =>
@@ -313,6 +615,8 @@ public class IdempotencyBehaviorDbTests : IDisposable
 
     private sealed record FakeRequest : IRequest<string>, IIdempotentCommand;
 
+    private sealed record NamedRequest(string Name) : IRequest<string>, IIdempotentCommand;
+
     private sealed record OtherRequest : IRequest<string>, IIdempotentCommand;
 
     private sealed record ResultRequest : IRequest<Result<string>>, IIdempotentCommand;
@@ -326,14 +630,28 @@ public class IdempotencyBehaviorDbTests : IDisposable
         public override string SqlState => "23505";
     }
 
-    private sealed class StubIdempotencyContext(bool hasKey, Guid userId, string key) : IIdempotencyContext
+    private sealed class StubIdempotencyContext(bool hasKey, Guid userId, string key, bool trackOrdinals = false) : IIdempotencyContext
     {
+        private readonly Dictionary<string, int> _nextOrdinalByType = new(StringComparer.Ordinal);
+
         public bool TryGetRequestKey(out Guid resolvedUserId, out string idempotencyKey)
         {
             resolvedUserId = userId;
             idempotencyKey = key;
             return hasKey;
         }
+
+        public int NextRequestOrdinal(string requestType)
+        {
+            if (!trackOrdinals)
+                return 0;
+
+            _nextOrdinalByType.TryGetValue(requestType, out var ordinal);
+            _nextOrdinalByType[requestType] = ordinal + 1;
+            return ordinal;
+        }
+
+        public void ResetOrdinals() => _nextOrdinalByType.Clear();
     }
 
     private sealed class SqliteCompatOrbitDbContext(DbContextOptions<OrbitDbContext> options)

@@ -12,7 +12,7 @@ public record BulkSkipItem(Guid HabitId, DateOnly? Date = null) : IBulkHabitItem
 
 public record BulkSkipHabitsCommand(
     Guid UserId,
-    IReadOnlyList<BulkSkipItem> Items) : IRequest<Result<BulkSkipResult>>, IBulkHabitCommand<BulkSkipItem>;
+    IReadOnlyList<BulkSkipItem> Items) : IRequest<Result<BulkSkipResult>>, IBulkHabitCommand<BulkSkipItem>, IIdempotentCommand;
 
 public record BulkSkipResult(IReadOnlyList<BulkSkipItemResult> Results);
 

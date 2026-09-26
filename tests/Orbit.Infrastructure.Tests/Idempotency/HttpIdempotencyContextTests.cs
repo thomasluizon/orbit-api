@@ -75,6 +75,20 @@ public class HttpIdempotencyContextTests
         sut.TryGetRequestKey(out _, out _).Should().BeFalse();
     }
 
+    [Fact]
+    public void NextRequestOrdinal_CountsPerTypeAndStartsOverForNextRequest()
+    {
+        var firstRequest = CreateSut(BuildContext("shared-key", Guid.NewGuid().ToString()));
+
+        firstRequest.NextRequestOrdinal("BulkLogHabitsCommand").Should().Be(0);
+        firstRequest.NextRequestOrdinal("BulkSkipHabitsCommand").Should().Be(0);
+        firstRequest.NextRequestOrdinal("BulkLogHabitsCommand").Should().Be(1);
+        firstRequest.NextRequestOrdinal("BulkLogHabitsCommand").Should().Be(2);
+
+        var retry = CreateSut(BuildContext("shared-key", Guid.NewGuid().ToString()));
+        retry.NextRequestOrdinal("BulkLogHabitsCommand").Should().Be(0);
+    }
+
     private static HttpIdempotencyContext CreateSut(HttpContext? httpContext)
     {
         var httpContextAccessor = Substitute.For<IHttpContextAccessor>();
