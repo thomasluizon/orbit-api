@@ -7,6 +7,8 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Persistence;
+using Orbit.Infrastructure.Services;
+using System.Reflection;
 
 namespace Orbit.Infrastructure.Tests.Persistence;
 
@@ -35,13 +37,16 @@ public class QueryRoundTripCountTests
             DueDate: today.AddDays(-3))).Value;
         var bad = Habit.Create(new HabitCreateParams(userId, "Bad habit", FrequencyUnit.Day, 1,
             DueDate: today.AddDays(-10), IsBadHabit: true)).Value;
-        context.Habits.AddRange(overdue, skippedToday, skippedEarlier, bad);
+        var oldResolved = Habit.Create(new HabitCreateParams(userId, "Old resolved", FrequencyUnit.Year, 2,
+            DueDate: today.AddDays(-400))).Value;
+        context.Habits.AddRange(overdue, skippedToday, skippedEarlier, bad, oldResolved);
         context.HabitLogs.AddRange(
             HabitLog.FromScheduleRead(Guid.NewGuid(), overdue.Id, today.AddDays(-10), 1, 0, DateTime.UtcNow),
             HabitLog.FromScheduleRead(Guid.NewGuid(), overdue.Id, today.AddDays(-2), 0, 0, DateTime.UtcNow),
             HabitLog.FromScheduleRead(Guid.NewGuid(), skippedToday.Id, today, 0, 0, DateTime.UtcNow),
             HabitLog.FromScheduleRead(Guid.NewGuid(), skippedEarlier.Id, today.AddDays(-1), 0, 0, DateTime.UtcNow),
-            HabitLog.FromScheduleRead(Guid.NewGuid(), bad.Id, today.AddDays(-5), 1, 0, DateTime.UtcNow));
+            HabitLog.FromScheduleRead(Guid.NewGuid(), bad.Id, today.AddDays(-5), 1, 0, DateTime.UtcNow),
+            HabitLog.FromScheduleRead(Guid.NewGuid(), oldResolved.Id, oldResolved.DueDate, 1, 0, DateTime.UtcNow));
         await context.SaveChangesAsync();
         context.ChangeTracker.Clear();
         var directLogs = await new HabitSummaryLogReader(context).ReadAsync(
@@ -73,11 +78,46 @@ public class QueryRoundTripCountTests
 
         result.Value.Summary.Should().Be("Pinned summary");
         receivedHabits!.Select(habit => habit.Title).Should().BeEquivalentTo(
-            ["Overdue", "Skipped earlier", "Bad habit"]);
+            ["Overdue", "Skipped earlier", "Bad habit", "Old resolved"]);
         receivedHabits!.Single(habit => habit.Id == overdue.Id).Logs.Select(log => (log.Date, log.Value))
             .Should().Contain((today.AddDays(-10), 1));
         receivedContext!.ResolvedDueDateHabitIds.Should().Contain(overdue.Id);
+        receivedContext.ResolvedDueDateHabitIds.Should().Contain(oldResolved.Id);
         receivedContext!.LastBadHabitSlipDates[bad.Id].Should().Be(today.AddDays(-5));
+
+        var legacyHabits = await new GenericRepository<Habit>(context).FindAsync(
+            habit => habit.UserId == userId && !habit.IsGeneral,
+            query => query
+                .Include(habit => habit.Logs.Where(log =>
+                    log.Date >= today.AddDays(-366) && log.Date <= today))
+                .Include(habit => habit.Goals)
+                .AsSplitQuery(), CancellationToken.None);
+        var legacyIncluded = legacyHabits
+            .Where(habit => !habit.Logs.Any(log => log.Date == today && log.Value == 0))
+            .ToList();
+        var legacyResolution = legacyIncluded
+            .Where(habit => habit.Logs.Any(log => log.Date == habit.DueDate && log.Value >= 0))
+            .Select(habit => habit.Id).ToHashSet();
+        if (await context.HabitLogs.AnyAsync(log => log.HabitId == oldResolved.Id
+            && log.Date == oldResolved.DueDate && log.Value >= 0))
+            legacyResolution.Add(oldResolved.Id);
+        var legacySlipDates = legacyIncluded.Where(habit => habit.IsBadHabit)
+            .SelectMany(habit => habit.Logs.Where(log => log.Value > 0)
+                .Select(log => new { habit.Id, log.Date }))
+            .GroupBy(log => log.Id)
+            .ToDictionary(group => group.Key, group => group.Max(log => log.Date));
+        var legacyContext = receivedContext with
+        {
+            LastBadHabitSlipDates = legacySlipDates,
+            ResolvedDueDateHabitIds = legacyResolution
+        };
+        var prompt = BuildPrompt(receivedHabits!, receivedContext);
+        prompt.Should().Be(BuildPrompt(legacyIncluded, legacyContext));
+        prompt.Should().Contain("Overdue (pending, overdue)");
+        prompt.Should().Contain("Skipped earlier (pending)");
+        prompt.Should().Contain("Bad habit (bad habit -- clean, 5 days since last slip)");
+        prompt.Should().NotContain("Skipped today");
+        prompt.Should().NotContain("Old resolved");
     }
 
     [Fact]
@@ -257,6 +297,19 @@ public class QueryRoundTripCountTests
         await context.SaveChangesAsync();
         context.ChangeTracker.Clear();
         return userId;
+    }
+
+    private static string BuildPrompt(IEnumerable<Habit> habits, DailySummaryContext summaryContext)
+    {
+        const BindingFlags flags = BindingFlags.NonPublic | BindingFlags.Static;
+        var selected = (List<Habit>)typeof(AiSummaryService)
+            .GetMethod("SelectScheduledHabits", flags)!
+            .Invoke(null, [habits.ToList(), summaryContext.UserToday, summaryContext.DateFrom,
+                summaryContext.DateTo, summaryContext.WeekStartDay,
+                summaryContext.ResolvedDueDateHabitIds])!;
+        return (string)typeof(AiSummaryService)
+            .GetMethod("BuildSummaryPrompt", flags)!
+            .Invoke(null, [selected, summaryContext])!;
     }
 
     private static async Task<(Guid UserId, Guid HabitId)> SeedDetailHabitGraph(
