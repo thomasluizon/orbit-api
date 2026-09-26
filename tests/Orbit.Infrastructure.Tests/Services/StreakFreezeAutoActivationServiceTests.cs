@@ -13,11 +13,16 @@ using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
 using Orbit.Infrastructure.Tests.Persistence;
+using Xunit.Abstractions;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
 public class StreakFreezeAutoActivationServiceTests
 {
+    private readonly ITestOutputHelper _output;
+
+    public StreakFreezeAutoActivationServiceTests(ITestOutputHelper output) => _output = output;
+
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly DateOnly Today = new(2026, 6, 4);
     private static readonly DateTimeOffset Instant = new(2026, 6, 4, 12, 0, 0, TimeSpan.Zero);
@@ -249,6 +254,20 @@ public class StreakFreezeAutoActivationServiceTests
     }
 
     [Fact]
+    public async Task ActivateMissedDayFreezes_LargeAccountReturnsFiveCompletionPairs()
+    {
+        var (_, commands) = await ReadActivationQueriesAsync(
+            candidateCount: 1, habitsPerCandidate: 1000, logsPerCandidate: 4650);
+        var completionRead = commands.Single(command => command.Sql.Contains("HabitLogs", StringComparison.Ordinal));
+
+        completionRead.Rows.Should().Be(5);
+        _output.WriteLine($"Freeze SQL: {completionRead.Sql}");
+        completionRead.Sql.Should().Contain("SELECT DISTINCT");
+        completionRead.Sql.Split("FROM", 2)[0].Should().Contain("\"UserId\"")
+            .And.Contain("\"Date\"").And.NotContain("\"Value\"");
+    }
+
+    [Fact]
     public async Task ActivateMissedDayFreezes_ConflictAfterConcurrentCompletion_DoesNotSpendFreeze()
     {
         var databaseName = $"StreakFreezeConflict_{Guid.NewGuid()}";
@@ -356,7 +375,8 @@ public class StreakFreezeAutoActivationServiceTests
                 Arg.Any<CancellationToken>())
             .Returns(today);
 
-    private static async Task<(int QueryCount, IReadOnlyList<CapturedDbCommand> Commands)> ReadActivationQueriesAsync(int candidateCount)
+    private static async Task<(int QueryCount, IReadOnlyList<CapturedDbCommand> Commands)> ReadActivationQueriesAsync(
+        int candidateCount, int habitsPerCandidate = 1, int logsPerCandidate = 3)
     {
         var counter = new CountingDbCommandInterceptor();
         using var factory = new SqliteOrbitDbContextFactory(counter);
@@ -369,12 +389,25 @@ public class StreakFreezeAutoActivationServiceTests
             user.SetStreakState(10, 10, Today.AddDays(-3));
             user.AwardStreakFreezeIfEligible();
 
-            var habit = CreateDailyHabit(userId, Today.AddDays(-6));
-            foreach (var date in new[] { Today.AddDays(-5), Today.AddDays(-4), Today })
-                habit.Log(date, advanceDueDate: false);
-
             dbContext.Users.Add(user);
-            dbContext.Habits.Add(habit);
+            var remainingLogs = logsPerCandidate;
+            for (var habitIndex = 0; habitIndex < habitsPerCandidate; habitIndex++)
+            {
+                var habit = CreateDailyHabit(userId, Today.AddDays(-6));
+                if (habitsPerCandidate == 1)
+                {
+                    foreach (var date in new[] { Today.AddDays(-5), Today.AddDays(-4), Today })
+                        habit.Log(date, advanceDueDate: false);
+                }
+                else
+                {
+                    var logCount = Math.Min(5, remainingLogs);
+                    for (var logIndex = 0; logIndex < logCount; logIndex++)
+                        habit.Log(Today.AddDays(-5 + logIndex), advanceDueDate: false);
+                    remainingLogs -= logCount;
+                }
+                dbContext.Habits.Add(habit);
+            }
         }
         await dbContext.SaveChangesAsync();
         dbContext.ChangeTracker.Clear();
