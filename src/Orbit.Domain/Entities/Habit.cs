@@ -142,14 +142,6 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         if (reminderTimesValidation is not null)
             return Result.Failure<Habit>(reminderTimesValidation);
 
-        var reminderTimes = p.ReminderTimes ?? [15];
-        var scheduledReminders = p.ScheduledReminders ?? [];
-        if (p.DueTime is { } dueTime && scheduledReminders.Count > 0)
-        {
-            reminderTimes = ReminderStoreNormalizer.FoldScheduledReminders(dueTime, reminderTimes, scheduledReminders);
-            scheduledReminders = [];
-        }
-
         return Result.Success(new Habit
         {
             UserId = p.UserId,
@@ -172,10 +164,10 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             DueEndTime = p.DueEndTime,
             ParentHabitId = p.ParentHabitId,
             ReminderEnabled = p.ReminderEnabled,
-            ReminderTimes = reminderTimes,
+            ReminderTimes = p.ReminderTimes ?? [15],
             SlipAlertEnabled = p.SlipAlertEnabled,
             ChecklistItems = p.ChecklistItems ?? [],
-            ScheduledReminders = scheduledReminders,
+            ScheduledReminders = p.ScheduledReminders ?? [],
             EndDate = p.EndDate,
             Position = p.Position,
             GoogleEventId = p.GoogleEventId,
@@ -456,9 +448,8 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         if (validation.IsFailure)
             return validation;
 
-        var previousDueTime = DueTime;
         ApplyRequiredUpdates(p);
-        ApplyOptionalUpdates(p, previousDueTime);
+        ApplyOptionalUpdates(p);
 
         UpdatedAtUtc = DateTime.UtcNow;
         return Result.Success();
@@ -488,7 +479,8 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
 
         var dateValidation = HabitInvariants.ValidateDateOptions(
             p.DueTime ?? DueTime, p.DueEndTime ?? DueEndTime,
-            p.ClearEndDate == true ? null : (p.EndDate ?? EndDate),
+            effectiveIsGeneral && p.EndDate.HasValue ? p.EndDate
+                : p.ClearEndDate == true || effectiveIsGeneral ? null : (p.EndDate ?? EndDate),
             p.FrequencyUnit, effectiveIsGeneral, p.DueDate ?? DueDate);
         if (dateValidation is not null)
             return dateValidation;
@@ -537,7 +529,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             OriginalDayOfMonth = null;
     }
 
-    private void ApplyOptionalUpdates(HabitUpdateParams p, TimeOnly? previousDueTime)
+    private void ApplyOptionalUpdates(HabitUpdateParams p)
     {
         if (p.IsGeneral.HasValue)
         {
@@ -558,21 +550,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         if (p.ScheduledReminders is not null)
             ScheduledReminders = p.ScheduledReminders;
 
-        if (DueTime is { } dueTime && ScheduledReminders.Count > 0)
-        {
-            ReminderTimes = ReminderStoreNormalizer.FoldScheduledReminders(dueTime, ReminderTimes, ScheduledReminders);
-            ScheduledReminders = [];
-        }
-        else if (DueTime is null && previousDueTime is { } oldDueTime
-            && p.ScheduledReminders is null && ReminderTimes.Count > 0)
-        {
-            var converted = ReminderStoreNormalizer.NormalizeForUpdate(null, oldDueTime, null, null,
-                ReminderTimes, ScheduledReminders);
-            ReminderTimes = converted.ReminderTimes ?? ReminderTimes;
-            ScheduledReminders = converted.ScheduledReminders ?? ScheduledReminders;
-        }
-
-        if (p.ClearEndDate == true)
+        if (p.ClearEndDate == true || IsGeneral)
             EndDate = null;
         else if (p.EndDate.HasValue)
             EndDate = p.EndDate.Value;

@@ -1728,55 +1728,18 @@ public class HabitTests
     }
 
     [Fact]
-    public void Create_MixedReminderStores_Normalizes()
+    public void Update_GeneralWithStaleEndDate_ClearsItWhenOmitted()
     {
-        var result = Habit.Create(new HabitCreateParams(ValidUserId, "Routine", FrequencyUnit.Day, 1,
-            DueDate: Today, DueTime: new TimeOnly(10, 0), ReminderTimes: [15],
-            ScheduledReminders: [new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(9, 30))]));
+        var habit = CreateGeneralHabit();
+        var endDateProperty = typeof(Habit).GetProperty(nameof(Habit.EndDate))
+            ?? throw new InvalidOperationException("Habit.EndDate was not found");
+        endDateProperty.SetValue(habit, Today.AddDays(1));
+
+        var result = habit.Update(new HabitUpdateParams("General", null, null, null, null, false,
+            Today, IsGeneral: true));
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.ScheduledReminders.Should().BeEmpty();
-        result.Value.ReminderTimes.Should().BeEquivalentTo([15, 30]);
-    }
-
-    [Fact]
-    public void Update_MixedReminderStores_Normalizes()
-    {
-        var habit = CreateValidHabit();
-
-        var result = habit.Update(new HabitUpdateParams("Routine", null, FrequencyUnit.Day, 1, null, false,
-            Today, DueTime: new TimeOnly(10, 0), ReminderTimes: [15],
-            ScheduledReminders: [new ScheduledReminderTime(ScheduledReminderWhen.DayBefore, new TimeOnly(9, 30))]));
-
-        result.IsSuccess.Should().BeTrue();
-        habit.ScheduledReminders.Should().BeEmpty();
-        habit.ReminderTimes.Should().BeEquivalentTo([15, 1470]);
-    }
-
-    [Fact]
-    public void Update_ScheduledRemindersWithDueTime_PreservesExistingRelativeReminder()
-    {
-        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Routine", FrequencyUnit.Day, 1,
-            DueDate: Today, DueTime: new TimeOnly(10, 0), ReminderTimes: [15])).Value;
-
-        var result = habit.Update(new HabitUpdateParams("Routine", null, FrequencyUnit.Day, 1, null, false,
-            Today, DueTime: new TimeOnly(10, 0),
-            ScheduledReminders: [new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(9, 0))]));
-
-        result.IsSuccess.Should().BeTrue();
-        habit.ScheduledReminders.Should().BeEmpty();
-        habit.ReminderTimes.Should().Equal(15, 60);
-    }
-
-    [Fact]
-    public void Create_ScheduledRemindersWithoutDueTime_KeepsScheduledStore()
-    {
-        var scheduled = new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(9, 0));
-
-        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Routine", FrequencyUnit.Day, 1,
-            DueDate: Today, ScheduledReminders: [scheduled])).Value;
-
-        habit.ScheduledReminders.Should().Equal(scheduled);
+        habit.EndDate.Should().BeNull();
     }
 
     [Fact]
@@ -1787,26 +1750,6 @@ public class HabitTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.EndDate.Should().Be(Today.AddDays(1));
-    }
-
-    [Fact]
-    public void Create_MixedReminderStores_CapsFoldedOffsets()
-    {
-        var existing = Enumerable.Range(1, DomainConstants.MaxReminderTimes - 1).ToArray();
-        var scheduled = new[]
-        {
-            new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(9, 0)),
-            new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(8, 0))
-        };
-
-        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Routine", FrequencyUnit.Day, 1,
-            DueDate: Today, DueTime: new TimeOnly(10, 0),
-            ReminderTimes: existing, ScheduledReminders: scheduled)).Value;
-
-        habit.ScheduledReminders.Should().BeEmpty();
-        habit.ReminderTimes.Should().HaveCount(DomainConstants.MaxReminderTimes);
-        habit.ReminderTimes.Should().Contain(60);
-        habit.ReminderTimes.Should().NotContain(120);
     }
 
     [Fact]

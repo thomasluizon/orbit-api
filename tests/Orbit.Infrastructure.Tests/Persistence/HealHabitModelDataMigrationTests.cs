@@ -1,11 +1,8 @@
 using System.Reflection;
-using System.Text.Json;
 using FluentAssertions;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
-using Orbit.Domain.Common;
-using Orbit.Domain.Enums;
-using Orbit.Domain.ValueObjects;
 using Orbit.Infrastructure.Migrations;
 
 namespace Orbit.Infrastructure.Tests.Persistence;
@@ -13,53 +10,55 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 public class HealHabitModelDataMigrationTests
 {
     [Fact]
-    public void Up_RepairsExistingRowsAndGuardsWritesFromOldInstances()
+    public void Up_ClearsGeneralEndDatesWithoutChangingOtherRows()
     {
-        var sql = GetSql("Up");
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        Execute(connection, """
+            CREATE TABLE "Habits" ("Id" INTEGER PRIMARY KEY, "IsGeneral" INTEGER NOT NULL, "EndDate" TEXT);
+            INSERT INTO "Habits" ("Id", "IsGeneral", "EndDate") VALUES
+                (1, 1, '2027-01-01'),
+                (2, 0, '2027-01-02'),
+                (3, 1, NULL);
+            """);
 
-        sql.Should().Contain("BEFORE INSERT OR UPDATE ON \"Habits\"");
-        sql.Should().Contain("UPDATE \"Habits\" SET \"EndDate\" = \"EndDate\"");
-        sql.Should().Contain("NEW.\"ScheduledReminders\" := '[]'::jsonb");
-        sql.Should().Contain($"LIMIT {DomainConstants.MaxReminderTimes}");
-        sql.Should().Contain("RAISE NOTICE");
-        sql.Should().Contain("RAISE EXCEPTION");
+        var sql = GetOperations("Up").OfType<SqlOperation>().Should().ContainSingle().Subject.Sql;
+        Execute(connection, sql);
+        Execute(connection, sql);
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT \"Id\", \"EndDate\" FROM \"Habits\" ORDER BY \"Id\"";
+        using var reader = command.ExecuteReader();
+        reader.Read().Should().BeTrue();
+        reader.GetInt32(0).Should().Be(1);
+        reader.IsDBNull(1).Should().BeTrue();
+        reader.Read().Should().BeTrue();
+        reader.GetInt32(0).Should().Be(2);
+        reader.GetString(1).Should().Be("2027-01-02");
+        reader.Read().Should().BeTrue();
+        reader.GetInt32(0).Should().Be(3);
+        reader.IsDBNull(1).Should().BeTrue();
+        reader.Read().Should().BeFalse();
     }
 
     [Fact]
-    public void Down_RemovesTheWriteGuard()
+    public void Down_DoesNotRecreateClearedDates()
     {
-        var sql = GetSql("Down");
-
-        sql.Should().Contain("DROP TRIGGER IF EXISTS");
-        sql.Should().Contain("DROP FUNCTION IF EXISTS");
+        GetOperations("Down").Should().BeEmpty();
     }
 
-    [Fact]
-    public void FoldScheduledReminders_SeededMixedRow_PreservesReminderCountWithinCap()
-    {
-        var scheduled = new[]
-        {
-            new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(9, 0)),
-            new ScheduledReminderTime(ScheduledReminderWhen.DayBefore, new TimeOnly(20, 0))
-        };
-        var storedJson = JsonSerializer.Serialize(scheduled);
-        storedJson.Should().Contain("\"When\":\"same_day\"");
-        storedJson.Should().Contain("\"Time\":\"09:00:00\"");
-        var storedScheduled = JsonSerializer.Deserialize<List<ScheduledReminderTime>>(storedJson)!;
-        var storedOffsets = JsonSerializer.Deserialize<List<int>>("[15]")!;
-
-        var folded = ReminderStoreNormalizer.FoldScheduledReminders(
-            new TimeOnly(10, 0), storedOffsets, storedScheduled);
-
-        folded.Should().Equal(15, 60, 840);
-        folded.Should().HaveCount(Math.Min(storedOffsets.Count + storedScheduled.Count, DomainConstants.MaxReminderTimes));
-    }
-
-    private static string GetSql(string methodName)
+    private static IReadOnlyList<MigrationOperation> GetOperations(string methodName)
     {
         var builder = new MigrationBuilder("Npgsql.EntityFrameworkCore.PostgreSQL");
         typeof(HealHabitModelData).GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic)!
             .Invoke(new HealHabitModelData(), [builder]);
-        return builder.Operations.OfType<SqlOperation>().Should().ContainSingle().Subject.Sql;
+        return builder.Operations;
+    }
+
+    private static void Execute(SqliteConnection connection, string sql)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        command.ExecuteNonQuery();
     }
 }
