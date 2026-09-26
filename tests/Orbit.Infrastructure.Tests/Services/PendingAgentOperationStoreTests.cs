@@ -144,6 +144,78 @@ public class PendingAgentOperationStoreTests : IDisposable
     }
 
     [Fact]
+    public void Revise_WhenConfirmCommitsAfterUnconfirmedRead_RejectsRefresh()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        using var confirmContext = factory.CreateContext();
+        var refreshContext = factory.Context;
+        var user = User.Create("Alex", $"{Guid.NewGuid():N}@example.com").Value;
+        refreshContext.Users.Add(user);
+        refreshContext.SaveChanges();
+
+        var settings = Options.Create(new AgentPlatformSettings());
+        var refreshStore = new PendingAgentOperationStore(refreshContext, settings);
+        var confirmStore = new PendingAgentOperationStore(confirmContext, settings);
+        var capability = _catalogService.GetCapability(AgentCapabilityIds.HabitsBulkWrite)!;
+        const string json = "{\"filter\":{\"all\":true},\"updates\":{\"emoji\":\"A\"}}";
+        var fingerprint = AgentOperationFingerprint.Compute("bulk_update_habits", json);
+        var pending = refreshStore.Create(user.Id, capability, "bulk_update_habits", json,
+            "Update habits", fingerprint, AgentExecutionSurface.Chat);
+
+        refreshContext.ChangeTracker.Clear();
+        refreshContext.PendingAgentOperations.Single(item => item.Id == pending.Id)
+            .ConfirmedAtUtc.Should().BeNull();
+        var confirmation = confirmStore.Confirm(user.Id, pending.Id);
+        confirmation.Should().NotBeNull();
+
+        refreshStore.Revise(user.Id, pending.Id, fingerprint, json, fingerprint, "fresh-preview")
+            .Should().BeFalse();
+
+        using var verifyContext = factory.CreateContext();
+        var stored = verifyContext.PendingAgentOperations.Single(item => item.Id == pending.Id);
+        stored.PreviewFingerprint.Should().BeNull();
+        stored.ConfirmedAtUtc.Should().NotBeNull();
+        stored.ConfirmationTokenHash.Should().NotBeNull();
+        var verifyStore = new PendingAgentOperationStore(verifyContext, settings);
+        verifyStore.TryConsumeFreshConfirmation(user.Id, capability.Id, fingerprint,
+            confirmation!.ConfirmationToken, false).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Confirm_WhenRefreshCommitsAfterUnconfirmedRead_RejectsOldApproval()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        using var confirmContext = factory.CreateContext();
+        var refreshContext = factory.Context;
+        var user = User.Create("Alex", $"{Guid.NewGuid():N}@example.com").Value;
+        refreshContext.Users.Add(user);
+        refreshContext.SaveChanges();
+
+        var settings = Options.Create(new AgentPlatformSettings());
+        var refreshStore = new PendingAgentOperationStore(refreshContext, settings);
+        var confirmStore = new PendingAgentOperationStore(confirmContext, settings);
+        var capability = _catalogService.GetCapability(AgentCapabilityIds.HabitsBulkWrite)!;
+        const string json = "{\"filter\":{\"all\":true},\"updates\":{\"emoji\":\"A\"}}";
+        var fingerprint = AgentOperationFingerprint.Compute("bulk_update_habits", json);
+        var pending = refreshStore.Create(user.Id, capability, "bulk_update_habits", json,
+            "Update habits", fingerprint, AgentExecutionSurface.Chat);
+
+        confirmContext.PendingAgentOperations.Single(item => item.Id == pending.Id)
+            .ConfirmedAtUtc.Should().BeNull();
+        refreshContext.ChangeTracker.Clear();
+        refreshStore.Revise(user.Id, pending.Id, fingerprint, json, fingerprint, "fresh-preview")
+            .Should().BeTrue();
+
+        confirmStore.Confirm(user.Id, pending.Id).Should().BeNull();
+
+        using var verifyContext = factory.CreateContext();
+        var stored = verifyContext.PendingAgentOperations.Single(item => item.Id == pending.Id);
+        stored.PreviewFingerprint.Should().Be("fresh-preview");
+        stored.ConfirmedAtUtc.Should().BeNull();
+        stored.ConfirmationTokenHash.Should().BeNull();
+    }
+
+    [Fact]
     public void Cancel_RejectsAnyLaterConfirmationOrExecution()
     {
         var capability = _catalogService.GetCapability(AgentCapabilityIds.HabitsBulkDelete)!;

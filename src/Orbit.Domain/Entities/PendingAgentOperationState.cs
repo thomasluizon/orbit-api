@@ -69,6 +69,7 @@ public class PendingAgentOperationState : Entity
     {
         ConfirmationTokenHash = confirmationTokenHash;
         ConfirmedAtUtc = DateTime.UtcNow;
+        RevisionNumber++;
     }
 
     public void MarkStepUpSatisfied()
