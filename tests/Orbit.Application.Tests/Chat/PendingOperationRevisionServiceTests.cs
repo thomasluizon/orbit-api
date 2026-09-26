@@ -83,6 +83,37 @@ public sealed class PendingOperationRevisionServiceTests
         _store.DidNotReceiveWithAnyArgs().Revise(default, default, default!, default!, default!, default!);
     }
 
+    [Fact]
+    public async Task ReviseAsync_EditsOneLogDateWithoutChangingAnother()
+    {
+        var first = CreateHabit("First");
+        var second = CreateHabit("Second");
+        SetupHabits([first, second]);
+        var pendingId = Guid.NewGuid();
+        var arguments = JsonDocument.Parse("""{"filter":{"all":true},"date":"2026-09-25"}""")
+            .RootElement.Clone();
+        _store.GetExecution(_userId, pendingId).Returns(new PendingAgentOperationExecution(
+            pendingId, AgentCapabilityIds.HabitsBulkWrite, "bulk_log_habits", arguments,
+            AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation));
+        _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<string>(), Arg.Any<string>()).Returns(true);
+        var previewer = new PendingOperationChangePreviewer(_habits, _dateService);
+        var preview = await previewer.PreviewAsync(_userId, "bulk_log_habits", arguments);
+        using var edits = JsonDocument.Parse("{\"date\":\"2026-09-26\"}");
+        var service = new PendingOperationRevisionService(_store, previewer,
+            new RevisePendingOperationRequestValidator());
+
+        var result = await service.ReviseAsync(_userId, pendingId,
+            new RevisePendingOperationRequest(preview!.PreviewFingerprint!,
+                [new(first.Id.ToString(), edits.RootElement.Clone()), new(second.Id.ToString())]),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        _store.Received(1).Revise(_userId, pendingId, Arg.Any<string>(),
+            Arg.Is<string>(json => DatesMatch(json, first.Id, second.Id)),
+            Arg.Any<string>(), Arg.Any<string>());
+    }
+
     private void SetupHabits(IReadOnlyList<Habit> habits)
     {
         _dateService.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>())
@@ -102,5 +133,16 @@ public sealed class PendingOperationRevisionServiceTests
         return items.GetArrayLength() == 1
             && items[0].GetProperty("habit_id").GetString() == id.ToString()
             && items[0].GetProperty("updates").GetProperty("emoji").GetString() == emoji;
+    }
+
+    private static bool DatesMatch(string json, Guid first, Guid second)
+    {
+        using var document = JsonDocument.Parse(json);
+        var items = document.RootElement.GetProperty("revised_items");
+        return items.GetArrayLength() == 2
+            && items[0].GetProperty("habit_id").GetString() == first.ToString()
+            && items[0].GetProperty("date").GetString() == "2026-09-26"
+            && items[1].GetProperty("habit_id").GetString() == second.ToString()
+            && items[1].GetProperty("date").GetString() == "2026-09-25";
     }
 }

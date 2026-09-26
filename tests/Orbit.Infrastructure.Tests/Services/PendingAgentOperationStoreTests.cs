@@ -137,4 +137,19 @@ public class PendingAgentOperationStoreTests : IDisposable
         _store.Confirm(_userId, pending.Id).Should().BeNull();
         _store.GetExecution(_userId, pending.Id).Should().BeNull();
     }
+
+    [Fact]
+    public void Revise_RejectsFingerprintThatDoesNotMatchPayload()
+    {
+        var capability = _catalogService.GetCapability(AgentCapabilityIds.HabitsBulkWrite)!;
+        const string json = "{\"filter\":{\"all\":true}}";
+        var fingerprint = AgentOperationFingerprint.Compute("bulk_update_habits", json);
+        var pending = _store.Create(_userId, capability, "bulk_update_habits", json,
+            "Update habits", fingerprint, AgentExecutionSurface.Chat);
+
+        _store.Revise(_userId, pending.Id, fingerprint, "{\"revised_items\":[]}",
+            "incorrect", "preview-state").Should().BeFalse();
+
+        _store.GetExecution(_userId, pending.Id)!.Arguments.GetRawText().Should().Be(json);
+    }
 }

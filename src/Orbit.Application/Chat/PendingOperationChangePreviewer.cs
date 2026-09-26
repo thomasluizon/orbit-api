@@ -13,10 +13,17 @@ namespace Orbit.Application.Chat;
 
 public sealed class PendingOperationChangePreviewer(
     IGenericRepository<Habit> habitRepository,
-    IUserDateService userDateService) : IPendingOperationChangePreviewer
+    IUserDateService userDateService,
+    IDestructiveOperationPreviewer? destructivePreviewer = null) : IPendingOperationChangePreviewer
 {
     private const int MaxDisplayedEntries = 3;
     private const int MaxEntryLength = 60;
+    private static readonly HashSet<string> CreateFields = new(StringComparer.Ordinal)
+    {
+        "title", "description", "emoji", "frequency_unit", "frequency_quantity",
+        "interval_weeks", "days", "due_date", "end_date", "due_time",
+        "is_bad_habit", "is_general", "is_flexible", "checklist_items", "sub_habits"
+    };
 
     public async Task<PendingOperationChangePreview?> PreviewAsync(
         Guid userId,
@@ -30,7 +37,8 @@ public sealed class PendingOperationChangePreviewer(
         if (operationId is not ("bulk_update_habits" or "bulk_reschedule_habits"
             or "bulk_delete_habits" or "bulk_log_habits" or "bulk_skip_habits"
             or "bulk_update_habit_emojis" or "delete_habit"))
-            return null;
+            return destructivePreviewer is null ? null
+                : await destructivePreviewer.PreviewAsync(userId, operationId, arguments, cancellationToken);
 
         if (operationId == "delete_habit")
             return await PreviewSingleHabitAsync(userId, arguments, cancellationToken);
@@ -70,17 +78,8 @@ public sealed class PendingOperationChangePreviewer(
             }
             else
             {
-                var field = operationId switch
-                {
-                    "bulk_delete_habits" => "delete",
-                    "bulk_log_habits" => "log",
-                    "bulk_skip_habits" => "skip",
-                    _ => "emoji"
-                };
-                var value = arguments.TryGetProperty(field == "emoji" ? "emoji" : "date", out var proposed)
-                    ? proposed.ToString() : null;
-                fields.Add(new PendingOperationChange(habit.Id, habit.Title, field,
-                    field == "emoji" ? habit.Emoji : null, value, field == "emoji" ? "emoji" : "action"));
+                fields.Add(BuildActionChange(habit, operationId, arguments, revisedItems,
+                    isRevised, today));
                 actualChangeCount = fields.Count;
             }
 
@@ -91,6 +90,29 @@ public sealed class PendingOperationChangePreviewer(
         }
 
         return BuildPreview(operationId, rows, items);
+    }
+
+    private static PendingOperationChange BuildActionChange(Habit habit, string operationId,
+        JsonElement arguments, JsonElement revisedItems, bool isRevised, DateOnly today)
+    {
+        var field = operationId switch
+        {
+            "bulk_delete_habits" => "delete",
+            "bulk_log_habits" or "bulk_skip_habits" => "date",
+            _ => "emoji"
+        };
+        var revisedItem = isRevised
+            ? revisedItems.EnumerateArray().First(item =>
+                item.GetProperty("habit_id").GetString() == habit.Id.ToString())
+            : default;
+        var value = isRevised && revisedItem.TryGetProperty(field, out var revisedValue)
+            ? revisedValue.ToString()
+            : arguments.TryGetProperty(field == "emoji" ? "emoji" : "date", out var proposed)
+                ? proposed.ToString()
+                : field == "date" ? today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) : null;
+        return new PendingOperationChange(habit.Id, habit.Title, field,
+            field == "emoji" ? habit.Emoji : null, value,
+            field == "emoji" ? "emoji" : field == "date" ? "date" : "action");
     }
 
     private static void AddProposedFields(List<PendingOperationChange> fields, Habit habit,
@@ -135,13 +157,40 @@ public sealed class PendingOperationChangePreviewer(
         Dictionary<Guid, BulkHabitChanges> revisedChanges)
     {
         if (isRevised)
+        {
+            if (operationId is "bulk_log_habits" or "bulk_skip_habits")
+            {
+                var (items, error) = BulkHabitToolArguments.ParseRevisedDatedItems(arguments);
+                return error is null
+                    ? (new BulkHabitFilter(false, items!.Select(item => item.HabitId).ToList(),
+                        IncludeCompleted: true), null) : (null, error);
+            }
+            if (operationId == "bulk_update_habit_emojis")
+                return ParseRevisedEmojiFilter(revisedItems);
             return ParseRevisedFilter(revisedItems, revisedChanges);
+        }
         return operationId switch
         {
             "bulk_update_habits" or "bulk_reschedule_habits" => BulkHabitToolArguments.ParseRequiredFilter(arguments),
             "bulk_update_habit_emojis" => BulkHabitToolArguments.ParseEmojiFilter(arguments),
             _ => BulkHabitToolArguments.ParseActionFilter(arguments)
         };
+    }
+
+    private static (BulkHabitFilter? Filter, string? Error) ParseRevisedEmojiFilter(JsonElement items)
+    {
+        var ids = new List<Guid>();
+        foreach (var item in items.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object
+                || !item.TryGetProperty("habit_id", out var idValue)
+                || idValue.ValueKind != JsonValueKind.String
+                || !Guid.TryParse(idValue.GetString(), out var id)
+                || ids.Contains(id))
+                return (null, "invalid_revised_items");
+            ids.Add(id);
+        }
+        return (new BulkHabitFilter(false, ids, IncludeCompleted: true), null);
     }
 
     private static (BulkHabitFilter? Filter, string? Error) ParseRevisedFilter(
@@ -188,7 +237,7 @@ public sealed class PendingOperationChangePreviewer(
             var name = habit.ValueKind == JsonValueKind.Object
                 && habit.TryGetProperty("title", out var title) ? title.ToString() : string.Empty;
             var fields = habit.ValueKind == JsonValueKind.Object
-                ? habit.EnumerateObject().Where(property => property.Name != "preview_item_id")
+                ? habit.EnumerateObject().Where(property => CreateFields.Contains(property.Name))
                     .Select(property => new PendingOperationChange(
                     Guid.Empty, name, property.Name, null, property.Value.ToString(), "text")).ToList()
                 : [];

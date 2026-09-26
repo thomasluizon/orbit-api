@@ -143,8 +143,9 @@ public class DeleteNotificationsTool(IMediator mediator) : IAiTool
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            action = new { type = JsonSchemaTypes.String, @enum = new[] { "delete_one", "delete_all" } },
-            notification_id = new { type = JsonSchemaTypes.String, nullable = true }
+            action = new { type = JsonSchemaTypes.String, @enum = new[] { "delete_one", "delete_all", "delete_selected" } },
+            notification_id = new { type = JsonSchemaTypes.String, nullable = true },
+            notification_ids = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String } }
         },
         required = new[] { "action" }
     };
@@ -159,8 +160,32 @@ public class DeleteNotificationsTool(IMediator mediator) : IAiTool
         {
             "delete_one" => await DeleteOneAsync(args, userId, ct),
             "delete_all" => await ChatToolMediator.RunAsync(mediator, new DeleteAllNotificationsCommand(userId), userId, "Deleted all notifications", new { action }, ct),
+            "delete_selected" => await DeleteSelectedAsync(args, userId, ct),
             _ => new ToolResult(false, Error: $"Unsupported action '{action}'.")
         };
+    }
+
+    private async Task<ToolResult> DeleteSelectedAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
+        if (!args.TryGetProperty("notification_ids", out var values)
+            || values.ValueKind != JsonValueKind.Array || values.GetArrayLength() == 0)
+            return new ToolResult(false, Error: "notification_ids must be a non-empty array.");
+        var ids = new List<Guid>();
+        foreach (var value in values.EnumerateArray())
+        {
+            if (value.ValueKind != JsonValueKind.String
+                || !Guid.TryParse(value.GetString(), out var id) || ids.Contains(id))
+                return new ToolResult(false, Error: "notification_ids contains an invalid ID.");
+            ids.Add(id);
+        }
+        foreach (var id in ids)
+        {
+            var result = await mediator.Send(new DeleteNotificationCommand(userId, id), ct);
+            if (result.IsFailure)
+                return ToolResult.FromFailure(result);
+        }
+        return new ToolResult(true, EntityId: userId.ToString(),
+            EntityName: $"Deleted {ids.Count} notifications");
     }
 
     private async Task<ToolResult> DeleteOneAsync(JsonElement args, Guid userId, CancellationToken ct)

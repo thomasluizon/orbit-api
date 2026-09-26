@@ -2980,12 +2980,12 @@
       "Behaviors": 17,
       "Calendar": 21,
       "Challenges": 15,
-      "Chat": 79,
+      "Chat": 80,
       "ChecklistTemplates": 10,
       "Common": 260,
       "Gamification": 45,
       "Goals": 55,
-      "Habits": 99,
+      "Habits": 100,
       "Marketing": 6,
       "Notifications": 25,
       "Profile": 41,
@@ -3565,6 +3565,13 @@
         "file": "tests/Orbit.Application.Tests/Chat/Tools/BulkUpdateHabitEmojisToolTests.cs",
         "references": [
           "Habit"
+        ]
+      },
+      {
+        "testClass": "BulkUpdateHabitsToolRevisionTests",
+        "file": "tests/Orbit.Application.Tests/Chat/Tools/BulkUpdateHabitsToolRevisionTests.cs",
+        "references": [
+          "BulkUpdateHabitsCommand"
         ]
       },
       {
@@ -8026,6 +8033,14 @@
         "references": [
           "AppConfig",
           "Habit"
+        ]
+      },
+      {
+        "testClass": "DestructiveOperationPreviewerTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Services/DestructiveOperationPreviewerTests.cs",
+        "references": [
+          "Notification",
+          "UserFact"
         ]
       },
       {

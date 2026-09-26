@@ -1,6 +1,9 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using FluentValidation;
+using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Habits.Commands;
+using Orbit.Application.Habits.Validators;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
@@ -67,8 +70,11 @@ public sealed class PendingOperationRevisionService(
                 : Failure("revision_conflict");
         }
 
-        var revised = BuildArguments(execution.OperationId, execution.Arguments, request.Items);
+        var revised = BuildArguments(execution.OperationId, execution.Arguments, request.Items, offered);
         if (revised is null)
+            return Failure("invalid_revision");
+        if (execution.OperationId == "bulk_create_habits"
+            && !ValidateCreate(userId, revised.Value))
             return Failure("invalid_revision");
 
         var revisedPreview = await previewer.PreviewAsync(userId, execution.OperationId,
@@ -100,60 +106,92 @@ public sealed class PendingOperationRevisionService(
     }
 
     private static JsonElement? BuildArguments(string operationId, JsonElement original,
-        IReadOnlyList<RevisedPendingOperationItem> selected)
+        IReadOnlyList<RevisedPendingOperationItem> selected,
+        IReadOnlyDictionary<string, PendingOperationItem> offered)
     {
         if (JsonNode.Parse(original.GetRawText()) is not JsonObject root)
             return null;
 
-        if (operationId == "bulk_create_habits")
-        {
-            if (!BuildCreateArguments(root, selected))
-                return null;
-        }
-        else if (operationId is "bulk_update_habits" or "bulk_reschedule_habits")
-        {
-            var updates = operationId == "bulk_reschedule_habits"
-                ? new JsonObject { ["due_date"] = root["due_date"]?.DeepClone() }
-                : root["updates"]?.DeepClone() as JsonObject;
-            if (updates is null)
-                return null;
-            var items = new JsonArray();
-            foreach (var item in selected)
-            {
-                var copy = (JsonObject)updates.DeepClone();
-                if (!ApplyEdits(copy, item.Edits))
-                    return null;
-                items.Add(new JsonObject
-                {
-                    ["habit_id"] = item.ItemId,
-                    ["updates"] = copy
-                });
-            }
-            root["revised_items"] = items;
-            root.Remove("filter");
-        }
-        else if (operationId is "bulk_delete_habits" or "bulk_log_habits" or "bulk_skip_habits"
-            or "bulk_update_habit_emojis")
-        {
-            if (selected.Any(item => item.Edits is { ValueKind: JsonValueKind.Object } edits
-                && edits.EnumerateObject().Any()))
-                return null;
-            root.Remove("filter");
-            root["habit_ids"] = new JsonArray(selected.Select(item =>
-                (JsonNode?)JsonValue.Create(item.ItemId)).ToArray());
-            if (operationId == "bulk_update_habit_emojis")
-                root["include_completed"] = true;
-        }
-        else if (operationId == "delete_habit")
-        {
-            if (selected.Count != 1 || selected[0].Edits is { ValueKind: JsonValueKind.Object } edits
-                && edits.EnumerateObject().Any())
-                return null;
-        }
-        else
+        var built = operationId.StartsWith("bulk_", StringComparison.Ordinal)
+            || operationId == "delete_habit"
+            ? BuildHabitArguments(root, operationId, selected, offered)
+            : BuildOtherArguments(root, operationId, selected);
+        if (!built)
             return null;
 
         return JsonDocument.Parse(root.ToJsonString()).RootElement.Clone();
+    }
+
+    private static bool BuildHabitArguments(JsonObject root, string operationId,
+        IReadOnlyList<RevisedPendingOperationItem> selected,
+        IReadOnlyDictionary<string, PendingOperationItem> offered)
+    {
+        if (operationId == "bulk_create_habits")
+            return BuildCreateArguments(root, selected);
+        if (operationId is "bulk_update_habits" or "bulk_reschedule_habits")
+            return BuildUpdatedHabitArguments(root, operationId, selected);
+        if (operationId is "bulk_log_habits" or "bulk_skip_habits")
+            return BuildDatedHabitArguments(root, selected, offered);
+        if (operationId == "bulk_update_habit_emojis")
+            return BuildEmojiArguments(root, selected);
+        if (operationId == "bulk_delete_habits")
+        {
+            if (selected.Any(HasEdits))
+                return false;
+            root.Remove("filter");
+            root["habit_ids"] = new JsonArray(selected.Select(item =>
+                (JsonNode?)JsonValue.Create(item.ItemId)).ToArray());
+            return true;
+        }
+        return operationId == "delete_habit" && selected.Count == 1 && !HasEdits(selected[0]);
+    }
+
+    private static bool BuildOtherArguments(JsonObject root, string operationId,
+        IReadOnlyList<RevisedPendingOperationItem> selected)
+    {
+        if (operationId is "delete_goal" or "delete_tag" or "delete_checklist_template")
+            return selected.Count == 1 && !HasEdits(selected[0]);
+        if (operationId == "manage_calendar_sync")
+            return BuildCalendarArguments(root, selected);
+        if (operationId == "delete_user_facts")
+            return BuildSelectedDeletion(root, selected, "fact_id", "fact_ids");
+        if (operationId == "delete_notifications")
+        {
+            if (!BuildSelectedDeletion(root, selected, "notification_id", "notification_ids"))
+                return false;
+            root["action"] = "delete_selected";
+            return true;
+        }
+        return false;
+    }
+
+    private static bool BuildCalendarArguments(JsonObject root,
+        IReadOnlyList<RevisedPendingOperationItem> selected)
+    {
+        if (selected.Count != 1)
+            return false;
+        if (root["action"]?.ToString() != "set_auto_sync")
+            return !HasEdits(selected[0]);
+        if (selected[0].Edits is { ValueKind: JsonValueKind.Object } edits
+            && edits.TryGetProperty("enabled", out var enabled)
+            && enabled.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
+            return false;
+        return ApplyEdits(root, selected[0].Edits);
+    }
+
+    private static bool HasEdits(RevisedPendingOperationItem item) =>
+        item.Edits is { ValueKind: JsonValueKind.Object } edits
+        && edits.EnumerateObject().Any();
+
+    private static bool BuildSelectedDeletion(JsonObject root,
+        IReadOnlyList<RevisedPendingOperationItem> selected, string singleKey, string multipleKey)
+    {
+        if (selected.Any(HasEdits))
+            return false;
+        root.Remove(singleKey);
+        root[multipleKey] = new JsonArray(selected.Select(item =>
+            (JsonNode?)JsonValue.Create(item.ItemId)).ToArray());
+        return true;
     }
 
     private static bool BuildCreateArguments(JsonObject root,
@@ -177,6 +215,85 @@ public sealed class PendingOperationRevisionService(
         return true;
     }
 
+    private static bool BuildUpdatedHabitArguments(JsonObject root, string operationId,
+        IReadOnlyList<RevisedPendingOperationItem> selected)
+    {
+        var updates = operationId == "bulk_reschedule_habits"
+            ? new JsonObject { ["due_date"] = root["due_date"]?.DeepClone() }
+            : root["updates"]?.DeepClone() as JsonObject;
+        if (updates is null)
+            return false;
+        var items = new JsonArray();
+        foreach (var item in selected)
+        {
+            var copy = (JsonObject)updates.DeepClone();
+            if (!ApplyEdits(copy, item.Edits))
+                return false;
+            items.Add(new JsonObject
+            {
+                ["habit_id"] = item.ItemId,
+                ["updates"] = copy
+            });
+        }
+        root["revised_items"] = items;
+        root.Remove("filter");
+        return true;
+    }
+
+    private static bool BuildDatedHabitArguments(JsonObject root,
+        IReadOnlyList<RevisedPendingOperationItem> selected,
+        IReadOnlyDictionary<string, PendingOperationItem> offered)
+    {
+        var items = new JsonArray();
+        foreach (var item in selected)
+        {
+            var originalDate = offered[item.ItemId].Fields
+                .FirstOrDefault(field => field.Field == "date")?.NewValue;
+            if (originalDate is null)
+                return false;
+            var edits = item.Edits;
+            string? date = originalDate;
+            if (edits is { ValueKind: JsonValueKind.Object } values
+                && values.TryGetProperty("date", out var editedDate))
+            {
+                if (editedDate.ValueKind != JsonValueKind.String)
+                    return false;
+                date = editedDate.GetString();
+            }
+            if (!DateOnly.TryParseExact(date, "yyyy-MM-dd",
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out _))
+                return false;
+            items.Add(new JsonObject { ["habit_id"] = item.ItemId, ["date"] = date });
+        }
+        root.Remove("filter");
+        root.Remove("habit_ids");
+        root["revised_items"] = items;
+        return true;
+    }
+
+    private static bool BuildEmojiArguments(JsonObject root,
+        IReadOnlyList<RevisedPendingOperationItem> selected)
+    {
+        var items = new JsonArray();
+        foreach (var item in selected)
+        {
+            var target = new JsonObject { ["habit_id"] = item.ItemId };
+            if (item.Edits is { ValueKind: JsonValueKind.Object } edits
+                && edits.TryGetProperty("emoji", out var emoji))
+            {
+                if (emoji.ValueKind is not JsonValueKind.String and not JsonValueKind.Null)
+                    return false;
+                target["emoji"] = JsonNode.Parse(emoji.GetRawText());
+            }
+            items.Add(target);
+        }
+        root.Remove("filter");
+        root.Remove("habit_ids");
+        root["revised_items"] = items;
+        return true;
+    }
+
     private static bool ApplyEdits(JsonObject target, JsonElement? edits)
     {
         if (edits is not { ValueKind: JsonValueKind.Object } fields)
@@ -184,6 +301,25 @@ public sealed class PendingOperationRevisionService(
         foreach (var field in fields.EnumerateObject())
             target[field.Name] = JsonNode.Parse(field.Value.GetRawText());
         return true;
+    }
+
+    private static bool ValidateCreate(Guid userId, JsonElement arguments)
+    {
+        if (!arguments.TryGetProperty("habits", out var habits)
+            || habits.ValueKind != JsonValueKind.Array)
+            return false;
+        var items = new List<BulkHabitItem>();
+        foreach (var habit in habits.EnumerateArray())
+        {
+            if (habit.ValueKind != JsonValueKind.Object)
+                return false;
+            var item = BulkCreateHabitsTool.ParseBulkHabitItem(habit);
+            if (item is null)
+                return false;
+            items.Add(item);
+        }
+        return new BulkCreateHabitsCommandValidator()
+            .Validate(new BulkCreateHabitsCommand(userId, items)).IsValid;
     }
 
     private static PendingOperationRevisionResult Failure(string error) =>

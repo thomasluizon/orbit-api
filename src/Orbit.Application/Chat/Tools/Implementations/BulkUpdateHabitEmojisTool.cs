@@ -56,14 +56,18 @@ public sealed partial class BulkUpdateHabitEmojisTool(
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
-        var (filter, filterError) = BulkHabitToolArguments.ParseEmojiFilter(args);
+        var overrides = new Dictionary<Guid, string?>();
+        var (filter, filterError) = args.TryGetProperty("revised_items", out var revisedItems)
+            ? ParseRevisedItems(revisedItems, overrides)
+            : BulkHabitToolArguments.ParseEmojiFilter(args);
         if (filterError is not null)
             return new ToolResult(false, Error: filterError);
 
         var hasEmojiArgument = JsonArgumentParser.PropertyExists(args, "emoji");
         var requestedEmoji = hasEmojiArgument ? JsonArgumentParser.GetNullableString(args, "emoji") : null;
         var inferFromTitle = JsonArgumentParser.GetOptionalBool(args, "infer_from_title") ?? !hasEmojiArgument;
-        if (!inferFromTitle && !hasEmojiArgument)
+        if (!inferFromTitle && !hasEmojiArgument
+            && (filter is null || overrides.Count != filter.HabitIds.Count))
             return new ToolResult(false, Error: "Provide emoji or set infer_from_title to true.");
 
         var habits = await BulkHabitSelection.LoadAsync(habitRepository, userId, filter!, ct);
@@ -78,11 +82,12 @@ public sealed partial class BulkUpdateHabitEmojisTool(
         foreach (var chunk in inputs.Chunk(InferenceChunkSize))
         {
             IReadOnlyDictionary<Guid, string>? inferred = null;
-            if (inferFromTitle)
+            var inferenceInputs = chunk.Where(input => !overrides.ContainsKey(input.HabitId)).ToArray();
+            if (inferFromTitle && inferenceInputs.Length > 0)
             {
                 var inferenceResult = await inferenceService.InferAsync(
                     userId,
-                    chunk,
+                    inferenceInputs,
                     ct);
                 if (inferenceResult.IsFailure)
                 {
@@ -106,7 +111,11 @@ public sealed partial class BulkUpdateHabitEmojisTool(
                     foreach (var habit in trackedHabits)
                     {
                         string? emoji;
-                        if (inferFromTitle)
+                        if (overrides.TryGetValue(habit.Id, out var overrideEmoji))
+                        {
+                            emoji = overrideEmoji;
+                        }
+                        else if (inferFromTitle)
                         {
                             if (!inferred!.TryGetValue(habit.Id, out emoji) || !IsSingleEmojiGrapheme(emoji))
                                 continue;
@@ -143,6 +152,33 @@ public sealed partial class BulkUpdateHabitEmojisTool(
             new BulkHabitMutationResult(appliedCount, totalMatched, skippedCount, partial),
             "Updated emojis for",
             includeUpdatedCount: true);
+    }
+
+    private static (BulkHabitFilter? Filter, string? Error) ParseRevisedItems(
+        JsonElement items, Dictionary<Guid, string?> overrides)
+    {
+        if (items.ValueKind != JsonValueKind.Array || items.GetArrayLength() == 0)
+            return (null, "revised_items must be a non-empty array.");
+        var ids = new List<Guid>();
+        foreach (var item in items.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object
+                || !item.TryGetProperty("habit_id", out var idValue)
+                || idValue.ValueKind != JsonValueKind.String
+                || !Guid.TryParse(idValue.GetString(), out var id)
+                || ids.Contains(id))
+                return (null, "revised_items contains an invalid habit ID.");
+            ids.Add(id);
+            if (!item.TryGetProperty("emoji", out var emoji))
+                continue;
+            if (emoji.ValueKind is not JsonValueKind.Null and not JsonValueKind.String)
+                return (null, "revised_items contains an invalid emoji.");
+            var value = emoji.ValueKind == JsonValueKind.Null ? null : emoji.GetString();
+            if (value is not null && !IsSingleEmojiGrapheme(value))
+                return (null, "revised_items contains an invalid emoji.");
+            overrides[id] = value;
+        }
+        return (new BulkHabitFilter(false, ids, IncludeCompleted: true), null);
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Bulk emoji inference stopped after {AppliedCount} of {TotalMatched} matches: {Reason}")]

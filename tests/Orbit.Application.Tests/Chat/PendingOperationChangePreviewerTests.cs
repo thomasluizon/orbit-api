@@ -50,8 +50,8 @@ public sealed class PendingOperationChangePreviewerTests
 
     [Theory]
     [InlineData("bulk_delete_habits", "delete")]
-    [InlineData("bulk_log_habits", "log")]
-    [InlineData("bulk_skip_habits", "skip")]
+    [InlineData("bulk_log_habits", "date")]
+    [InlineData("bulk_skip_habits", "date")]
     [InlineData("bulk_update_habit_emojis", "emoji")]
     public async Task PreviewAsync_BulkActions_ListEachTarget(string operationId, string field)
     {

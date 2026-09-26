@@ -55,7 +55,7 @@ public class BulkCreateHabitsTool(
         return new ToolResult(true, EntityName: $"{successCount}/{items.Count} habits created", Payload: result.Value);
     }
 
-    private static BulkHabitItem? ParseBulkHabitItem(JsonElement el)
+    internal static BulkHabitItem? ParseBulkHabitItem(JsonElement el)
     {
         var title = JsonArgumentParser.GetOptionalString(el, TitleProperty);
         if (string.IsNullOrWhiteSpace(title))

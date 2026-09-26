@@ -86,7 +86,9 @@ public class PendingAgentOperationState : Entity
         if (IsExpired(utcNow) || ConsumedAtUtc.HasValue
             || string.IsNullOrWhiteSpace(argumentsJson)
             || string.IsNullOrWhiteSpace(operationFingerprint)
-            || string.IsNullOrWhiteSpace(previewFingerprint))
+            || string.IsNullOrWhiteSpace(previewFingerprint)
+            || previewFingerprint.Length > 256
+            || AgentOperationFingerprint.Compute(OperationId, argumentsJson) != operationFingerprint)
             return false;
 
         ArgumentsJson = argumentsJson;
