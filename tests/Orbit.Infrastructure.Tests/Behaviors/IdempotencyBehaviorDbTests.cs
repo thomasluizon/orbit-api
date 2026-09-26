@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using MediatR;
 using Microsoft.Data.Sqlite;
@@ -6,6 +7,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Orbit.Application.Behaviors;
+using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Challenges.Services;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
@@ -163,6 +165,114 @@ public class IdempotencyBehaviorDbTests : IDisposable
         secondResponse.Should().Be("second");
         _handlerCalls.Should().Be(2);
         (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Handle_SameKeyDifferentCommandsOfOneType_BothExecute()
+    {
+        var behavior = CreateBehavior<NamedRequest, string>();
+
+        var first = await behavior.Handle(new NamedRequest("first"), CountingHandler("first"), CancellationToken.None);
+        var second = await behavior.Handle(new NamedRequest("second"), CountingHandler("second"), CancellationToken.None);
+
+        first.Should().Be("first");
+        second.Should().Be("second");
+        (await behavior.Handle(new NamedRequest("first"), CountingHandler("changed"), CancellationToken.None))
+            .Should().Be("first");
+        (await behavior.Handle(new NamedRequest("second"), CountingHandler("changed"), CancellationToken.None))
+            .Should().Be("second");
+        _handlerCalls.Should().Be(2);
+        (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Handle_ReplayOfRowWrittenBeforeContentScoping_ReturnsStoredResponse()
+    {
+        var legacy = ProcessedRequest.Create(
+            _userId, "mutation-key-1", typeof(NamedRequest).FullName!, ProcessedRequest.UnscopedFingerprint);
+        legacy.SetResponseBody(JsonSerializer.Serialize("stored-before-deploy"));
+        _dbContext.ProcessedRequests.Add(legacy);
+        await _dbContext.SaveChangesAsync();
+        var behavior = CreateBehavior<NamedRequest, string>();
+
+        var replay = await behavior.Handle(new NamedRequest("first"), CountingHandler("executed-again"), CancellationToken.None);
+
+        replay.Should().Be("stored-before-deploy");
+        _handlerCalls.Should().Be(0);
+        (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_SharedKey250Habits_AllChunksApplyOnceAndReplay(bool skip)
+    {
+        var today = new DateOnly(2026, 9, 24);
+        var habits = Enumerable.Range(1, 250).Select(index => Habit.Create(new HabitCreateParams(
+            _userId, $"Habit {index}", skip ? FrequencyUnit.Week : FrequencyUnit.Day,
+            skip ? 3 : 1, DueDate: today, IsFlexible: skip)).Value).ToArray();
+        _dbContext.Habits.AddRange(habits);
+        await _dbContext.SaveChangesAsync();
+
+        var dateService = CreateUserDateService(today);
+        var mediator = Substitute.For<IMediator>();
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var habitRepository = new GenericRepository<Habit>(_dbContext);
+        var logRepository = new GenericRepository<HabitLog>(_dbContext);
+        var context = new StubIdempotencyContext(true, _userId, "shared-http-key");
+        if (skip)
+        {
+            var handler = new BulkSkipHabitsCommandHandler(habitRepository, logRepository, dateService, _unitOfWork, cache);
+            var behavior = new IdempotencyBehavior<BulkSkipHabitsCommand, Result<BulkSkipResult>>(context, _store, _unitOfWork);
+            mediator.Send(Arg.Any<BulkSkipHabitsCommand>(), Arg.Any<CancellationToken>())
+                .Returns(call =>
+                {
+                    var command = call.Arg<BulkSkipHabitsCommand>();
+                    return behavior.Handle(command, ct =>
+                    {
+                        _handlerCalls++;
+                        return handler.Handle(command, ct);
+                    }, call.Arg<CancellationToken>());
+                });
+        }
+        else
+        {
+            var goalService = Substitute.For<IGoalCompletionService>();
+            goalService.SyncDerivedGoalsAsync(_userId, Arg.Any<IReadOnlyCollection<Guid>>(), today,
+                    Arg.Any<bool>(), Arg.Any<CancellationToken>())
+                .Returns((IReadOnlyList<GoalCompletionUpdate>)Array.Empty<GoalCompletionUpdate>());
+            var handler = new BulkLogHabitsCommandHandler(habitRepository, logRepository,
+                new BulkLogServices(dateService, Substitute.For<IUserStreakService>(), Substitute.For<IGamificationService>()),
+                goalService, _unitOfWork, cache, NullLogger<BulkLogHabitsCommandHandler>.Instance);
+            var behavior = new IdempotencyBehavior<BulkLogHabitsCommand, Result<BulkLogResult>>(context, _store, _unitOfWork);
+            mediator.Send(Arg.Any<BulkLogHabitsCommand>(), Arg.Any<CancellationToken>())
+                .Returns(call =>
+                {
+                    var command = call.Arg<BulkLogHabitsCommand>();
+                    return behavior.Handle(command, ct =>
+                    {
+                        _handlerCalls++;
+                        return handler.Handle(command, ct);
+                    }, call.Arg<CancellationToken>());
+                });
+        }
+
+        var args = JsonSerializer.SerializeToElement(new { habit_ids = habits.Select(habit => habit.Id).ToArray() });
+        var tool = skip
+            ? (Orbit.Application.Chat.Tools.IAiTool)new BulkSkipHabitsTool(mediator, habitRepository, dateService)
+            : new BulkLogHabitsTool(mediator, habitRepository, dateService);
+        var first = await tool.ExecuteAsync(args, _userId, CancellationToken.None);
+        var replay = await tool.ExecuteAsync(args, _userId, CancellationToken.None);
+
+        first.Success.Should().BeTrue();
+        first.EntityName.Should().Contain("250 of 250");
+        replay.EntityName.Should().Be(first.EntityName);
+        JsonSerializer.Serialize(replay.Payload).Should().Be(JsonSerializer.Serialize(first.Payload));
+        _handlerCalls.Should().Be(3);
+        (await _dbContext.HabitLogs.AsNoTracking().CountAsync()).Should().Be(250);
+        (await _dbContext.HabitLogs.AsNoTracking().Select(log => log.HabitId).Distinct().CountAsync()).Should().Be(250);
+        (await _dbContext.HabitLogs.AsNoTracking().CountAsync(log => log.Value == 0)).Should().Be(skip ? 250 : 0);
+        (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(3);
     }
 
     [Fact]
@@ -451,6 +561,8 @@ public class IdempotencyBehaviorDbTests : IDisposable
         };
 
     private sealed record FakeRequest : IRequest<string>, IIdempotentCommand;
+
+    private sealed record NamedRequest(string Name) : IRequest<string>, IIdempotentCommand;
 
     private sealed record OtherRequest : IRequest<string>, IIdempotentCommand;
 
