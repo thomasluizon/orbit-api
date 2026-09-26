@@ -7,6 +7,7 @@ public class HabitLog : Entity, ITimestamped, ISoftDeletable
     public Guid HabitId { get; private set; }
     public DateOnly Date { get; private set; }
     public decimal Value { get; private set; }
+    public bool IsSlip { get; private set; }
     public string? Note { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
@@ -15,13 +16,14 @@ public class HabitLog : Entity, ITimestamped, ISoftDeletable
 
     private HabitLog() { }
 
-    internal static HabitLog Create(Guid habitId, DateOnly date, decimal value, string? note = null)
+    internal static HabitLog Create(Guid habitId, DateOnly date, decimal value, string? note = null, bool isSlip = false)
     {
         return new HabitLog
         {
             HabitId = habitId,
             Date = date,
             Value = value,
+            IsSlip = isSlip,
             Note = note?.Trim(),
             CreatedAtUtc = DateTime.UtcNow,
             UpdatedAtUtc = DateTime.UtcNow

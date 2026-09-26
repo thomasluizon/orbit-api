@@ -13,9 +13,9 @@ public class HabitLogReader(OrbitDbContext context) : IHabitLogReader
         return context.Habits
             .AsNoTracking()
             .IgnoreQueryFilters()
-            .Where(habit => habit.UserId == userId && !habit.IsBadHabit)
+            .Where(habit => habit.UserId == userId)
             .SelectMany(habit => context.HabitLogs
-                .Where(log => log.HabitId == habit.Id && log.Value > 0 && !log.IsDeleted))
+                .Where(log => log.HabitId == habit.Id && log.Value > 0 && !log.IsSlip && !log.IsDeleted))
             .MaxAsync(log => (DateOnly?)log.Date, cancellationToken);
     }
 
