@@ -70,16 +70,13 @@ public static class SharedHabitRules
     public static void AddOneTimeTaskEndDateRules<T>(
         AbstractValidator<T> validator,
         System.Linq.Expressions.Expression<Func<T, DateOnly?>> endDateExpr,
-        System.Linq.Expressions.Expression<Func<T, Domain.Enums.FrequencyUnit?>> freqUnitExpr,
-        System.Linq.Expressions.Expression<Func<T, bool>> isGeneralExpr)
+        System.Linq.Expressions.Expression<Func<T, Domain.Enums.FrequencyUnit?>> freqUnitExpr)
     {
         var freqUnitFunc = freqUnitExpr.Compile();
-        var isGeneralFunc = isGeneralExpr.Compile();
-
         validator.RuleFor(endDateExpr)
             .Must((command, endDate) =>
-                !endDate.HasValue || freqUnitFunc(command) is not null || isGeneralFunc(command))
-            .WithMessage("A one-time task cannot have an end date");
+                !endDate.HasValue || freqUnitFunc(command) is not null)
+            .WithMessage("An end date requires a recurring habit");
     }
 
     public static void AddGeneralHabitRules<T>(

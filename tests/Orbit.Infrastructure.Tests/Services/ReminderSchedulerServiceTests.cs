@@ -446,6 +446,37 @@ public class ReminderSchedulerServiceTests
             user.Id, habit.Title, Arg.Any<string>(), "/", Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task CheckAndSendReminders_ConvertedScheduledReminder_FiresAtSameMoment()
+    {
+        await using var dbContext = CreateInMemoryDbContext();
+        var pushService = Substitute.For<IPushNotificationService>();
+        var clock = new MutableTimeProvider(new DateTimeOffset(2027, 9, 26, 8, 59, 0, TimeSpan.Zero));
+        var user = User.Create("Alex", "alex@test.com").Value;
+        user.SetTimeZone("UTC").IsSuccess.Should().BeTrue();
+        var habit = Habit.Create(new HabitCreateParams(user.Id, "Workout", FrequencyUnit.Day, 1,
+            DueDate: new DateOnly(2027, 9, 26), DueTime: new TimeOnly(10, 0),
+            ReminderEnabled: true, ReminderTimes: [],
+            ScheduledReminders: [new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(9, 0))])).Value;
+
+        habit.ScheduledReminders.Should().BeEmpty();
+        habit.ReminderTimes.Should().Equal(60);
+        dbContext.Users.Add(user);
+        dbContext.Habits.Add(habit);
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext, pushService, clock);
+        await service.CheckAndSendReminders(CancellationToken.None);
+        (await dbContext.SentReminders.CountAsync(r => r.HabitId == habit.Id)).Should().Be(0);
+
+        clock.SetUtcNow(new DateTimeOffset(2027, 9, 26, 9, 0, 0, TimeSpan.Zero));
+        await service.CheckAndSendReminders(CancellationToken.None);
+
+        (await dbContext.SentReminders.SingleAsync(r => r.HabitId == habit.Id)).MinutesBefore.Should().Be(60);
+        await pushService.Received(1).SendToUserAsync(
+            user.Id, habit.Title, Arg.Any<string>(), "/", Arg.Any<CancellationToken>());
+    }
+
     [Theory]
     [InlineData("2027-09-25T09:00:00Z", "UTC", "2027-09-26", 9, 0, 1440)]
     [InlineData("2027-09-26T09:30:00Z", "Etc/GMT+10", "2027-09-26", 0, 30, 60)]

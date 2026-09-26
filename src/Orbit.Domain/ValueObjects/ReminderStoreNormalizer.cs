@@ -1,11 +1,26 @@
 using Orbit.Domain.Enums;
 using Orbit.Domain.ValueObjects;
 
-namespace Orbit.Application.Chat.Tools.Implementations;
+namespace Orbit.Domain.ValueObjects;
 
-internal static class ReminderStoreNormalizer
+public static class ReminderStoreNormalizer
 {
     private const int MinutesPerDay = 24 * 60;
+
+    public static List<int> FoldScheduledReminders(
+        TimeOnly dueTime,
+        IReadOnlyList<int> reminderTimes,
+        IReadOnlyList<ScheduledReminderTime> scheduledReminders)
+    {
+        var offsets = reminderTimes.Distinct().Take(Common.DomainConstants.MaxReminderTimes).ToList();
+        foreach (var reminder in scheduledReminders)
+        {
+            var offset = ToMinutesBeforeDueTime(dueTime, reminder);
+            if (!offsets.Contains(offset) && offsets.Count < Common.DomainConstants.MaxReminderTimes)
+                offsets.Add(offset);
+        }
+        return offsets;
+    }
 
     /// <summary>
     /// Returns the reminder stores the habit should persist. When the habit has no due time both stores
@@ -24,17 +39,7 @@ internal static class ReminderStoreNormalizer
         if (reminderTimes is null && scheduledReminders is null)
             return (null, null);
 
-        var offsets = reminderTimes is not null ? new List<int>(reminderTimes) : new List<int>();
-
-        if (scheduledReminders is not null)
-        {
-            foreach (var reminder in scheduledReminders)
-            {
-                var offset = ToMinutesBeforeDueTime(dueTime.Value, reminder);
-                if (!offsets.Contains(offset))
-                    offsets.Add(offset);
-            }
-        }
+        var offsets = FoldScheduledReminders(dueTime.Value, reminderTimes ?? [], scheduledReminders ?? []);
 
         return (offsets.Count > 0 ? offsets : reminderTimes, []);
     }
@@ -61,14 +66,7 @@ internal static class ReminderStoreNormalizer
 
     private static List<int> ToOffsets(TimeOnly dueTime, IReadOnlyList<ScheduledReminderTime> reminders)
     {
-        var offsets = new List<int>();
-        foreach (var reminder in reminders)
-        {
-            var offset = ToMinutesBeforeDueTime(dueTime, reminder);
-            if (!offsets.Contains(offset))
-                offsets.Add(offset);
-        }
-        return offsets;
+        return FoldScheduledReminders(dueTime, [], reminders);
     }
 
     private static List<ScheduledReminderTime> ToScheduledReminders(TimeOnly dueTime, IReadOnlyList<int> offsets)
