@@ -25,6 +25,7 @@ public class RecordListCardBuilderTests
         card.Items.Should().HaveCount(10);
         card.Items[0].Title.Should().Be("Notice 36");
         card.Items[0].Detail.Should().HaveLength(120);
+        card.NextCursor.Should().NotBeNull();
         JsonSerializer.Serialize(card, new JsonSerializerOptions(JsonSerializerDefaults.Web))
             .Should().NotContain("example.test");
     }
@@ -48,10 +49,11 @@ public class RecordListCardBuilderTests
 
         var card = RecordListCardBuilder.BuildKeys([key], now);
 
-        card.Items.Single().Detail.Should().Be("orb_123 (expired)");
+        card.Items.Single().Detail.Should().Be("orb_123");
+        card.Items.Single().State.Should().Be("expired");
         using var json = JsonDocument.Parse(JsonSerializer.Serialize(card.Items.Single(),
             new JsonSerializerOptions(JsonSerializerDefaults.Web)));
         json.RootElement.EnumerateObject().Select(property => property.Name)
-            .Should().BeEquivalentTo(["id", "title", "detail", "date"]);
+            .Should().BeEquivalentTo(["id", "title", "detail", "date", "state"]);
     }
 }

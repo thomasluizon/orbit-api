@@ -634,13 +634,13 @@ public partial class ProcessUserChatCommandHandler(
             RecordListCard? card = kind switch
             {
                 "notifications" => results.LastSuccessfulPayload<GetNotificationsResponse>("get_notifications") is { } notifications
-                    ? RecordListCardBuilder.BuildNotifications(notifications) : null,
+                    ? RecordListCardBuilder.BuildNotifications(notifications, request.UserId) : null,
                 "tags" => results.LastSuccessfulPayload<IReadOnlyList<TagResponse>>("list_tags") is { } tags
-                    ? RecordListCardBuilder.BuildTags(tags) : null,
+                    ? RecordListCardBuilder.BuildTags(tags, request.UserId) : null,
                 "templates" => results.LastSuccessfulPayload<IReadOnlyList<ChecklistTemplateResponse>>("get_checklist_templates") is { } templates
-                    ? RecordListCardBuilder.BuildTemplates(templates) : null,
+                    ? RecordListCardBuilder.BuildTemplates(templates, request.UserId) : null,
                 "keys" => results.LastSuccessfulPayload<IReadOnlyList<ApiKeyResponse>>("get_api_keys") is { } keys
-                    ? RecordListCardBuilder.BuildKeys(keys, TimeProvider.System.GetUtcNow().UtcDateTime) : null,
+                    ? RecordListCardBuilder.BuildKeys(keys, TimeProvider.System.GetUtcNow().UtcDateTime, request.UserId) : null,
                 _ => null
             };
             if (card is not null)

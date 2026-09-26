@@ -488,6 +488,15 @@
     },
     {
       "controller": "ChatController",
+      "action": "GetRecordListPage",
+      "httpMethod": "GET",
+      "routeTemplate": "/api/chat/records/{kind}",
+      "authorization": "Authorize (class)",
+      "mediatrRequest": "GetRecordListPageQuery",
+      "responseDto": "RecordListCard"
+    },
+    {
+      "controller": "ChatController",
       "action": "ProcessChatStream",
       "httpMethod": "POST",
       "routeTemplate": "/api/chat/stream",
@@ -2184,6 +2193,12 @@
       "featureFolder": "Gamification"
     },
     {
+      "request": "GetRecordListPageQuery",
+      "response": "Result<RecordListCard>",
+      "handlerFile": "src/Orbit.Application/Chat/Queries/GetRecordListPageQuery.cs",
+      "featureFolder": "Chat"
+    },
+    {
       "request": "GetReferralDashboardQuery",
       "response": "Result<ReferralDashboardResponse>",
       "handlerFile": "src/Orbit.Application/Referrals/Queries/GetReferralDashboardQuery.cs",
@@ -2743,7 +2758,7 @@
       "Behaviors": 4,
       "Calendar": 16,
       "Challenges": 15,
-      "Chat": 91,
+      "Chat": 93,
       "ChecklistTemplates": 5,
       "Common": 37,
       "Gamification": 34,
@@ -2956,14 +2971,14 @@
       "Behaviors": 17,
       "Calendar": 21,
       "Challenges": 14,
-      "Chat": 73,
+      "Chat": 74,
       "ChecklistTemplates": 9,
       "Common": 258,
       "Gamification": 45,
       "Goals": 54,
       "Habits": 97,
       "Marketing": 6,
-      "Notifications": 23,
+      "Notifications": 24,
       "Profile": 41,
       "Referrals": 15,
       "Social": 36,
@@ -3412,6 +3427,15 @@
         "testClass": "FollowUpDirectiveTests",
         "file": "tests/Orbit.Application.Tests/Chat/FollowUpDirectiveTests.cs",
         "references": []
+      },
+      {
+        "testClass": "GetRecordListPageQueryHandlerTests",
+        "file": "tests/Orbit.Application.Tests/Chat/GetRecordListPageQueryHandlerTests.cs",
+        "references": [
+          "GetNotificationsQuery",
+          "GetRecordListPageQuery",
+          "GetRecordListPageQueryHandler"
+        ]
       },
       {
         "testClass": "GoalListCardBuilderTests",

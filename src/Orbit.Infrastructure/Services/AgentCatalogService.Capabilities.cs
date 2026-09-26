@@ -385,8 +385,8 @@ public partial class AgentCatalogService
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
                 chatTools: ["list_tags"],
-                mcpTools: ["list_tags"],
-                controllerActions: ["TagsController.GetTags"]),
+                mcpTools: ["list_tags", "get_tag_page"],
+                controllerActions: ["TagsController.GetTags", "ChatController.GetRecordListPage"]),
 
             CreateCapability(
                 AgentCapabilityIds.TagsWrite,
@@ -539,8 +539,8 @@ public partial class AgentCatalogService
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
                 chatTools: ["get_notifications"],
-                mcpTools: ["get_notifications"],
-                controllerActions: ["NotificationController.GetNotifications"]),
+                mcpTools: ["get_notifications", "get_notification_page"],
+                controllerActions: ["NotificationController.GetNotifications", "ChatController.GetRecordListPage"]),
 
             CreateCapability(
                 AgentCapabilityIds.NotificationsWrite,
@@ -700,8 +700,8 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.None,
                 featureFlagKeys: ["checklist_templates"],
                 chatTools: ["get_checklist_templates"],
-                mcpTools: ["get_checklist_templates"],
-                controllerActions: ["ChecklistTemplatesController.GetTemplates"]),
+                mcpTools: ["get_checklist_templates", "get_template_page"],
+                controllerActions: ["ChecklistTemplatesController.GetTemplates", "ChatController.GetRecordListPage"]),
 
             CreateCapability(
                 AgentCapabilityIds.ChecklistTemplatesWrite,
@@ -858,8 +858,8 @@ public partial class AgentCatalogService
                 planRequirement: "Pro",
                 featureFlagKeys: ["api_keys"],
                 chatTools: ["get_api_keys"],
-                mcpTools: ["get_api_keys"],
-                controllerActions: ["ApiKeysController.GetApiKeys"]),
+                mcpTools: ["get_api_keys", "get_api_key_page"],
+                controllerActions: ["ApiKeysController.GetApiKeys", "ChatController.GetRecordListPage"]),
 
             CreateCapability(
                 AgentCapabilityIds.ApiKeysManage,

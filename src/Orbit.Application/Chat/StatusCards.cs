@@ -9,7 +9,7 @@ public record DaySummaryCard(
     DateOnly Date, int Due, int Done, int? CompletionRate,
     int OverdueCount, int CurrentStreak, string SurfaceId = "today");
 
-public record StreakAchievement(string Id, string IconKey, DateTime EarnedAt);
+public record StreakAchievement(string Id, string IconKey, DateTime? EarnedAt);
 
 public record StreakCard(
     int CurrentStreak, int LongestStreak, int Level, int TotalXp, int XpForNextLevel,
@@ -51,10 +51,9 @@ public static class StatusCardBuilder
             streak.CurrentStreak, streak.LongestStreak, profile.Level, profile.TotalXp,
             profile.XpForNextLevel, streak.LastActiveDate, streak.IsFrozenToday,
             streak.RecentFreezeDates,
-            achievements.Where(item => item.EarnedAtUtc.HasValue)
-                .OrderByDescending(item => item.EarnedAtUtc)
+            achievements.OrderByDescending(item => item.EarnedAtUtc)
                 .Take(6)
-                .Select(item => new StreakAchievement(item.Id, item.IconKey, item.EarnedAtUtc!.Value))
+                .Select(item => new StreakAchievement(item.Id, item.IconKey, item.EarnedAtUtc))
                 .ToList());
     }
 

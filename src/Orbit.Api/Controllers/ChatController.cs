@@ -8,6 +8,8 @@ using Orbit.Api.Extensions;
 using Orbit.Api.RateLimiting;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Models;
+using Orbit.Application.Chat.Queries;
+using Orbit.Application.Chat;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
@@ -24,6 +26,18 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
     private static readonly JsonSerializerOptions ChatHistoryJsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     private const long MaxChatRequestBytes = 10 * 1024 * 1024;
+
+    [HttpGet("records/{kind}")]
+    [ProducesResponseType<RecordListCard>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetRecordListPage(string kind, [FromQuery] string cursor, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GetRecordListPageQuery(HttpContext.GetUserId(), kind, cursor), cancellationToken);
+        return result.ToPayGateAwareResult(v => Ok(v), StatusCodes.Status404NotFound);
+    }
 
     [HttpPost]
     [ConcurrentChatLimit]
