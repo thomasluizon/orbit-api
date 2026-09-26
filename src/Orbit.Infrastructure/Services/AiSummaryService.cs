@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
@@ -128,7 +129,7 @@ public sealed partial class AiSummaryService(
         var contextHeader = BuildContextHeader(
             context.CurrentLocalTime, context.CurrentStreak, context.StreakFreezesAccumulated, badHabitSlips);
 
-        return $"""
+        return string.Create(CultureInfo.InvariantCulture, $"""
             Date: {context.DateFrom:MMMM d, yyyy}
             {contextHeader}
             Progress: {doneTotal}/{goodHabits.Count} habits completed
@@ -160,7 +161,7 @@ public sealed partial class AiSummaryService(
             - No greeting like "good morning", no sign-off -- just the message
 
             Respond with ONLY a JSON object with one string field and nothing else: "summary" (the message above).
-            """;
+            """);
     }
 
     private static string BuildContextHeader(
@@ -169,11 +170,11 @@ public sealed partial class AiSummaryService(
         var lines = new List<string> { $"Current part of day: {BuildTimeContext(currentLocalTime)}" };
 
         if (currentStreak > 0)
-            lines.Add($"Current streak: {currentStreak} days");
+            lines.Add(string.Create(CultureInfo.InvariantCulture, $"Current streak: {currentStreak} days"));
         if (streakFreezesAccumulated > 0)
-            lines.Add($"Streak freezes banked: {streakFreezesAccumulated}");
+            lines.Add(string.Create(CultureInfo.InvariantCulture, $"Streak freezes banked: {streakFreezesAccumulated}"));
         if (badHabitSlips > 0)
-            lines.Add($"Bad habit slips today: {badHabitSlips}");
+            lines.Add(string.Create(CultureInfo.InvariantCulture, $"Bad habit slips today: {badHabitSlips}"));
 
         return string.Join("\n", lines);
     }
@@ -197,7 +198,7 @@ public sealed partial class AiSummaryService(
             {
                 var doneCount = children.Count(c => IsDoneInRange(c, dateFrom, dateTo));
                 var status = IsDoneInRange(habit, dateFrom, dateTo) ? "done" : "pending";
-                habitLines.Add($"- {habit.Title} ({status}, {doneCount}/{children.Count} sub-tasks done) [{DescribeTiming(habit)}]");
+                habitLines.Add(string.Create(CultureInfo.InvariantCulture, $"- {habit.Title} ({status}, {doneCount}/{children.Count} sub-tasks done) [{DescribeTiming(habit)}]"));
                 foreach (var child in children)
                     habitLines.Add($"  - {DescribeHabitLine(child, dateFrom, dateTo, userToday, lastBadHabitSlipDates, weekStartDay, resolvedDueDateHabitIds)}");
             }
@@ -246,7 +247,7 @@ public sealed partial class AiSummaryService(
             return "bad habit -- clean, no slips on record";
 
         var daysClean = userToday.DayNumber - lastSlip.DayNumber;
-        return $"bad habit -- clean, {daysClean} days since last slip";
+        return string.Create(CultureInfo.InvariantCulture, $"bad habit -- clean, {daysClean} days since last slip");
     }
 
     private static void AppendGoalsLine(List<string> habitLines, Habit habit)
@@ -308,7 +309,7 @@ public sealed partial class AiSummaryService(
     private static string DescribeTiming(Habit habit)
     {
         var dueDescription = habit.DueTime.HasValue
-            ? $"due {habit.DueTime.Value:HH\\:mm}"
+            ? string.Create(CultureInfo.InvariantCulture, $"due {habit.DueTime.Value:HH\\:mm}")
             : InferTitleTimePeriod(habit.Title);
 
         return dueDescription ?? "no specific time";

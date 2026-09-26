@@ -40,7 +40,7 @@ public class NotificationTools(IMediator mediator, McpExecutorBridge executorBri
 
         var lines = items.Select(n =>
             // Body omitted: social/accountability bodies embed other users' names; the MCP surface must not leak third-party PII. https://github.com/thomasluizon/orbit-ui-mobile/issues/243
-            $"- [{(n.IsRead ? " " : "NEW")}] {n.Title} (id: {n.Id}, {n.CreatedAtUtc:yyyy-MM-dd HH:mm})");
+            string.Create(System.Globalization.CultureInfo.InvariantCulture, $"- [{(n.IsRead ? " " : "NEW")}] {n.Title} (id: {n.Id}, {n.CreatedAtUtc:yyyy-MM-dd HH:mm})"));
 
         return $"Notifications ({items.Count}, {result.Value.UnreadCount} unread):\n{string.Join("\n", lines)}";
     }

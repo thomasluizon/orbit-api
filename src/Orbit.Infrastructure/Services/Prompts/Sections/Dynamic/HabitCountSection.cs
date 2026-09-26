@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 
 namespace Orbit.Infrastructure.Services.Prompts.Sections.Dynamic;
@@ -10,7 +11,7 @@ public class HabitCountSection : IPromptSection
     public string Build(PromptContext context)
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"## Habit Count: {context.ActiveHabits.Count} active habits");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"## Habit Count: {context.ActiveHabits.Count} active habits");
         sb.AppendLine();
         return sb.ToString();
     }

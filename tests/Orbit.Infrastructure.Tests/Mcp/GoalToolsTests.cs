@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Claims;
 using FluentAssertions;
 using MediatR;
@@ -67,6 +68,32 @@ public class GoalToolsTests
     }
 
     [Fact]
+    public async Task ListGoals_Deadline_UsesInvariantCalendar()
+    {
+        var goals = new List<GoalDto>
+        {
+            new(Guid.NewGuid(), "Run", null, 10.5m, 3.5m, "miles", GoalStatus.Active, GoalType.Standard,
+                new DateOnly(2026, 12, 31), 0, DateTime.UtcNow, null, 33.3m, [], "On Track")
+        };
+        _mediator.Send(Arg.Any<GetGoalsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new PaginatedResponse<GoalDto>(goals, 1, 50, 1, 1)));
+        var previousCulture = CultureInfo.CurrentCulture;
+
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("ar-SA");
+            var result = await _tools.ListGoals(_user);
+
+            result.Should().Contain("3.5/10.5 miles (33%)");
+            result.Should().Contain("Deadline: 12/31/2026");
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previousCulture;
+        }
+    }
+
+    [Fact]
     public async Task ListGoals_Empty_ReturnsNoGoalsMessage()
     {
         var paginated = new PaginatedResponse<GoalDto>([], 1, 50, 0, 0);
@@ -105,6 +132,38 @@ public class GoalToolsTests
 
         result.Should().Contain("Read 12 books");
         result.Should().Contain("3/12 books");
+    }
+
+    [Fact]
+    public async Task GetGoal_DeadlineAndProgress_UseInvariantCulture()
+    {
+        var goalId = Guid.NewGuid();
+        var detail = new GoalDetailDto(
+            goalId, "Run", null, 10.5m, 3.5m, "miles", GoalStatus.Active, GoalType.Standard,
+            new DateOnly(2026, 12, 31), 0, new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 12, 1, 0, 0, 0, DateTimeKind.Utc), 33.3m,
+            [new GoalProgressEntryDto(3.5m, 1.5m, null, DateTime.UtcNow)],
+            [new LinkedHabitDto(Guid.NewGuid(), "Morning run")]);
+        _mediator.Send(Arg.Any<GetGoalByIdQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(detail));
+        var previousCulture = CultureInfo.CurrentCulture;
+
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("ar-SA");
+            var result = await _tools.GetGoal(_user, goalId.ToString());
+
+            result.Should().Contain("Progress: 3.5/10.5 miles (33.3%)");
+            result.Should().Contain("Deadline: 12/31/2026");
+            result.Should().Contain("Created: 2026-01-01");
+            result.Should().Contain("Completed: 2026-12-01");
+            result.Should().Contain("Linked habits: Morning run");
+            result.Should().Contain("Recent progress: 1.5->3.5");
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previousCulture;
+        }
     }
 
     [Fact]
@@ -281,6 +340,51 @@ public class GoalToolsTests
         result.Should().Contain("75.5%");
         result.Should().Contain("1.20/day");
         result.Should().Contain("On Track");
+    }
+
+    [Fact]
+    public async Task GetGoalMetrics_DecimalValues_UseInvariantCulture()
+    {
+        var metrics = new GoalMetrics(75.5m, 1.2m, null, null, "On Track", []);
+        _mediator.Send(Arg.Any<GetGoalMetricsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(metrics));
+        var previousCulture = CultureInfo.CurrentCulture;
+
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("pt-BR");
+            var result = await _tools.GetGoalMetrics(_user, Guid.NewGuid().ToString());
+
+            result.Should().Contain("Progress: 75.5%");
+            result.Should().Contain("Velocity: 1.20/day");
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previousCulture;
+        }
+    }
+
+    [Fact]
+    public async Task GetGoalMetrics_LinkedHabit_FormatsPerformance()
+    {
+        var adherence = new LinkedHabitAdherence(Guid.NewGuid(), "Morning run", 85.5m, 75m, 3);
+        var metrics = new GoalMetrics(75.5m, 1.2m, null, null, "On Track", [adherence]);
+        _mediator.Send(Arg.Any<GetGoalMetricsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(metrics));
+        var previousCulture = CultureInfo.CurrentCulture;
+
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("ar-SA");
+            var result = await _tools.GetGoalMetrics(_user, Guid.NewGuid().ToString());
+
+            result.Should().Contain("Linked habit performance:");
+            result.Should().Contain("Morning run: weekly 86%, streak 3d");
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previousCulture;
+        }
     }
 
     [Fact]

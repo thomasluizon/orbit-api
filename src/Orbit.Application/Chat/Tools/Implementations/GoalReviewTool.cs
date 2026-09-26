@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
@@ -42,14 +43,14 @@ public class GoalReviewTool(
                 GoalProgressSyncService.ApplyReadValue(goal, freshValue);
 
             var m = GoalMetricsCalculator.Calculate(goal, userToday, weekStartDay);
-            sb.AppendLine($"Goal: \"{goal.Title}\" | {goal.CurrentValue}/{goal.TargetValue} {goal.Unit} ({m.ProgressPercentage}%)");
-            sb.AppendLine($"  Status: {m.TrackingStatus} | Velocity: {m.VelocityPerDay} {goal.Unit}/day");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"Goal: \"{goal.Title}\" | {goal.CurrentValue}/{goal.TargetValue} {goal.Unit} ({m.ProgressPercentage}%)");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"  Status: {m.TrackingStatus} | Velocity: {m.VelocityPerDay} {goal.Unit}/day");
             if (m.ProjectedCompletionDate.HasValue)
-                sb.AppendLine($"  Projected completion: {m.ProjectedCompletionDate:yyyy-MM-dd}");
+                sb.AppendLine(CultureInfo.InvariantCulture, $"  Projected completion: {m.ProjectedCompletionDate:yyyy-MM-dd}");
             if (goal.Deadline.HasValue)
-                sb.AppendLine($"  Deadline: {goal.Deadline:yyyy-MM-dd} ({m.DaysToDeadline} days)");
+                sb.AppendLine(CultureInfo.InvariantCulture, $"  Deadline: {goal.Deadline:yyyy-MM-dd} ({m.DaysToDeadline} days)");
             foreach (var h in m.HabitAdherence)
-                sb.AppendLine($"  Linked habit: \"{h.HabitTitle}\" | Weekly: {h.WeeklyCompletionRate}% | Streak: {h.CurrentStreak}d");
+                sb.AppendLine(CultureInfo.InvariantCulture, $"  Linked habit: \"{h.HabitTitle}\" | Weekly: {h.WeeklyCompletionRate}% | Streak: {h.CurrentStreak}d");
         }
 
         return new ToolResult(true, EntityName: sb.ToString());

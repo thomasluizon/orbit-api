@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
@@ -47,6 +48,49 @@ public class GoalReviewToolTests
         result.Success.Should().BeTrue();
         result.EntityName.Should().Contain("Read books");
         result.EntityName.Should().Contain("12");
+    }
+
+    [Fact]
+    public async Task SuccessfulReview_DecimalProgress_UsesInvariantCulture()
+    {
+        var goal = Goal.Create(UserId, "Run", 10.5m, "miles").Value;
+        goal.UpdateProgress(3.5m);
+        SetupGoals(goal);
+        var previousCulture = CultureInfo.CurrentCulture;
+
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("pt-BR");
+            var result = await Execute("{}");
+
+            result.Success.Should().BeTrue();
+            result.EntityName.Should().Contain("3.5/10.5 miles");
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previousCulture;
+        }
+    }
+
+    [Fact]
+    public async Task SuccessfulReview_Deadline_UsesInvariantCalendar()
+    {
+        var goal = Goal.Create(new Goal.CreateGoalParams(
+            UserId, "Run", 10, "miles", Deadline: new DateOnly(2026, 12, 31))).Value;
+        SetupGoals(goal);
+        var previousCulture = CultureInfo.CurrentCulture;
+
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("ar-SA");
+            var result = await Execute("{}");
+
+            result.EntityName.Should().Contain("Deadline: 2026-12-31");
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previousCulture;
+        }
     }
 
     [Fact]

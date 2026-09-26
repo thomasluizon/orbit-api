@@ -166,5 +166,5 @@ public class GetDailySummaryQueryHandler(
     }
 
     private static string CacheKey(Guid userId, DateOnly date, string language, string timeBucket) =>
-        $"summary:{userId}:{date:yyyy-MM-dd}:{language}:{timeBucket}";
+        string.Create(System.Globalization.CultureInfo.InvariantCulture, $"summary:{userId}:{date:yyyy-MM-dd}:{language}:{timeBucket}");
 }

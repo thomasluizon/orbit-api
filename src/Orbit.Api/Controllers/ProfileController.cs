@@ -387,7 +387,7 @@ public partial class ProfileController(
             return result.ToErrorResult();
 
         var userToday = await userDateService.GetUserTodayAsync(HttpContext.GetUserId(), cancellationToken);
-        var fileName = $"orbit-data-export-{userToday:yyyy-MM-dd}.json";
+        var fileName = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"orbit-data-export-{userToday:yyyy-MM-dd}.json");
         var json = JsonSerializer.SerializeToUtf8Bytes(result.Value, ExportJsonOptions);
         return File(json, "application/json", fileName);
     }

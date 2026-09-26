@@ -34,7 +34,7 @@ public class ProfileTools(IMediator mediator, McpExecutorBridge executorBridge)
         return $"Name: {p.Name}\n" +
                $"Email: {p.Email}\n" +
                $"Plan: {p.Plan}{(p.HasProAccess ? " (Pro)" : "")}\n" +
-               (p.IsTrialActive ? $"Trial ends: {p.TrialEndsAt:yyyy-MM-dd}\n" : "") +
+               (p.IsTrialActive ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Trial ends: {p.TrialEndsAt:yyyy-MM-dd}\n") : "") +
                (p.TimeZone is not null ? $"Timezone: {p.TimeZone}\n" : "") +
                (p.Language is not null ? $"Language: {p.Language}\n" : "") +
                $"AI Messages: {p.AiMessagesUsed}/{p.AiMessagesLimit}\n" +

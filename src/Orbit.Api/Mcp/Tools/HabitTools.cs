@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.ComponentModel;
 using System.Security.Claims;
 using System.Text.Json;
@@ -67,7 +68,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
             McpToolHelpers.AppendChildren(lines, h.Children, indent: 1);
         }
 
-        return $"Habits (page {result.Value.Page}/{result.Value.TotalPages}, total: {result.Value.TotalCount}):\n" +
+        return string.Create(CultureInfo.InvariantCulture, $"Habits (page {result.Value.Page}/{result.Value.TotalPages}, total: {result.Value.TotalCount}):\n") +
                string.Join("\n", lines);
     }
 
@@ -89,15 +90,15 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
                    $"Emoji: {h.Emoji ?? "None"}\n" +
                    $"Status: {(h.IsCompleted ? "Completed" : "Active")}\n" +
                    (h.Description is not null ? $"Description: {h.Description}\n" : "") +
-                   (h.FrequencyUnit is not null ? $"Frequency: {h.FrequencyQuantity}x per {h.FrequencyUnit}\n" : "Type: One-time task\n") +
-                   $"Due Date: {h.DueDate}\n" +
-                   (h.DueTime is not null ? $"Due Time: {h.DueTime:HH:mm}\n" : "") +
+                   (h.FrequencyUnit is not null ? string.Create(CultureInfo.InvariantCulture, $"Frequency: {h.FrequencyQuantity}x per {h.FrequencyUnit}\n") : "Type: One-time task\n") +
+                   string.Create(CultureInfo.InvariantCulture, $"Due Date: {h.DueDate}\n") +
+                   (h.DueTime is not null ? string.Create(CultureInfo.InvariantCulture, $"Due Time: {h.DueTime:HH:mm}\n") : "") +
                    (h.Days.Count > 0 ? $"Days: {string.Join(", ", h.Days)}\n" : "") +
                    (h.IsBadHabit ? "Bad Habit: Yes\n" : "") +
                    (h.IsGeneral ? "General: Yes\n" : "") +
                    (h.IsFlexible ? "Flexible: Yes\n" : "") +
-                   (h.ChecklistItems.Count > 0 ? $"Checklist: {h.ChecklistItems.Count(i => i.IsChecked)}/{h.ChecklistItems.Count} items\n" : "") +
-                   $"Created: {h.CreatedAtUtc:yyyy-MM-dd}\n" +
+                   (h.ChecklistItems.Count > 0 ? string.Create(CultureInfo.InvariantCulture, $"Checklist: {h.ChecklistItems.Count(i => i.IsChecked)}/{h.ChecklistItems.Count} items\n") : "") +
+                   string.Create(CultureInfo.InvariantCulture, $"Created: {h.CreatedAtUtc:yyyy-MM-dd}\n") +
                    (h.Children.Count > 0 ? $"Sub-habits: {string.Join(", ", h.Children.Select(c => c.Title))}\n" : "");
         return habitSummary;
     }
@@ -222,12 +223,12 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
 
         var m = result.Value;
         return $"Metrics for habit {habitId}:\n" +
-               $"Current Streak: {m.CurrentStreak} days\n" +
-               $"Longest Streak: {m.LongestStreak} days\n" +
-               $"Total Completions: {m.TotalCompletions}\n" +
-               $"Weekly Completion Rate: {m.WeeklyCompletionRate:P0}\n" +
-               $"Monthly Completion Rate: {m.MonthlyCompletionRate:P0}\n" +
-               (m.LastCompletedDate is not null ? $"Last Completed: {m.LastCompletedDate}" : "Never completed");
+               string.Create(CultureInfo.InvariantCulture, $"Current Streak: {m.CurrentStreak} days\n") +
+               string.Create(CultureInfo.InvariantCulture, $"Longest Streak: {m.LongestStreak} days\n") +
+               string.Create(CultureInfo.InvariantCulture, $"Total Completions: {m.TotalCompletions}\n") +
+               string.Create(CultureInfo.InvariantCulture, $"Weekly Completion Rate: {m.WeeklyCompletionRate:P0}\n") +
+               string.Create(CultureInfo.InvariantCulture, $"Monthly Completion Rate: {m.MonthlyCompletionRate:P0}\n") +
+               (m.LastCompletedDate is not null ? string.Create(CultureInfo.InvariantCulture, $"Last Completed: {m.LastCompletedDate}") : "Never completed");
     }
 
     [McpServerTool(Name = "skip_habit"), Description("Skip a habit for today (or a specific date). Advances to next scheduled date without logging completion. Only works on recurring habits.")]
@@ -284,7 +285,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         var returnedLogs = logs.Take(50).ToList();
         var partial = returnedLogs.Count < logs.Count;
         var lines = returnedLogs.Select(l =>
-            $"- {l.Date:yyyy-MM-dd}" +
+            string.Create(CultureInfo.InvariantCulture, $"- {l.Date:yyyy-MM-dd}") +
             $" (id: {l.Id})");
 
         return $"Logs (total: {logs.Count}, returned: {returnedLogs.Count}, partial: {partial.ToString().ToLowerInvariant()}):\n{string.Join("\n", lines)}";
@@ -314,7 +315,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         var lines = grouped.Select(group =>
         {
             var returned = group.Value.Take(10).ToList();
-            return $"Habit {group.Key}: total {group.Value.Count}, returned {returned.Count} ({string.Join(", ", returned.Select(log => log.Date.ToString("yyyy-MM-dd")))})";
+            return string.Create(CultureInfo.InvariantCulture, $"Habit {group.Key}: total {group.Value.Count}, returned {returned.Count} ({string.Join(", ", returned.Select(log => log.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)))})");
         });
 
         return $"Logs for {grouped.Count} habits (total_logs: {totalLogs}, returned_logs: {returnedLogCount}, partial: {partial.ToString().ToLowerInvariant()}):\n{string.Join("\n", lines)}";

@@ -94,48 +94,48 @@ public partial class AgentCatalogService : IAgentCatalogService
     {
         sb.AppendLine("## Product Surface Snapshot");
         foreach (var surface in _surfaces)
-            sb.AppendLine($"- {surface.DisplayName}: {surface.Description}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"- {surface.DisplayName}: {surface.Description}");
     }
 
     private static void AppendSafeUserContext(StringBuilder sb, AgentContextSnapshot snapshot)
     {
         sb.AppendLine("## Safe User Context");
-        sb.AppendLine($"Plan: {snapshot.Plan}");
-        sb.AppendLine($"Language: {snapshot.Language ?? "unknown"}");
-        sb.AppendLine($"Timezone: {snapshot.TimeZone ?? "unknown"}");
-        sb.AppendLine($"AI memory: {(snapshot.AiMemoryEnabled ? "enabled" : "disabled")}");
-        sb.AppendLine($"AI summary: {(snapshot.AiSummaryEnabled ? "enabled" : "disabled")}");
-        sb.AppendLine($"Week starts on: {(snapshot.WeekStartDay == 0 ? "Sunday" : "Monday")}");
-        sb.AppendLine($"Theme: {snapshot.ThemePreference ?? "system"}");
-        sb.AppendLine($"Color scheme: {snapshot.ColorScheme ?? "default"}");
-        sb.AppendLine($"Google Calendar connected: {(snapshot.HasGoogleConnection ? "yes" : "no")}");
-        sb.AppendLine($"Calendar auto-sync: {(snapshot.GoogleCalendarAutoSyncEnabled ? "enabled" : "disabled")} ({snapshot.GoogleCalendarAutoSyncStatus})");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Plan: {snapshot.Plan}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Language: {snapshot.Language ?? "unknown"}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Timezone: {snapshot.TimeZone ?? "unknown"}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"AI memory: {(snapshot.AiMemoryEnabled ? "enabled" : "disabled")}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"AI summary: {(snapshot.AiSummaryEnabled ? "enabled" : "disabled")}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Week starts on: {(snapshot.WeekStartDay == 0 ? "Sunday" : "Monday")}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Theme: {snapshot.ThemePreference ?? "system"}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Color scheme: {snapshot.ColorScheme ?? "default"}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Google Calendar connected: {(snapshot.HasGoogleConnection ? "yes" : "no")}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Calendar auto-sync: {(snapshot.GoogleCalendarAutoSyncEnabled ? "enabled" : "disabled")} ({snapshot.GoogleCalendarAutoSyncStatus})");
 
         if (snapshot.FeatureFlags is { Count: > 0 })
-            sb.AppendLine($"Feature flags: {string.Join(", ", snapshot.FeatureFlags.OrderBy(flag => flag, StringComparer.OrdinalIgnoreCase))}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"Feature flags: {string.Join(", ", snapshot.FeatureFlags.OrderBy(flag => flag, StringComparer.OrdinalIgnoreCase))}");
 
         if (snapshot.TagNames is { Count: > 0 })
-            sb.AppendLine($"Tags: {string.Join(", ", snapshot.TagNames)}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"Tags: {string.Join(", ", snapshot.TagNames)}");
 
         if (snapshot.ChecklistTemplateNames is { Count: > 0 })
-            sb.AppendLine($"Checklist templates: {string.Join(", ", snapshot.ChecklistTemplateNames)}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"Checklist templates: {string.Join(", ", snapshot.ChecklistTemplateNames)}");
 
         if (snapshot.RecentHabitTitles is { Count: > 0 })
-            sb.AppendLine($"Recent habits: {string.Join(", ", snapshot.RecentHabitTitles)}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"Recent habits: {string.Join(", ", snapshot.RecentHabitTitles)}");
 
         if (snapshot.RecentGoalTitles is { Count: > 0 })
-            sb.AppendLine($"Recent goals: {string.Join(", ", snapshot.RecentGoalTitles)}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"Recent goals: {string.Join(", ", snapshot.RecentGoalTitles)}");
 
         if (snapshot.ClientContext is not null)
         {
             sb.AppendLine();
             sb.AppendLine("## Untrusted Client Hints");
-            sb.AppendLine($"Platform: {snapshot.ClientContext.Platform ?? "unknown"}");
-            sb.AppendLine($"Locale: {snapshot.ClientContext.Locale ?? "unknown"}");
-            sb.AppendLine($"Time format: {snapshot.ClientContext.TimeFormat ?? "unknown"}");
-            sb.AppendLine($"Current app area: {snapshot.ClientContext.CurrentAppArea ?? "unknown"}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"Platform: {snapshot.ClientContext.Platform ?? "unknown"}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"Locale: {snapshot.ClientContext.Locale ?? "unknown"}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"Time format: {snapshot.ClientContext.TimeFormat ?? "unknown"}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"Current app area: {snapshot.ClientContext.CurrentAppArea ?? "unknown"}");
             if (snapshot.ClientContext.ShowGeneralOnToday.HasValue)
-                sb.AppendLine($"Show general on today: {snapshot.ClientContext.ShowGeneralOnToday.Value}");
+                sb.AppendLine(CultureInfo.InvariantCulture, $"Show general on today: {snapshot.ClientContext.ShowGeneralOnToday.Value}");
         }
     }
 

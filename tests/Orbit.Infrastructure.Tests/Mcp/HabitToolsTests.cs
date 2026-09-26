@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Claims;
 using FluentAssertions;
 using MediatR;
@@ -123,6 +124,35 @@ public class HabitToolsTests
         result.Should().Contain("Exercise");
         result.Should().Contain("Emoji: 🏃");
         result.Should().Contain("Active");
+    }
+
+    [Fact]
+    public async Task GetHabit_Dates_UseInvariantCalendar()
+    {
+        var habitId = Guid.NewGuid();
+        var detail = new HabitDetailResponse(
+            habitId, "Run", null, FrequencyUnit.Day, 1,
+            false, false, false, false,
+            new DateOnly(2026, 12, 31), null, null, null,
+            [], null, false, [], [], [new Orbit.Domain.ValueObjects.ChecklistItem("Shoes", true)],
+            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), []);
+        _mediator.Send(Arg.Any<GetHabitByIdQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(detail));
+        var previousCulture = CultureInfo.CurrentCulture;
+
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("ar-SA");
+            var result = await _tools.GetHabit(_user, habitId.ToString());
+
+            result.Should().Contain("Due Date: 12/31/2026");
+            result.Should().Contain("Created: 2026-01-01");
+            result.Should().Contain("Checklist: 1/1 items");
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previousCulture;
+        }
     }
 
     [Fact]
@@ -350,6 +380,29 @@ public class HabitToolsTests
         result.Should().Contain("Current Streak: 5 days");
         result.Should().Contain("Longest Streak: 10 days");
         result.Should().Contain("Total Completions: 50");
+    }
+
+    [Fact]
+    public async Task GetHabitMetrics_Percentages_UseInvariantCulture()
+    {
+        var metrics = new HabitMetrics(5, 10, 0.85m, 0.75m, 50, new DateOnly(2026, 12, 31));
+        _mediator.Send(Arg.Any<GetHabitMetricsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(metrics));
+        var previousCulture = CultureInfo.CurrentCulture;
+
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("ar-SA");
+            var result = await _tools.GetHabitMetrics(_user, Guid.NewGuid().ToString());
+
+            result.Should().Contain("Weekly Completion Rate: 85 %");
+            result.Should().Contain("Monthly Completion Rate: 75 %");
+            result.Should().NotContain("85٪");
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previousCulture;
+        }
     }
 
     [Fact]

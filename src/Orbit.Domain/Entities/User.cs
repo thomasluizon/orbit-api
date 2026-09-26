@@ -506,7 +506,7 @@ public partial class User : Entity
     /// the user's id) for a freshly created account. Bypasses format validation because the result is
     /// provably valid (17 chars, alphanumeric + underscore); the same formula backfills existing rows.
     /// </summary>
-    public void SeedDefaultHandle() => Handle = $"user_{Id:N}"[..17];
+    public void SeedDefaultHandle() => Handle = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"user_{Id:N}")[..17];
 
     public void SetSocialOptIn(bool enabled) => SocialOptIn = enabled;
 

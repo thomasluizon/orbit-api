@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
@@ -21,7 +22,7 @@ public class ActiveHabitsSection : IPromptSection
             .ToList();
         var (total, general, dueToday, overdue) = ComputeHabitCounts(indexedHabits, context.UserToday);
 
-        sb.AppendLine($"## User's Habits ({total} total, {general} general, {dueToday} due today, {overdue} overdue)");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"## User's Habits ({total} total, {general} general, {dueToday} due today, {overdue} overdue)");
         sb.AppendLine();
         if (context.IsHabitIndexPartial)
         {
@@ -75,12 +76,12 @@ public class ActiveHabitsSection : IPromptSection
     private static void AppendHabitEntry(StringBuilder sb, Habit habit, PromptContext context, string dupSuffix)
     {
         var labelStr = BuildHabitLabel(habit, context.UserToday);
-        sb.AppendLine($"- {PromptDataSanitizer.QuoteInline(habit.Title, 100)}{dupSuffix} | {habit.Id}{labelStr}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"- {PromptDataSanitizer.QuoteInline(habit.Title, 100)}{dupSuffix} | {habit.Id}{labelStr}");
 
         if (habit.Goals.Count > 0)
         {
             var goalNames = string.Join(", ", habit.Goals.Select(g => PromptDataSanitizer.QuoteInline(g.Title, 100)));
-            sb.AppendLine($"  Goals: {goalNames}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"  Goals: {goalNames}");
         }
     }
 
@@ -123,7 +124,7 @@ public class ActiveHabitsSection : IPromptSection
         foreach (var child in children)
         {
             var labelStr = BuildHabitLabel(child, userToday);
-            sb.AppendLine($"{indent}- {PromptDataSanitizer.QuoteInline(child.Title, 100)}{childSuffixes.GetValueOrDefault(child.Id, string.Empty)} | {child.Id}{labelStr}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}- {PromptDataSanitizer.QuoteInline(child.Title, 100)}{childSuffixes.GetValueOrDefault(child.Id, string.Empty)} | {child.Id}{labelStr}");
             AppendChildren(sb, allHabits, child.Id, depth + 1, userToday);
         }
     }

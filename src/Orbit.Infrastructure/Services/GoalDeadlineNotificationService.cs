@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -230,7 +231,8 @@ public partial class GoalDeadlineNotificationService(
     internal static string FormatDeadlineBody(Goal goal, decimal currentValue, int daysBefore, string lang)
     {
         var isPt = LocaleHelper.IsPortuguese(lang);
-        var progressText = $"{currentValue}/{goal.TargetValue} {goal.Unit}";
+        var culture = CultureInfo.GetCultureInfo(isPt ? "pt-BR" : "en-US");
+        var progressText = string.Create(culture, $"{currentValue}/{goal.TargetValue} {goal.Unit}");
         return daysBefore switch
         {
             1 => isPt

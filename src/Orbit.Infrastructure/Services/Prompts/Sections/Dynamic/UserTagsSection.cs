@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Orbit.Infrastructure.Services.Prompts;
 
@@ -17,7 +18,7 @@ public class UserTagsSection : IPromptSection
         if (context.UserTags is { Count: > 0 })
         {
             foreach (var tag in context.UserTags)
-                sb.AppendLine($"- {PromptDataSanitizer.QuoteInline(tag.Name, 80)} (color: {PromptDataSanitizer.SanitizeInline(tag.Color, 20)})");
+                sb.AppendLine(CultureInfo.InvariantCulture, $"- {PromptDataSanitizer.QuoteInline(tag.Name, 80)} (color: {PromptDataSanitizer.SanitizeInline(tag.Color, 20)})");
         }
         else
         {

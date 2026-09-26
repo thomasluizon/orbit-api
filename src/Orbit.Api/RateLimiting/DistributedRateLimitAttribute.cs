@@ -75,7 +75,7 @@ public sealed partial class DistributedRateLimitFilter(
                 (int)Math.Ceiling((decision.WindowEndsAtUtc - DateTime.UtcNow).TotalSeconds));
             context.HttpContext.Response.Headers.RetryAfter = Math.Max(
                 1,
-                retryAfterSeconds).ToString();
+                retryAfterSeconds).ToString(System.Globalization.CultureInfo.InvariantCulture);
             context.HttpContext.Response.Headers[HttpContextExtensions.RequestIdHeaderName] = context.HttpContext.GetRequestId();
             LogRateLimitRejected(
                 logger,
@@ -288,7 +288,7 @@ public sealed partial class ConcurrentChatLimitFilter(
             var retryAfterSeconds = Math.Max(
                 1,
                 (int)Math.Ceiling((decision.WindowEndsAtUtc - TimeProvider.System.GetUtcNow().UtcDateTime).TotalSeconds));
-            context.HttpContext.Response.Headers.RetryAfter = retryAfterSeconds.ToString();
+            context.HttpContext.Response.Headers.RetryAfter = retryAfterSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
             context.HttpContext.Response.Headers[HttpContextExtensions.RequestIdHeaderName] = context.HttpContext.GetRequestId();
             LogConcurrentChatRejected(
                 logger,
