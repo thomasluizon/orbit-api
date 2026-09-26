@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,6 +24,22 @@ public partial class ReminderSchedulerService(
     TimeProvider? timeProvider = null) : ScheduledServiceBase, IScheduledJob
 {
     private const int MaxRelativeLookaheadDays = DomainConstants.MaxReminderMinutesBefore / 1440 + 1;
+
+    private static readonly Expression<Func<Habit, SchedulerHabit>> HabitProjection = h => new SchedulerHabit
+    {
+        Id = h.Id, UserId = h.UserId, Title = h.Title,
+        DueDate = h.DueDate, EndDate = h.EndDate, ScheduledStartDate = h.ScheduledStartDate,
+        FrequencyUnit = h.FrequencyUnit, FrequencyQuantity = h.FrequencyQuantity,
+        IntervalWeeks = h.IntervalWeeks, IsFlexible = h.IsFlexible, Days = h.Days,
+        DueTime = h.DueTime, ReminderTimes = h.ReminderTimes,
+        ScheduledReminders = h.ScheduledReminders
+    };
+
+    private static readonly Expression<Func<User, SchedulerUser>> UserProjection = u => new SchedulerUser
+    {
+        Id = u.Id, TimeZone = u.TimeZone, Language = u.Language,
+        WeekStartDay = u.WeekStartDay
+    };
 
     private readonly TimeSpan _interval = TimeSpan.FromMinutes(
         configuration.GetValue("BackgroundServices:ReminderIntervalMinutes", 1));
@@ -74,14 +91,7 @@ public partial class ReminderSchedulerService(
             .Where(h => !h.IsCompleted && !h.IsGeneral && h.ReminderEnabled && h.DueTime != null
                 && h.DueDate <= maxLocalDate
                 && (!h.EndDate.HasValue || h.EndDate.Value >= minLocalDate))
-            .Select(h => new SchedulerHabit
-            {
-                Id = h.Id, UserId = h.UserId, Title = h.Title,
-                DueDate = h.DueDate, EndDate = h.EndDate, ScheduledStartDate = h.ScheduledStartDate,
-                FrequencyUnit = h.FrequencyUnit, FrequencyQuantity = h.FrequencyQuantity,
-                IntervalWeeks = h.IntervalWeeks, IsFlexible = h.IsFlexible, Days = h.Days,
-                DueTime = h.DueTime, ReminderTimes = h.ReminderTimes
-            })
+            .Select(HabitProjection)
             .ToListAsync(ct);
 
         if (habits.Count == 0) return;
@@ -90,11 +100,7 @@ public partial class ReminderSchedulerService(
         var users = await dbContext.Users
             .AsNoTracking()
             .Where(u => userIds.Contains(u.Id))
-            .Select(u => new SchedulerUser
-            {
-                Id = u.Id, TimeZone = u.TimeZone, Language = u.Language,
-                WeekStartDay = u.WeekStartDay
-            })
+            .Select(UserProjection)
             .ToDictionaryAsync(u => u.Id, ct);
 
         var habitIds = habits.Select(h => h.Id).ToList();
@@ -199,14 +205,7 @@ public partial class ReminderSchedulerService(
             .Where(h => !h.IsCompleted && !h.IsGeneral && h.ReminderEnabled && h.DueTime == null
                 && h.DueDate <= maxDayBeforeDate
                 && (!h.EndDate.HasValue || h.EndDate.Value >= minLocalDate))
-            .Select(h => new SchedulerHabit
-            {
-                Id = h.Id, UserId = h.UserId, Title = h.Title,
-                DueDate = h.DueDate, EndDate = h.EndDate, ScheduledStartDate = h.ScheduledStartDate,
-                FrequencyUnit = h.FrequencyUnit, FrequencyQuantity = h.FrequencyQuantity,
-                IntervalWeeks = h.IntervalWeeks, IsFlexible = h.IsFlexible, Days = h.Days,
-                ScheduledReminders = h.ScheduledReminders
-            })
+            .Select(HabitProjection)
             .ToListAsync(ct);
 
         habits = habits.Where(h => h.ScheduledReminders.Count > 0).ToList();
@@ -217,11 +216,7 @@ public partial class ReminderSchedulerService(
         var users = await dbContext.Users
             .AsNoTracking()
             .Where(u => userIds.Contains(u.Id))
-            .Select(u => new SchedulerUser
-            {
-                Id = u.Id, TimeZone = u.TimeZone, Language = u.Language,
-                WeekStartDay = u.WeekStartDay
-            })
+            .Select(UserProjection)
             .ToDictionaryAsync(u => u.Id, ct);
 
         var habitIds = habits.Select(h => h.Id).ToList();
