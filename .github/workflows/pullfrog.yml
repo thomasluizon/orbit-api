@@ -63,10 +63,11 @@ jobs:
         with:
           fetch-depth: 1
       # Codex is the reviewer. Model and effort come from the Pullfrog repository config.
-      # Published pullfrog 0.1.83 resolves gpt-sol to openai/gpt-6-sol.
+      # Published pullfrog 0.1.83 resolves gpt-sol to openai/gpt-6-sol. Both steps pin the commit the
+      # v0 tag named on 2026-09-26 (release 0.1.83), because a moving tag is an unpinned dependency.
       - name: Run agent
         id: codex
-        uses: pullfrog/pullfrog@v0
+        uses: pullfrog/pullfrog@e9f81154ce83828fc8208d624c5ca9a1174d8909 # v0, release 0.1.83
         continue-on-error: true
         with:
           prompt: ${{ inputs.prompt }}
@@ -74,7 +75,7 @@ jobs:
       # exhausted OpenAI allowance looks like. Green runs never reach this.
       - name: Run agent (Claude fallback)
         if: steps.codex.outcome == 'failure'
-        uses: pullfrog/pullfrog@v0
+        uses: pullfrog/pullfrog@e9f81154ce83828fc8208d624c5ca9a1174d8909 # v0, release 0.1.83
         with:
           prompt: ${{ inputs.prompt }}
           model: anthropic/claude-opus-5
