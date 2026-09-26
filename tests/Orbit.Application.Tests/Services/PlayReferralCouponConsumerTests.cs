@@ -23,7 +23,7 @@ public class PlayReferralCouponConsumerTests
 
     private static User UserWithCoupon()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         user.SetReferralCoupon("coupon_abc");
         return user;
     }
@@ -79,7 +79,7 @@ public class PlayReferralCouponConsumerTests
     [Fact]
     public void ReferralOfferWithoutCoupon_ReturnsNull()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
 
         var couponId = CreateConsumer().ConsumeOnNewPurchase(user, StateWithOffer("referral10"), "tok_new");
 

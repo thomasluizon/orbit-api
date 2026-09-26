@@ -8,15 +8,6 @@ using Orbit.Domain.Enums;
 
 namespace Orbit.Api.Mcp.Tools;
 
-/// <summary>
-/// MCP goal tools. Mutations route through <see cref="McpExecutorBridge"/> →
-/// <see cref="Orbit.Domain.Interfaces.IAgentOperationExecutor"/> with
-/// <see cref="Orbit.Domain.Models.AgentExecutionSurface.Mcp"/>, sharing the policy evaluation
-/// (read-only-credential denial, ownership pre-check, Pro/feature-flag gating) and the
-/// <c>AgentAuditLogs</c> trail used by every other agent surface; each forwards a snake_case
-/// argument object matching its backing <c>IAiTool</c> schema and formats the result into the
-/// legacy string contract. Read/query tools stay on MediatR.
-/// </summary>
 [McpServerToolType]
 public class GoalTools(IMediator mediator, McpExecutorBridge executorBridge)
 {

@@ -6,7 +6,7 @@ namespace Orbit.Domain.Tests.Entities;
 
 public class UserTests
 {
-    private static User CreateValidUser(string name = "Thomas", string email = "thomas@example.com")
+    private static User CreateValidUser(string name = "Alex", string email = "alex@example.com")
     {
         var result = User.Create(name, email);
         return result.Value;
@@ -15,11 +15,11 @@ public class UserTests
     [Fact]
     public void Create_ValidInput_ReturnsSuccess()
     {
-        var result = User.Create("Thomas", "thomas@example.com");
+        var result = User.Create("Alex", "alex@example.com");
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Name.Should().Be("Thomas");
-        result.Value.Email.Should().Be("thomas@example.com");
+        result.Value.Name.Should().Be("Alex");
+        result.Value.Email.Should().Be("alex@example.com");
     }
 
     [Fact]
@@ -39,7 +39,7 @@ public class UserTests
     [Fact]
     public void Create_EmptyName_ReturnsFailure()
     {
-        var result = User.Create("", "thomas@example.com");
+        var result = User.Create("", "alex@example.com");
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Name is required");
@@ -48,7 +48,7 @@ public class UserTests
     [Fact]
     public void Create_WhitespaceName_ReturnsFailure()
     {
-        var result = User.Create("   ", "thomas@example.com");
+        var result = User.Create("   ", "alex@example.com");
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Name is required");
@@ -57,7 +57,7 @@ public class UserTests
     [Fact]
     public void Create_EmptyEmail_ReturnsFailure()
     {
-        var result = User.Create("Thomas", "");
+        var result = User.Create("Alex", "");
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Email is required");
@@ -66,7 +66,7 @@ public class UserTests
     [Fact]
     public void Create_InvalidEmailFormat_ReturnsFailure()
     {
-        var result = User.Create("Thomas", "not-an-email");
+        var result = User.Create("Alex", "not-an-email");
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Invalid email format");
@@ -75,18 +75,18 @@ public class UserTests
     [Fact]
     public void Create_TrimsNameAndEmail()
     {
-        var result = User.Create("  Thomas  ", "  thomas@example.com  ");
+        var result = User.Create("  Alex  ", "  alex@example.com  ");
 
-        result.Value.Name.Should().Be("Thomas");
-        result.Value.Email.Should().Be("thomas@example.com");
+        result.Value.Name.Should().Be("Alex");
+        result.Value.Email.Should().Be("alex@example.com");
     }
 
     [Fact]
     public void Create_LowercasesEmail()
     {
-        var result = User.Create("Thomas", "Thomas@EXAMPLE.com");
+        var result = User.Create("Alex", "Alex@EXAMPLE.com");
 
-        result.Value.Email.Should().Be("thomas@example.com");
+        result.Value.Email.Should().Be("alex@example.com");
     }
 
     [Fact]
@@ -264,7 +264,7 @@ public class UserTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Name is required");
-        user.Name.Should().Be("Thomas");
+        user.Name.Should().Be("Alex");
     }
 
     [Fact]
@@ -276,7 +276,7 @@ public class UserTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Name is required");
-        user.Name.Should().Be("Thomas");
+        user.Name.Should().Be("Alex");
     }
 
     [Fact]
@@ -288,7 +288,7 @@ public class UserTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("at most 50 characters");
-        user.Name.Should().Be("Thomas");
+        user.Name.Should().Be("Alex");
     }
 
     [Fact]

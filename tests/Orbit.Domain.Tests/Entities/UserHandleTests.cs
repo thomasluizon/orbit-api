@@ -6,7 +6,7 @@ namespace Orbit.Domain.Tests.Entities;
 
 public class UserHandleTests
 {
-    private static User CreateUser() => User.Create("Thomas", "thomas@example.com").Value;
+    private static User CreateUser() => User.Create("Alex", "alex@example.com").Value;
 
     [Theory]
     [InlineData("abc")]

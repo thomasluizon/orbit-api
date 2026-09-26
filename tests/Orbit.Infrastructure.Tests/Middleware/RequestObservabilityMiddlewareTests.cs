@@ -7,14 +7,6 @@ using Orbit.Api.Middleware;
 
 namespace Orbit.Infrastructure.Tests.Middleware;
 
-/// <summary>
-/// End-to-end request-id observability: the id that <see cref="RequestCorrelationMiddleware"/>
-/// pins from the inbound <c>X-Orbit-Request-Id</c> header must survive all the way into the error
-/// envelopes the exception handlers write, so a single correlation id ties the client, the response
-/// header, the JSON body, and the server logs together. The isolated handler contracts live in
-/// <see cref="ValidationExceptionHandlerTests"/> / UnhandledExceptionHandlerTests; this file asserts
-/// the propagation across the two components on one shared <see cref="HttpContext"/>.
-/// </summary>
 public class RequestObservabilityMiddlewareTests
 {
     private const string IncomingRequestId = "req_client_supplied_42";

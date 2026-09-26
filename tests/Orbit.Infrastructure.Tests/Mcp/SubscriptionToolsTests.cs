@@ -66,7 +66,7 @@ public class SubscriptionToolsTests
     [Fact]
     public async Task GetSubscriptionStatus_UserWithTrial_ShowsPlanAndAiMessages()
     {
-        var user = User.Create("Thomas", "thomas@example.com").Value;
+        var user = User.Create("Alex", "alex@example.com").Value;
         _userRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(user);
         _payGate.GetAiMessageLimit(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
@@ -81,7 +81,7 @@ public class SubscriptionToolsTests
     [Fact]
     public async Task GetSubscriptionStatus_TrialActive_ShowsTrialInfo()
     {
-        var user = User.Create("Thomas", "thomas@example.com").Value;
+        var user = User.Create("Alex", "alex@example.com").Value;
         _userRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(user);
         _payGate.GetAiMessageLimit(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
@@ -95,7 +95,7 @@ public class SubscriptionToolsTests
     [Fact]
     public async Task GetSubscriptionStatus_AiMessageUsage_ShowsCorrectCount()
     {
-        var user = User.Create("Thomas", "thomas@example.com").Value;
+        var user = User.Create("Alex", "alex@example.com").Value;
         _userRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(user);
         _payGate.GetAiMessageLimit(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
@@ -110,7 +110,7 @@ public class SubscriptionToolsTests
     public async Task GetSubscriptionStatus_AfterLocalMidnight_ShowsZeroDailyUsage()
     {
         var today = new DateOnly(2026, 8, 23);
-        var user = User.Create("Thomas", "thomas@example.com").Value;
+        var user = User.Create("Alex", "alex@example.com").Value;
         for (var i = 0; i < 5; i++)
             user.IncrementAiMessageCount(today.AddDays(-1));
         _userRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())

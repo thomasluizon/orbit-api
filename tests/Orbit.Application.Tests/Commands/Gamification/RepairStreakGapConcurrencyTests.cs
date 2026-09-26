@@ -17,20 +17,6 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Application.Tests.Commands.Gamification;
 
-/// <summary>
-/// The consistency boundary, proved against a REAL production writer rather than against the
-/// repair's own call order.
-///
-/// A repair reads the habits, the logs and the schedule derived from them, then spends banked
-/// freezes against what it read. <c>User.xmin</c> cannot hold those two together: a habit-only write
-/// commits without touching the user row, so the optimistic token never fires. The only thing that
-/// holds them together is that both sides take <see cref="HabitCeilingLock"/>.
-///
-/// So this test runs <see cref="DeleteHabitCommandHandler"/> concurrently with the repair and asserts
-/// the INTERLEAVING. Before the fix the delete acquired nothing, and its soft delete could commit
-/// between the repair's eligibility read and its spend, leaving a freeze paid for a schedule that no
-/// longer existed. A test that merely called the two in order stayed green through that.
-/// </summary>
 public class RepairStreakGapConcurrencyTests
 {
     private static readonly DateOnly Today = new(2026, 9, 6);

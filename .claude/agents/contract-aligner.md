@@ -6,14 +6,14 @@ model: sonnet
 effort: medium
 ---
 
-<!-- MANUAL ONLY. Nothing invokes this agent automatically. Pullfrog reviews every pull request from GitHub Actions, and a service in Actions cannot invoke a local Claude Code agent, so no review-time trigger exists. This file is the only copy: orbit-ui-mobile carries no twin. .opencode/agents/contract-aligner.md is a thin pointer to this body. The Zod side lives in the sibling orbit-ui-mobile checkout, so every path below is absolute and the agent reports NOT_VERIFIABLE when that checkout is absent. -->
+<!-- Manual only. Pullfrog cannot invoke local agents. Resolve paths from each repository root and report NOT_VERIFIABLE when the frontend checkout is absent. -->
 
 # Contract aligner
 
-The TypeScript Zod schemas in `C:\Users\thoma\Documents\Programming\Projects\orbit-ui-mobile\packages\shared\src\types\` and the .NET DTOs — which are feature-local under `C:\Users\thoma\Documents\Programming\Projects\orbit-api\src\Orbit.Application\` (records/classes in each feature's folder or its `Models\` subfolder, e.g. `Subscriptions\SubscriptionDtos.cs`, `Auth\Models\LoginResponse.cs`, plus the request/response records declared alongside their commands and queries) — MUST match. The endpoint paths in `C:\Users\thoma\Documents\Programming\Projects\orbit-ui-mobile\packages\shared\src\api\endpoints.ts` MUST match the controller routes in `C:\Users\thoma\Documents\Programming\Projects\orbit-api\src\Orbit.Api\Controllers\`.
+The TypeScript Zod schemas in `orbit-ui-mobile/packages/shared/src/types/` and the feature-local DTOs in `orbit-api/src/Orbit.Application/` MUST match. The endpoint paths in `orbit-ui-mobile/packages/shared/src/api/endpoints.ts` MUST match the routes in `orbit-api/src/Orbit.Api/Controllers/`. Resolve each path from its repository root.
 
 This subagent detects drift between them. The Zod side lives in the sibling
-`orbit-ui-mobile` repo, referenced above by absolute path. If that checkout is absent
+`orbit-ui-mobile` repo. If that checkout is absent
 (a clone or worktree with no sibling repository beside it), report
 `NOT_VERIFIABLE` for the Zod side rather than guessing.
 
@@ -28,10 +28,10 @@ For each shared type referenced by an edited file, find its API counterpart and 
 ## Steps
 
 1. **List the surface area:**
-   - Read `C:\Users\thoma\Documents\Programming\Projects\orbit-ui-mobile\packages\shared\src\types\*.ts` → extract Zod schema field names + types.
-   - Read `C:\Users\thoma\Documents\Programming\Projects\orbit-ui-mobile\packages\shared\src\api\endpoints.ts` → extract path tree.
-   - Read the feature-local DTO/model files under `C:\Users\thoma\Documents\Programming\Projects\orbit-api\src\Orbit.Application\` (e.g. `*Dtos.cs`, `**\Models\*.cs`, and the request/response records defined with their commands/queries) → extract record/class field names + types.
-   - Read `C:\Users\thoma\Documents\Programming\Projects\orbit-api\src\Orbit.Api\Controllers\*.cs` → extract `[HttpGet/Post/Put/Delete/Patch("...")]` route attributes.
+   - Read `packages/shared/src/types/*.ts` in `orbit-ui-mobile` and extract Zod schema field names and types.
+   - Read `packages/shared/src/api/endpoints.ts` in `orbit-ui-mobile` and extract the path tree.
+   - Read feature-local DTO/model files under `src/Orbit.Application/` in `orbit-api`, including `*Dtos.cs`, `**/Models/*.cs`, and records defined with commands or queries.
+   - Read `src/Orbit.Api/Controllers/*.cs` in `orbit-api` and extract HTTP route attributes.
 2. **For each Zod schema with a matching name in DTOs:**
    - Field names: do they match? Casing convention (PascalCase C# vs camelCase TS) is expected — System.Text.Json default camelCases.
    - Field types: `z.string()` ↔ `string`, `z.number()` ↔ `int`/`double`/`decimal`, `z.boolean()` ↔ `bool`, `z.array(T)` ↔ `List<T>` or `T[]`, `z.nullable()` ↔ nullable.

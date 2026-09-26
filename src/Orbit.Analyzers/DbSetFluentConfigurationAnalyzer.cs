@@ -8,15 +8,6 @@ using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace Orbit.Analyzers;
 
-/// <summary>
-/// Requires every <c>DbSet&lt;T&gt;</c> property a <c>DbContext</c> subclass declares to have an
-/// explicit fluent configuration: a <c>modelBuilder.Entity&lt;T&gt;(...)</c> call anywhere in the
-/// context class (the configuration helpers live in the same class), or an
-/// <c>ApplyConfiguration(new TConfiguration())</c> registration. Without one, EF infers the mapping
-/// by convention, which silently produces wrong keys, indexes, and column types in the next
-/// migration. A context that calls <c>ApplyConfigurationsFromAssembly</c> is skipped, since the
-/// configured set is not resolvable statically.
-/// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class DbSetFluentConfigurationAnalyzer : DiagnosticAnalyzer
 {

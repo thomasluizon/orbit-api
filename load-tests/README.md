@@ -1,9 +1,9 @@
 # Orbit API — load / stress tests (k6)
 
-Light, rate-capped load scripts for the hot money-and-retention endpoints, used **once** before scaling ad spend (issue #230). This is a pre-launch capacity probe, **not** ongoing load infrastructure.
+Light, rate-capped load scripts for the hot money-and-retention endpoints. Run them only for a planned capacity probe.
 
 > [!CAUTION]
-> The QA environment was aborted, so the only realistic target is **production** (`https://api.useorbit.org`). These scripts are written to be safe, but a load test against prod is inherently risky. **Only ever run against prod inside an agreed off-peak, low-traffic window, with the abort thresholds enabled.** Never point this at prod during a rollout, a campaign, or peak hours. When in doubt, do not run.
+> Load tests against **production** (`https://api.useorbit.org`) need an agreed off-peak, low-traffic window with abort thresholds enabled. Never run them during a rollout, campaign, or peak hours.
 
 ## What it covers
 

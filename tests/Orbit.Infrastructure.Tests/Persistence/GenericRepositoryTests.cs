@@ -5,13 +5,6 @@ using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Persistence;
 
-/// <summary>
-/// Exercises the tracking contract of <see cref="GenericRepository{T}"/> against the real
-/// <see cref="OrbitDbContext"/>: the tracked read variants return change-tracked entities whose
-/// in-place mutations persist on the next SaveChanges without an explicit Update, the AsNoTracking
-/// variants return detached snapshots whose mutations are dropped, and the soft-delete query filter
-/// is applied to the tracked reads while the IgnoringFilters variants bypass it.
-/// </summary>
 public class GenericRepositoryTests
 {
     private static readonly Guid UserId = Guid.NewGuid();

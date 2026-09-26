@@ -15,14 +15,6 @@ using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
-/// <summary>
-/// Exercises the real <see cref="PushNotificationService.SendToUserAsync"/> against an in-memory
-/// SQLite <see cref="OrbitDbContext"/> and a stubbed HTTP transport. Web Push delivery is driven end
-/// to end (valid VAPID + receiver EC keys are generated in-process so aes128gcm encryption reaches
-/// the stubbed push service), which lets the dead-token-prune, transient-failure, and success paths
-/// be asserted on real database state. FCM send is not reachable without Firebase credentials, so
-/// only its "not initialized" guard is covered.
-/// </summary>
 public sealed class PushNotificationServiceTests : IDisposable
 {
     private readonly SqliteConnection _connection;

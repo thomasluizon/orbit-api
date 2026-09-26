@@ -7,7 +7,7 @@ namespace Orbit.Api.Idempotency;
 /// <summary>
 /// Reads the <c>Idempotency-Key</c> header and authenticated user id from the current HTTP request.
 /// Only requests that carry the header (the mobile offline queue's replayable mutations) opt into
-/// idempotency; every read and un-keyed request bypasses it. See thomasluizon/orbit-ui-mobile#243.
+/// idempotency; every read and un-keyed request bypasses it.
 /// </summary>
 public sealed class HttpIdempotencyContext(IHttpContextAccessor httpContextAccessor) : IIdempotencyContext
 {

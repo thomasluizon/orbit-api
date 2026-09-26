@@ -45,7 +45,7 @@ public class AuthSessionServiceTests
     {
         var userId = Guid.NewGuid();
 
-        var result = await _sut.CreateSessionAsync(userId, "thomas@test.com", CancellationToken.None);
+        var result = await _sut.CreateSessionAsync(userId, "alex@test.com", CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.AccessToken.Should().Be("access-token");
@@ -62,7 +62,7 @@ public class AuthSessionServiceTests
             Arg.Do<UserSession>(session => captured = session),
             Arg.Any<CancellationToken>());
 
-        await _sut.CreateSessionAsync(Guid.NewGuid(), "thomas@test.com", CancellationToken.None);
+        await _sut.CreateSessionAsync(Guid.NewGuid(), "alex@test.com", CancellationToken.None);
 
         captured.Should().NotBeNull();
         captured!.ExpiresAtUtc.Should().NotBeNull();
@@ -72,7 +72,7 @@ public class AuthSessionServiceTests
     [Fact]
     public async Task RefreshSessionAsync_RotatesExistingSession()
     {
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         var existingToken = "refresh-token";
         var session = UserSession.Create(user.Id, Hash(existingToken), DateTime.UtcNow.AddDays(7)).Value;
 
@@ -95,7 +95,7 @@ public class AuthSessionServiceTests
     [Fact]
     public async Task RefreshSessionAsync_LosesConcurrencyRace_ReturnsInvalidSessionDiscardsChangesAndIssuesNoToken()
     {
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         var existingToken = "refresh-token";
         var session = UserSession.Create(user.Id, Hash(existingToken), DateTime.UtcNow.AddDays(7)).Value;
 

@@ -7,14 +7,6 @@ using Orbit.Api.Extensions;
 
 namespace Orbit.Infrastructure.Tests.Health;
 
-/// <summary>
-/// The <c>/health</c> ResponseWriter is what a load balancer or uptime monitor
-/// actually reads. These tests pin the two behaviours that matter operationally:
-/// the HTTP status code maps a non-healthy report to 503 (so a degraded process
-/// is never mistaken for live), and the JSON body surfaces each check's
-/// name/status/description without ever serializing the raw exception object.
-/// The writer is invoked directly against an in-memory <see cref="HealthReport"/>.
-/// </summary>
 public class HealthCheckResponseTests
 {
     private static HealthReportEntry Entry(

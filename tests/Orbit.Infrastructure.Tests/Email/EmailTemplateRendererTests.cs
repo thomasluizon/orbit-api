@@ -25,7 +25,7 @@ public class EmailTemplateRendererTests
 
     private static Dictionary<string, string> WelcomeTokens() => new()
     {
-        ["heading"] = "Welcome aboard, Thomas!",
+        ["heading"] = "Welcome aboard, Alex!",
         ["intro"] = "We're excited to have you on Orbit.",
         ["featuresTitle"] = "Here's what you can do:",
         ["feature1"] = "Create daily, weekly, or custom habits",

@@ -13,16 +13,6 @@ using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Api.Mcp.Tools;
 
-/// <summary>
-/// MCP habit tools. Mutations route through <see cref="McpExecutorBridge"/> →
-/// <see cref="Orbit.Domain.Interfaces.IAgentOperationExecutor"/> with
-/// <see cref="Orbit.Domain.Models.AgentExecutionSurface.Mcp"/>, so they share the policy
-/// evaluation (read-only-credential denial, ownership pre-check, confirmation gating) and the
-/// <c>AgentAuditLogs</c> trail used by every other agent surface; each mutation forwards a
-/// snake_case argument object matching its backing <c>IAiTool</c> schema and formats the
-/// returned <see cref="McpExecutorResult"/> into the legacy string contract. Read/query tools
-/// stay on MediatR. Other MCP toolsets mirror this routing for the same policy + audit coverage.
-/// </summary>
 [McpServerToolType]
 public class HabitTools(IMediator mediator, IUserDateService userDateService, McpExecutorBridge executorBridge)
 {

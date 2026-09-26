@@ -5,44 +5,6 @@ using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Mcp;
 
-/// <summary>
-/// Architecture guard behind the MCP confirmation gate. The selective-auth middleware in
-/// <c>WebApplicationExtensions</c> forwards a tool whose capability carries a confirmation
-/// requirement straight to the tool, because <c>IAgentOperationExecutor</c> owns that gate and is
-/// the only layer that receives the caller's confirmation token. That deferral is safe only while
-/// five invariants hold, and each one is pinned by a test here.
-/// <list type="number">
-/// <item>A confirmation requirement always sits on a mutation, because only a mutation is
-/// guaranteed to reach the executor.</item>
-/// <item>The source scan reaches every confirmation-gated MCP tool the catalog declares. The three
-/// guards below assert over whatever the scan returns, so a scan that silently stopped finding
-/// gated tools would report every one of them clean while enforcing nothing. The other three
-/// source-scan invariants rest on this one.</item>
-/// <item>Every confirmation-gated MCP tool reaches the executor through
-/// <c>McpExecutorBridge</c>.</item>
-/// <item>The operation id a gated tool forwards resolves to the tool's own capability, carrying the
-/// same id and the same confirmation requirement. The executor gates on
-/// <c>GetCapability(operation.CapabilityId)</c>, never on the MCP tool name, so a gated tool
-/// forwarding an ungated operation id keeps the middleware stepping aside while the executor finds
-/// nothing to enforce, and the tool runs with no confirmation at all.</item>
-/// <item>Every gated tool declares a <c>string? confirmationToken</c> parameter and forwards that
-/// bare identifier in the executor's token slot, because <c>HasFreshConfirmation</c> sees only
-/// what that slot carries. The resolver is a text scan over one file, not a compiler. It accepts
-/// the identifier written directly in the bridge call, or carried through exactly one same-file
-/// helper, and it refuses a tool that writes to the parameter with <c>=</c>, <c>??=</c> or
-/// <c>+=</c> before the call. <c>default</c>, <c>null!</c>, <c>(string?)null</c>, <c>""</c>, an
-/// unrelated local, a conditional expression and an omitted optional argument all fail, because
-/// none of them is that identifier. The helper hop pairs a caller argument with a helper
-/// parameter by position alone: it strips a named-argument prefix without reading the name, so a
-/// call that names its arguments out of the declared order is read wrong. Several members can
-/// share one name, and the scan reads every member whose parameter count admits the call, so an
-/// ambiguous name reddens the tool instead of resolving to one member. Two or more helper hops
-/// read as no bridge call at all and fail the routing guard above; that direction is safe, so it
-/// stands. Aliasing, reflection and a call reached through an interface are outside what the scan
-/// models, and an author who sets out to defeat a text scan can spell the bypass another way.
-/// What this guard closes is every shape an ordinary refactor produces.</item>
-/// </list>
-/// </summary>
 public partial class ConfirmationGatedMcpToolsRouteThroughExecutorTests
 {
     private const string BridgeCall = "executorBridge.ExecuteAsync(";

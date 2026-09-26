@@ -1,12 +1,5 @@
 namespace Orbit.Application.Common;
 
-/// <summary>
-/// Resolves whether a user's region uses a 24-hour clock, derived from their IANA
-/// time zone. The 12-hour-clock zone set is sourced from the CLDR regions that default
-/// to a 12-hour clock (the Americas' English/Spanish locales, Australia, New Zealand,
-/// South and Southeast Asia, and a few others); every other zone, and a null or unknown
-/// value, resolves to 24-hour, which is the global majority.
-/// </summary>
 public static class TimeFormatResolver
 {
     private static readonly HashSet<string> TwelveHourTimeZones = new(StringComparer.Ordinal)

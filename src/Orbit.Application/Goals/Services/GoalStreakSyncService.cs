@@ -45,13 +45,6 @@ public static class GoalStreakSyncService
             .Min();
     }
 
-    /// <summary>
-    /// Computes the value an active streak goal should display right now from its linked habits'
-    /// logs, without mutating or persisting anything. Returns 0 for a streak goal that has lost all
-    /// its habits (its retained value is stale), the minimum live streak across linked habits, or
-    /// null when the goal is not an active streak goal (the caller keeps its current value). Read
-    /// paths use this to surface the fresh streak while leaving completion to the write paths.
-    /// </summary>
     public static int? ComputeReadValue(Goal goal, DateOnly userToday, int weekStartDay)
     {
         if (!IsActiveStreakGoal(goal))

@@ -261,7 +261,7 @@ public class ReminderSchedulerServiceTests
         await using var dbContext = CreateInMemoryDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
 
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         var habit = Habit.Create(new HabitCreateParams(
             user.Id, "Drink water", FrequencyUnit.Day, 1,
             ReminderEnabled: true,
@@ -294,7 +294,7 @@ public class ReminderSchedulerServiceTests
         var pushService = Substitute.For<IPushNotificationService>();
 
         var dueTomorrow = UtcToday.AddDays(1);
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         var habit = Habit.Create(new HabitCreateParams(
             user.Id, "Submit report", null, null,
             ReminderEnabled: true,
@@ -326,7 +326,7 @@ public class ReminderSchedulerServiceTests
         var pushService = Substitute.For<IPushNotificationService>();
 
         var reminderTime = new TimeOnly(0, 0);
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         var habit = Habit.Create(new HabitCreateParams(
             user.Id, "Submit report", null, null,
             ReminderEnabled: true,
@@ -359,7 +359,7 @@ public class ReminderSchedulerServiceTests
         var pushService = Substitute.For<IPushNotificationService>();
 
         var reminderTime = new TimeOnly(0, 0);
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         var habit = Habit.Create(new HabitCreateParams(
             user.Id, "Drink water", FrequencyUnit.Day, 1,
             ReminderEnabled: true,
@@ -394,7 +394,7 @@ public class ReminderSchedulerServiceTests
         var pushService = Substitute.For<IPushNotificationService>();
 
         var reminderTime = new TimeOnly(0, 0);
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         var habit = Habit.Create(new HabitCreateParams(
             user.Id, "Drink water", FrequencyUnit.Day, 1,
             ReminderEnabled: true,
@@ -423,7 +423,7 @@ public class ReminderSchedulerServiceTests
         await using var dbContext = CreateInMemoryDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
 
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         var habit = Habit.Create(new HabitCreateParams(
             user.Id, "Workout", FrequencyUnit.Day, 1,
             ReminderEnabled: true,
@@ -464,7 +464,7 @@ public class ReminderSchedulerServiceTests
         var reminderInstant = DateTimeOffset.Parse(instant);
         var clock = new MutableTimeProvider(reminderInstant.AddMinutes(-1));
 
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         user.SetTimeZone(timeZoneId).IsSuccess.Should().BeTrue();
         var habit = Habit.Create(new HabitCreateParams(
             user.Id, "Workout", FrequencyUnit.Day, 1,
@@ -501,7 +501,7 @@ public class ReminderSchedulerServiceTests
         var dueDate = new DateOnly(2027, 9, 26);
         var clock = new MutableTimeProvider(new DateTimeOffset(2027, 9, 26, 9, 0, 0, TimeSpan.Zero));
 
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         var habit = Habit.Create(new HabitCreateParams(
             user.Id, "Report", null, null,
             ReminderEnabled: true,
@@ -529,7 +529,7 @@ public class ReminderSchedulerServiceTests
         var dueDate = new DateOnly(2027, 9, 26);
         var clock = new MutableTimeProvider(new DateTimeOffset(2027, 9, 25, 9, 0, 0, TimeSpan.Zero));
 
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         var habit = Habit.Create(new HabitCreateParams(
             user.Id, "Workout", FrequencyUnit.Day, 1,
             ReminderEnabled: true,
@@ -556,7 +556,7 @@ public class ReminderSchedulerServiceTests
         await using var dbContext = CreateInMemoryDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
 
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         var habit = Habit.Create(new HabitCreateParams(
             user.Id, "Workout", FrequencyUnit.Day, 1,
             ReminderEnabled: true,
@@ -589,7 +589,7 @@ public class ReminderSchedulerServiceTests
             TimeZoneInfo.ConvertTimeFromUtc(nowUtc, TimeZoneInfo.FindSystemTimeZoneById(timeZoneId)));
         userToday.Should().NotBe(UtcToday);
 
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         user.SetTimeZone(timeZoneId);
         var habit = Habit.Create(new HabitCreateParams(
             user.Id, "Workout", FrequencyUnit.Day, 1,
@@ -623,7 +623,7 @@ public class ReminderSchedulerServiceTests
             TimeZoneInfo.ConvertTimeFromUtc(nowUtc, TimeZoneInfo.FindSystemTimeZoneById(timeZoneId)));
         userToday.Should().NotBe(UtcToday);
 
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         user.SetTimeZone(timeZoneId);
         var habit = Habit.Create(new HabitCreateParams(
             user.Id, "Workout", FrequencyUnit.Day, 1,
@@ -651,7 +651,7 @@ public class ReminderSchedulerServiceTests
         await using var dbContext = CreateInMemoryDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
 
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         var habit = Habit.Create(new HabitCreateParams(
             user.Id, "Workout", FrequencyUnit.Day, 1,
             ReminderEnabled: true,
@@ -726,7 +726,7 @@ public class ReminderSchedulerServiceTests
         await using var dbContext = CreateInMemoryDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
 
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         var habit = Habit.Create(new HabitCreateParams(
             user.Id, "Workout", FrequencyUnit.Day, 1,
             ReminderEnabled: true, DueDate: UtcToday, DueTime: new TimeOnly(0, 0),

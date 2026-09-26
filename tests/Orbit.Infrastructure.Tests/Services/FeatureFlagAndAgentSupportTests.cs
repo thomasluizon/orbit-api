@@ -44,7 +44,7 @@ public class FeatureFlagAndAgentSupportTests : IDisposable
     [Fact]
     public async Task FeatureFlagService_ReturnsEnabledFlagsForMatchingPlan()
     {
-        var user = User.Create("Thomas", "thomas@example.com").Value;
+        var user = User.Create("Alex", "alex@example.com").Value;
         user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddDays(30), SubscriptionInterval.Yearly);
         _dbContext.Users.Add(user);
         _dbContext.AppFeatureFlags.Add(AppFeatureFlag.Create("basic", true, null, "Basic"));
@@ -72,7 +72,7 @@ public class FeatureFlagAndAgentSupportTests : IDisposable
     [Fact]
     public async Task FeatureFlagService_UnknownPlanRequirement_FailsClosed()
     {
-        var user = User.Create("Thomas", "thomas@example.com").Value;
+        var user = User.Create("Alex", "alex@example.com").Value;
         user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddDays(30), SubscriptionInterval.Monthly);
         var unknownRequirement = string.Concat("Yearly", "Pro");
         _dbContext.Users.Add(user);

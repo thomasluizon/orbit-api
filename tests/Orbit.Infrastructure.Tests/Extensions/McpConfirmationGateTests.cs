@@ -33,16 +33,6 @@ using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Extensions;
 
-/// <summary>
-/// The confirmation gate on the MCP surface, driven through the real middleware entry point
-/// (<see cref="WebApplicationExtensions.HandleMcpToolCallAsync"/>) into the real
-/// <see cref="McpExecutorBridge"/>, <see cref="AgentOperationExecutor"/> and
-/// <see cref="AgentPolicyEvaluator"/>. The middleware holds no confirmation token, so a second
-/// policy evaluation there can only refuse a step-up capability forever: the token a client obtains
-/// is single use and is bound to the executor's operation fingerprint, not to the middleware's.
-/// These tests pin that the middleware defers the gate to the executor, that the refusal names the
-/// tools a client must call, and that a confirmed retry runs the operation.
-/// </summary>
 public class McpConfirmationGateTests : IDisposable
 {
     private readonly OrbitDbContext _dbContext;
@@ -72,7 +62,7 @@ public class McpConfirmationGateTests : IDisposable
             .Options;
         _dbContext = new OrbitDbContext(options);
 
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddDays(30), SubscriptionInterval.Monthly);
         _userId = user.Id;
         _dbContext.Users.Add(user);

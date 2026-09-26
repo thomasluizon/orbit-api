@@ -11,13 +11,6 @@ using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
 
-/// <summary>
-/// Time-driven sweep that reconciles active derived goals without waiting for a request. Standard
-/// goals may already qualify from historical completion logs when derivation first applies, while a
-/// Streak goal may advance as time passes without a request. Each tick recomputes linked Standard
-/// goals and every Streak goal, then routes any Active to Completed transition through persistence
-/// and gamification exactly once.
-/// </summary>
 public partial class StreakGoalSyncService(
     IServiceScopeFactory scopeFactory,
     ILogger<StreakGoalSyncService> logger,

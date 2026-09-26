@@ -24,7 +24,7 @@ public class PendingAgentOperationStoreTests : IDisposable
             .Options;
 
         _dbContext = new OrbitDbContext(options);
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         _userId = user.Id;
         _dbContext.Users.Add(user);
         _dbContext.SaveChanges();
@@ -69,7 +69,7 @@ public class PendingAgentOperationStoreTests : IDisposable
         using var factory = new SqliteOrbitDbContextFactory();
         using var secondContext = factory.CreateContext();
         var firstContext = factory.Context;
-        var user = User.Create("Thomas", $"{Guid.NewGuid():N}@example.com").Value;
+        var user = User.Create("Alex", $"{Guid.NewGuid():N}@example.com").Value;
         firstContext.Users.Add(user);
         firstContext.SaveChanges();
 

@@ -1,16 +1,4 @@
 #!/usr/bin/env node
-// The cross-repo dash ban (REBUILD.md 6.1.1). Em dashes are banned everywhere;
-// en dashes are banned except inside a numeric range (1–10). ESLint cannot be
-// the home: the rule spans a TS monorepo, a .NET solution, and an Astro site,
-// so this ONE script is vendored into all three repos and wired as a CI job
-// (diff-scoped via --files), a lefthook pre-commit step (staged files), and a
-// full-tree baseline ratchet (--check-baseline / --write-baseline).
-//
-// Usage:
-//   node tools/check-dashes.mjs --files <path>...   check exactly these files (exit 1 on any hit)
-//   node tools/check-dashes.mjs --check-baseline    full tree vs tools/dash-baseline.json (exit 1 on growth)
-//   node tools/check-dashes.mjs --write-baseline    regenerate tools/dash-baseline.json
-//   node tools/check-dashes.mjs --text "<string>"   check a string (PR titles/bodies; exit 1 on any hit)
 
 import { execFileSync } from "node:child_process"
 import { readFileSync, writeFileSync, existsSync } from "node:fs"

@@ -66,15 +66,6 @@ public static class HabitScheduleService
         return dates;
     }
 
-    /// <summary>
-    /// Returns the union of all scheduled dates across a set of habits within [from, to].
-    /// Excludes habits that do not contribute to the user-wide streak:
-    ///   - bad habits (no "must do" expectation)
-    ///   - general habits (no schedule)
-    ///   - flexible habits (window-based)
-    ///   - one-time tasks already completed
-    ///   - soft-deleted habits
-    /// </summary>
     public static HashSet<DateOnly> GetUnionScheduledDates(
         IEnumerable<Habit> habits, DateOnly from, DateOnly to, int weekStartDay = 1)
     {
@@ -127,15 +118,6 @@ public static class HabitScheduleService
         return true;
     }
 
-    /// <summary>
-    /// The streak value, and most recent contributing date, as of <paramref name="anchor"/> — the single
-    /// schedule-aware streak rule shared by the live recalculation engine and the streak-history series.
-    /// Walks <paramref name="from"/>..<paramref name="anchor"/> forward over <paramref name="expectedDates"/>:
-    /// non-scheduled days are skipped (they never break or extend a streak), a scheduled completion extends
-    /// it, a scheduled freeze bridges it without extending, and a scheduled day that is neither resets it.
-    /// An unresolved scheduled <paramref name="anchor"/> reports the streak carried into it (the day is not
-    /// yet missed) without breaking, mirroring the live engine's "today not done yet" allowance.
-    /// </summary>
     public static (int Streak, DateOnly? LastActiveDate) ComputeStreakAsOf(
         HashSet<DateOnly> expectedDates,
         HashSet<DateOnly> completionDates,
@@ -149,13 +131,6 @@ public static class HabitScheduleService
         return (run.Streak, run.LastActiveDate);
     }
 
-    /// <summary>
-    /// The day-by-day streak series over [<paramref name="from"/>, <paramref name="to"/>], each point being the
-    /// streak as if that day were today. Uses the same forward walk as <see cref="ComputeStreakAsOf"/> seeded from
-    /// <paramref name="seedFrom"/> (a lookback before <paramref name="from"/>) so the streak entering the window is
-    /// correct, then emits only the in-window days. The value on <paramref name="to"/> equals the user's live
-    /// current streak for the same inputs.
-    /// </summary>
     public static List<(DateOnly Date, int Streak)> BuildStreakSeries(
         HashSet<DateOnly> expectedDates,
         HashSet<DateOnly> completionDates,
@@ -213,13 +188,6 @@ public static class HabitScheduleService
         }
     }
 
-    /// <summary>
-    /// Returns occurrences used only for the first computation of a closed-month recap. This is
-    /// separate from <see cref="GetScheduledDates"/> and the live streak path because it aligns
-    /// recurrence to <see cref="Habit.ScheduledStartDate"/> and bounds it by lifecycle dates. A
-    /// later cadence edit cannot reconstruct the earlier cadence because the model stores no cadence
-    /// history, so the computed recap is persisted and this helper never recomputes a stored month.
-    /// </summary>
     public static List<DateOnly> GetHistoricalScheduledDates(
         Habit habit,
         DateOnly from,
@@ -337,13 +305,6 @@ public static class HabitScheduleService
             ? first > third ? first : third
             : second > third ? second : third;
 
-    /// <summary>
-    /// True when a recurring, non-flexible, non-bad habit has an unresolved past
-    /// occurrence, meaning its <see cref="Habit.DueDate"/> has fallen before today and the current
-    /// cadence schedules an occurrence without a completion or skip log within the bounded
-    /// schedule horizon ending before today. This is the single overdue signal shared by the
-    /// schedule query and the log/skip commands.
-    /// </summary>
     public static bool HasMissedPastOccurrence(
         Habit habit,
         DateOnly today,
@@ -387,14 +348,6 @@ public static class HabitScheduleService
             && log.Date == date
             && (log.Value == 0 || log.Value > 0));
 
-    /// <summary>
-    /// True when the habit has an active completion log (Value &gt; 0) on any date within
-    /// [<paramref name="dateFrom"/>, <paramref name="dateTo"/>]. Skip logs (Value == 0) do not
-    /// count. This is the date-scoped "done in range" signal shared by the schedule query and the
-    /// daily summary — deliberately distinct from <see cref="Habit.IsCompleted"/>, which is a
-    /// sticky lifetime flag (a one-time task stays completed forever) and must never be used to
-    /// decide whether a habit was done on a particular day.
-    /// </summary>
     public static bool HasCompletedLogInRange(Habit habit, DateOnly dateFrom, DateOnly dateTo) =>
         HasCompletedLogInRange(habit.Logs, dateFrom, dateTo);
 
@@ -404,13 +357,6 @@ public static class HabitScheduleService
         DateOnly dateTo) =>
         logs.Any(l => !l.IsDeleted && l.Date >= dateFrom && l.Date <= dateTo && l.Value > 0);
 
-    /// <summary>
-    /// True when the habit has an unresolved occurrence strictly before
-    /// <paramref name="referenceDate"/>: a one-time task past its (still-uncompleted) due date,
-    /// or a recurring habit whose DueDate has fallen behind and that is not due on the reference
-    /// date. Flexible and bad habits are never overdue. This is the single overdue rule shared by
-    /// the schedule query (<c>GetHabitScheduleQuery</c>) and the daily summary (<c>AiSummaryService</c>).
-    /// </summary>
     public static bool IsOverdueOnDate(
         Habit habit,
         DateOnly referenceDate,
@@ -516,14 +462,6 @@ public static class HabitScheduleService
         return Math.Max(0, adjustedTarget - completed);
     }
 
-    /// <summary>
-    /// Computes per-date instances for a habit within a date range, including an overdue lookback window.
-    /// Each instance has its own status (Pending, Completed, Overdue) based on logs and the user's today.
-    /// The forward horizon is capped at <see cref="AppConstants.MaxInstanceHorizonDays"/> days from
-    /// <paramref name="dateFrom"/> so the array stays bounded when a caller requests the full allowed
-    /// range (the schedule query permits up to <see cref="AppConstants.MaxRangeDays"/> days); the cap
-    /// exceeds every real caller's window (calendar-month ≤ 62 days, schedule interval ≤ 14 days).
-    /// </summary>
     public static List<HabitInstanceItem> GetInstances(
         Habit habit,
         DateOnly dateFrom,

@@ -4,16 +4,6 @@ using System.Text.Json;
 
 namespace Orbit.Domain.Common;
 
-/// <summary>
-/// Builds the deterministic dedupe/confirmation key for an agent mutation: the SHA-256 of the
-/// operation identity and canonicalized arguments, hex-encoded (64 chars). Hashing keeps
-/// arbitrarily large tool payloads inside the fingerprint column's 256-char bound, and
-/// canonicalization (ordinal-sorted object keys, compact re-serialization) keeps the key stable
-/// across JSON round-trips — pending arguments are persisted as jsonb, which reorders keys and
-/// strips whitespace, so the re-executed arguments never match the original raw text byte-for-byte.
-/// Every surface that creates or consumes pending agent operations MUST build fingerprints
-/// through this helper so confirmation matching stays consistent.
-/// </summary>
 public static class AgentOperationFingerprint
 {
     public static string Compute(string operationIdentity, string argumentsJson)

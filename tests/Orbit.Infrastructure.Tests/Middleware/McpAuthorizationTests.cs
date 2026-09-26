@@ -3,18 +3,6 @@ using Orbit.Api.Extensions;
 
 namespace Orbit.Infrastructure.Tests.Middleware;
 
-/// <summary>
-/// The authorization gate of the MCP selective-auth middleware: <see cref="WebApplicationExtensions"/>
-/// only lets a request past authentication when its JSON-RPC <c>method</c> is on a tight allowlist
-/// (the <c>initialize</c>/<c>ping</c> handshake and the side-effect-free <c>notifications/</c>
-/// namespace); every other method — every tool call, resource read, or prompt fetch — must
-/// authenticate. The isolated classification/parse contract is covered in
-/// <see cref="Extensions.WebApplicationExtensionsMcpTests"/>; this file locks the fail-closed EDGES of
-/// that allowlist so no casing trick or prefix look-alike can widen the unauthenticated surface.
-/// The HTTP-level challenge itself (the 401 + WWW-Authenticate write in the middleware's private
-/// authentication step) runs only inside the ASP.NET request pipeline, which the unit-only suite does
-/// not host, so it is asserted here at the decision-surface level.
-/// </summary>
 public class McpAuthorizationTests
 {
     private static bool BypassesAuthentication(string body)
