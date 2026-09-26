@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
@@ -128,7 +129,7 @@ public sealed partial class AiSummaryService(
         var contextHeader = BuildContextHeader(
             context.CurrentLocalTime, context.CurrentStreak, context.StreakFreezesAccumulated, badHabitSlips);
 
-        return $"""
+        return string.Create(CultureInfo.InvariantCulture, $"""
             Date: {context.DateFrom:MMMM d, yyyy}
             {contextHeader}
             Progress: {doneTotal}/{goodHabits.Count} habits completed
@@ -160,7 +161,7 @@ public sealed partial class AiSummaryService(
             - No greeting like "good morning", no sign-off -- just the message
 
             Respond with ONLY a JSON object with one string field and nothing else: "summary" (the message above).
-            """;
+            """);
     }
 
     private static string BuildContextHeader(

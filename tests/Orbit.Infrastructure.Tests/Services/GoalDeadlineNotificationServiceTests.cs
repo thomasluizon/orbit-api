@@ -168,15 +168,17 @@ public class GoalDeadlineNotificationServiceTests
         body.Should().NotContain("em 1 dias");
     }
 
-    [Fact]
-    public void FormatDeadlineBody_DecimalProgress_FormatsCorrectly()
+    [Theory]
+    [InlineData("en", "3.5/10 miles")]
+    [InlineData("pt-BR", "3,5/10 miles")]
+    public void FormatDeadlineBody_DecimalProgress_FormatsCorrectly(string language, string expectedProgress)
     {
         var goal = CreateGoal(targetValue: 10, unit: "miles");
         goal.UpdateProgress(3.5m);
 
-        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue, 3, "en");
+        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue, 3, language);
 
-        body.Should().Contain("3.5/10 miles");
+        body.Should().Contain(expectedProgress);
     }
 
     [Fact]

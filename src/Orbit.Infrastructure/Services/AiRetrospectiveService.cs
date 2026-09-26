@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
@@ -157,7 +158,7 @@ public sealed partial class AiRetrospectiveService(
 
         var overallRate = totalScheduled > 0 ? (int)Math.Round(100.0 * totalMet / totalScheduled) : 0;
 
-        return $"""
+        return string.Create(CultureInfo.InvariantCulture, $"""
             Period: Last {totalDays} days ({period}) -- {dateFrom:MMMM d} to {dateTo:MMMM d, yyyy}
             Total habits tracked: {habits.Count(h => h.ParentHabitId is null)}
             Overall completion rate: {totalMet}/{totalScheduled} ({overallRate}%)
@@ -182,7 +183,7 @@ public sealed partial class AiRetrospectiveService(
             - Do NOT use emojis or JSON
             - Use markdown bold for section headings only
             - Write ONLY in {languageName}
-            """;
+            """);
     }
 
     private static (string HabitSection, int TotalMet, int TotalScheduled, int BadHabitSlips) BuildHabitBreakdown(
