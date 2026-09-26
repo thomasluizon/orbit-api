@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using NSubstitute;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Models;
@@ -14,6 +15,7 @@ public class AccountResetRepositoryTests : IDisposable
     private readonly SqliteConnection _connection;
     private readonly OrbitDbContext _dbContext;
     private readonly AccountResetRepository _repository;
+    private readonly Orbit.Domain.Events.IAccountEventCollector _eventCollector = NSubstitute.Substitute.For<Orbit.Domain.Events.IAccountEventCollector>();
     private readonly AgentCatalogService _catalogService = new();
     private readonly Guid _userId = Guid.NewGuid();
     private readonly Guid _otherUserId = Guid.NewGuid();
@@ -29,7 +31,7 @@ public class AccountResetRepositoryTests : IDisposable
 
         _dbContext = new SqliteCompatOrbitDbContext(options);
         _dbContext.Database.EnsureCreated();
-        _repository = new AccountResetRepository(_dbContext, NSubstitute.Substitute.For<Orbit.Domain.Events.IAccountEventCollector>());
+        _repository = new AccountResetRepository(_dbContext, _eventCollector);
     }
 
     public void Dispose()
@@ -102,6 +104,8 @@ public class AccountResetRepositoryTests : IDisposable
         _dbContext.ChangeTracker.Clear();
 
         await _repository.DeleteAllUserDataAsync(_userId);
+
+        _eventCollector.Received(1).MarkResync(_userId);
 
         (await _dbContext.AiUsageDaily.AnyAsync(u => u.UserId == _userId)).Should().BeTrue();
     }

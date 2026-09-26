@@ -174,6 +174,29 @@ public class AccountEventsTests
     }
 
     [Fact]
+    public async Task Collector_PublishesResetOnlyAfterCommit()
+    {
+        var bus = new InMemoryAccountEventBus();
+        var collector = new AccountEventCollector(bus, new HttpContextAccessor());
+        using var factory = new SqliteOrbitDbContextFactory(collector, new AccountEventTransactionInterceptor(collector));
+        var context = factory.Context;
+        var userId = Guid.NewGuid();
+        bus.TrySubscribe(userId, Guid.NewGuid(), null, out var stream).Should().BeTrue();
+
+        using (stream!.Lease)
+        await using (var transaction = await context.Database.BeginTransactionAsync())
+        {
+            collector.MarkResync(userId);
+            await context.SaveChangesAsync();
+            stream.Reader.TryRead(out _).Should().BeFalse();
+            await transaction.CommitAsync();
+            stream.Reader.TryRead(out var item).Should().BeTrue();
+            item!.Type.Should().Be("resync");
+            item.Data.V.Should().Be(1);
+        }
+    }
+
+    [Fact]
     public void Ticket_HasDedicatedAudience_AndExpiresAfterSixtySeconds()
     {
         var settings = new JwtSettings
