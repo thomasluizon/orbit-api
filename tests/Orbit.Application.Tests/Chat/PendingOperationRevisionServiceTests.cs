@@ -4,6 +4,7 @@ using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Validators;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -17,6 +18,82 @@ public sealed class PendingOperationRevisionServiceTests
     private readonly IPendingAgentOperationStore _store = Substitute.For<IPendingAgentOperationStore>();
     private readonly IGenericRepository<Habit> _habits = Substitute.For<IGenericRepository<Habit>>();
     private readonly IUserDateService _dateService = Substitute.For<IUserDateService>();
+
+    [Fact]
+    public async Task RefreshAsync_RegeneratesStoredIntentAndPersistsNewFingerprint()
+    {
+        var habit = CreateHabit("First");
+        SetupHabits([habit]);
+        var pendingId = Guid.NewGuid();
+        var arguments = JsonDocument.Parse("""{"filter":{"all":true},"updates":{"emoji":"A"}}""")
+            .RootElement.Clone();
+        _store.GetExecution(_userId, pendingId).Returns(new PendingAgentOperationExecution(
+            pendingId, AgentCapabilityIds.HabitsBulkWrite, "bulk_update_habits", arguments,
+            AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation,
+            PreviewFingerprint: "stale-fingerprint"));
+        _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<string>(), Arg.Any<string>()).Returns(true);
+        var service = new PendingOperationRevisionService(_store,
+            new PendingOperationChangePreviewer(_habits, _dateService),
+            new RevisePendingOperationRequestValidator());
+
+        var result = await service.RefreshAsync(_userId, pendingId, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.PendingOperationId.Should().Be(pendingId);
+        result.Preview!.ChangeTargetCount.Should().Be(1);
+        result.Preview.Items.Should().ContainSingle()
+            .Which.ItemId.Should().Be(habit.Id.ToString());
+        result.Preview.Items[0].Fields.Should().Contain(field => field.Field == "emoji");
+        result.Preview.PreviewFingerprint.Should().NotBe("stale-fingerprint");
+        var fingerprint = AgentOperationFingerprint.Compute("bulk_update_habits", arguments.GetRawText());
+        _store.Received(1).Revise(_userId, pendingId, fingerprint,
+            arguments.GetRawText(), fingerprint, result.Preview.PreviewFingerprint!);
+        _store.DidNotReceiveWithAnyArgs().Cancel(default, default, default!);
+
+        var revision = await service.ReviseAsync(_userId, pendingId,
+            new RevisePendingOperationRequest(result.Preview.PreviewFingerprint!,
+                [new RevisedPendingOperationItem(habit.Id.ToString())]),
+            CancellationToken.None);
+        revision.IsSuccess.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("missing")]
+    [InlineData("unavailable")]
+    [InlineData("conflict")]
+    public async Task RefreshAsync_FailureDoesNotChangePendingIntent(string caseName)
+    {
+        var pendingId = Guid.NewGuid();
+        var arguments = JsonDocument.Parse("{}").RootElement.Clone();
+        var previewer = Substitute.For<IPendingOperationChangePreviewer>();
+        if (caseName != "missing")
+            _store.GetExecution(_userId, pendingId).Returns(new PendingAgentOperationExecution(
+                pendingId, AgentCapabilityIds.HabitsBulkWrite, "bulk_create_habits", arguments,
+                AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation));
+        if (caseName == "conflict")
+        {
+            previewer.PreviewAsync(_userId, "bulk_create_habits", arguments, Arg.Any<CancellationToken>())
+                .Returns(new PendingOperationChangePreview([], 0, [], "fresh"));
+            _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<string>(), Arg.Any<string>()).Returns(false);
+        }
+        var service = new PendingOperationRevisionService(_store, previewer,
+            new RevisePendingOperationRequestValidator());
+
+        var result = await service.RefreshAsync(_userId, pendingId, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Be(caseName switch
+        {
+            "missing" => "pending_operation_not_found",
+            "unavailable" => "preview_unavailable",
+            _ => "revision_conflict"
+        });
+        result.Preview.Should().BeNull();
+        if (caseName != "conflict")
+            _store.DidNotReceiveWithAnyArgs().Revise(default, default, default!, default!, default!, default!);
+    }
 
     [Fact]
     public async Task ReviseAsync_RemovesOneItemAndEditsOnlyTheSelectedItem()

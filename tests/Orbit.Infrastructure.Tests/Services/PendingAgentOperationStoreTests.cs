@@ -124,6 +124,26 @@ public class PendingAgentOperationStoreTests : IDisposable
     }
 
     [Fact]
+    public void Revise_WithSameArgumentsRefreshesPreviewAndInvalidatesApproval()
+    {
+        var capability = _catalogService.GetCapability(AgentCapabilityIds.HabitsBulkWrite)!;
+        const string json = "{\"filter\":{\"all\":true},\"updates\":{\"emoji\":\"A\"}}";
+        var fingerprint = AgentOperationFingerprint.Compute("bulk_update_habits", json);
+        var pending = _store.Create(_userId, capability, "bulk_update_habits", json,
+            "Update habits", fingerprint, AgentExecutionSurface.Chat);
+        var confirmation = _store.Confirm(_userId, pending.Id)!;
+
+        _store.Revise(_userId, pending.Id, fingerprint, json, fingerprint, "fresh-preview")
+            .Should().BeTrue();
+
+        var execution = _store.GetExecution(_userId, pending.Id)!;
+        execution.Arguments.GetRawText().Should().Be(json);
+        execution.PreviewFingerprint.Should().Be("fresh-preview");
+        _store.TryConsumeFreshConfirmation(_userId, capability.Id, fingerprint,
+            confirmation.ConfirmationToken, false).Should().BeFalse();
+    }
+
+    [Fact]
     public void Cancel_RejectsAnyLaterConfirmationOrExecution()
     {
         var capability = _catalogService.GetCapability(AgentCapabilityIds.HabitsBulkDelete)!;

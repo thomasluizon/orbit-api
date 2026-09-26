@@ -812,6 +812,86 @@
         }
       }
     },
+    "/api/ai/pending-operations/{id}/preview/refresh": {
+      "post": {
+        "tags": [
+          "Ai"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingOperationRevisionResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingOperationRevisionResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingOperationRevisionResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingOperationRevisionResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingOperationRevisionResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingOperationRevisionResult"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingOperationRevisionResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingOperationRevisionResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingOperationRevisionResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/ai/pending-operations/{id}/revise": {
       "post": {
         "tags": [
@@ -15490,6 +15570,44 @@
           }
         }
       },
+      "PendingOperationChangePreview": {
+        "required": [
+          "changes",
+          "changeTargetCount"
+        ],
+        "type": "object",
+        "properties": {
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PendingOperationChange"
+            }
+          },
+          "changeTargetCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "items": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PendingOperationItem"
+            }
+          },
+          "previewFingerprint": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "PendingOperationItem": {
         "required": [
           "itemId",
@@ -15521,6 +15639,47 @@
           },
           "stateFingerprint": {
             "type": "string"
+          }
+        }
+      },
+      "PendingOperationRevisionResult": {
+        "required": [
+          "isSuccess",
+          "error",
+          "pendingOperationId",
+          "preview"
+        ],
+        "type": "object",
+        "properties": {
+          "isSuccess": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "pendingOperationId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "preview": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PendingOperationChangePreview"
+              }
+            ]
+          },
+          "cancelled": {
+            "type": "boolean",
+            "default": false
           }
         }
       },
