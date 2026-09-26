@@ -52,7 +52,12 @@ public class AchievementProgressServiceTests
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
             .SetValue(habit, startDate.ToDateTime(TimeOnly.MinValue));
         for (var day = 0; day < streakDays; day++)
-            habit.Log(Today.AddDays(-day), advanceDueDate: false);
+        {
+            var logDate = Today.AddDays(-day);
+            var log = habit.Log(logDate, advanceDueDate: false).Value;
+            typeof(HabitLog).GetProperty(nameof(HabitLog.CreatedAtUtc))!
+                .SetValue(log, logDate.ToDateTime(new TimeOnly(12, 0), DateTimeKind.Utc));
+        }
         return habit;
     }
 
