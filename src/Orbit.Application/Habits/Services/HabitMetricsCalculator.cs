@@ -10,6 +10,8 @@ public static class HabitMetricsCalculator
     // Horizon must exceed the largest streak-achievement target (1000-day StreakImmortal) or those achievements can never hit 100%. https://github.com/thomasluizon/orbit-api/pull/419
     private const int MaxStreakHorizonDays = 1100;
 
+    public static DateOnly GetStreakLogCutoff(DateOnly today) => today.AddDays(-2 * MaxStreakHorizonDays);
+
     public static HabitMetrics Calculate(
         Habit habit,
         DateOnly today,
@@ -22,6 +24,21 @@ public static class HabitMetricsCalculator
     public static HabitMetrics Calculate(
         Habit habit,
         IReadOnlyCollection<HabitLog> logs,
+        DateOnly today,
+        int weekStartDay,
+        TimeZoneInfo? userTimeZone = null)
+    {
+        return CalculateProjected(
+            habit,
+            logs.Select(log => new HabitMetricLog(log.HabitId, log.Date, log.Value, log.IsDeleted)).ToList(),
+            today,
+            weekStartDay,
+            userTimeZone);
+    }
+
+    public static HabitMetrics CalculateProjected(
+        Habit habit,
+        IReadOnlyCollection<HabitMetricLog> logs,
         DateOnly today,
         int weekStartDay,
         TimeZoneInfo? userTimeZone = null)
@@ -144,7 +161,7 @@ public static class HabitMetricsCalculator
 
     private static HashSet<DateOnly> GenerateCompletedFlexibleWindowDates(
         Habit habit,
-        IReadOnlyCollection<HabitLog> logs,
+        IReadOnlyCollection<HabitMetricLog> logs,
         IReadOnlyCollection<DateOnly> windowMarkers,
         DateOnly today,
         DateOnly startDate,
@@ -196,7 +213,7 @@ public static class HabitMetricsCalculator
 
     private static DateOnly ResolveHabitStartDate(
         Habit habit,
-        IReadOnlyCollection<HabitLog> logs,
+        IReadOnlyCollection<HabitMetricLog> logs,
         TimeZoneInfo? userTimeZone)
     {
         var tz = userTimeZone ?? TimeZoneInfo.Utc;
@@ -207,7 +224,7 @@ public static class HabitMetricsCalculator
 
     private static DateOnly ResolveLegacyStartDate(
         Habit habit,
-        IReadOnlyCollection<HabitLog> logs,
+        IReadOnlyCollection<HabitMetricLog> logs,
         DateOnly createdDate)
     {
         var hasProgressingHistory = HasProgressingLegacyHistory(
@@ -219,7 +236,7 @@ public static class HabitMetricsCalculator
 
     private static bool HasProgressingLegacyHistory(
         Habit habit,
-        IReadOnlyCollection<HabitLog> logs,
+        IReadOnlyCollection<HabitMetricLog> logs,
         DateOnly createdDate)
     {
         if (habit.FrequencyUnit is null || habit.IsBadHabit)

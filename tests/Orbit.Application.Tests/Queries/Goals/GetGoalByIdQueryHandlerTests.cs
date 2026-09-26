@@ -1,6 +1,7 @@
 using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Goals.Queries;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -36,6 +37,16 @@ public class GetGoalByIdQueryHandlerTests
             Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
             Arg.Any<CancellationToken>())
             .Returns((goal is null ? new List<Goal>() : [goal]).AsReadOnly());
+        _goalRepo.ProjectAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<GoalStandardCompletionCount>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var predicate = call.ArgAt<Expression<Func<Goal, bool>>>(0).Compile();
+                var projection = call.ArgAt<Func<IQueryable<Goal>, IQueryable<GoalStandardCompletionCount>>>(1);
+                return projection((goal is null ? [] : new[] { goal }).Where(predicate).AsQueryable()).ToList();
+            });
     }
 
     [Fact]

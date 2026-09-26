@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -28,8 +27,7 @@ public class SkipHabitTool(
 
         var habit = await habitRepository.FindOneTrackedAsync(
             h => h.Id == habitId && h.UserId == userId,
-            q => q.Include(h => h.Logs),
-            ct);
+            cancellationToken: ct);
 
         if (habit is null)
             return HabitToolHelpers.HabitNotFoundResult(habitId);
@@ -77,7 +75,11 @@ public class SkipHabitTool(
 
         if (habit.IsFlexible)
         {
-            var remaining = HabitScheduleService.GetRemainingCompletions(habit, targetDate, habit.Logs, weekStartDay);
+            var windowStart = HabitScheduleService.GetWindowStart(habit, targetDate, weekStartDay);
+            var windowEnd = HabitScheduleService.GetWindowEnd(habit, targetDate, weekStartDay);
+            var logs = await habitLogRepository.FindAsync(
+                log => log.HabitId == habit.Id && log.Date >= windowStart && log.Date <= windowEnd, ct);
+            var remaining = HabitScheduleService.GetRemainingCompletions(habit, targetDate, logs, weekStartDay);
             if (remaining <= 0)
                 return new ToolResult(false, Error: "All instances for this period have already been completed or skipped.");
 

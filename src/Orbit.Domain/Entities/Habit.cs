@@ -2,6 +2,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.ValueObjects;
+using Orbit.Domain.Models;
 
 #pragma warning disable S6964 // Domain entity with private setters - not a model-bound DTO
 
@@ -112,6 +113,28 @@ public class Habit : Entity, ITimestamped, ISoftDeletable, IHabitSchedule
     public IReadOnlyCollection<Goal> Goals => _goals.AsReadOnly();
 
     private Habit() { }
+
+    public static Habit FromScheduleSnapshot(HabitScheduleSnapshot snapshot) => new()
+    {
+        Id = snapshot.Id,
+        ParentHabitId = snapshot.ParentHabitId,
+        FrequencyUnit = snapshot.FrequencyUnit,
+        FrequencyQuantity = snapshot.FrequencyQuantity,
+        IntervalWeeks = snapshot.IntervalWeeks,
+        DueDate = snapshot.DueDate,
+        ScheduledStartDate = snapshot.ScheduledStartDate,
+        OriginalDayOfMonth = snapshot.OriginalDayOfMonth,
+        EndDate = snapshot.EndDate,
+        CreatedAtUtc = snapshot.CreatedAtUtc,
+        DeletedAtUtc = snapshot.DeletedAtUtc,
+        IsDeleted = snapshot.IsDeleted,
+        IsBadHabit = snapshot.IsBadHabit,
+        IsCompleted = snapshot.IsCompleted,
+        IsGeneral = snapshot.IsGeneral,
+        IsFlexible = snapshot.IsFlexible,
+        Days = snapshot.Days.ToList(),
+        Title = string.Empty
+    };
 
     public static Result<Habit> Create(HabitCreateParams p)
     {
