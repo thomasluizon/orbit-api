@@ -26,6 +26,21 @@ public static class HabitMetricsCalculator
         int weekStartDay,
         TimeZoneInfo? userTimeZone = null)
     {
+        return CalculateProjected(
+            habit,
+            logs.Select(log => new HabitMetricLog(log.HabitId, log.Date, log.Value, log.IsDeleted)).ToList(),
+            today,
+            weekStartDay,
+            userTimeZone);
+    }
+
+    public static HabitMetrics CalculateProjected(
+        Habit habit,
+        IReadOnlyCollection<HabitMetricLog> logs,
+        DateOnly today,
+        int weekStartDay,
+        TimeZoneInfo? userTimeZone = null)
+    {
         var logDates = logs.Where(l => l.Value > 0).Select(l => l.Date).Distinct().ToHashSet();
         var habitStartDate = ResolveHabitStartDate(habit, logs, userTimeZone);
         var expectedDates = GenerateExpectedDates(habit, today, habitStartDate, weekStartDay).ToList();
@@ -144,7 +159,7 @@ public static class HabitMetricsCalculator
 
     private static HashSet<DateOnly> GenerateCompletedFlexibleWindowDates(
         Habit habit,
-        IReadOnlyCollection<HabitLog> logs,
+        IReadOnlyCollection<HabitMetricLog> logs,
         IReadOnlyCollection<DateOnly> windowMarkers,
         DateOnly today,
         DateOnly startDate,
@@ -196,7 +211,7 @@ public static class HabitMetricsCalculator
 
     private static DateOnly ResolveHabitStartDate(
         Habit habit,
-        IReadOnlyCollection<HabitLog> logs,
+        IReadOnlyCollection<HabitMetricLog> logs,
         TimeZoneInfo? userTimeZone)
     {
         var tz = userTimeZone ?? TimeZoneInfo.Utc;
@@ -207,7 +222,7 @@ public static class HabitMetricsCalculator
 
     private static DateOnly ResolveLegacyStartDate(
         Habit habit,
-        IReadOnlyCollection<HabitLog> logs,
+        IReadOnlyCollection<HabitMetricLog> logs,
         DateOnly createdDate)
     {
         var hasProgressingHistory = HasProgressingLegacyHistory(
@@ -219,7 +234,7 @@ public static class HabitMetricsCalculator
 
     private static bool HasProgressingLegacyHistory(
         Habit habit,
-        IReadOnlyCollection<HabitLog> logs,
+        IReadOnlyCollection<HabitMetricLog> logs,
         DateOnly createdDate)
     {
         if (habit.FrequencyUnit is null || habit.IsBadHabit)
