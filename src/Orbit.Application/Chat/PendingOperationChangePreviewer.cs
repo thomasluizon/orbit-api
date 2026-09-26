@@ -78,9 +78,10 @@ public sealed class PendingOperationChangePreviewer(
                 var preview = habit.PreviewUpdate(update);
                 if (preview.IsFailure)
                     return null;
-                AddChanges(fields, habit, preview.Value);
+                AddChanges(fields, habit, preview.Value, itemChanges);
                 actualChangeCount = fields.Count;
-                AddProposedFields(fields, habit, operationId, arguments, isRevised, revisedItems);
+                AddProposedFields(fields, habit, preview.Value, itemChanges,
+                    operationId, arguments, isRevised, revisedItems);
             }
             else
             {
@@ -124,7 +125,8 @@ public sealed class PendingOperationChangePreviewer(
     }
 
     private static void AddProposedFields(List<PendingOperationChange> fields, Habit habit,
-        string operationId, JsonElement arguments, bool isRevised, JsonElement revisedItems)
+        Habit effective, BulkHabitChanges changes, string operationId, JsonElement arguments,
+        bool isRevised, JsonElement revisedItems)
     {
         var proposed = isRevised
             ? revisedItems.EnumerateArray().First(item =>
@@ -140,7 +142,8 @@ public sealed class PendingOperationChangePreviewer(
                 continue;
             var value = property.Value.ToString();
             fields.Add(new PendingOperationChange(habit.Id, habit.Title,
-                property.Name, value, value, "text", property.Value.Clone(), true));
+                property.Name, value, value, "text", property.Value.Clone(),
+                IsEditableUpdateField(property.Name, habit, effective, changes)));
         }
     }
 
@@ -276,10 +279,11 @@ public sealed class PendingOperationChangePreviewer(
             habit.ScheduledReminders, habit.IsDeleted
         }));
 
-    private static void AddChanges(List<PendingOperationChange> rows, Habit habit, Habit effective)
+    private static void AddChanges(List<PendingOperationChange> rows, Habit habit, Habit effective,
+        BulkHabitChanges changes)
     {
         void Add(string field, object? oldValue, object? newValue, string valueType,
-            bool? changed = null, JsonElement? typedValue = null, bool isEditable = true)
+            bool? changed = null, JsonElement? typedValue = null)
         {
             if (changed ?? !Equals(oldValue, newValue))
                 rows.Add(new PendingOperationChange(
@@ -288,7 +292,7 @@ public sealed class PendingOperationChangePreviewer(
                     {
                         DateOnly or TimeOnly or FrequencyUnit => Format(newValue),
                         _ => newValue
-                    }), isEditable));
+                    }), IsEditableUpdateField(field, habit, effective, changes)));
         }
 
         Add("title", habit.Title, effective.Title, "text");
@@ -304,7 +308,7 @@ public sealed class PendingOperationChangePreviewer(
         Add("due_time", habit.DueTime, effective.DueTime, "time");
         Add("is_bad_habit", habit.IsBadHabit, effective.IsBadHabit, "boolean");
         Add("is_flexible", habit.IsFlexible, effective.IsFlexible, "boolean");
-        Add("is_completed", habit.IsCompleted, effective.IsCompleted, "boolean", isEditable: false);
+        Add("is_completed", habit.IsCompleted, effective.IsCompleted, "boolean");
         Add("reminder_enabled", habit.ReminderEnabled, effective.ReminderEnabled, "boolean");
         AddList("reminder_times", habit.ReminderTimes, effective.ReminderTimes,
             FormatReminderTime, JsonSerializer.SerializeToElement(effective.ReminderTimes));
@@ -326,6 +330,20 @@ public sealed class PendingOperationChangePreviewer(
             Add(field, oldText, newText, "text", changed: true, typedValue: typedValue);
         }
     }
+
+    private static bool IsEditableUpdateField(string field, Habit habit, Habit effective,
+        BulkHabitChanges changes) => field switch
+    {
+        "title" or "description" or "emoji" or "frequency_unit" or "frequency_quantity"
+            or "interval_weeks" or "due_date" or "due_time" or "is_bad_habit"
+            or "is_flexible" or "reminder_enabled" or "checklist_items" => true,
+        "days" => !effective.IsFlexible,
+        "end_date" => !habit.IsGeneral,
+        "reminder_times" => effective.DueTime is null
+            || !changes.HasScheduledReminders || changes.ScheduledReminders is not { Count: > 0 },
+        "scheduled_reminders" => effective.DueTime is null,
+        _ => false
+    };
 
     private static (string OldText, string NewText) FormatChangedList<T>(
         IReadOnlyList<T> oldValues, IReadOnlyList<T> newValues, Func<T, string> format)

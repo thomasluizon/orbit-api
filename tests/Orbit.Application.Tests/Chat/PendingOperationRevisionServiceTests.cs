@@ -83,6 +83,48 @@ public sealed class PendingOperationRevisionServiceTests
         _store.DidNotReceiveWithAnyArgs().Revise(default, default, default!, default!, default!, default!);
     }
 
+    [Theory]
+    [InlineData("days")]
+    [InlineData("reminder_times")]
+    public async Task ReviseAsync_RejectsDerivedFieldsThatCannotBeReplaced(string field)
+    {
+        var habit = field == "days"
+            ? Habit.Create(new HabitCreateParams(_userId, "First", FrequencyUnit.Day, 1,
+                new DateOnly(2026, 9, 25), Days: [DayOfWeek.Monday, DayOfWeek.Wednesday])).Value
+            : Habit.Create(new HabitCreateParams(_userId, "First", FrequencyUnit.Day, 1,
+                new DateOnly(2026, 9, 25), DueTime: new TimeOnly(9, 0), ReminderTimes: [])).Value;
+        SetupHabits([habit]);
+        var pendingId = Guid.NewGuid();
+        var argumentJson = field == "days"
+            ? """{"filter":{"all":true},"updates":{"is_flexible":true}}"""
+            : """{"filter":{"all":true},"updates":{"scheduled_reminders":[{"when":"same_day","time":"08:30"}]}}""";
+        var editJson = field == "days"
+            ? """{"days":["Tuesday"]}"""
+            : """{"reminder_times":[15]}""";
+        using var arguments = JsonDocument.Parse(argumentJson);
+        using var edits = JsonDocument.Parse(editJson);
+        _store.GetExecution(_userId, pendingId).Returns(new PendingAgentOperationExecution(
+            pendingId, AgentCapabilityIds.HabitsBulkWrite, "bulk_update_habits",
+            arguments.RootElement.Clone(), AgentExecutionSurface.Chat,
+            AgentConfirmationRequirement.FreshConfirmation));
+        _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<string>(), Arg.Any<string>()).Returns(true);
+        var previewer = new PendingOperationChangePreviewer(_habits, _dateService);
+        var preview = await previewer.PreviewAsync(_userId, "bulk_update_habits", arguments.RootElement);
+        var service = new PendingOperationRevisionService(_store, previewer,
+            new RevisePendingOperationRequestValidator());
+
+        var result = await service.ReviseAsync(_userId, pendingId,
+            new RevisePendingOperationRequest(preview!.PreviewFingerprint!,
+                [new(habit.Id.ToString(), edits.RootElement.Clone())]), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Be("field_not_offered");
+        preview.Items![0].Fields.Single(change => change.Field == field)
+            .IsEditable.Should().BeFalse();
+        _store.DidNotReceiveWithAnyArgs().Revise(default, default, default!, default!, default!, default!);
+    }
+
     [Fact]
     public async Task ReviseAsync_InferredEmojiOperation_RejectsEditableRevision()
     {
