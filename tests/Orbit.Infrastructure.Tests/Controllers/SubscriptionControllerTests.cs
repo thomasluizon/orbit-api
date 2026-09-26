@@ -38,6 +38,19 @@ public class SubscriptionControllerTests
     }
 
     [Fact]
+    public void ClaimAdReward_RouteRemainsAvailableAndDeprecated()
+    {
+        var routes = typeof(SubscriptionController).GetMethods()
+            .Where(method => method.GetCustomAttributes(typeof(HttpPostAttribute), false)
+                .Cast<HttpPostAttribute>()
+                .Any(attribute => attribute.Template == "ad-reward"))
+            .ToArray();
+
+        routes.Should().ContainSingle();
+        routes[0].GetCustomAttributes(typeof(ObsoleteAttribute), false).Should().ContainSingle();
+    }
+
+    [Fact]
     public async Task CreateCheckout_Success_ReturnsOk()
     {
         _mediator.Send(Arg.Any<CreateCheckoutCommand>(), Arg.Any<CancellationToken>())
@@ -343,6 +356,29 @@ public class SubscriptionControllerTests
                 query.CountryCode == "BR" &&
                 query.IpAddress == "127.0.0.1"),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ClaimAdReward_Success_ReturnsOk()
+    {
+        _mediator.Send(Arg.Any<ClaimAdRewardCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(default(AdRewardResponse)!));
+
+        var result = await _controller.ClaimAdReward(CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task ClaimAdReward_PayGateFailure_Returns403()
+    {
+        _mediator.Send(Arg.Any<ClaimAdRewardCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.PayGateFailure<AdRewardResponse>("Pro required"));
+
+        var result = await _controller.ClaimAdReward(CancellationToken.None);
+
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(403);
     }
 
     [Fact]

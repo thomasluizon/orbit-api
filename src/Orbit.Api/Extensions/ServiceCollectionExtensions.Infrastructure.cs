@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.Extensions.Options;
 using Orbit.Api.Mcp.Tools;
@@ -280,6 +281,13 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddOpenApi(options =>
         {
             options.AddDocumentTransformer<BearerSecuritySchemeTransformer>();
+            options.AddOperationTransformer((operation, context, _) =>
+            {
+                if (context.Description.ActionDescriptor is ControllerActionDescriptor action &&
+                    action.MethodInfo.IsDefined(typeof(ObsoleteAttribute), false))
+                    operation.Deprecated = true;
+                return Task.CompletedTask;
+            });
         });
     }
 

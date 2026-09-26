@@ -582,12 +582,13 @@ public class PayGateServiceTests
     }
 
     [Fact]
-    public async Task CanSendAiMessage_AtConfiguredDailyLimit_ReturnsPayGateFailure()
+    public async Task CanSendAiMessage_WithAdRewardBonus_StillUsesConfiguredLimit()
     {
         var user = CreateFreeUser();
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
         for (int i = 0; i < 5; i++)
             user.IncrementAiMessageCount(Today);
+        user.GrantAdReward(Today, 15);
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
         var result = await _sut.CanSendAiMessage(UserId);
@@ -597,10 +598,11 @@ public class PayGateServiceTests
     }
 
     [Fact]
-    public async Task GetAiMessageLimit_FreeUser_EqualsConfiguredDailyLimit()
+    public async Task GetAiMessageLimit_WithAdRewardBonus_IgnoresBonus()
     {
         var user = CreateFreeUser();
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        user.GrantAdReward(Today, 15);
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
         var limit = await _sut.GetAiMessageLimit(UserId);
