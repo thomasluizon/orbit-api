@@ -118,7 +118,11 @@ function comments(text, path, root) {
       let quote = ""
       for (let i = 0; i < line.length; i++) {
         const char = line[i]
-        if (quote) { if (char === quote && line[i - 1] !== "\\") quote = "" }
+        if (quote) {
+          let slashes = 0
+          while (line[i - 1 - slashes] === "\\") slashes++
+          if (char === quote && (quote === "'" || slashes % 2 === 0)) quote = ""
+        }
         else if (char === "'" || char === '"') quote = char
         else if (char === "#") { found.push({ line: index + 1, text: line.slice(i), length: 1 }); break }
       }
@@ -215,7 +219,7 @@ function allowlist(root) {
     !entry || typeof entry.path !== "string" || !entry.path || typeof entry.reason !== "string" || !entry.reason ||
     !["machine-path", "owner-name", "dated-anecdote", "comment-length"].includes(entry.rule) ||
     (entry.scope === "directory"
-      ? entry.match !== null || !entry.path.endsWith("/") || !["owner-name", "dated-anecdote"].includes(entry.rule) ||
+      ? entry.match !== null || !entry.path.endsWith("/") || entry.rule === "machine-path" ||
         (entry.exclude !== undefined && (!Array.isArray(entry.exclude) ||
           entry.exclude.some((prefix) => typeof prefix !== "string" || !prefix.startsWith(entry.path) || !prefix.endsWith("/"))))
       : entry.scope !== undefined || typeof entry.match !== "string" || !entry.match))) {
@@ -307,7 +311,7 @@ try {
   const results = []
   for (const path of paths) {
     const absolute = join(ROOT, path)
-    if (!existsSync(absolute)) continue
+    if (!selected && !existsSync(absolute)) continue
     const content = !selected ? readFileSync(absolute, "utf8")
       : args[0] === "--staged" ? git(["show", `:${path}`]) : git(["show", `HEAD:${path}`])
     for (const item of findings(path, content)) {

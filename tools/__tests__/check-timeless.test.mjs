@@ -138,3 +138,37 @@ test("XML build files have their comments checked", () => {
     } finally { rmSync(root, { recursive: true, force: true }) }
   }
 })
+
+test("an even number of backslashes closes a YAML string before a dated comment", () => {
+  const root = make("sample.yml", String.raw`value: "foo\\\\" # ${date}` + "\n")
+  try {
+    const result = run(root, ["--all"])
+    assert.equal(result.status, 1)
+    assert.match(result.stderr, /sample\.yml:1: dated-anecdote/)
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test("staged content is checked after its working copy is deleted", () => {
+  const root = make("sample.md")
+  try {
+    writeFileSync(join(root, "sample.md"), `On ${date}, it failed.\n`)
+    git(root, "add", "sample.md")
+    rmSync(join(root, "sample.md"))
+    const result = run(root, ["--staged"])
+    assert.equal(result.status, 1)
+    assert.match(result.stderr, /sample\.md:1: dated-anecdote/)
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test("a directory entry may exempt comment-length but never machine-path", () => {
+  const root = make("sample.md")
+  try {
+    mkdirSync(join(root, "export"))
+    writeFileSync(join(root, "export/example.ts"), Array.from({ length: 7 }, (_, index) => `// export note ${index}`).join("\n") + "\n")
+    git(root, "add", "export/example.ts")
+    writeFileSync(join(root, "tools/timeless-allowlist.json"), JSON.stringify([{ path: "export/", rule: "comment-length", match: null, scope: "directory", reason: "generated export" }]))
+    assert.equal(run(root, ["--all"]).status, 0)
+    writeFileSync(join(root, "tools/timeless-allowlist.json"), JSON.stringify([{ path: "export/", rule: "machine-path", match: null, scope: "directory", reason: "never allowed" }]))
+    assert.equal(run(root, ["--all"]).status, 2)
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
