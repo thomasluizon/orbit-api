@@ -402,7 +402,7 @@ public class UpdateHabitToolTests
     }
 
     [Fact]
-    public async Task UpdateDueTimedHabit_WithScheduledReminders_ConvertsToOffsetsAndClearsScheduledStore()
+    public async Task UpdateDueTimedHabit_WithScheduledReminders_PreservesClockTimeInRelativeStore()
     {
         var habit = CreateHabitWithTime("Standup", FrequencyUnit.Day, 1, new TimeOnly(9, 0));
         SetupHabitFound(habit);
@@ -418,12 +418,13 @@ public class UpdateHabitToolTests
         """);
 
         result.Success.Should().BeTrue();
-        habit.ReminderTimes.Should().Contain(30);
+        habit.RelativeReminders.Should().ContainSingle(r =>
+            r.When == ScheduledReminderWhen.SameDay && r.Time == new TimeOnly(8, 30));
         habit.ScheduledReminders.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task UpdateDueTimedHabit_WithDayBeforeScheduledReminder_ConvertsToCrossDayOffset()
+    public async Task UpdateDueTimedHabit_WithDayBeforeScheduledReminder_PreservesClockTime()
     {
         var habit = CreateHabitWithTime("Standup", FrequencyUnit.Day, 1, new TimeOnly(9, 0));
         SetupHabitFound(habit);
@@ -439,7 +440,8 @@ public class UpdateHabitToolTests
         """);
 
         result.Success.Should().BeTrue();
-        habit.ReminderTimes.Should().Contain(720);
+        habit.RelativeReminders.Should().ContainSingle(r =>
+            r.When == ScheduledReminderWhen.DayBefore && r.Time == new TimeOnly(21, 0));
         habit.ScheduledReminders.Should().BeEmpty();
     }
 
@@ -465,7 +467,7 @@ public class UpdateHabitToolTests
     }
 
     [Fact]
-    public async Task UpdateNoDueTimeHabit_AddDueTime_ConvertsScheduledRemindersToOffsets()
+    public async Task UpdateNoDueTimeHabit_AddDueTime_FoldsScheduledReminders()
     {
         var habit = CreateHabitWithScheduledReminders(
             "Appointment",
@@ -476,7 +478,9 @@ public class UpdateHabitToolTests
 
         result.Success.Should().BeTrue();
         habit.DueTime.Should().Be(new TimeOnly(9, 0));
-        habit.ReminderTimes.Should().Contain(60);
+        habit.ReminderTimes.Should().BeEmpty();
+        habit.RelativeReminders.Should().ContainSingle(r =>
+            r.When == ScheduledReminderWhen.SameDay && r.Time == new TimeOnly(8, 0));
         habit.ScheduledReminders.Should().BeEmpty();
     }
 
@@ -496,7 +500,7 @@ public class UpdateHabitToolTests
     }
 
     [Fact]
-    public async Task UpdateDueTimedHabit_SameDayReminderAfterDueTime_ClampsOffsetToZeroNotDropped()
+    public async Task UpdateDueTimedHabit_SameDayReminderAfterDueTime_PreservesLocalTime()
     {
         var habit = CreateHabitWithTime("Standup", FrequencyUnit.Day, 1, new TimeOnly(9, 0));
         SetupHabitFound(habit);
@@ -512,8 +516,10 @@ public class UpdateHabitToolTests
         """);
 
         result.Success.Should().BeTrue();
-        habit.ReminderTimes.Should().Contain(0);
+        habit.ReminderTimes.Should().NotContain(0);
         habit.ScheduledReminders.Should().BeEmpty();
+        habit.RelativeReminders.Should().ContainSingle(reminder =>
+            reminder.When == ScheduledReminderWhen.SameDay && reminder.Time == new TimeOnly(10, 0));
     }
 
     [Fact]

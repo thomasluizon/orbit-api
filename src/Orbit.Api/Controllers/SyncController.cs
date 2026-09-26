@@ -58,7 +58,8 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
         DateTime CreatedAtUtc,
         DateTime UpdatedAtUtc,
         string? Emoji = null,
-        int? IntervalWeeks = null);
+        int? IntervalWeeks = null,
+        IReadOnlyList<Orbit.Domain.ValueObjects.RelativeReminderTime>? RelativeReminders = null);
 
     public record SyncHabitLogDto(Guid Id, Guid HabitId, DateOnly Date, decimal Value, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
 
@@ -346,7 +347,8 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
             habit.CreatedAtUtc,
             habit.UpdatedAtUtc,
             Emoji: habit.Emoji,
-            IntervalWeeks: habit.IntervalWeeks);
+            IntervalWeeks: habit.IntervalWeeks,
+            RelativeReminders: habit.RelativeReminders);
     }
 
     private static SyncHabitLogDto MapHabitLog(HabitLog habitLog)

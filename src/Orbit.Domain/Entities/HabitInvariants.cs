@@ -92,6 +92,23 @@ internal static class HabitInvariants
         return null;
     }
 
+    public static AppError? ValidateRelativeReminders(IReadOnlyList<RelativeReminderTime>? reminders)
+    {
+        if (reminders is null)
+            return null;
+
+        if (reminders.Count > DomainConstants.MaxRelativeReminders || reminders.Count != reminders.Distinct().Count())
+            return DomainErrors.InvalidRelativeReminders;
+
+        if (reminders.Any(r => (r.MinutesBefore.HasValue == r.When.HasValue)
+            || (r.When.HasValue != r.Time.HasValue)
+            || (r.MinutesBefore.HasValue && r.MinutesBefore.Value is < -1439 or > DomainConstants.MaxReminderMinutesBefore)
+            || (r.When.HasValue && !Enum.IsDefined(r.When.Value))))
+            return DomainErrors.InvalidRelativeReminders;
+
+        return null;
+    }
+
     public static AppError? ValidateEmoji(string? emoji)
     {
         if (emoji is null)

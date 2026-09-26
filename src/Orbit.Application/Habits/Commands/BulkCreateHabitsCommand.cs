@@ -36,7 +36,8 @@ public record BulkHabitItem(
     string? GoogleEventId = null,
     string? Emoji = null,
     IReadOnlyList<string>? Tags = null,
-    int? IntervalWeeks = null);
+    int? IntervalWeeks = null,
+    IReadOnlyList<RelativeReminderTime>? RelativeReminders = null);
 
 public record BulkCreateResult(IReadOnlyList<BulkCreateItemResult> Results);
 
@@ -157,6 +158,7 @@ public partial class BulkCreateHabitsCommandHandler(
                 IsGeneral: item.IsGeneral,
                 IsFlexible: item.IsFlexible,
                 ScheduledReminders: item.ScheduledReminders,
+                RelativeReminders: item.RelativeReminders,
                 ChecklistItems: item.ChecklistItems,
                 Position: rootPosition,
                 GoogleEventId: item.GoogleEventId,

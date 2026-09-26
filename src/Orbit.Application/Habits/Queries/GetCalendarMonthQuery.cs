@@ -194,7 +194,8 @@ public class GetCalendarMonthQueryHandler(
             children, children.Count > 0,
             flexibleTarget, flexibleCompleted, isLoggedInRange, instances,
             Emoji: habit.Emoji,
-            IntervalWeeks: habit.IntervalWeeks);
+            IntervalWeeks: habit.IntervalWeeks,
+            RelativeReminders: habit.RelativeReminders);
     }
 
     private static (int? Target, int? Completed) CalculateFlexibleProgress(

@@ -299,7 +299,8 @@ internal static class HabitScheduleFilters
             isLoggedInRange, instances,
             ComputeSearchMatches(h, ctx),
             Emoji: h.Emoji,
-            IntervalWeeks: h.IntervalWeeks);
+            IntervalWeeks: h.IntervalWeeks,
+            RelativeReminders: h.RelativeReminders);
     }
 
     private static (int? Target, int? Completed) CalculateFlexibleProgress(

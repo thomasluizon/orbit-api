@@ -97,6 +97,7 @@ public partial class CreateHabitCommandHandler(
             IsGeneral: request.IsGeneral,
             IsFlexible: opts.IsFlexible,
             ScheduledReminders: opts.ScheduledReminders,
+            RelativeReminders: opts.RelativeReminders,
             Position: nextPosition,
             IntervalWeeks: request.IntervalWeeks));
 

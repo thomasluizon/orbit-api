@@ -48,7 +48,8 @@ public record HabitScheduleItem(
     IReadOnlyList<HabitInstanceItem> Instances,
     IReadOnlyList<SearchMatchField>? SearchMatches = null,
     string? Emoji = null,
-    int? IntervalWeeks = null);
+    int? IntervalWeeks = null,
+    IReadOnlyList<RelativeReminderTime>? RelativeReminders = null);
 
 public record HabitScheduleChildItem(
     Guid Id,

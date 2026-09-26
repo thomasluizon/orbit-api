@@ -20,6 +20,7 @@ internal sealed class SchedulerHabit : IHabitSchedule
     public TimeOnly? DueTime { get; set; }
     public IReadOnlyList<int> ReminderTimes { get; set; } = [];
     public IReadOnlyList<ScheduledReminderTime> ScheduledReminders { get; set; } = [];
+    public IReadOnlyList<RelativeReminderTime> RelativeReminders { get; set; } = [];
 }
 
 internal sealed class SchedulerUser

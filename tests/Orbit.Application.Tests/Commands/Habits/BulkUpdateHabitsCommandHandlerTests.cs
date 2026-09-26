@@ -229,7 +229,7 @@ public sealed class BulkUpdateHabitsCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_AddingDueTime_MigratesScheduledRemindersToOffsets()
+    public async Task Handle_AddingDueTime_MigratesScheduledRemindersToRelativeClock()
     {
         var habit = Habit.Create(new HabitCreateParams(
             UserId,
@@ -251,12 +251,13 @@ public sealed class BulkUpdateHabitsCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         habit.DueTime.Should().Be(new TimeOnly(9, 0));
-        habit.ReminderTimes.Should().ContainSingle().Which.Should().Be(60);
+        habit.RelativeReminders.Should().ContainSingle(r =>
+            r.When == ScheduledReminderWhen.SameDay && r.Time == new TimeOnly(8, 0));
         habit.ScheduledReminders.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task Handle_TimedHabitGivenScheduledReminders_NormalizesToOffsets()
+    public async Task Handle_TimedHabitGivenScheduledReminders_NormalizesToRelativeClock()
     {
         var habit = Habit.Create(new HabitCreateParams(
             UserId,
@@ -279,7 +280,8 @@ public sealed class BulkUpdateHabitsCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        habit.ReminderTimes.Should().ContainSingle().Which.Should().Be(30);
+        habit.RelativeReminders.Should().ContainSingle(r =>
+            r.When == ScheduledReminderWhen.SameDay && r.Time == new TimeOnly(8, 30));
         habit.ScheduledReminders.Should().BeEmpty();
     }
 

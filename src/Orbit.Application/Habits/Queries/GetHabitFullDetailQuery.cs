@@ -78,7 +78,8 @@ public class GetHabitFullDetailQueryHandler(
             LinkedGoals: habit.ParentHabitId.HasValue
                 ? habit.Goals.Select(goal => new LinkedGoalDto(goal.Id, goal.Title)).ToList()
                 : null,
-            SlipAlertEnabled: habit.ParentHabitId.HasValue ? habit.SlipAlertEnabled : null);
+            SlipAlertEnabled: habit.ParentHabitId.HasValue ? habit.SlipAlertEnabled : null,
+            RelativeReminders: habit.RelativeReminders);
 
         var metrics = HabitMetricsCalculator.Calculate(
             habit,

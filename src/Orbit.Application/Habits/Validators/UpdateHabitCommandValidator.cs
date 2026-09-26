@@ -82,6 +82,7 @@ public class UpdateHabitCommandValidator : AbstractValidator<UpdateHabitCommand>
             SharedHabitRules.AddScheduledReminderRules(RuleFor(x => x.Options!.ScheduledReminders));
 
             SharedHabitRules.AddReminderTimesRules(RuleFor(x => x.Options!.ReminderTimes));
+            SharedHabitRules.AddRelativeReminderRules(RuleFor(x => x.Options!.RelativeReminders));
         });
 
         SharedHabitRules.AddGoalIdsRules(this, x => x.GoalIds);
