@@ -9,7 +9,10 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
-public sealed record BulkHabitReplayPlan(DateOnly Date, IReadOnlyList<Guid> HabitIds);
+public sealed record BulkHabitReplayPlan(
+    DateOnly Date,
+    IReadOnlyList<Guid> HabitIds,
+    IReadOnlyList<int>? LegacyChunkSizes = null);
 
 public sealed class BulkHabitReplayPlanner(
     IIdempotencyContext idempotencyContext,
@@ -45,7 +48,13 @@ public sealed class BulkHabitReplayPlanner(
                 ? await userDateService.GetUserTodayAsync(userId, token)
                 : DateOnly.ParseExact(selectedDate.GetString()!, "yyyy-MM-dd", CultureInfo.InvariantCulture);
             var habits = await BulkHabitSelection.LoadAsync(habitRepository, userId, filter!, token);
-            return new BulkHabitReplayPlan(date, habits.Select(habit => habit.Id).ToArray());
+            var selectedIds = habits.Select(habit => habit.Id).ToArray();
+            var legacyChunks = await LoadLegacyChunksAsync(userId, commandType, token);
+            var legacyIds = legacyChunks.SelectMany(chunk => chunk).ToArray();
+            var committedIds = legacyIds.ToHashSet();
+            return new BulkHabitReplayPlan(date,
+                legacyIds.Concat(selectedIds.Where(id => !committedIds.Contains(id))).ToArray(),
+                legacyChunks.Select(chunk => chunk.Count).ToArray());
         }, cancellationToken);
         if (plan.HabitIds.Count == 0)
             return new ToolResult(false, Error: noMatchError);
@@ -55,7 +64,8 @@ public sealed class BulkHabitReplayPlanner(
             executeChunk,
             countApplied,
             verb,
-            cancellationToken);
+            cancellationToken,
+            plan.LegacyChunkSizes);
     }
 
     public async Task<BulkHabitReplayPlan> GetOrCreateAsync(
@@ -99,4 +109,27 @@ public sealed class BulkHabitReplayPlanner(
 
     private static BulkHabitReplayPlan Deserialize(string body) =>
         JsonSerializer.Deserialize<BulkHabitReplayPlan>(body)!;
+
+    private async Task<IReadOnlyList<IReadOnlyList<Guid>>> LoadLegacyChunksAsync(
+        Guid userId, string commandType, CancellationToken cancellationToken)
+    {
+        if (!idempotencyContext.TryGetRequestKey(out var keyUserId, out var idempotencyKey)
+            || keyUserId != userId)
+            return [];
+
+        var chunks = new List<IReadOnlyList<Guid>>();
+        for (var ordinal = 0; ; ordinal++)
+        {
+            var body = await idempotencyStore.FindResponseBodyAsync(
+                userId, idempotencyKey, commandType, ordinal, cancellationToken);
+            if (body is null)
+                break;
+            var chunkIds = LegacyBulkHabitResult.ReadHabitIds(body, commandType);
+            if (chunkIds is null)
+                break;
+            chunks.Add(chunkIds);
+        }
+
+        return chunks;
+    }
 }

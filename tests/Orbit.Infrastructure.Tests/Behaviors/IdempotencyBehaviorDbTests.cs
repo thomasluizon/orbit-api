@@ -379,6 +379,106 @@ public class IdempotencyBehaviorDbTests : IDisposable
     }
 
     [Theory]
+    [InlineData(false, false, 100)]
+    [InlineData(true, false, 100)]
+    [InlineData(false, true, 100)]
+    [InlineData(true, true, 100)]
+    [InlineData(false, false, 50)]
+    [InlineData(true, true, 50)]
+    public async Task Handle_LegacyFirstChunkThenChangedSelection_ProcessesEachHabitOnce(
+        bool skip, bool reorder, int firstChunkSize)
+    {
+        var today = new DateOnly(2026, 9, 24);
+        var habits = Enumerable.Range(1, 250).Select(index => Habit.Create(new HabitCreateParams(
+            _userId, $"Habit {index:D3}", reorder ? FrequencyUnit.Week : null,
+            reorder ? 3 : null, DueDate: today, IsFlexible: reorder && skip)).Value).ToArray();
+        _dbContext.Habits.AddRange(habits);
+        await _dbContext.SaveChangesAsync();
+
+        var dateService = CreateUserDateService(today);
+        var mediator = Substitute.For<IMediator>();
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var habitRepository = new GenericRepository<Habit>(_dbContext);
+        var logRepository = new GenericRepository<HabitLog>(_dbContext);
+        var context = new StubIdempotencyContext(true, _userId, "cross-deploy-key", trackOrdinals: true);
+        var firstChunk = habits.Take(firstChunkSize).ToArray();
+        var executedIds = new List<Guid>();
+        if (skip)
+        {
+            var handler = new BulkSkipHabitsCommandHandler(habitRepository, logRepository, dateService, _unitOfWork, cache);
+            var behavior = new IdempotencyBehavior<BulkSkipHabitsCommand, Result<BulkSkipResult>>(context, _store, _unitOfWork);
+            var firstCommand = new BulkSkipHabitsCommand(_userId, firstChunk.Select(h => new BulkSkipItem(h.Id, today)).ToArray());
+            await behavior.Handle(firstCommand, ct => handler.Handle(firstCommand, ct), CancellationToken.None);
+            mediator.Send(Arg.Any<BulkSkipHabitsCommand>(), Arg.Any<CancellationToken>())
+                .Returns(call =>
+                {
+                    var command = call.Arg<BulkSkipHabitsCommand>();
+                    return behavior.Handle(command, ct =>
+                    {
+                        executedIds.AddRange(command.Items.Select(item => item.HabitId));
+                        return handler.Handle(command, ct);
+                    }, call.Arg<CancellationToken>());
+                });
+        }
+        else
+        {
+            var goalService = Substitute.For<IGoalCompletionService>();
+            goalService.SyncDerivedGoalsAsync(_userId, Arg.Any<IReadOnlyCollection<Guid>>(), today,
+                    Arg.Any<bool>(), Arg.Any<CancellationToken>())
+                .Returns((IReadOnlyList<GoalCompletionUpdate>)Array.Empty<GoalCompletionUpdate>());
+            var handler = new BulkLogHabitsCommandHandler(habitRepository, logRepository,
+                new BulkLogServices(dateService, Substitute.For<IUserStreakService>(), Substitute.For<IGamificationService>()),
+                goalService, _unitOfWork, cache, NullLogger<BulkLogHabitsCommandHandler>.Instance);
+            var behavior = new IdempotencyBehavior<BulkLogHabitsCommand, Result<BulkLogResult>>(context, _store, _unitOfWork);
+            var firstCommand = new BulkLogHabitsCommand(_userId, firstChunk.Select(h => new BulkLogItem(h.Id, today)).ToArray());
+            await behavior.Handle(firstCommand, ct => handler.Handle(firstCommand, ct), CancellationToken.None);
+            mediator.Send(Arg.Any<BulkLogHabitsCommand>(), Arg.Any<CancellationToken>())
+                .Returns(call =>
+                {
+                    var command = call.Arg<BulkLogHabitsCommand>();
+                    return behavior.Handle(command, ct =>
+                    {
+                        executedIds.AddRange(command.Items.Select(item => item.HabitId));
+                        return handler.Handle(command, ct);
+                    }, call.Arg<CancellationToken>());
+                });
+        }
+
+        var currentRow = await _dbContext.ProcessedRequests.SingleAsync();
+        var commandType = skip ? typeof(BulkSkipHabitsCommand).FullName! : typeof(BulkLogHabitsCommand).FullName!;
+        var legacyRow = ProcessedRequest.Create(_userId, "cross-deploy-key", commandType, 0);
+        legacyRow.SetResponseBody(currentRow.ResponseBody);
+        _dbContext.ProcessedRequests.Remove(currentRow);
+        _dbContext.ProcessedRequests.Add(legacyRow);
+        if (reorder)
+            foreach (var habit in habits.Skip(firstChunkSize))
+                habit.SetPosition(0);
+        await _dbContext.SaveChangesAsync();
+        context.ResetOrdinals();
+
+        var tool = skip
+            ? (Orbit.Application.Chat.Tools.IAiTool)new BulkSkipHabitsTool(mediator, habitRepository, dateService,
+                new BulkHabitReplayPlanner(context, _store, _unitOfWork))
+            : new BulkLogHabitsTool(mediator, habitRepository, dateService,
+                new BulkHabitReplayPlanner(context, _store, _unitOfWork));
+        var args = JsonSerializer.SerializeToElement(new { filter = new { all = true } });
+        var replay = await tool.ExecuteAsync(args, _userId, CancellationToken.None);
+
+        replay.Success.Should().BeTrue();
+        replay.EntityName.Should().Contain(skip ? "Skipped 250 of 250" : "Logged 250 of 250");
+        var payload = JsonSerializer.SerializeToElement(replay.Payload);
+        payload.GetProperty("applied_count").GetInt32().Should().Be(250);
+        payload.GetProperty("total_matched").GetInt32().Should().Be(250);
+        executedIds.Should().HaveCount(250 - firstChunkSize).And.OnlyHaveUniqueItems();
+        executedIds.Should().BeEquivalentTo(habits.Skip(firstChunkSize).Select(habit => habit.Id));
+        if (skip)
+            (await _dbContext.HabitLogs.AsNoTracking().CountAsync(log => log.Value == 0))
+                .Should().Be(reorder ? 250 : 0);
+        else
+            (await _dbContext.HabitLogs.AsNoTracking().CountAsync()).Should().Be(250);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task Handle_PlanCommittedWithoutChunks_RetryExecutesEveryChunkOnce(bool skip)

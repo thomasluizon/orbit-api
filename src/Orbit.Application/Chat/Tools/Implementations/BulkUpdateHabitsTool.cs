@@ -98,10 +98,22 @@ public sealed class BulkUpdateHabitsTool(IMediator mediator) : IAiTool
         Func<IReadOnlyList<TItem>, CancellationToken, Task<Result<TResult>>> executeChunk,
         Func<TResult, int> countApplied,
         string verb,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyList<int>? prefixChunkSizes = null)
     {
         var appliedCount = 0;
-        foreach (var chunk in items.Chunk(AppConstants.MaxBulkOperationSize))
+        var offset = 0;
+        var chunks = new List<IReadOnlyList<TItem>>();
+        if (prefixChunkSizes is not null)
+        {
+            foreach (var size in prefixChunkSizes)
+            {
+                chunks.Add(items.Skip(offset).Take(size).ToArray());
+                offset += size;
+            }
+        }
+        chunks.AddRange(items.Skip(offset).Chunk(AppConstants.MaxBulkOperationSize));
+        foreach (var chunk in chunks)
         {
             Result<TResult> result;
             try
