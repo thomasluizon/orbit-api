@@ -23,6 +23,7 @@ public partial class ReminderSchedulerService(
     IConfiguration configuration,
     TimeProvider? timeProvider = null) : ScheduledServiceBase, IScheduledJob
 {
+    private const int MinRelativeDayOffset = -1;
     private const int MaxRelativeLookaheadDays = DomainConstants.MaxReminderMinutesBefore / 1440 + 1;
 
     private static readonly Expression<Func<Habit, SchedulerHabit>> HabitProjection = h => new SchedulerHabit
@@ -105,8 +106,7 @@ public partial class ReminderSchedulerService(
             .ToDictionaryAsync(u => u.Id, ct);
 
         var habitIds = habits.Select(h => h.Id).ToList();
-        var utcToday = DateOnly.FromDateTime(nowUtc);
-        var minWindowDate = utcToday.AddDays(-1);
+        var minWindowDate = minLocalDate.AddDays(MinRelativeDayOffset);
         var maxWindowDate = maxLocalDate;
 
         var loggedHabitDates = (await dbContext.HabitLogs
@@ -185,7 +185,7 @@ public partial class ReminderSchedulerService(
                 .Select(r => LocalReminderInstantUtc(r.Date.ToDateTime(r.Time), tz)))
             .ToHashSet();
 
-        for (var dayOffset = -1; dayOffset <= MaxRelativeLookaheadDays; dayOffset++)
+        for (var dayOffset = MinRelativeDayOffset; dayOffset <= MaxRelativeLookaheadDays; dayOffset++)
         {
             var occurrenceDate = userToday.AddDays(dayOffset);
             if (!HabitScheduleService.IsHabitDueOnDate(habit, occurrenceDate, user.WeekStartDay)) continue;
