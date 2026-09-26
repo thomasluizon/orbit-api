@@ -253,11 +253,10 @@ public class OrbitDbContext : DbContext
         modelBuilder.Entity<ProcessedRequest>(entity =>
         {
             entity.HasIndex(request => new { request.UserId, request.IdempotencyKey, request.RequestType,
-                request.RequestFingerprint }).IsUnique();
+                request.RequestOrdinal }).IsUnique();
             entity.HasIndex(request => request.CreatedAtUtc);
             entity.Property(request => request.IdempotencyKey).IsRequired().HasMaxLength(200);
             entity.Property(request => request.RequestType).IsRequired().HasMaxLength(256);
-            entity.Property(request => request.RequestFingerprint).IsRequired().HasMaxLength(64);
             entity.HasOne<User>().WithMany().HasForeignKey(request => request.UserId).OnDelete(DeleteBehavior.Cascade);
         });
     }

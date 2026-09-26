@@ -170,10 +170,13 @@ public class IdempotencyBehaviorDbTests : IDisposable
     [Fact]
     public async Task Handle_SameKeyDifferentCommandsOfOneType_BothExecute()
     {
-        var behavior = CreateBehavior<NamedRequest, string>();
+        var context = new StubIdempotencyContext(true, _userId, "mutation-key-1", trackOrdinals: true);
+        var behavior = new IdempotencyBehavior<NamedRequest, string>(context, _store, _unitOfWork);
 
         var first = await behavior.Handle(new NamedRequest("first"), CountingHandler("first"), CancellationToken.None);
         var second = await behavior.Handle(new NamedRequest("second"), CountingHandler("second"), CancellationToken.None);
+
+        context.ResetOrdinals();
 
         first.Should().Be("first");
         second.Should().Be("second");
@@ -186,10 +189,10 @@ public class IdempotencyBehaviorDbTests : IDisposable
     }
 
     [Fact]
-    public async Task Handle_ReplayOfRowWrittenBeforeContentScoping_ReturnsStoredResponse()
+    public async Task Handle_ReplayOfRowWrittenBeforeOrdinalScoping_ReturnsStoredResponse()
     {
         var legacy = ProcessedRequest.Create(
-            _userId, "mutation-key-1", typeof(NamedRequest).FullName!, ProcessedRequest.UnscopedFingerprint);
+            _userId, "mutation-key-1", typeof(NamedRequest).FullName!, 0);
         legacy.SetResponseBody(JsonSerializer.Serialize("stored-before-deploy"));
         _dbContext.ProcessedRequests.Add(legacy);
         await _dbContext.SaveChangesAsync();
@@ -219,7 +222,7 @@ public class IdempotencyBehaviorDbTests : IDisposable
         using var cache = new MemoryCache(new MemoryCacheOptions());
         var habitRepository = new GenericRepository<Habit>(_dbContext);
         var logRepository = new GenericRepository<HabitLog>(_dbContext);
-        var context = new StubIdempotencyContext(true, _userId, "shared-http-key");
+        var context = new StubIdempotencyContext(true, _userId, "shared-http-key", trackOrdinals: true);
         if (skip)
         {
             var handler = new BulkSkipHabitsCommandHandler(habitRepository, logRepository, dateService, _unitOfWork, cache);
@@ -262,6 +265,7 @@ public class IdempotencyBehaviorDbTests : IDisposable
             ? (Orbit.Application.Chat.Tools.IAiTool)new BulkSkipHabitsTool(mediator, habitRepository, dateService)
             : new BulkLogHabitsTool(mediator, habitRepository, dateService);
         var first = await tool.ExecuteAsync(args, _userId, CancellationToken.None);
+        context.ResetOrdinals();
         var replay = await tool.ExecuteAsync(args, _userId, CancellationToken.None);
 
         first.Success.Should().BeTrue();
@@ -273,6 +277,55 @@ public class IdempotencyBehaviorDbTests : IDisposable
         (await _dbContext.HabitLogs.AsNoTracking().Select(log => log.HabitId).Distinct().CountAsync()).Should().Be(250);
         (await _dbContext.HabitLogs.AsNoTracking().CountAsync(log => log.Value == 0)).Should().Be(skip ? 250 : 0);
         (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(3);
+    }
+
+    [Fact]
+    public async Task Handle_ChatRetryAfterLocalMidnight_ReplaysOriginalBulkLog()
+    {
+        var firstDay = new DateOnly(2026, 9, 24);
+        var currentDay = firstDay;
+        var habit = Habit.Create(new HabitCreateParams(
+            _userId, "Daily habit", FrequencyUnit.Day, 1, DueDate: firstDay)).Value;
+        _dbContext.Habits.Add(habit);
+        await _dbContext.SaveChangesAsync();
+
+        var dateService = Substitute.For<IUserDateService>();
+        dateService.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(_ => currentDay);
+        dateService.GetUserWeekStartDayAsync(_userId, Arg.Any<CancellationToken>()).Returns(1);
+        var mediator = Substitute.For<IMediator>();
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var habitRepository = new GenericRepository<Habit>(_dbContext);
+        var goalService = Substitute.For<IGoalCompletionService>();
+        goalService.SyncDerivedGoalsAsync(_userId, Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(),
+                Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .Returns((IReadOnlyList<GoalCompletionUpdate>)Array.Empty<GoalCompletionUpdate>());
+        var handler = new BulkLogHabitsCommandHandler(habitRepository, new GenericRepository<HabitLog>(_dbContext),
+            new BulkLogServices(dateService, Substitute.For<IUserStreakService>(), Substitute.For<IGamificationService>()),
+            goalService, _unitOfWork, cache, NullLogger<BulkLogHabitsCommandHandler>.Instance);
+        var behavior = CreateBehavior<BulkLogHabitsCommand, Result<BulkLogResult>>(key: "chat-retry");
+        mediator.Send(Arg.Any<BulkLogHabitsCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var command = call.Arg<BulkLogHabitsCommand>();
+                return behavior.Handle(command, ct =>
+                {
+                    _handlerCalls++;
+                    return handler.Handle(command, ct);
+                }, call.Arg<CancellationToken>());
+            });
+        var tool = new BulkLogHabitsTool(mediator, habitRepository, dateService);
+        var args = JsonSerializer.SerializeToElement(new { habit_ids = new[] { habit.Id } });
+
+        var first = await tool.ExecuteAsync(args, _userId, CancellationToken.None);
+        currentDay = firstDay.AddDays(1);
+        var replay = await tool.ExecuteAsync(args, _userId, CancellationToken.None);
+
+        first.Success.Should().BeTrue();
+        replay.EntityName.Should().Be(first.EntityName);
+        JsonSerializer.Serialize(replay.Payload).Should().Be(JsonSerializer.Serialize(first.Payload));
+        _handlerCalls.Should().Be(1);
+        (await _dbContext.HabitLogs.AsNoTracking().CountAsync()).Should().Be(1);
+        (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(1);
     }
 
     [Fact]
@@ -577,14 +630,28 @@ public class IdempotencyBehaviorDbTests : IDisposable
         public override string SqlState => "23505";
     }
 
-    private sealed class StubIdempotencyContext(bool hasKey, Guid userId, string key) : IIdempotencyContext
+    private sealed class StubIdempotencyContext(bool hasKey, Guid userId, string key, bool trackOrdinals = false) : IIdempotencyContext
     {
+        private readonly Dictionary<string, int> _nextOrdinalByType = new(StringComparer.Ordinal);
+
         public bool TryGetRequestKey(out Guid resolvedUserId, out string idempotencyKey)
         {
             resolvedUserId = userId;
             idempotencyKey = key;
             return hasKey;
         }
+
+        public int NextRequestOrdinal(string requestType)
+        {
+            if (!trackOrdinals)
+                return 0;
+
+            _nextOrdinalByType.TryGetValue(requestType, out var ordinal);
+            _nextOrdinalByType[requestType] = ordinal + 1;
+            return ordinal;
+        }
+
+        public void ResetOrdinals() => _nextOrdinalByType.Clear();
     }
 
     private sealed class SqliteCompatOrbitDbContext(DbContextOptions<OrbitDbContext> options)

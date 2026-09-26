@@ -10,20 +10,13 @@ namespace Orbit.Domain.Entities;
 /// </summary>
 public class ProcessedRequest : Entity
 {
-    /// <summary>
-    /// The fingerprint of a row written before the ledger was scoped by command content (migration
-    /// <c>ScopeProcessedRequestsByContent</c>). Such a row identified the one command a key and type could
-    /// carry, so a replay that spans the deploy still returns its stored response.
-    /// </summary>
-    public const string UnscopedFingerprint = "";
-
     public Guid UserId { get; private set; }
 
     public string IdempotencyKey { get; private set; } = "";
 
     public string RequestType { get; private set; } = "";
 
-    public string RequestFingerprint { get; private set; } = UnscopedFingerprint;
+    public int RequestOrdinal { get; private set; }
 
     public string ResponseBody { get; private set; } = "";
 
@@ -31,14 +24,14 @@ public class ProcessedRequest : Entity
 
     private ProcessedRequest() { }
 
-    public static ProcessedRequest Create(Guid userId, string idempotencyKey, string requestType, string requestFingerprint)
+    public static ProcessedRequest Create(Guid userId, string idempotencyKey, string requestType, int requestOrdinal)
     {
         return new ProcessedRequest
         {
             UserId = userId,
             IdempotencyKey = idempotencyKey,
             RequestType = requestType,
-            RequestFingerprint = requestFingerprint,
+            RequestOrdinal = requestOrdinal,
             CreatedAtUtc = DateTime.UtcNow,
         };
     }

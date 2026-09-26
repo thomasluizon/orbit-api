@@ -12,14 +12,14 @@ public interface IIdempotencyStore
     /// <c>null</c> if that combination has not been processed.
     /// </summary>
     Task<string?> FindResponseBodyAsync(Guid userId, string idempotencyKey, string requestType,
-        string requestFingerprint, CancellationToken cancellationToken);
+        int requestOrdinal, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Adds a tracked, uncommitted reservation for the (user, key, request type, content) so it commits atomically
+    /// Adds a tracked, uncommitted reservation for the (user, key, request type, ordinal) so it commits atomically
     /// with the wrapped handler's mutation. The response body is filled in via the returned reservation
     /// after the handler runs.
     /// </summary>
-    IIdempotencyReservation Reserve(Guid userId, string idempotencyKey, string requestType, string requestFingerprint);
+    IIdempotencyReservation Reserve(Guid userId, string idempotencyKey, string requestType, int requestOrdinal);
 }
 
 /// <summary>

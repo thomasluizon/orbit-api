@@ -1581,10 +1581,8 @@ namespace Orbit.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<string>("RequestFingerprint")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                    b.Property<int>("RequestOrdinal")
+                        .HasColumnType("integer");
 
                     b.Property<string>("RequestType")
                         .IsRequired()
@@ -1602,7 +1600,7 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasIndex("CreatedAtUtc");
 
-                    b.HasIndex("UserId", "IdempotencyKey", "RequestType", "RequestFingerprint")
+                    b.HasIndex("UserId", "IdempotencyKey", "RequestType", "RequestOrdinal")
                         .IsUnique();
 
                     b.ToTable("ProcessedRequests");

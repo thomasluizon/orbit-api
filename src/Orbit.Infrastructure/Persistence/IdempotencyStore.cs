@@ -7,22 +7,21 @@ namespace Orbit.Infrastructure.Persistence;
 public sealed class IdempotencyStore(OrbitDbContext context) : IIdempotencyStore
 {
     public async Task<string?> FindResponseBodyAsync(Guid userId, string idempotencyKey, string requestType,
-        string requestFingerprint, CancellationToken cancellationToken)
+        int requestOrdinal, CancellationToken cancellationToken)
     {
         return await context.ProcessedRequests
             .AsNoTracking()
             .Where(request => request.UserId == userId
                 && request.IdempotencyKey == idempotencyKey
                 && request.RequestType == requestType
-                && (request.RequestFingerprint == requestFingerprint
-                    || request.RequestFingerprint == ProcessedRequest.UnscopedFingerprint))
+                && request.RequestOrdinal == requestOrdinal)
             .Select(request => request.ResponseBody)
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    public IIdempotencyReservation Reserve(Guid userId, string idempotencyKey, string requestType, string requestFingerprint)
+    public IIdempotencyReservation Reserve(Guid userId, string idempotencyKey, string requestType, int requestOrdinal)
     {
-        var record = ProcessedRequest.Create(userId, idempotencyKey, requestType, requestFingerprint);
+        var record = ProcessedRequest.Create(userId, idempotencyKey, requestType, requestOrdinal);
         context.ProcessedRequests.Add(record);
         return new Reservation(record);
     }

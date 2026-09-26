@@ -5,7 +5,7 @@
 namespace Orbit.Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class ScopeProcessedRequestsByContent : Migration
+    public partial class ScopeProcessedRequestsByOrdinal : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -14,18 +14,17 @@ namespace Orbit.Infrastructure.Migrations
                 name: "IX_ProcessedRequests_UserId_IdempotencyKey_RequestType",
                 table: "ProcessedRequests");
 
-            migrationBuilder.AddColumn<string>(
-                name: "RequestFingerprint",
+            migrationBuilder.AddColumn<int>(
+                name: "RequestOrdinal",
                 table: "ProcessedRequests",
-                type: "character varying(64)",
-                maxLength: 64,
+                type: "integer",
                 nullable: false,
-                defaultValue: "");
+                defaultValue: 0);
 
             migrationBuilder.CreateIndex(
                 name: "IX_ProcessedRequests_UserId_IdempotencyKey_RequestType_Request~",
                 table: "ProcessedRequests",
-                columns: new[] { "UserId", "IdempotencyKey", "RequestType", "RequestFingerprint" },
+                columns: new[] { "UserId", "IdempotencyKey", "RequestType", "RequestOrdinal" },
                 unique: true);
         }
 
@@ -37,7 +36,7 @@ namespace Orbit.Infrastructure.Migrations
                 table: "ProcessedRequests");
 
             migrationBuilder.DropColumn(
-                name: "RequestFingerprint",
+                name: "RequestOrdinal",
                 table: "ProcessedRequests");
 
             migrationBuilder.CreateIndex(

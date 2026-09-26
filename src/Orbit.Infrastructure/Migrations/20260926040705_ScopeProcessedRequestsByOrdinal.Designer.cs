@@ -12,8 +12,8 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    [Migration("20260926032621_ScopeProcessedRequestsByContent")]
-    partial class ScopeProcessedRequestsByContent
+    [Migration("20260926040705_ScopeProcessedRequestsByOrdinal")]
+    partial class ScopeProcessedRequestsByOrdinal
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -1584,10 +1584,8 @@ namespace Orbit.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<string>("RequestFingerprint")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                    b.Property<int>("RequestOrdinal")
+                        .HasColumnType("integer");
 
                     b.Property<string>("RequestType")
                         .IsRequired()
@@ -1605,7 +1603,7 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasIndex("CreatedAtUtc");
 
-                    b.HasIndex("UserId", "IdempotencyKey", "RequestType", "RequestFingerprint")
+                    b.HasIndex("UserId", "IdempotencyKey", "RequestType", "RequestOrdinal")
                         .IsUnique();
 
                     b.ToTable("ProcessedRequests");

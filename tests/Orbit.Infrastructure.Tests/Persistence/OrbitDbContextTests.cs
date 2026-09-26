@@ -349,7 +349,7 @@ public class OrbitDbContextTests
             (typeof(ProcessedRequest), new[]
             {
                 nameof(ProcessedRequest.UserId), nameof(ProcessedRequest.IdempotencyKey), nameof(ProcessedRequest.RequestType),
-                nameof(ProcessedRequest.RequestFingerprint),
+                nameof(ProcessedRequest.RequestOrdinal),
             }),
             (typeof(ClosedMonthRecap), new[]
             {

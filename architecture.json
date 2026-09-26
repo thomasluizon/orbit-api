@@ -2956,12 +2956,12 @@
       "Behaviors": 17,
       "Calendar": 19,
       "Challenges": 15,
-      "Chat": 65,
+      "Chat": 66,
       "ChecklistTemplates": 9,
       "Common": 204,
       "Gamification": 44,
       "Goals": 55,
-      "Habits": 95,
+      "Habits": 96,
       "Marketing": 6,
       "Notifications": 21,
       "Profile": 40,
@@ -6829,10 +6829,15 @@
         "testClass": "IdempotencyBehaviorDbTests",
         "file": "tests/Orbit.Infrastructure.Tests/Behaviors/IdempotencyBehaviorDbTests.cs",
         "references": [
+          "BulkLogHabitsCommand",
+          "BulkLogHabitsCommandHandler",
+          "BulkSkipHabitsCommand",
+          "BulkSkipHabitsCommandHandler",
           "Habit",
           "HabitLog",
           "LogHabitCommand",
           "LogHabitCommandHandler",
+          "ProcessedRequest",
           "Tag",
           "User"
         ]
@@ -7266,6 +7271,8 @@
         "testClass": "HttpIdempotencyContextTests",
         "file": "tests/Orbit.Infrastructure.Tests/Idempotency/HttpIdempotencyContextTests.cs",
         "references": [
+          "BulkLogHabitsCommand",
+          "BulkSkipHabitsCommand",
           "User"
         ]
       },
