@@ -4,10 +4,11 @@ using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Infrastructure.Persistence;
+using Xunit.Abstractions;
 
 namespace Orbit.Infrastructure.Tests.Persistence;
 
-public class StreakProjectionQueryTests
+public class StreakProjectionQueryTests(ITestOutputHelper output)
 {
     [Fact]
     public async Task ScheduleProjection_KeepsScheduledDatesWithoutLoadingUnusedHabitColumns()
@@ -100,6 +101,11 @@ public class StreakProjectionQueryTests
         {
             var excluded = Habit.Create(new HabitCreateParams(
                 user.Id, "Completed bad habit", FrequencyUnit.Day, 1, today, IsBadHabit: true)).Value;
+            if (index < 930)
+            {
+                for (var day = 0; day < 5; day++)
+                    excluded.Log(today.AddDays(-day), advanceDueDate: false).IsSuccess.Should().BeTrue();
+            }
             typeof(Habit).GetProperty(nameof(Habit.IsCompleted))!.SetValue(excluded, true);
             habits.Add(excluded);
         }
@@ -117,6 +123,21 @@ public class StreakProjectionQueryTests
             streakHabit.Id, achievementHabit.Id]);
         second.Should().BeSameAs(first);
         counter.CommandCount.Should().Be(1);
+        counter.Commands.Should().ContainSingle().Which.Rows.Should().Be(2);
+        var sql = counter.Commands.Single().Sql;
+        sql.Should().Contain("\"IsDeleted\"")
+            .And.Contain("\"IsBadHabit\"")
+            .And.Contain("\"IsCompleted\"")
+            .And.Contain("\"IsGeneral\"")
+            .And.Contain("\"ParentHabitId\"")
+            .And.Contain("\"Days\"")
+            .And.NotContain("\"Description\"")
+            .And.NotContain("\"Emoji\"");
+        if (excludedHabitCount > 0)
+        {
+            factory.Context.HabitLogs.Count().Should().Be(4650);
+            output.WriteLine(sql);
+        }
     }
 
     private static Habit CreateHabit(Guid userId, DateOnly start)
