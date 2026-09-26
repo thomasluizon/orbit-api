@@ -34,7 +34,7 @@ public class EmailCopyTests
         var sources = new (string Email, object Copy)[]
         {
             ("VerificationCode", EmailCopy.VerificationCode(isPtBr)),
-            ("Welcome", EmailCopy.Welcome(isPtBr, "Thomas")),
+            ("Welcome", EmailCopy.Welcome(isPtBr, "Alex")),
             ("AccountDeletion", EmailCopy.AccountDeletion(isPtBr)),
             ("ApiKeyCreation", EmailCopy.ApiKeyCreation(isPtBr)),
             ("WaitlistConfirmation", EmailCopy.WaitlistConfirmation(isPtBr)),
@@ -93,13 +93,6 @@ public class EmailCopyTests
                 value, $"{email}.{field} must be translated, not copied");
     }
 
-    /// <summary>
-    /// Confirming deletion deactivates the account: <c>ConfirmAccountDeletionCommandHandler</c>
-    /// schedules removal at most <see cref="AppConstants.MaxDeletionGraceDays"/> days out, and
-    /// signing in again cancels it through <c>User.CancelDeactivation</c>. Copy that promised an
-    /// immediate and permanent wipe was wrong in both directions, which is the defect pull request
-    /// 954 already corrected once inside the app.
-    /// </summary>
     [Theory]
     [MemberData(nameof(BothLanguages))]
     public void TheDeletionEmailNamesTheGraceWindowAndTheWayOutOfIt(bool isPtBr)

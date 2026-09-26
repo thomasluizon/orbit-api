@@ -5,14 +5,6 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Application.ApiKeys.Services;
 
-/// <summary>
-/// The single authorization concept behind API-key listing, creation and revocation. It has two
-/// doors and both end in a six-digit code emailed to the account owner: the HTTP challenge
-/// (<c>POST /api/api-keys/creation-challenge[/confirm]</c>) and a verified agent step-up
-/// (<c>step_up_agent_operation_v2</c> then <c>verify_step_up_agent_operation_v2</c>). Both doors
-/// open the same grant, so a handler never has to know which door its caller came through.
-/// Creating key material spends the grant; listing and revoking only read it.
-/// </summary>
 public sealed class ApiKeyManagementAuthorization(
     IAppConfigService appConfigService,
     EmailChallengeService challengeService) : IAgentStepUpAuthorizationBridge

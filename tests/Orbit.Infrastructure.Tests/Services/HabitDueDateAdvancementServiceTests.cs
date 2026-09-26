@@ -255,7 +255,7 @@ public class HabitDueDateAdvancementServiceTests
     public async Task AdvanceStaleDueDates_AdvancesBadHabitOnly_LeavesNonBadOverdue()
     {
         await using var dbContext = CreateInMemoryDbContext();
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         var staleDueDate = Today.AddDays(-3);
         var nonBadHabit = Habit.Create(new HabitCreateParams(
             user.Id, "Non-bad recurring", FrequencyUnit.Day, 1,
@@ -284,7 +284,7 @@ public class HabitDueDateAdvancementServiceTests
     public async Task AdvanceStaleDueDates_UnsatisfiableHabit_DoesNotBlockValidHabit()
     {
         await using var dbContext = CreateInMemoryDbContext();
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         var anchor = Today.AddDays(-35);
         var unsatisfiableHabit = Habit.Create(new HabitCreateParams(
             user.Id,
@@ -321,7 +321,7 @@ public class HabitDueDateAdvancementServiceTests
     public async Task AdvanceStaleDueDates_SundayStartBoundaryHabit_SavesValidSibling()
     {
         await using var dbContext = CreateInMemoryDbContext();
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var user = User.Create("Alex", "alex@test.com").Value;
         user.SetWeekStartDay(0).IsSuccess.Should().BeTrue();
         var boundaryHabit = Habit.Create(new HabitCreateParams(
             user.Id,

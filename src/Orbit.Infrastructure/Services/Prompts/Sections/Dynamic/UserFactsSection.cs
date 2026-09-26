@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Orbit.Domain.Entities;
 using Orbit.Infrastructure.Services.Prompts;
@@ -62,6 +63,6 @@ public class UserFactsSection : IPromptSection
 
         sb.AppendLine(header);
         foreach (var fact in facts)
-            sb.AppendLine($"  - {PromptDataSanitizer.QuoteInline(fact.FactText, 250)}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"  - {PromptDataSanitizer.QuoteInline(fact.FactText, 250)}");
     }
 }

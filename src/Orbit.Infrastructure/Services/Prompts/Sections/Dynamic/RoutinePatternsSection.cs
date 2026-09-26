@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 
 namespace Orbit.Infrastructure.Services.Prompts.Sections.Dynamic;
@@ -19,7 +20,7 @@ public class RoutinePatternsSection : IPromptSection
         else
         {
             foreach (var pattern in context.RoutinePatterns)
-                sb.AppendLine($"- \"{pattern.HabitTitle}\": {pattern.Description} (confidence: {pattern.Confidence}, consistency: {pattern.ConsistencyScore:P0})");
+                sb.AppendLine(CultureInfo.InvariantCulture, $"- \"{pattern.HabitTitle}\": {pattern.Description} (confidence: {pattern.Confidence}, consistency: {pattern.ConsistencyScore:P0})");
             sb.AppendLine();
             sb.AppendLine("Use these routine patterns to:");
             sb.AppendLine("- Warn about potential scheduling conflicts when user creates new habits");

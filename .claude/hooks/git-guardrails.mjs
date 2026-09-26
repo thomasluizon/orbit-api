@@ -1,16 +1,4 @@
 #!/usr/bin/env node
-// PreToolUse(Bash|PowerShell) hook: block git invocations that violate Orbit's git
-// workflow. Registered on both shell tools because a matcher naming only "Bash" leaves
-// the identical command issued through the PowerShell tool completely unguarded.
-// Enforces the CLAUDE.md "Git workflow" rules deterministically instead of relying
-// on prose the model can drift past:
-//   - "Branch protection on main. No direct pushes. Squash-merge only."
-//   - "Never --no-verify, --no-gpg-sign, or force-push to main."
-// Also covers the bypass aliases: `git commit -n` (= --no-verify) and a bare
-// `git push` issued while HEAD is on main/master. Feature-branch pushes, new
-// commits, and PRs are untouched. reset --hard and checkout -- are intentionally
-// NOT blocked: CLAUDE.md allows them with judgment. Exits 0 silent (allow) or 2
-// with stderr feedback (block). Any error exits 0 so the hook never wedges a shell tool.
 
 import { readFileSync } from "node:fs"
 import { execFileSync } from "node:child_process"
@@ -78,7 +66,7 @@ try {
           process.exit(2)
         }
       } catch {
-        // Can't determine the branch (no repo at that path, git error): fail open.
+        // An unknown branch cannot be treated as a protected branch.
       }
     }
   }

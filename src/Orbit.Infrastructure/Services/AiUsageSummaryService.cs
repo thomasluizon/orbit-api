@@ -104,7 +104,7 @@ public partial class AiUsageSummaryService(
         IReadOnlyDictionary<string, AiModelPrice> pricing)
     {
         if (rows.Count == 0)
-            return $"AI cost {date:yyyy-MM-dd}: no usage recorded";
+            return string.Create(CultureInfo.InvariantCulture, $"AI cost {date:yyyy-MM-dd}: no usage recorded");
 
         var totalCostUsd = rows.Sum(row => row.CostUsd);
         var totalCalls = rows.Sum(row => row.Calls);
@@ -114,9 +114,9 @@ public partial class AiUsageSummaryService(
             .Select(group => (Purpose: group.Key, Cost: group.Sum(row => row.CostUsd)))
             .OrderByDescending(entry => entry.Cost)
             .Take(TopPurposeCount)
-            .Select(entry => $"{entry.Purpose}=${entry.Cost:F4}");
+            .Select(entry => string.Create(CultureInfo.InvariantCulture, $"{entry.Purpose}=${entry.Cost:F4}"));
 
-        var line = $"AI cost {date:yyyy-MM-dd}: total=${totalCostUsd:F4} over {totalCalls} calls; top: {string.Join(", ", topPurposes)}";
+        var line = string.Create(CultureInfo.InvariantCulture, $"AI cost {date:yyyy-MM-dd}: total=${totalCostUsd:F4} over {totalCalls} calls; top: {string.Join(", ", topPurposes)}");
 
         var unpricedModels = rows
             .Select(row => row.Model)
@@ -138,7 +138,7 @@ public partial class AiUsageSummaryService(
         int proLimit)
     {
         if (activeUsers.Count == 0)
-            return $"Astra quota {date:yyyy-MM-dd}: no active users";
+            return string.Create(CultureInfo.InvariantCulture, $"Astra quota {date:yyyy-MM-dd}: no active users");
 
         var messageCounts = activeUsers
             .Select(user => user.AiMessagesUsedToday)
@@ -149,7 +149,7 @@ public partial class AiUsageSummaryService(
         var freeCapHits = activeUsers.Count(user => !user.HasProAccess && user.AiMessagesUsedToday >= freeLimit);
         var proCapHits = activeUsers.Count(user => user.HasProAccess && user.AiMessagesUsedToday >= proLimit);
 
-        return $"Astra quota {date:yyyy-MM-dd}: free_cap_hits={freeCapHits}; pro_cap_hits={proCapHits}; " +
+        return string.Create(CultureInfo.InvariantCulture, $"Astra quota {date:yyyy-MM-dd}: free_cap_hits={freeCapHits}; pro_cap_hits={proCapHits}; ") +
             $"mean_messages_per_active_user={mean.ToString("F2", CultureInfo.InvariantCulture)}; " +
             $"p95_messages_per_active_user={messageCounts[p95Index]}";
     }

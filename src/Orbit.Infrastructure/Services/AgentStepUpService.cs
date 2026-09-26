@@ -61,7 +61,7 @@ public class AgentStepUpService(
         if (recentChallenge is not null)
             return Result.Failure<AgentStepUpChallenge>(ErrorMessages.StepUpCooldown);
 
-        var code = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
+        var code = RandomNumberGenerator.GetInt32(100000, 1000000).ToString(System.Globalization.CultureInfo.InvariantCulture);
         var challenge = AgentStepUpChallengeState.Create(
             userId,
             pendingOperationId,

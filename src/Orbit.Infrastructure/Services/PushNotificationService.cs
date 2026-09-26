@@ -282,14 +282,6 @@ public partial class PushNotificationService(
         return WebPushAttemptOutcome.GaveUp;
     }
 
-    /// <summary>
-    /// A push token is pruned only when FCM reports it permanently invalid: an unregistered device,
-    /// a malformed token, or a sender-ID mismatch. Transient failures - rate limits
-    /// (<see cref="MessagingErrorCode.QuotaExceeded"/>), upstream auth faults
-    /// (<see cref="MessagingErrorCode.ThirdPartyAuthError"/>), and server errors
-    /// (<see cref="MessagingErrorCode.Internal"/> / <see cref="MessagingErrorCode.Unavailable"/>) -
-    /// keep the subscription so a later delivery can succeed, isolating one bad send from the batch.
-    /// </summary>
     internal static bool IsStaleFcmError(MessagingErrorCode? code) =>
         code is MessagingErrorCode.Unregistered
             or MessagingErrorCode.InvalidArgument

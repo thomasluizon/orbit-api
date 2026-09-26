@@ -3,16 +3,6 @@ using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
-/// <summary>
-/// Routes Astra-supplied reminders into the correct one of the two mutually exclusive stores keyed on
-/// whether the habit has a due time: due-timed habits use <c>reminderTimes</c> (minute offsets before the
-/// due time) while habits with no due time use <c>scheduledReminders</c> (absolute day_before/same_day
-/// times). The AI tools expose both shapes, so a model can emit <c>scheduled_reminders</c> for a due-timed
-/// habit — the wrong store — which is why due-timed habits ended up holding scheduled reminders the client
-/// never reads. This mirrors the web/mobile request builders' store selection and converts reminders across
-/// the two representations so the user's intent survives both a mis-targeted tool call and a due-time
-/// add/remove transition (thomasluizon/orbit-ui-mobile#447 Bug 3, PR #500).
-/// </summary>
 internal static class ReminderStoreNormalizer
 {
     private const int MinutesPerDay = 24 * 60;
@@ -49,14 +39,6 @@ internal static class ReminderStoreNormalizer
         return (offsets.Count > 0 ? offsets : reminderTimes, []);
     }
 
-    /// <summary>
-    /// Store selection for the update path, which also has to heal a due-time transition. When the caller
-    /// supplies reminders this defers to <see cref="Normalize"/>. When it does not but the update adds or
-    /// removes the due time, the habit's existing reminders are migrated across the boundary — absolute
-    /// scheduled reminders become minute offsets before the new due time, and offsets become absolute
-    /// reminders relative to the previous due time — so a due-time-only edit never strands reminders in the
-    /// store the client no longer reads. Otherwise both stores are left untouched.
-    /// </summary>
     public static (List<int>? ReminderTimes, List<ScheduledReminderTime>? ScheduledReminders) NormalizeForUpdate(
         TimeOnly? newDueTime,
         TimeOnly? previousDueTime,

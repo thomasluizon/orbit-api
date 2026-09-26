@@ -106,7 +106,7 @@ public class HandlePlayNotificationCommandHandlerTests
     public async Task Handle_ActiveState_GrantsPro(string subscriptionState, int notificationType,
         SubscriptionLapseReason? expectedReason)
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         var expiresAt = DateTime.UtcNow.AddMonths(1);
         user.SetPlaySubscription("tok_renew", expiresAt, SubscriptionInterval.Monthly);
         user.RecordSubscriptionLapseReason(SubscriptionSource.GooglePlay, SubscriptionLapseReason.PaymentFailed);
@@ -143,7 +143,7 @@ public class HandlePlayNotificationCommandHandlerTests
     public async Task Handle_VerifiedNonEntitledState_RemovesAccessWithExistingReason(
         string subscriptionState, int notificationType, SubscriptionLapseReason expectedReason)
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
         user.SetPlaySubscription("tok_old", DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly);
         StubUser(user);
@@ -165,7 +165,7 @@ public class HandlePlayNotificationCommandHandlerTests
     [Fact]
     public async Task Handle_PlayGraceWhileStripeOwnsEntitlement_PreservesStripeReason()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         var stripeExpiry = DateTime.UtcNow.AddMonths(2);
         user.SetStripeSubscription("sub_test", stripeExpiry);
         user.RecordSubscriptionLapseReason(SubscriptionSource.Stripe, SubscriptionLapseReason.Canceled);
@@ -188,7 +188,7 @@ public class HandlePlayNotificationCommandHandlerTests
     [Fact]
     public async Task Handle_InactiveState_CancelsSubscription()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         user.SetPlaySubscription("tok_old", DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly);
         StubUser(user);
         StubVerify(new PlaySubscriptionState(false, DateTime.UtcNow.AddDays(-1), null, false, "orbit_pro", null, null));
@@ -208,7 +208,7 @@ public class HandlePlayNotificationCommandHandlerTests
     [Fact]
     public async Task Handle_AccountHold_RecordsPaymentFailureReason()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         user.SetPlaySubscription("tok_old", DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly);
         StubUser(user);
         StubVerify(new PlaySubscriptionState(false, DateTime.UtcNow, null, true, "orbit_pro", null, null));
@@ -223,7 +223,7 @@ public class HandlePlayNotificationCommandHandlerTests
     [Fact]
     public async Task Handle_CanceledWhileEntitled_RecordsPendingCanceledReason()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         user.SetPlaySubscription("tok_old", DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly);
         StubUser(user);
         StubVerify(new PlaySubscriptionState(true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, true, "orbit_pro", null, null));
@@ -239,7 +239,7 @@ public class HandlePlayNotificationCommandHandlerTests
     [Fact]
     public async Task Handle_PlayCanceledWhileStripeOwnsEntitlement_DoesNotRecordPlayReason()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddMonths(2));
         user.LinkPlayPurchaseToken("tok_old");
         StubUser(user);
@@ -265,7 +265,7 @@ public class HandlePlayNotificationCommandHandlerTests
     [Fact]
     public async Task Handle_CanceledAfterPaymentFailure_PreservesPaymentFailureReason()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         user.SetPlaySubscription("tok_old", DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly);
         user.RecordSubscriptionLapseReason(
             SubscriptionSource.GooglePlay, SubscriptionLapseReason.PaymentFailed);
@@ -281,7 +281,7 @@ public class HandlePlayNotificationCommandHandlerTests
     [Fact]
     public async Task Handle_ExpiredAfterCancellation_PreservesCanceledReason()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         user.SetPlaySubscription("tok_old", DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly);
         user.RecordSubscriptionLapseReason(
             SubscriptionSource.GooglePlay, SubscriptionLapseReason.Canceled);
@@ -297,7 +297,7 @@ public class HandlePlayNotificationCommandHandlerTests
     [Fact]
     public async Task Handle_RevokedSubscription_RecordsExpiredReason()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         user.SetPlaySubscription("tok_old", DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly);
         StubUser(user);
         StubVerify(new PlaySubscriptionState(false, DateTime.UtcNow, null, true, "orbit_pro", null, null));
@@ -311,7 +311,7 @@ public class HandlePlayNotificationCommandHandlerTests
     [Fact]
     public async Task Handle_PurchaseGrantingPro_InvokesCouponConsumerBeforeTokenOverwrite()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         StubUser(user);
         StubVerify(new PlaySubscriptionState(
             true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, true, "orbit_pro", null, null, "referral10"));
@@ -347,7 +347,7 @@ public class HandlePlayNotificationCommandHandlerTests
     [Fact]
     public async Task Handle_LinkedPurchaseToken_FindsUserByLinkedTokenAndRepoints()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         user.SetPlaySubscription("tok_old", DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly);
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
@@ -365,7 +365,7 @@ public class HandlePlayNotificationCommandHandlerTests
     [Fact]
     public async Task Handle_VerifyThrows_ReturnsFailureSoPubSubRetries()
     {
-        StubUser(User.Create("Thomas", "test@example.com").Value);
+        StubUser(User.Create("Alex", "test@example.com").Value);
         _playBilling.VerifyAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new BillingProviderException("boom"));
 
@@ -404,7 +404,7 @@ public class HandlePlayNotificationCommandHandlerTests
     [Fact]
     public async Task Handle_UnrecognizedBasePlan_DoesNotGrantPro()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         StubUser(user);
         StubVerify(new PlaySubscriptionState(true, DateTime.UtcNow.AddMonths(1), null, true, "orbit_pro", null, null));
 
@@ -417,7 +417,7 @@ public class HandlePlayNotificationCommandHandlerTests
     [Fact]
     public async Task Handle_NotificationAccountMismatch_SkipsWithoutMutating()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         user.SetPlaySubscription("tok", DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly);
         StubUser(user);
         StubVerify(new PlaySubscriptionState(true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, true, "orbit_pro", null, Guid.NewGuid().ToString()));
@@ -432,7 +432,7 @@ public class HandlePlayNotificationCommandHandlerTests
     [Fact]
     public async Task Handle_ConcurrentDuplicate_SaveConflictButAlreadyRecorded_ReturnsSuccess()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         StubUser(user);
         StubVerify(new PlaySubscriptionState(true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, true, "orbit_pro", null, null));
         _processedRepo.AnyAsync(
@@ -450,7 +450,7 @@ public class HandlePlayNotificationCommandHandlerTests
     [Fact]
     public async Task Handle_StripeCoversLaterPeriod_LinksTokenWithoutDowngradingStripeEntitlement()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         var stripeExpiry = DateTime.UtcNow.AddMonths(6);
         user.SetStripeSubscription("sub_123", stripeExpiry);
         StubUser(user);
@@ -468,7 +468,7 @@ public class HandlePlayNotificationCommandHandlerTests
     [Fact]
     public async Task Handle_ReferralCoupon_CancelledOnlyAfterSaveSucceeds()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         StubUser(user);
         StubVerify(new PlaySubscriptionState(
             true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, true, "orbit_pro", null, null, "referral10"));
@@ -488,7 +488,7 @@ public class HandlePlayNotificationCommandHandlerTests
     [Fact]
     public async Task Handle_ReferralCoupon_SaveFails_CouponNotCancelled()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         StubUser(user);
         StubVerify(new PlaySubscriptionState(
             true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, true, "orbit_pro", null, null, "referral10"));
@@ -515,7 +515,7 @@ public class HandlePlayNotificationCommandHandlerTests
     [Fact]
     public async Task Handle_SaveThrowsConcurrencyConflict_PropagatesWithoutTreatingAsDuplicate()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         StubUser(user);
         StubVerify(new PlaySubscriptionState(true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, true, "orbit_pro", null, null));
         _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
@@ -531,7 +531,7 @@ public class HandlePlayNotificationCommandHandlerTests
     [Fact]
     public async Task Handle_ThroughRetryBehavior_ConcurrencyConflictThenSuccess_GrantsProAndRetries()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         StubUser(user);
         StubVerify(new PlaySubscriptionState(true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, true, "orbit_pro", null, null));
 

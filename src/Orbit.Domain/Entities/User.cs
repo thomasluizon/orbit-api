@@ -516,7 +516,7 @@ public partial class User : Entity
     /// the user's id) for a freshly created account. Bypasses format validation because the result is
     /// provably valid (17 chars, alphanumeric + underscore); the same formula backfills existing rows.
     /// </summary>
-    public void SeedDefaultHandle() => Handle = $"user_{Id:N}"[..17];
+    public void SeedDefaultHandle() => Handle = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"user_{Id:N}")[..17];
 
     public void SetSocialOptIn(bool enabled) => SocialOptIn = enabled;
 
@@ -626,23 +626,6 @@ public partial class User : Entity
         LastActiveDate = lastActiveDate;
     }
 
-    /// <param name="preGapStreak">
-    /// The streak as of <paramref name="precedingDate"/>, bounding the award cursor to what was earned
-    /// BEFORE the gap. Rounding the full repaired streak down instead marked milestones crossed by
-    /// completions AFTER the gap as already awarded, so a pre-migration row could spend its banked
-    /// freeze and never receive the one it just earned.
-    /// <para>
-    /// It also caps a MATCHING saved snapshot, which survives later recalculations on purpose and can
-    /// therefore describe a longer run than the one being repaired: unlogging an older pre-gap
-    /// completion shortens the run while a cursor of 14 still matches on date, which would suppress
-    /// the awards the shorter run has re-earned.
-    /// </para>
-    /// <para>
-    /// NULLABLE on purpose. A caller that cannot say what the run into the gap was must not be read as
-    /// saying it was ZERO, which silently collapses the cursor and re-grants every milestone the user
-    /// already had. Unknown means do not bound, the behaviour that stood before the bound existed.
-    /// </para>
-    /// </param>
     public void RestoreStreakAfterGapRepair(
         int currentStreak, int longestStreak, DateOnly? lastActiveDate, DateOnly precedingDate,
         int? preGapStreak)

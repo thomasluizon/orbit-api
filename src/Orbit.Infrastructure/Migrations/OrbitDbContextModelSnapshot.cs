@@ -1329,6 +1329,9 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<bool?>("IsSlip")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Note")
                         .HasColumnType("text");
 
@@ -1581,6 +1584,9 @@ namespace Orbit.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<int>("RequestOrdinal")
+                        .HasColumnType("integer");
+
                     b.Property<string>("RequestType")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -1597,7 +1603,7 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasIndex("CreatedAtUtc");
 
-                    b.HasIndex("UserId", "IdempotencyKey", "RequestType")
+                    b.HasIndex("UserId", "IdempotencyKey", "RequestType", "RequestOrdinal")
                         .IsUnique();
 
                     b.ToTable("ProcessedRequests");

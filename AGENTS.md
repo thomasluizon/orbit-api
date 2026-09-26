@@ -13,17 +13,15 @@ file on its own head. Nothing here configures that review.
 - Your prompt is a GitHub ticket body. Execute exactly it; an impossible or
   contradictory ticket means STOP and report, never improvise.
 - Finish = `dotnet build Orbit.slnx` 0 errors + `dotnet test` green, commit, push, one
-  PR to `main` linking the ticket reference (`ORB-N` or `#N`), then stop. Never merge.
-- Post the approach before you write the code. Open the pull request as your FIRST act
-  after creating the branch, carrying no implementation yet, and immediately post your
-  intended approach as a pull request comment: the change you mean to make, the files it
-  will land in, and why that shape rather than the alternatives you rejected. Only then
-  start writing. A wrong shape then costs one comment instead of a review round against
-  code you already wrote. Changing a plan is free; changing a merged design is not.
+  PR to the base branch named in the order, linking the ticket as
+  `thomasluizon/orbit-tickets#N`, then stop. Never merge.
+- After tests pass, open or update the pull request and put the intended approach in
+  its body: the change made, the files it landed in, and why that shape was chosen.
 - Analyzer gates (silent in local builds, CI-fatal): ORBIT0001 narration comments,
   ORBIT0002 redundant rollbacks, ORBIT0003 controller authorization, ORBIT0004 raw
   `DateTime.UtcNow` for user-facing dates (use `IUserDateService.GetUserTodayAsync`),
   ORBIT0005 unconfigured DbSet. Grep for bare `//` comments before pushing.
+- Write rules, docs and comments timelessly: no dates except load-bearing data, names or attributions, incident stories, or machine paths. `tools/check-timeless.mjs` enforces this when installed.
 - The dash ban is CI-enforced (`tools/check-dashes.mjs`): never type an em dash
   anywhere, including commits and PR text.
 - New features need FluentValidation validators AND domain-entity guards; the backend
@@ -43,8 +41,8 @@ copy; the gates are the enforcement.
 - Never perform an admin merge, in any shape: no `gh pr merge --admin`, no direct
   `PUT /repos/{owner}/{repo}/pulls/{number}/merge`, and no GraphQL `mergePullRequest`
   mutation. Naming the two raw API calls is deliberate; forbidding only the CLI flag
-  leaves both API paths open. The admin override exists for Thomas alone. If a merge
-  genuinely needs it, STOP and ask Thomas to merge it himself.
+  leaves both API paths open. The admin override exists for the owner alone. If a merge
+  genuinely needs it, STOP and ask the owner to merge it.
 - Never bypass the git hooks: no `--no-verify` (or its `-n` commit alias), no
   `--no-gpg-sign` and no `commit.gpgsign=false`. Fix what a hook flags, then commit.
 - Never `git worktree remove --force`: on Windows it follows a junction and deletes the

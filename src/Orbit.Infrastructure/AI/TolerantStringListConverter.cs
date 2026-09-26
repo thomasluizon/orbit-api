@@ -3,14 +3,6 @@ using System.Text.Json.Serialization;
 
 namespace Orbit.Infrastructure.AI;
 
-/// <summary>
-/// Deserializes a JSON array into a string list while tolerating elements the model returns as
-/// objects instead of plain strings (e.g. <c>{"title": "Brush teeth"}</c>). Object elements
-/// contribute their <c>title</c>/<c>name</c> property, or their first non-empty string property;
-/// elements that yield no usable string are skipped. A non-array token yields an empty list. This
-/// keeps LLM JSON that drifts from the requested schema from throwing at the deserialization
-/// boundary — https://thomasluizon.sentry.io/issues/ORBIT-API-K
-/// </summary>
 public sealed class TolerantStringListConverter : JsonConverter<IReadOnlyList<string>>
 {
     public override IReadOnlyList<string> Read(

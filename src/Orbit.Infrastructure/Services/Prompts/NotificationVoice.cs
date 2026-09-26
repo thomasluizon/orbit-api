@@ -1,13 +1,5 @@
 namespace Orbit.Infrastructure.Services.Prompts;
 
-/// <summary>
-/// The one voice contract every generated user-facing message obeys, injected into
-/// each generator's prompt. The register is pinned here, in the prompt, rather than
-/// in a post-processing scrub, so this block is the only control on generated copy.
-/// It states each ban directly and deliberately carries no worked example, because
-/// the prompts this replaced demonstrated an exclamation mark and a doubled hyphen
-/// inside their own examples and the model reproduced both.
-/// </summary>
 public static class NotificationVoice
 {
     public const string Rules = """

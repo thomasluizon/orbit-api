@@ -160,7 +160,7 @@ public class ResendEmailServiceTests
     {
         _handler.ResponseToReturn = new HttpResponseMessage(HttpStatusCode.OK);
 
-        await _sut.SendWelcomeEmailAsync("user@test.com", "Thomas");
+        await _sut.SendWelcomeEmailAsync("user@test.com", "Alex");
 
         _handler.LastRequest.Should().NotBeNull();
         _handler.LastRequestBody.Should().Contain("You are in");
@@ -171,7 +171,7 @@ public class ResendEmailServiceTests
     {
         _handler.ResponseToReturn = new HttpResponseMessage(HttpStatusCode.OK);
 
-        await _sut.SendWelcomeEmailAsync("user@test.com", "Thomas", "pt-BR");
+        await _sut.SendWelcomeEmailAsync("user@test.com", "Alex", "pt-BR");
 
         _handler.LastRequestBody.Should().Contain("Boas-vindas");
     }
@@ -280,7 +280,7 @@ public class ResendEmailServiceTests
     {
         _handler.ResponseToReturn = new HttpResponseMessage(HttpStatusCode.OK);
 
-        await _sut.SendWelcomeEmailAsync("user@test.com", "Thomas");
+        await _sut.SendWelcomeEmailAsync("user@test.com", "Alex");
 
         _handler.LastRequestBody.Should().NotContain("#22094F");
         _handler.LastRequestBody.Should().NotContain("linear-gradient");

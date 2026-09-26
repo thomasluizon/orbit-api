@@ -31,17 +31,6 @@ public static class LocaleHelper
         return language.StartsWith("pt", StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>
-    /// Returns true if an <c>Accept-Language</c> header prefers Portuguese.
-    /// <para>
-    /// The header is a weighted list, so the whole value is not a language code:
-    /// <c>pt;q=0.1,en;q=0.9</c> prefers English while starting with <c>pt</c>. Tags are ranked by
-    /// their quality value, which defaults to 1 when absent, and ties keep the order the client
-    /// sent. A tag with <c>q=0</c> is a refusal and is dropped.
-    /// Only a strictly higher parsed quality replaces the current tag, so ties retain header order
-    /// without testing floating point equality.
-    /// </para>
-    /// </summary>
     public static bool IsPortugueseAcceptLanguage(string? acceptLanguage)
     {
         if (string.IsNullOrWhiteSpace(acceptLanguage))

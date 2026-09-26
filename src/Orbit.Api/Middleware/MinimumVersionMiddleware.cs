@@ -4,21 +4,6 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Api.Middleware;
 
-/// <summary>
-/// Server-authoritative minimum-supported-version gate. Reads the client's
-/// <c>X-App-Version</c> header and returns 426 Upgrade Required when it is
-/// provably below the configured floor, so honest old clients get a clear
-/// update prompt instead of cryptic errors after an API deploy.
-///
-/// Runs before authentication by design: an expired or unauthenticated old
-/// client must still receive the prompt. It reads only the version header and
-/// one cached config value — no auth state, no PII, no writes.
-///
-/// Fail-safe: a missing/blank or unparseable header is always allowed, so no
-/// client that predates this header can ever be blocked. The floor defaults to
-/// 0.0.0 (gate open) and is raised only after a header-sending, prompt-equipped
-/// client is live in the fleet.
-/// </summary>
 public sealed partial class MinimumVersionMiddleware(
     RequestDelegate next,
     ILogger<MinimumVersionMiddleware> logger)

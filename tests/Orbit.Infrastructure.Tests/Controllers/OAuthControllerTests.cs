@@ -243,7 +243,7 @@ public class OAuthControllerTests : IDisposable
     [Fact]
     public async Task VerifyCode_Success_ReturnsOkWithRedirectUrl()
     {
-        var loginResponse = new LoginResponse(UserId, "jwt-token", "Thomas", "test@example.com");
+        var loginResponse = new LoginResponse(UserId, "jwt-token", "Alex", "test@example.com");
         _mediator.Send(Arg.Any<VerifyCodeCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(loginResponse));
 
@@ -297,7 +297,7 @@ public class OAuthControllerTests : IDisposable
     [Fact]
     public async Task VerifyCode_RedirectUriWithQueryParam_UseAmpersandSeparator()
     {
-        var loginResponse = new LoginResponse(UserId, "jwt-token", "Thomas", "test@example.com");
+        var loginResponse = new LoginResponse(UserId, "jwt-token", "Alex", "test@example.com");
         _mediator.Send(Arg.Any<VerifyCodeCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(loginResponse));
 
@@ -383,9 +383,9 @@ public class OAuthControllerTests : IDisposable
     [Fact]
     public async Task GoogleAuth_ExistingUser_ReturnsRedirectUrl()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         var mockHandler = new MockHttpMessageHandler(HttpStatusCode.OK,
-            """{"email":"test@example.com","aud":"test-google-client-id","name":"Thomas"}""");
+            """{"email":"test@example.com","aud":"test-google-client-id","name":"Alex"}""");
         var httpClient = new HttpClient(mockHandler);
         _httpClientFactory.CreateClient().Returns(httpClient);
 
@@ -409,10 +409,10 @@ public class OAuthControllerTests : IDisposable
     [Fact]
     public async Task GoogleAuth_DeactivatedUser_ReactivatesAndReturnsRedirect()
     {
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         user.Deactivate(DateTime.UtcNow.AddDays(7));
         var mockHandler = new MockHttpMessageHandler(HttpStatusCode.OK,
-            """{"email":"test@example.com","aud":"test-google-client-id","name":"Thomas"}""");
+            """{"email":"test@example.com","aud":"test-google-client-id","name":"Alex"}""");
         _httpClientFactory.CreateClient().Returns(new HttpClient(mockHandler));
 
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
@@ -483,9 +483,9 @@ public class OAuthControllerTests : IDisposable
     [Fact]
     public async Task GoogleAuth_MixedCaseEmail_LogsIntoExistingLowercaseAccount()
     {
-        var existingUser = User.Create("Thomas", "test@example.com").Value;
+        var existingUser = User.Create("Alex", "test@example.com").Value;
         var mockHandler = new MockHttpMessageHandler(HttpStatusCode.OK,
-            """{"email":"Test@Example.com","aud":"test-google-client-id","name":"Thomas"}""");
+            """{"email":"Test@Example.com","aud":"test-google-client-id","name":"Alex"}""");
         _httpClientFactory.CreateClient().Returns(new HttpClient(mockHandler));
 
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
@@ -855,7 +855,7 @@ public class OAuthControllerTests : IDisposable
     public async Task VerifyCode_EchoesStateVerbatim_SoClientCanDetectMismatch()
     {
         var state = "state-" + Guid.NewGuid().ToString("N");
-        var loginResponse = new LoginResponse(UserId, "jwt-token", "Thomas", "test@example.com");
+        var loginResponse = new LoginResponse(UserId, "jwt-token", "Alex", "test@example.com");
         _mediator.Send(Arg.Any<VerifyCodeCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(loginResponse));
 
@@ -873,7 +873,7 @@ public class OAuthControllerTests : IDisposable
     public async Task VerifyCode_StateWithQueryInjection_IsPercentEncodedSoNoParamSmuggling()
     {
         var tamperedState = "benign&code=forged-code&x=";
-        var loginResponse = new LoginResponse(UserId, "jwt-token", "Thomas", "test@example.com");
+        var loginResponse = new LoginResponse(UserId, "jwt-token", "Alex", "test@example.com");
         _mediator.Send(Arg.Any<VerifyCodeCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(loginResponse));
 
@@ -925,7 +925,7 @@ public class OAuthControllerTests : IDisposable
     public async Task VerifyCode_WithNonce_BindsNonceRetrievableAtTokenExchange()
     {
         var (verifier, challenge) = GeneratePkce();
-        var loginResponse = new LoginResponse(UserId, "jwt-token", "Thomas", "test@example.com");
+        var loginResponse = new LoginResponse(UserId, "jwt-token", "Alex", "test@example.com");
         _mediator.Send(Arg.Any<VerifyCodeCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(loginResponse));
 
@@ -947,9 +947,9 @@ public class OAuthControllerTests : IDisposable
     public async Task GoogleAuth_WithNonce_BindsNonceRetrievableAtTokenExchange()
     {
         var (verifier, challenge) = GeneratePkce();
-        var user = User.Create("Thomas", "test@example.com").Value;
+        var user = User.Create("Alex", "test@example.com").Value;
         var mockHandler = new MockHttpMessageHandler(HttpStatusCode.OK,
-            """{"email":"test@example.com","aud":"test-google-client-id","name":"Thomas"}""");
+            """{"email":"test@example.com","aud":"test-google-client-id","name":"Alex"}""");
         _httpClientFactory.CreateClient().Returns(new HttpClient(mockHandler));
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<System.Linq.Expressions.Expression<Func<User, bool>>>(),

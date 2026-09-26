@@ -15,6 +15,7 @@ public class HabitLogPropertyTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Value.Should().Be(0m);
+        result.Value.IsSlip.Should().BeFalse();
     }
 
     [Property]
@@ -24,6 +25,7 @@ public class HabitLogPropertyTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Value.Should().Be(1m);
+        result.Value.IsSlip.Should().Be(habit.IsBadHabit);
     }
 
     [Property]

@@ -27,14 +27,6 @@ public record CalendarEventItem(
     DateTime? EndUtc = null,
     string? RecurrenceTimeZone = null)
 {
-    /// <summary>
-    /// The IANA zone the source calendar expands this event's recurrence in, taken from the recurring
-    /// master rather than from an expanded instance. Server-only: the <see cref="JsonIgnoreAttribute"/>
-    /// keeps this field out of the <c>GET /calendar/events</c> response body.
-    /// <c>StoredCalendarEventJson</c> carries it beside the stored suggestion instead, which is what
-    /// lets both feeds judge one series the same way. Null for a single event and for a suggestion row
-    /// written before that key existed.
-    /// </summary>
     [JsonIgnore]
     public string? SourceTimeZone { get; init; }
 
@@ -84,28 +76,6 @@ public record CalendarEventItem(
         };
     }
 
-    /// <summary>
-    /// True when a timed recurrence cannot be shown to keep one account-local weekday pattern and
-    /// one displayed start clock across a year in <paramref name="accountTimeZone"/>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The proof uses the original recurrence start, not the actual start of a rescheduled instance.
-    /// It walks source wall clocks through a year because Google's expanded feed covers sixty days.
-    /// </para>
-    /// <para>
-    /// Two zones with the same rules keep the same date and clock after the actual instance is
-    /// checked against the recurrence-defined start.
-    /// </para>
-    /// <para>
-    /// Missing source zone or original recurrence start leaves the series unproved and withheld.
-    /// </para>
-    /// <para>
-    /// A shifted <c>BYDAY</c> rule must have uniform occurrence evidence before its weekdays move.
-    /// Other rules may keep a fixed date shift, but all timed recurrences must keep the same
-    /// displayed start minute.
-    /// </para>
-    /// </remarks>
     internal bool HasUnrepresentableRecurrenceAfterProjection(TimeZoneInfo accountTimeZone)
     {
         if (!IsRecurring)
@@ -318,16 +288,6 @@ public record CalendarEventItem(
         }
     }
 
-    /// <summary>
-    /// True when every source wall clock across a year projects to the same account-local start
-    /// minute and day relationship as the recurrence-defined first start.
-    /// </summary>
-    /// <remarks>
-    /// A wall clock a spring-forward gap removes names no instant on that date, so the series produces
-    /// no occurrence there and the date carries no evidence either way. The walk moves to the next
-    /// date rather than ending. Counting the absent date as a failure withheld a whole series on a
-    /// date it never fires, which is the opposite of what the gate exists to prevent.
-    /// </remarks>
     private static bool KeepsItsLocalScheduleForAYear(
         TimeZoneInfo sourceTimeZone, TimeZoneInfo accountTimeZone, DateTime recurrenceStartUtc)
     {
@@ -363,18 +323,6 @@ public record CalendarEventItem(
 
     private static string ProjectedClock(DateTime local) => local.ToString("HH:mm", CultureInfo.InvariantCulture);
 
-    /// <summary>
-    /// The offsets the source zone can hold at one wall clock. A fall-back transition repeats an hour,
-    /// so an ambiguous wall clock has two instants and both must keep the date.
-    /// </summary>
-    /// <remarks>
-    /// Picking one of the two would need a fact the response does not carry. RFC 5545 section 3.3.5
-    /// reads a repeated wall clock as "the first occurrence of the referenced time", while
-    /// <see cref="TimeZoneInfo.ConvertTimeToUtc(DateTime, TimeZoneInfo)"/> reads it as standard time,
-    /// which is the second. The two readings disagree, and which one the source calendar expanded the
-    /// occurrence to is not in what Google returns, so requiring both to keep the date withholds a
-    /// series the first reading would allow rather than asserting a normalization nothing established.
-    /// </remarks>
     private static IReadOnlyList<TimeSpan> SourceOffsetsAt(TimeZoneInfo sourceTimeZone, DateTime sourceLocal)
         => sourceTimeZone.IsAmbiguousTime(sourceLocal)
             ? sourceTimeZone.GetAmbiguousTimeOffsets(sourceLocal)

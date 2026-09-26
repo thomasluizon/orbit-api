@@ -3,13 +3,6 @@ using System.Text;
 
 namespace Orbit.Application.Chat;
 
-/// <summary>
-/// Cheap, deterministic pre-check that decides whether a chat turn can skip the full tool-declaration
-/// payload (~40 tools). Only clearly-trivial social turns — greetings, thanks, acknowledgements in
-/// English or Portuguese — are routed tool-free; anything with actionable content, a question, or an
-/// unrecognised shape keeps the full tool loop. It biases hard toward keeping tools so a real request
-/// is never starved, and runs in-process with no model call so it adds zero latency to genuine turns.
-/// </summary>
 public static class ChatIntentRouter
 {
     private static readonly HashSet<string> TrivialPhrases = new(StringComparer.Ordinal)

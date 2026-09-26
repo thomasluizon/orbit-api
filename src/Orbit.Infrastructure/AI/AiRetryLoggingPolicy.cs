@@ -3,13 +3,6 @@ using Microsoft.Extensions.Logging;
 
 namespace Orbit.Infrastructure.AI;
 
-/// <summary>
-/// Retry policy for AI completions that logs every failed attempt with its
-/// attempt number and retriability. The OpenAI SDK retries silently by default,
-/// which let a hung connection burn the full network timeout unobserved; this
-/// policy makes each attempt visible so latency tails are diagnosable from
-/// production logs.
-/// </summary>
 public partial class AiRetryLoggingPolicy(int maxRetries, ILogger logger) : ClientRetryPolicy(maxRetries)
 {
     private sealed class AttemptCounter

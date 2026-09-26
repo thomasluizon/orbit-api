@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
@@ -157,7 +158,7 @@ public sealed partial class AiRetrospectiveService(
 
         var overallRate = totalScheduled > 0 ? (int)Math.Round(100.0 * totalMet / totalScheduled) : 0;
 
-        return $"""
+        return string.Create(CultureInfo.InvariantCulture, $"""
             Period: Last {totalDays} days ({period}) -- {dateFrom:MMMM d} to {dateTo:MMMM d, yyyy}
             Total habits tracked: {habits.Count(h => h.ParentHabitId is null)}
             Overall completion rate: {totalMet}/{totalScheduled} ({overallRate}%)
@@ -182,7 +183,7 @@ public sealed partial class AiRetrospectiveService(
             - Do NOT use emojis or JSON
             - Use markdown bold for section headings only
             - Write ONLY in {languageName}
-            """;
+            """);
     }
 
     private static (string HabitSection, int TotalMet, int TotalScheduled, int BadHabitSlips) BuildHabitBreakdown(
@@ -221,13 +222,13 @@ public sealed partial class AiRetrospectiveService(
         if (habit.IsBadHabit)
         {
             badHabitSlips += completedCount;
-            lines.Add($"- {habit.Title} (bad habit): {completedCount} slips in {totalDays} days");
+            lines.Add(string.Create(CultureInfo.InvariantCulture, $"- {habit.Title} (bad habit): {completedCount} slips in {totalDays} days"));
             return;
         }
 
         var met = Math.Min(completedCount, scheduledCount);
         var rate = scheduledCount > 0 ? (int)Math.Round(100.0 * met / scheduledCount) : 0;
-        lines.Add($"- {habit.Title}: {met}/{scheduledCount} completed ({rate}%)");
+        lines.Add(string.Create(CultureInfo.InvariantCulture, $"- {habit.Title}: {met}/{scheduledCount} completed ({rate}%)"));
     }
 
     private static void AppendChildHabitLines(
@@ -239,7 +240,7 @@ public sealed partial class AiRetrospectiveService(
             var childScheduled = HabitScheduleService.GetScheduledDates(child, dateFrom, dateTo, weekStartDay).Count;
             var childMet = Math.Min(childLogs, childScheduled);
             var childRate = childScheduled > 0 ? (int)Math.Round(100.0 * childMet / childScheduled) : 0;
-            lines.Add($"  - {child.Title}: {childMet}/{childScheduled} ({childRate}%)");
+            lines.Add(string.Create(CultureInfo.InvariantCulture, $"  - {child.Title}: {childMet}/{childScheduled} ({childRate}%)"));
         }
     }
 

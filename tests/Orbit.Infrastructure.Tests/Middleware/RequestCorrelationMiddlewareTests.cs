@@ -5,13 +5,6 @@ using Orbit.Api.Middleware;
 
 namespace Orbit.Infrastructure.Tests.Middleware;
 
-/// <summary>
-/// <see cref="RequestCorrelationMiddleware"/> pins a per-request correlation id: a safe inbound
-/// <c>X-Orbit-Request-Id</c> is trusted and reused, anything unsafe or absent falls back to the
-/// framework-generated <see cref="HttpContext.TraceIdentifier"/>, and whichever id wins is echoed on
-/// the response header so <see cref="HttpContext.TraceIdentifier"/> (the ambient log-scope id) and the
-/// response header always agree — no unvalidated client value ever reaches the logs or the response.
-/// </summary>
 public class RequestCorrelationMiddlewareTests
 {
     private static async Task<(DefaultHttpContext Context, bool NextCalled)> InvokeAsync(

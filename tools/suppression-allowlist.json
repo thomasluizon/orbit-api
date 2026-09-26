@@ -7,13 +7,13 @@
         "618",
         "CA1814"
       ],
-      "reason": "EF Core emits these, so they are generated code and not a decision anybody made. `612, 618` wrap BuildTargetModel in every migration designer. `CA1814` appears in exactly the two migrations that call InsertData with a `new object[,]` row block, verified 2026-09-08: those two are the only files under this directory using that construct, and they are the only two carrying the pragma. `Guard Migrations` already fails any pull request that edits an applied migration, which is the gate that matters here. The rules list is EXHAUSTIVE and enforced: any other suppression under this directory fails like an undeclared one anywhere else, so this entry exempts three rule ids rather than a whole subtree."
+      "reason": "EF Core generates these suppressions. Rules 612 and 618 wrap BuildTargetModel; CA1814 covers generated InsertData row arrays. Only the listed rules are exempt."
     }
   ],
   "ruleVerdicts": {
     "ORBIT0001": {
       "verdict": "keep the rule as it stands; no site is suppressed.",
-      "evidence": "NoCommentsAnalyzer ships at DiagnosticSeverity.Error and zero `#pragma warning disable ORBIT0001` exists under src/, read from the tree on 2026-09-08. A narration comment is either deleted or rewritten as an XML doc or a URL-linked WHY note, and `dotnet format` autofixes it. Nothing to narrow and nothing to clear."
+      "evidence": "NoCommentsAnalyzer is an error and has no suppressions under src/. Narration comments must be removed or rewritten as permitted documentation."
     },
     "ORBIT0002": {
       "verdict": "keep the rule as it stands; no site is suppressed.",
@@ -24,8 +24,8 @@
       "evidence": "ControllerAuthorizationAnalyzer ships at Error and zero suppressions of it exist under src/. The sanctioned escape is `[AllowAnonymous]` on the controller, which is a visible attribute rather than a pragma, so the rule already has an in-language exemption and needs no allowlist entry."
     },
     "ORBIT0004": {
-      "verdict": "NARROW IT, and #230 executes the narrowing. Provisional, and deliberately not acted on here.",
-      "evidence": "This carries 47 of the 94 hand-written pragma sites under src/, in 27 files, and orbit-api#431's classification is 38 instants and 14 buckets. Every one of those is an expiry, TTL, cutoff, audit stamp or aggregation key, which is what the analyzer is supposed to permit. The analyzer's exemption logic is LINE-level: it excuses a `DateTime.UtcNow` read when the source line names an `*AtUtc` symbol or a cache key, or when the value feeds a TimeZoneInfo conversion. A site that assigns to a local called `nowUtc` and passes it to a domain method taking an `*AtUtc` parameter does not match that line, and fires. `AuthSessionService.cs:33-35` (`var nowUtc = DateTime.UtcNow;`) is exactly that shape and carries five of the sites. If dataflow into an `*AtUtc` parameter were recognised, a large share of the 47 would stop firing and their pragmas would be deleted rather than re-justified. NOT executed here: this ticket declares the sites as they are, and narrowing an analyzer silently changes what 47 sites mean before anyone has read them. #230 confirms this against the analyzer source and an analyzer-enabled build, then narrows or refutes it."
+      "verdict": "Review whether the analyzer can recognize UTC instants passed to *AtUtc parameters before narrowing the rule.",
+      "evidence": "The current analyzer recognizes *AtUtc names, cache keys, and TimeZoneInfo conversion on the source line. A local nowUtc passed to an *AtUtc parameter can require a targeted suppression because the analyzer does not follow dataflow. Review each site before changing the rule."
     },
     "ORBIT0005": {
       "verdict": "keep the rule as it stands; no site is suppressed.",
@@ -42,37 +42,37 @@
     "src/Orbit.Api/Controllers/ApiKeysController.cs": {
       "CA1873": {
         "count": 1,
-        "reason": "a file-level disable in a file that uses [LoggerMessage] source generation, verified 2026-09-08: every one of the eleven CA1873 files contains at least one [LoggerMessage] declaration, and the analyzer flags the generated call sites. The reason is not site-specific, because the disable is not: #230 owns narrowing it."
+        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
       }
     },
     "src/Orbit.Api/Controllers/AuthController.cs": {
       "CA1873": {
         "count": 1,
-        "reason": "a file-level disable in a file that uses [LoggerMessage] source generation, verified 2026-09-08: every one of the eleven CA1873 files contains at least one [LoggerMessage] declaration, and the analyzer flags the generated call sites. The reason is not site-specific, because the disable is not: #230 owns narrowing it."
+        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
       }
     },
     "src/Orbit.Api/Controllers/ChecklistTemplatesController.cs": {
       "CA1873": {
         "count": 1,
-        "reason": "a file-level disable in a file that uses [LoggerMessage] source generation, verified 2026-09-08: every one of the eleven CA1873 files contains at least one [LoggerMessage] declaration, and the analyzer flags the generated call sites. The reason is not site-specific, because the disable is not: #230 owns narrowing it."
+        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
       }
     },
     "src/Orbit.Api/Controllers/GoalsController.cs": {
       "CA1873": {
         "count": 1,
-        "reason": "a file-level disable in a file that uses [LoggerMessage] source generation, verified 2026-09-08: every one of the eleven CA1873 files contains at least one [LoggerMessage] declaration, and the analyzer flags the generated call sites. The reason is not site-specific, because the disable is not: #230 owns narrowing it."
+        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
       }
     },
     "src/Orbit.Api/Controllers/HabitsController.cs": {
       "CA1873": {
         "count": 1,
-        "reason": "a file-level disable in a file that uses [LoggerMessage] source generation, verified 2026-09-08: every one of the eleven CA1873 files contains at least one [LoggerMessage] declaration, and the analyzer flags the generated call sites. The reason is not site-specific, because the disable is not: #230 owns narrowing it."
+        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
       }
     },
     "src/Orbit.Api/Controllers/NotificationController.cs": {
       "CA1873": {
         "count": 1,
-        "reason": "a file-level disable in a file that uses [LoggerMessage] source generation, verified 2026-09-08: every one of the eleven CA1873 files contains at least one [LoggerMessage] declaration, and the analyzer flags the generated call sites. The reason is not site-specific, because the disable is not: #230 owns narrowing it."
+        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
       }
     },
     "src/Orbit.Api/Controllers/OAuthController.cs": {
@@ -92,7 +92,7 @@
     "src/Orbit.Api/Controllers/ProfileController.cs": {
       "CA1873": {
         "count": 1,
-        "reason": "a file-level disable in a file that uses [LoggerMessage] source generation, verified 2026-09-08: every one of the eleven CA1873 files contains at least one [LoggerMessage] declaration, and the analyzer flags the generated call sites. The reason is not site-specific, because the disable is not: #230 owns narrowing it."
+        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
       }
     },
     "src/Orbit.Api/Controllers/SubscriptionController.cs": {
@@ -104,7 +104,7 @@
     "src/Orbit.Api/Controllers/SupportController.cs": {
       "CA1873": {
         "count": 1,
-        "reason": "a file-level disable in a file that uses [LoggerMessage] source generation, verified 2026-09-08: every one of the eleven CA1873 files contains at least one [LoggerMessage] declaration, and the analyzer flags the generated call sites. The reason is not site-specific, because the disable is not: #230 owns narrowing it."
+        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
       }
     },
     "src/Orbit.Api/Controllers/SyncController.cs": {
@@ -116,13 +116,13 @@
     "src/Orbit.Api/Controllers/TagsController.cs": {
       "CA1873": {
         "count": 1,
-        "reason": "a file-level disable in a file that uses [LoggerMessage] source generation, verified 2026-09-08: every one of the eleven CA1873 files contains at least one [LoggerMessage] declaration, and the analyzer flags the generated call sites. The reason is not site-specific, because the disable is not: #230 owns narrowing it."
+        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
       }
     },
     "src/Orbit.Api/Controllers/UserFactsController.cs": {
       "CA1873": {
         "count": 1,
-        "reason": "a file-level disable in a file that uses [LoggerMessage] source generation, verified 2026-09-08: every one of the eleven CA1873 files contains at least one [LoggerMessage] declaration, and the analyzer flags the generated call sites. The reason is not site-specific, because the disable is not: #230 owns narrowing it."
+        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
       }
     },
     "src/Orbit.Api/Extensions/ServiceCollectionExtensions.Infrastructure.cs": {
@@ -200,21 +200,21 @@
     "src/Orbit.Domain/Entities/PendingClarification.cs": {
       "CS0649": {
         "count": 1,
-        "reason": "EF writes this backing field through reflection on materialization and at the SQL layer, so there is no C# writer and never-assigned is a false positive. orbit-api#390."
+        "reason": "EF writes this backing field through reflection on materialization and at the SQL layer, so there is no C# writer and never-assigned is a false positive."
       },
       "S3459": {
         "count": 1,
-        "reason": "the same field: EF writes it through reflection and at the SQL layer, so unassigned-field is a false positive. orbit-api#390."
+        "reason": "the same field: EF writes it through reflection and at the SQL layer, so unassigned-field is a false positive."
       }
     },
     "src/Orbit.Domain/Entities/Report.cs": {
       "CS0649": {
         "count": 1,
-        "reason": "EF writes this backing field through reflection on materialization and at the SQL layer, so there is no C# writer and never-assigned is a false positive. orbit-api#390."
+        "reason": "EF writes this backing field through reflection on materialization and at the SQL layer, so there is no C# writer and never-assigned is a false positive."
       },
       "S3459": {
         "count": 1,
-        "reason": "the same field: EF writes it through reflection and at the SQL layer, so unassigned-field is a false positive. orbit-api#390."
+        "reason": "the same field: EF writes it through reflection and at the SQL layer, so unassigned-field is a false positive."
       }
     },
     "src/Orbit.Infrastructure/AI/AiBatchClient.cs": {
@@ -320,7 +320,7 @@
     "src/Orbit.Infrastructure/Services/AiIntentService.cs": {
       "CA1873": {
         "count": 1,
-        "reason": "a file-level disable in a file that uses [LoggerMessage] source generation, verified 2026-09-08: every one of the eleven CA1873 files contains at least one [LoggerMessage] declaration, and the analyzer flags the generated call sites. The reason is not site-specific, because the disable is not: #230 owns narrowing it."
+        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
       }
     },
     "src/Orbit.Infrastructure/Services/AiUsageSummaryService.cs": {
@@ -391,8 +391,8 @@
     },
     "src/Orbit.Infrastructure/Services/ReminderSchedulerService.cs": {
       "ORBIT0004": {
-        "count": 4,
-        "reason": "bucket: widened UTC-date prefetch windows, the minimum and maximum local date across all timezones, plus UTC-date dedupe keys; per-user reminder timing uses the converted user clock."
+        "count": 2,
+        "reason": "bucket: the scheduled-reminder UTC-date prefetch window (minimum local date across all timezones) and its UTC-date dedupe key; relative reminders use the converted user clock only."
       }
     },
     "src/Orbit.Infrastructure/Services/SlipAlertSchedulerService.cs": {

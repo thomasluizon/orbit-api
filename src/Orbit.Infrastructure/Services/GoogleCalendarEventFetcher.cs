@@ -7,13 +7,6 @@ using Orbit.Infrastructure.Services.Calendar;
 
 namespace Orbit.Infrastructure.Services;
 
-/// <summary>
-/// Google-Calendar-backed implementation of <see cref="ICalendarEventFetcher"/>. Fans the
-/// fetch out across the user's owned (or explicitly selected) calendars, merging the results
-/// and tagging each event with its source calendar. Vendor SDK construction is delegated to
-/// <see cref="IGoogleCalendarApi"/> so this aggregation/filter/dedup logic stays unit-testable
-/// (Clean Architecture: vendor integrations belong in Infrastructure).
-/// </summary>
 internal sealed partial class GoogleCalendarEventFetcher(
     IGoogleCalendarApi api,
     ILogger<GoogleCalendarEventFetcher> logger) : ICalendarEventFetcher
@@ -148,7 +141,7 @@ internal sealed partial class GoogleCalendarEventFetcher(
     private static CalendarEventItem MapEvent(
         Event ev, string calendarId, string calendarName, MasterRecurrence recurrence)
     {
-        var startTime = ev.Start?.DateTimeDateTimeOffset?.ToString("HH:mm");
+        var startTime = ev.Start?.DateTimeDateTimeOffset?.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture);
         var isRecurring = ev.RecurringEventId is not null
             || (ev.Recurrence is not null && ev.Recurrence.Count > 0);
 
@@ -156,9 +149,9 @@ internal sealed partial class GoogleCalendarEventFetcher(
             ev.RecurringEventId ?? ev.Id,
             ev.Summary.Trim(),
             ev.Description,
-            ev.Start?.Date ?? ev.Start?.DateTimeDateTimeOffset?.ToString("yyyy-MM-dd"),
+            ev.Start?.Date ?? ev.Start?.DateTimeDateTimeOffset?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
             startTime,
-            ev.End?.DateTimeDateTimeOffset?.ToString("HH:mm"),
+            ev.End?.DateTimeDateTimeOffset?.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture),
             isRecurring,
             recurrence.Rule,
             BuildReminders(ev, startTime),
@@ -179,13 +172,6 @@ internal sealed partial class GoogleCalendarEventFetcher(
         };
     }
 
-    /// <summary>
-    /// Reads the rule and the expansion timezone from whichever event actually owns them. Google
-    /// declares <c>EventDateTime.TimeZone</c> required on a recurring event and says the recurrence is
-    /// expanded in it, but an expanded instance is not a recurring event, so the value is read from the
-    /// master that the list request never returns
-    /// (<c>Google.Apis.Calendar.v3.xml</c>, <c>EventDateTime.TimeZone</c>, package 1.75.0.4206).
-    /// </summary>
     private async Task<MasterRecurrence> ResolveRecurrence(
         string accessToken,
         string calendarId,

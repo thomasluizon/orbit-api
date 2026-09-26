@@ -154,13 +154,6 @@ public class UpdateHabitCommandHandler(
         UpdateHabitCommandOptions Options,
         DateOnly Today);
 
-    /// <summary>
-    /// Rejects an <c>IsGeneral</c> change that would break the invariant that a habit's
-    /// <c>IsGeneral</c> must match its parent's: if the habit has a parent, the new value must
-    /// match the parent's; otherwise, it must match every child that isn't a completed
-    /// one-time task. A completed one-time-task child is functionally inert and excluded so an
-    /// ancient, already-finished child can't permanently block the parent's General flag.
-    /// </summary>
     private async Task<Result> ValidateGeneralAgainstRelativesAsync(
         Habit habit, bool newIsGeneral, Guid userId, CancellationToken cancellationToken)
     {

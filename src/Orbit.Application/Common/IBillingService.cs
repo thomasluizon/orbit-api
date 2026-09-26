@@ -1,14 +1,5 @@
 namespace Orbit.Application.Common;
 
-/// <summary>
-/// Payment-provider abstraction. All Stripe SDK calls for checkout, portal, billing
-/// details, and plan pricing go through this interface. Implementations live in
-/// Infrastructure so the Application layer has no compile-time dependency on Stripe.
-///
-/// HandleWebhookCommand.cs intentionally keeps its Stripe imports because webhook
-/// payload shapes are defined by Stripe itself; decoupling it would require a full
-/// domain-event model. It's the only remaining Stripe surface in Application.
-/// </summary>
 public interface IBillingService
 {
     /// <summary>Create a Stripe customer and return the provider customer ID.</summary>

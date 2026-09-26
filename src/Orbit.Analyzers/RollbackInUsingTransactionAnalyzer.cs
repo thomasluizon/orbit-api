@@ -8,14 +8,6 @@ using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace Orbit.Analyzers;
 
-/// <summary>
-/// Forbids an explicit <c>RollbackAsync()</c>/<c>Rollback()</c> call on an EF
-/// <c>IDbContextTransaction</c> (or ADO <c>DbTransaction</c>) that is declared with
-/// <c>using</c>/<c>await using</c> in the enclosing scope. Scope disposal already rolls back any
-/// uncommitted transaction, so the explicit rollback is redundant and can double-roll-back. A
-/// genuinely manually-owned transaction (declared without <c>using</c>, or reached through a field
-/// or parameter) is left alone. Generated code (EF migrations, designer files) is excluded.
-/// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class RollbackInUsingTransactionAnalyzer : DiagnosticAnalyzer
 {

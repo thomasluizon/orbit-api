@@ -21,24 +21,24 @@ public class AiProactiveCheckinMessageServiceGenerationTests
     [Fact]
     public async Task GenerateMessageAsync_TwoLines_ReturnsTitleAndBody()
     {
-        var service = BuildService("Still time today, Thomas\nMeditate is still open. Astra records it when you do it.");
+        var service = BuildService("Still time today, Alex\nMeditate is still open. Astra records it when you do it.");
 
-        var result = await service.GenerateMessageAsync("Thomas", OffTrackHabits, 5, "en");
+        var result = await service.GenerateMessageAsync("Alex", OffTrackHabits, 5, "en");
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Title.Should().Be("Still time today, Thomas");
+        result.Value.Title.Should().Be("Still time today, Alex");
         result.Value.Body.Should().Be("Meditate is still open. Astra records it when you do it.");
     }
 
     [Fact]
     public async Task GenerateMessageAsync_NoActiveStreak_StillReturnsModelText()
     {
-        var service = BuildService("Let's finish strong, Thomas\nA couple of habits are still open today.");
+        var service = BuildService("Let's finish strong, Alex\nA couple of habits are still open today.");
 
-        var result = await service.GenerateMessageAsync("Thomas", OffTrackHabits, 0, "en");
+        var result = await service.GenerateMessageAsync("Alex", OffTrackHabits, 0, "en");
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Title.Should().Be("Let's finish strong, Thomas");
+        result.Value.Title.Should().Be("Let's finish strong, Alex");
         result.Value.Body.Should().Be("A couple of habits are still open today.");
     }
 
@@ -47,10 +47,10 @@ public class AiProactiveCheckinMessageServiceGenerationTests
     {
         var service = BuildService("A couple of habits are still open today.");
 
-        var result = await service.GenerateMessageAsync("Thomas", OffTrackHabits, 5, "en");
+        var result = await service.GenerateMessageAsync("Alex", OffTrackHabits, 5, "en");
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Title.Should().Be("Still time today, Thomas");
+        result.Value.Title.Should().Be("Still time today, Alex");
         result.Value.Body.Should().Be("A couple of habits are still open today.");
     }
 
@@ -59,10 +59,10 @@ public class AiProactiveCheckinMessageServiceGenerationTests
     {
         var service = BuildService("Alguns habitos ainda estao abertos hoje.");
 
-        var result = await service.GenerateMessageAsync("Thomas", OffTrackHabits, 5, "pt-BR");
+        var result = await service.GenerateMessageAsync("Alex", OffTrackHabits, 5, "pt-BR");
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Title.Should().Be("Ainda dá tempo hoje, Thomas");
+        result.Value.Title.Should().Be("Ainda dá tempo hoje, Alex");
         result.Value.Body.Should().Be("Alguns habitos ainda estao abertos hoje.");
     }
 
@@ -71,10 +71,10 @@ public class AiProactiveCheckinMessageServiceGenerationTests
     {
         var service = BuildService("   ");
 
-        var result = await service.GenerateMessageAsync("Thomas", OffTrackHabits, 5, "en");
+        var result = await service.GenerateMessageAsync("Alex", OffTrackHabits, 5, "en");
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Title.Should().Be("Still time today, Thomas");
+        result.Value.Title.Should().Be("Still time today, Alex");
         result.Value.Body.Should().Be("Some habits are still open today. Pick the easiest one and tell Astra when you do it.");
     }
 
@@ -83,10 +83,10 @@ public class AiProactiveCheckinMessageServiceGenerationTests
     {
         var service = BuildService("   ");
 
-        var result = await service.GenerateMessageAsync("Thomas", OffTrackHabits, 0, "pt-BR");
+        var result = await service.GenerateMessageAsync("Alex", OffTrackHabits, 0, "pt-BR");
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Title.Should().Be("Ainda dá tempo hoje, Thomas");
+        result.Value.Title.Should().Be("Ainda dá tempo hoje, Alex");
         result.Value.Body.Should().Be("Ainda há hábitos abertos hoje. Escolha o mais fácil e conte à Astra quando fizer.");
     }
 
@@ -95,10 +95,10 @@ public class AiProactiveCheckinMessageServiceGenerationTests
     {
         var service = BuildService("boom", HttpStatusCode.BadRequest);
 
-        var result = await service.GenerateMessageAsync("Thomas", OffTrackHabits, 5, "en");
+        var result = await service.GenerateMessageAsync("Alex", OffTrackHabits, 5, "en");
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Title.Should().Be("Still time today, Thomas");
+        result.Value.Title.Should().Be("Still time today, Alex");
         result.Value.Body.Should().Be("Some habits are still open today. Pick the easiest one and tell Astra when you do it.");
     }
 
@@ -107,10 +107,10 @@ public class AiProactiveCheckinMessageServiceGenerationTests
     {
         var service = BuildService("boom", HttpStatusCode.BadRequest);
 
-        var result = await service.GenerateMessageAsync("Thomas", OffTrackHabits, 0, "pt-BR");
+        var result = await service.GenerateMessageAsync("Alex", OffTrackHabits, 0, "pt-BR");
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Title.Should().Be("Ainda dá tempo hoje, Thomas");
+        result.Value.Title.Should().Be("Ainda dá tempo hoje, Alex");
         result.Value.Body.Should().Be("Ainda há hábitos abertos hoje. Escolha o mais fácil e conte à Astra quando fizer.");
     }
 
@@ -127,7 +127,7 @@ public class AiProactiveCheckinMessageServiceGenerationTests
     {
         var service = BuildService("   ");
 
-        var result = await service.GenerateMessageAsync("Thomas", ["Meditate"], 5, language);
+        var result = await service.GenerateMessageAsync("Alex", ["Meditate"], 5, language);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Body.Should().Be(expected);
@@ -140,8 +140,8 @@ public class AiProactiveCheckinMessageServiceGenerationTests
     {
         var service = BuildService("   ");
 
-        var oneOpen = await service.GenerateMessageAsync("Thomas", ["Meditate"], 5, language);
-        var manyOpen = await service.GenerateMessageAsync("Thomas", OffTrackHabits, 5, language);
+        var oneOpen = await service.GenerateMessageAsync("Alex", ["Meditate"], 5, language);
+        var manyOpen = await service.GenerateMessageAsync("Alex", OffTrackHabits, 5, language);
 
         foreach (var body in new[] { oneOpen.Value.Body, manyOpen.Value.Body })
         {

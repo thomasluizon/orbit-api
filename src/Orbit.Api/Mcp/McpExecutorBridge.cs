@@ -7,15 +7,6 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Api.Mcp;
 
-/// <summary>
-/// Routes MCP tool mutations through the shared <see cref="IAgentOperationExecutor"/> so they
-/// pass the same policy evaluation and <c>AgentAuditLogs</c> trail as every other agent surface.
-/// Serializes a caller-supplied snake_case argument object into the <see cref="JsonElement"/> the
-/// backing <c>IAiTool</c> expects, builds the request with <see cref="AgentExecutionSurface.Mcp"/>
-/// and the four claim-derived credential fields, and maps the executor outcome back to the legacy
-/// MCP string contract: callers format their own success message; denials/failures become
-/// <c>"Error: …"</c>; pending-confirmation outcomes return a deterministic confirmation prompt.
-/// </summary>
 public class McpExecutorBridge(IAgentOperationExecutor operationExecutor)
 {
     private static readonly JsonSerializerOptions ArgumentSerializerOptions = new()

@@ -7,15 +7,6 @@ using Orbit.Domain.Common;
 
 namespace Orbit.Api.Mcp.Tools;
 
-/// <summary>
-/// MCP profile tools. Mutations route through <see cref="McpExecutorBridge"/> →
-/// <see cref="Orbit.Domain.Interfaces.IAgentOperationExecutor"/> with
-/// <see cref="Orbit.Domain.Models.AgentExecutionSurface.Mcp"/> for shared policy evaluation and the
-/// <c>AgentAuditLogs</c> trail. <c>set_ai_memory</c>/<c>set_ai_summary</c>/<c>set_color_scheme</c>
-/// route to like-named chat tools; <c>set_timezone</c>/<c>set_language</c>/<c>set_week_start_day</c>
-/// map to the consolidated <c>update_profile_preferences</c> chat tool via its <c>action</c>
-/// discriminator. The <c>get_profile</c> read stays on MediatR.
-/// </summary>
 [McpServerToolType]
 public class ProfileTools(IMediator mediator, McpExecutorBridge executorBridge)
 {
@@ -35,7 +26,7 @@ public class ProfileTools(IMediator mediator, McpExecutorBridge executorBridge)
         return $"Name: {p.Name}\n" +
                $"Email: {p.Email}\n" +
                $"Plan: {p.Plan}{(p.HasProAccess ? " (Pro)" : "")}\n" +
-               (p.IsTrialActive ? $"Trial ends: {p.TrialEndsAt:yyyy-MM-dd}\n" : "") +
+               (p.IsTrialActive ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Trial ends: {p.TrialEndsAt:yyyy-MM-dd}\n") : "") +
                (p.TimeZone is not null ? $"Timezone: {p.TimeZone}\n" : "") +
                (p.Language is not null ? $"Language: {p.Language}\n" : "") +
                $"AI Messages: {p.AiMessagesUsed}/{p.AiMessagesLimit}\n" +

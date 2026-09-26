@@ -43,7 +43,7 @@ public class BackgroundServiceHealthCheck : IHealthCheck
 #pragma warning disable ORBIT0004
                 var elapsed = DateTime.UtcNow - lastTick;
 #pragma warning restore ORBIT0004
-                serviceTickStatuses[name] = $"Last tick: {elapsed.TotalMinutes:F0}m ago";
+                serviceTickStatuses[name] = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Last tick: {elapsed.TotalMinutes:F0}m ago");
                 if (elapsed > maxInterval)
                     unhealthy.Add(name);
             }

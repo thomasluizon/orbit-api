@@ -43,11 +43,6 @@ public interface IPayGateService
     Task<Result> CanUseRetrospective(Guid userId, CancellationToken ct = default);
 
     /// <summary>
-    /// Checks if the user can use AI goal reviews (Pro-only feature).
-    /// </summary>
-    Task<Result> CanUseGoalReview(Guid userId, CancellationToken ct = default);
-
-    /// <summary>
     /// Checks if the user can read calendar integration data (Pro-only feature).
     /// </summary>
     Task<Result> CanAccessCalendar(Guid userId, CancellationToken ct = default);

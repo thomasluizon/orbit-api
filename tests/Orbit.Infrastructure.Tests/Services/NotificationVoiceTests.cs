@@ -8,13 +8,6 @@ using Orbit.Infrastructure.Services.Prompts;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
-/// <summary>
-/// The register is pinned in the prompt rather than in a post-processing scrub, so
-/// these tests assert the constraint each prompt carries, never a generated wording.
-/// They also assert that no prompt demonstrates what it bans: the prompts these
-/// replaced taught an exclamation mark and a doubled hyphen by worked example, and
-/// at temperature 0.9 the model reproduced both.
-/// </summary>
 public class NotificationVoiceTests
 {
     private const string DoubledHyphen = "--";
@@ -39,8 +32,8 @@ public class NotificationVoiceTests
         { "slip alert, en", AiSlipAlertMessageService.BuildPrompt("Smoking", DayOfWeek.Friday, 14, "en") },
         { "slip alert, pt-BR", AiSlipAlertMessageService.BuildPrompt("Fumar", DayOfWeek.Monday, null, "pt-BR") },
         { "proactive checkin, system", AiProactiveCheckinMessageService.SystemPrompt },
-        { "proactive checkin, en", AiProactiveCheckinMessageService.BuildPrompt("Thomas", ["Run"], 4, "en") },
-        { "proactive checkin, pt-BR", AiProactiveCheckinMessageService.BuildPrompt("Thomas", ["Correr"], 0, "pt-BR") },
+        { "proactive checkin, en", AiProactiveCheckinMessageService.BuildPrompt("Alex", ["Run"], 4, "en") },
+        { "proactive checkin, pt-BR", AiProactiveCheckinMessageService.BuildPrompt("Alex", ["Correr"], 0, "pt-BR") },
         { "daily summary, system", AiSummaryService.SystemPrompt },
         { "daily summary, en", DailySummaryPrompt("en") },
         { "daily summary, pt-BR", DailySummaryPrompt("pt-BR") },
@@ -50,8 +43,8 @@ public class NotificationVoiceTests
     {
         { "slip alert, en", AiSlipAlertMessageService.BuildPrompt("Smoking", DayOfWeek.Friday, 14, "en") },
         { "slip alert, pt-BR", AiSlipAlertMessageService.BuildPrompt("Fumar", DayOfWeek.Monday, null, "pt-BR") },
-        { "proactive checkin, en", AiProactiveCheckinMessageService.BuildPrompt("Thomas", ["Run"], 4, "en") },
-        { "proactive checkin, pt-BR", AiProactiveCheckinMessageService.BuildPrompt("Thomas", ["Correr"], 0, "pt-BR") },
+        { "proactive checkin, en", AiProactiveCheckinMessageService.BuildPrompt("Alex", ["Run"], 4, "en") },
+        { "proactive checkin, pt-BR", AiProactiveCheckinMessageService.BuildPrompt("Alex", ["Correr"], 0, "pt-BR") },
         { "daily summary, en", DailySummaryPrompt("en") },
         { "daily summary, pt-BR", DailySummaryPrompt("pt-BR") },
     };

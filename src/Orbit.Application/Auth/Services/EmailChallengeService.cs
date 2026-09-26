@@ -39,7 +39,7 @@ public sealed class EmailChallengeService(IMemoryCache cache, TimeProvider timeP
                 return Result.Failure<string>(ErrorMessages.CodeRequestCooldown);
             }
 
-            var code = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
+            var code = RandomNumberGenerator.GetInt32(100000, 1000000).ToString(System.Globalization.CultureInfo.InvariantCulture);
             cache.Set(cacheKey, new VerificationEntry(code, 0, nowAtUtc), new MemoryCacheEntryOptions
             {
                 AbsoluteExpirationRelativeToNow = ChallengeTtl,

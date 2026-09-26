@@ -3,14 +3,6 @@ using System.Text;
 
 namespace Orbit.Application.Chat;
 
-/// <summary>
-/// Cache-safe coarse tool grouping: a handful of rarely-used tool domains are only declared to the
-/// model when the conversation actually references them, trimming the per-turn tool payload for the
-/// common habit/goal flows. Core habit, goal, logging, query, profile, tag, gamification, and meta
-/// tools are ALWAYS declared, so a turn is never starved of a core capability. Keywords are matched
-/// against the cumulative conversation text (message + history), so a keyword unlock persists across
-/// turns. A client entry-point intent also activates its matching group when supplied on each turn.
-/// </summary>
 public static class ChatToolGroups
 {
     private sealed record ExtendedGroup(

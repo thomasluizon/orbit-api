@@ -10,16 +10,6 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Api.Mcp.Tools;
 
-/// <summary>
-/// MCP subscription and referral tools. <c>get_referral_code</c> is a mutation (it generates and
-/// persists a code on demand) and <c>manage_subscription</c> is a high-risk mutation, so both route
-/// through <see cref="McpExecutorBridge"/> →
-/// <see cref="Orbit.Domain.Interfaces.IAgentOperationExecutor"/> with
-/// <see cref="Orbit.Domain.Models.AgentExecutionSurface.Mcp"/> for shared policy evaluation and the
-/// <c>AgentAuditLogs</c> trail; <c>manage_subscription</c> requires step-up and forwards a
-/// confirmation token. The <c>get_subscription_status</c> and <c>get_referral_stats</c> reads stay
-/// on MediatR.
-/// </summary>
 [McpServerToolType]
 public class SubscriptionTools(
     IGenericRepository<User> userRepository,
@@ -43,8 +33,8 @@ public class SubscriptionTools(
         var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
 
         return $"Plan: {(u.HasProAccess ? "Pro" : "Free")}\n" +
-               (u.IsTrialActive ? $"Trial active, ends: {u.TrialEndsAt:yyyy-MM-dd}\n" : "") +
-               (u.PlanExpiresAt is not null ? $"Plan expires: {u.PlanExpiresAt:yyyy-MM-dd}\n" : "") +
+               (u.IsTrialActive ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Trial active, ends: {u.TrialEndsAt:yyyy-MM-dd}\n") : "") +
+               (u.PlanExpiresAt is not null ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Plan expires: {u.PlanExpiresAt:yyyy-MM-dd}\n") : "") +
                $"Daily AI Messages: {u.GetAiMessagesUsedToday(today)}/{aiLimit}\n" +
                (u.IsLifetimePro ? "Lifetime Pro: Yes\n" : "") +
                (u.SubscriptionInterval is not null ? $"Billing: {u.SubscriptionInterval.ToString()!.ToLowerInvariant()}" : "");

@@ -24,9 +24,9 @@ public class IdempotencyBehaviorRaceTests
     public async Task Handle_ConcurrentDuplicateLosesUniqueRace_ReplaysWinnerResponse()
     {
         var store = Substitute.For<IIdempotencyStore>();
-        store.FindResponseBodyAsync(UserId, Key, Arg.Any<string>(), Arg.Any<CancellationToken>())
+        store.FindResponseBodyAsync(UserId, Key, Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<string?>(null), Task.FromResult<string?>("\"winner-response\""));
-        store.Reserve(UserId, Key, Arg.Any<string>()).Returns(Substitute.For<IIdempotencyReservation>());
+        store.Reserve(UserId, Key, Arg.Any<string>(), Arg.Any<int>()).Returns(Substitute.For<IIdempotencyReservation>());
 
         var unitOfWork = BuildUnitOfWorkThatThrowsUniqueViolationOnSave();
         var behavior = new IdempotencyBehavior<FakeRequest, string>(BuildContextWithKey(), store, unitOfWork);
@@ -48,9 +48,9 @@ public class IdempotencyBehaviorRaceTests
     public async Task Handle_UniqueViolationWithNoStoredResponse_Rethrows()
     {
         var store = Substitute.For<IIdempotencyStore>();
-        store.FindResponseBodyAsync(UserId, Key, Arg.Any<string>(), Arg.Any<CancellationToken>())
+        store.FindResponseBodyAsync(UserId, Key, Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<string?>(null));
-        store.Reserve(UserId, Key, Arg.Any<string>()).Returns(Substitute.For<IIdempotencyReservation>());
+        store.Reserve(UserId, Key, Arg.Any<string>(), Arg.Any<int>()).Returns(Substitute.For<IIdempotencyReservation>());
 
         var unitOfWork = BuildUnitOfWorkThatThrowsUniqueViolationOnSave();
         var behavior = new IdempotencyBehavior<FakeRequest, string>(BuildContextWithKey(), store, unitOfWork);
@@ -73,9 +73,9 @@ public class IdempotencyBehaviorRaceTests
         var winnerJson = JsonSerializer.Serialize(winnerBatch, LedgerSerializerOptions);
 
         var store = Substitute.For<IIdempotencyStore>();
-        store.FindResponseBodyAsync(UserId, Key, Arg.Any<string>(), Arg.Any<CancellationToken>())
+        store.FindResponseBodyAsync(UserId, Key, Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<string?>(null), Task.FromResult<string?>(winnerJson));
-        store.Reserve(UserId, Key, Arg.Any<string>()).Returns(Substitute.For<IIdempotencyReservation>());
+        store.Reserve(UserId, Key, Arg.Any<string>(), Arg.Any<int>()).Returns(Substitute.For<IIdempotencyReservation>());
 
         var unitOfWork = BuildUnitOfWorkThatThrowsUniqueViolationOnSave();
         var behavior = new IdempotencyBehavior<FakeBatchRequest, Result<FakeBatchResponse>>(

@@ -2,21 +2,6 @@ using Orbit.Domain.Common;
 
 namespace Orbit.Application.Common;
 
-/// <summary>
-/// Application-level error catalog pairing each stable error code with the English copy
-/// <see cref="ErrorCopy"/> holds for that code. The sentence itself lives in
-/// <see cref="ErrorCopy"/> beside its pt-BR counterpart, so a message is never written in two
-/// files and can never drift between them. Domain entity guards use
-/// <see cref="Orbit.Domain.Common.DomainErrors"/>, whose sentences stay developer-facing and
-/// whose user-facing counterparts also live in <see cref="ErrorCopy"/>.
-/// <para>
-/// Several constants deliberately share one code, because they name the same thing to a person
-/// even where the call site distinguishes them: every <c>Ai*Unavailable</c> resolves to
-/// <see cref="ErrorCodes.AiUnavailable"/>, and the three expiring codes to
-/// <see cref="ErrorCodes.CodeExpired"/>. The name documents the call site; the code carries
-/// the copy.
-/// </para>
-/// </summary>
 public static class ErrorMessages
 {
     private static AppError From(string code) => new(code, ErrorCopy.English(code));
@@ -89,13 +74,6 @@ public static class ErrorMessages
     public static readonly AppError DeletionCodeExpired = From(ErrorCodes.CodeExpired);
     public static readonly AppError TooManyCodeAttempts = From(ErrorCodes.TooManyAttempts);
     public static readonly AppError InvalidVerificationCode = From(ErrorCodes.InvalidVerificationCode);
-    /// <summary>
-    /// Keeps <see cref="ErrorCodes.InvalidVerificationCode"/> because both shipped clients branch
-    /// on that value and have no branch for anything else: a new code sends Orbit 1.3.31 and the
-    /// web step-up screen down their generic-error path. The count rides in the counted variant
-    /// <see cref="ErrorCopy.EnglishWithCount"/> resolves, which keeps the trailing token those
-    /// clients parse.
-    /// </summary>
     public static readonly AppError InvalidDeletionCode = FromCounted(ErrorCodes.InvalidVerificationCode);
     public static readonly AppError ApiKeyCreationCodeExpired = From(ErrorCodes.CodeExpired);
     /// <inheritdoc cref="InvalidDeletionCode"/>

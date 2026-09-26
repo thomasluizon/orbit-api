@@ -524,42 +524,6 @@ public class PayGateServiceTests
     }
 
     [Fact]
-    public async Task CanUseGoalReview_ProUser_Success()
-    {
-        var user = CreateProUser();
-        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-
-        var result = await _sut.CanUseGoalReview(UserId);
-
-        result.IsSuccess.Should().BeTrue();
-    }
-
-    [Fact]
-    public async Task CanUseGoalReview_FreeUser_PayGateFailure()
-    {
-        var user = CreateFreeUser();
-        user.StartTrial(DateTime.UtcNow.AddDays(-1));
-        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-
-        var result = await _sut.CanUseGoalReview(UserId);
-
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be("PAY_GATE");
-        result.Error.Should().Contain("Goal reviews are a Pro feature");
-    }
-
-    [Fact]
-    public async Task CanUseGoalReview_UserNotFound_Failure()
-    {
-        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns((User?)null);
-
-        var result = await _sut.CanUseGoalReview(UserId);
-
-        result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
-    }
-
-    [Fact]
     public async Task CanCreateApiKeys_ProUser_Success()
     {
         var user = CreateProUser();

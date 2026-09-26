@@ -27,15 +27,6 @@ public interface IGoalCompletionService
         CancellationToken cancellationToken = default);
 }
 
-/// <summary>
-/// Owns the single persistence path for goal completion and its rewards. Derived inputs are loaded
-/// in one untracked split-query batch, then retained as value snapshots because gamification
-/// concurrency retries can reset the shared change tracker. Each candidate is resolved from its
-/// identifier inside its own retryable transaction, so a reset cannot detach a later goal that the
-/// operation still intends to save. The snapshot's goal update timestamp rejects a source mutation
-/// that committed before that reload, while the goal's persistence concurrency token rejects one
-/// that commits after it.
-/// </summary>
 public sealed class GoalCompletionService(
     IGenericRepository<Goal> goalRepository,
     IGamificationService gamificationService,

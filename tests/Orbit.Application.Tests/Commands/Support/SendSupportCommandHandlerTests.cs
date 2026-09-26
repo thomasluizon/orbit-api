@@ -21,13 +21,13 @@ public class SendSupportCommandHandlerTests
     [Fact]
     public async Task Handle_ValidRequest_SendsEmailAndReturnsSuccess()
     {
-        var command = new SendSupportCommand(UserId, "Thomas", "test@example.com", "Bug Report", "Something is broken");
+        var command = new SendSupportCommand(UserId, "Alex", "test@example.com", "Bug Report", "Something is broken");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _emailService.Received(1).SendSupportEmailAsync(
-            "Thomas", "test@example.com", "Bug Report", "Something is broken",
+            "Alex", "test@example.com", "Bug Report", "Something is broken",
             Arg.Any<CancellationToken>());
     }
 
@@ -37,7 +37,7 @@ public class SendSupportCommandHandlerTests
     [InlineData(null)]
     public async Task Handle_EmptySubject_ReturnsFailure(string? subject)
     {
-        var command = new SendSupportCommand(UserId, "Thomas", "test@example.com", subject!, "Message body");
+        var command = new SendSupportCommand(UserId, "Alex", "test@example.com", subject!, "Message body");
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
@@ -53,7 +53,7 @@ public class SendSupportCommandHandlerTests
     [InlineData(null)]
     public async Task Handle_EmptyMessage_ReturnsFailure(string? message)
     {
-        var command = new SendSupportCommand(UserId, "Thomas", "test@example.com", "Subject", message!);
+        var command = new SendSupportCommand(UserId, "Alex", "test@example.com", "Subject", message!);
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
@@ -63,7 +63,7 @@ public class SendSupportCommandHandlerTests
     [Fact]
     public async Task Handle_EmptySubjectAndMessage_ReturnsSubjectFailureFirst()
     {
-        var command = new SendSupportCommand(UserId, "Thomas", "test@example.com", "", "");
+        var command = new SendSupportCommand(UserId, "Alex", "test@example.com", "", "");
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();

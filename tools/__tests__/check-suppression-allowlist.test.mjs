@@ -1,11 +1,3 @@
-/**
- * Coverage for tools/check-suppression-allowlist.mjs, on Node's built-in runner: `node --test tools`.
- *
- * This repository has no package.json and no JavaScript test harness, so `node:test` is the only
- * runner available without adding a dependency to a .NET repository to test a 200-line script. Every
- * case stages its own repository shape in a temp directory and runs the real tool against it, so the
- * tool under test is the tool that ships.
- */
 import { execFileSync } from "node:child_process"
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -281,14 +273,6 @@ test("a generated directory exempts only the rules it declares, so its rules lis
   assert.match(result.stderr, /suppresses ORBIT0004, which src\/Orbit\.Infrastructure\/Migrations\/ does not declare as generated/)
 })
 
-/**
- * The second review round. Canonical-form matching cannot establish a closed set: a form the extractor
- * does not recognise reads as "no suppression here" and passes. Detection and extraction are separate
- * now, and anything found but not inventoriable is REFUSED rather than skipped.
- *
- * The spaced directive was verified against a real `net10.0` build with `TreatWarningsAsErrors=true`:
- * it suppressed the diagnostic while the old pattern reported zero sites and exited 0.
- */
 test("whitespace after the # is a legal directive and is caught", () => {
   const result = run(
     stage("spaced-pragma", {
@@ -338,16 +322,6 @@ test("a SuppressMessage whose check id is not a literal is REFUSED, not skipped"
   assert.match(result.stderr, /refused rather than skipped/)
 })
 
-/**
- * The alias grammar, and the reason this is now an INVARIANT rather than a list of spellings. Three
- * rounds were spent adding one more form each time; C#'s using-alias grammar carries an optional
- * `global` modifier, an optional `global::` qualifier, arbitrary whitespace, and can span lines, so
- * enumerating it was never going to terminate. Every mention of the identifier that does not read as an
- * attribute with a literal check id is refused, whatever produced it.
- *
- * The first two forms below are the ones review found. The last two were never predicted and are
- * covered by the same invariant, which is the point.
- */
 const aliasCase = (label, aliasLines) => {
   test(`${label} is REFUSED by the mention invariant`, () => {
     const result = run(

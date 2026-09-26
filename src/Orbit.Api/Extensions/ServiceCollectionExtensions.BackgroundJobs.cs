@@ -59,14 +59,6 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddHostedService<FoundingAchievementReconciliationService>();
     }
 
-    /// <summary>
-    /// Registers the durable Hangfire job queue — PostgreSQL-backed storage, the enqueue client, and a
-    /// processing server — unconditionally, so request-path work such as the verification-code email can
-    /// be handed to <see cref="IBackgroundJobClient"/> and dispatched out of band: the send survives a
-    /// restart and is auto-retried on failure. This is independent of
-    /// <c>BackgroundServices:UseDurableQueue</c>, which only governs whether the recurring scans run as
-    /// Hangfire recurring jobs or as in-process polling loops.
-    /// </summary>
     private static void AddDurableJobQueue(WebApplicationBuilder builder)
     {
         var connectionString = OrbitConnectionStringFactory.ForSession(builder.Configuration);

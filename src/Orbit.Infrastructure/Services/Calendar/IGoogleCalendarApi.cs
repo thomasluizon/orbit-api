@@ -2,13 +2,6 @@ using Google.Apis.Calendar.v3.Data;
 
 namespace Orbit.Infrastructure.Services.Calendar;
 
-/// <summary>
-/// Thin testable seam over the Google Calendar SDK. Production wraps the real
-/// <c>CalendarService</c>; tests substitute it to exercise the owned-calendar filter,
-/// per-calendar aggregation, pagination, and dedup logic in <see cref="GoogleCalendarEventFetcher"/>
-/// without the vendor SDK. Each method already drains the provider's pagination so callers
-/// receive the full result set.
-/// </summary>
 internal interface IGoogleCalendarApi
 {
     /// <summary>Lists every <see cref="CalendarListEntry"/> on the user's calendar list, following page tokens.</summary>

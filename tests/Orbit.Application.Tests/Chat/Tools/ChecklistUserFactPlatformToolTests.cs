@@ -814,7 +814,7 @@ public class ChecklistUserFactPlatformToolTests
     {
         var tool = new SendSupportRequestTool(Substitute.For<IMediator>());
 
-        var result = await tool.ExecuteAsync(Parse("""{"name":"Thomas"}"""), UserId, CancellationToken.None);
+        var result = await tool.ExecuteAsync(Parse("""{"name":"Alex"}"""), UserId, CancellationToken.None);
 
         result.Success.Should().BeFalse();
         result.Error.Should().Be("name, email, subject, and message are required.");
@@ -829,7 +829,7 @@ public class ChecklistUserFactPlatformToolTests
         var tool = new SendSupportRequestTool(mediator);
 
         var result = await tool.ExecuteAsync(
-            Parse("""{"name":"Thomas","email":"t@example.com","subject":"Help","message":"Need support"}"""),
+            Parse("""{"name":"Alex","email":"t@example.com","subject":"Help","message":"Need support"}"""),
             UserId,
             CancellationToken.None);
 
@@ -846,7 +846,7 @@ public class ChecklistUserFactPlatformToolTests
         var tool = new SendSupportRequestTool(mediator);
 
         var result = await tool.ExecuteAsync(
-            Parse("""{"name":"Thomas","email":"t@example.com","subject":"Help","message":"Need support"}"""),
+            Parse("""{"name":"Alex","email":"t@example.com","subject":"Help","message":"Need support"}"""),
             UserId,
             CancellationToken.None);
 

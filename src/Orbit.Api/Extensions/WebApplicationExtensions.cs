@@ -261,16 +261,6 @@ public static partial class WebApplicationExtensions
         return false;
     }
 
-    /// <summary>
-    /// The legacy MCP authorization gate. It owns the tools that still reach a MediatR query
-    /// directly, and it steps aside for the two kinds of call that
-    /// <see cref="IAgentOperationExecutor"/> already authorizes end to end:
-    /// <c>execute_agent_operation_v2</c>, and every tool whose capability carries a confirmation
-    /// requirement. Those tools route through <see cref="Orbit.Api.Mcp.McpExecutorBridge"/>, which
-    /// forwards the caller's confirmation token to the executor. Evaluating them here as well can
-    /// never admit a confirmed retry, because this gate holds no token and a confirmation token is
-    /// single use and bound to the executor's own operation fingerprint.
-    /// </summary>
     internal static async Task HandleMcpToolCallAsync(
         HttpContext context,
         Func<Task> next,
@@ -579,7 +569,7 @@ public static partial class WebApplicationExtensions
 
         context.Response.StatusCode = StatusCodes.Status429TooManyRequests;
         context.Response.ContentType = "application/json";
-        context.Response.Headers.RetryAfter = retryAfterSeconds.ToString();
+        context.Response.Headers.RetryAfter = retryAfterSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
         context.Response.Headers[HttpContextExtensions.RequestIdHeaderName] = context.GetRequestId();
 
         var logger = context.RequestServices

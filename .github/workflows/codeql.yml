@@ -2,17 +2,6 @@ name: CodeQL
 
 # CodeQL advanced setup, replacing default setup (ORB-164).
 #
-# Default setup does not run on Dependabot pull requests (github/codeql-action
-# issue 2858), so the three contexts branch protection requires on main,
-# "Analyze (csharp)", "Analyze (javascript-typescript)" and "Analyze (actions)",
-# never reported on a Dependabot head and every Dependabot pull request stayed
-# permanently BLOCKED. An advanced-setup workflow is an ordinary workflow, so it
-# triggers on a Dependabot head like every other job in this repository, and the
-# job-level permissions block below is honoured there. GitHub's "Troubleshooting
-# Dependabot on GitHub Actions" documents both halves: a Dependabot-triggered run
-# "receives a read-only GITHUB_TOKEN and does not have access to any secrets", and
-# "you can use the permissions key in your workflow to increase the access for the
-# token", which is exactly what the analyze job does for security-events.
 #
 # The job name is load bearing. A matrix job produces one check run per leg,
 # named by interpolating the job name, so "Analyze (${{ matrix.language }})"
@@ -74,7 +63,7 @@ jobs:
           dotnet-version: "10.0.x"
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        uses: github/codeql-action/init@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
@@ -86,6 +75,6 @@ jobs:
           dotnet build --no-restore
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        uses: github/codeql-action/analyze@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           category: "/language:${{ matrix.language }}"

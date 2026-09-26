@@ -6,14 +6,6 @@ using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Persistence;
 
-/// <summary>
-/// Guards that a soft-deleted habit's preserved logs never leak into any aggregate read. Each test
-/// reproduces a real log-reading query's shape against an in-memory context so the actual EF global
-/// query filter (not a mock) decides exclusion. The two shapes in production are: ids materialised
-/// from the filtered Habits set then fed to a direct HabitLogs query (gamification, streak, daily
-/// summary, export, referral, get-all-logs), and Include of the Logs navigation off a Habits query
-/// (calendar, retrospective, habit metrics, goal metrics).
-/// </summary>
 public class SoftDeleteLeakTests
 {
     private static readonly Guid UserId = Guid.NewGuid();
