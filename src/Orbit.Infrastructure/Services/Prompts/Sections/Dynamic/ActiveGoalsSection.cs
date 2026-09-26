@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Orbit.Domain.Entities;
 using Orbit.Infrastructure.Services.Prompts;
@@ -14,7 +15,7 @@ public class ActiveGoalsSection : IPromptSection
         var goals = context.ActiveGoals ?? [];
         var sb = new StringBuilder();
         sb.AppendLine();
-        sb.AppendLine($"## User's Active Goals ({goals.Count} total)");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"## User's Active Goals ({goals.Count} total)");
         sb.AppendLine();
         sb.AppendLine("This list is the source of truth for active goals: progress, status, deadlines, descriptions, and linked habits. Answer goal questions directly from it - do not call query_goals to re-fetch it.");
         sb.AppendLine("query_goals exists for what the list lacks: completed or abandoned goals and filtered searches. Filters: search, status, include_completed, include_linked_habits, include_descriptions, limit.");
@@ -38,23 +39,23 @@ public class ActiveGoalsSection : IPromptSection
     {
         var labels = new List<string>
         {
-            $"Progress: {goal.CurrentValue}/{goal.TargetValue} {PromptDataSanitizer.QuoteInline(goal.Unit, 32)}",
+            string.Create(CultureInfo.InvariantCulture, $"Progress: {goal.CurrentValue}/{goal.TargetValue} {PromptDataSanitizer.QuoteInline(goal.Unit, 32)}"),
             $"Status: {goal.Status}",
             goal.Type == Orbit.Domain.Enums.GoalType.Streak ? "STREAK" : "STANDARD"
         };
 
         if (goal.Deadline.HasValue)
-            labels.Add($"Deadline: {goal.Deadline:yyyy-MM-dd}");
+            labels.Add(string.Create(CultureInfo.InvariantCulture, $"Deadline: {goal.Deadline:yyyy-MM-dd}"));
 
-        sb.AppendLine($"- {PromptDataSanitizer.QuoteInline(goal.Title, 100)} | {goal.Id} [{string.Join(" | ", labels)}]");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"- {PromptDataSanitizer.QuoteInline(goal.Title, 100)} | {goal.Id} [{string.Join(" | ", labels)}]");
 
         if (!string.IsNullOrWhiteSpace(goal.Description))
-            sb.AppendLine($"  Description: {PromptDataSanitizer.QuoteInline(goal.Description, 160)}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"  Description: {PromptDataSanitizer.QuoteInline(goal.Description, 160)}");
 
         if (goal.Habits.Count > 0)
         {
             var habitNames = string.Join(", ", goal.Habits.Select(h => PromptDataSanitizer.QuoteInline(h.Title, 100)));
-            sb.AppendLine($"  Linked habits: {habitNames}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"  Linked habits: {habitNames}");
         }
     }
 }

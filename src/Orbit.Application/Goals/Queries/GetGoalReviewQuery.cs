@@ -87,17 +87,17 @@ public class GetGoalReviewQueryHandler(
         foreach (var goal in goals)
         {
             var metrics = GoalMetricsCalculator.Calculate(goal, userToday, weekStartDay);
-            lines.Add($"Goal: \"{goal.Title}\" | {goal.CurrentValue}/{goal.TargetValue} {goal.Unit} ({metrics.ProgressPercentage}%)");
-            lines.Add($"  Status: {metrics.TrackingStatus} | Velocity: {metrics.VelocityPerDay} {goal.Unit}/day");
+            lines.Add(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Goal: \"{goal.Title}\" | {goal.CurrentValue}/{goal.TargetValue} {goal.Unit} ({metrics.ProgressPercentage}%)"));
+            lines.Add(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  Status: {metrics.TrackingStatus} | Velocity: {metrics.VelocityPerDay} {goal.Unit}/day"));
 
             if (metrics.ProjectedCompletionDate.HasValue)
-                lines.Add($"  Projected completion: {metrics.ProjectedCompletionDate:yyyy-MM-dd}");
+                lines.Add(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  Projected completion: {metrics.ProjectedCompletionDate:yyyy-MM-dd}"));
 
             if (goal.Deadline.HasValue)
-                lines.Add($"  Deadline: {goal.Deadline:yyyy-MM-dd} ({metrics.DaysToDeadline} days remaining)");
+                lines.Add(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  Deadline: {goal.Deadline:yyyy-MM-dd} ({metrics.DaysToDeadline} days remaining)"));
 
             foreach (var h in metrics.HabitAdherence)
-                lines.Add($"  Linked habit: \"{h.HabitTitle}\" | Weekly: {h.WeeklyCompletionRate}% | Streak: {h.CurrentStreak}d");
+                lines.Add(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"  Linked habit: \"{h.HabitTitle}\" | Weekly: {h.WeeklyCompletionRate}% | Streak: {h.CurrentStreak}d"));
         }
 
         return string.Join("\n", lines);

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
@@ -104,7 +105,7 @@ public class QueryGoalsTool(
         bool includeLinkedHabits)
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"Found {goals.Count} goal(s):");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Found {goals.Count} goal(s):");
         sb.AppendLine();
 
         foreach (var goal in goals)
@@ -114,21 +115,21 @@ public class QueryGoalsTool(
             {
                 $"Status: {goal.Status}",
                 $"Type: {goal.Type}",
-                $"Progress: {currentValue}/{goal.TargetValue} {goal.Unit}"
+                string.Create(CultureInfo.InvariantCulture, $"Progress: {currentValue}/{goal.TargetValue} {goal.Unit}")
             };
 
             if (goal.Deadline.HasValue)
-                labels.Add($"Deadline: {goal.Deadline:yyyy-MM-dd}");
+                labels.Add(string.Create(CultureInfo.InvariantCulture, $"Deadline: {goal.Deadline:yyyy-MM-dd}"));
 
-            sb.AppendLine($"- \"{goal.Title}\" | ID: {goal.Id} | {string.Join(" | ", labels)}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"- \"{goal.Title}\" | ID: {goal.Id} | {string.Join(" | ", labels)}");
 
             if (includeDescriptions && !string.IsNullOrWhiteSpace(goal.Description))
-                sb.AppendLine($"  Description: {goal.Description}");
+                sb.AppendLine(CultureInfo.InvariantCulture, $"  Description: {goal.Description}");
 
             if (includeLinkedHabits && goal.Habits.Count > 0)
             {
                 var linkedHabits = string.Join(", ", goal.Habits.Select(h => h.Title));
-                sb.AppendLine($"  Linked habits: {linkedHabits}");
+                sb.AppendLine(CultureInfo.InvariantCulture, $"  Linked habits: {linkedHabits}");
             }
         }
 

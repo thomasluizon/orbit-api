@@ -148,7 +148,7 @@ internal sealed partial class GoogleCalendarEventFetcher(
     private static CalendarEventItem MapEvent(
         Event ev, string calendarId, string calendarName, MasterRecurrence recurrence)
     {
-        var startTime = ev.Start?.DateTimeDateTimeOffset?.ToString("HH:mm");
+        var startTime = ev.Start?.DateTimeDateTimeOffset?.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture);
         var isRecurring = ev.RecurringEventId is not null
             || (ev.Recurrence is not null && ev.Recurrence.Count > 0);
 
@@ -156,9 +156,9 @@ internal sealed partial class GoogleCalendarEventFetcher(
             ev.RecurringEventId ?? ev.Id,
             ev.Summary.Trim(),
             ev.Description,
-            ev.Start?.Date ?? ev.Start?.DateTimeDateTimeOffset?.ToString("yyyy-MM-dd"),
+            ev.Start?.Date ?? ev.Start?.DateTimeDateTimeOffset?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
             startTime,
-            ev.End?.DateTimeDateTimeOffset?.ToString("HH:mm"),
+            ev.End?.DateTimeDateTimeOffset?.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture),
             isRecurring,
             recurrence.Rule,
             BuildReminders(ev, startTime),

@@ -118,7 +118,7 @@ public class GetFriendFeedQueryHandler(
 internal static class FeedCursor
 {
     public static string Encode(DateTime createdAtUtc, Guid id) =>
-        Base64UrlEncode($"{createdAtUtc.Ticks}:{id:N}");
+        Base64UrlEncode(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{createdAtUtc.Ticks}:{id:N}"));
 
     public static bool TryDecode(string cursor, out DateTime createdAtUtc, out Guid id)
     {

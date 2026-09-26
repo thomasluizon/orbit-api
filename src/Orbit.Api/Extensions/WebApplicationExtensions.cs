@@ -579,7 +579,7 @@ public static partial class WebApplicationExtensions
 
         context.Response.StatusCode = StatusCodes.Status429TooManyRequests;
         context.Response.ContentType = "application/json";
-        context.Response.Headers.RetryAfter = retryAfterSeconds.ToString();
+        context.Response.Headers.RetryAfter = retryAfterSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
         context.Response.Headers[HttpContextExtensions.RequestIdHeaderName] = context.GetRequestId();
 
         var logger = context.RequestServices

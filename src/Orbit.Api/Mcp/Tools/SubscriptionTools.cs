@@ -43,8 +43,8 @@ public class SubscriptionTools(
         var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
 
         return $"Plan: {(u.HasProAccess ? "Pro" : "Free")}\n" +
-               (u.IsTrialActive ? $"Trial active, ends: {u.TrialEndsAt:yyyy-MM-dd}\n" : "") +
-               (u.PlanExpiresAt is not null ? $"Plan expires: {u.PlanExpiresAt:yyyy-MM-dd}\n" : "") +
+               (u.IsTrialActive ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Trial active, ends: {u.TrialEndsAt:yyyy-MM-dd}\n") : "") +
+               (u.PlanExpiresAt is not null ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Plan expires: {u.PlanExpiresAt:yyyy-MM-dd}\n") : "") +
                $"Daily AI Messages: {u.GetAiMessagesUsedToday(today)}/{aiLimit}\n" +
                (u.IsLifetimePro ? "Lifetime Pro: Yes\n" : "") +
                (u.SubscriptionInterval is not null ? $"Billing: {u.SubscriptionInterval.ToString()!.ToLowerInvariant()}" : "");

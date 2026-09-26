@@ -16,9 +16,9 @@ public static class CacheInvalidationHelper
             var date = today.AddDays(i);
             foreach (var lang in AppConstants.SupportedLanguages)
             {
-                cache.Remove($"summary:{userId}:{date:yyyy-MM-dd}:{lang}");
+                cache.Remove(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"summary:{userId}:{date:yyyy-MM-dd}:{lang}"));
                 foreach (var bucket in SummaryTimeBuckets)
-                    cache.Remove($"summary:{userId}:{date:yyyy-MM-dd}:{lang}:{bucket}");
+                    cache.Remove(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"summary:{userId}:{date:yyyy-MM-dd}:{lang}:{bucket}"));
             }
         }
     }

@@ -188,7 +188,7 @@ public class QueryHabitsTool(
 #pragma warning restore CA1859
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"Found {results.Count} habit(s):");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Found {results.Count} habit(s):");
         sb.AppendLine();
 
         var suffixes = SiblingTitleDisambiguator.ComputeSuffixes(results);
@@ -219,7 +219,7 @@ public class QueryHabitsTool(
         var labels = BuildLabels(habit, today, weekStartDay, includeMetrics);
         var labelStr = labels.Count > 0 ? $" [{string.Join(" | ", labels)}]" : "";
         var emojiLabel = string.IsNullOrWhiteSpace(habit.Emoji) ? "No emoji" : $"Emoji: {habit.Emoji}";
-        return $"- \"{habit.Title}\"{dupSuffix} | ID: {habit.Id} | {emojiLabel} | {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{labelStr}";
+        return string.Create(CultureInfo.InvariantCulture, $"- \"{habit.Title}\"{dupSuffix} | ID: {habit.Id} | {emojiLabel} | {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{labelStr}");
     }
 
     private static List<string> BuildLabels(Habit habit, DateOnly today, int weekStartDay, bool includeMetrics)
@@ -259,7 +259,7 @@ public class QueryHabitsTool(
         if (!includeMetrics) return;
         var metrics = HabitMetricsCalculator.Calculate(habit, today, weekStartDay);
         if (metrics.CurrentStreak > 0) labels.Add($"Streak: {metrics.CurrentStreak}d");
-        if (metrics.WeeklyCompletionRate > 0) labels.Add($"Week: {metrics.WeeklyCompletionRate:F0}%");
+        if (metrics.WeeklyCompletionRate > 0) labels.Add(string.Create(CultureInfo.InvariantCulture, $"Week: {metrics.WeeklyCompletionRate:F0}%"));
         if (metrics.TotalCompletions > 0) labels.Add($"Total: {metrics.TotalCompletions}");
     }
 
@@ -292,7 +292,7 @@ public class QueryHabitsTool(
             if (GetResponseCompletion(child, today)) childLabels.Add("COMPLETED");
             var childLabelStr = childLabels.Count > 0 ? $" [{string.Join(" | ", childLabels)}]" : "";
             var emojiLabel = string.IsNullOrWhiteSpace(child.Emoji) ? "No emoji" : $"Emoji: {child.Emoji}";
-            sb.AppendLine($"{indent}- \"{child.Title}\"{childSuffixes.GetValueOrDefault(child.Id, string.Empty)} | ID: {child.Id} | {emojiLabel}{childLabelStr}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}- \"{child.Title}\"{childSuffixes.GetValueOrDefault(child.Id, string.Empty)} | ID: {child.Id} | {emojiLabel}{childLabelStr}");
             AppendChildren(sb, allHabits, child.Id, today, includeMetrics, depth + 1);
         }
     }

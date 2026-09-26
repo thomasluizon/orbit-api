@@ -46,7 +46,7 @@ public class SendCodeCommandHandler(
                 return Task.FromResult(Result.Failure(ErrorMessages.CodeRequestCooldown));
         }
 
-        var code = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
+        var code = RandomNumberGenerator.GetInt32(100000, 1000000).ToString(System.Globalization.CultureInfo.InvariantCulture);
 
 #pragma warning disable ORBIT0004
         var entry = new VerificationEntry(code, 0, DateTime.UtcNow);

@@ -40,7 +40,7 @@ public class ApiKeyTools(McpExecutorBridge executorBridge)
             $"- {k.Name} ({k.KeyPrefix}...) | id: {k.Id}" +
             (k.IsReadOnly ? " | read-only" : "") +
             (k.IsRevoked ? " | REVOKED" : "") +
-            (k.ExpiresAtUtc is not null ? $" | expires {k.ExpiresAtUtc:yyyy-MM-dd}" : "") +
+            (k.ExpiresAtUtc is not null ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $" | expires {k.ExpiresAtUtc:yyyy-MM-dd}") : "") +
             $" | scopes: {string.Join(", ", k.Scopes)}");
 
         return $"API keys ({keys.Count}):\n{string.Join("\n", lines)}";
