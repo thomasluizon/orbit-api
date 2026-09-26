@@ -43,6 +43,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAgentTargetOwnershipService, AgentTargetOwnershipService>();
         builder.Services.AddScoped<IAgentOperationExecutor, AgentOperationExecutor>();
         builder.Services.AddScoped<IPendingOperationChangePreviewer, PendingOperationChangePreviewer>();
+        builder.Services.AddScoped<PendingOperationRevisionService>();
         builder.Services.AddScoped<Orbit.Api.Mcp.McpExecutorBridge>();
     }
 

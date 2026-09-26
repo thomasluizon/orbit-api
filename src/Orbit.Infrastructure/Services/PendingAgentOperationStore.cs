@@ -67,7 +67,15 @@ public class PendingAgentOperationStore(
 
         var confirmationToken = GenerateToken();
         entity.SetConfirmationTokenHash(HashToken(confirmationToken));
-        dbContext.SaveChanges();
+        try
+        {
+            dbContext.SaveChanges();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            dbContext.Entry(entity).State = EntityState.Detached;
+            return null;
+        }
 
         return new PendingAgentOperationConfirmation(entity.Id, confirmationToken, entity.ExpiresAtUtc);
     }
@@ -89,7 +97,50 @@ public class PendingAgentOperationStore(
             entity.OperationId,
             parsedArguments,
             entity.Surface,
-            entity.ConfirmationRequirement);
+            entity.ConfirmationRequirement,
+            entity.PreviewFingerprint);
+    }
+
+    public bool Revise(Guid userId, Guid pendingOperationId, string expectedFingerprint,
+        string argumentsJson, string operationFingerprint, string previewFingerprint)
+    {
+        var entity = dbContext.PendingAgentOperations.FirstOrDefault(item =>
+            item.Id == pendingOperationId && item.UserId == userId);
+        var checkedAtUtc = DateTime.UtcNow;
+        if (entity is null || entity.OperationFingerprint != expectedFingerprint
+            || !entity.Revise(argumentsJson, operationFingerprint, previewFingerprint, checkedAtUtc))
+            return false;
+
+        try
+        {
+            dbContext.SaveChanges();
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            dbContext.Entry(entity).State = EntityState.Detached;
+            return false;
+        }
+    }
+
+    public bool Cancel(Guid userId, Guid pendingOperationId, string expectedFingerprint)
+    {
+        var entity = dbContext.PendingAgentOperations.FirstOrDefault(item =>
+            item.Id == pendingOperationId && item.UserId == userId);
+        var cancelledAtUtc = DateTime.UtcNow;
+        if (entity is null || entity.OperationFingerprint != expectedFingerprint
+            || !entity.Cancel(cancelledAtUtc))
+            return false;
+        try
+        {
+            dbContext.SaveChanges();
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            dbContext.Entry(entity).State = EntityState.Detached;
+            return false;
+        }
     }
 
     public bool TryConsumeFreshConfirmation(

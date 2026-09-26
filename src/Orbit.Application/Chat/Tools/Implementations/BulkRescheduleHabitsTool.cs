@@ -25,6 +25,10 @@ public sealed class BulkRescheduleHabitsTool(IMediator mediator) : IAiTool
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
+        if (args.TryGetProperty("revised_items", out var revisedItems))
+            return await BulkUpdateHabitsTool.ExecuteRevisedAsync(mediator,
+                revisedItems, userId, "Rescheduled", ct);
+
         var (filter, filterError) = BulkHabitToolArguments.ParseRequiredFilter(args);
         if (filterError is not null)
             return new ToolResult(false, Error: filterError);

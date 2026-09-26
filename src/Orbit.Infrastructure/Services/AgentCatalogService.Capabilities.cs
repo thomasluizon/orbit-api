@@ -56,6 +56,7 @@ public partial class AgentCatalogService
                     "ChatController.ProcessChatStream",
                     "ChatController.Transcribe",
                     "AiController.ConfirmPendingOperation",
+                    "AiController.RevisePendingOperation",
                     "AiController.MarkPendingOperationStepUp",
                     "AiController.VerifyPendingOperationStepUp",
                     "AiController.ExecutePendingOperation",

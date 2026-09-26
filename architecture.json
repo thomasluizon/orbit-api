@@ -155,6 +155,15 @@
     },
     {
       "controller": "AiController",
+      "action": "RevisePendingOperation",
+      "httpMethod": "POST",
+      "routeTemplate": "/api/ai/pending-operations/{id:guid}/revise",
+      "authorization": "Authorize (class)",
+      "mediatrRequest": null,
+      "responseDto": null
+    },
+    {
+      "controller": "AiController",
       "action": "MarkPendingOperationStepUp",
       "httpMethod": "POST",
       "routeTemplate": "/api/ai/pending-operations/{id:guid}/step-up",
@@ -2758,7 +2767,7 @@
       "Behaviors": 4,
       "Calendar": 16,
       "Challenges": 15,
-      "Chat": 93,
+      "Chat": 95,
       "ChecklistTemplates": 5,
       "Common": 38,
       "Gamification": 34,
@@ -2971,7 +2980,7 @@
       "Behaviors": 17,
       "Calendar": 21,
       "Challenges": 15,
-      "Chat": 78,
+      "Chat": 79,
       "ChecklistTemplates": 10,
       "Common": 260,
       "Gamification": 45,
@@ -3464,6 +3473,13 @@
       {
         "testClass": "PendingOperationChangePreviewerTests",
         "file": "tests/Orbit.Application.Tests/Chat/PendingOperationChangePreviewerTests.cs",
+        "references": [
+          "Habit"
+        ]
+      },
+      {
+        "testClass": "PendingOperationRevisionServiceTests",
+        "file": "tests/Orbit.Application.Tests/Chat/PendingOperationRevisionServiceTests.cs",
         "references": [
           "Habit"
         ]

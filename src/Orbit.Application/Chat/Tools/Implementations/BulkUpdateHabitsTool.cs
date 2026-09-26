@@ -49,6 +49,9 @@ public sealed class BulkUpdateHabitsTool(IMediator mediator) : IAiTool
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
+        if (args.TryGetProperty("revised_items", out var revisedItems))
+            return await ExecuteRevisedAsync(mediator, revisedItems, userId, "Updated", ct);
+
         var (filter, filterError) = BulkHabitToolArguments.ParseRequiredFilter(args);
         if (filterError is not null)
             return new ToolResult(false, Error: filterError);
@@ -60,6 +63,43 @@ public sealed class BulkUpdateHabitsTool(IMediator mediator) : IAiTool
         if (result.IsFailure)
             return ToolResult.FromFailure(result);
         return BuildResult(result.Value, "Updated");
+    }
+
+    internal static async Task<ToolResult> ExecuteRevisedAsync(IMediator mediator,
+        JsonElement items, Guid userId, string verb, CancellationToken ct)
+    {
+        if (items.ValueKind != JsonValueKind.Array || items.GetArrayLength() == 0)
+            return new ToolResult(false, Error: "revised_items must be a non-empty array.");
+
+        var parsed = new List<(Guid Id, BulkHabitChanges Changes)>();
+        var seen = new HashSet<Guid>();
+        foreach (var item in items.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object
+                || !item.TryGetProperty("habit_id", out var idValue)
+                || idValue.ValueKind != JsonValueKind.String
+                || !Guid.TryParse(idValue.GetString(), out var id)
+                || !seen.Add(id))
+                return new ToolResult(false, Error: "revised_items contains an invalid habit ID.");
+            var (changes, error) = BulkHabitToolArguments.ParseChanges(item);
+            if (error is not null || changes is null || !changes.HasAnyChange)
+                return new ToolResult(false, Error: error ?? "revised_items requires changes.");
+            parsed.Add((id, changes));
+        }
+
+        var applied = 0;
+        foreach (var item in parsed)
+        {
+            var result = await mediator.Send(new BulkUpdateHabitsCommand(userId,
+                new BulkHabitFilter(false, [item.Id], IncludeCompleted: true), item.Changes), ct);
+            if (result.IsFailure)
+                return applied == 0 ? ToolResult.FromFailure(result)
+                    : BuildResult(new BulkHabitMutationResult(applied, parsed.Count,
+                        parsed.Count - applied, true), verb);
+            applied += result.Value.AppliedCount;
+        }
+        return BuildResult(new BulkHabitMutationResult(applied, parsed.Count,
+            parsed.Count - applied, applied != parsed.Count), verb);
     }
 
     internal static ToolResult BuildResult(

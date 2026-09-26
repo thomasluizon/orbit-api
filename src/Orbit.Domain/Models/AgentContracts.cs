@@ -167,7 +167,8 @@ public record PendingAgentOperationExecution(
     string OperationId,
     JsonElement Arguments,
     AgentExecutionSurface Surface,
-    AgentConfirmationRequirement ConfirmationRequirement);
+    AgentConfirmationRequirement ConfirmationRequirement,
+    string? PreviewFingerprint = null);
 
 public record AgentStepUpChallenge(
     Guid ChallengeId,

@@ -35,33 +35,17 @@ public sealed class PendingOperationChangePreviewer(
         if (operationId == "delete_habit")
             return await PreviewSingleHabitAsync(userId, arguments, cancellationToken);
 
-        var (filter, filterError) = operationId switch
-        {
-            "bulk_update_habits" or "bulk_reschedule_habits" => BulkHabitToolArguments.ParseRequiredFilter(arguments),
-            "bulk_update_habit_emojis" => BulkHabitToolArguments.ParseEmojiFilter(arguments),
-            _ => BulkHabitToolArguments.ParseActionFilter(arguments)
-        };
+        var isRevised = arguments.TryGetProperty("revised_items", out var revisedItems)
+            && revisedItems.ValueKind == JsonValueKind.Array;
+        var revisedChanges = new Dictionary<Guid, BulkHabitChanges>();
+        var (filter, filterError) = ResolveFilter(operationId, arguments,
+            isRevised, revisedItems, revisedChanges);
         if (filterError is not null || filter is null)
             return null;
 
-        BulkHabitChanges? changes = null;
-        if (operationId == "bulk_reschedule_habits")
-        {
-            if (!arguments.TryGetProperty("due_date", out var dateElement)
-                || dateElement.ValueKind != JsonValueKind.String
-                || !DateOnly.TryParseExact(dateElement.GetString(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
-                return null;
-            changes = new BulkHabitChanges(HasDueDate: true, DueDate: date);
-        }
-        else if (operationId == "bulk_update_habits")
-        {
-            var parsed = BulkHabitToolArguments.ParseChanges(arguments);
-            if (parsed.Error is not null)
-                return null;
-            changes = parsed.Changes;
-        }
+        var changes = isRevised ? null : ResolveChanges(operationId, arguments);
 
-        if (operationId is "bulk_update_habits" or "bulk_reschedule_habits"
+        if (!isRevised && operationId is ("bulk_update_habits" or "bulk_reschedule_habits")
             && (changes is null || !changes.HasAnyChange))
             return null;
 
@@ -72,13 +56,17 @@ public sealed class PendingOperationChangePreviewer(
         foreach (var habit in habits)
         {
             var fields = new List<PendingOperationChange>();
-            if (changes is not null)
+            var actualChangeCount = 0;
+            var itemChanges = isRevised ? revisedChanges.GetValueOrDefault(habit.Id) : changes;
+            if (itemChanges is not null)
             {
-                var update = BulkUpdateHabitsCommandHandler.ResolveUpdate(habit, changes, today);
+                var update = BulkUpdateHabitsCommandHandler.ResolveUpdate(habit, itemChanges, today);
                 var preview = habit.PreviewUpdate(update);
                 if (preview.IsFailure)
                     return null;
                 AddChanges(fields, habit, preview.Value);
+                actualChangeCount = fields.Count;
+                AddProposedFields(fields, habit, operationId, arguments, isRevised, revisedItems);
             }
             else
             {
@@ -93,15 +81,87 @@ public sealed class PendingOperationChangePreviewer(
                     ? proposed.ToString() : null;
                 fields.Add(new PendingOperationChange(habit.Id, habit.Title, field,
                     field == "emoji" ? habit.Emoji : null, value, field == "emoji" ? "emoji" : "action"));
+                actualChangeCount = fields.Count;
             }
 
             items.Add(new PendingOperationItem(habit.Id.ToString(), habit.Id, habit.Title,
                 fields, FingerprintHabit(habit)));
             if (items.Count <= 10)
-                rows.AddRange(fields);
+                rows.AddRange(fields.Take(actualChangeCount));
         }
 
         return BuildPreview(operationId, rows, items);
+    }
+
+    private static void AddProposedFields(List<PendingOperationChange> fields, Habit habit,
+        string operationId, JsonElement arguments, bool isRevised, JsonElement revisedItems)
+    {
+        var proposed = isRevised
+            ? revisedItems.EnumerateArray().First(item =>
+                item.GetProperty("habit_id").GetString() == habit.Id.ToString())
+                .GetProperty("updates")
+            : operationId == "bulk_update_habits"
+                ? arguments.GetProperty("updates") : default;
+        if (proposed.ValueKind != JsonValueKind.Object)
+            return;
+        foreach (var property in proposed.EnumerateObject())
+        {
+            if (fields.Any(field => field.Field == property.Name))
+                continue;
+            var value = property.Value.ToString();
+            fields.Add(new PendingOperationChange(habit.Id, habit.Title,
+                property.Name, value, value, "text"));
+        }
+    }
+
+    private static BulkHabitChanges? ResolveChanges(string operationId, JsonElement arguments)
+    {
+        if (operationId == "bulk_reschedule_habits")
+        {
+            if (!arguments.TryGetProperty("due_date", out var dateElement)
+                || dateElement.ValueKind != JsonValueKind.String
+                || !DateOnly.TryParseExact(dateElement.GetString(), "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out var date))
+                return null;
+            return new BulkHabitChanges(HasDueDate: true, DueDate: date);
+        }
+        if (operationId == "bulk_update_habits")
+            return BulkHabitToolArguments.ParseChanges(arguments).Changes;
+        return null;
+    }
+
+    private static (BulkHabitFilter? Filter, string? Error) ResolveFilter(
+        string operationId, JsonElement arguments, bool isRevised, JsonElement revisedItems,
+        Dictionary<Guid, BulkHabitChanges> revisedChanges)
+    {
+        if (isRevised)
+            return ParseRevisedFilter(revisedItems, revisedChanges);
+        return operationId switch
+        {
+            "bulk_update_habits" or "bulk_reschedule_habits" => BulkHabitToolArguments.ParseRequiredFilter(arguments),
+            "bulk_update_habit_emojis" => BulkHabitToolArguments.ParseEmojiFilter(arguments),
+            _ => BulkHabitToolArguments.ParseActionFilter(arguments)
+        };
+    }
+
+    private static (BulkHabitFilter? Filter, string? Error) ParseRevisedFilter(
+        JsonElement items, Dictionary<Guid, BulkHabitChanges> changes)
+    {
+        var ids = new List<Guid>();
+        foreach (var item in items.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object
+                || !item.TryGetProperty("habit_id", out var idElement)
+                || !Guid.TryParse(idElement.GetString(), out var id)
+                || !item.TryGetProperty("updates", out var updates))
+                return (null, "invalid_revised_items");
+            var parsed = BulkHabitToolArguments.ParseChanges(
+                JsonDocument.Parse($"{{\"updates\":{updates.GetRawText()}}}").RootElement);
+            if (parsed.Error is not null || parsed.Changes is null || !changes.TryAdd(id, parsed.Changes))
+                return (null, "invalid_revised_items");
+            ids.Add(id);
+        }
+        return (new BulkHabitFilter(false, ids, IncludeCompleted: true), null);
     }
 
     private async Task<PendingOperationChangePreview?> PreviewSingleHabitAsync(
@@ -128,10 +188,14 @@ public sealed class PendingOperationChangePreviewer(
             var name = habit.ValueKind == JsonValueKind.Object
                 && habit.TryGetProperty("title", out var title) ? title.ToString() : string.Empty;
             var fields = habit.ValueKind == JsonValueKind.Object
-                ? habit.EnumerateObject().Select(property => new PendingOperationChange(
+                ? habit.EnumerateObject().Where(property => property.Name != "preview_item_id")
+                    .Select(property => new PendingOperationChange(
                     Guid.Empty, name, property.Name, null, property.Value.ToString(), "text")).ToList()
                 : [];
-            return new PendingOperationItem(index.ToString(CultureInfo.InvariantCulture), null,
+            var itemId = habit.ValueKind == JsonValueKind.Object
+                && habit.TryGetProperty("preview_item_id", out var storedId)
+                ? storedId.ToString() : index.ToString(CultureInfo.InvariantCulture);
+            return new PendingOperationItem(itemId, null,
                 name, fields, AgentOperationFingerprint.Compute("bulk_create_habits", habit.GetRawText()));
         }).ToList();
         return BuildPreview("bulk_create_habits", [], items);
