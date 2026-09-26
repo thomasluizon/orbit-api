@@ -13,7 +13,7 @@ const machine = new RegExp([
   "(?:^|[\\s'\"=(])/home/[a-z][^/\\s.]+/", "~/" + "Developer/",
 ].join("|"))
 const owner = new RegExp(["\\bTho" + "mas\\b", "\\b(?:in )?(?:his|her) (?:own )?words\\b", "\\b(?:he|she) (?:said|asked|wrote|answered|decided)\\b"].join("|"))
-const date = /\b(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])\b/
+const date = /\b(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])(?=\b|T)/
 const session = new RegExp("\\bses" + "sion[\\s:_-]*[a-f0-9]{8,}\\b", "i")
 const prose = new Set([".md", ".mdx", ".txt"])
 const js = new Set([".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".cs"])
@@ -59,16 +59,21 @@ function parsedComments(text, path, parser) {
       found.push({ line, position: range.pos, text: value, length: value.split("\n").length, singleLine: range.kind === parser.SyntaxKind.SingleLineCommentTrivia })
     }
   }
-  const visit = (node) => {
+  const visitLiterals = (node) => {
     if ([parser.SyntaxKind.JsxText, parser.SyntaxKind.StringLiteral, parser.SyntaxKind.NoSubstitutionTemplateLiteral,
       parser.SyntaxKind.RegularExpressionLiteral, parser.SyntaxKind.TemplateHead, parser.SyntaxKind.TemplateMiddle,
       parser.SyntaxKind.TemplateTail].includes(node.kind)) literalSpans.push([node.getStart(source), node.getEnd()])
-    if (node.kind !== parser.SyntaxKind.JsxText) collect(node.getFullStart())
-    collect(node.getEnd())
-    if (node.kind === parser.SyntaxKind.JsxExpression) collect(node.getStart(source) + 1)
-    parser.forEachChild(node, visit)
+    parser.forEachChild(node, visitLiterals)
   }
-  visit(source)
+  visitLiterals(source)
+  const visitTokens = (node) => {
+    const children = node.getChildren(source)
+    if (children.length) { children.forEach(visitTokens); return }
+    if (node.kind === parser.SyntaxKind.JsxText) return
+    collect(node.getFullStart())
+    collect(node.getEnd())
+  }
+  visitTokens(source)
   collect(source.endOfFileToken.getFullStart())
   return found.filter((item) => !literalSpans.some(([start, end]) => item.position >= start && item.position < end))
 }
@@ -198,18 +203,47 @@ function findings(path, content, root = ROOT) {
   return results
 }
 
-function addedLines(diff) {
-  const selected = new Map()
-  let path = null, line = 0
-  for (const row of diff.split("\n")) {
-    if (row.startsWith("+++ b/")) path = row.slice(6)
-    const header = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(row)
-    if (header) { line = Number(header[1]); continue }
-    if (!path || row.startsWith("+++")) continue
-    if (row.startsWith("+")) { if (!selected.has(path)) selected.set(path, new Set()); selected.get(path).add(line++) }
-    else if (row.startsWith(" ")) line++
+function changedPaths(args) {
+  const parts = git(["diff", "--no-renames", "--name-status", "-z", "--diff-filter=ACMT", ...args]).split("\0")
+  const paths = []
+  for (let index = 0; index + 1 < parts.length; index += 2) {
+    if (parts[index]) paths.push({ status: parts[index], path: parts[index + 1] })
   }
-  return selected
+  return paths
+}
+
+function newFindings(path, before, after, root = ROOT) {
+  const previous = findings(path, before, root)
+  const current = findings(path, after, root)
+  const counts = new Map(), lengths = []
+  for (const item of previous) {
+    if (item.rule === "comment-length") lengths.push(Number.parseInt(item.match, 10))
+    else {
+      const key = JSON.stringify([item.rule, item.match])
+      counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
+  }
+  lengths.sort((left, right) => left - right)
+  const added = []
+  const ordered = [
+    ...current.filter((item) => item.rule !== "comment-length"),
+    ...current.filter((item) => item.rule === "comment-length")
+      .sort((left, right) => Number.parseInt(right.match, 10) - Number.parseInt(left.match, 10)),
+  ]
+  for (const item of ordered) {
+    if (item.rule === "comment-length") {
+      const length = Number.parseInt(item.match, 10)
+      const index = lengths.findIndex((previousLength) => previousLength >= length)
+      if (index < 0) added.push(item)
+      else lengths.splice(index, 1)
+    } else {
+      const key = JSON.stringify([item.rule, item.match])
+      const count = counts.get(key) ?? 0
+      if (count) counts.set(key, count - 1)
+      else added.push(item)
+    }
+  }
+  return added
 }
 
 function allowlist(root) {
@@ -278,19 +312,9 @@ function hook() {
   }
   const isWrite = typeof input.content === "string"
   const edits = isWrite ? [{ old_string: current, new_string: input.content }] : pairs(input)
-  const added = new Set(), oldLines = new Set()
-  for (const edit of edits) {
-    String(edit.old_string ?? "").split("\n").forEach((line) => oldLines.add(line))
-    String(edit.new_string ?? "").split("\n").forEach((line) => { if (!oldLines.has(line)) added.add(line) })
-  }
   const proposed = isWrite ? input.content
     : edits.reduce((body, edit) => body.replace(String(edit.old_string ?? ""), String(edit.new_string ?? "")), current)
-  const lines = proposed.split("\n")
-  const results = findings(path, proposed, root).filter((item) => {
-    if (item.rule === "comment-length") return lines.slice(item.line - 1, item.end).some((line) => added.has(line))
-    return added.has(lines[item.line - 1])
-  })
-  return report(results, allowlist(root), false) ? 2 : 0
+  return report(newFindings(path, current, proposed, root), allowlist(root), false) ? 2 : 0
 }
 
 try {
@@ -300,23 +324,25 @@ try {
   if (!((args.length === 1 && ["--all", "--staged"].includes(args[0])) || (args.length === 2 && args[0] === "--base"))) {
     console.error(USAGE); process.exit(2)
   }
-  let selected
+  let selected, oldRef
   if (args[0] === "--all") selected = null
-  else if (args[0] === "--staged") selected = addedLines(git(["diff", "--cached", "--unified=0", "--diff-filter=ACMRT"]))
-  else {
-    const base = git(["merge-base", args[1], "HEAD"]).trim()
-    selected = addedLines(git(["diff", "--unified=0", "--diff-filter=ACMRT", base, "HEAD"]))
+  else if (args[0] === "--staged") {
+    oldRef = "HEAD"
+    selected = changedPaths(["--cached"])
   }
-  const paths = selected ? [...selected.keys()] : git(["ls-files", "-z"]).split("\0").filter(Boolean)
+  else {
+    oldRef = git(["merge-base", args[1], "HEAD"]).trim()
+    selected = changedPaths([oldRef, "HEAD"])
+  }
+  const paths = selected ?? git(["ls-files", "-z"]).split("\0").filter(Boolean).map((path) => ({ path }))
   const results = []
-  for (const path of paths) {
+  for (const { path, status } of paths) {
     const absolute = join(ROOT, path)
     if (!selected && !existsSync(absolute)) continue
     const content = !selected ? readFileSync(absolute, "utf8")
       : args[0] === "--staged" ? git(["show", `:${path}`]) : git(["show", `HEAD:${path}`])
-    for (const item of findings(path, content)) {
-      if (!selected || selected.get(path)?.has(item.line) || (item.rule === "comment-length" && [...selected.get(path)].some((line) => line >= item.line && line <= item.end))) results.push(item)
-    }
+    const before = selected && status !== "A" ? git(["show", `${oldRef}:${path}`]) : ""
+    results.push(...(selected ? newFindings(path, before, content) : findings(path, content)))
   }
   process.exit(report(results, allowlist(ROOT), !selected))
 } catch (error) {

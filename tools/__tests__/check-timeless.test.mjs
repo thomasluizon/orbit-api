@@ -160,6 +160,37 @@ test("staged content is checked after its working copy is deleted", () => {
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
 
+test("a dated comment inside an empty call fails the full scan", () => {
+  const root = make("sample.ts", `run(/* On ${date}, it failed. */)\n`)
+  try {
+    const result = run(root, ["--all"])
+    assert.equal(result.status, 1)
+    assert.match(result.stderr, /sample\.ts:1: dated-anecdote/)
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test("a Write hook rejects wrapping an existing date literal in a block comment", () => {
+  const name = "sample.ts"
+  const root = make(name, `const value = new Date("${date}")\n`)
+  try {
+    const result = hook(root, name, `/*\nconst value = new Date("${date}")\n*/\n`)
+    assert.equal(result.status, 2)
+    assert.match(result.stderr, /sample\.ts:2: dated-anecdote/)
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test("moving an existing violating comment passes the staged diff", () => {
+  const name = "sample.ts"
+  const comment = `// On ${date}, it failed.\n`
+  const root = make(name, `${comment}const value = 1\n`)
+  try {
+    writeFileSync(join(root, name), `const value = 1\n${comment}`)
+    git(root, "add", name)
+    const result = run(root, ["--staged"])
+    assert.equal(result.status, 0, result.stderr)
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
 test("a directory entry may exempt comment-length but never machine-path", () => {
   const root = make("sample.md")
   try {
@@ -169,6 +200,8 @@ test("a directory entry may exempt comment-length but never machine-path", () =>
     writeFileSync(join(root, "tools/timeless-allowlist.json"), JSON.stringify([{ path: "export/", rule: "comment-length", match: null, scope: "directory", reason: "generated export" }]))
     assert.equal(run(root, ["--all"]).status, 0)
     writeFileSync(join(root, "tools/timeless-allowlist.json"), JSON.stringify([{ path: "export/", rule: "machine-path", match: null, scope: "directory", reason: "never allowed" }]))
-    assert.equal(run(root, ["--all"]).status, 2)
+    const refused = run(root, ["--all"])
+    assert.equal(refused.status, 2)
+    assert.match(refused.stderr, /valid exact or directory-scoped entries/)
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
