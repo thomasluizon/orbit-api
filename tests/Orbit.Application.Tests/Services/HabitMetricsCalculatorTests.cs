@@ -62,6 +62,18 @@ public class HabitMetricsCalculatorTests
     }
 
     [Fact]
+    public void CalculateProjected_UsesSameLogValuesAsEntityCalculation()
+    {
+        var habit = CreateDailyHabitWithLogs([Today.AddDays(-1), Today]);
+        var projected = habit.Logs
+            .Select(log => new HabitMetricLog(log.HabitId, log.Date, log.Value, log.IsDeleted))
+            .ToList();
+
+        HabitMetricsCalculator.CalculateProjected(habit, projected, Today, 1)
+            .Should().Be(HabitMetricsCalculator.Calculate(habit, Today, 1));
+    }
+
+    [Fact]
     public void Calculate_NoLogs_ReturnsZeroes()
     {
         var habit = Habit.Create(new HabitCreateParams(

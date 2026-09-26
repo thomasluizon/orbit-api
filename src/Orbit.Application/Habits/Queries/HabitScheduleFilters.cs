@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -37,24 +36,6 @@ internal static class HabitScheduleFilters
             AddSubtreeIds(child.Id, lookup, ids);
     }
 
-    internal static IQueryable<Habit> IncludeHabitGraph(
-        IQueryable<Habit> query,
-        DateOnly logFrom,
-        DateOnly logTo,
-        bool includeTags,
-        bool includeGoals)
-    {
-        query = query.Include(h => h.Logs.Where(l => l.Date >= logFrom && l.Date <= logTo));
-
-        if (includeTags)
-            query = query.Include(h => h.Tags);
-
-        if (includeGoals)
-            query = query.Include(h => h.Goals);
-
-        return query.AsSplitQuery();
-    }
-
     internal static List<(Habit habit, List<DateOnly> scheduledDates, bool isOverdue)> FilterScheduledHabits(
         IEnumerable<Habit> topLevel,
         DateOnly dateFrom,
@@ -62,22 +43,25 @@ internal static class HabitScheduleFilters
         bool includeOverdue,
         ILookup<Guid?, Habit> lookup,
         int weekStartDay,
-        IReadOnlySet<Guid> dueDateResolution)
+        IReadOnlySet<Guid> dueDateResolution,
+        HabitScheduleLogFacts? logFacts = null)
     {
         var filtered = new List<(Habit habit, List<DateOnly> scheduledDates, bool isOverdue)>();
 
         foreach (var habit in topLevel)
         {
-            var hasCompletedLogInRange = HabitScheduleService.HasCompletedLogInRange(habit, dateFrom, dateTo);
+            var hasCompletedLogInRange = logFacts?.HasCompleted(habit.Id, dateFrom, dateTo)
+                ?? HabitScheduleService.HasCompletedLogInRange(habit, dateFrom, dateTo);
             var scheduledDates = HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo, weekStartDay);
 
             if (habit.IsFlexible
                 && !hasCompletedLogInRange
                 && !scheduledDates.Any(date =>
-                    HabitScheduleService.IsFlexibleHabitDueOnDate(habit, date, habit.Logs, weekStartDay)))
+                    (logFacts?.IsFlexibleDue(habit, date, weekStartDay)
+                        ?? HabitScheduleService.IsFlexibleHabitDueOnDate(habit, date, habit.Logs, weekStartDay))))
                 continue;
 
-            var isOverdue = DetermineOverdueStatus(habit, dateFrom, includeOverdue, weekStartDay, dueDateResolution);
+            var isOverdue = DetermineOverdueStatus(habit, dateFrom, includeOverdue, weekStartDay, dueDateResolution, logFacts);
             var hasDescendantDue = HasAnyDescendantDue(
                 habit.Id,
                 lookup,
@@ -85,7 +69,8 @@ internal static class HabitScheduleFilters
                 dateTo,
                 includeOverdue,
                 weekStartDay,
-                dueDateResolution);
+                dueDateResolution,
+                logFacts);
 
             if (scheduledDates.Count > 0 || isOverdue || hasDescendantDue || hasCompletedLogInRange)
                 filtered.Add((habit, scheduledDates, isOverdue));
@@ -105,12 +90,14 @@ internal static class HabitScheduleFilters
         DateOnly dateFrom,
         bool includeOverdue,
         int weekStartDay,
-        IReadOnlySet<Guid>? dueDateResolution = null) =>
+        IReadOnlySet<Guid>? dueDateResolution = null,
+        HabitScheduleLogFacts? logFacts = null) =>
         includeOverdue && HabitScheduleService.IsOverdueOnDate(
             habit,
             dateFrom,
             weekStartDay,
-            dueDateResolution?.Contains(habit.Id) == true);
+            dueDateResolution?.Contains(habit.Id) == true,
+            logFacts?.ResolvedDates(habit.Id));
 
     internal static IEnumerable<Habit> ApplyCommonFilters(
         IEnumerable<Habit> topLevel,
@@ -118,7 +105,8 @@ internal static class HabitScheduleFilters
         ILookup<Guid?, Habit> lookup,
         DateOnly? userToday = null,
         int weekStartDay = 1,
-        IReadOnlySet<Guid>? dueDateResolution = null)
+        IReadOnlySet<Guid>? dueDateResolution = null,
+        HabitScheduleLogFacts? logFacts = null)
     {
         if (!string.IsNullOrWhiteSpace(request.Search))
             topLevel = ApplySearchFilter(
@@ -129,7 +117,8 @@ internal static class HabitScheduleFilters
                 request.IncludeOverdue,
                 lookup,
                 weekStartDay,
-                dueDateResolution);
+                dueDateResolution,
+                logFacts);
 
         if (request.IsCompleted.HasValue)
             topLevel = topLevel.Where(h =>
@@ -149,7 +138,8 @@ internal static class HabitScheduleFilters
         bool includeOverdue,
         ILookup<Guid?, Habit> lookup,
         int weekStartDay,
-        IReadOnlySet<Guid>? dueDateResolution)
+        IReadOnlySet<Guid>? dueDateResolution,
+        HabitScheduleLogFacts? logFacts)
     {
         return topLevel.Where(h => MatchesSearch(
             h,
@@ -159,7 +149,8 @@ internal static class HabitScheduleFilters
             dateTo,
             includeOverdue,
             weekStartDay,
-            dueDateResolution));
+            dueDateResolution,
+            logFacts));
     }
 
     private static bool MatchesSearch(
@@ -170,7 +161,8 @@ internal static class HabitScheduleFilters
         DateOnly? dateTo,
         bool includeOverdue,
         int weekStartDay,
-        IReadOnlySet<Guid>? dueDateResolution)
+        IReadOnlySet<Guid>? dueDateResolution,
+        HabitScheduleLogFacts? logFacts)
     {
         if (FuzzyMatcher.FuzzyContains(h.Title, term)) return true;
         if (h.Description != null && FuzzyMatcher.FuzzyContains(h.Description, term)) return true;
@@ -183,7 +175,8 @@ internal static class HabitScheduleFilters
             dateTo,
             includeOverdue,
             weekStartDay,
-            dueDateResolution);
+            dueDateResolution,
+            logFacts);
     }
 
     private static bool HasDescendantMatchingSearch(
@@ -194,7 +187,8 @@ internal static class HabitScheduleFilters
         DateOnly? dateTo,
         bool includeOverdue,
         int weekStartDay,
-        IReadOnlySet<Guid>? dueDateResolution)
+        IReadOnlySet<Guid>? dueDateResolution,
+        HabitScheduleLogFacts? logFacts)
     {
         foreach (var child in lookup[parentId])
         {
@@ -204,7 +198,8 @@ internal static class HabitScheduleFilters
                     dateTo,
                     includeOverdue,
                     weekStartDay,
-                    dueDateResolution))
+                    dueDateResolution,
+                    logFacts))
                 continue;
             if (FuzzyMatcher.FuzzyContains(child.Title, term)) return true;
             if (child.Description != null && FuzzyMatcher.FuzzyContains(child.Description, term)) return true;
@@ -217,7 +212,8 @@ internal static class HabitScheduleFilters
                     dateTo,
                     includeOverdue,
                     weekStartDay,
-                    dueDateResolution))
+                    dueDateResolution,
+                    logFacts))
                 return true;
         }
         return false;
@@ -229,7 +225,8 @@ internal static class HabitScheduleFilters
         DateOnly? dateTo,
         bool includeOverdue,
         int weekStartDay,
-        IReadOnlySet<Guid>? dueDateResolution)
+        IReadOnlySet<Guid>? dueDateResolution,
+        HabitScheduleLogFacts? logFacts)
     {
         if (child.IsCompleted) return false;
         if (!dateFrom.HasValue || !dateTo.HasValue) return true;
@@ -240,7 +237,8 @@ internal static class HabitScheduleFilters
             dateFrom.Value,
             includeOverdue,
             weekStartDay,
-            dueDateResolution);
+            dueDateResolution,
+            logFacts);
 
         return scheduledDates.Count > 0 || isOverdue;
     }
@@ -348,7 +346,8 @@ internal static class HabitScheduleFilters
                     ctx.DateFrom.Value,
                     ctx.IncludeOverdue,
                     ctx.WeekStartDay,
-                    ctx.DueDateResolution);
+                    ctx.DueDateResolution,
+                    ctx.LogFacts);
 
                 if (childScheduledDates.Count == 0 && !childIsOverdue)
                     continue;
@@ -371,7 +370,8 @@ internal static class HabitScheduleFilters
         DateOnly dateTo,
         bool includeOverdue,
         int weekStartDay,
-        IReadOnlySet<Guid>? dueDateResolution)
+        IReadOnlySet<Guid>? dueDateResolution,
+        HabitScheduleLogFacts? logFacts = null)
     {
         foreach (var child in lookup[parentId])
         {
@@ -381,11 +381,13 @@ internal static class HabitScheduleFilters
                 dateFrom,
                 includeOverdue,
                 weekStartDay,
-                dueDateResolution);
+                dueDateResolution,
+                logFacts);
 
             if (scheduledDates.Count > 0 || isOverdue)
                 return true;
-            if (child.Logs.Any(l => l.Date >= dateFrom && l.Date <= dateTo))
+            if (logFacts?.HasLog(child.Id, dateFrom, dateTo)
+                ?? child.Logs.Any(l => l.Date >= dateFrom && l.Date <= dateTo))
                 return true;
             if (HasAnyDescendantDue(
                     child.Id,
@@ -394,7 +396,8 @@ internal static class HabitScheduleFilters
                     dateTo,
                     includeOverdue,
                     weekStartDay,
-                    dueDateResolution))
+                    dueDateResolution,
+                    logFacts))
                 return true;
         }
         return false;
@@ -417,7 +420,8 @@ internal static class HabitScheduleFilters
                         df,
                         ctx.IncludeOverdue,
                         ctx.WeekStartDay,
-                        ctx.DueDateResolution);
+                        ctx.DueDateResolution,
+                        ctx.LogFacts);
 
                     return scheduledDates.Count > 0
                         || c.IsCompleted
@@ -429,7 +433,8 @@ internal static class HabitScheduleFilters
                             dt,
                             ctx.IncludeOverdue,
                             ctx.WeekStartDay,
-                            ctx.DueDateResolution)
+                            ctx.DueDateResolution,
+                            ctx.LogFacts)
                         || c.Logs.Any(l => l.Date >= df && l.Date <= dt);
                 });
         }
@@ -455,7 +460,8 @@ internal static class HabitScheduleFilters
                 ctx.DateFrom.Value,
                 ctx.IncludeOverdue,
                 ctx.WeekStartDay,
-                ctx.DueDateResolution);
+                ctx.DueDateResolution,
+                ctx.LogFacts);
 
         var instances = ctx.DateFrom.HasValue && ctx.DateTo.HasValue && ctx.UserToday.HasValue
             ? HabitScheduleService.GetInstances(

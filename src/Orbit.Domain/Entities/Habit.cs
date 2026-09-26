@@ -2,6 +2,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.ValueObjects;
+using Orbit.Domain.Models;
 
 #pragma warning disable S6964 // Domain entity with private setters - not a model-bound DTO
 
@@ -102,6 +103,16 @@ public class Habit : Entity, ITimestamped, ISoftDeletable, IHabitSchedule
     private readonly List<HabitLog> _logs = [];
     public IReadOnlyCollection<HabitLog> Logs => _logs.AsReadOnly();
 
+    public void LoadScheduleLogsForRead(IEnumerable<HabitLog> logs)
+    {
+        var loaded = logs.ToList();
+        if (loaded.Any(log => log.HabitId != Id))
+            throw new ArgumentException("Schedule logs must belong to this habit.");
+
+        _logs.Clear();
+        _logs.AddRange(loaded);
+    }
+
     private readonly List<Habit> _children = [];
     public IReadOnlyCollection<Habit> Children => _children.AsReadOnly();
 
@@ -111,7 +122,43 @@ public class Habit : Entity, ITimestamped, ISoftDeletable, IHabitSchedule
     private readonly List<Goal> _goals = [];
     public IReadOnlyCollection<Goal> Goals => _goals.AsReadOnly();
 
+    public void LoadScheduleRelationsForRead(IEnumerable<Tag> tags, IEnumerable<Goal> goals)
+    {
+        var loadedTags = tags.ToList();
+        var loadedGoals = goals.ToList();
+        if (loadedTags.Any(tag => tag.UserId != UserId)
+            || loadedGoals.Any(goal => goal.UserId != UserId))
+            throw new ArgumentException("Schedule relations must belong to this user.");
+
+        _tags.Clear();
+        _tags.AddRange(loadedTags);
+        _goals.Clear();
+        _goals.AddRange(loadedGoals);
+    }
+
     private Habit() { }
+
+    public static Habit FromScheduleSnapshot(HabitScheduleSnapshot snapshot) => new()
+    {
+        Id = snapshot.Id,
+        ParentHabitId = snapshot.ParentHabitId,
+        FrequencyUnit = snapshot.FrequencyUnit,
+        FrequencyQuantity = snapshot.FrequencyQuantity,
+        IntervalWeeks = snapshot.IntervalWeeks,
+        DueDate = snapshot.DueDate,
+        ScheduledStartDate = snapshot.ScheduledStartDate,
+        OriginalDayOfMonth = snapshot.OriginalDayOfMonth,
+        EndDate = snapshot.EndDate,
+        CreatedAtUtc = snapshot.CreatedAtUtc,
+        DeletedAtUtc = snapshot.DeletedAtUtc,
+        IsDeleted = snapshot.IsDeleted,
+        IsBadHabit = snapshot.IsBadHabit,
+        IsCompleted = snapshot.IsCompleted,
+        IsGeneral = snapshot.IsGeneral,
+        IsFlexible = snapshot.IsFlexible,
+        Days = snapshot.Days.ToList(),
+        Title = string.Empty
+    };
 
     public static Result<Habit> Create(HabitCreateParams p)
     {

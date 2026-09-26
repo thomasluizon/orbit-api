@@ -315,6 +315,7 @@ public class StreakGapRepairTests
             firstDate.ToDateTime(new TimeOnly(12, 0), DateTimeKind.Utc));
         _habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns([habit]);
         _logs.FindAsync(Arg.Any<Expression<Func<HabitLog, bool>>>(), Arg.Any<CancellationToken>()).Returns([]);
+        StubStreakData(habit);
 
         var response = await ReadStreakInfoAsync();
 
@@ -496,7 +497,10 @@ public class StreakGapRepairTests
     [Fact]
     public async Task NoPriorStreak_IsUnavailable()
     {
-        _logs.FindAsync(Arg.Any<Expression<Func<HabitLog, bool>>>(), Arg.Any<CancellationToken>()).Returns([]);
+        _logs.ProjectAsync(
+            Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<Func<IQueryable<HabitLog>, IQueryable<DateOnly>>>(),
+            Arg.Any<CancellationToken>()).Returns([]);
 
         (await Evaluate()).Should().BeNull();
     }
@@ -547,6 +551,7 @@ public class StreakGapRepairTests
         _habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns([habit]);
         _logs.FindAsync(Arg.Any<Expression<Func<HabitLog, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(call => habit.Logs.Where(call.Arg<Expression<Func<HabitLog, bool>>>().Compile()).ToList());
+        StubStreakData(habit);
         return habit;
     }
 
@@ -566,6 +571,7 @@ public class StreakGapRepairTests
         _habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns([habit]);
         _logs.FindAsync(Arg.Any<Expression<Func<HabitLog, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(call => habit.Logs.Where(call.Arg<Expression<Func<HabitLog, bool>>>().Compile()).ToList());
+        StubStreakData(habit);
         return habit;
     }
 
@@ -586,6 +592,7 @@ public class StreakGapRepairTests
         _habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns([habit]);
         _logs.FindAsync(Arg.Any<Expression<Func<HabitLog, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(call => habit.Logs.Where(call.Arg<Expression<Func<HabitLog, bool>>>().Compile()).ToList());
+        StubStreakData(habit);
         return habit;
     }
 
@@ -650,6 +657,24 @@ public class StreakGapRepairTests
         _habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns([habit]);
         _logs.FindAsync(Arg.Any<Expression<Func<HabitLog, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(call => habit.Logs.Where(call.Arg<Expression<Func<HabitLog, bool>>>().Compile()).ToList());
+        StubStreakData(habit);
         return habit;
+    }
+
+    private void StubStreakData(Habit habit)
+    {
+        _habits.ProjectAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<HabitScheduleSnapshot>>>(),
+            Arg.Any<CancellationToken>()).Returns(_ => [HabitScheduleSnapshot.FromHabit(habit)]);
+        _logs.ProjectAsync(
+            Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<Func<IQueryable<HabitLog>, IQueryable<DateOnly>>>(),
+            Arg.Any<CancellationToken>()).Returns(call =>
+            {
+                var predicate = call.ArgAt<Expression<Func<HabitLog, bool>>>(0).Compile();
+                var projection = call.ArgAt<Func<IQueryable<HabitLog>, IQueryable<DateOnly>>>(1);
+                return projection(habit.Logs.Where(predicate).AsQueryable()).ToList();
+            });
     }
 }

@@ -6,6 +6,7 @@ using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification.Services;
 using Orbit.Application.Goals.Commands;
+using Orbit.Application.Goals.Queries;
 using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Commands;
 using Orbit.Application.Social.Services;
@@ -22,6 +23,101 @@ namespace Orbit.Infrastructure.Tests.Services;
 public class GoalCompletionServiceTests
 {
     private static readonly DateOnly Today = new(2026, 8, 23);
+    private static readonly DateOnly BackdatedCompletion = Today.AddDays(-2201);
+
+    [Fact]
+    public async Task GetGoalDetail_BackdatedCompletionCreatedAfterGoal_RemainsInCurrentValue()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var context = factory.Context;
+        var (user, goal, _) = await SeedBackdatedGoalAsync(context, linked: true);
+        var handler = new GetGoalDetailQueryHandler(new GenericRepository<Goal>(context), StubGoalDate(user.Id));
+
+        var result = await handler.Handle(new GetGoalDetailQuery(user.Id, goal.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Goal.CurrentValue.Should().Be(1);
+        result.Value.Metrics.ProgressPercentage.Should().Be(10);
+    }
+
+    [Fact]
+    public async Task GetGoalById_BackdatedCompletionCreatedAfterGoal_RemainsInCurrentValue()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var context = factory.Context;
+        var (user, goal, _) = await SeedBackdatedGoalAsync(context, linked: true);
+        var handler = new GetGoalByIdQueryHandler(new GenericRepository<Goal>(context), StubGoalDate(user.Id));
+
+        var result = await handler.Handle(new GetGoalByIdQuery(user.Id, goal.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.CurrentValue.Should().Be(1);
+        result.Value.ProgressPercentage.Should().Be(10);
+    }
+
+    [Fact]
+    public async Task GoalProgressReadSyncer_BackdatedCompletionCreatedAfterGoal_RemainsInFreshValue()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var context = factory.Context;
+        var (user, goal, _) = await SeedBackdatedGoalAsync(context, linked: true);
+        var syncer = new GoalProgressReadSyncer(new GenericRepository<Goal>(context), StubGoalDate(user.Id));
+
+        var values = await syncer.ComputeFreshValuesAsync(user.Id, Today, CancellationToken.None);
+
+        values[goal.Id].Should().Be(1);
+    }
+
+    [Fact]
+    public async Task LinkHabitsToGoal_BackdatedCompletionCreatedAfterGoal_RemainsInCurrentValue()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var context = factory.Context;
+        var (user, goal, habit) = await SeedBackdatedGoalAsync(context, linked: false);
+        var unitOfWork = CreateUnitOfWork(context);
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var handler = new LinkHabitsToGoalCommandHandler(
+            new GenericRepository<Goal>(context),
+            new GenericRepository<Habit>(context),
+            CreateCompletionService(context, Substitute.For<IGamificationService>(), unitOfWork),
+            StubToday(user.Id),
+            cache);
+
+        var result = await handler.Handle(
+            new LinkHabitsToGoalCommand(user.Id, goal.Id, [habit.Id]),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var persisted = await context.Goals.AsNoTracking().SingleAsync(candidate => candidate.Id == goal.Id);
+        persisted.CurrentValue.Should().Be(1);
+        var detailHandler = new GetGoalByIdQueryHandler(new GenericRepository<Goal>(context), StubGoalDate(user.Id));
+        var detail = await detailHandler.Handle(new GetGoalByIdQuery(user.Id, goal.Id), CancellationToken.None);
+        detail.IsSuccess.Should().BeTrue();
+        detail.Value.CurrentValue.Should().Be(1);
+    }
+
+    private static async Task<(User User, Goal Goal, Habit Habit)> SeedBackdatedGoalAsync(
+        OrbitDbContext context,
+        bool linked)
+    {
+        var user = User.Create($"Backdated {Guid.NewGuid()}", $"backdated-{Guid.NewGuid()}@example.com").Value;
+        var goal = Goal.Create(user.Id, "Ten sessions", 10, "sessions").Value;
+        var habit = CreateHabit(user.Id, "Exercise");
+        habit.Log(BackdatedCompletion, advanceDueDate: false).IsSuccess.Should().BeTrue();
+        if (linked)
+            goal.AddHabit(habit);
+        context.AddRange(user, habit, goal);
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+        return (user, goal, habit);
+    }
+
+    private static IUserDateService StubGoalDate(Guid userId)
+    {
+        var service = StubToday(userId);
+        service.GetUserWeekStartDayAsync(userId, Arg.Any<CancellationToken>()).Returns(1);
+        return service;
+    }
 
     [Fact]
     public async Task SyncDerivedGoals_EmptyGoalSet_PersistsRecurringHabitSkipExactlyOnce()

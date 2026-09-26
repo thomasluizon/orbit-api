@@ -112,11 +112,17 @@ public partial class GamificationService(
         var today = await userDateService.GetUserTodayAsync(userId, ct);
 
         var streakLogCutoff = today.AddDays(-StreakLogWindowDays);
-        var loggedHabits = await repos.HabitRepository.FindAsync(
-            h => h.UserId == userId && habitIds.Contains(h.Id),
-            q => q.Include(h => h.Logs.Where(l => l.Date >= streakLogCutoff)),
-            ct);
+        var loggedHabits = (await repos.HabitRepository.ProjectAsync(
+            h => h.UserId == userId && habitIds.Contains(h.Id), HabitScheduleProjection.Select, ct))
+            .Select(Habit.FromScheduleSnapshot)
+            .ToList();
         if (loggedHabits.Count == 0) return new HabitsLoggedOutcome([], ShouldSave: false);
+        var loadedHabitIds = loggedHabits.Select(habit => habit.Id).ToList();
+        var streakLogs = await repos.HabitLogRepository.ProjectAsync(
+            log => loadedHabitIds.Contains(log.HabitId) && log.Date >= streakLogCutoff,
+            query => query.Select(log => new LoggedHabitLog(log.HabitId, log.Id, log.Date, log.Value, log.IsDeleted)),
+            ct);
+        var logsByHabit = streakLogs.ToLookup(log => log.HabitId);
 
         var context = await LoadLoggedHabitsContext(user, earned, today, ct);
 
@@ -126,7 +132,7 @@ public partial class GamificationService(
             var habit = loggedHabits.FirstOrDefault(h => h.Id == habitId);
             if (habit is null) continue;
 
-            results.Add(await ProcessLoggedHabit(user, habit, earned, context, today, pushes, ct));
+            results.Add(await ProcessLoggedHabit(user, habit, logsByHabit[habitId].ToList(), earned, context, today, pushes, ct));
         }
 
         return new HabitsLoggedOutcome(results, ShouldSave: true);
@@ -134,20 +140,26 @@ public partial class GamificationService(
 
     private sealed record LoggedHabitsContext(
         IReadOnlyList<Habit> AllUserHabits,
+        IReadOnlySet<(Guid HabitId, DateOnly Date)> CompletedDates,
         TimeZoneInfo UserTimeZone,
         int TotalLogCount,
-        IReadOnlyList<HabitLog> LogsWithRecentCreationTimes,
+        IReadOnlyList<DateTime> LogsWithRecentCreationTimes,
         bool HasActivityInPriorWeek);
 
     private async Task<LoggedHabitsContext> LoadLoggedHabitsContext(
         User user, HashSet<string> earned, DateOnly today, CancellationToken ct)
     {
         var perfectStreakCutoff = today.AddDays(-AchievementChecks.PerfectStreakWindowDays);
-        var allUserHabits = await repos.HabitRepository.FindAsync(
-            h => h.UserId == user.Id,
-            q => q.Include(h => h.Logs.Where(l => l.Date >= perfectStreakCutoff && l.Date <= today)),
-            ct);
+        var allUserHabits = (await repos.HabitRepository.ProjectAsync(
+            h => h.UserId == user.Id, HabitScheduleProjection.Select, ct))
+            .Select(Habit.FromScheduleSnapshot)
+            .ToList();
         var allHabitIds = allUserHabits.Select(h => h.Id).ToList();
+        var completedDates = (await repos.HabitLogRepository.ProjectAsync(
+            log => allHabitIds.Contains(log.HabitId) && log.Date >= perfectStreakCutoff && log.Date <= today,
+            query => query.Select(log => new HabitCompletionDate(log.HabitId, log.Date)).Distinct(), ct))
+            .Select(log => (log.HabitId, log.Date))
+            .ToHashSet();
 
         var totalLogCutoff = today.AddDays(-TotalCompletionWindowDays);
         var totalLogCount = earned.Contains(AchievementDefinitions.Liftoff) && earned.Contains(AchievementDefinitions.Unstoppable)
@@ -156,11 +168,12 @@ public partial class GamificationService(
                 l => allHabitIds.Contains(l.HabitId) && l.Date >= totalLogCutoff, ct);
 
         var createdAtUtcCutoff = DateTime.UtcNow.AddDays(-90);
-        IReadOnlyList<HabitLog> logsWithRecentCreationTimes =
+        IReadOnlyList<DateTime> logsWithRecentCreationTimes =
             earned.Contains(AchievementDefinitions.EarlyBird) && earned.Contains(AchievementDefinitions.NightOwl)
                 ? []
-                : await repos.HabitLogRepository.FindAsync(
-                    l => allHabitIds.Contains(l.HabitId) && l.CreatedAtUtc >= createdAtUtcCutoff, ct);
+                : await repos.HabitLogRepository.ProjectAsync(
+                    l => allHabitIds.Contains(l.HabitId) && l.CreatedAtUtc >= createdAtUtcCutoff,
+                    query => query.Select(log => log.CreatedAtUtc), ct);
 
         var comebackCutoff = today.AddDays(-7);
         var hasActivityInPriorWeek = earned.Contains(AchievementDefinitions.Comeback)
@@ -169,6 +182,7 @@ public partial class GamificationService(
 
         return new LoggedHabitsContext(
             allUserHabits,
+            completedDates,
             TimeZoneHelper.FindTimeZone(user.TimeZone),
             totalLogCount,
             logsWithRecentCreationTimes,
@@ -176,18 +190,20 @@ public partial class GamificationService(
     }
 
     private async Task<HabitLogGamificationResult> ProcessLoggedHabit(
-        User user, Habit habit, HashSet<string> earned, LoggedHabitsContext context, DateOnly today,
+        User user, Habit habit, IReadOnlyList<LoggedHabitLog> logs, HashSet<string> earned, LoggedHabitsContext context, DateOnly today,
         List<PendingPush> pushes, CancellationToken ct)
     {
         var previousLevel = user.Level;
         var newAchievements = new List<(UserAchievement Entity, AchievementDefinition Definition)>();
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, today, user.WeekStartDay, context.UserTimeZone);
+        var metrics = HabitMetricsCalculator.CalculateProjected(habit,
+            logs.Select(log => new HabitMetricLog(log.HabitId, log.Date, log.Value, log.IsDeleted)).ToList(),
+            today, user.WeekStartDay, context.UserTimeZone);
 
         var xpEarned = habit.IsBadHabit
             ? 0
             : await AwardLoggedHabitXpAndAchievementsAsync(
-                user, habit, new AchievementAccumulator(earned, newAchievements), context, today, metrics.CurrentStreak, ct);
+                user, habit, logs, new AchievementAccumulator(earned, newAchievements), context, today, metrics.CurrentStreak, ct);
 
         if (habit.IsBadHabit
             && !earned.Contains(AchievementDefinitions.BadHabitBreaker)
@@ -219,12 +235,12 @@ public partial class GamificationService(
         List<(UserAchievement Entity, AchievementDefinition Definition)> New);
 
     private async Task<int> AwardLoggedHabitXpAndAchievementsAsync(
-        User user, Habit habit, AchievementAccumulator accumulator, LoggedHabitsContext context, DateOnly today,
+        User user, Habit habit, IReadOnlyList<LoggedHabitLog> logs, AchievementAccumulator accumulator, LoggedHabitsContext context, DateOnly today,
         int currentStreak, CancellationToken ct)
     {
         var (earned, newAchievements) = accumulator;
         var xp = 10 + currentStreak;
-        var habitLogId = habit.Logs
+        var habitLogId = logs
             .Where(l => l.Date == today && l.Value > 0)
             .Select(l => (Guid?)l.Id)
             .FirstOrDefault();
@@ -238,12 +254,12 @@ public partial class GamificationService(
         if (!earned.Contains(AchievementDefinitions.Unstoppable))
             AchievementChecks.CheckVolumeAchievements(context.TotalLogCount, earned, user, newAchievements);
 
-        AchievementChecks.CheckPerfectDay(context.AllUserHabits, today, earned, user, newAchievements);
+        AchievementChecks.CheckPerfectDay(context.AllUserHabits, today, earned, user, newAchievements, context.CompletedDates);
 
         if (earned.Contains(AchievementDefinitions.PerfectDay)
             || newAchievements.Any(a => a.Definition.Id == AchievementDefinitions.PerfectDay))
         {
-            AchievementChecks.CheckPerfectWeekAndMonth(context.AllUserHabits, today, earned, user, newAchievements);
+            AchievementChecks.CheckPerfectWeekAndMonth(context.AllUserHabits, today, earned, user, newAchievements, context.CompletedDates);
         }
 
         AchievementChecks.CheckTimeBasedAchievements(user, earned, newAchievements, context.LogsWithRecentCreationTimes, context.UserTimeZone);
