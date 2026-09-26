@@ -27,4 +27,10 @@ public sealed class HabitScheduleSnapshotStore(IGenericRepository<Habit> habits)
             return snapshot;
         }
     }
+
+    public void Invalidate()
+    {
+        lock (_snapshots)
+            _snapshots.Clear();
+    }
 }

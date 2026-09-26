@@ -87,7 +87,13 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAgentStepUpAuthorizationBridge>(sp =>
             sp.GetRequiredService<Orbit.Application.ApiKeys.Services.ApiKeyManagementAuthorization>());
         builder.Services.AddScoped<IUserDateService, UserDateService>();
-        builder.Services.AddScoped<HabitScheduleSnapshotStore>();
+        builder.Services.AddScoped(sp =>
+        {
+            var snapshots = new HabitScheduleSnapshotStore(
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>());
+            HabitScheduleSnapshotInvalidation.Attach(sp.GetRequiredService<OrbitDbContext>(), snapshots);
+            return snapshots;
+        });
         builder.Services.AddScoped<IUserStreakService, UserStreakService>();
         builder.Services.AddScoped<IGoalProgressReadSyncer, GoalProgressReadSyncer>();
         builder.Services.AddScoped<IGoalCompletionService, GoalCompletionService>();
