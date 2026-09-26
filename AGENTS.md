@@ -13,13 +13,10 @@ file on its own head. Nothing here configures that review.
 - Your prompt is a GitHub ticket body. Execute exactly it; an impossible or
   contradictory ticket means STOP and report, never improvise.
 - Finish = `dotnet build Orbit.slnx` 0 errors + `dotnet test` green, commit, push, one
-  PR to `main` linking the ticket reference (`ORB-N` or `#N`), then stop. Never merge.
-- Post the approach before you write the code. Open the pull request as your FIRST act
-  after creating the branch, carrying no implementation yet, and immediately post your
-  intended approach as a pull request comment: the change you mean to make, the files it
-  will land in, and why that shape rather than the alternatives you rejected. Only then
-  start writing. A wrong shape then costs one comment instead of a review round against
-  code you already wrote. Changing a plan is free; changing a merged design is not.
+  PR to the base branch named in the order, linking the ticket as
+  `thomasluizon/orbit-tickets#N`, then stop. Never merge.
+- After tests pass, open or update the pull request and put the intended approach in
+  its body: the change made, the files it landed in, and why that shape was chosen.
 - Analyzer gates (silent in local builds, CI-fatal): ORBIT0001 narration comments,
   ORBIT0002 redundant rollbacks, ORBIT0003 controller authorization, ORBIT0004 raw
   `DateTime.UtcNow` for user-facing dates (use `IUserDateService.GetUserTodayAsync`),
