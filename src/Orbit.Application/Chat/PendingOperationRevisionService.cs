@@ -19,7 +19,7 @@ public sealed record RevisePendingOperationRequest(
 public sealed record PendingOperationRevisionResult(
     bool IsSuccess,
     string? Error,
-    PendingAgentOperationExecution? Operation,
+    Guid? PendingOperationId,
     PendingOperationChangePreview? Preview,
     bool Cancelled = false);
 
@@ -91,8 +91,7 @@ public sealed class PendingOperationRevisionService(
             revisedFingerprint, revisedPreview.PreviewFingerprint!))
             return Failure("revision_conflict");
 
-        return new PendingOperationRevisionResult(true, null,
-            store.GetExecution(userId, pendingOperationId), revisedPreview);
+        return new PendingOperationRevisionResult(true, null, pendingOperationId, revisedPreview);
     }
 
     public async Task<bool> IsCurrentAsync(Guid userId, PendingAgentOperationExecution execution,
