@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using FluentAssertions;
 using NSubstitute;
@@ -49,6 +50,32 @@ public class QueryGoalsToolTests
         result.Success.Should().BeTrue();
         result.EntityName.Should().Contain("Run a marathon");
         result.EntityName.Should().Contain("Train for race day");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_DecimalProgress_UsesInvariantCulture()
+    {
+        var goal = Goal.Create(UserId, "Run", 10.5m, "miles").Value;
+        goal.UpdateProgress(3.5m);
+        _goalRepository.FindAsync(
+            Arg.Any<System.Linq.Expressions.Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<Goal>>([goal]));
+        var previousCulture = CultureInfo.CurrentCulture;
+
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("pt-BR");
+            var result = await Execute("{}");
+
+            result.Success.Should().BeTrue();
+            result.EntityName.Should().Contain("Progress: 3.5/10.5 miles");
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previousCulture;
+        }
     }
 
     [Fact]

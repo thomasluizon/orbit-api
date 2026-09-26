@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Claims;
 using FluentAssertions;
 using MediatR;
@@ -281,6 +282,28 @@ public class GoalToolsTests
         result.Should().Contain("75.5%");
         result.Should().Contain("1.20/day");
         result.Should().Contain("On Track");
+    }
+
+    [Fact]
+    public async Task GetGoalMetrics_DecimalValues_UseInvariantCulture()
+    {
+        var metrics = new GoalMetrics(75.5m, 1.2m, null, null, "On Track", []);
+        _mediator.Send(Arg.Any<GetGoalMetricsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(metrics));
+        var previousCulture = CultureInfo.CurrentCulture;
+
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("pt-BR");
+            var result = await _tools.GetGoalMetrics(_user, Guid.NewGuid().ToString());
+
+            result.Should().Contain("Progress: 75.5%");
+            result.Should().Contain("Velocity: 1.20/day");
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previousCulture;
+        }
     }
 
     [Fact]

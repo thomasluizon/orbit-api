@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
@@ -47,6 +48,28 @@ public class GoalReviewToolTests
         result.Success.Should().BeTrue();
         result.EntityName.Should().Contain("Read books");
         result.EntityName.Should().Contain("12");
+    }
+
+    [Fact]
+    public async Task SuccessfulReview_DecimalProgress_UsesInvariantCulture()
+    {
+        var goal = Goal.Create(UserId, "Run", 10.5m, "miles").Value;
+        goal.UpdateProgress(3.5m);
+        SetupGoals(goal);
+        var previousCulture = CultureInfo.CurrentCulture;
+
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("pt-BR");
+            var result = await Execute("{}");
+
+            result.Success.Should().BeTrue();
+            result.EntityName.Should().Contain("3.5/10.5 miles");
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previousCulture;
+        }
     }
 
     [Fact]

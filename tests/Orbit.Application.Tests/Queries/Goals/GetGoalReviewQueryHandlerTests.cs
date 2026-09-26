@@ -1,3 +1,4 @@
+using System.Globalization;
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
@@ -70,6 +71,36 @@ public class GetGoalReviewQueryHandlerTests
         result.Value.FromCache.Should().BeFalse();
         await _payGate.Received(1).TryConsumeAiMessage(
             UserId, Arg.Any<IUnitOfWork>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_DecimalProgress_UsesInvariantCultureInReviewContext()
+    {
+        var goal = Goal.Create(UserId, "Run", 10.5m, "miles").Value;
+        goal.UpdateProgress(3.5m);
+        _goalRepo.FindAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Goal> { goal }.AsReadOnly());
+        string? capturedContext = null;
+        _reviewService.GenerateReviewAsync(
+            Arg.Do<string>(context => capturedContext = context), "en", Arg.Any<CancellationToken>())
+            .Returns(Result.Success("Review content"));
+        var previousCulture = CultureInfo.CurrentCulture;
+
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("pt-BR");
+            var result = await _handler.Handle(new GetGoalReviewQuery(UserId, "en"), CancellationToken.None);
+
+            result.IsSuccess.Should().BeTrue();
+            capturedContext.Should().Contain("3.5/10.5 miles");
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previousCulture;
+        }
     }
 
     [Fact]
