@@ -38,8 +38,7 @@ public class CreateHabitCommandValidator : AbstractValidator<CreateHabitCommand>
 
         SharedHabitRules.AddOneTimeTaskEndDateRules(this,
             x => x.Options != null ? x.Options.EndDate : null,
-            x => x.FrequencyUnit,
-            x => x.IsGeneral);
+            x => x.FrequencyUnit);
 
         RuleFor(x => x.SubHabits)
             .Must(subs => subs is null || subs.Count <= AppConstants.MaxSubHabits)

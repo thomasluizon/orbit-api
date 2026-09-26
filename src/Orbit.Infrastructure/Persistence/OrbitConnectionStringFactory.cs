@@ -25,7 +25,6 @@ public static class OrbitConnectionStringFactory
 
         return new NpgsqlConnectionStringBuilder(cappedConnectionString)
         {
-            ConnectionIdleLifetime = 60,
             KeepAlive = 30
         }.ConnectionString;
     }
@@ -38,7 +37,8 @@ public static class OrbitConnectionStringFactory
         return new NpgsqlConnectionStringBuilder(connectionString)
         {
             MaxPoolSize = maxPoolSize,
-            MinPoolSize = 0
+            MinPoolSize = 1,
+            ConnectionIdleLifetime = 300
         }.ConnectionString;
     }
 }

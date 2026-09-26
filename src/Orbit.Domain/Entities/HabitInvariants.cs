@@ -53,8 +53,8 @@ internal static class HabitInvariants
         if (dueEndTime.HasValue && dueTime.HasValue && dueEndTime.Value <= dueTime.Value)
             return DomainErrors.EndTimeBeforeStartTime;
 
-        if (endDate.HasValue && frequencyUnit is null && !isGeneral)
-            return DomainErrors.OneTimeTaskHasEndDate;
+        if (endDate.HasValue && frequencyUnit is null)
+            return isGeneral ? DomainErrors.GeneralHabitHasEndDate : DomainErrors.OneTimeTaskHasEndDate;
 
         if (endDate.HasValue && endDate.Value < dueDate)
             return DomainErrors.EndDateBeforeStartDate;
