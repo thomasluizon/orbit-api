@@ -100,6 +100,7 @@ public class UpdateHabitCommandHandler(
             EndDate: opts.EndDate,
             ClearEndDate: request.ClearEndDate,
             ScheduledReminders: opts.ScheduledReminders,
+            RelativeReminders: opts.RelativeReminders,
             Emoji: request.Emoji,
             UserToday: today,
             IntervalWeeks: request.IntervalWeeks ?? habit.IntervalWeeks);

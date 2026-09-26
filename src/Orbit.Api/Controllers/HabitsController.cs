@@ -209,7 +209,8 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
                 ChecklistItems: request.ChecklistItems,
                 ScheduledReminders: request.ScheduledReminders,
                 EndDate: request.EndDate,
-                IsFlexible: request.IsFlexible),
+                IsFlexible: request.IsFlexible,
+                RelativeReminders: request.RelativeReminders),
             TagIds: request.TagIds,
             GoalIds: request.GoalIds,
             Emoji: request.Emoji,
@@ -307,7 +308,8 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
                 ChecklistItems: request.ChecklistItems,
                 ScheduledReminders: request.ScheduledReminders,
                 EndDate: request.EndDate,
-                IsFlexible: request.IsFlexible),
+                IsFlexible: request.IsFlexible,
+                RelativeReminders: request.RelativeReminders),
             GoalIds: request.GoalIds,
             Emoji: request.Emoji,
             IntervalWeeks: request.IntervalWeeks);
@@ -555,7 +557,8 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
                 ChecklistItems: request.ChecklistItems,
                 ScheduledReminders: request.ScheduledReminders,
                 EndDate: request.EndDate,
-                IsFlexible: request.IsFlexible),
+                IsFlexible: request.IsFlexible,
+                RelativeReminders: request.RelativeReminders),
             TagIds: request.TagIds,
             Emoji: request.Emoji);
 
@@ -605,7 +608,8 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
             ChecklistItems: request.ChecklistItems,
             GoogleEventId: request.GoogleEventId,
             Tags: request.Tags,
-            IntervalWeeks: request.IntervalWeeks);
+            IntervalWeeks: request.IntervalWeeks,
+            RelativeReminders: request.RelativeReminders);
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Habit created {HabitId} by user {UserId}")]

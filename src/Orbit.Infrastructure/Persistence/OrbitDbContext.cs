@@ -807,6 +807,14 @@ public class OrbitDbContext : DbContext
                 .HasDefaultValueSql(EmptyJsonArraySql)
                 .Metadata.SetValueComparer(CreateReadOnlyListComparer<ScheduledReminderTime>());
 
+            entity.Property(h => h.RelativeReminders)
+                .HasConversion(
+                    v => SerializeJson(v),
+                    v => DeserializeJson(v, new List<RelativeReminderTime>()))
+                .HasColumnType(JsonbColumnType)
+                .HasDefaultValueSql(EmptyJsonArraySql)
+                .Metadata.SetValueComparer(CreateReadOnlyListComparer<RelativeReminderTime>());
+
             if (encConverter is null || nullableEncConverter is null)
                 return;
 

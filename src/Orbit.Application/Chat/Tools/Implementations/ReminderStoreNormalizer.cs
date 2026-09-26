@@ -7,38 +7,6 @@ internal static class ReminderStoreNormalizer
 {
     private const int MinutesPerDay = 24 * 60;
 
-    /// <summary>
-    /// Returns the reminder stores the habit should persist. When the habit has no due time both stores
-    /// pass through untouched. When it has a due time and the caller is setting reminders, every reminder
-    /// is expressed as a minute offset before the due time and the scheduled-reminder store is emptied;
-    /// when the caller is not touching reminders (both inputs null) neither store is modified.
-    /// </summary>
-    public static (List<int>? ReminderTimes, List<ScheduledReminderTime>? ScheduledReminders) Normalize(
-        TimeOnly? dueTime,
-        List<int>? reminderTimes,
-        List<ScheduledReminderTime>? scheduledReminders)
-    {
-        if (dueTime is null)
-            return (reminderTimes, scheduledReminders);
-
-        if (reminderTimes is null && scheduledReminders is null)
-            return (null, null);
-
-        var offsets = reminderTimes is not null ? new List<int>(reminderTimes) : new List<int>();
-
-        if (scheduledReminders is not null)
-        {
-            foreach (var reminder in scheduledReminders)
-            {
-                var offset = ToMinutesBeforeDueTime(dueTime.Value, reminder);
-                if (!offsets.Contains(offset))
-                    offsets.Add(offset);
-            }
-        }
-
-        return (offsets.Count > 0 ? offsets : reminderTimes, []);
-    }
-
     public static (List<int>? ReminderTimes, List<ScheduledReminderTime>? ScheduledReminders) NormalizeForUpdate(
         TimeOnly? newDueTime,
         TimeOnly? previousDueTime,
@@ -48,27 +16,15 @@ internal static class ReminderStoreNormalizer
         IReadOnlyList<ScheduledReminderTime> existingScheduledReminders)
     {
         if (suppliedReminderTimes is not null || suppliedScheduledReminders is not null)
-            return Normalize(newDueTime, suppliedReminderTimes, suppliedScheduledReminders);
+            return (suppliedReminderTimes, suppliedScheduledReminders);
 
-        if (previousDueTime is null && newDueTime is { } addedDueTime && existingScheduledReminders.Count > 0)
-            return (ToOffsets(addedDueTime, existingScheduledReminders), []);
+        if (previousDueTime is null && newDueTime.HasValue && existingScheduledReminders.Count > 0)
+            return (null, existingScheduledReminders.ToList());
 
         if (newDueTime is null && previousDueTime is { } removedDueTime && existingReminderTimes.Count > 0)
             return ([], ToScheduledReminders(removedDueTime, existingReminderTimes));
 
         return (null, null);
-    }
-
-    private static List<int> ToOffsets(TimeOnly dueTime, IReadOnlyList<ScheduledReminderTime> reminders)
-    {
-        var offsets = new List<int>();
-        foreach (var reminder in reminders)
-        {
-            var offset = ToMinutesBeforeDueTime(dueTime, reminder);
-            if (!offsets.Contains(offset))
-                offsets.Add(offset);
-        }
-        return offsets;
     }
 
     private static List<ScheduledReminderTime> ToScheduledReminders(TimeOnly dueTime, IReadOnlyList<int> offsets)
@@ -82,19 +38,6 @@ internal static class ReminderStoreNormalizer
                 reminders.Add(reminder);
         }
         return reminders;
-    }
-
-    /// <summary>
-    /// Minutes before the due time a scheduled reminder fires. A same-day reminder timed after the due time
-    /// yields a negative raw value; it is clamped to 0 (fire at the due time) rather than dropped, so no
-    /// reminder is silently lost.
-    /// </summary>
-    private static int ToMinutesBeforeDueTime(TimeOnly dueTime, ScheduledReminderTime reminder)
-    {
-        var minutesBefore = (int)(dueTime.ToTimeSpan() - reminder.Time.ToTimeSpan()).TotalMinutes;
-        if (reminder.When == ScheduledReminderWhen.DayBefore)
-            minutesBefore += MinutesPerDay;
-        return Math.Max(minutesBefore, 0);
     }
 
     private static ScheduledReminderTime ToScheduledReminder(TimeOnly dueTime, int offsetMinutes)
