@@ -85,10 +85,14 @@ public class GetStreakHistoryQueryHandlerTests
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<CancellationToken>())
             .Returns(list);
-        _habitLogRepo.FindAsync(
+        _habitLogRepo.ProjectAsync(
             Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<Func<IQueryable<HabitLog>, IQueryable<DateOnly>>>(),
             Arg.Any<CancellationToken>())
-            .Returns(list.SelectMany(h => h.Logs.Where(l => l.Value > 0)).ToList());
+            .Returns(call => call.ArgAt<Func<IQueryable<HabitLog>, IQueryable<DateOnly>>>(1)(
+                list.SelectMany(h => h.Logs.Where(l => !l.IsDeleted))
+                    .Where(call.ArgAt<Expression<Func<HabitLog, bool>>>(0).Compile())
+                    .AsQueryable()).ToList());
     }
 
     private void ArrangeFreezes(params StreakFreeze[] freezes)
@@ -115,6 +119,29 @@ public class GetStreakHistoryQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_RepeatedDeletedAndSkippedLogs_CountsEachCompletedDateOnce()
+    {
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(CreateProUser());
+        var first = CreateDailyHabit(Today.AddDays(-2));
+        var second = CreateDailyHabit(Today.AddDays(-2));
+        Log(first, Today.AddDays(-2), Today.AddDays(-1));
+        Log(second, Today.AddDays(-2), Today.AddDays(-1));
+        second.Log(Today, advanceDueDate: false);
+        second.Unlog(Today);
+        var flexible = Habit.Create(new HabitCreateParams(
+            UserId, "Flexible", FrequencyUnit.Week, 2,
+            DueDate: Today.AddDays(-2), IsFlexible: true)).Value;
+        flexible.SkipFlexible(Today);
+        ArrangeHabits(first, second, flexible);
+
+        var result = await _handler.Handle(
+            new GetStreakHistoryQuery(UserId, Today.AddDays(-2), Today), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Points.Select(point => point.Streak).Should().Equal(1, 2, 2);
+    }
+
+    [Fact]
     public async Task Handle_HabitLogReadFilter_ExcludesLogsFromHabitsTheUserDoesNotOwn()
     {
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(CreateProUser());
@@ -123,11 +150,14 @@ public class GetStreakHistoryQueryHandlerTests
             .Returns(new List<Habit> { ownedHabit });
 
         Expression<Func<HabitLog, bool>>? readFilter = null;
-        _habitLogRepo.FindAsync(Arg.Any<Expression<Func<HabitLog, bool>>>(), Arg.Any<CancellationToken>())
+        _habitLogRepo.ProjectAsync(
+            Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<Func<IQueryable<HabitLog>, IQueryable<DateOnly>>>(),
+            Arg.Any<CancellationToken>())
             .Returns(call =>
             {
                 readFilter = call.Arg<Expression<Func<HabitLog, bool>>>();
-                return (IReadOnlyList<HabitLog>)new List<HabitLog>();
+                return (IReadOnlyList<DateOnly>)new List<DateOnly>();
             });
 
         await _handler.Handle(new GetStreakHistoryQuery(UserId, Today.AddDays(-2), Today), CancellationToken.None);
