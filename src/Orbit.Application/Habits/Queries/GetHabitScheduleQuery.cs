@@ -109,7 +109,8 @@ internal record ScheduleMapContext(
     DateOnly? UserToday = null,
     string? Search = null,
     Dictionary<Guid, List<DateOnly>>? ScheduledDatesCache = null,
-    IReadOnlySet<Guid>? DueDateResolution = null)
+    IReadOnlySet<Guid>? DueDateResolution = null,
+    HabitScheduleLogFacts? LogFacts = null)
 {
     /// <summary>
     /// Returns cached scheduled dates for a habit, computing and caching on first access.
@@ -131,7 +132,8 @@ internal record ScheduleMapContext(
 
 public class GetHabitScheduleQueryHandler(
     IGenericRepository<Habit> habitRepository,
-    IGenericRepository<HabitLog> habitLogRepository,
+    IHabitScheduleLogReader scheduleLogReader,
+    IHabitSchedulePageLoader pageLoader,
     IUserDateService userDateService,
     IUnitOfWork unitOfWork) : IRequestHandler<GetHabitScheduleQuery, Result<PaginatedResponse<HabitScheduleItem>>>
 {
@@ -204,20 +206,41 @@ public class GetHabitScheduleQueryHandler(
         var overdueLookbackDays = request.IncludeOverdue
             ? AppConstants.MaxRangeDays
             : AppConstants.DefaultOverdueWindowDays;
-        var logFrom = (request.DateFrom ?? today).AddDays(-overdueLookbackDays);
+        var referenceDate = request.DateFrom ?? today;
+        var logFrom = referenceDate.AddDays(-overdueLookbackDays);
         var logTo = request.DateTo ?? today;
+        var flexibleFrom = new DateOnly(referenceDate.Year, 1, 1);
+        if (flexibleFrom < logFrom)
+            logFrom = flexibleFrom;
         var allHabits = await LoadScheduleHabits(
             request.UserId,
-            logFrom,
-            logTo,
             includeTags: HabitScheduleFilters.NeedsTagsForFiltering(request),
-            includeGoals: false,
             cancellationToken);
-        var dueDateResolution = await HabitDueDateResolutionLoader.LoadAsync(
-            habitLogRepository,
-            allHabits,
-            logFrom,
-            cancellationToken);
+        var candidateIds = allHabits.Select(habit => habit.Id).ToArray();
+        var logDays = await scheduleLogReader.ReadDaysAsync(candidateIds, logFrom, logTo, cancellationToken);
+        var logFacts = new HabitScheduleLogFacts(logDays);
+        var dueDateResolution = allHabits
+            .Where(habit => habit.DueDate >= logFrom
+                && habit.DueDate <= logTo
+                && logFacts.ResolvedDates(habit.Id).Contains(habit.DueDate))
+            .Select(habit => habit.Id)
+            .ToHashSet();
+        if (request.IncludeOverdue)
+        {
+            var oldDueDateIds = allHabits
+                .Where(habit => habit.FrequencyUnit is not null
+                    && !habit.IsFlexible
+                    && !habit.IsBadHabit
+                    && habit.DueDate < logFrom)
+                .Select(habit => habit.Id)
+                .ToArray();
+            if (oldDueDateIds.Length > 0)
+            {
+                var olderResolutions = await scheduleLogReader.ReadResolvedDueDateIdsAsync(
+                    oldDueDateIds, cancellationToken);
+                dueDateResolution.UnionWith(olderResolutions);
+            }
+        }
 
         var lookup = allHabits.ToLookup(h => h.ParentHabitId);
 
@@ -230,7 +253,8 @@ public class GetHabitScheduleQueryHandler(
             request,
             lookup,
             weekStartDay: weekStartDay,
-            dueDateResolution: dueDateResolution);
+            dueDateResolution: dueDateResolution,
+            logFacts: logFacts);
         topLevel = HabitScheduleFilters.ApplyFrequencyUnitFilter(topLevel, request.FrequencyUnitFilter);
 
         if (!request.DateFrom.HasValue || !request.DateTo.HasValue)
@@ -238,8 +262,10 @@ public class GetHabitScheduleQueryHandler(
                 topLevel,
                 request,
                 lookup,
-                new HabitScheduleWindow(today, weekStartDay, logFrom, logTo),
+                today,
+                weekStartDay,
                 dueDateResolution,
+                logFacts,
                 cancellationToken);
 
         var dateFrom = request.DateFrom.Value;
@@ -254,7 +280,8 @@ public class GetHabitScheduleQueryHandler(
             request.IncludeOverdue,
             lookup,
             weekStartDay,
-            dueDateResolution);
+            dueDateResolution,
+            logFacts);
 
         var totalCount = filtered.Count;
         var totalPages = (int)Math.Ceiling((double)totalCount / request.PageSize);
@@ -268,12 +295,12 @@ public class GetHabitScheduleQueryHandler(
             .Skip((page - 1) * request.PageSize)
             .Take(request.PageSize)
             .ToList();
+        var pageLogFrom = GetPageLogFrom(pageItems.Select(item => item.habit), lookup, dateFrom, weekStartDay);
         var pagedLookup = await LoadPageHabitLookup(
             pageItems.Select(x => x.habit),
             lookup,
-            logFrom,
-            logTo,
-            includeGoals: true,
+            pageLogFrom,
+            dateTo,
             cancellationToken);
 
         var ctx = new ScheduleMapContext(
@@ -286,7 +313,8 @@ public class GetHabitScheduleQueryHandler(
             UserToday: today,
             Search: request.Search,
             ScheduledDatesCache: scheduledDatesCache,
-            DueDateResolution: dueDateResolution);
+            DueDateResolution: dueDateResolution,
+            LogFacts: logFacts);
         var pagedHabitsById = pagedLookup.SelectMany(group => group).ToDictionary(h => h.Id);
         var pagedItems = pageItems
             .Select(x => HabitScheduleFilters.MapToScheduleItem(
@@ -314,15 +342,12 @@ public class GetHabitScheduleQueryHandler(
 
     private async Task<IReadOnlyList<Habit>> LoadScheduleHabits(
         Guid userId,
-        DateOnly logFrom,
-        DateOnly logTo,
         bool includeTags,
-        bool includeGoals,
         CancellationToken cancellationToken)
     {
         return await habitRepository.FindAsync(
             h => h.UserId == userId && !h.IsGeneral,
-            q => HabitScheduleFilters.IncludeHabitGraph(q, logFrom, logTo, includeTags, includeGoals),
+            q => includeTags ? q.Include(h => h.Tags) : q,
             cancellationToken);
     }
 
@@ -331,7 +356,6 @@ public class GetHabitScheduleQueryHandler(
         ILookup<Guid?, Habit> baseLookup,
         DateOnly logFrom,
         DateOnly logTo,
-        bool includeGoals,
         CancellationToken cancellationToken)
     {
         var ids = new HashSet<Guid>();
@@ -341,31 +365,24 @@ public class GetHabitScheduleQueryHandler(
         if (ids.Count == 0)
             return Enumerable.Empty<Habit>().ToLookup(h => h.ParentHabitId);
 
-        var pageHabits = await habitRepository.FindAsync(
-            h => ids.Contains(h.Id),
-            q => HabitScheduleFilters.IncludeHabitGraph(q, logFrom, logTo, includeTags: true, includeGoals: includeGoals),
-            cancellationToken);
-
-        return pageHabits
+        var pageHabits = baseLookup.SelectMany(group => group)
             .Where(h => ids.Contains(h.Id))
-            .ToLookup(h => h.ParentHabitId);
-    }
+            .ToArray();
+        await pageLoader.LoadAsync(pageHabits, logFrom, logTo, cancellationToken);
 
-    private sealed record HabitScheduleWindow(
-        DateOnly Today,
-        int WeekStartDay,
-        DateOnly LogFrom,
-        DateOnly LogTo);
+        return pageHabits.ToLookup(h => h.ParentHabitId);
+    }
 
     private async Task<Result<PaginatedResponse<HabitScheduleItem>>> BuildNonDateResponse(
         IEnumerable<Habit> topLevel,
         GetHabitScheduleQuery request,
         ILookup<Guid?, Habit> lookup,
-        HabitScheduleWindow window,
+        DateOnly today,
+        int weekStartDay,
         IReadOnlySet<Guid> dueDateResolution,
+        HabitScheduleLogFacts logFacts,
         CancellationToken cancellationToken)
     {
-        var (today, weekStartDay, logFrom, logTo) = window;
         var allFiltered = topLevel.ToList();
         var allTotalCount = allFiltered.Count;
         var allTotalPages = (int)Math.Ceiling((double)allTotalCount / request.PageSize);
@@ -375,12 +392,12 @@ public class GetHabitScheduleQueryHandler(
             .Skip((allPage - 1) * request.PageSize)
             .Take(request.PageSize)
             .ToList();
+        var pageLogFrom = GetPageLogFrom(pageHabits, lookup, today, weekStartDay);
         var pagedLookup = await LoadPageHabitLookup(
             pageHabits,
             lookup,
-            logFrom,
-            logTo,
-            includeGoals: true,
+            pageLogFrom,
+            today,
             cancellationToken);
         var pagedHabitsById = pagedLookup.SelectMany(group => group).ToDictionary(h => h.Id);
 
@@ -392,7 +409,8 @@ public class GetHabitScheduleQueryHandler(
             ReferenceDate: today,
             UserToday: today,
             Search: request.Search,
-            DueDateResolution: dueDateResolution);
+            DueDateResolution: dueDateResolution,
+            LogFacts: logFacts);
         var allPagedItems = pageHabits
             .Select(h => HabitScheduleFilters.MapToScheduleItem(
                 pagedHabitsById.TryGetValue(h.Id, out var hydratedHabit) ? hydratedHabit : h,
@@ -441,4 +459,25 @@ public class GetHabitScheduleQueryHandler(
 
     private static DateOnly GetCompletionDate(GetHabitScheduleQuery request, DateOnly today) =>
         request.DateFrom ?? request.DateTo ?? today;
+
+    private static DateOnly GetPageLogFrom(
+        IEnumerable<Habit> pageHabits,
+        ILookup<Guid?, Habit> lookup,
+        DateOnly referenceDate,
+        int weekStartDay)
+    {
+        var from = referenceDate.AddDays(-AppConstants.DefaultOverdueWindowDays);
+        var ids = new HashSet<Guid>();
+        foreach (var habit in pageHabits)
+            HabitScheduleFilters.AddSubtreeIds(habit.Id, lookup, ids);
+
+        foreach (var habit in lookup.SelectMany(group => group).Where(habit => ids.Contains(habit.Id) && habit.IsFlexible))
+        {
+            var windowStart = HabitScheduleService.GetWindowStart(habit, referenceDate, weekStartDay);
+            if (windowStart < from)
+                from = windowStart;
+        }
+
+        return from;
+    }
 }

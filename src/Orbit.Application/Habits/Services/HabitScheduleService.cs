@@ -314,7 +314,8 @@ public static class HabitScheduleService
         Habit habit,
         DateOnly today,
         int weekStartDay,
-        bool dueDateResolved = false)
+        bool dueDateResolved = false,
+        IReadOnlySet<DateOnly>? resolvedDates = null)
     {
         if (habit.FrequencyUnit is null || habit.IsBadHabit || habit.IsFlexible)
             return false;
@@ -323,7 +324,7 @@ public static class HabitScheduleService
         if ((!habit.EndDate.HasValue || habit.DueDate <= habit.EndDate.Value)
             && IsHabitDueOnDate(habit, habit.DueDate, weekStartDay)
             && !dueDateResolved
-            && !IsOccurrenceResolved(habit, habit.DueDate))
+            && !IsOccurrenceResolved(habit, habit.DueDate, resolvedDates))
             return true;
 
         var latestOccurrence = today.AddDays(-1);
@@ -340,15 +341,15 @@ public static class HabitScheduleService
         for (var date = earliestOccurrence; date <= latestOccurrence; date = date.AddDays(1))
         {
             if (IsHabitDueOnDate(habit, date, weekStartDay)
-                && !IsOccurrenceResolved(habit, date))
+                && !IsOccurrenceResolved(habit, date, resolvedDates))
                 return true;
         }
 
         return false;
     }
 
-    private static bool IsOccurrenceResolved(Habit habit, DateOnly date) =>
-        habit.Logs.Any(log =>
+    private static bool IsOccurrenceResolved(Habit habit, DateOnly date, IReadOnlySet<DateOnly>? resolvedDates) =>
+        resolvedDates?.Contains(date) ?? habit.Logs.Any(log =>
             !log.IsDeleted
             && log.Date == date
             && (log.Value == 0 || log.Value > 0));
@@ -366,7 +367,8 @@ public static class HabitScheduleService
         Habit habit,
         DateOnly referenceDate,
         int weekStartDay = 1,
-        bool dueDateResolved = false)
+        bool dueDateResolved = false,
+        IReadOnlySet<DateOnly>? resolvedDates = null)
     {
         if (habit.IsFlexible || habit.IsBadHabit)
             return false;
@@ -379,7 +381,7 @@ public static class HabitScheduleService
         if (IsHabitDueOnDate(habit, referenceDate, weekStartDay))
             return false;
 
-        return HasMissedPastOccurrence(habit, referenceDate, weekStartDay, dueDateResolved);
+        return HasMissedPastOccurrence(habit, referenceDate, weekStartDay, dueDateResolved, resolvedDates);
     }
 
     /// <summary>
