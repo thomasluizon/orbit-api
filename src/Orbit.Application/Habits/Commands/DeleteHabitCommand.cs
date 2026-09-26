@@ -58,11 +58,7 @@ public class DeleteHabitCommandHandler(
         var childrenByParentId = userHabits.ToLookup(h => h.ParentHabitId);
 
         var deletedAtUtc = DateTime.UtcNow;
-        foreach (var inSubtree in HabitHierarchy.SelfAndDescendants(habit, childrenByParentId))
-        {
-            inSubtree.RemoveAllGoals();
-            inSubtree.SoftDelete(deletedAtUtc);
-        }
+        HabitHierarchy.SoftDeleteSubtree(habit, childrenByParentId, new HashSet<Guid>(), deletedAtUtc);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await ConcurrencyRetry.SaveWithRetryAsync(

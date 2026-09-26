@@ -152,18 +152,34 @@ public class BulkDeleteHabitsToolTests
             null,
             new DateOnly(2026, 9, 11))).Value;
         completed.Log(new DateOnly(2026, 9, 11));
-        SetupHabits(active, completed);
+        var excludedChild = Habit.Create(new HabitCreateParams(
+            UserId,
+            "Excluded child",
+            FrequencyUnit.Day,
+            1,
+            new DateOnly(2026, 9, 11),
+            ParentHabitId: completed.Id)).Value;
+        SetupHabits(active, completed, excludedChild);
         _mediator.Send(Arg.Any<BulkDeleteHabitsCommand>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
                 var command = call.Arg<BulkDeleteHabitsCommand>();
                 return Result.Success(new BulkDeleteResult(command.HabitIds.Select((id, index) =>
-                    new BulkDeleteItemResult(index, BulkItemStatus.Success, id)).ToList()));
+                    new BulkDeleteItemResult(index, BulkItemStatus.Success, id,
+                        CascadedHabitIds: [excludedChild.Id])).ToList()));
             });
 
         var result = await Execute("""{"filter":{"all":true,"is_completed":true}}""");
 
         result.Success.Should().BeTrue();
+        result.EntityName.Should().Contain("Deleted 1 of 1");
+        result.EntityName.Should().Contain("Skipped 0");
+        result.EntityName.Should().Contain("Complete result");
+        var payload = JsonSerializer.SerializeToElement(result.Payload);
+        payload.GetProperty("applied_count").GetInt32().Should().Be(1);
+        payload.GetProperty("total_matched").GetInt32().Should().Be(1);
+        payload.GetProperty("skipped_count").GetInt32().Should().Be(0);
+        payload.GetProperty("partial").GetBoolean().Should().BeFalse();
         await _mediator.Received(1).Send(
             Arg.Is<BulkDeleteHabitsCommand>(command => command.HabitIds.SequenceEqual(new[] { completed.Id })),
             Arg.Any<CancellationToken>());
