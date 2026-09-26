@@ -62,25 +62,20 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 1
-      # Codex is the reviewer. Model and effort come from the Pullfrog repository config
-      # (`npx pullfrog config get effort`): openai/gpt-sol at 0.25, which is medium on GPT-6 Sol
-      # (#636). The app dispatch payload carries both and outranks action inputs, so none are set
-      # here. The published pullfrog 0.1.82 resolves gpt-sol to gpt-5.6-sol; PULLFROG_FORCE_LOCAL_CLI
-      # runs this pinned commit's own code, whose models.ts resolves it to gpt-6-sol. Return to @v0
-      # and drop the variable once pullfrog 0.1.83 is published.
+      # Codex is the reviewer. Model and effort come from the Pullfrog repository config.
+      # Published pullfrog 0.1.83 resolves gpt-sol to openai/gpt-6-sol. Both steps pin the commit the
+      # v0 tag named on 2026-09-26 (release 0.1.83), because a moving tag is an unpinned dependency.
       - name: Run agent
         id: codex
-        uses: pullfrog/pullfrog@405f60c2302dd458154b5854d0f72d6868e1a54a
+        uses: pullfrog/pullfrog@e9f81154ce83828fc8208d624c5ca9a1174d8909 # v0, release 0.1.83
         continue-on-error: true
-        env:
-          PULLFROG_FORCE_LOCAL_CLI: "1"
         with:
           prompt: ${{ inputs.prompt }}
       # Claude reviews ONLY when the Codex step fails, which is what an
       # exhausted OpenAI allowance looks like. Green runs never reach this.
       - name: Run agent (Claude fallback)
         if: steps.codex.outcome == 'failure'
-        uses: pullfrog/pullfrog@v0
+        uses: pullfrog/pullfrog@e9f81154ce83828fc8208d624c5ca9a1174d8909 # v0, release 0.1.83
         with:
           prompt: ${{ inputs.prompt }}
           model: anthropic/claude-opus-5
