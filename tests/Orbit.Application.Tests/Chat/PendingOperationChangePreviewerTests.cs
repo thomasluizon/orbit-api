@@ -63,7 +63,6 @@ public sealed class PendingOperationChangePreviewerTests
     [InlineData("bulk_delete_habits", "delete")]
     [InlineData("bulk_log_habits", "date")]
     [InlineData("bulk_skip_habits", "date")]
-    [InlineData("bulk_update_habit_emojis", "emoji")]
     public async Task PreviewAsync_BulkActions_ListEachTarget(string operationId, string field)
     {
         Setup([CreateHabit("One", null), CreateHabit("Two", null)]);
@@ -73,6 +72,31 @@ public sealed class PendingOperationChangePreviewerTests
         preview!.Items.Should().HaveCount(2);
         preview.Items!.SelectMany(item => item.Fields).Select(change => change.Field)
             .Should().OnlyContain(value => value == field);
+    }
+
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("{\"infer_from_title\":true}")]
+    [InlineData("{\"emoji\":\"✅\",\"infer_from_title\":true}")]
+    public async Task PreviewAsync_InferredEmojis_DoNotOfferEditableItems(string arguments)
+    {
+        Setup([CreateHabit("One", null), CreateHabit("Two", null)]);
+
+        var preview = await Preview("bulk_update_habit_emojis", arguments);
+
+        preview.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task PreviewAsync_ExplicitEmoji_ListsEachApprovedValue()
+    {
+        Setup([CreateHabit("One", "🔴"), CreateHabit("Two", "🔵")]);
+
+        var preview = await Preview("bulk_update_habit_emojis", """{"emoji":"✅"}""");
+
+        preview!.Items.Should().HaveCount(2);
+        preview.Items!.SelectMany(item => item.Fields).Should()
+            .OnlyContain(field => field.Field == "emoji" && field.NewValue == "✅");
     }
 
     [Fact]

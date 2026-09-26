@@ -84,6 +84,30 @@ public sealed class PendingOperationRevisionServiceTests
     }
 
     [Fact]
+    public async Task ReviseAsync_InferredEmojiOperation_RejectsEditableRevision()
+    {
+        var habit = CreateHabit("First");
+        SetupHabits([habit]);
+        var pendingId = Guid.NewGuid();
+        var arguments = JsonDocument.Parse("""{"infer_from_title":true}""").RootElement.Clone();
+        _store.GetExecution(_userId, pendingId).Returns(new PendingAgentOperationExecution(
+            pendingId, AgentCapabilityIds.HabitsBulkWrite, "bulk_update_habit_emojis", arguments,
+            AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation));
+        var service = new PendingOperationRevisionService(_store,
+            new PendingOperationChangePreviewer(_habits, _dateService),
+            new RevisePendingOperationRequestValidator());
+
+        var result = await service.ReviseAsync(_userId, pendingId,
+            new RevisePendingOperationRequest("untrusted_fingerprint",
+                [new RevisedPendingOperationItem(habit.Id.ToString())]),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Be("stale_preview");
+        _store.DidNotReceiveWithAnyArgs().Revise(default, default, default!, default!, default!, default!);
+    }
+
+    [Fact]
     public async Task ReviseAsync_EditsOneLogDateWithoutChangingAnother()
     {
         var first = CreateHabit("First");

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Orbit.Domain.Common;
+using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Entities;
@@ -39,6 +40,11 @@ public sealed class PendingOperationChangePreviewer(
             or "bulk_update_habit_emojis" or "delete_habit"))
             return destructivePreviewer is null ? null
                 : await destructivePreviewer.PreviewAsync(userId, operationId, arguments, cancellationToken);
+
+        if (operationId == "bulk_update_habit_emojis"
+            && (JsonArgumentParser.GetOptionalBool(arguments, "infer_from_title")
+                ?? !JsonArgumentParser.PropertyExists(arguments, "emoji")))
+            return null;
 
         if (operationId == "delete_habit")
             return await PreviewSingleHabitAsync(userId, arguments, cancellationToken);
