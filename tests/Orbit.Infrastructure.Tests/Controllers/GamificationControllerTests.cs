@@ -211,6 +211,8 @@ public class GamificationControllerTests
     }
 
     [Theory]
+    [InlineData(1, 17, 23)]
+    [InlineData(0, 16, 22)]
     [InlineData(0, 17, 23)]
     [InlineData(1, 16, 22)]
     public async Task GetRecap_ClosedWeek_ResolvesAnchorIndependentlyOfCurrentPreference(

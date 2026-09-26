@@ -63,6 +63,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAiTool, BulkUpdateHabitsTool>();
         builder.Services.AddScoped<IAiTool, BulkRescheduleHabitsTool>();
         builder.Services.AddScoped<IAiTool, BulkUpdateHabitEmojisTool>();
+        builder.Services.AddScoped<BulkHabitReplayPlanner>();
         builder.Services.AddScoped<IAiTool, BulkLogHabitsTool>();
         builder.Services.AddScoped<IAiTool, BulkSkipHabitsTool>();
         builder.Services.AddScoped<IAiTool, QueryHabitsTool>();

@@ -67,7 +67,11 @@ public class GetRecapQueryHandler(
                 : ErrorMessages.RecapPeriodBeforeAccount);
 
         if (isClosedPeriod)
-            return await HandleClosedPeriodAsync(request, userTimeZone, user.WeekStartDay, cancellationToken);
+            return await HandleClosedPeriodAsync(
+                request,
+                userTimeZone,
+                request.ClosedWeekStart is { } weekStart ? (int)weekStart.DayOfWeek : user.WeekStartDay,
+                cancellationToken);
 
         return await BuildResponseAsync(
             request,

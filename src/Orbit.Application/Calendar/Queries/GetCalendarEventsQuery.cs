@@ -27,6 +27,7 @@ public record CalendarEventItem(
     DateTime? EndUtc = null,
     string? RecurrenceTimeZone = null)
 {
+    /// <summary>The source zone comes from the recurring master; instances may carry another zone.</summary>
     [JsonIgnore]
     public string? SourceTimeZone { get; init; }
 
@@ -76,6 +77,7 @@ public record CalendarEventItem(
         };
     }
 
+    /// <summary>Withhold a recurrence unless its weekday and clock stay stable in the account zone.</summary>
     internal bool HasUnrepresentableRecurrenceAfterProjection(TimeZoneInfo accountTimeZone)
     {
         if (!IsRecurring)
@@ -256,7 +258,7 @@ public record CalendarEventItem(
 
     /// <summary>
     /// True when the projection dropped an end time the source carried, so the caller can log the
-    /// reason. Deliberately independent of <see cref="EndUtc"/>: a suggestion row written before this
+    /// reason. Deliberately independent of <see cref="EndUtc"/>: a suggestion row missing this
     /// projection existed carries an <see cref="EndTime"/> with no end instant, and those rows are the
     /// ones that lose an end most often.
     /// </summary>
@@ -323,6 +325,7 @@ public record CalendarEventItem(
 
     private static string ProjectedClock(DateTime local) => local.ToString("HH:mm", CultureInfo.InvariantCulture);
 
+    /// <summary>Both offsets of a repeated wall clock must preserve the projected date.</summary>
     private static IReadOnlyList<TimeSpan> SourceOffsetsAt(TimeZoneInfo sourceTimeZone, DateTime sourceLocal)
         => sourceTimeZone.IsAmbiguousTime(sourceLocal)
             ? sourceTimeZone.GetAmbiguousTimeOffsets(sourceLocal)

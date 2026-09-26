@@ -87,7 +87,7 @@ public class PayGateServiceTests
         var result = await _sut.CanCreateHabits(UserId);
 
         result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().BeNull();
+        result.ErrorCode.Should().Be("HABIT_LIMIT_REACHED");
         result.Error.Should().Be("You've reached the 1000 habit limit.");
     }
 
@@ -154,7 +154,7 @@ public class PayGateServiceTests
         var result = await _sut.CanCreateHabits(UserId);
 
         result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().BeNull();
+        result.ErrorCode.Should().Be("HABIT_LIMIT_REACHED");
         result.Error.Should().Be("You've reached the 1000 habit limit.");
     }
 
@@ -172,7 +172,7 @@ public class PayGateServiceTests
         var result = await _sut.CanCreateHabits(UserId, 5);
 
         result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().BeNull();
+        result.ErrorCode.Should().Be("HABIT_LIMIT_REACHED");
         result.Error.Should().Be("You've reached the 1000 habit limit.");
     }
 

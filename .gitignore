@@ -63,3 +63,7 @@ caddy_config/
 
 ## Generated gating matrix
 /gating-matrix.json
+
+## Generated architecture map
+/architecture.json
+/architecture.html

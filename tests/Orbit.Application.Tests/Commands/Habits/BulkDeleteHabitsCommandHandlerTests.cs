@@ -69,6 +69,87 @@ public class BulkDeleteHabitsCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_Parent_DeletesChildNotScheduledTodayAndReportsBothIds()
+    {
+        var parent = Habit.Create(new HabitCreateParams(UserId, "Parent", FrequencyUnit.Day, 1, Today)).Value;
+        var child = Habit.Create(new HabitCreateParams(
+            UserId, "Later task", null, null, Today.AddDays(1), ParentHabitId: parent.Id)).Value;
+        _habitRepo.FindTrackedAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { parent, child });
+
+        var result = await _handler.Handle(new BulkDeleteHabitsCommand(UserId, [parent.Id]), CancellationToken.None);
+
+        parent.IsDeleted.Should().BeTrue();
+        child.IsDeleted.Should().BeTrue();
+        child.DeletedAtUtc.Should().Be(parent.DeletedAtUtc);
+        result.Value.Results.Should().ContainSingle()
+            .Which.Should().Match<BulkDeleteItemResult>(item =>
+                item.Index == 0 && item.HabitId == parent.Id && item.Status == BulkItemStatus.Success);
+        var response = System.Text.Json.JsonSerializer.SerializeToElement(result.Value);
+        response.GetProperty("Results")[0].GetProperty("CascadedHabitIds")
+            .EnumerateArray().Select(id => id.GetGuid()).Should().Equal(child.Id);
+    }
+
+    [Fact]
+    public async Task Handle_ParentWithMoreThan100Descendants_DeletesInOneRequest()
+    {
+        var parent = Habit.Create(new HabitCreateParams(UserId, "Parent", FrequencyUnit.Day, 1, Today)).Value;
+        var habits = new List<Habit> { parent };
+        for (var branch = 0; branch < 10; branch++)
+        {
+            var child = Habit.Create(new HabitCreateParams(
+                UserId, $"Child {branch}", FrequencyUnit.Day, 1, Today, ParentHabitId: parent.Id)).Value;
+            habits.Add(child);
+            for (var leaf = 0; leaf < 10; leaf++)
+                habits.Add(Habit.Create(new HabitCreateParams(
+                    UserId, $"Leaf {branch}-{leaf}", FrequencyUnit.Day, 1, Today, ParentHabitId: child.Id)).Value);
+        }
+        _habitRepo.FindTrackedAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(habits);
+
+        var result = await _handler.Handle(new BulkDeleteHabitsCommand(UserId, [parent.Id]), CancellationToken.None);
+
+        habits.Should().HaveCount(111).And.OnlyContain(habit => habit.IsDeleted);
+        result.Value.Results.Should().ContainSingle().Which.HabitId.Should().Be(parent.Id);
+        var response = System.Text.Json.JsonSerializer.SerializeToElement(result.Value);
+        response.GetProperty("Results")[0].GetProperty("CascadedHabitIds")
+            .EnumerateArray().Select(id => id.GetGuid()).Should().BeEquivalentTo(habits.Skip(1).Select(habit => habit.Id));
+    }
+
+    [Fact]
+    public async Task Handle_OverlappingRequestedSubtrees_DeletesEachHabitOnce()
+    {
+        var parent = Habit.Create(new HabitCreateParams(UserId, "Parent", FrequencyUnit.Day, 1, Today)).Value;
+        var child = Habit.Create(new HabitCreateParams(
+            UserId, "Child", FrequencyUnit.Day, 1, Today, ParentHabitId: parent.Id)).Value;
+        var grandchild = Habit.Create(new HabitCreateParams(
+            UserId, "Grandchild", FrequencyUnit.Day, 1, Today, ParentHabitId: child.Id)).Value;
+        _habitRepo.FindTrackedAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { parent, child, grandchild });
+
+        var result = await _handler.Handle(
+            new BulkDeleteHabitsCommand(UserId, [parent.Id, child.Id, parent.Id]), CancellationToken.None);
+
+        result.Value.Results.Select(item => item.HabitId).Should().Equal(parent.Id, child.Id, parent.Id);
+        result.Value.Results.Select(item => item.Index).Should().Equal(0, 1, 2);
+        result.Value.Results.Should().OnlyContain(item => item.Status == BulkItemStatus.Success);
+        var response = System.Text.Json.JsonSerializer.SerializeToElement(result.Value);
+        response.GetProperty("Results")[0].GetProperty("CascadedHabitIds")
+            .EnumerateArray().Select(id => id.GetGuid()).Should().Equal(child.Id, grandchild.Id);
+        new[] { parent, child, grandchild }.Should().OnlyContain(habit => habit.IsDeleted);
+        await _userStreakService.Received(1).RecalculateAsync(UserId, cancellationToken: Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_SomeNotFound_ReportsPartialFailure()
     {
         var habit1 = Habit.Create(new HabitCreateParams(UserId, "Habit 1", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;

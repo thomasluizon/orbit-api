@@ -26,7 +26,9 @@ public class BulkSkipHabitsToolTests
 
     public BulkSkipHabitsToolTests()
     {
-        _tool = new BulkSkipHabitsTool(_mediator, _habitRepo, _userDateService);
+        _tool = new BulkSkipHabitsTool(_mediator, _habitRepo, _userDateService,
+            new BulkHabitReplayPlanner(Substitute.For<IIdempotencyContext>(), Substitute.For<IIdempotencyStore>(),
+                Substitute.For<IUnitOfWork>()));
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
         _mediator.Send(Arg.Any<BulkSkipHabitsCommand>(), Arg.Any<CancellationToken>())
             .Returns(call =>

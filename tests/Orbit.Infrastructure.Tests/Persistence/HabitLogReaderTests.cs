@@ -236,6 +236,8 @@ public class HabitLogReaderTests
             user.Id, "Bad", FrequencyUnit.Day, 1, Anchor, IsBadHabit: true)).Value;
         Log(goodHabit, Anchor.AddDays(-3));
         Log(badHabit, Anchor.AddDays(-1));
+        badHabit.Update(new HabitUpdateParams(
+            "Bad", null, FrequencyUnit.Day, 1, null, false, Anchor)).IsSuccess.Should().BeTrue();
         factory.Context.Users.Add(user);
         factory.Context.Habits.AddRange(goodHabit, badHabit);
         await factory.Context.SaveChangesAsync();
@@ -244,6 +246,26 @@ public class HabitLogReaderTests
             .GetLastCompletionDateAsync(user.Id, CancellationToken.None);
 
         result.Should().Be(Anchor.AddDays(-3));
+    }
+
+    [Fact]
+    public async Task LastCompletionDate_IncludesCompletionAfterHabitBecomesBad()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var user = User.Create("Former Good User", "former-good@example.com").Value;
+        var habit = Habit.Create(new HabitCreateParams(
+            user.Id, "Former Good", FrequencyUnit.Day, 1, Anchor)).Value;
+        Log(habit, Anchor.AddDays(-1));
+        habit.Update(new HabitUpdateParams(
+            "Former Good", null, FrequencyUnit.Day, 1, null, true, Anchor)).IsSuccess.Should().BeTrue();
+        factory.Context.Users.Add(user);
+        factory.Context.Habits.Add(habit);
+        await factory.Context.SaveChangesAsync();
+
+        var result = await new HabitLogReader(factory.Context)
+            .GetLastCompletionDateAsync(user.Id, CancellationToken.None);
+
+        result.Should().Be(Anchor.AddDays(-1));
     }
 
     [Fact]
