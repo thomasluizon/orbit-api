@@ -12,13 +12,17 @@ public class UnsubscribeMarketingCommandHandlerTests
 {
     private readonly IMarketingUnsubscribeTokenService _tokenService = Substitute.For<IMarketingUnsubscribeTokenService>();
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
+    private readonly IGenericRepository<MarketingContact> _contactRepo = Substitute.For<IGenericRepository<MarketingContact>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly UnsubscribeMarketingCommandHandler _handler;
 
     public UnsubscribeMarketingCommandHandlerTests()
     {
+        _unitOfWork.ExecuteInTransactionAsync(
+            Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task>>()(call.Arg<CancellationToken>()));
         _handler = new UnsubscribeMarketingCommandHandler(
-            _tokenService, _userRepo, _unitOfWork, NullLogger<UnsubscribeMarketingCommandHandler>.Instance);
+            _tokenService, _userRepo, _contactRepo, _unitOfWork, NullLogger<UnsubscribeMarketingCommandHandler>.Instance);
     }
 
     private void ValidTokenFor(Guid userId) =>
@@ -49,6 +53,12 @@ public class UnsubscribeMarketingCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         user.MarketingEmailConsent.Should().BeFalse();
+        await _contactRepo.Received(1).AddAsync(
+            Arg.Is<MarketingContact>(contact => contact.Email == "test@example.com" &&
+                contact.Source == "user" && contact.UnsubscribedAtUtc != null),
+            Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).ExecuteInTransactionAsync(
+            Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -68,7 +78,7 @@ public class UnsubscribeMarketingCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_AlreadyUnsubscribed_IsIdempotentSuccessWithoutSaving()
+    public async Task Handle_AlreadyUnsubscribed_RecordsAddressOptOut()
     {
         var user = User.Create("Test", "test@example.com").Value;
         user.SetMarketingConsent(false);
@@ -78,7 +88,10 @@ public class UnsubscribeMarketingCommandHandlerTests
         var result = await _handler.Handle(new UnsubscribeMarketingCommand("valid"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _contactRepo.Received(1).AddAsync(
+            Arg.Is<MarketingContact>(contact => contact.Email == "test@example.com" && contact.UnsubscribedAtUtc != null),
+            Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -91,5 +104,44 @@ public class UnsubscribeMarketingCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WaitlistContact_MarksUnsubscribed()
+    {
+        var contact = MarketingContact.ConfirmWaitlist("person@example.com", "en");
+        ValidTokenFor(contact.Id);
+        SetupUserFound(null);
+        _contactRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<MarketingContact, bool>>>(),
+            Arg.Any<Func<IQueryable<MarketingContact>, IQueryable<MarketingContact>>?>(),
+            Arg.Any<CancellationToken>()).Returns(contact);
+
+        var result = await _handler.Handle(new UnsubscribeMarketingCommand("valid"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        contact.UnsubscribedAtUtc.Should().NotBeNull();
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_UserWithWaitlistContact_MarksContactUnsubscribed()
+    {
+        var user = User.Create("Test", "TEST@example.com").Value;
+        user.SetMarketingConsent(true);
+        var contact = MarketingContact.ConfirmWaitlist("test@example.com", "en");
+        ValidTokenFor(user.Id);
+        SetupUserFound(user);
+        _contactRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<MarketingContact, bool>>>(),
+            Arg.Any<Func<IQueryable<MarketingContact>, IQueryable<MarketingContact>>?>(),
+            Arg.Any<CancellationToken>()).Returns(contact);
+
+        var result = await _handler.Handle(new UnsubscribeMarketingCommand("valid"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.MarketingEmailConsent.Should().BeFalse();
+        contact.UnsubscribedAtUtc.Should().NotBeNull();
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 }

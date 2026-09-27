@@ -3,6 +3,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Orbit.Application.Marketing.Services;
+using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Persistence;
@@ -98,8 +100,10 @@ public partial class AccountDeletionService(
             {
                 var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
                 var resetRepository = scope.ServiceProvider.GetRequiredService<IAccountResetRepository>();
+                var contactRepository = scope.ServiceProvider.GetRequiredService<IGenericRepository<MarketingContact>>();
                 await unitOfWork.ExecuteInTransactionAsync(async transactionToken =>
                 {
+                    await MarketingContactOptOut.RecordAsync(userToDelete.Email, contactRepository, unitOfWork, transactionToken);
                     await dbContext.AiUsageDaily
                         .Where(u => u.UserId == userId)
                         .ExecuteDeleteAsync(transactionToken);
