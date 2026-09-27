@@ -13,9 +13,14 @@ public class OrbitDbContextFactory : IDesignTimeDbContextFactory<OrbitDbContext>
 {
     public OrbitDbContext CreateDbContext(string[] args)
     {
+        var workingDirectory = Directory.GetCurrentDirectory();
+        var configurationDirectory = File.Exists(Path.Combine(workingDirectory, "appsettings.json"))
+            ? workingDirectory
+            : Path.Combine(workingDirectory, "..", "Orbit.Api");
         var configuration = new ConfigurationBuilder()
-            .SetBasePath(Path.Combine(Directory.GetCurrentDirectory(), "..", "Orbit.Api"))
+            .SetBasePath(configurationDirectory)
             .AddJsonFile("appsettings.json", optional: false)
+            .AddEnvironmentVariables()
             .Build();
 
         var optionsBuilder = new DbContextOptionsBuilder<OrbitDbContext>();
