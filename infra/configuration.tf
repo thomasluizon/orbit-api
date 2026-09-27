@@ -148,6 +148,7 @@ resource "render_env_group" "production_api" {
       Storage__S3__AccessKeyId     = { value = aws_ssm_parameter.uploads_access_key_id["production"].value }
       Storage__S3__SecretAccessKey = { value = aws_ssm_parameter.uploads_secret_access_key["production"].value }
     },
+    { BotProtection__SecretKey = { value = aws_ssm_parameter.turnstile_secret["production"].value } },
   )
 }
 
@@ -161,6 +162,7 @@ resource "render_env_group" "staging_api" {
       Storage__S3__AccessKeyId     = { value = aws_ssm_parameter.uploads_access_key_id["staging"].value }
       Storage__S3__SecretAccessKey = { value = aws_ssm_parameter.uploads_secret_access_key["staging"].value }
     },
+    { BotProtection__SecretKey = { value = aws_ssm_parameter.turnstile_secret["staging"].value } },
   )
 }
 

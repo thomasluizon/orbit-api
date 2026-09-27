@@ -1708,6 +1708,90 @@
         }
       }
     },
+    "/api/Auth/google/code": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleCodeAuthRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleCodeAuthRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleCodeAuthRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Auth/operations/google/code": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleCodeAuthOperationRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleCodeAuthOperationRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleCodeAuthOperationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/Auth/refresh": {
       "post": {
         "tags": [
@@ -14671,6 +14755,64 @@
       },
       "GoogleCalendarAutoSyncStatus": {
         "type": "integer"
+      },
+      "GoogleCodeAuthOperationRequest": {
+        "required": [
+          "code",
+          "codeVerifier",
+          "redirectUri"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "codeVerifier": {
+            "type": "string"
+          },
+          "redirectUri": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string",
+            "default": "en"
+          },
+          "referralCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "GoogleCodeAuthRequest": {
+        "required": [
+          "code",
+          "codeVerifier",
+          "redirectUri"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "codeVerifier": {
+            "type": "string"
+          },
+          "redirectUri": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string",
+            "default": "en"
+          },
+          "referralCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
       },
       "HabitListCard": {
         "required": [

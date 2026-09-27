@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using System.Security.Claims;
+using System.Reflection;
 using Orbit.Api.Controllers;
 using Orbit.Api.RateLimiting;
 using Orbit.Application.Auth.Validators;
@@ -21,6 +22,27 @@ public class DistributedRateLimitFilterTests
     private readonly IDistributedRateLimitService _service = Substitute.For<IDistributedRateLimitService>();
     private readonly IAuthSessionService _authSessionService = Substitute.For<IAuthSessionService>();
     private readonly ILogger<DistributedRateLimitFilter> _logger = Substitute.For<ILogger<DistributedRateLimitFilter>>();
+
+    [Theory]
+    [InlineData(nameof(AuthController.GoogleCodeAuth))]
+    [InlineData(nameof(AuthController.GoogleCodeAuthOperation))]
+    public async Task GoogleCodeRoute_UsesAuthRateLimitPolicy(string action)
+    {
+        _service.TryAcquireAsync("auth", Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new DistributedRateLimitDecision(true, 1, 10, DateTime.UtcNow.AddMinutes(1)));
+        var provider = Substitute.For<IServiceProvider>();
+        provider.GetService(typeof(IDistributedRateLimitService)).Returns(_service);
+        provider.GetService(typeof(IAuthSessionService)).Returns(_authSessionService);
+        provider.GetService(typeof(ILogger<DistributedRateLimitFilter>)).Returns(_logger);
+        var attribute = typeof(AuthController).GetMethod(action)!
+            .GetCustomAttribute<DistributedRateLimitAttribute>()!;
+        var filter = (DistributedRateLimitFilter)attribute.CreateInstance(provider);
+        var (context, _) = CreateExecutingContext();
+
+        await filter.OnActionExecutionAsync(context, () => Task.FromResult(CreateExecutedContext(context)));
+
+        await _service.Received(1).TryAcquireAsync("auth", Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
 
     [Fact]
     public async Task SupportPolicy_FailsOpen_WhenRateLimitStoreUnavailable()

@@ -31,7 +31,27 @@ public class ConfirmWaitlistCommandHandlerTests
         var result = await _handler.Handle(new ConfirmWaitlistCommand("good-token"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _contactsService.Received(1).AddContactAsync("user@test.com", Arg.Any<CancellationToken>());
+        await _contactsService.Received(1).AddContactAsync("user@test.com", "en", Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("EN", "en")]
+    [InlineData("pt-br", "pt-BR")]
+    public async Task Handle_PreviouslyIssuedMixedCaseToken_StoresCanonicalLanguage(string tokenLanguage, string expected)
+    {
+        _tokenService
+            .TryValidateToken("old-token", out Arg.Any<string>(), out Arg.Any<string>())
+            .Returns(call =>
+            {
+                call[1] = "user@test.com";
+                call[2] = tokenLanguage;
+                return true;
+            });
+
+        var result = await _handler.Handle(new ConfirmWaitlistCommand("old-token"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _contactsService.Received(1).AddContactAsync("user@test.com", expected, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -44,6 +64,6 @@ public class ConfirmWaitlistCommandHandlerTests
         var result = await _handler.Handle(new ConfirmWaitlistCommand("bad-token"), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        await _contactsService.DidNotReceive().AddContactAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _contactsService.DidNotReceive().AddContactAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 }

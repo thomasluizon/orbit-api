@@ -68,6 +68,8 @@ public static class ErrorMessages
     public static readonly AppError ApiKeyCreationCodeExpired = new(ErrorCodes.CodeExpired, "API key creation code expired or not found");
     public static readonly AppError InvalidApiKeyCreationCode = new(ErrorCodes.InvalidVerificationCode, "Invalid code. Remaining attempts: {0}");
     public static readonly AppError InvalidGoogleToken = new(ErrorCodes.InvalidGoogleToken, "Invalid or expired Google sign-in token");
+    public static readonly AppError GoogleRedirectUriNotAllowed = new(ErrorCodes.GoogleRedirectUriNotAllowed, "Google sign-in redirect URI is not allowed");
+    public static readonly AppError GoogleCodeExchangeFailed = new(ErrorCodes.GoogleCodeExchangeFailed, "Could not exchange Google sign-in code");
     public static readonly AppError GoogleEmailUnavailable = new(ErrorCodes.GoogleEmailUnavailable, "Could not retrieve email from Google account");
     public static readonly AppError GoogleTokenAudienceMismatch = new(ErrorCodes.GoogleTokenAudienceMismatch, "Google token was not issued for this application");
     public static readonly AppError TemplateNotFound = new(ErrorCodes.TemplateNotFound, "Template not found.");

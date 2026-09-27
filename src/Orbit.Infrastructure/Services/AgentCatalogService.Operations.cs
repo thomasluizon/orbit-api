@@ -165,6 +165,39 @@ public partial class AgentCatalogService
                     required = new[] { "access_token", "refresh_token", "user_id" }
                 })),
             new AgentOperation(
+                "exchange_google_auth_code",
+                "Exchange Google Auth Code",
+                "Exchange a Google authorization code for a direct Orbit session.",
+                AgentCapabilityIds.AuthManage,
+                AgentRiskClass.Low,
+                AgentConfirmationRequirement.None,
+                true,
+                false,
+                CloneJson(new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        code = new { type = "string" },
+                        code_verifier = new { type = "string" },
+                        redirect_uri = new { type = "string" },
+                        language = new { type = "string", nullable = true },
+                        referral_code = new { type = "string", nullable = true }
+                    },
+                    required = new[] { "code", "code_verifier", "redirect_uri" }
+                }),
+                CloneJson(new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        access_token = new { type = "string" },
+                        refresh_token = new { type = "string" },
+                        user_id = new { type = "string" }
+                    },
+                    required = new[] { "access_token", "refresh_token", "user_id" }
+                })),
+            new AgentOperation(
                 "refresh_auth_session",
                 "Refresh Auth Session",
                 "Exchange a refresh token for a new access and refresh token pair.",
