@@ -27,13 +27,9 @@ public partial class ReminderSchedulerService(
     private const int MaxRelativeLookaheadDays = DomainConstants.MaxReminderMinutesBefore / 1440 + 1;
     private const string ReminderProbeSql = """
         SELECT COUNT(*) AS "HabitCount",
-               MAX(h."UpdatedAtUtc") AS "LatestHabitUpdateUtc",
-               COALESCE(SUM(u."ReminderPreferencesVersion"), 0) AS "UserPreferencesVersionSum"
+               CAST(COALESCE(SUM(h."ReminderProbeVersion"), 0) AS bigint) AS "HabitVersionSum",
+               (SELECT CAST(COALESCE(SUM("ReminderPreferencesVersion"), 0) AS bigint) FROM "Users") AS "UserPreferencesVersionSum"
         FROM "Habits" AS h
-        INNER JOIN "Users" AS u ON h."UserId" = u."Id"
-        WHERE NOT h."IsDeleted" AND NOT h."IsCompleted"
-          AND NOT h."IsGeneral" AND h."ReminderEnabled"
-          AND NOT u."IsDeactivated"
         """;
 
     private static readonly Expression<Func<Habit, SchedulerHabit>> HabitProjection = h => new SchedulerHabit
@@ -104,9 +100,7 @@ public partial class ReminderSchedulerService(
 
     private async Task<ReminderSnapshot> GetSnapshotAsync(OrbitDbContext dbContext, DateTime nowUtc, CancellationToken ct)
     {
-        var probe = dbContext.Database.IsRelational()
-            ? await dbContext.Database.SqlQueryRaw<ReminderProbe>(ReminderProbeSql).SingleAsync(ct)
-            : await GetInMemoryProbeAsync(dbContext, ct);
+        var probe = await dbContext.Database.SqlQueryRaw<ReminderProbe>(ReminderProbeSql).SingleAsync(ct);
 
         if (_snapshot is not null && nowUtc >= _snapshot.LoadedAtUtc
             && nowUtc - _snapshot.LoadedAtUtc < TimeSpan.FromHours(1)
@@ -115,22 +109,6 @@ public partial class ReminderSchedulerService(
 
         _snapshot = await LoadSnapshotAsync(dbContext, probe, nowUtc, ct);
         return _snapshot;
-    }
-
-    private static async Task<ReminderProbe> GetInMemoryProbeAsync(OrbitDbContext dbContext, CancellationToken ct)
-    {
-        var rows = await (from habit in dbContext.Habits.AsNoTracking()
-                          join user in dbContext.Users.AsNoTracking() on habit.UserId equals user.Id
-                          where !habit.IsCompleted && !habit.IsGeneral && habit.ReminderEnabled
-                          select new { habit.UpdatedAtUtc, user.ReminderPreferencesVersion })
-            .ToListAsync(ct);
-
-        return new ReminderProbe
-        {
-            HabitCount = rows.Count,
-            LatestHabitUpdateUtc = rows.Count > 0 ? rows.Max(row => row.UpdatedAtUtc) : null,
-            UserPreferencesVersionSum = rows.Sum(row => (long)row.ReminderPreferencesVersion)
-        };
     }
 
     private static async Task<ReminderSnapshot> LoadSnapshotAsync(
@@ -458,7 +436,7 @@ public partial class ReminderSchedulerService(
     private sealed record ReminderProbe
     {
         public long HabitCount { get; init; }
-        public DateTime? LatestHabitUpdateUtc { get; init; }
+        public long HabitVersionSum { get; init; }
         public long UserPreferencesVersionSum { get; init; }
     }
 

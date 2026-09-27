@@ -473,6 +473,7 @@ public partial class User : Entity
     public void Deactivate(DateTime scheduledDeletion)
     {
         IsDeactivated = true;
+        ReminderPreferencesVersion++;
         DeactivatedAt = DateTime.UtcNow;
         ScheduledDeletionAt = scheduledDeletion;
         GoogleAccessToken = null;
@@ -483,6 +484,7 @@ public partial class User : Entity
     public void CancelDeactivation()
     {
         IsDeactivated = false;
+        ReminderPreferencesVersion++;
         DeactivatedAt = null;
         ScheduledDeletionAt = null;
     }
