@@ -1,11 +1,17 @@
 using System.Data.Common;
+using System.Text.Json;
 using FluentAssertions;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Habits.Commands;
+using Orbit.Infrastructure.Configuration;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -20,6 +26,65 @@ namespace Orbit.Infrastructure.Tests.Services;
 
 public class ReminderSchedulerCacheTests
 {
+    [Fact]
+    public async Task ReminderTick_AstraDeleteAndReplacement_RefreshesCandidates()
+    {
+        var reads = new SchedulerReadInterceptor();
+        using var factory = new SqliteOrbitDbContextFactory(reads);
+        var db = factory.Context;
+        var clock = new MutableTimeProvider(new DateTimeOffset(2027, 9, 26, 8, 59, 0, TimeSpan.Zero));
+        var user = User.Create("Alex", "alex@test.com").Value;
+        var oldHabit = Habit.Create(new HabitCreateParams(user.Id, "Old reminder", FrequencyUnit.Day, 1,
+            new DateOnly(2027, 9, 26), DueTime: new TimeOnly(9, 0), ReminderEnabled: true,
+            ReminderTimes: [0])).Value;
+        db.Users.Add(user);
+        db.Habits.Add(oldHabit);
+        await db.SaveChangesAsync();
+        oldHabit.ReminderProbeVersion.Should().Be(0);
+
+        var push = Substitute.For<IPushNotificationService>();
+        var scheduler = new ReminderSchedulerService(Scope(db, push),
+            NullLogger<ReminderSchedulerService>.Instance, new ConfigurationBuilder().Build(), clock);
+        await scheduler.CheckAndSendReminders(CancellationToken.None);
+
+        await using (var writeDb = factory.CreateContext())
+        {
+            var repository = new GenericRepository<Habit>(writeDb);
+            var work = new UnitOfWork(writeDb, new DatabaseConnectionSettings());
+            var streaks = Substitute.For<IUserStreakService>();
+            var dates = Substitute.For<IUserDateService>();
+            dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>())
+                .Returns(new DateOnly(2027, 9, 26));
+            var handler = new DeleteHabitCommandHandler(repository, streaks, work, dates,
+                new MemoryCache(new MemoryCacheOptions()));
+            var mediator = Substitute.For<IMediator>();
+            mediator.Send(Arg.Any<DeleteHabitCommand>(), Arg.Any<CancellationToken>())
+                .Returns(call => handler.Handle(call.Arg<DeleteHabitCommand>(), call.Arg<CancellationToken>()));
+            var tool = new DeleteHabitTool(mediator, repository);
+            var args = JsonDocument.Parse($$"""{"habit_id":"{{oldHabit.Id}}"}""").RootElement;
+            var result = await tool.ExecuteAsync(args, user.Id, CancellationToken.None);
+            result.Success.Should().BeTrue();
+            await writeDb.SaveChangesAsync();
+
+            var replacement = Habit.Create(new HabitCreateParams(user.Id, "New reminder", FrequencyUnit.Day, 1,
+                new DateOnly(2027, 9, 26), DueTime: new TimeOnly(9, 0), ReminderEnabled: true,
+                ReminderTimes: [0])).Value;
+            writeDb.Habits.Add(replacement);
+            await writeDb.SaveChangesAsync();
+            replacement.ReminderProbeVersion.Should().Be(0);
+        }
+
+        clock.Set(new DateTimeOffset(2027, 9, 26, 9, 0, 0, TimeSpan.Zero));
+        reads.Clear();
+        await scheduler.CheckAndSendReminders(CancellationToken.None);
+
+        reads.Commands.Should().Contain(c => c.Contains("\"Title\"", StringComparison.Ordinal));
+        await push.Received(1).SendToUserAsync(user.Id, "New reminder", "Due now", "/",
+            Arg.Any<CancellationToken>());
+        await push.DidNotReceive().SendToUserAsync(user.Id, "Old reminder", Arg.Any<string>(),
+            Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task ReminderTick_NoCandidates_ProbeStillReturnsOneRow()
     {
@@ -129,6 +194,48 @@ public class ReminderSchedulerCacheTests
             && c.Contains("\"Title\"", StringComparison.Ordinal));
         if (change is "create" or "restore" or "toggle")
             (await db.SentReminders.CountAsync(r => r.HabitId == habit.Id)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ReminderTick_TwoStaleHabitWriters_AdvanceProbeTwiceAndRefreshAfterSecondSave()
+    {
+        var reads = new SchedulerReadInterceptor();
+        using var factory = new SqliteOrbitDbContextFactory(reads);
+        var today = new DateOnly(2027, 9, 26);
+        var user = User.Create("Alex", "alex@test.com").Value;
+        var habit = Habit.Create(new HabitCreateParams(user.Id, "Reminder", FrequencyUnit.Day, 1,
+            today, DueTime: new TimeOnly(9, 0), ReminderEnabled: true, ReminderTimes: [0])).Value;
+        factory.Context.Users.Add(user);
+        factory.Context.Habits.Add(habit);
+        await factory.Context.SaveChangesAsync();
+
+        await using var firstDb = factory.CreateContext();
+        await using var secondDb = factory.CreateContext();
+        await using var schedulerDb = factory.CreateContext();
+        var firstHabit = await firstDb.Habits.SingleAsync(h => h.Id == habit.Id);
+        var secondHabit = await secondDb.Habits.SingleAsync(h => h.Id == habit.Id);
+        var service = new ReminderSchedulerService(Scope(schedulerDb, Substitute.For<IPushNotificationService>()),
+            NullLogger<ReminderSchedulerService>.Instance, new ConfigurationBuilder().Build(),
+            new MutableTimeProvider(new DateTimeOffset(2027, 9, 26, 8, 0, 0, TimeSpan.Zero)));
+
+        firstHabit.Update(UpdateParams(firstHabit, "Edited reminder", true)).IsSuccess.Should().BeTrue();
+        await firstDb.SaveChangesAsync();
+        await service.CheckAndSendReminders(CancellationToken.None);
+
+        secondHabit.Update(new HabitUpdateParams(secondHabit.Title, secondHabit.Description,
+            secondHabit.FrequencyUnit, secondHabit.FrequencyQuantity, secondHabit.Days.ToList(),
+            secondHabit.IsBadHabit, today.AddDays(1), DueTime: secondHabit.DueTime,
+            ReminderEnabled: secondHabit.ReminderEnabled)).IsSuccess.Should().BeTrue();
+        await secondDb.SaveChangesAsync();
+
+        (await schedulerDb.Habits.IgnoreQueryFilters().SumAsync(h => h.ReminderProbeVersion)).Should().Be(2);
+        reads.NonQueryCommands.Where(command => command.Contains("UPDATE \"Habits\"", StringComparison.Ordinal)
+            && command.Contains("\"ReminderProbeVersion\"", StringComparison.Ordinal))
+            .Should().HaveCount(2).And.OnlyContain(command => !command.Contains("RETURNING", StringComparison.Ordinal));
+        reads.Clear();
+        await service.CheckAndSendReminders(CancellationToken.None);
+        reads.Commands.Should().Contain(c => c.Contains("FROM \"Habits\"", StringComparison.Ordinal)
+            && c.Contains("\"Title\"", StringComparison.Ordinal));
     }
 
     private static HabitUpdateParams UpdateParams(Habit habit, string title, bool enabled) =>
@@ -428,8 +535,21 @@ public class ReminderSchedulerCacheTests
     private sealed class SchedulerReadInterceptor : DbCommandInterceptor
     {
         public List<string> Commands { get; } = [];
+        public List<string> NonQueryCommands { get; } = [];
 
-        public void Clear() => Commands.Clear();
+        public void Clear()
+        {
+            Commands.Clear();
+            NonQueryCommands.Clear();
+        }
+
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+            DbCommand command, CommandEventData eventData, InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            NonQueryCommands.Add(command.CommandText);
+            return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
+        }
 
         public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
             DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result,
