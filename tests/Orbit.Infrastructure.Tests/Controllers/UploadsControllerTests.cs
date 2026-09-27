@@ -87,11 +87,25 @@ public class UploadsControllerTests
         await _objectStorage.Received(1).CreateReadUrlAsync(key, Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task ReadObject_ParsedGuids_UseCanonicalObjectKey()
+    {
+        const string userId = "2B3B1FC7-813C-4EB6-AD02-BD7754299703";
+        const string fileName = "1E21A217-E146-43C9-B61C-B5871A991578.webp";
+        const string canonicalKey = "2b3b1fc7-813c-4eb6-ad02-bd7754299703/1e21a217-e146-43c9-b61c-b5871a991578.webp";
+        _objectStorage.CreateReadUrlAsync(canonicalKey, Arg.Any<CancellationToken>())
+            .Returns("https://example.s3.amazonaws.com/signed-read");
+
+        var result = await _controller.ReadObject(userId, fileName, CancellationToken.None);
+
+        result.Should().BeOfType<RedirectResult>().Which.Url.Should().Be("https://example.s3.amazonaws.com/signed-read");
+        await _objectStorage.Received(1).CreateReadUrlAsync(canonicalKey, Arg.Any<CancellationToken>());
+    }
+
     [Theory]
     [InlineData("../other", "1e21a217-e146-43c9-b61c-b5871a991578.webp")]
     [InlineData("2b3b1fc7-813c-4eb6-ad02-bd7754299703", "../other.webp")]
     [InlineData("2b3b1fc7-813c-4eb6-ad02-bd7754299703", "1e21a217-e146-43c9-b61c-b5871a991578.pdf")]
-    [InlineData("2B3B1FC7-813C-4EB6-AD02-BD7754299703", "1e21a217-e146-43c9-b61c-b5871a991578.webp")]
     public async Task ReadObject_InvalidKey_ReturnsNotFoundWithoutPresigning(string userId, string fileName)
     {
         var result = await _controller.ReadObject(userId, fileName, CancellationToken.None);
