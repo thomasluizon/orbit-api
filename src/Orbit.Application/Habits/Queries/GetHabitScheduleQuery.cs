@@ -405,6 +405,11 @@ public class GetHabitScheduleQueryHandler(
             h => ids.Contains(h.Id), cancellationToken))
             .Where(h => ids.Contains(h.Id))
             .ToArray();
+        var candidatesById = baseLookup.SelectMany(group => group)
+            .Where(habit => ids.Contains(habit.Id))
+            .ToDictionary(habit => habit.Id);
+        foreach (var pageHabit in pageHabits)
+            pageHabit.LoadScheduleFieldsForRead(candidatesById[pageHabit.Id]);
         await pageLoader.LoadAsync(pageHabits, logFrom, logTo, cancellationToken);
 
         return pageHabits.ToLookup(h => h.ParentHabitId);

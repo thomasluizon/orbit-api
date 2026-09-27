@@ -159,15 +159,28 @@ public class GetHabitScheduleQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_SingleDailyHabitInRange_ReturnsHabit()
+    public async Task Handle_SingleDailyHabitInRange_KeepsCandidateCadenceWhenPageChanges()
     {
         var habit = CreateTestHabit(dueDate: Today);
         SetupHabits(habit);
+        var editedHabit = CreateTestHabit(
+            frequencyUnit: FrequencyUnit.Week,
+            dueDate: Today.AddDays(-1));
+        typeof(Habit).GetProperty("Id")!.SetValue(editedHabit, habit.Id);
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new[] { editedHabit });
         var query = new GetHabitScheduleQuery(UserId, Today, Today.AddDays(6));
         var result = await _handler.Handle(query, CancellationToken.None);
         result.IsSuccess.Should().BeTrue();
         result.Value.Items.Should().HaveCount(1);
         result.Value.Items[0].Title.Should().Be("Test Habit");
+        result.Value.Items[0].FrequencyUnit.Should().Be(FrequencyUnit.Day);
+        result.Value.Items[0].DueDate.Should().Be(Today);
+        result.Value.Items[0].ScheduledDates.Should().Equal(
+            Enumerable.Range(0, 7).Select(offset => Today.AddDays(offset)));
+        result.Value.Items[0].IsOverdue.Should().BeFalse();
     }
 
     [Fact]
