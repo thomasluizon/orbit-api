@@ -26,6 +26,7 @@ locals {
     AI__Model                           = "gpt-4.1-mini"
     ASPNETCORE_ENVIRONMENT              = "Production"
     Cors__AllowedOrigins__0             = "https://app.useorbit.org"
+    Database__MigrateOnStartup          = "false"
     GooglePlay__MonthlyBasePlanId       = "monthly"
     GooglePlay__PackageName             = "org.useorbit.app"
     GooglePlay__ProductId               = "orbit_pro"
@@ -62,6 +63,7 @@ locals {
 
   staging_api_values = merge(local.production_api_values, {
     ASPNETCORE_ENVIRONMENT         = "Staging"
+    Database__MigrateOnStartup     = "true"
     Cors__AllowedOrigins__0        = "https://staging.useorbit.org"
     Frontend__BaseUrl              = "https://staging.useorbit.org"
     Google__AllowedRedirectUris__0 = "https://staging.useorbit.org/auth-callback"

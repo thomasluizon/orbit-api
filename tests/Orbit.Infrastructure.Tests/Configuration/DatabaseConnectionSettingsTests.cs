@@ -13,6 +13,7 @@ public class DatabaseConnectionSettingsTests
 
         settings.EfMaxPoolSize.Should().Be(15);
         settings.SessionMaxPoolSize.Should().Be(5);
+        settings.MigrateOnStartup.Should().BeTrue();
         settings.SessionMaxPoolSize.Should().BeLessThan(settings.EfMaxPoolSize);
     }
 
@@ -42,7 +43,8 @@ public class DatabaseConnectionSettingsTests
             ["Database:EfMaxPoolSize"] = "20",
             ["Database:SessionMaxPoolSize"] = "6",
             ["Database:CommandTimeoutSeconds"] = "90",
-            ["Database:MigrationCommandTimeoutSeconds"] = "240"
+            ["Database:MigrationCommandTimeoutSeconds"] = "240",
+            ["Database:MigrateOnStartup"] = "false"
         });
 
         var settings = DatabaseConnectionSettings.From(configuration);
@@ -51,6 +53,7 @@ public class DatabaseConnectionSettingsTests
         settings.SessionMaxPoolSize.Should().Be(6);
         settings.CommandTimeoutSeconds.Should().Be(90);
         settings.MigrationCommandTimeoutSeconds.Should().Be(240);
+        settings.MigrateOnStartup.Should().BeFalse();
     }
 
     [Fact]
@@ -62,6 +65,7 @@ public class DatabaseConnectionSettingsTests
         settings.SessionMaxPoolSize.Should().Be(5);
         settings.CommandTimeoutSeconds.Should().Be(60);
         settings.MigrationCommandTimeoutSeconds.Should().Be(180);
+        settings.MigrateOnStartup.Should().BeTrue();
     }
 
     private static IConfiguration BuildConfiguration(Dictionary<string, string?> values) =>

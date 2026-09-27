@@ -4,12 +4,6 @@ variable "render_owner_id" {
   default     = "tea-ctg9ljtumphs73dep1o0"
 }
 
-variable "api_auto_deploy" {
-  description = "Keep production API deployment on each main commit until release workflows own it."
-  type        = bool
-  default     = true
-}
-
 variable "api_database" {
   description = "Production API database source during the data migration."
   type        = string

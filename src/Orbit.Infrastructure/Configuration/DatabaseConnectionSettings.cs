@@ -18,6 +18,8 @@ public sealed class DatabaseConnectionSettings
 
     public int SlowQueryThresholdMilliseconds { get; init; } = 500;
 
+    public bool MigrateOnStartup { get; init; } = true;
+
     public static DatabaseConnectionSettings From(IConfiguration configuration) =>
         configuration.GetSection(SectionName).Get<DatabaseConnectionSettings>()
             ?? new DatabaseConnectionSettings();
