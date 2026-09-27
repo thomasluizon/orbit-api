@@ -937,24 +937,95 @@ public class OrbitDbContext : DbContext
         });
     }
 
-    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        var modifiedHabits = ChangeTracker.Entries<Habit>()
+            .Where(entry => entry.State == EntityState.Modified).ToArray();
+        if (modifiedHabits.Length == 0 || !Database.IsRelational())
+        {
+            foreach (var entry in modifiedHabits)
+                entry.Property(h => h.ReminderProbeVersion).CurrentValue++;
+            return base.SaveChanges(acceptAllChangesOnSuccess);
+        }
+
+        var habitIds = modifiedHabits.Select(entry => entry.Entity.Id).Distinct().ToArray();
+        foreach (var entry in modifiedHabits)
+            entry.Property(h => h.ReminderProbeVersion).IsModified = false;
+
+        if (Database.CurrentTransaction is not null)
+            return SaveHabitChanges(acceptAllChangesOnSuccess, habitIds);
+
+        return Database.CreateExecutionStrategy().Execute(() =>
+        {
+            using var transaction = Database.BeginTransaction();
+            var saved = SaveHabitChanges(false, habitIds);
+            transaction.Commit();
+            if (acceptAllChangesOnSuccess)
+                ChangeTracker.AcceptAllChanges();
+            return saved;
+        });
+    }
+
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken = default)
     {
 #pragma warning disable ORBIT0004
         var now = DateTime.UtcNow;
 #pragma warning restore ORBIT0004
-        foreach (var entry in ChangeTracker.Entries<Habit>()
-            .Where(e => e.State == EntityState.Modified))
-        {
-            entry.Property(h => h.ReminderProbeVersion).CurrentValue++;
-        }
-
         foreach (var entry in ChangeTracker.Entries<ITimestamped>()
             .Where(e => e.State is EntityState.Modified or EntityState.Added))
         {
             entry.Entity.UpdatedAtUtc = now;
         }
 
-        return base.SaveChangesAsync(cancellationToken);
+        var modifiedHabits = ChangeTracker.Entries<Habit>()
+            .Where(entry => entry.State == EntityState.Modified).ToArray();
+        if (modifiedHabits.Length == 0 || !Database.IsRelational())
+        {
+            foreach (var entry in modifiedHabits)
+                entry.Property(h => h.ReminderProbeVersion).CurrentValue++;
+            return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        }
+
+        var habitIds = modifiedHabits.Select(entry => entry.Entity.Id).Distinct().ToArray();
+        foreach (var entry in modifiedHabits)
+            entry.Property(h => h.ReminderProbeVersion).IsModified = false;
+
+        if (Database.CurrentTransaction is not null)
+            return await SaveHabitChangesAsync(acceptAllChangesOnSuccess, habitIds, cancellationToken);
+
+        return await Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            await using var transaction = await Database.BeginTransactionAsync(cancellationToken);
+            var saved = await SaveHabitChangesAsync(false, habitIds, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            if (acceptAllChangesOnSuccess)
+                ChangeTracker.AcceptAllChanges();
+            return saved;
+        });
+    }
+
+    private int SaveHabitChanges(bool acceptAllChangesOnSuccess, Guid[] habitIds)
+    {
+        var saved = base.SaveChanges(false);
+        Habits.IgnoreQueryFilters().Where(habit => habitIds.Contains(habit.Id))
+            .ExecuteUpdate(setters => setters.SetProperty(habit => habit.ReminderProbeVersion,
+                habit => habit.ReminderProbeVersion + 1));
+        if (acceptAllChangesOnSuccess)
+            ChangeTracker.AcceptAllChanges();
+        return saved;
+    }
+
+    private async Task<int> SaveHabitChangesAsync(bool acceptAllChangesOnSuccess, Guid[] habitIds,
+        CancellationToken cancellationToken)
+    {
+        var saved = await base.SaveChangesAsync(false, cancellationToken);
+        await Habits.IgnoreQueryFilters().Where(habit => habitIds.Contains(habit.Id))
+            .ExecuteUpdateAsync(setters => setters.SetProperty(habit => habit.ReminderProbeVersion,
+                habit => habit.ReminderProbeVersion + 1), cancellationToken);
+        if (acceptAllChangesOnSuccess)
+            ChangeTracker.AcceptAllChanges();
+        return saved;
     }
 
     private static string SerializeDays(ICollection<System.DayOfWeek> days)
