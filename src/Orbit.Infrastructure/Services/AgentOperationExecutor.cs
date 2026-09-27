@@ -90,7 +90,8 @@ public partial class AgentOperationExecutor(
             catch (Exception exception)
             {
                 logger.LogWarning(exception, "Agent tool step notification failed for {OperationId}", operation.Id);
-                executionCancellationToken = CancellationToken.None;
+                if (policyDecision.ConsumedConfirmation)
+                    executionCancellationToken = CancellationToken.None;
             }
         }
 

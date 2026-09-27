@@ -120,7 +120,8 @@ public record AgentPolicyDecision(
     string? Reason = null,
     PendingAgentOperation? PendingOperation = null,
     AgentPolicyDecisionStatus? ShadowStatus = null,
-    string? ShadowReason = null);
+    string? ShadowReason = null,
+    bool ConsumedConfirmation = false);
 
 public record PendingAgentOperation(
     Guid Id,

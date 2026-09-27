@@ -108,6 +108,7 @@ public class AgentPolicyEvaluatorTests : IDisposable
         decision.Status.Should().Be(AgentPolicyDecisionStatus.ConfirmationRequired);
         decision.PendingOperation.Should().NotBeNull();
         decision.PendingOperation!.CapabilityId.Should().Be(AgentCapabilityIds.HabitsDelete);
+        decision.ConsumedConfirmation.Should().BeFalse();
     }
 
     [Fact]
@@ -156,6 +157,7 @@ public class AgentPolicyEvaluatorTests : IDisposable
             ConfirmationToken: confirmation!.ConfirmationToken));
 
         confirmedDecision.Status.Should().Be(AgentPolicyDecisionStatus.Allowed);
+        confirmedDecision.ConsumedConfirmation.Should().BeTrue();
     }
 
     [Fact]
@@ -209,6 +211,7 @@ public class AgentPolicyEvaluatorTests : IDisposable
             OperationFingerprint: "get_api_keys:{}"));
 
         decision.Status.Should().Be(AgentPolicyDecisionStatus.Allowed);
+        decision.ConsumedConfirmation.Should().BeFalse();
     }
 
     [Fact]
@@ -361,6 +364,59 @@ public class AgentPolicyEvaluatorTests : IDisposable
         decision.ShadowStatus.Should().Be(AgentPolicyDecisionStatus.ConfirmationRequired);
         decision.ShadowReason.Should().Be("step_up_required");
         decision.PendingOperation.Should().BeNull();
+        decision.ConsumedConfirmation.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Evaluate_InShadowMode_PreservesConsumedConfirmation()
+    {
+        const string fingerprint = "delete_habit:{\"habitId\":\"123\"}";
+        var pending = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+            AgentCapabilityIds.HabitsDelete,
+            _userId,
+            AgentExecutionSurface.Chat,
+            AgentAuthMethod.Jwt,
+            [],
+            "delete_habit",
+            "Delete habit via chat",
+            OperationFingerprint: fingerprint));
+        var confirmation = _pendingOperationStore.Confirm(_userId, pending.PendingOperation!.Id);
+        confirmation.Should().NotBeNull();
+
+        var shadowEvaluator = new AgentPolicyEvaluator(
+            _dbContext,
+            _catalogService,
+            _pendingOperationStore,
+            _stepUpAuthorizationBridge,
+            Options.Create(new AgentPlatformSettings { ShadowModeEnabled = true }));
+        var decision = shadowEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+            AgentCapabilityIds.HabitsDelete,
+            _userId,
+            AgentExecutionSurface.Chat,
+            AgentAuthMethod.Jwt,
+            [],
+            "delete_habit",
+            "Delete habit via chat",
+            OperationFingerprint: fingerprint,
+            ConfirmationToken: confirmation!.ConfirmationToken));
+
+        decision.Status.Should().Be(AgentPolicyDecisionStatus.Allowed);
+        decision.ShadowStatus.Should().Be(AgentPolicyDecisionStatus.Allowed);
+        decision.ConsumedConfirmation.Should().BeTrue();
+
+        var replay = shadowEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+            AgentCapabilityIds.HabitsDelete,
+            _userId,
+            AgentExecutionSurface.Chat,
+            AgentAuthMethod.Jwt,
+            [],
+            "delete_habit",
+            "Delete habit via chat",
+            OperationFingerprint: fingerprint,
+            ConfirmationToken: confirmation.ConfirmationToken));
+
+        replay.ConsumedConfirmation.Should().BeFalse();
+        replay.ShadowStatus.Should().Be(AgentPolicyDecisionStatus.ConfirmationRequired);
     }
 
     [Theory]

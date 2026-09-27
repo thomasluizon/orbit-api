@@ -252,6 +252,46 @@ public class AgentExecutionAndSanitizerTests
     }
 
     [Fact]
+    public async Task AgentOperationExecutor_CancelsUnconfirmedMutationWhenStepWriteFails()
+    {
+        var catalog = Substitute.For<IAgentCatalogService>();
+        var capability = CreateCapability(AgentCapabilityIds.HabitsWrite, AgentScopes.WriteHabits,
+            AgentRiskClass.Low, AgentConfirmationRequirement.None, isMutation: true);
+        var operation = CreateOperation("create_habit", capability.Id, isMutation: true,
+            isAgentExecutable: true, AgentConfirmationRequirement.None, AgentRiskClass.Low);
+        catalog.GetOperation(operation.Id).Returns(operation);
+        catalog.GetCapability(capability.Id).Returns(capability);
+        var policy = Substitute.For<IAgentPolicyEvaluator>();
+        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+            .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability));
+
+        using var cancellation = new CancellationTokenSource();
+        var tokenWasCancelled = false;
+        var mutationCompleted = false;
+        var tool = new StubTool(operation.Id, (_, _, token) =>
+        {
+            tokenWasCancelled = token.IsCancellationRequested;
+            token.ThrowIfCancellationRequested();
+            mutationCompleted = true;
+            return Task.FromResult(new ToolResult(true));
+        });
+        var executor = CreateExecutor(catalog, policyEvaluator: policy,
+            toolRegistry: new AiToolRegistry([tool]));
+
+        var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
+            UserId, operation.Id, Parse("{}"), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt,
+            OnExecutionStarted: () =>
+            {
+                cancellation.Cancel();
+                throw new IOException("Stream disconnected");
+            }), cancellation.Token);
+
+        tokenWasCancelled.Should().BeTrue();
+        mutationCompleted.Should().BeFalse();
+        response.Operation.Status.Should().Be(AgentOperationStatus.Failed);
+    }
+
+    [Fact]
     public async Task AgentOperationExecutor_ReturnsPendingConfirmation()
     {
         var catalog = Substitute.For<IAgentCatalogService>();
