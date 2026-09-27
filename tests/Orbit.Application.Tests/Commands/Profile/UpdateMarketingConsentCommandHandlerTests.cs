@@ -10,6 +10,7 @@ namespace Orbit.Application.Tests.Commands.Profile;
 public class UpdateMarketingConsentCommandHandlerTests
 {
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
+    private readonly IGenericRepository<MarketingContact> _contactRepo = Substitute.For<IGenericRepository<MarketingContact>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly UpdateMarketingConsentCommandHandler _handler;
 
@@ -17,7 +18,10 @@ public class UpdateMarketingConsentCommandHandlerTests
 
     public UpdateMarketingConsentCommandHandlerTests()
     {
-        _handler = new UpdateMarketingConsentCommandHandler(_userRepo, _unitOfWork);
+        _unitOfWork.ExecuteInTransactionAsync(
+            Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task>>()(call.Arg<CancellationToken>()));
+        _handler = new UpdateMarketingConsentCommandHandler(_userRepo, _contactRepo, _unitOfWork);
     }
 
     private void SetupUserFound(User user) =>
@@ -50,7 +54,31 @@ public class UpdateMarketingConsentCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         user.MarketingEmailConsent.Should().BeFalse();
+        await _contactRepo.Received(1).AddAsync(
+            Arg.Is<MarketingContact>(contact => contact.Email == "test@example.com" && contact.UnsubscribedAtUtc != null),
+            Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).ExecuteInTransactionAsync(
+            Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_OptOut_PreservesExistingWaitlistContact()
+    {
+        var user = User.Create("Test User", "test@example.com").Value;
+        var contact = MarketingContact.ConfirmWaitlist("test@example.com", "pt-BR");
+        SetupUserFound(user);
+        _contactRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<MarketingContact, bool>>>(),
+            Arg.Any<Func<IQueryable<MarketingContact>, IQueryable<MarketingContact>>?>(),
+            Arg.Any<CancellationToken>()).Returns(contact);
+
+        var result = await _handler.Handle(new UpdateMarketingConsentCommand(UserId, false), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        contact.UnsubscribedAtUtc.Should().NotBeNull();
+        contact.Source.Should().Be("waitlist");
+        await _contactRepo.DidNotReceive().AddAsync(Arg.Any<MarketingContact>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

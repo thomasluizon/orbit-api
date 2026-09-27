@@ -64,7 +64,7 @@ public partial class SendMarketingBroadcastCommandHandler(
             .ToList();
 
         recipients.AddRange(contacts
-            .Where(contact => !userEmails.Contains(contact.Email) &&
+            .Where(contact => contact.Source == "waitlist" && !userEmails.Contains(contact.Email) &&
                 contact.UnsubscribedAtUtc is null && contact.SuppressedAtUtc is null)
             .Select(contact => new MarketingRecipient(contact.Id, contact.Email, contact.Language)));
 

@@ -31,6 +31,14 @@ public sealed class MarketingContact : Entity
         };
     }
 
+    public static MarketingContact RecordUserOptOut(string email)
+    {
+        var contact = ConfirmWaitlist(email, "en");
+        contact.Source = "user";
+        contact.Unsubscribe();
+        return contact;
+    }
+
     public void Unsubscribe()
     {
         UnsubscribedAtUtc ??= DateTime.UtcNow;

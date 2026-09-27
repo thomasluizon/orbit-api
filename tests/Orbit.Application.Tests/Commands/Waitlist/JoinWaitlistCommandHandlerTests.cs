@@ -40,6 +40,19 @@ public class JoinWaitlistCommandHandlerTests
             Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData("EN", "en")]
+    [InlineData("pt-br", "pt-BR")]
+    public async Task Handle_AcceptedMixedCaseLanguage_SignsCanonicalLanguage(string input, string expected)
+    {
+        var result = await _handler.Handle(new JoinWaitlistCommand("mixed@test.com", input), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        _tokenService.Received(1).CreateToken("mixed@test.com", expected);
+        await _emailService.Received(1).SendWaitlistConfirmationAsync(
+            "mixed@test.com", Arg.Any<string>(), expected, Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task Handle_WithinCooldown_DoesNotSendSecondEmail()
     {

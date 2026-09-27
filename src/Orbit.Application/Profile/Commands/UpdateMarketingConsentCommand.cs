@@ -1,5 +1,6 @@
 using MediatR;
 using Orbit.Application.Common;
+using Orbit.Application.Marketing.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -10,6 +11,7 @@ public record UpdateMarketingConsentCommand(Guid UserId, bool Enabled) : IReques
 
 public class UpdateMarketingConsentCommandHandler(
     IGenericRepository<User> userRepository,
+    IGenericRepository<MarketingContact> contactRepository,
     IUnitOfWork unitOfWork) : IRequestHandler<UpdateMarketingConsentCommand, Result>
 {
     public async Task<Result> Handle(UpdateMarketingConsentCommand request, CancellationToken cancellationToken)
@@ -21,8 +23,20 @@ public class UpdateMarketingConsentCommandHandler(
         if (user is null)
             return Result.Failure(ErrorMessages.UserNotFound);
 
-        user.SetMarketingConsent(request.Enabled);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        if (request.Enabled)
+        {
+            user.SetMarketingConsent(true);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        else
+        {
+            await unitOfWork.ExecuteInTransactionAsync(async ct =>
+            {
+                await MarketingContactOptOut.RecordAsync(user.Email, contactRepository, unitOfWork, ct);
+                user.SetMarketingConsent(false);
+                await unitOfWork.SaveChangesAsync(ct);
+            }, cancellationToken);
+        }
 
         return Result.Success();
     }

@@ -1,4 +1,7 @@
 using FluentAssertions;
+using Microsoft.Extensions.Options;
+using Orbit.Application.Common;
+using Orbit.Application.Waitlist.Commands;
 using Orbit.Domain.Entities;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
@@ -9,6 +12,29 @@ namespace Orbit.Infrastructure.Tests.Services;
 
 public class DatabaseMarketingContactsServiceTests
 {
+    [Theory]
+    [InlineData("EN", "en")]
+    [InlineData("pt-br", "pt-BR")]
+    public async Task ConfirmWaitlistCommand_PreviouslyIssuedMixedCaseToken_PersistsContact(string tokenLanguage, string expected)
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        using var context = factory.Context;
+        var tokenService = new WaitlistConfirmationTokenService(
+            Options.Create(new WaitlistSettings { SigningKey = "test-signing-key" }), TimeProvider.System);
+        var contactsService = new DatabaseMarketingContactsService(
+            new GenericRepository<MarketingContact>(context),
+            new UnitOfWork(context, new DatabaseConnectionSettings()));
+        var handler = new ConfirmWaitlistCommandHandler(tokenService, contactsService);
+        var token = tokenService.CreateToken("Mixed@Example.com", tokenLanguage);
+
+        var result = await handler.Handle(new ConfirmWaitlistCommand(token), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var contact = context.MarketingContacts.Single();
+        contact.Email.Should().Be("mixed@example.com");
+        contact.Language.Should().Be(expected);
+    }
+
     [Fact]
     public async Task AddContactAsync_SecondConfirmationKeepsOneNormalizedContact()
     {

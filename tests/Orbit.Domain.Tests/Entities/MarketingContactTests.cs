@@ -35,4 +35,15 @@ public class MarketingContactTests
         contact.UnsubscribedAtUtc.Should().Be(unsubscribedAt);
         contact.SuppressedAtUtc.Should().Be(suppressedAt);
     }
+
+    [Fact]
+    public void RecordUserOptOut_CreatesNormalizedUnsubscribedContact()
+    {
+        var contact = MarketingContact.RecordUserOptOut(" PERSON@Example.com ");
+
+        contact.Email.Should().Be("person@example.com");
+        contact.Source.Should().Be("user");
+        contact.UnsubscribedAtUtc.Should().NotBeNull();
+        contact.SuppressedAtUtc.Should().BeNull();
+    }
 }

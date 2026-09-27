@@ -19,6 +19,9 @@ public class JoinWaitlistCommandHandler(
 
     public async Task<Result> Handle(JoinWaitlistCommand request, CancellationToken cancellationToken)
     {
+        if (!WaitlistLanguage.TryCanonicalize(request.Language, out var language))
+            return Result.Failure("Unsupported waitlist language.");
+
         var email = request.Email.Trim().ToLowerInvariant();
         var cacheKey = $"waitlist:{email}";
 
@@ -28,10 +31,10 @@ public class JoinWaitlistCommandHandler(
 #pragma warning restore ORBIT0004
             return Result.Success();
 
-        var token = tokenService.CreateToken(email, request.Language);
+        var token = tokenService.CreateToken(email, language);
         var confirmUrl = $"{_settings.ApiBaseUrl.TrimEnd('/')}/api/waitlist/confirm?token={Uri.EscapeDataString(token)}";
 
-        await emailService.SendWaitlistConfirmationAsync(email, confirmUrl, request.Language, cancellationToken);
+        await emailService.SendWaitlistConfirmationAsync(email, confirmUrl, language, cancellationToken);
 
         cache.Set(cacheKey, DateTime.UtcNow, new MemoryCacheEntryOptions
         {

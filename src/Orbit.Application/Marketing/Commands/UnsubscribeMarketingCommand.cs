@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
+using Orbit.Application.Marketing.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -38,11 +39,13 @@ public partial class UnsubscribeMarketingCommandHandler(
             return Result.Success();
         }
 
-        if (user.MarketingEmailConsent == false)
-            return Result.Success();
-
-        user.SetMarketingConsent(false);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await unitOfWork.ExecuteInTransactionAsync(async ct =>
+        {
+            await MarketingContactOptOut.RecordAsync(user.Email, contactRepository, unitOfWork, ct);
+            if (user.MarketingEmailConsent != false)
+                user.SetMarketingConsent(false);
+            await unitOfWork.SaveChangesAsync(ct);
+        }, cancellationToken);
 
         LogConsentRevoked(logger, user.Id);
         return Result.Success();

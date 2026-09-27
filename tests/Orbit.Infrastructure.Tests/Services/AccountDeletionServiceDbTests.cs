@@ -33,6 +33,7 @@ public class AccountDeletionServiceDbTests : IDisposable
         var serviceProvider = new ServiceCollection()
             .AddSingleton(_dbContext)
             .AddSingleton<IUnitOfWork>(new UnitOfWork(_dbContext, new DatabaseConnectionSettings()))
+            .AddSingleton<IGenericRepository<MarketingContact>>(new GenericRepository<MarketingContact>(_dbContext))
             .AddSingleton<IAccountResetRepository>(new AccountResetRepository(_dbContext, NSubstitute.Substitute.For<Orbit.Domain.Events.IAccountEventCollector>()))
             .BuildServiceProvider();
 
@@ -82,6 +83,42 @@ public class AccountDeletionServiceDbTests : IDisposable
         (await _dbContext.Tags.IgnoreQueryFilters().AnyAsync(t => t.UserId == userId)).Should().BeFalse();
         (await _dbContext.ProcessedRequests.AnyAsync(r => r.UserId == userId)).Should().BeFalse();
         (await _dbContext.SentProactiveCheckins.AnyAsync(p => p.UserId == userId)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RunAsync_OptedOutUserDeletion_PreservesAddressOptOut()
+    {
+        var userId = Guid.NewGuid();
+        SeedDeactivatedUser(userId, "PERSON@example.com", DateTime.UtcNow.AddDays(-1));
+        var user = _dbContext.Users.Local.Single(u => u.Id == userId);
+        user.SetMarketingConsent(false);
+        _dbContext.MarketingContacts.Add(MarketingContact.ConfirmWaitlist("person@example.com", "en"));
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+
+        await _service.RunAsync(CancellationToken.None);
+
+        (await _dbContext.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == userId)).Should().BeFalse();
+        var contact = await _dbContext.MarketingContacts.SingleAsync();
+        contact.Email.Should().Be("person@example.com");
+        contact.UnsubscribedAtUtc.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task RunAsync_DeletionWithoutWaitlistContact_CreatesAddressOptOut()
+    {
+        var userId = Guid.NewGuid();
+        SeedDeactivatedUser(userId, "ABSENT@example.com", DateTime.UtcNow.AddDays(-1));
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+
+        await _service.RunAsync(CancellationToken.None);
+
+        (await _dbContext.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == userId)).Should().BeFalse();
+        var contact = await _dbContext.MarketingContacts.SingleAsync();
+        contact.Email.Should().Be("absent@example.com");
+        contact.Source.Should().Be("user");
+        contact.UnsubscribedAtUtc.Should().NotBeNull();
     }
 
     [Fact]
