@@ -6,13 +6,6 @@ resource "cloudflare_zone" "orbit" {
   type = "full"
 }
 
-resource "cloudflare_zone_subscription" "orbit" {
-  zone_id = cloudflare_zone.orbit.id
-  rate_plan = {
-    id = "free"
-  }
-}
-
 locals {
   existing_dns_records = {
     apex_a = {

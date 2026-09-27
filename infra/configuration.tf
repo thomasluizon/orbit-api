@@ -41,6 +41,14 @@ locals {
     Jwt__ExpiryMinutes                  = "0"
     Jwt__Issuer                         = "OrbitApi"
     Jwt__RefreshExpiryDays              = "90"
+    Email__Provider                     = "Resend"
+    Ses__Region                         = "us-east-2"
+    Ses__FromEmail                      = "Orbit <noreply@send.useorbit.org>"
+    Ses__MarketingFromEmail             = "Orbit <news@updates.useorbit.org>"
+    Ses__SupportEmail                   = "contact@useorbit.org"
+    Ses__TransactionalConfigurationSet  = "orbit-transactional"
+    Ses__MarketingConfigurationSet      = "orbit-marketing"
+    Ses__TopicArn                       = aws_sns_topic.ses_events.arn
     Resend__FromEmail                   = "Orbit <noreply@send.useorbit.org>"
     Resend__SupportEmail                = "contact@useorbit.org"
     Sentry__Environment                 = "production"
@@ -140,6 +148,8 @@ resource "render_env_group" "production_api" {
     { for key in local.api_secret_keys : key => { value = data.aws_ssm_parameter.production_api[key].value } },
     { for key, value in local.production_api_database_values : key => { value = value } },
     { BotProtection__SecretKey = { value = aws_ssm_parameter.turnstile_secret["production"].value } },
+    { Ses__AccessKeyId = { value = aws_ssm_parameter.api_ses_access_key_id["production"].value } },
+    { Ses__SecretAccessKey = { value = aws_ssm_parameter.api_ses_secret_access_key["production"].value } },
   )
 }
 
@@ -150,6 +160,8 @@ resource "render_env_group" "staging_api" {
     { for key in local.api_secret_keys : key => { value = data.aws_ssm_parameter.staging_api[key].value } },
     { for key in local.database_keys : key => { value = local.staging_render_npgsql } },
     { BotProtection__SecretKey = { value = aws_ssm_parameter.turnstile_secret["staging"].value } },
+    { Ses__AccessKeyId = { value = aws_ssm_parameter.api_ses_access_key_id["staging"].value } },
+    { Ses__SecretAccessKey = { value = aws_ssm_parameter.api_ses_secret_access_key["staging"].value } },
   )
 }
 
