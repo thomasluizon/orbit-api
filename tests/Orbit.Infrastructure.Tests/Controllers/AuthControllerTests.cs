@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Api.Controllers;
+using Orbit.Api.RateLimiting;
 using Orbit.Application.Auth.Commands;
 using Orbit.Application.Auth.Models;
 using Orbit.Application.Auth.Queries;
@@ -129,6 +130,52 @@ public class AuthControllerTests
     }
 
     [Fact]
+    public async Task GoogleCodeAuth_ReturnsLoginResponseAndDispatchesRetryableCommand()
+    {
+        var login = new LoginResponse(UserId, "token", "Name", "test@example.com", false, "refresh");
+        _mediator.Send(Arg.Any<GoogleCodeAuthCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(login));
+
+        var result = await _controller.GoogleCodeAuth(
+            new AuthController.GoogleCodeAuthRequest("code", "verifier", "https://app.test/callback", ReferralCode: "friend"),
+            CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(login);
+        await _mediator.Received(1).Send(Arg.Is<GoogleCodeAuthCommand>(command =>
+            command is IConcurrencyRetryable && command.CodeVerifier == "verifier"
+            && command.RedirectUri == "https://app.test/callback" && command.ReferralCode == "friend"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GoogleCodeAuth_FailureReturnsSpecificErrorCode()
+    {
+        _mediator.Send(Arg.Any<GoogleCodeAuthCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure<LoginResponse>(ErrorMessages.GoogleRedirectUriNotAllowed));
+
+        var result = await _controller.GoogleCodeAuth(
+            new AuthController.GoogleCodeAuthRequest("code", "verifier", "https://evil.test"), CancellationToken.None);
+
+        result.Should().BeOfType<ObjectResult>().Which.Value.Should().BeEquivalentTo(new
+        {
+            error = ErrorMessages.GoogleRedirectUriNotAllowed.Message,
+            errorCode = ErrorCodes.GoogleRedirectUriNotAllowed
+        });
+    }
+
+    [Theory]
+    [InlineData(nameof(AuthController.GoogleCodeAuth), "google/code")]
+    [InlineData(nameof(AuthController.GoogleCodeAuthOperation), "operations/google/code")]
+    public void GoogleCodeRoutes_MatchGoogleAuthProtection(string actionName, string route)
+    {
+        var method = typeof(AuthController).GetMethod(actionName)!;
+        method.GetCustomAttribute<HttpPostAttribute>()!.Template.Should().Be(route);
+        method.GetCustomAttribute<AllowAnonymousAttribute>().Should().NotBeNull();
+        method.GetCustomAttribute<DistributedRateLimitAttribute>().Should().NotBeNull();
+        method.GetCustomAttribute<RequireBotProtectionAttribute>().Should().BeNull();
+    }
+
+    [Fact]
     public async Task RequestDeletion_Success_ReturnsOk()
     {
         _mediator.Send(Arg.Any<RequestAccountDeletionCommand>(), Arg.Any<CancellationToken>())
@@ -226,6 +273,8 @@ public class AuthControllerTests
     [InlineData(nameof(AuthController.SendCode), true)]
     [InlineData(nameof(AuthController.VerifyCode), true)]
     [InlineData(nameof(AuthController.GoogleAuth), true)]
+    [InlineData(nameof(AuthController.GoogleCodeAuth), true)]
+    [InlineData(nameof(AuthController.GoogleCodeAuthOperation), true)]
     [InlineData(nameof(AuthController.Refresh), true)]
     [InlineData(nameof(AuthController.Logout), true)]
     [InlineData(nameof(AuthController.LogoutAll), false)]
