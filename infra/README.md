@@ -1,8 +1,8 @@
-# Render infrastructure
+# Orbit infrastructure
 
-This directory is one Terraform state for the Render production and staging resources. `production.tf` imports the existing API and declares the production database, web service, and landing site. `staging.tf` declares the staging database and services. `configuration.tf` owns four environment groups and their AWS SSM inputs. `variables.tf` contains the cutover switches and image digests. `versions.tf` pins the providers and configures the encrypted S3 state with native locking.
+This directory is one Terraform state for the Render production and staging resources, Cloudflare DNS and Turnstile, and AWS SSM parameters. `production.tf` imports the existing API and declares the production database, web service, and landing site. `staging.tf` declares the staging database and services. `configuration.tf` owns four environment groups and their AWS SSM inputs. `cloudflare.tf` owns the zone, DNS records, widget, and its secret parameters. `variables.tf` contains the cutover switches and image digests. `versions.tf` pins the providers and configures the encrypted S3 state with native locking.
 
-The Render provider reads `RENDER_API_KEY` from the environment. The AWS provider uses the default credential chain in `us-east-2`. The S3 state contains decrypted SecureString values, so access to the bucket and its lock file must stay restricted. The existing API is imported with its service ID; do not remove that import block or replace the service.
+The Render provider reads `RENDER_API_KEY` from the environment. The Cloudflare provider reads `CLOUDFLARE_API_TOKEN` from the environment. The AWS provider uses the default credential chain in `us-east-2`. The S3 state contains decrypted SecureString values, including the Turnstile secret, so access to the bucket and its lock file must stay restricted. The existing API is imported with its service ID; do not remove that import block or replace the service.
 
 ## SSM parameters
 
@@ -55,9 +55,17 @@ Create each entry as a SecureString in AWS Systems Manager Parameter Store in `u
 
 Every staging secret must be independently generated or issued for staging. The production API's non-secret values mirror the existing Render service. Staging currently inherits the same public third-party identifiers except for its environment, CORS origin, and URL-specific web settings. Replace those identifiers when separate staging integrations are available.
 
+Terraform creates `/orbit/production/api/BotProtection__SecretKey` and `/orbit/staging/api/BotProtection__SecretKey` as SecureString parameters from the managed Turnstile widget. Both API environment groups read the corresponding parameter. `BotProtection__Enabled` remains at its current setting. The public `turnstile_site_key` output is for the web and landing builds.
+
+## DNS cutover
+
+The Cloudflare zone uses full DNS setup on the Free plan. The existing records have automatic TTL and remain unproxied. The default `dns_apex_target`, `dns_www_target`, and `dns_app_target` values point to the current Vercel destinations. Change those variables only during the later Render cutover. `api` continues to point to its existing Render service. Staging CNAMEs take their hostnames from the staging Render resources.
+
+After apply, read the `cloudflare_name_servers` output and switch the nameservers at Spaceship. Once the switch has propagated, compare each Cloudflare nameserver against the current Spaceship zone with `bash infra/check-dns-cutover.sh <cloudflare-nameserver>`. The script compares record values and MX priorities while ignoring TTL and TXT chunk boundaries.
+
 ## Plan and apply
 
-Set `RENDER_API_KEY` in the shell and provide AWS credentials through the default credential chain. Make a local `infra/local.tfvars` containing the published production and staging image digests and any approved domain or database cutover settings. This file is ignored; `example.tfvars` shows the shape only. Run:
+Set `RENDER_API_KEY` and `CLOUDFLARE_API_TOKEN` in the shell and provide AWS credentials through the default credential chain. Make a local `infra/local.tfvars` containing the published production and staging image digests and any approved domain or database cutover settings. This file is ignored; `example.tfvars` shows the shape only. Run:
 
 ```sh
 terraform -chdir=infra init

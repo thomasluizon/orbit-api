@@ -137,6 +137,7 @@ resource "render_env_group" "production_api" {
     { for key, value in local.production_api_values : key => { value = value } },
     { for key in local.api_secret_keys : key => { value = data.aws_ssm_parameter.production_api[key].value } },
     { for key, value in local.production_api_database_values : key => { value = value } },
+    { BotProtection__SecretKey = { value = aws_ssm_parameter.turnstile_secret["production"].value } },
   )
 }
 
@@ -146,6 +147,7 @@ resource "render_env_group" "staging_api" {
     { for key, value in local.staging_api_values : key => { value = value } },
     { for key in local.api_secret_keys : key => { value = data.aws_ssm_parameter.staging_api[key].value } },
     { for key in local.database_keys : key => { value = local.staging_render_npgsql } },
+    { BotProtection__SecretKey = { value = aws_ssm_parameter.turnstile_secret["staging"].value } },
   )
 }
 
