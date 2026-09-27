@@ -146,10 +146,10 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
 
     private Habit() { }
 
-    public static Habit FromScheduleSnapshot(HabitScheduleSnapshot snapshot) => new()
+    public static Habit FromScheduleSnapshot(HabitScheduleSnapshot snapshot, Guid userId) => new()
     {
         Id = snapshot.Id,
-        UserId = snapshot.UserId,
+        UserId = userId,
         ParentHabitId = snapshot.ParentHabitId,
         FrequencyUnit = snapshot.FrequencyUnit,
         FrequencyQuantity = snapshot.FrequencyQuantity,

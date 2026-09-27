@@ -189,11 +189,12 @@ public class StreakProjectionQueryTests
             factory.Context.Habits.AsNoTracking().Where(candidate => candidate.UserId == user.Id));
         var sql = projectionQuery.ToQueryString();
         var snapshot = await projectionQuery.SingleAsync();
-        var projectedHabit = Habit.FromScheduleSnapshot(snapshot);
+        var projectedHabit = Habit.FromScheduleSnapshot(snapshot, user.Id);
         var end = start.AddDays(14);
 
         HabitScheduleService.GetUnionScheduledDatesForStreak([projectedHabit], start, end, TimeZoneInfo.Utc)
             .Should().BeEquivalentTo(HabitScheduleService.GetUnionScheduledDatesForStreak([habit], start, end, TimeZoneInfo.Utc));
+        sql.Split("FROM", 2)[0].Should().NotContain("\"UserId\"");
         sql.Should().NotContain("\"Description\"").And.NotContain("\"Emoji\"");
     }
 
@@ -238,7 +239,8 @@ public class StreakProjectionQueryTests
         projectedAchievementRows.Should().HaveCount(5);
         foreach (var habit in fullAchievementHabits)
         {
-            var projectedHabit = Habit.FromScheduleSnapshot(projectedHabits.Single(snapshot => snapshot.Id == habit.Id));
+            var projectedHabit = Habit.FromScheduleSnapshot(
+                projectedHabits.Single(snapshot => snapshot.Id == habit.Id), user.Id);
             HabitMetricsCalculator.CalculateProjected(projectedHabit,
                 projectedAchievementRows.Where(log => log.HabitId == habit.Id).ToList(), today, 1)
                 .Should().Be(HabitMetricsCalculator.Calculate(habit, today, 1));
@@ -286,6 +288,7 @@ public class StreakProjectionQueryTests
         counter.CommandCount.Should().Be(1);
         counter.Commands.Should().ContainSingle().Which.Rows.Should().Be(2);
         var sql = counter.Commands.Single().Sql;
+        sql.Split("FROM", 2)[0].Should().NotContain("\"UserId\"");
         sql.Should().Contain("\"IsDeleted\"")
             .And.Contain("\"IsBadHabit\"")
             .And.Contain("\"IsCompleted\"")
