@@ -84,6 +84,44 @@ public class HabitScheduleLogReaderTests
     }
 
     [Fact]
+    public async Task ReadDaysAsync_RebuildsCountsAndPresenceFromRealRows()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var user = User.Create("Schedule User", $"schedule-{Guid.NewGuid():N}@example.com").Value;
+        var habit = CreateFlexibleHabit(user.Id);
+        var other = CreateFlexibleHabit(user.Id);
+        var from = DueDate;
+        var to = DueDate.AddDays(3);
+        var now = new DateTime(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc);
+        var logs = new[]
+        {
+            HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, from, 1, 0, now),
+            HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, from, 2, 1, now),
+            HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, from.AddDays(1), 0, 0, now),
+            HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, from.AddDays(2), -1, 0, now),
+            HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, to, 1, 0, now),
+            HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, from.AddDays(-1), 1, 0, now),
+            HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, to.AddDays(1), 1, 0, now),
+            HabitLog.FromScheduleRead(Guid.NewGuid(), other.Id, from, 1, 0, now)
+        };
+        factory.Context.Users.Add(user);
+        factory.Context.Habits.AddRange(habit, other);
+        factory.Context.HabitLogs.AddRange(logs);
+        await factory.Context.SaveChangesAsync();
+        factory.Context.ChangeTracker.Clear();
+
+        var days = await new HabitScheduleLogReader(factory.Context)
+            .ReadDaysAsync([habit.Id], from, to);
+
+        days.Should().BeEquivalentTo([
+            new Orbit.Domain.Interfaces.HabitScheduleLogDay(habit.Id, from, 2, 0, true),
+            new Orbit.Domain.Interfaces.HabitScheduleLogDay(habit.Id, from.AddDays(1), 0, 1, true),
+            new Orbit.Domain.Interfaces.HabitScheduleLogDay(habit.Id, from.AddDays(2), 0, 0, true),
+            new Orbit.Domain.Interfaces.HabitScheduleLogDay(habit.Id, to, 1, 0, true)
+        ]);
+    }
+
+    [Fact]
     public async Task ReadResolvedDueDateIdsAsync_ReturnsOnlyHabitsWithALogOnTheirDueDate()
     {
         using var factory = new SqliteOrbitDbContextFactory();
