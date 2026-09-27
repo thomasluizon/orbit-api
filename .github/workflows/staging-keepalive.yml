@@ -13,4 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check staging health
-        run: curl --fail --silent --show-error --max-time 90 https://api-staging.useorbit.org/health > /dev/null
+        run: |
+          status="$(curl --silent --show-error --max-time 90 --output /dev/null \
+            --write-out '%{http_code}' https://api-staging.useorbit.org/health)"
+          [[ "$status" == 2[0-9][0-9] ]]
