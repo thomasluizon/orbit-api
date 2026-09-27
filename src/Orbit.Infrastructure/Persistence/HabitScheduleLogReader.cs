@@ -22,14 +22,22 @@ public sealed class HabitScheduleLogReader(OrbitDbContext context) : IHabitSched
         FormattableString sql = context.Database.ProviderName switch
         {
             "Microsoft.EntityFrameworkCore.Sqlite" => $"""
-                SELECT "HabitId", json_group_array(json_array("Date", "Value")) AS "Facts"
+                SELECT "HabitId", json_array(
+                    json(COALESCE(json_group_array(CAST(julianday("Date") - julianday({fromIso}) AS integer)) FILTER (WHERE CAST("Value" AS numeric) > 0), '[]')),
+                    json(COALESCE(json_group_array(CAST(julianday("Date") - julianday({fromIso}) AS integer)) FILTER (WHERE CAST("Value" AS numeric) = 0), '[]')),
+                    json(COALESCE(json_group_array(DISTINCT CAST(julianday("Date") - julianday({fromIso}) AS integer)) FILTER (WHERE CAST("Value" AS numeric) < 0), '[]'))
+                ) AS "Facts"
                 FROM "HabitLogs"
                 WHERE "HabitId" IN (SELECT upper(value) FROM json_each({idsJson}))
                   AND "Date" >= {fromIso} AND "Date" <= {toIso} AND NOT "IsDeleted"
                 GROUP BY "HabitId"
                 """,
             "Npgsql.EntityFrameworkCore.PostgreSQL" => $"""
-                SELECT "HabitId", jsonb_agg(jsonb_build_array("Date", "Value"))::text AS "Facts"
+                SELECT "HabitId", jsonb_build_array(
+                    COALESCE(jsonb_agg("Date" - CAST({fromIso} AS date)) FILTER (WHERE "Value" > 0), '[]'::jsonb),
+                    COALESCE(jsonb_agg("Date" - CAST({fromIso} AS date)) FILTER (WHERE "Value" = 0), '[]'::jsonb),
+                    COALESCE(jsonb_agg(DISTINCT "Date" - CAST({fromIso} AS date)) FILTER (WHERE "Value" < 0), '[]'::jsonb)
+                )::text AS "Facts"
                 FROM "HabitLogs"
                 WHERE "HabitId" IN (SELECT value::uuid FROM jsonb_array_elements_text(CAST({idsJson} AS jsonb)) AS value)
                   AND "Date" >= CAST({fromIso} AS date)
@@ -44,17 +52,32 @@ public sealed class HabitScheduleLogReader(OrbitDbContext context) : IHabitSched
         foreach (var row in rows)
         {
             using var document = JsonDocument.Parse(row.Facts);
-            foreach (var dateGroup in document.RootElement.EnumerateArray()
-                .GroupBy(entry => DateOnly.Parse(entry[0].ToString(), CultureInfo.InvariantCulture)))
+            var facts = document.RootElement;
+            var counts = new Dictionary<int, (int Completed, int Skipped)>();
+            foreach (var offset in facts[0].EnumerateArray())
             {
-                var values = dateGroup
-                    .Select(entry => decimal.Parse(entry[1].ToString(), CultureInfo.InvariantCulture))
-                    .ToArray();
+                var day = offset.GetInt32();
+                counts.TryGetValue(day, out var count);
+                counts[day] = (count.Completed + 1, count.Skipped);
+            }
+
+            foreach (var offset in facts[1].EnumerateArray())
+            {
+                var day = offset.GetInt32();
+                counts.TryGetValue(day, out var count);
+                counts[day] = (count.Completed, count.Skipped + 1);
+            }
+
+            foreach (var offset in facts[2].EnumerateArray())
+                counts.TryAdd(offset.GetInt32(), default);
+
+            foreach (var (offset, count) in counts)
+            {
                 days.Add(new HabitScheduleLogDay(
                     row.HabitId,
-                    dateGroup.Key,
-                    values.Count(value => value > 0),
-                    values.Count(value => value == 0),
+                    from.AddDays(offset),
+                    count.Completed,
+                    count.Skipped,
                     true));
             }
         }
