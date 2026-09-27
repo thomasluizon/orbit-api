@@ -15,6 +15,8 @@ public static class ErrorCopy
         (ErrorCodes.TooManyAttempts, $"Too many tries. Wait {AppConstants.VerificationAttemptWindowMinutes} minutes and start again.", $"Tentativas demais. Espere {AppConstants.VerificationAttemptWindowMinutes} minutos e comece de novo."),
         (ErrorCodes.CodeRequestCooldown, "Wait a moment before asking for another code.", "Espere um instante antes de pedir outro código."),
         (ErrorCodes.InvalidGoogleToken, "That Google sign-in expired. Sign in with Google again.", "Esse acesso com o Google expirou. Entre com o Google de novo."),
+        (ErrorCodes.GoogleRedirectUriNotAllowed, "Google sign-in redirect URI is not allowed", "O endereço de retorno do acesso com o Google não é permitido."),
+        (ErrorCodes.GoogleCodeExchangeFailed, "Could not exchange Google sign-in code", "Não foi possível trocar o código de acesso do Google."),
         (ErrorCodes.GoogleEmailUnavailable, "Google did not share an email address. Allow email access and try again.", "O Google não compartilhou um e-mail. Permita o acesso ao e-mail e tente de novo."),
         (ErrorCodes.GoogleTokenAudienceMismatch, "That Google sign-in was issued for another app. Sign in from Orbit again.", "Esse acesso do Google foi emitido para outro aplicativo. Entre pelo Orbit de novo."),
         (ErrorCodes.InvalidUnsubscribeToken, "That unsubscribe link expired. Use the link in a newer email.", "Esse link para cancelar inscrição expirou. Use o link de um e-mail mais recente."),

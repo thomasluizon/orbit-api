@@ -40,10 +40,10 @@ public class GoogleAuthCommandHandlerTests
         var httpFactory = Substitute.For<IHttpClientFactory>();
         httpFactory.CreateClient("Supabase").Returns(httpClient);
 
-        _handler = new GoogleAuthCommandHandler(
-            _userRepo, _unitOfWork, _authSessionService, httpFactory, _emailService,
+        var flow = new GoogleSignInFlow(_userRepo, _unitOfWork, _authSessionService, _emailService,
             Substitute.For<Microsoft.Extensions.DependencyInjection.IServiceScopeFactory>(), _analytics,
-            Substitute.For<ILogger<GoogleAuthCommandHandler>>());
+            Substitute.For<ILogger<GoogleSignInFlow>>());
+        _handler = new GoogleAuthCommandHandler(httpFactory, flow);
 
         _authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new SessionTokens("jwt-token", "refresh-token")));

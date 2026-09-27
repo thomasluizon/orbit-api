@@ -10,7 +10,6 @@ using Orbit.Application.Marketing.Commands;
 using Orbit.Application.Profile.Commands;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
-using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Commands.Profile;
 

@@ -167,6 +167,7 @@ public class AgentCatalogServiceTests
             "send_auth_code",
             "verify_auth_code",
             "exchange_google_auth",
+            "exchange_google_auth_code",
             "refresh_auth_session",
             "logout_auth_session"
         };

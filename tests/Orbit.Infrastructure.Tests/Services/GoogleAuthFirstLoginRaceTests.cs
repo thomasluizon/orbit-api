@@ -139,8 +139,9 @@ public class GoogleAuthFirstLoginRaceTests
         {
             BaseAddress = new Uri("https://supabase.example.com")
         });
-        return new GoogleAuthCommandHandler(userRepository, unitOfWork, sessionService, httpFactory,
-            emailService, scopeFactory, analytics, NullLogger<GoogleAuthCommandHandler>.Instance);
+        var flow = new GoogleSignInFlow(userRepository, unitOfWork, sessionService,
+            emailService, scopeFactory, analytics, NullLogger<GoogleSignInFlow>.Instance);
+        return new GoogleAuthCommandHandler(httpFactory, flow);
     }
 
     private sealed class GoogleTokenHandler : HttpMessageHandler
