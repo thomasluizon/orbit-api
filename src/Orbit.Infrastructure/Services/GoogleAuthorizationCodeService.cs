@@ -1,5 +1,6 @@
-using System.Text.Json;
 using Google.Apis.Auth;
+using Google.Apis.Auth.OAuth2.Responses;
+using Google.Apis.Util;
 using Microsoft.Extensions.Options;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -84,9 +85,9 @@ public sealed class GoogleAuthorizationCodeService(
             if (!response.IsSuccessStatusCode)
                 return Result.Failure<GoogleCodeIdentity>(ErrorMessages.GoogleCodeExchangeFailed);
 
-            using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
-            var root = document.RootElement;
-            var idToken = ReadString(root, "id_token");
+            var tokens = await TokenResponse.FromHttpResponseAsync(
+                response, SystemClock.Default, Google.ApplicationContext.Logger);
+            var idToken = tokens.IdToken;
             if (string.IsNullOrWhiteSpace(idToken))
                 return Result.Failure<GoogleCodeIdentity>(ErrorMessages.InvalidGoogleToken);
 
@@ -96,22 +97,18 @@ public sealed class GoogleAuthorizationCodeService(
 
             return Result.Success(new GoogleCodeIdentity(
                 identity.Value.Email, identity.Value.Name,
-                NonEmptyString(root, "access_token"), NonEmptyString(root, "refresh_token")));
+                NonEmpty(tokens.AccessToken), NonEmpty(tokens.RefreshToken)));
         }
-        catch (Exception ex) when (ex is HttpRequestException or JsonException)
+        catch (InvalidJwtException)
+        {
+            return Result.Failure<GoogleCodeIdentity>(ErrorMessages.InvalidGoogleToken);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TokenResponseException
+            || ex is OperationCanceledException && !cancellationToken.IsCancellationRequested)
         {
             return Result.Failure<GoogleCodeIdentity>(ErrorMessages.GoogleCodeExchangeFailed);
         }
     }
 
-    private static string? ReadString(JsonElement root, string name) =>
-        root.TryGetProperty(name, out var element) && element.ValueKind == JsonValueKind.String
-            ? element.GetString()
-            : null;
-
-    private static string? NonEmptyString(JsonElement root, string name)
-    {
-        var value = ReadString(root, name);
-        return string.IsNullOrWhiteSpace(value) ? null : value;
-    }
+    private static string? NonEmpty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 }

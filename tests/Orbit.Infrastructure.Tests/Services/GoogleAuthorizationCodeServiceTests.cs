@@ -13,6 +13,9 @@ namespace Orbit.Infrastructure.Tests.Services;
 public class GoogleAuthorizationCodeServiceTests
 {
     private const string RedirectUri = "https://app.test/auth/callback";
+    private static readonly string IdToken = Segment("""{"alg":"RS256","kid":"test"}""")
+        + "." + Segment("""{"iss":"accounts.google.com","aud":"google-client","exp":4100000000,"iat":1900000000,"email":"google@example.com","email_verified":true}""")
+        + "." + Segment("signature");
     private readonly RecordingHandler _handler = new();
     private readonly IGoogleIdTokenValidator _validator = Substitute.For<IGoogleIdTokenValidator>();
     private readonly GoogleAuthorizationCodeService _service;
@@ -21,7 +24,7 @@ public class GoogleAuthorizationCodeServiceTests
     {
         var factory = Substitute.For<IHttpClientFactory>();
         factory.CreateClient(GoogleAuthorizationCodeService.HttpClientName).Returns(new HttpClient(_handler));
-        _validator.ValidateAsync("signed-id-token")
+        _validator.ValidateAsync(IdToken)
             .Returns(Result.Success(("google@example.com", "Google User")));
         _service = new GoogleAuthorizationCodeService(factory,
             Options.Create(new GoogleSettings
@@ -36,7 +39,7 @@ public class GoogleAuthorizationCodeServiceTests
     public async Task AllowedRedirect_ExchangesCodeAndValidatesIdToken()
     {
         _handler.Respond(HttpStatusCode.OK,
-            """{"access_token":"access","refresh_token":"refresh","id_token":"signed-id-token"}""");
+            $$"""{"access_token":"access","refresh_token":"refresh","id_token":"{{IdToken}}"}""");
 
         var result = await _service.ExchangeAsync("auth-code", "pkce-verifier", RedirectUri, CancellationToken.None);
 
@@ -52,7 +55,7 @@ public class GoogleAuthorizationCodeServiceTests
             .And.Contain("client_secret=google-secret")
             .And.Contain("redirect_uri=https%3A%2F%2Fapp.test%2Fauth%2Fcallback")
             .And.Contain("grant_type=authorization_code");
-        await _validator.Received(1).ValidateAsync("signed-id-token");
+        await _validator.Received(1).ValidateAsync(IdToken);
     }
 
     [Fact]
@@ -63,6 +66,15 @@ public class GoogleAuthorizationCodeServiceTests
         result.ErrorCode.Should().Be(ErrorCodes.GoogleRedirectUriNotAllowed);
         _handler.RequestCount.Should().Be(0);
         await _validator.DidNotReceive().ValidateAsync(Arg.Any<string>());
+    }
+
+    [Fact]
+    public async Task RedirectMustMatchExactly()
+    {
+        var result = await _service.ExchangeAsync("auth-code", "verifier", RedirectUri + "/", CancellationToken.None);
+
+        result.ErrorCode.Should().Be(ErrorCodes.GoogleRedirectUriNotAllowed);
+        _handler.RequestCount.Should().Be(0);
     }
 
     [Fact]
@@ -79,14 +91,28 @@ public class GoogleAuthorizationCodeServiceTests
     [Fact]
     public async Task InvalidIdToken_ReturnsValidatorError()
     {
-        _handler.Respond(HttpStatusCode.OK, """{"id_token":"signed-id-token"}""");
-        _validator.ValidateAsync("signed-id-token")
+        _handler.Respond(HttpStatusCode.OK, $$"""{"access_token":"access","id_token":"{{IdToken}}"}""");
+        _validator.ValidateAsync(IdToken)
             .Returns(Result.Failure<(string, string)>(ErrorMessages.InvalidGoogleToken));
 
         var result = await _service.ExchangeAsync("auth-code", "verifier", RedirectUri, CancellationToken.None);
 
         result.ErrorCode.Should().Be(ErrorCodes.InvalidGoogleToken);
     }
+
+    [Fact]
+    public async Task MalformedIdToken_ReturnsInvalidTokenError()
+    {
+        _handler.Respond(HttpStatusCode.OK, """{"access_token":"access","id_token":"malformed"}""");
+
+        var result = await _service.ExchangeAsync("auth-code", "verifier", RedirectUri, CancellationToken.None);
+
+        result.ErrorCode.Should().Be(ErrorCodes.InvalidGoogleToken);
+        await _validator.DidNotReceive().ValidateAsync(Arg.Any<string>());
+    }
+
+    private static string Segment(string value) => Convert.ToBase64String(Encoding.UTF8.GetBytes(value))
+        .TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
     private sealed class RecordingHandler : HttpMessageHandler
     {
