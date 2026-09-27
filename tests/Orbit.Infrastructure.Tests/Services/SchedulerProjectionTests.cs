@@ -9,8 +9,10 @@ using NSubstitute;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
+using Orbit.Domain.Events;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.ValueObjects;
+using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Tests.Persistence;
 using Orbit.Infrastructure.Services;
 
@@ -192,6 +194,54 @@ public class SchedulerProjectionTests
 
         reads.Commands.Should().Contain(c => c.Contains("\"Title\"", StringComparison.Ordinal));
         await push.Received(1).SendToUserAsync(user.Id, habit.Title, "Due now", "/", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReminderTick_ResetAndReplacementWithSameCount_RefreshesBeforeReminder()
+    {
+        var reads = new SchedulerReadInterceptor();
+        using var factory = new SqliteOrbitDbContextFactory(reads);
+        var db = factory.Context;
+        var clock = new MutableTimeProvider(new DateTimeOffset(2027, 9, 26, 8, 59, 0, TimeSpan.Zero));
+        var user = User.Create("Alex", "alex@test.com").Value;
+        var deletedHabit = Habit.Create(new HabitCreateParams(user.Id, "Old reminder", FrequencyUnit.Day, 1,
+            new DateOnly(2027, 9, 26), DueTime: new TimeOnly(9, 0), ReminderEnabled: true,
+            ReminderTimes: [0])).Value;
+        db.Users.Add(user);
+        db.Habits.Add(deletedHabit);
+        await db.SaveChangesAsync();
+        deletedHabit.ReminderProbeVersion.Should().Be(0);
+
+        var push = Substitute.For<IPushNotificationService>();
+        var service = new ReminderSchedulerService(Scope(db, push), NullLogger<ReminderSchedulerService>.Instance,
+            new ConfigurationBuilder().Build(), clock);
+        await service.CheckAndSendReminders(CancellationToken.None);
+
+        await using (var resetDb = factory.CreateContext())
+        {
+            var resetUser = await resetDb.Users.SingleAsync(u => u.Id == user.Id);
+            var resetRepository = new AccountResetRepository(resetDb, Substitute.For<IAccountEventCollector>());
+            await resetRepository.DeleteAllUserDataAsync(user.Id);
+            resetUser.ResetAccount();
+            await resetDb.SaveChangesAsync();
+
+            var replacement = Habit.Create(new HabitCreateParams(user.Id, "New reminder", FrequencyUnit.Day, 1,
+                new DateOnly(2027, 9, 26), DueTime: new TimeOnly(9, 0), ReminderEnabled: true,
+                ReminderTimes: [0])).Value;
+            resetDb.Habits.Add(replacement);
+            await resetDb.SaveChangesAsync();
+            replacement.ReminderProbeVersion.Should().Be(0);
+        }
+
+        clock.Set(new DateTimeOffset(2027, 9, 26, 9, 0, 0, TimeSpan.Zero));
+        reads.Clear();
+        await service.CheckAndSendReminders(CancellationToken.None);
+
+        reads.Commands.Should().Contain(c => c.Contains("\"Title\"", StringComparison.Ordinal));
+        await push.Received(1).SendToUserAsync(user.Id, "New reminder", "Due now", "/",
+            Arg.Any<CancellationToken>());
+        await push.DidNotReceive().SendToUserAsync(user.Id, "Old reminder", Arg.Any<string>(),
+            Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

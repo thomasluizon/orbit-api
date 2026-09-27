@@ -698,6 +698,7 @@ public partial class User : Entity
     /// </summary>
     public void ResetAccount()
     {
+        ReminderPreferencesVersion++;
         HasCompletedOnboarding = false;
         HasCompletedTour = false;
         HasCreatedFirstHabit = false;
