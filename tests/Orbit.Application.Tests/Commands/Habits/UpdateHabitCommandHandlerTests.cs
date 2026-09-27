@@ -7,6 +7,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.ValueObjects;
 using System.Linq.Expressions;
 
 namespace Orbit.Application.Tests.Commands.Habits;
@@ -104,6 +105,37 @@ public class UpdateHabitCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         habit.Title.Should().Be("Updated Title");
         habit.Description.Should().Be("New description");
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_TimedHabitScheduledReminderEdit_SavesFoldedClockReminder()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Timed habit", FrequencyUnit.Day, 1, Today,
+            DueTime: new TimeOnly(9, 0),
+            ScheduledReminders: [new(ScheduledReminderWhen.SameDay, new TimeOnly(8, 0))])).Value;
+        _habitRepo.FindOneTrackedAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(habit);
+        _sentReminderRepo.FindAsync(
+                Arg.Any<Expression<Func<SentReminder, bool>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<SentReminder>());
+        var command = new UpdateHabitCommand(
+            UserId, habit.Id, habit.Title, habit.Description, habit.FrequencyUnit, habit.FrequencyQuantity,
+            Options: new UpdateHabitCommandOptions(
+                DueTime: habit.DueTime,
+                ScheduledReminders: [new(ScheduledReminderWhen.SameDay, new TimeOnly(10, 0))]));
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        habit.ScheduledReminders.Should().BeEmpty();
+        habit.RelativeReminders.Should().ContainSingle().Which.Should().Be(
+            new RelativeReminderTime(When: ScheduledReminderWhen.SameDay, Time: new TimeOnly(10, 0)));
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
