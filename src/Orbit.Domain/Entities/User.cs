@@ -57,6 +57,7 @@ public partial class User : Entity
     public DateTime? DeactivatedAt { get; private set; }
     public DateTime? ScheduledDeletionAt { get; private set; }
     public int WeekStartDay { get; private set; } = 1;
+    public int ReminderPreferencesVersion { get; private set; }
     public string? ReferralCode { get; private set; }
     public Guid? ReferredByUserId { get; private set; }
     public string? Handle { get; private set; }
@@ -168,6 +169,7 @@ public partial class User : Entity
         {
             TimeZoneInfo.FindSystemTimeZoneById(trimmedTimeZoneId);
             TimeZone = trimmedTimeZoneId;
+            ReminderPreferencesVersion++;
             return Result.Success();
         }
         catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException)
@@ -182,7 +184,11 @@ public partial class User : Entity
 
     public void SetProactiveAstraEnabled(bool enabled) => ProactiveAstraEnabled = enabled;
 
-    public void SetLanguage(string? language) => Language = language;
+    public void SetLanguage(string? language)
+    {
+        Language = language;
+        ReminderPreferencesVersion++;
+    }
 
     /// <summary>
     /// Persists the user's Google Calendar selection as a JSON array of calendar ids.
@@ -487,6 +493,7 @@ public partial class User : Entity
             return Result.Failure(DomainErrors.InvalidWeekStartDay);
 
         WeekStartDay = day;
+        ReminderPreferencesVersion++;
         return Result.Success();
     }
 

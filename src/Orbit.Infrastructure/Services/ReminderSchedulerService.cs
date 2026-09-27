@@ -25,6 +25,16 @@ public partial class ReminderSchedulerService(
 {
     private const int MinRelativeDayOffset = -1;
     private const int MaxRelativeLookaheadDays = DomainConstants.MaxReminderMinutesBefore / 1440 + 1;
+    private const string ReminderProbeSql = """
+        SELECT COUNT(*) AS "HabitCount",
+               MAX(h."UpdatedAtUtc") AS "LatestHabitUpdateUtc",
+               COALESCE(SUM(u."ReminderPreferencesVersion"), 0) AS "UserPreferencesVersionSum"
+        FROM "Habits" AS h
+        INNER JOIN "Users" AS u ON h."UserId" = u."Id"
+        WHERE NOT h."IsDeleted" AND NOT h."IsCompleted"
+          AND NOT h."IsGeneral" AND h."ReminderEnabled"
+          AND NOT u."IsDeactivated"
+        """;
 
     private static readonly Expression<Func<Habit, SchedulerHabit>> HabitProjection = h => new SchedulerHabit
     {
@@ -94,17 +104,12 @@ public partial class ReminderSchedulerService(
 
     private async Task<ReminderSnapshot> GetSnapshotAsync(OrbitDbContext dbContext, DateTime nowUtc, CancellationToken ct)
     {
-        var probe = await (from habit in dbContext.Habits.AsNoTracking()
-                           join user in dbContext.Users.AsNoTracking() on habit.UserId equals user.Id
-                           where !habit.IsCompleted && !habit.IsGeneral && habit.ReminderEnabled
-                           orderby habit.Id
-                           select new ReminderProbe(habit.Id, habit.UpdatedAtUtc,
-                               user.TimeZone, user.Language, user.WeekStartDay))
-            .ToListAsync(ct);
+        var probe = await dbContext.Database.SqlQueryRaw<ReminderProbe>(ReminderProbeSql)
+            .SingleAsync(ct);
 
         if (_snapshot is not null && nowUtc >= _snapshot.LoadedAtUtc
             && nowUtc - _snapshot.LoadedAtUtc < TimeSpan.FromHours(1)
-            && probe.SequenceEqual(_snapshot.Probe))
+            && probe == _snapshot.Probe)
             return _snapshot;
 
         _snapshot = await LoadSnapshotAsync(dbContext, probe, nowUtc, ct);
@@ -112,7 +117,7 @@ public partial class ReminderSchedulerService(
     }
 
     private static async Task<ReminderSnapshot> LoadSnapshotAsync(
-        OrbitDbContext dbContext, List<ReminderProbe> probe, DateTime nowUtc, CancellationToken ct)
+        OrbitDbContext dbContext, ReminderProbe probe, DateTime nowUtc, CancellationToken ct)
     {
         var minLocalDate = DateOnly.FromDateTime(nowUtc.AddDays(-1));
         var maxLocalDate = DateOnly.FromDateTime(nowUtc.AddDays(MaxRelativeLookaheadDays + 1));
@@ -433,12 +438,16 @@ public partial class ReminderSchedulerService(
 
     private readonly record struct PendingReminderPush(Guid UserId, string Title, string Body, Guid HabitId);
 
-    private sealed record ReminderProbe(Guid HabitId, DateTime UpdatedAtUtc,
-        string? TimeZone, string? Language, int WeekStartDay);
+    private sealed record ReminderProbe
+    {
+        public long HabitCount { get; init; }
+        public DateTime? LatestHabitUpdateUtc { get; init; }
+        public long UserPreferencesVersionSum { get; init; }
+    }
 
     private sealed record ReminderSnapshot(
         DateTime LoadedAtUtc,
-        List<ReminderProbe> Probe,
+        ReminderProbe Probe,
         List<SchedulerHabit> RelativeHabits,
         List<SchedulerHabit> ScheduledHabits,
         Dictionary<Guid, SchedulerUser> Users,
