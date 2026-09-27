@@ -1,0 +1,90 @@
+name: Staging reseed
+
+# Required secret: RENDER_API_KEY from Render Account Settings > API Keys.
+# Required variable: SEED_OWNER_EMAIL for the staging owner's Google sign-in email.
+# The AWS role is created by infra/github_oidc.tf before this workflow is enabled.
+on:
+  schedule:
+    - cron: '0 10 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: staging-database-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  reseed:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: arn:aws:iam::713285551626:role/orbit-staging-reseed
+          aws-region: us-east-2
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e
+        with:
+          terraform_version: 1.16.4
+          terraform_wrapper: false
+      - name: Read staging database age
+        id: age
+        run: |
+          terraform -chdir=infra init -input=false
+          database_id="$(terraform -chdir=infra output -raw staging_postgres_id)"
+          created_at="$(curl --fail --silent --show-error --max-time 30 \
+            --header "Authorization: Bearer ${RENDER_API_KEY}" \
+            "https://api.render.com/v1/postgres/${database_id}" \
+            | jq --exit-status --raw-output --arg id "${database_id}" 'select(.id == $id) | .createdAt')"
+          created_epoch="$(date -u -d "${created_at}" +%s)"
+          now_epoch="$(date -u +%s)"
+          if [[ "${{ github.event_name }}" == workflow_dispatch || $((now_epoch - created_epoch)) -ge 2246400 ]]; then
+            echo 'replace=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'replace=false' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Replace staging database and refresh its API connection
+        if: steps.age.outputs.replace == 'true'
+        run: |
+          terraform -chdir=infra plan -input=false \
+            -var-file=example.tfvars \
+            -target=render_env_group.staging_api \
+            -replace=render_postgres.staging \
+            -out=staging-reseed.tfplan
+          terraform -chdir=infra show -json staging-reseed.tfplan | jq --exit-status '
+            [.resource_changes[] | select(.change.actions != ["no-op"])] |
+            (length >= 1 and all(.[]; .address == "render_postgres.staging" or
+              (.address == "render_env_group.staging_api" and .change.actions == ["update"]))) and
+            any(.[]; .address == "render_postgres.staging" and
+              (.change.actions == ["delete", "create"] or .change.actions == ["create", "delete"]))
+          ' > /dev/null
+          terraform -chdir=infra apply -input=false -auto-approve staging-reseed.tfplan
+      - name: Wait for API migration on the new database
+        if: steps.age.outputs.replace == 'true'
+        run: |
+          for ((attempt=1; attempt<=30; attempt++)); do
+            if curl --fail --silent --show-error --max-time 20 https://api-staging.useorbit.org/health > /dev/null; then
+              exit 0
+            fi
+            sleep 20
+          done
+          exit 1
+      - uses: actions/setup-dotnet@v6
+        if: steps.age.outputs.replace == 'true'
+        with:
+          dotnet-version: '10.0.x'
+      - name: Seed the owner account
+        if: steps.age.outputs.replace == 'true'
+        env:
+          ASPNETCORE_ENVIRONMENT: Staging
+          Seed__OwnerEmail: ${{ vars.SEED_OWNER_EMAIL }}
+        run: |
+          Seed__ExpectedHost="$(terraform -chdir=infra output -raw staging_external_host)" \
+            Seed__DatabaseUrl="$(terraform -chdir=infra output -raw staging_external_connection_string)" \
+            dotnet run --project src/Orbit.Api/Orbit.Api.csproj -- seed-staging
