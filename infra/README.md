@@ -69,6 +69,17 @@ Set `RENDER_API_KEY` and `CLOUDFLARE_API_TOKEN` in the shell and provide AWS cre
 
 The `production_web_digest` and `staging_web_digest` variables seed the web images only when Terraform first creates each service. Terraform ignores later digest changes on both web services. The `web-image.yml` and `deploy-web.yml` release workflows own subsequent staging and production web deploys by digest.
 
+With Render provider v1.9.1, a refreshed digest image path also populates a computed image tag. On any web service update, the provider sends an image reference built from the planned tag before considering the digest. Ignoring the entire image block retains that computed tag and does not make the update safe. Once either web service exists, do not apply changes to any attribute of `render_web_service.production_web` or `render_web_service.staging_web`, including plan, region, health check path, custom domains, or runtime source. Before every apply, inspect the plan and stop if either web service has an update. Defer those service-setting changes until the provider can preserve digest image paths on update.
+
+After every apply, read each web service's live `imagePath` from Render using its service ID and compare it with the digest approved by its latest release workflow. The expected value is `ghcr.io/thomasluizon/orbit-web@sha256:<approved digest without the sha256: prefix>`. Do not use the Terraform digest variables as the expected value after creation. For each service, run:
+
+```sh
+curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+  "https://api.render.com/v1/services/<service-id>" | jq -r '.imagePath'
+```
+
+If either image differs, stop further applies and redeploy the approved digest through the corresponding release workflow.
+
 Changing a Render service's build or deploy settings through Terraform starts a Render deploy of the tracked branch head, including when the change is to an API service. Before applying such a change, arrange to pause or cancel that deploy, or apply only when an approved release of the same commit is intended.
 
 Run:
