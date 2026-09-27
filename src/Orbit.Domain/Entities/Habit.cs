@@ -170,6 +170,39 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         Title = string.Empty
     };
 
+    public void LoadScheduleCandidateFieldsForRead(
+        string title, string? description, int? position, IEnumerable<Tag> tags)
+    {
+        Title = title;
+        Description = description;
+        Position = position;
+        _tags.Clear();
+        _tags.AddRange(tags);
+    }
+
+    public void LoadScheduleFieldsForRead(Habit candidate)
+    {
+        if (candidate.Id != Id || candidate.UserId != UserId)
+            throw new ArgumentException("Schedule candidate must match the hydrated habit.");
+
+        ParentHabitId = candidate.ParentHabitId;
+        FrequencyUnit = candidate.FrequencyUnit;
+        FrequencyQuantity = candidate.FrequencyQuantity;
+        IntervalWeeks = candidate.IntervalWeeks;
+        DueDate = candidate.DueDate;
+        ScheduledStartDate = candidate.ScheduledStartDate;
+        OriginalDayOfMonth = candidate.OriginalDayOfMonth;
+        EndDate = candidate.EndDate;
+        CreatedAtUtc = candidate.CreatedAtUtc;
+        DeletedAtUtc = candidate.DeletedAtUtc;
+        IsDeleted = candidate.IsDeleted;
+        IsBadHabit = candidate.IsBadHabit;
+        IsCompleted = candidate.IsCompleted;
+        IsGeneral = candidate.IsGeneral;
+        IsFlexible = candidate.IsFlexible;
+        Days = candidate.Days.ToList();
+    }
+
     public static Result<Habit> Create(HabitCreateParams p)
     {
         if (p.UserId == Guid.Empty)
