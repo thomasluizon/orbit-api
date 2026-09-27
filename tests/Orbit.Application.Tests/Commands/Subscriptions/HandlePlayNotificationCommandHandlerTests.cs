@@ -78,6 +78,25 @@ public class HandlePlayNotificationCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_LicenseTesterPurchaseNotification_GrantsPro()
+    {
+        var user = User.Create("Alex", "test@example.com").Value;
+        user.LinkPlayPurchaseToken("test_purchase_token");
+        StubUser(user);
+        using var play = new PlayBillingTestClient("SUBSCRIPTION_STATE_ACTIVE",
+            DateTime.UtcNow.AddMonths(1), user.Id, Settings, isTestPurchase: true);
+        StubVerify(await play.Billing.VerifyAsync("orbit_pro", "test_purchase_token", CancellationToken.None));
+
+        var result = await _handler.Handle(new HandlePlayNotificationCommand(
+            BuildPushBody(4, "test_purchase_token", "orbit_pro")), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.IsPro.Should().BeTrue();
+        user.PlayPurchaseToken.Should().Be("test_purchase_token");
+        await _unitOfWork.Received().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_MalformedBody_ReturnsSuccessWithoutSaving()
     {
         var result = await _handler.Handle(new HandlePlayNotificationCommand("not-json"), CancellationToken.None);
