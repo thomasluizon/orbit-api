@@ -80,10 +80,21 @@ public partial class AgentOperationExecutor(
                 execution.Capability.ConfirmationRequirement,
                 execution.Summary);
 
+        var executionCancellationToken = cancellationToken;
         if (request.OnExecutionStarted is not null)
-            await request.OnExecutionStarted();
+        {
+            try
+            {
+                await request.OnExecutionStarted();
+            }
+            catch (Exception exception)
+            {
+                logger.LogWarning(exception, "Agent tool step notification failed for {OperationId}", operation.Id);
+                executionCancellationToken = CancellationToken.None;
+            }
+        }
 
-        return await ExecuteToolAsync(tool, execution, policyDecision, cancellationToken);
+        return await ExecuteToolAsync(tool, execution, policyDecision, executionCancellationToken);
     }
 
     private async Task<AgentExecuteOperationResponse> DenyUnknownOperationAsync(
