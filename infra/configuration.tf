@@ -55,6 +55,7 @@ locals {
     Storage__Provider                   = var.production_storage_provider
     Storage__S3__Bucket                 = aws_s3_bucket.uploads["production"].bucket
     Storage__S3__Region                 = "us-east-2"
+    Storage__S3__PublicBaseUrl          = "https://api.useorbit.org"
     Vapid__PublicKey                    = "BCotrosa_VZSere_khAKbxMVRj-NZIuHs4lK4sep1Fv5N6fx8z-99q9-pDPeEs0GwKiwOwf44SiI4NN5XX-htow"
     Vapid__Subject                      = "mailto:hello@useorbit.org"
   }
@@ -78,6 +79,7 @@ locals {
     Supabase__Url                  = "https://staging-storage-disabled.invalid"
     Storage__Provider              = var.staging_storage_provider
     Storage__S3__Bucket            = aws_s3_bucket.uploads["staging"].bucket
+    Storage__S3__PublicBaseUrl     = "https://api-staging.useorbit.org"
     Waitlist__ApiBaseUrl           = "https://api-staging.useorbit.org"
   })
 

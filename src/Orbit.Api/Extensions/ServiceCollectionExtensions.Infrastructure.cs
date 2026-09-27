@@ -54,6 +54,7 @@ public static partial class ServiceCollectionExtensions
         else if (storageProvider.Equals("S3", StringComparison.OrdinalIgnoreCase))
         {
             RequireConfigValue(builder, "Storage:S3:Bucket");
+            RequireConfigValue(builder, "Storage:S3:PublicBaseUrl");
             var region = RequireConfigValue(builder, "Storage:S3:Region");
             var accessKeyId = RequireConfigValue(builder, "Storage:S3:AccessKeyId");
             var secretAccessKey = RequireConfigValue(builder, "Storage:S3:SecretAccessKey");

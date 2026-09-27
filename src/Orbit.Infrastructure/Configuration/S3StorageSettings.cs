@@ -8,4 +8,5 @@ public sealed class S3StorageSettings
     public string Region { get; set; } = string.Empty;
     public string AccessKeyId { get; set; } = string.Empty;
     public string SecretAccessKey { get; set; } = string.Empty;
+    public string PublicBaseUrl { get; set; } = string.Empty;
 }

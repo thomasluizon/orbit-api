@@ -10,7 +10,7 @@ namespace Orbit.Infrastructure.Services;
 public sealed class S3ObjectStorageService(IAmazonS3 client, IOptions<S3StorageSettings> options) : IObjectStorageService
 {
     private static readonly TimeSpan UploadLifetime = TimeSpan.FromMinutes(10);
-    private static readonly TimeSpan ReadLifetime = TimeSpan.FromDays(7);
+    private static readonly TimeSpan ReadLifetime = TimeSpan.FromMinutes(10);
     private readonly S3StorageSettings _settings = options.Value;
 
     public async Task<SignedUpload> CreateSignedUploadAsync(
@@ -31,14 +31,18 @@ public sealed class S3ObjectStorageService(IAmazonS3 client, IOptions<S3StorageS
             Expires = now.Add(UploadLifetime),
             Headers = { ContentLength = sizeBytes },
         });
-        var readUrl = await client.GetPreSignedURLAsync(new GetPreSignedUrlRequest
+        return new SignedUpload(objectKey, uploadUrl,
+            $"{_settings.PublicBaseUrl.TrimEnd('/')}/api/uploads/object/{objectKey}");
+    }
+
+    public Task<string> CreateReadUrlAsync(string objectKey, CancellationToken cancellationToken = default)
+    {
+        return client.GetPreSignedURLAsync(new GetPreSignedUrlRequest
         {
             BucketName = _settings.Bucket,
             Key = objectKey,
             Verb = HttpVerb.GET,
-            Expires = now.Add(ReadLifetime),
+            Expires = TimeProvider.System.GetUtcNow().UtcDateTime.Add(ReadLifetime),
         });
-
-        return new SignedUpload(objectKey, uploadUrl, readUrl);
     }
 }

@@ -17,6 +17,9 @@ public sealed partial class SupabaseObjectStorageService(
 
     private readonly SupabaseStorageSettings _settings = options.Value;
 
+    public Task<string> CreateReadUrlAsync(string objectKey, CancellationToken cancellationToken = default) =>
+        Task.FromResult($"{_settings.Url.TrimEnd('/')}/storage/v1/object/public/{_settings.Bucket}/{objectKey}");
+
     public async Task<SignedUpload> CreateSignedUploadAsync(string objectKey, string contentType, long sizeBytes, CancellationToken cancellationToken = default)
     {
         var client = httpClientFactory.CreateClient(HttpClientName);

@@ -12,7 +12,7 @@ namespace Orbit.Infrastructure.Tests.Services;
 public class S3ObjectStorageServiceTests
 {
     private const string Bucket = "orbit-uploads-staging-713285551626";
-    private const string Key = "2b3b1fc7-813c-4eb6-ad02-bd7754299703/image.webp";
+    private const string Key = "2b3b1fc7-813c-4eb6-ad02-bd7754299703/1e21a217-e146-43c9-b61c-b5871a991578.webp";
 
     [Fact]
     public async Task CreateSignedUploadAsync_SignsPutTypeSizeAndShortExpiry()
@@ -33,8 +33,12 @@ public class S3ObjectStorageServiceTests
         query["X-Amz-SignedHeaders"].Split(';').Should().Contain(["content-type", "content-length", "host"]);
         DateTimeOffset.ParseExact(query["X-Amz-Date"], "yyyyMMddTHHmmssZ", null)
             .Should().BeCloseTo(before, TimeSpan.FromSeconds(5));
-        result.PublicUrl.Should().Contain(Bucket).And.Contain(Key);
-        ParseQuery(new Uri(result.PublicUrl))["X-Amz-Expires"].Should().Be("604800");
+        result.PublicUrl.Should().Be($"https://api-staging.useorbit.org/api/uploads/object/{Key}");
+
+        var readUrl = new Uri(await service.CreateReadUrlAsync(Key));
+        readUrl.Host.Should().Contain(Bucket);
+        readUrl.AbsolutePath.Should().EndWith(Key);
+        ParseQuery(readUrl)["X-Amz-Expires"].Should().Be("600");
     }
 
     [Fact]
@@ -59,12 +63,30 @@ public class S3ObjectStorageServiceTests
         await act.Should().ThrowAsync<ArgumentException>();
     }
 
+    [Fact]
+    public async Task CreateSignedUploadAsync_BindsDeclaredSizeInSignature()
+    {
+        using var client = CreateClient();
+        var service = CreateService(client);
+
+        var first = await service.CreateSignedUploadAsync(Key, "image/webp", 1024);
+        var second = await service.CreateSignedUploadAsync(Key, "image/webp", 2048);
+
+        ParseQuery(new Uri(first.SignedUrl))["X-Amz-Signature"]
+            .Should().NotBe(ParseQuery(new Uri(second.SignedUrl))["X-Amz-Signature"]);
+    }
+
     private static AmazonS3Client CreateClient() => new(
         new BasicAWSCredentials("AKIAEXAMPLE123456789", "example-secret-key"),
         RegionEndpoint.USEast2);
 
     private static S3ObjectStorageService CreateService(AmazonS3Client client) => new(client,
-        Options.Create(new S3StorageSettings { Bucket = Bucket, Region = "us-east-2" }));
+        Options.Create(new S3StorageSettings
+        {
+            Bucket = Bucket,
+            Region = "us-east-2",
+            PublicBaseUrl = "https://api-staging.useorbit.org",
+        }));
 
     private static Dictionary<string, string> ParseQuery(Uri uri) => uri.Query.TrimStart('?')
         .Split('&', StringSplitOptions.RemoveEmptyEntries)

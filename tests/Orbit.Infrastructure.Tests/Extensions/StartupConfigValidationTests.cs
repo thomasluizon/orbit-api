@@ -92,6 +92,7 @@ public class StartupConfigValidationTests
         values["Storage:Provider"] = "S3";
         values["Storage:S3:Bucket"] = "orbit-uploads-staging-713285551626";
         values["Storage:S3:Region"] = "us-east-2";
+        values["Storage:S3:PublicBaseUrl"] = "https://api-staging.useorbit.org";
         values["Storage:S3:AccessKeyId"] = "AKIAEXAMPLE123456789";
         values["Storage:S3:SecretAccessKey"] = "example-secret-key";
         values["ConnectionStrings:DefaultConnection"] = "Host=localhost;Database=orbit;Username=orbit;Password=unused";
