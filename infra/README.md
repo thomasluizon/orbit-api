@@ -4,6 +4,24 @@ This directory is one Terraform state for the Render production and staging reso
 
 The Render provider reads `RENDER_API_KEY` from the environment. The AWS provider uses the default credential chain in `us-east-2`. The S3 state contains decrypted SecureString values, so access to the bucket and its lock file must stay restricted. The existing API is imported with its service ID; do not remove that import block or replace the service.
 
+## Staging lifecycle
+
+The staging keepalive workflow calls the API health endpoint every five minutes from 08:00 through 23:55 in Sao Paulo. The reseed workflow checks the Render Postgres creation time daily and replaces the staging database once it is at least 26 days old. A manual dispatch replaces it immediately. The replacement plan is restricted to `render_postgres.staging` and its staging API environment group, and the workflow rejects a plan that changes another resource.
+
+Create the GitHub OIDC provider and staging reseed role from `github_oidc.tf` with a reviewed targeted Terraform apply before enabling the workflow. If the GitHub OIDC provider already exists in the AWS account, import it into this state before applying. Set `RENDER_API_KEY` in GitHub Actions secrets from Render Account Settings > API Keys, and `SEED_OWNER_EMAIL` in GitHub Actions variables to the owner's Google sign-in email. The role trust policy accepts only workflows on this repository's `main` branch.
+
+After the API has migrated the new database, the workflow invokes the seed command using the database connection returned by the staging Terraform resource. To run the same command manually from the repository root after `terraform -chdir=infra init`:
+
+```sh
+ASPNETCORE_ENVIRONMENT=Staging \
+Seed__OwnerEmail=owner@example.com \
+Seed__ExpectedHost="$(terraform -chdir=infra output -raw staging_external_host)" \
+Seed__DatabaseUrl="$(terraform -chdir=infra output -raw staging_external_connection_string)" \
+dotnet run --project src/Orbit.Api/Orbit.Api.csproj -- seed-staging
+```
+
+The command checks the environment, staging host, database name, and database user before opening a connection. It reuses the owner's account by email and adds missing sample records without duplicating existing ones.
+
 ## SSM parameters
 
 Create each entry as a SecureString in AWS Systems Manager Parameter Store in `us-east-2` before planning. Production API connection strings remain the existing Supabase Npgsql strings while `api_database = "supabase"`. They are no longer read when `api_database = "render"`. The Render database URL is converted to Npgsql's key and value connection string format for both API connection strings. Staging uses its own Render database from the start.

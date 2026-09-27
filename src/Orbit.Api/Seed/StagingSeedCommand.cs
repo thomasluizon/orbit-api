@@ -1,11 +1,15 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 using Orbit.Application.Habits.Services;
+using Orbit.Application.Tags.Commands;
+using Orbit.Application.Tags.Validators;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.ValueObjects;
 using Orbit.Infrastructure.Persistence;
+using Orbit.Infrastructure.Configuration;
 
 namespace Orbit.Api.Seed;
 
@@ -111,14 +115,7 @@ public sealed class StagingSeedService(OrbitDbContext db)
             await db.SaveChangesAsync(cancellationToken);
         }
 
-        var tags = await db.Tags.Where(t => t.UserId == user.Id).ToListAsync(cancellationToken);
-        foreach (var (name, color) in new[] { ("Health", "#43A047"), ("Learning", "#5C6BC0"), ("Planning", "#FB8C00") })
-        {
-            if (tags.Any(t => t.Name == name)) continue;
-            var tag = Require(Tag.Create(user.Id, name, color));
-            db.Tags.Add(tag);
-            tags.Add(tag);
-        }
+        var tags = await SeedTagsAsync(user.Id, cancellationToken);
 
         var existing = await db.Habits.Include(h => h.Logs).Include(h => h.Tags)
             .Where(h => h.UserId == user.Id).ToListAsync(cancellationToken);
@@ -126,12 +123,12 @@ public sealed class StagingSeedService(OrbitDbContext db)
         foreach (var spec in Habits)
         {
             if (byTitle.ContainsKey(spec.Title)) continue;
-            var anchor = today.AddDays(-29);
+            var anchor = InitialDate(spec, today);
             if (spec.Days is { Count: > 0 })
                 while (!spec.Days.Contains(anchor.DayOfWeek)) anchor = anchor.AddDays(1);
             var parentId = spec.Parent is null ? (Guid?)null : byTitle[spec.Parent].Id;
             var zone = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
-            var createdAtUtc = TimeZoneInfo.ConvertTimeToUtc(anchor.ToDateTime(new TimeOnly(12, 0)), zone);
+            var createdAtUtc = TimeZoneInfo.ConvertTimeToUtc(anchor.ToDateTime(TimeOnly.MinValue), zone);
             var habit = Require(Habit.Create(new HabitCreateParams(
                 user.Id, spec.Title, spec.Unit, spec.Quantity, anchor,
                 Days: spec.Days, IsBadHabit: spec.IsBad, ParentHabitId: parentId,
@@ -151,6 +148,7 @@ public sealed class StagingSeedService(OrbitDbContext db)
             for (var offset = 29; offset >= 0; offset--)
             {
                 var date = today.AddDays(-offset);
+                if (habit.FrequencyUnit is null && !habit.IsGeneral) continue;
                 if (!habit.IsGeneral && !HabitScheduleService.IsHabitDueOnDate(habit, date)) continue;
                 if (offset > 0 && (date.DayNumber + habit.Title.Length) % 6 == 0) continue;
                 if (habit.IsBadHabit && offset % 11 != 0) continue;
@@ -168,6 +166,28 @@ public sealed class StagingSeedService(OrbitDbContext db)
         AddGoal("Build a hydration streak", 14, GoalType.Streak, ["Drink water"], goals, byTitle, user.Id, today);
 
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static DateOnly InitialDate(HabitSpec spec, DateOnly today) =>
+        spec.Unit is null && !spec.IsGeneral ? today : today.AddDays(-29);
+
+    private async Task<List<Tag>> SeedTagsAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var tags = await db.Tags.Where(t => t.UserId == userId).ToListAsync(cancellationToken);
+        using var tagCache = new MemoryCache(new MemoryCacheOptions());
+        var createTag = new CreateTagCommandHandler(
+            new GenericRepository<Tag>(db), new UnitOfWork(db, new DatabaseConnectionSettings()), tagCache);
+        var tagValidator = new CreateTagCommandValidator();
+        foreach (var (name, color) in new[] { ("Health", "#43A047"), ("Learning", "#5C6BC0"), ("Planning", "#FB8C00") })
+        {
+            if (tags.Any(t => t.Name == name)) continue;
+            var command = new CreateTagCommand(userId, name, color);
+            var validation = await tagValidator.ValidateAsync(command, cancellationToken);
+            if (!validation.IsValid) throw new InvalidOperationException(validation.ToString());
+            var tagId = Require(await createTag.Handle(command, cancellationToken));
+            tags.Add(db.Tags.Local.Single(t => t.Id == tagId));
+        }
+        return tags;
     }
 
     private void AddGoal(string title, int target, GoalType type, string[] habitTitles,
