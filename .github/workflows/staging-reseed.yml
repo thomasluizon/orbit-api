@@ -42,9 +42,8 @@ jobs:
             --header "Authorization: Bearer ${RENDER_API_KEY}" \
             "https://api.render.com/v1/postgres/${database_id}" \
             | jq --exit-status --raw-output --arg id "${database_id}" 'select(.id == $id) | .createdAt')"
-          created_epoch="$(date -u -d "${created_at}" +%s)"
-          now_epoch="$(date -u +%s)"
-          if [[ "${{ github.event_name }}" == workflow_dispatch || $((now_epoch - created_epoch)) -ge 2246400 ]]; then
+          age_seconds="$(python3 -c 'from datetime import datetime, timezone; import sys; print(int((datetime.now(timezone.utc) - datetime.fromisoformat(sys.argv[1].replace("Z", "+00:00"))).total_seconds()))' "${created_at}")"
+          if [[ "${{ github.event_name }}" == workflow_dispatch || "${age_seconds}" -ge 2246400 ]]; then
             echo 'replace=true' >> "$GITHUB_OUTPUT"
           else
             echo 'replace=false' >> "$GITHUB_OUTPUT"
