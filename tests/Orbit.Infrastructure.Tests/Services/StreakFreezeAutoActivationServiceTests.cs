@@ -74,6 +74,27 @@ public class StreakFreezeAutoActivationServiceTests
     }
 
     [Fact]
+    public async Task ActivateMissedDayFreezes_KeepsCandidateSchedulesGroupedByUser()
+    {
+        await using var dbContext = CreateDbContext();
+        var pushService = Substitute.For<IPushNotificationService>();
+        var userDateService = Substitute.For<IUserDateService>();
+        ConfigureToday(userDateService, Today);
+        var first = await SeedEligibleUserAsync(dbContext, Today);
+        var second = CreateEligibleProUser();
+        var secondId = Guid.NewGuid();
+        typeof(User).GetProperty(nameof(User.Id))!.SetValue(second, secondId);
+        await SeedEligibleUserAsync(dbContext, Today, second, completeYesterday: true);
+        var service = CreateService(dbContext, pushService, userDateService);
+
+        await service.ActivateMissedDayFreezes(CancellationToken.None);
+
+        (await dbContext.StreakFreezes.AsNoTracking().SingleAsync()).UserId.Should().Be(first.Id);
+        first.StreakFreezesAccumulated.Should().Be(0);
+        second.StreakFreezesAccumulated.Should().Be(1);
+    }
+
+    [Fact]
     public async Task ActivateMissedDayFreezes_RepeatedDeletedAndSkippedLogs_RepairsOnlyTheMissingDay()
     {
         await using var dbContext = CreateDbContext();
@@ -245,6 +266,9 @@ public class StreakFreezeAutoActivationServiceTests
     public async Task ActivateMissedDayFreezes_ProjectsDistinctCompletionPairsInSql()
     {
         var (_, commands) = await ReadActivationQueriesAsync(candidateCount: 2);
+        var scheduleRead = commands.Single(command =>
+            command.Sql.Contains("\"Days\"", StringComparison.Ordinal));
+        scheduleRead.Sql.Split("FROM", 2)[0].Should().Contain("\"UserId\"");
         var completionRead = commands.Single(command => command.Sql.Contains("HabitLogs", StringComparison.Ordinal));
 
         completionRead.Sql.Should().Contain("SELECT DISTINCT").And.Contain("FROM \"Habits\"");
@@ -341,12 +365,15 @@ public class StreakFreezeAutoActivationServiceTests
     private static async Task<User> SeedEligibleUserAsync(
         OrbitDbContext dbContext,
         DateOnly today,
-        User? user = null)
+        User? user = null,
+        bool completeYesterday = false)
     {
         user ??= CreateEligibleProUser();
         var habit = CreateDailyHabit(user.Id, today.AddDays(-6));
         foreach (var offset in new[] { -5, -4, -3, -2 })
             habit.Log(today.AddDays(offset), advanceDueDate: false);
+        if (completeYesterday)
+            habit.Log(today.AddDays(-1), advanceDueDate: false);
 
         dbContext.Users.Add(user);
         dbContext.Habits.Add(habit);

@@ -296,7 +296,7 @@ public class UserStreakService(
     {
         var eligibleHabits = (await scheduleSnapshots.GetAsync(userId, cancellationToken))
             .Where(snapshot => !snapshot.IsDeleted && !snapshot.IsBadHabit)
-            .Select(Habit.FromScheduleSnapshot)
+            .Select(snapshot => Habit.FromScheduleSnapshot(snapshot, userId))
             .ToList();
         var streakEligibleHabitIds = eligibleHabits
             .Select(h => h.Id)

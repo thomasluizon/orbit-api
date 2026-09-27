@@ -115,7 +115,7 @@ public partial class GamificationService(
         var streakLogCutoff = today.AddDays(-StreakLogWindowDays);
         var loggedHabits = (await repos.HabitRepository.ProjectAsync(
             h => h.UserId == userId && habitIds.Contains(h.Id), HabitScheduleProjection.Select, ct))
-            .Select(Habit.FromScheduleSnapshot)
+            .Select(snapshot => Habit.FromScheduleSnapshot(snapshot, userId))
             .ToList();
         if (loggedHabits.Count == 0) return new HabitsLoggedOutcome([], ShouldSave: false);
         var loadedHabitIds = loggedHabits.Select(habit => habit.Id).ToList();
@@ -153,7 +153,7 @@ public partial class GamificationService(
         var perfectStreakCutoff = today.AddDays(-AchievementChecks.PerfectStreakWindowDays);
         var allUserHabits = (await scheduleSnapshots.GetAsync(user.Id, ct))
             .Where(snapshot => !snapshot.IsCompleted && !snapshot.IsGeneral && snapshot.ParentHabitId == null)
-            .Select(Habit.FromScheduleSnapshot)
+            .Select(snapshot => Habit.FromScheduleSnapshot(snapshot, user.Id))
             .ToList();
         var perfectHabitIds = allUserHabits.Select(h => h.Id).ToList();
         var completedDates = (await repos.HabitLogRepository.ProjectAsync(
