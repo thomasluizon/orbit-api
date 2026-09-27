@@ -175,9 +175,7 @@ public partial class BulkCreateHabitsCommandHandler(
             }
 
             var parentHabit = habitResult.Value;
-            await repos.Habits.AddAsync(parentHabit, cancellationToken);
-
-            await AttachTagsAsync(parentHabit, userId, item.Tags, tagsByName, cancellationToken);
+            var children = new List<Habit>();
 
             if (item.SubHabits is { Count: > 0 })
             {
@@ -217,7 +215,6 @@ public partial class BulkCreateHabitsCommandHandler(
 
                     if (childResult.IsFailure)
                     {
-                        repos.Habits.Remove(parentHabit);
                         return new BulkCreateItemResult(
                             Index: index,
                             Status: BulkItemStatus.Failed,
@@ -226,9 +223,14 @@ public partial class BulkCreateHabitsCommandHandler(
                             Field: "SubHabits");
                     }
 
-                    await repos.Habits.AddAsync(childResult.Value, cancellationToken);
+                    children.Add(childResult.Value);
                 }
             }
+
+            await repos.Habits.AddAsync(parentHabit, cancellationToken);
+            await AttachTagsAsync(parentHabit, userId, item.Tags, tagsByName, cancellationToken);
+            foreach (var child in children)
+                await repos.Habits.AddAsync(child, cancellationToken);
 
             return new BulkCreateItemResult(
                 Index: index,
