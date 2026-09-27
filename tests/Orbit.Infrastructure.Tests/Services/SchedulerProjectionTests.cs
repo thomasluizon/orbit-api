@@ -198,6 +198,48 @@ public class SchedulerProjectionTests
             (await db.SentReminders.CountAsync(r => r.HabitId == habit.Id)).Should().Be(1);
     }
 
+    [Fact]
+    public async Task ReminderTick_TwoStaleHabitWriters_AdvanceProbeTwiceAndRefreshAfterSecondSave()
+    {
+        var reads = new SchedulerReadInterceptor();
+        using var factory = new SqliteOrbitDbContextFactory(reads);
+        var today = new DateOnly(2027, 9, 26);
+        var user = User.Create("Alex", "alex@test.com").Value;
+        var habit = Habit.Create(new HabitCreateParams(user.Id, "Reminder", FrequencyUnit.Day, 1,
+            today, DueTime: new TimeOnly(9, 0), ReminderEnabled: true, ReminderTimes: [0])).Value;
+        factory.Context.Users.Add(user);
+        factory.Context.Habits.Add(habit);
+        await factory.Context.SaveChangesAsync();
+
+        await using var firstDb = factory.CreateContext();
+        await using var secondDb = factory.CreateContext();
+        await using var schedulerDb = factory.CreateContext();
+        var firstHabit = await firstDb.Habits.SingleAsync(h => h.Id == habit.Id);
+        var secondHabit = await secondDb.Habits.SingleAsync(h => h.Id == habit.Id);
+        var service = new ReminderSchedulerService(Scope(schedulerDb, Substitute.For<IPushNotificationService>()),
+            NullLogger<ReminderSchedulerService>.Instance, new ConfigurationBuilder().Build(),
+            new MutableTimeProvider(new DateTimeOffset(2027, 9, 26, 8, 0, 0, TimeSpan.Zero)));
+
+        firstHabit.Update(UpdateParams(firstHabit, "Edited reminder", true)).IsSuccess.Should().BeTrue();
+        await firstDb.SaveChangesAsync();
+        await service.CheckAndSendReminders(CancellationToken.None);
+
+        secondHabit.Update(new HabitUpdateParams(secondHabit.Title, secondHabit.Description,
+            secondHabit.FrequencyUnit, secondHabit.FrequencyQuantity, secondHabit.Days.ToList(),
+            secondHabit.IsBadHabit, today.AddDays(1), DueTime: secondHabit.DueTime,
+            ReminderEnabled: secondHabit.ReminderEnabled)).IsSuccess.Should().BeTrue();
+        await secondDb.SaveChangesAsync();
+
+        (await schedulerDb.Habits.IgnoreQueryFilters().SumAsync(h => h.ReminderProbeVersion)).Should().Be(2);
+        reads.NonQueryCommands.Where(command => command.Contains("UPDATE \"Habits\"", StringComparison.Ordinal)
+            && command.Contains("\"ReminderProbeVersion\"", StringComparison.Ordinal))
+            .Should().HaveCount(2).And.OnlyContain(command => !command.Contains("RETURNING", StringComparison.Ordinal));
+        reads.Clear();
+        await service.CheckAndSendReminders(CancellationToken.None);
+        reads.Commands.Should().Contain(c => c.Contains("FROM \"Habits\"", StringComparison.Ordinal)
+            && c.Contains("\"Title\"", StringComparison.Ordinal));
+    }
+
     private static HabitUpdateParams UpdateParams(Habit habit, string title, bool enabled) =>
         new(title, habit.Description, habit.FrequencyUnit, habit.FrequencyQuantity,
             habit.Days.ToList(), habit.IsBadHabit, habit.DueDate,
@@ -578,8 +620,21 @@ public class SchedulerProjectionTests
     private sealed class SchedulerReadInterceptor : DbCommandInterceptor
     {
         public List<string> Commands { get; } = [];
+        public List<string> NonQueryCommands { get; } = [];
 
-        public void Clear() => Commands.Clear();
+        public void Clear()
+        {
+            Commands.Clear();
+            NonQueryCommands.Clear();
+        }
+
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+            DbCommand command, CommandEventData eventData, InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            NonQueryCommands.Add(command.CommandText);
+            return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
+        }
 
         public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
             DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result,

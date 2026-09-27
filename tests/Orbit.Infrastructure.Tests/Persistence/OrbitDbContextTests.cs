@@ -16,6 +16,34 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 public class OrbitDbContextTests
 {
     [Fact]
+    public void SaveChanges_TwoStaleHabitWriters_AdvanceProbeTwice()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var user = User.Create("Alex", "alex@test.com").Value;
+        var habit = Habit.Create(new HabitCreateParams(user.Id, "Reminder", Orbit.Domain.Enums.FrequencyUnit.Day,
+            1, new DateOnly(2027, 9, 26))).Value;
+        factory.Context.Users.Add(user);
+        factory.Context.Habits.Add(habit);
+        factory.Context.SaveChanges();
+
+        using var firstDb = factory.CreateContext();
+        using var secondDb = factory.CreateContext();
+        var firstHabit = firstDb.Habits.Single(h => h.Id == habit.Id);
+        var secondHabit = secondDb.Habits.Single(h => h.Id == habit.Id);
+
+        firstHabit.Update(new HabitUpdateParams("First edit", firstHabit.Description,
+            firstHabit.FrequencyUnit, firstHabit.FrequencyQuantity, firstHabit.Days.ToList(),
+            firstHabit.IsBadHabit, firstHabit.DueDate)).IsSuccess.Should().BeTrue();
+        firstDb.SaveChanges();
+        secondHabit.Update(new HabitUpdateParams("Second edit", secondHabit.Description,
+            secondHabit.FrequencyUnit, secondHabit.FrequencyQuantity, secondHabit.Days.ToList(),
+            secondHabit.IsBadHabit, secondHabit.DueDate)).IsSuccess.Should().BeTrue();
+        secondDb.SaveChanges();
+
+        factory.Context.Habits.IgnoreQueryFilters().Sum(h => h.ReminderProbeVersion).Should().Be(2);
+    }
+
+    [Fact]
     public void Model_WithoutEncryptionService_UsesValueConvertersForSerializedCollections()
     {
         using var context = CreateContext();
