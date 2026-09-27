@@ -13,7 +13,7 @@ public class DeleteHabitTool(
     public string Name => "delete_habit";
 
     public string Description =>
-        "Delete a habit permanently. For single deletions, execute immediately. For bulk deletions (2+ habits), list them in your message and ask for confirmation first - only delete after they confirm.";
+        "Delete a habit and its sub-habits. For single deletions, execute immediately. For bulk deletions (2+ habits), list them in your message and ask for confirmation first - only delete after they confirm.";
 
     public object GetParameterSchema() => new
     {

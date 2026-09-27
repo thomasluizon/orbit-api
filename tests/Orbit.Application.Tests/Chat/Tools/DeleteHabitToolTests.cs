@@ -100,15 +100,22 @@ public class DeleteHabitToolTests
         var databaseName = $"DeleteHabitIsolation_{Guid.NewGuid()}";
         Guid habitId;
         Guid childId;
+        Guid httpHabitId;
+        Guid httpChildId;
         await using (var seed = CreateContext(databaseName))
         {
             var ownerHabit = CreateHabit("Owner-only habit");
             var child = Habit.Create(new HabitCreateParams(UserId, "Child", FrequencyUnit.Day, 1,
                 DueDate: Today, ParentHabitId: ownerHabit.Id)).Value;
-            seed.Habits.AddRange(ownerHabit, child);
+            var httpHabit = CreateHabit("HTTP habit");
+            var httpChild = Habit.Create(new HabitCreateParams(UserId, "HTTP child", FrequencyUnit.Day, 1,
+                DueDate: Today, ParentHabitId: httpHabit.Id)).Value;
+            seed.Habits.AddRange(ownerHabit, child, httpHabit, httpChild);
             await seed.SaveChangesAsync();
             habitId = ownerHabit.Id;
             childId = child.Id;
+            httpHabitId = httpHabit.Id;
+            httpChildId = httpChild.Id;
         }
 
         await using var context = CreateContext(databaseName);
@@ -134,16 +141,24 @@ public class DeleteHabitToolTests
                 .Should().BeTrue("a foreign user must not delete another user's habit");
 
         var ownerResult = await tool.ExecuteAsync(ArgsFor(habitId), UserId, CancellationToken.None);
+        var httpResult = await handler.Handle(new DeleteHabitCommand(UserId, httpHabitId), CancellationToken.None);
 
         ownerResult.Success.Should().BeTrue("the owner can delete their own habit");
+        httpResult.IsSuccess.Should().BeTrue();
         await using (var afterOwner = CreateContext(databaseName))
         {
             var deleted = await afterOwner.Habits.IgnoreQueryFilters()
                 .Where(h => h.Id == habitId || h.Id == childId).ToListAsync();
+            var httpDeleted = await afterOwner.Habits.IgnoreQueryFilters()
+                .Where(h => h.Id == httpHabitId || h.Id == httpChildId).ToListAsync();
             deleted.Should().HaveCount(2);
             deleted.Should().OnlyContain(h => h.IsDeleted && h.DeletedAtUtc != null);
             deleted.Select(h => h.DeletedAtUtc).Distinct().Should().ContainSingle();
+            httpDeleted.Should().HaveCount(2);
+            httpDeleted.Should().OnlyContain(h => h.IsDeleted && h.DeletedAtUtc != null);
+            httpDeleted.Select(h => h.DeletedAtUtc).Distinct().Should().ContainSingle();
             (await afterOwner.Habits.AnyAsync(h => h.Id == habitId || h.Id == childId)).Should().BeFalse();
+            (await afterOwner.Habits.AnyAsync(h => h.Id == httpHabitId || h.Id == httpChildId)).Should().BeFalse();
         }
     }
 

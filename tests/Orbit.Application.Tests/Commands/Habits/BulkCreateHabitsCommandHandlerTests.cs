@@ -111,6 +111,21 @@ public class BulkCreateHabitsCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_InvalidLaterSubHabit_DoesNotAddAnyPartOfItem()
+    {
+        var item = new BulkHabitItem("Routine", null, FrequencyUnit.Day, 1,
+            SubHabits: [new("Valid child", null, null, null), new("", null, null, null)]);
+
+        var result = await _handler.Handle(
+            new BulkCreateHabitsCommand(UserId, [item]), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Results.Should().ContainSingle()
+            .Which.Status.Should().Be(BulkItemStatus.Failed);
+        await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_WithSubHabits_InheritsParentIntervalSchedule()
     {
         var addedHabits = new List<Habit>();
