@@ -120,7 +120,8 @@ public record AgentPolicyDecision(
     string? Reason = null,
     PendingAgentOperation? PendingOperation = null,
     AgentPolicyDecisionStatus? ShadowStatus = null,
-    string? ShadowReason = null);
+    string? ShadowReason = null,
+    bool ConsumedConfirmation = false);
 
 public record PendingAgentOperation(
     Guid Id,
@@ -187,7 +188,8 @@ public record AgentExecuteOperationRequest(
     bool IsReadOnlyCredential = false,
     string? ConfirmationToken = null,
     string? CorrelationId = null,
-    bool IncludeChangePreview = false);
+    bool IncludeChangePreview = false,
+    Func<Task>? OnExecutionStarted = null);
 
 public record AgentOperationResult(
     string OperationId,

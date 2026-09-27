@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Orbit.Application.Chat.Models;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Models;
 using Orbit.Domain.ValueObjects;
@@ -13,7 +14,7 @@ public partial class ProcessUserChatCommandHandler
         private readonly HashSet<string> _seenRelatedSurfaces = new(StringComparer.Ordinal);
         private readonly HashSet<string> _calledToolNames = new(StringComparer.Ordinal);
         private readonly HashSet<(string Domain, string Access)> _seenToolSteps = [];
-        private readonly List<(string Domain, string Access)> _toolSteps = [];
+        private readonly SemaphoreSlim _toolStepGate = new(1, 1);
 
         public List<ActionResult> ActionResults { get; } = [];
         public List<AgentOperationResult> OperationResults { get; } = [];
@@ -26,12 +27,18 @@ public partial class ProcessUserChatCommandHandler
         /// </summary>
         public IReadOnlyCollection<string> CalledToolNames => _calledToolNames;
 
-        public IReadOnlyList<(string Domain, string Access)> ToolSteps => _toolSteps;
-
-        public void AddToolStep(string domain, string access)
+        public async Task EmitToolStepAsync(string domain, string access, Func<ChatStreamEvent, Task> streamSink)
         {
-            if (_seenToolSteps.Add((domain, access)))
-                _toolSteps.Add((domain, access));
+            await _toolStepGate.WaitAsync();
+            try
+            {
+                if (_seenToolSteps.Add((domain, access)))
+                    await streamSink(ChatStreamEvent.Step(domain, access));
+            }
+            finally
+            {
+                _toolStepGate.Release();
+            }
         }
 
         /// <summary>

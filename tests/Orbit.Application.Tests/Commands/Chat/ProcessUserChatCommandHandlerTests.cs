@@ -202,6 +202,9 @@ public class ProcessUserChatCommandHandlerTests
                             "unsupported_by_policy"));
                 }
 
+                if (request.OnExecutionStarted is not null)
+                    await request.OnExecutionStarted();
+
                 try
                 {
                     var toolResult = await tool.ExecuteAsync(request.Arguments, request.UserId, cancellationToken);
@@ -1815,6 +1818,72 @@ public class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_TwoToolCalls_StreamsStepsBeforeNextToolAndFinal()
+    {
+        SetupUserAndPayGate();
+        var habitTool = FakeTool("create_habit");
+        var goalTool = FakeTool("create_goal");
+        habitTool.IsReadOnly.Returns(false);
+        goalTool.IsReadOnly.Returns(false);
+        var events = new List<ChatStreamEvent>();
+        var firstStepVisibleAtFirstExecution = false;
+        var firstStepVisibleAtSecondExecution = false;
+        var bothStepsVisibleAtContinuation = false;
+        habitTool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                firstStepVisibleAtFirstExecution = events.Any(item =>
+                    item.Type == "step" && item.Domain == "habits" && item.Access == "write");
+                return new ToolResult(true);
+            });
+        goalTool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                firstStepVisibleAtSecondExecution = events.Any(item =>
+                    item.Type == "step" && item.Domain == "habits" && item.Access == "write");
+                return new ToolResult(true);
+            });
+        _catalogService.GetCapabilityByChatTool(Arg.Any<string>())
+            .Returns(call => BuildCapability(call.Arg<string>()) with
+            {
+                Domain = call.Arg<string>() == "create_habit" ? "habits" : "goals"
+            });
+        SetupAiResponse(new AiResponse
+        {
+            ToolCalls =
+            [
+                new AiToolCall("create_habit", "habit", ParseArguments("{}")),
+                new AiToolCall("create_goal", "goal", ParseArguments("{}"))
+            ],
+            ConversationContext = TestConversationContext
+        });
+        _aiIntentService.ContinueWithToolResultsAsync(
+                Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                bothStepsVisibleAtContinuation = events.Count(item => item.Type == "step") == 2;
+                return Result.Success(new AiResponse { TextMessage = "Done" });
+            });
+
+        var result = await CreateHandler(habitTool, goalTool).Handle(new ProcessUserChatCommand(
+            UserId, "Create a habit and goal",
+            ClientContext: new AgentClientContext(SupportsToolSteps: true),
+            StreamSink: streamEvent => { events.Add(streamEvent); return Task.CompletedTask; }), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        firstStepVisibleAtFirstExecution.Should().BeTrue();
+        firstStepVisibleAtSecondExecution.Should().BeTrue();
+        bothStepsVisibleAtContinuation.Should().BeTrue();
+        events.Add(ChatStreamEvent.Final(result.Value));
+        events.Where(item => item.Type is "step" or "final")
+            .Select(item => item.Type).Should().Equal("step", "step", "final");
+        events.Where(item => item.Type == "step")
+            .Select(item => (item.Domain, item.Access))
+            .Should().Equal(("habits", "write"), ("goals", "write"));
+    }
+
+    [Fact]
     public async Task Handle_UnknownTool_EmitsNoStep()
     {
         SetupUserAndPayGate();
@@ -1889,7 +1958,7 @@ public class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ToolFailure_EmitsNoStepOrFollowUps()
+    public async Task Handle_ToolFailure_EmitsStartedStepButNoFollowUps()
     {
         SetupUserAndPayGate();
         SetupAiResponse(ToolResponse("create_habit", "one", "{}"));
@@ -1902,11 +1971,12 @@ public class ProcessUserChatCommandHandlerTests
 
         result.Value.AiMessage.Should().Be(EnglishToolFailureMessage);
         result.Value.FollowUps.Should().BeNull();
-        events.Should().NotContain(item => item.Type == "step");
+        events.Should().ContainSingle(item => item.Type == "step"
+            && item.Domain == "chat" && item.Access == "write");
     }
 
     [Fact]
-    public async Task Handle_LaterToolFailure_EmitsNoEarlierSteps()
+    public async Task Handle_LaterToolFailure_KeepsStartedSteps()
     {
         SetupUserAndPayGate();
         var readTool = FakeTool("read_habits_one");
@@ -1926,7 +1996,9 @@ public class ProcessUserChatCommandHandlerTests
             CancellationToken.None);
 
         result.Value.AiMessage.Should().Be(EnglishToolFailureMessage);
-        events.Should().NotContain(item => item.Type == "step");
+        events.Where(item => item.Type == "step")
+            .Select(item => (item.Domain, item.Access))
+            .Should().Equal(("chat", "read"), ("chat", "write"));
     }
 
     [Fact]

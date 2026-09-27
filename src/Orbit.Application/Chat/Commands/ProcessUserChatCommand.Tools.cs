@@ -102,7 +102,7 @@ public partial class ProcessUserChatCommandHandler
             .OrderBy(c => ai.ToolRegistry.GetTool(c.Name)?.Order ?? int.MaxValue)
             .ToList();
 
-        var outcomesByCallId = await ExecuteToolCallsAsync(orderedCalls, request, cancellationToken);
+        var outcomesByCallId = await ExecuteToolCallsAsync(orderedCalls, request, executionResults, cancellationToken);
 
         var toolResults = new List<AiToolCallResult>(orderedCalls.Count);
         var hadToolFailure = false;
@@ -123,27 +123,6 @@ public partial class ProcessUserChatCommandHandler
 
         if (hadToolFailure)
             return new ToolRoundResult(MessageResponse(language), HadToolFailure: true);
-
-        if (request.ClientContext?.SupportsToolSteps == true
-            && executionResults.PendingOperations.Count == 0
-            && !executionResults.ActionResults.Any(action => action.Status == ActionStatus.NeedsClarification))
-        {
-            foreach (var call in orderedCalls)
-            {
-                var outcome = outcomesByCallId[call.Id];
-                if (outcome.OperationResult?.Status != AgentOperationStatus.Succeeded
-                    || outcome.ActionResult is { Status: not ActionStatus.Success })
-                    continue;
-
-                var tool = ai.ToolRegistry.GetTool(call.Name);
-                var capability = ai.CatalogService.GetCapabilityByChatTool(call.Name);
-                if (tool is null || capability is null)
-                    continue;
-
-                var access = tool.IsReadOnly ? "read" : "write";
-                executionResults.AddToolStep(capability.Domain, access);
-            }
-        }
 
         var continueResult = await ai.IntentService.ContinueWithToolResultsAsync(aiResponse.ConversationContext!, toolResults, aiStreamSink, cancellationToken);
         if (continueResult.IsFailure)
@@ -178,6 +157,7 @@ public partial class ProcessUserChatCommandHandler
     private async Task<IReadOnlyDictionary<string, ToolCallOutcome>> ExecuteToolCallsAsync(
         List<AiToolCall> orderedCalls,
         ProcessUserChatCommand request,
+        ToolExecutionAccumulator executionResults,
         CancellationToken cancellationToken)
     {
         var readOnlyCalls = orderedCalls
@@ -189,7 +169,7 @@ public partial class ProcessUserChatCommandHandler
         var bulkRedirects = BulkToolRepeatGuard.FindRedirects(writeCalls);
 
         var readOnlyTasks = readOnlyCalls
-            .Select(call => ExecuteReadOnlyToolCallOnIsolatedScopeAsync(call, request, cancellationToken))
+            .Select(call => ExecuteReadOnlyToolCallOnIsolatedScopeAsync(call, request, executionResults, cancellationToken))
             .ToList();
         var readOnlyOutcomes = await Task.WhenAll(readOnlyTasks);
 
@@ -205,7 +185,7 @@ public partial class ProcessUserChatCommandHandler
                 continue;
             }
             outcomesByCallId[call.Id] = await ExecuteSingleToolCallAsync(
-                call, request, execution.OperationExecutor, execution.PendingClarificationStore, cancellationToken);
+                call, request, executionResults, execution.OperationExecutor, execution.PendingClarificationStore, cancellationToken);
         }
 
         return outcomesByCallId;
@@ -225,6 +205,7 @@ public partial class ProcessUserChatCommandHandler
     private async Task<ToolCallOutcome> ExecuteReadOnlyToolCallOnIsolatedScopeAsync(
         AiToolCall call,
         ProcessUserChatCommand request,
+        ToolExecutionAccumulator executionResults,
         CancellationToken cancellationToken)
     {
         using var scope = execution.ServiceScopeFactory.CreateScope();
@@ -232,7 +213,7 @@ public partial class ProcessUserChatCommandHandler
         var scopedClarificationStore = scope.ServiceProvider.GetRequiredService<IPendingClarificationStore>();
 
         return await ExecuteSingleToolCallAsync(
-            call, request, scopedExecutor, scopedClarificationStore, cancellationToken);
+            call, request, executionResults, scopedExecutor, scopedClarificationStore, cancellationToken);
     }
 
     /// <summary>
@@ -242,6 +223,7 @@ public partial class ProcessUserChatCommandHandler
     private async Task<ToolCallOutcome> ExecuteSingleToolCallAsync(
         AiToolCall call,
         ProcessUserChatCommand request,
+        ToolExecutionAccumulator executionResults,
         IAgentOperationExecutor operationExecutor,
         IPendingClarificationStore clarificationStore,
         CancellationToken cancellationToken)
@@ -257,7 +239,14 @@ public partial class ProcessUserChatCommandHandler
         if (capability is null)
             return UnsupportedByPolicyOutcome(call, tool);
 
-        var executionResponse = await DispatchToolCallAsync(call, request, operationExecutor, cancellationToken);
+        Func<Task>? onExecutionStarted = null;
+        if (request.StreamSink is { } streamSink && request.ClientContext?.SupportsToolSteps == true)
+        {
+            var access = tool.IsReadOnly ? "read" : "write";
+            onExecutionStarted = () => executionResults.EmitToolStepAsync(capability.Domain, access, streamSink);
+        }
+
+        var executionResponse = await DispatchToolCallAsync(call, request, operationExecutor, onExecutionStarted, cancellationToken);
         var operationResult = executionResponse.Operation;
         var toolResult = BuildToolCallResult(call, operationResult);
         LogToolCallOutcome(call, operationResult);
@@ -340,6 +329,7 @@ public partial class ProcessUserChatCommandHandler
         AiToolCall call,
         ProcessUserChatCommand request,
         IAgentOperationExecutor operationExecutor,
+        Func<Task>? onExecutionStarted,
         CancellationToken cancellationToken)
     {
         var dispatchArgs = call.Name == "send_support_request" && !string.IsNullOrWhiteSpace(request.CorrelationId)
@@ -356,7 +346,8 @@ public partial class ProcessUserChatCommandHandler
             request.IsReadOnlyCredential,
             request.ConfirmationToken,
             request.CorrelationId,
-            IncludeChangePreview: request.ClientContext?.SupportsPendingOperationChanges == true), cancellationToken);
+            IncludeChangePreview: request.ClientContext?.SupportsPendingOperationChanges == true,
+            OnExecutionStarted: onExecutionStarted), cancellationToken);
     }
 
     private void LogToolCallOutcome(AiToolCall call, AgentOperationResult operationResult)
