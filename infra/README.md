@@ -65,7 +65,13 @@ After apply, read the `cloudflare_name_servers` output. Before you change the de
 
 ## Plan and apply
 
-Set `RENDER_API_KEY` and `CLOUDFLARE_API_TOKEN` in the shell and provide AWS credentials through the default credential chain. Make a local `infra/local.tfvars` containing the published production and staging image digests and any approved domain or database cutover settings. This file is ignored; `example.tfvars` shows the shape only. Run:
+Set `RENDER_API_KEY` and `CLOUDFLARE_API_TOKEN` in the shell and provide AWS credentials through the default credential chain. Make a local `infra/local.tfvars` containing the published production and staging image digests and any approved domain or database cutover settings. This file is ignored; `example.tfvars` shows the shape only.
+
+The `production_web_digest` and `staging_web_digest` variables seed the web images only when Terraform first creates each service. Terraform ignores later digest changes on both web services. The `web-image.yml` and `deploy-web.yml` release workflows own subsequent staging and production web deploys by digest.
+
+Changing a Render service's build or deploy settings through Terraform starts a Render deploy of the tracked branch head, including when the change is to an API service. Before applying such a change, arrange to pause or cancel that deploy, or apply only when an approved release of the same commit is intended.
+
+Run:
 
 ```sh
 terraform -chdir=infra init
