@@ -441,7 +441,7 @@ public partial class AgentCatalogService
             CreateCapability(
                 AgentCapabilityIds.ProfilePreferencesWrite,
                 "Write Preferences",
-                "Writes display name, timezone, language, theme, onboarding, and week-start preferences.",
+                "Writes display name, timezone, language, light or dark mode, onboarding, and week-start preferences. Orbit uses one accent.",
                 "profile",
                 AgentScopes.WriteProfilePreferences,
                 AgentRiskClass.Low,
@@ -467,16 +467,14 @@ public partial class AgentCatalogService
 
             CreateCapability(
                 AgentCapabilityIds.ProfilePremiumAppearanceWrite,
-                "Write Color Scheme",
-                "Accepts a color-scheme write from an older app. Orbit renders one accent, so the stored value becomes the granted one and nothing looks different.",
+                "Legacy Color Scheme Write",
+                "Accepts legacy HTTP color scheme writes. Orbit uses one accent and offers light or dark mode.",
                 "profile",
                 AgentScopes.WriteProfilePreferences,
                 AgentRiskClass.Low,
                 isMutation: true,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                chatTools: ["set_color_scheme"],
-                mcpTools: ["set_color_scheme"],
                 controllerActions: ["ProfileController.SetColorScheme"]),
 
             CreateCapability(
