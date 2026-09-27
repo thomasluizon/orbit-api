@@ -13,7 +13,7 @@ Create the GitHub OIDC provider and staging reseed role from `github_oidc.tf` wi
 Move the staging database state before applying either root. With credentials for the main state and the Render API, record its ID, remove its old state entry, initialize the new root, and import that ID:
 
 ```sh
-database_id="$(terraform -chdir=infra output -raw staging_postgres_id)"
+database_id="$(terraform -chdir=infra state show -no-color render_postgres.staging | awk -F'"' '/^ +id +=/ {print $2; exit}')"
 export TF_VAR_staging_environment_id='<staging environment ID from Render dashboard>'
 export TF_VAR_staging_api_service_id='<staging API service ID from Render dashboard>'
 terraform -chdir=infra state rm render_postgres.staging
