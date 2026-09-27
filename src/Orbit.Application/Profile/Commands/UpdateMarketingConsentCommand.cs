@@ -25,8 +25,17 @@ public class UpdateMarketingConsentCommandHandler(
 
         if (request.Enabled)
         {
-            user.SetMarketingConsent(true);
-            await unitOfWork.SaveChangesAsync(cancellationToken);
+            await unitOfWork.ExecuteInTransactionAsync(async ct =>
+            {
+                var normalizedEmail = user.Email.Trim().ToLowerInvariant();
+                await unitOfWork.AcquireAdvisoryLockAsync($"marketing-contact:{normalizedEmail}", ct);
+                var contact = await contactRepository.FindOneTrackedAsync(
+                    candidate => candidate.Email == normalizedEmail && candidate.Source == "user",
+                    cancellationToken: ct);
+                contact?.RestoreUserConsent();
+                user.SetMarketingConsent(true);
+                await unitOfWork.SaveChangesAsync(ct);
+            }, cancellationToken);
         }
         else
         {

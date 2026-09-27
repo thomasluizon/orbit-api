@@ -44,6 +44,14 @@ public sealed class MarketingContact : Entity
         UnsubscribedAtUtc ??= DateTime.UtcNow;
     }
 
+    public void RestoreUserConsent()
+    {
+        if (Source != "user")
+            throw new InvalidOperationException("Only a user-sourced contact can be restored by user consent.");
+
+        UnsubscribedAtUtc = null;
+    }
+
     public void Suppress()
     {
         SuppressedAtUtc ??= DateTime.UtcNow;

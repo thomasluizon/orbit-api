@@ -46,4 +46,29 @@ public class MarketingContactTests
         contact.UnsubscribedAtUtc.Should().NotBeNull();
         contact.SuppressedAtUtc.Should().BeNull();
     }
+
+    [Fact]
+    public void RestoreUserConsent_ClearsUnsubscribeButKeepsSuppression()
+    {
+        var contact = MarketingContact.RecordUserOptOut("person@example.com");
+        contact.Suppress();
+        var suppressedAt = contact.SuppressedAtUtc;
+
+        contact.RestoreUserConsent();
+
+        contact.UnsubscribedAtUtc.Should().BeNull();
+        contact.SuppressedAtUtc.Should().Be(suppressedAt);
+    }
+
+    [Fact]
+    public void RestoreUserConsent_RejectsWaitlistContact()
+    {
+        var contact = MarketingContact.ConfirmWaitlist("person@example.com", "en");
+        contact.Unsubscribe();
+        var unsubscribedAt = contact.UnsubscribedAtUtc;
+
+        FluentActions.Invoking(contact.RestoreUserConsent)
+            .Should().Throw<InvalidOperationException>();
+        contact.UnsubscribedAtUtc.Should().Be(unsubscribedAt);
+    }
 }
