@@ -61,7 +61,7 @@ Terraform creates `/orbit/production/api/BotProtection__SecretKey` and `/orbit/s
 
 The Cloudflare zone uses full DNS setup on the Free plan. The existing records have automatic TTL and remain unproxied. The default `dns_apex_target`, `dns_www_target`, and `dns_app_target` values point to the current Vercel destinations. Change those variables only during the later Render cutover. `api` continues to point to its existing Render service. Staging CNAMEs take their hostnames from the staging Render resources.
 
-After apply, read the `cloudflare_name_servers` output and switch the nameservers at Spaceship. Once the switch has propagated, compare each Cloudflare nameserver against the current Spaceship zone with `bash infra/check-dns-cutover.sh <cloudflare-nameserver>`. The script compares record values and MX priorities while ignoring TTL and TXT chunk boundaries.
+After apply, read the `cloudflare_name_servers` output. Before you change the delegation, run `bash infra/check-dns-cutover.sh <cloudflare-nameserver>` once for each of those nameservers. The script asks the Cloudflare nameserver directly, so it verifies the new zone while Spaceship still serves live traffic. It compares record values and MX priorities while ignoring TTL and TXT chunk boundaries. Switch the nameservers at Spaceship only when every run prints that all answers match. After the switch propagates, run the script again for each nameserver and confirm that `dig NS useorbit.org +short` returns the Cloudflare nameservers.
 
 ## Plan and apply
 
