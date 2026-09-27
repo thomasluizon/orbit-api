@@ -56,7 +56,7 @@ jobs:
             -var-file=example.tfvars \
             -target=render_env_group.staging_api \
             -replace=render_postgres.staging \
-            -out=staging-reseed.tfplan
+            -out=staging-reseed.tfplan > /dev/null
           terraform -chdir=infra show -json staging-reseed.tfplan | jq --exit-status '
             [.resource_changes[] | select(.change.actions != ["no-op"])] |
             (length >= 1 and all(.[]; .address == "render_postgres.staging" or
@@ -64,7 +64,7 @@ jobs:
             any(.[]; .address == "render_postgres.staging" and
               (.change.actions == ["delete", "create"] or .change.actions == ["create", "delete"]))
           ' > /dev/null
-          terraform -chdir=infra apply -input=false -auto-approve staging-reseed.tfplan
+          terraform -chdir=infra apply -input=false -auto-approve staging-reseed.tfplan > /dev/null
       - name: Wait for API migration on the new database
         if: steps.age.outputs.replace == 'true'
         run: |
