@@ -13,6 +13,7 @@ using Orbit.Api.Authorization;
 using Orbit.Api.Idempotency;
 using Orbit.Api.OAuth;
 using Orbit.Api.Observability;
+using Orbit.Application.Auth.Commands;
 using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification;
@@ -53,6 +54,11 @@ public static partial class ServiceCollectionExtensions
 
         if (!builder.Environment.IsProduction())
             return builder;
+
+        var googleSettings = builder.Configuration.GetSection(GoogleSettings.SectionName).Get<GoogleSettings>();
+        if (googleSettings?.AllowedRedirectUris is not { Length: > 0 }
+            || googleSettings.AllowedRedirectUris.Any(string.IsNullOrWhiteSpace))
+            throw new InvalidOperationException("Production requires Google:AllowedRedirectUris to contain valid redirect URIs.");
 
         var encryptionKey = builder.Configuration[$"{EncryptionSettings.SectionName}:Key"];
         if (string.IsNullOrWhiteSpace(encryptionKey) || encryptionKey.Contains("REPLACE", StringComparison.OrdinalIgnoreCase))
@@ -214,6 +220,9 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<Orbit.Application.Social.Services.SocialInteractionServices>();
         builder.Services.AddScoped<Orbit.Application.Gamification.Services.GamificationNotifiers>();
         builder.Services.AddScoped<IGoogleTokenService, GoogleTokenService>();
+        builder.Services.AddScoped<GoogleSignInFlow>();
+        builder.Services.AddScoped<IGoogleAuthorizationCodeService, GoogleAuthorizationCodeService>();
+        builder.Services.AddScoped<IGoogleIdTokenValidator, GoogleIdTokenValidator>();
         builder.Services.AddGoogleCalendarServices(GetDefaultHttpTimeout(builder));
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddScoped<ITokenService, JwtTokenService>();
@@ -364,6 +373,7 @@ public static partial class ServiceCollectionExtensions
 
         builder.Services.AddSingleton<OAuthAuthorizationStore>();
         builder.Services.AddHttpClient(GoogleTokenService.HttpClientName, client => client.Timeout = httpTimeout);
+        builder.Services.AddHttpClient(GoogleAuthorizationCodeService.HttpClientName, client => client.Timeout = httpTimeout);
 
         AddStripeBilling(builder, httpTimeout);
         AddGooglePlayBilling(builder, httpTimeout);

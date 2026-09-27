@@ -26,6 +26,7 @@ locals {
     AI__Model                           = "gpt-4.1-mini"
     ASPNETCORE_ENVIRONMENT              = "Production"
     Cors__AllowedOrigins__0             = "https://app.useorbit.org"
+    Database__MigrateOnStartup          = "false"
     GooglePlay__MonthlyBasePlanId       = "monthly"
     GooglePlay__PackageName             = "org.useorbit.app"
     GooglePlay__ProductId               = "orbit_pro"
@@ -58,6 +59,7 @@ locals {
 
   staging_api_values = merge(local.production_api_values, {
     ASPNETCORE_ENVIRONMENT         = "Staging"
+    Database__MigrateOnStartup     = "true"
     Cors__AllowedOrigins__0        = "https://staging.useorbit.org"
     Frontend__BaseUrl              = "https://staging.useorbit.org"
     Google__AllowedRedirectUris__0 = "https://staging.useorbit.org/auth-callback"
@@ -135,6 +137,7 @@ resource "render_env_group" "production_api" {
     { for key, value in local.production_api_values : key => { value = value } },
     { for key in local.api_secret_keys : key => { value = data.aws_ssm_parameter.production_api[key].value } },
     { for key, value in local.production_api_database_values : key => { value = value } },
+    { BotProtection__SecretKey = { value = aws_ssm_parameter.turnstile_secret["production"].value } },
   )
 }
 
@@ -143,6 +146,7 @@ resource "render_env_group" "staging_api" {
   env_vars = merge(
     { for key, value in local.staging_api_values : key => { value = value } },
     { for key in local.api_secret_keys : key => { value = data.aws_ssm_parameter.staging_api[key].value } },
+    { BotProtection__SecretKey = { value = aws_ssm_parameter.turnstile_secret["staging"].value } },
   )
 }
 

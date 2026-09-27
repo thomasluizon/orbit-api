@@ -20,12 +20,14 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
     public record SendCodeRequest(string Email, string Language = "en", string? TurnstileToken = null);
     public record VerifyCodeRequest(string Email, string Code, string Language = "en", string? ReferralCode = null, string? TurnstileToken = null);
     public record GoogleAuthRequest(string AccessToken, string Language = "en", string? GoogleAccessToken = null, string? GoogleRefreshToken = null, string? ReferralCode = null);
+    public record GoogleCodeAuthRequest(string Code, string CodeVerifier, string RedirectUri, string Language = "en", string? ReferralCode = null);
     public record ConfirmDeletionRequest(string Code);
     public record RefreshSessionRequest(string RefreshToken);
     public record LogoutSessionRequest(string RefreshToken);
     public record SendCodeOperationRequest(string Email, string Language = "en", string? TurnstileToken = null);
     public record VerifyCodeOperationRequest(string Email, string Code, string Language = "en", string? ReferralCode = null, string? TurnstileToken = null);
     public record GoogleAuthOperationRequest(string AccessToken, string Language = "en", string? GoogleAccessToken = null, string? GoogleRefreshToken = null, string? ReferralCode = null);
+    public record GoogleCodeAuthOperationRequest(string Code, string CodeVerifier, string RedirectUri, string Language = "en", string? ReferralCode = null);
     public record RefreshSessionOperationRequest(string RefreshToken);
     public record LogoutSessionOperationRequest(string RefreshToken);
 
@@ -158,6 +160,39 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
             cancellationToken);
 
         return await CompleteLoginOperationAsync("exchange_google_auth", "google_oauth", result, cancellationToken);
+    }
+
+    [HttpPost("google/code")]
+    [DistributedRateLimit("auth")]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GoogleCodeAuth(
+        [FromBody] GoogleCodeAuthRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GoogleCodeAuthCommand(
+            request.Code, request.CodeVerifier, request.RedirectUri, request.Language, request.ReferralCode), cancellationToken);
+        if (result.IsSuccess)
+        {
+            LogUserLoggedInViaGoogle(logger, HttpContext.GetRequestId());
+            return Ok(result.Value);
+        }
+
+        LogGoogleAuthFailed(logger, result.Error, HttpContext.GetRequestId());
+        return result.ToErrorResult(StatusCodes.Status401Unauthorized);
+    }
+
+    [HttpPost("operations/google/code")]
+    [DistributedRateLimit("auth")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GoogleCodeAuthOperation(
+        [FromBody] GoogleCodeAuthOperationRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GoogleCodeAuthCommand(
+            request.Code, request.CodeVerifier, request.RedirectUri, request.Language, request.ReferralCode), cancellationToken);
+        return await CompleteLoginOperationAsync("exchange_google_auth_code", "google_oauth", result, cancellationToken);
     }
 
     [HttpPost("refresh")]

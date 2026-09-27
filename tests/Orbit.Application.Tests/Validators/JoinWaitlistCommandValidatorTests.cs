@@ -11,6 +11,8 @@ public class JoinWaitlistCommandValidatorTests
     [Theory]
     [InlineData("en")]
     [InlineData("pt-BR")]
+    [InlineData("EN")]
+    [InlineData("pt-br")]
     public void Validate_ValidEmailAndLanguage_NoErrors(string language)
     {
         var result = _validator.TestValidate(new JoinWaitlistCommand("user@example.com", language));

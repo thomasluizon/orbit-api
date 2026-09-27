@@ -4,12 +4,6 @@ variable "render_owner_id" {
   default     = "tea-ctg9ljtumphs73dep1o0"
 }
 
-variable "api_auto_deploy" {
-  description = "Keep production API deployment on each main commit until release workflows own it."
-  type        = bool
-  default     = true
-}
-
 variable "api_database" {
   description = "Production API database source during the data migration."
   type        = string
@@ -69,4 +63,22 @@ variable "staging_web_custom_domains" {
   description = "Staging web custom domains."
   type        = set(string)
   default     = ["staging.useorbit.org"]
+}
+
+variable "dns_apex_target" {
+  description = "A record target for the zone apex."
+  type        = string
+  default     = "216.198.79.1"
+}
+
+variable "dns_www_target" {
+  description = "CNAME target for www."
+  type        = string
+  default     = "2def0cb46b05a9c9.vercel-dns-017.com"
+}
+
+variable "dns_app_target" {
+  description = "CNAME target for app."
+  type        = string
+  default     = "853b076627ebd39e.vercel-dns-017.com"
 }

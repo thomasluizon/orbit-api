@@ -69,7 +69,7 @@ public static partial class ServiceCollectionExtensions
             builder.Configuration.GetSection(MarketingSettings.SectionName));
         builder.Services.AddSingleton<IWaitlistConfirmationTokenService, WaitlistConfirmationTokenService>();
         builder.Services.AddSingleton<IMarketingUnsubscribeTokenService, MarketingUnsubscribeTokenService>();
-        builder.Services.AddScoped<IMarketingContactsService, ResendContactsService>();
+        builder.Services.AddScoped<IMarketingContactsService, DatabaseMarketingContactsService>();
     }
 
     internal static void AddBotProtection(WebApplicationBuilder builder, TimeSpan httpTimeout)
