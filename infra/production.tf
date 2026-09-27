@@ -4,13 +4,14 @@ import {
 }
 
 resource "render_web_service" "production_api" {
-  environment_id    = render_project.orbit.environments["Production"].id
-  name              = "orbit-api"
-  plan              = "starter"
-  region            = "ohio"
-  health_check_path = "/health"
-  env_vars          = { ORBIT_TERRAFORM_ENV_GROUP = { value = "production-api" } }
-  custom_domains    = [{ name = "api.useorbit.org" }]
+  environment_id     = render_project.orbit.environments["Production"].id
+  name               = "orbit-api"
+  plan               = "starter"
+  region             = "ohio"
+  health_check_path  = "/health"
+  pre_deploy_command = "./efbundle"
+  env_vars           = { ORBIT_TERRAFORM_ENV_GROUP = { value = "production-api" } }
+  custom_domains     = [{ name = "api.useorbit.org" }]
 
   lifecycle {
     # The imported service's own variables stay until the linked group is verified live, so the first apply cannot strip production's configuration.
@@ -23,7 +24,7 @@ resource "render_web_service" "production_api" {
       repo_url        = "https://github.com/thomasluizon/orbit-api"
       dockerfile_path = "./Dockerfile"
       context         = "."
-      auto_deploy     = var.api_auto_deploy
+      auto_deploy     = false
     }
   }
 }
