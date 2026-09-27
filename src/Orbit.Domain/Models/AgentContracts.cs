@@ -187,7 +187,8 @@ public record AgentExecuteOperationRequest(
     bool IsReadOnlyCredential = false,
     string? ConfirmationToken = null,
     string? CorrelationId = null,
-    bool IncludeChangePreview = false);
+    bool IncludeChangePreview = false,
+    Func<Task>? OnExecutionStarted = null);
 
 public record AgentOperationResult(
     string OperationId,

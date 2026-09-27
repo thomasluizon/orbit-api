@@ -80,6 +80,9 @@ public partial class AgentOperationExecutor(
                 execution.Capability.ConfirmationRequirement,
                 execution.Summary);
 
+        if (request.OnExecutionStarted is not null)
+            await request.OnExecutionStarted();
+
         return await ExecuteToolAsync(tool, execution, policyDecision, cancellationToken);
     }
 

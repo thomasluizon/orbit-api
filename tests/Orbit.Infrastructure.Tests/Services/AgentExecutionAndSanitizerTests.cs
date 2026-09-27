@@ -153,6 +153,43 @@ public class AgentExecutionAndSanitizerTests
         response.PolicyDenial!.Reason.Should().Be("missing_scope:write_habits");
     }
 
+    [Theory]
+    [InlineData(AgentPolicyDecisionStatus.Allowed, true)]
+    [InlineData(AgentPolicyDecisionStatus.Denied, false)]
+    [InlineData(AgentPolicyDecisionStatus.ConfirmationRequired, false)]
+    public async Task AgentOperationExecutor_NotifiesOnlyWhenToolStarts(
+        AgentPolicyDecisionStatus decisionStatus, bool expectedStart)
+    {
+        var catalog = Substitute.For<IAgentCatalogService>();
+        var capability = CreateCapability(AgentCapabilityIds.HabitsWrite, AgentScopes.WriteHabits,
+            AgentRiskClass.Low, AgentConfirmationRequirement.None, isMutation: true);
+        var operation = CreateOperation("create_habit", capability.Id, isMutation: true,
+            isAgentExecutable: true, AgentConfirmationRequirement.None, AgentRiskClass.Low);
+        catalog.GetOperation(operation.Id).Returns(operation);
+        catalog.GetCapability(capability.Id).Returns(capability);
+        var policy = Substitute.For<IAgentPolicyEvaluator>();
+        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+            .Returns(new AgentPolicyDecision(decisionStatus, capability));
+        var events = new List<string>();
+        var tool = new StubTool(operation.Id, (_, _, _) =>
+        {
+            events.Add("tool");
+            return Task.FromResult(new ToolResult(true));
+        });
+        var executor = CreateExecutor(catalog, policyEvaluator: policy,
+            toolRegistry: new AiToolRegistry([tool]));
+
+        await executor.ExecuteAsync(new AgentExecuteOperationRequest(
+            UserId, operation.Id, Parse("{}"), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt,
+            OnExecutionStarted: () =>
+            {
+                events.Add("step");
+                return Task.CompletedTask;
+            }));
+
+        events.Should().Equal(expectedStart ? ["step", "tool"] : []);
+    }
+
     [Fact]
     public async Task AgentOperationExecutor_ReturnsPendingConfirmation()
     {
