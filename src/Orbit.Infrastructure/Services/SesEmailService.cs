@@ -18,6 +18,7 @@ public partial class SesEmailService(
     private const string HeadingToken = "heading";
     private const string IntroToken = "intro";
     private const string FooterToken = "footer";
+    private const string WarningToken = "warning";
 
     private readonly SesSettings _settings = options.Value;
     private readonly string _frontendBaseUrl = frontendSettings.Value.BaseUrl;
@@ -50,7 +51,7 @@ public partial class SesEmailService(
             ["code"] = code,
             ["cta"] = copy.Cta,
             ["signInUrl"] = signInUrl,
-            ["warning"] = copy.Warning,
+            [WarningToken] = copy.Warning,
             [FooterToken] = copy.Footer,
         };
 
@@ -72,7 +73,7 @@ public partial class SesEmailService(
             [IntroToken] = copy.Intro,
             ["codeLabel"] = copy.CodeLabel,
             ["code"] = code,
-            ["warning"] = copy.Warning,
+            [WarningToken] = copy.Warning,
             [FooterToken] = copy.Footer,
         };
 
@@ -94,7 +95,7 @@ public partial class SesEmailService(
             [IntroToken] = copy.Intro,
             ["codeLabel"] = copy.CodeLabel,
             ["code"] = code,
-            ["warning"] = copy.Warning,
+            [WarningToken] = copy.Warning,
             [FooterToken] = copy.Footer,
         };
 
@@ -116,7 +117,7 @@ public partial class SesEmailService(
             [IntroToken] = copy.Intro,
             ["cta"] = copy.Cta,
             ["confirmUrl"] = confirmUrl,
-            ["warning"] = copy.Warning,
+            [WarningToken] = copy.Warning,
             [FooterToken] = copy.Footer,
         };
 
@@ -180,27 +181,31 @@ public partial class SesEmailService(
                     LogEmailSent(logger, subject);
                 return;
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            catch (Exception ex) when (IsRetryableThrottle(ex, attempt))
             {
-                throw;
-            }
-            catch (Amazon.SimpleEmailV2.Model.TooManyRequestsException) when (attempt < MaxMarketingRetries)
-            {
-            }
-            catch (Amazon.Runtime.AmazonServiceException ex) when (ex.StatusCode == HttpStatusCode.TooManyRequests && attempt < MaxMarketingRetries)
-            {
+                await DelayBeforeRetryAsync(attempt, cancellationToken);
             }
             catch (Exception ex)
             {
+                if (ex is OperationCanceledException && cancellationToken.IsCancellationRequested)
+                    throw;
                 LogEmailSendException(logger, ex);
                 return;
             }
-
-            var backoff = TimeSpan.FromMilliseconds(_settings.MarketingRetryBaseDelayMs * Math.Pow(2, attempt));
-            if (logger.IsEnabled(LogLevel.Warning))
-                LogMarketingRetry(logger, attempt + 1, backoff.TotalMilliseconds);
-            await Task.Delay(backoff, cancellationToken);
         }
+    }
+
+    private static bool IsRetryableThrottle(Exception exception, int attempt) =>
+        attempt < MaxMarketingRetries &&
+        (exception is Amazon.SimpleEmailV2.Model.TooManyRequestsException ||
+         exception is Amazon.Runtime.AmazonServiceException { StatusCode: HttpStatusCode.TooManyRequests });
+
+    private async Task DelayBeforeRetryAsync(int attempt, CancellationToken cancellationToken)
+    {
+        var backoff = TimeSpan.FromMilliseconds(_settings.MarketingRetryBaseDelayMs * Math.Pow(2, attempt));
+        if (logger.IsEnabled(LogLevel.Warning))
+            LogMarketingRetry(logger, attempt + 1, backoff.TotalMilliseconds);
+        await Task.Delay(backoff, cancellationToken);
     }
 
     public async Task SendSupportEmailAsync(string fromName, string fromEmail, string subject, string message, CancellationToken cancellationToken = default)

@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Orbit.Application.Email.Commands;
+using Orbit.Api.RateLimiting;
 
 namespace Orbit.Api.Controllers;
 
@@ -11,6 +12,7 @@ namespace Orbit.Api.Controllers;
 public sealed class EmailController(ISender sender) : ControllerBase
 {
     [HttpPost("ses-events")]
+    [DistributedRateLimit("ses-events")]
     [Consumes("text/plain", "application/json")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

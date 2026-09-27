@@ -41,7 +41,7 @@ locals {
     Jwt__ExpiryMinutes                  = "0"
     Jwt__Issuer                         = "OrbitApi"
     Jwt__RefreshExpiryDays              = "90"
-    Email__Provider                     = "Resend"
+    Email__Provider                     = var.production_email_provider
     Ses__Region                         = "us-east-2"
     Ses__FromEmail                      = "Orbit <noreply@send.useorbit.org>"
     Ses__MarketingFromEmail             = "Orbit <news@updates.useorbit.org>"
@@ -66,6 +66,7 @@ locals {
   }
 
   staging_api_values = merge(local.production_api_values, {
+    Email__Provider                = var.staging_email_provider
     ASPNETCORE_ENVIRONMENT         = "Staging"
     Database__MigrateOnStartup     = "true"
     Cors__AllowedOrigins__0        = "https://staging.useorbit.org"

@@ -43,6 +43,7 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
             ["public-profile"] = new(TimeSpan.FromMinutes(1), PermitLimit: 30, SegmentCount: 4),
             ["admin-broadcast"] = new(TimeSpan.FromHours(1), PermitLimit: 5, SegmentCount: 1),
             ["marketing-unsubscribe"] = new(TimeSpan.FromMinutes(1), PermitLimit: 20, SegmentCount: 4),
+            ["ses-events"] = new(TimeSpan.FromMinutes(1), PermitLimit: 600, SegmentCount: 4),
             ["mcp"] = new(TimeSpan.FromMinutes(1), PermitLimit: 60, SegmentCount: 4),
             ["mcp-ai"] = new(TimeSpan.FromMinutes(1), PermitLimit: 15, SegmentCount: 4)
         };

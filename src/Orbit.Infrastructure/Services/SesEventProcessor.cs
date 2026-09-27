@@ -12,6 +12,8 @@ public sealed class SesEventProcessor(
     IUnitOfWork unitOfWork,
     ILogger<SesEventProcessor> logger) : ISesEventProcessor
 {
+    private const string BounceEvent = "Bounce";
+
     public async Task<bool> ProcessAsync(string payload, CancellationToken cancellationToken)
     {
         JsonDocument document;
@@ -22,72 +24,85 @@ public sealed class SesEventProcessor(
             var envelope = document.RootElement;
             if (!await verifier.VerifyAsync(envelope, cancellationToken))
                 return false;
-
-            var type = envelope.GetProperty("Type").GetString();
-            if (type == "SubscriptionConfirmation")
-            {
-                var url = envelope.GetProperty("SubscribeURL").GetString();
-                if (!verifier.IsSubscriptionUrl(url, envelope.GetProperty("TopicArn").GetString()!, envelope.GetProperty("Token").GetString()!))
-                    return false;
-                using var response = await httpClientFactory.CreateClient("SnsConfirmation")
-                    .GetAsync(url, cancellationToken);
-                return response.IsSuccessStatusCode;
-            }
-
-            if (!envelope.TryGetProperty("Message", out var message) || message.ValueKind != JsonValueKind.String)
-                return false;
-            JsonDocument eventDocument;
-            try { eventDocument = JsonDocument.Parse(message.GetString()!); }
-            catch (JsonException) { return false; }
-            using (eventDocument)
-            {
-                var emails = GetSuppressedEmails(eventDocument.RootElement);
-                if (emails is null)
-                    return false;
-                if (emails.Count == 0)
-                    return true;
-
-                await unitOfWork.ExecuteInTransactionAsync(async ct =>
-                {
-                    foreach (var email in emails)
-                    {
-                        await unitOfWork.AcquireAdvisoryLockAsync($"marketing-contact:{email}", ct);
-                        var contact = await contacts.FindOneTrackedAsync(
-                            candidate => candidate.Email == email, cancellationToken: ct);
-                        if (contact is null)
-                        {
-                            contact = MarketingContact.RecordUserOptOut(email);
-                            await contacts.AddAsync(contact, ct);
-                        }
-                        else
-                            contact.Unsubscribe();
-                        contact.Suppress();
-                    }
-                    await unitOfWork.SaveChangesAsync(ct);
-                }, cancellationToken);
-                return true;
-            }
+            return envelope.GetProperty("Type").GetString() == "SubscriptionConfirmation"
+                ? await ConfirmSubscriptionAsync(envelope, cancellationToken)
+                : await ProcessNotificationAsync(envelope, cancellationToken);
         }
     }
+
+    private async Task<bool> ConfirmSubscriptionAsync(JsonElement envelope, CancellationToken cancellationToken)
+    {
+        var url = envelope.GetProperty("SubscribeURL").GetString();
+        if (!verifier.IsSubscriptionUrl(url, envelope.GetProperty("TopicArn").GetString()!, envelope.GetProperty("Token").GetString()!))
+            return false;
+        using var response = await httpClientFactory.CreateClient("SnsConfirmation")
+            .GetAsync(url, cancellationToken);
+        return response.IsSuccessStatusCode;
+    }
+
+    private async Task<bool> ProcessNotificationAsync(JsonElement envelope, CancellationToken cancellationToken)
+    {
+        if (!envelope.TryGetProperty("Message", out var message) || message.ValueKind != JsonValueKind.String)
+            return false;
+        JsonDocument eventDocument;
+        try { eventDocument = JsonDocument.Parse(message.GetString()!); }
+        catch (JsonException) { return false; }
+        using (eventDocument)
+        {
+            var emails = GetSuppressedEmails(eventDocument.RootElement);
+            if (emails is null)
+                return false;
+            if (emails.Count == 0)
+                return true;
+            await SuppressAsync(emails, cancellationToken);
+            return true;
+        }
+    }
+
+    private Task SuppressAsync(HashSet<string> emails, CancellationToken cancellationToken) =>
+        unitOfWork.ExecuteInTransactionAsync(async ct =>
+        {
+            foreach (var email in emails)
+            {
+                await unitOfWork.AcquireAdvisoryLockAsync($"marketing-contact:{email}", ct);
+                var contact = await contacts.FindOneTrackedAsync(
+                    candidate => candidate.Email == email, cancellationToken: ct);
+                if (contact is null)
+                {
+                    contact = MarketingContact.RecordUserOptOut(email);
+                    await contacts.AddAsync(contact, ct);
+                }
+                else
+                    contact.Unsubscribe();
+                contact.Suppress();
+            }
+            await unitOfWork.SaveChangesAsync(ct);
+        }, cancellationToken);
+
     private HashSet<string>? GetSuppressedEmails(JsonElement eventData)
     {
         if (!eventData.TryGetProperty("eventType", out var eventType) || eventType.ValueKind != JsonValueKind.String)
             return null;
         var eventName = eventType.GetString();
-        if (eventName is not ("Bounce" or "Complaint"))
+        if (eventName is not (BounceEvent or "Complaint"))
             return [];
-        var sectionName = eventName == "Bounce" ? "bounce" : "complaint";
-        var recipientName = eventName == "Bounce" ? "bouncedRecipients" : "complainedRecipients";
+        var sectionName = eventName == BounceEvent ? "bounce" : "complaint";
+        var recipientName = eventName == BounceEvent ? "bouncedRecipients" : "complainedRecipients";
         if (!eventData.TryGetProperty(sectionName, out var section) || section.ValueKind != JsonValueKind.Object ||
             !section.TryGetProperty(recipientName, out var recipients) || recipients.ValueKind != JsonValueKind.Array)
             return null;
-        if (eventName == "Bounce" &&
+        if (eventName == BounceEvent &&
             (!section.TryGetProperty("bounceType", out var bounceType) || bounceType.GetString() != "Permanent"))
         {
             logger.LogWarning("Transient SES bounce received");
             return [];
         }
 
+        return ParseRecipientEmails(recipients);
+    }
+
+    private static HashSet<string>? ParseRecipientEmails(JsonElement recipients)
+    {
         var emails = new HashSet<string>(StringComparer.Ordinal);
         foreach (var recipient in recipients.EnumerateArray())
         {

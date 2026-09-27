@@ -81,6 +81,38 @@ resource "aws_sesv2_configuration_set" "orbit" {
 resource "aws_sns_topic" "ses_events" {
   name              = "orbit-ses-events"
   signature_version = 2
+  kms_master_key_id = aws_kms_key.ses_events.arn
+}
+
+resource "aws_kms_key" "ses_events" {
+  description         = "Encrypt SES event notifications in SNS"
+  enable_key_rotation = true
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "EnableAccountAdministration"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::713285551626:root" }
+        Action    = "kms:*"
+        Resource  = "*"
+      },
+      {
+        Sid       = "AllowSesEventPublishing"
+        Effect    = "Allow"
+        Principal = { Service = "ses.amazonaws.com" }
+        Action    = ["kms:GenerateDataKey*", "kms:Decrypt"]
+        Resource  = "*"
+      },
+      {
+        Sid       = "AllowSnsEncryption"
+        Effect    = "Allow"
+        Principal = { Service = "sns.amazonaws.com" }
+        Action    = ["kms:GenerateDataKey*", "kms:Decrypt"]
+        Resource  = "*"
+      }
+    ]
+  })
 }
 
 resource "aws_sns_topic_policy" "ses_events" {

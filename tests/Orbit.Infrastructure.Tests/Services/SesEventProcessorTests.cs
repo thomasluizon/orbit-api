@@ -4,6 +4,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -41,7 +42,7 @@ public sealed class SesEventProcessorTests : IDisposable
         _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(call => ((Func<CancellationToken, Task>)call[0]!)(CancellationToken.None));
         var settings = Options.Create(new SesSettings { TopicArn = Topic });
-        var verifier = new SnsMessageVerifier(factory, settings, _certificate);
+        var verifier = new SnsMessageVerifier(factory, settings, new MemoryCache(new MemoryCacheOptions()), _certificate);
         _processor = new SesEventProcessor(verifier, factory, _contacts, _unitOfWork,
             NullLogger<SesEventProcessor>.Instance);
     }
@@ -88,6 +89,17 @@ public sealed class SesEventProcessorTests : IDisposable
         var payload = Signed("SubscriptionConfirmation", "Confirm").Replace(Topic, "arn:aws:sns:us-east-2:713285551626:other");
         (await _processor.ProcessAsync(payload, CancellationToken.None)).Should().BeFalse();
         _fetchedUrls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task RepeatedSignedEnvelopesFetchCertificateOnce()
+    {
+        var payload = Signed("Notification", JsonSerializer.Serialize(new { eventType = "Delivery" }));
+
+        (await _processor.ProcessAsync(payload, CancellationToken.None)).Should().BeTrue();
+        (await _processor.ProcessAsync(payload, CancellationToken.None)).Should().BeTrue();
+
+        _fetchedUrls.Should().ContainSingle().Which.Should().Be(CertificateUrl);
     }
 
     [Fact]
