@@ -68,6 +68,7 @@ public class HabitScheduleReadShapeTests(ITestOutputHelper output)
         var candidateSql = counter.Commands.First(command =>
             command.Sql.Contains("FROM \"Habits\" AS \"h\"")
             && command.Sql.Contains("NOT (\"h\".\"IsGeneral\")"));
+        output.WriteLine($"Candidate SQL: {candidateSql.Sql}");
         candidateSql.Sql.Should().NotContain("\"Description\"");
         candidateSql.Sql.Should().NotContain("\"ChecklistItems\"");
         candidateSql.Rows.Should().Be(2);
