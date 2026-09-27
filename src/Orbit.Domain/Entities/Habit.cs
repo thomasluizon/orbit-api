@@ -171,6 +171,16 @@ public class Habit : Entity, ITimestamped, ISoftDeletable, IHabitSchedule
         Title = string.Empty
     };
 
+    public void LoadScheduleCandidateFieldsForRead(
+        string title, string? description, int? position, IEnumerable<Tag> tags)
+    {
+        Title = title;
+        Description = description;
+        Position = position;
+        _tags.Clear();
+        _tags.AddRange(tags);
+    }
+
     public static Result<Habit> Create(HabitCreateParams p)
     {
         if (p.UserId == Guid.Empty)

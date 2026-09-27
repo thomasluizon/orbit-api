@@ -5,6 +5,7 @@ using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.ValueObjects;
 using Orbit.Infrastructure.Persistence;
 using Xunit.Abstractions;
 
@@ -24,6 +25,93 @@ public class HabitScheduleReadShapeTests(ITestOutputHelper output)
             .Options;
         using var postgres = new OrbitDbContext(options);
         postgres.Database.ProviderName.Should().Be("Npgsql.EntityFrameworkCore.PostgreSQL");
+    }
+
+    [Fact]
+    public async Task TodayCandidates_ReadOnlyFilterColumns_AndPageRetainsDisplayFields()
+    {
+        var counter = new CountingDbCommandInterceptor();
+        using var factory = new SqliteOrbitDbContextFactory(counter);
+        var userId = Guid.NewGuid();
+        var user = User.Create("Schedule User", $"schedule-fields-{userId:N}@example.com").Value;
+        typeof(User).GetProperty("Id")!.SetValue(user, userId);
+        factory.Context.Users.Add(user);
+        var habit = Habit.Create(new HabitCreateParams(
+            userId, "Morning plan", FrequencyUnit.Day, 1, Today,
+            Description: "Display details", ChecklistItems: [new ChecklistItem("First step", false)])).Value;
+        habit.SetPosition(0);
+        var offPage = Habit.Create(new HabitCreateParams(
+            userId, "Evening plan", FrequencyUnit.Day, 1, Today,
+            Description: "Off page details")).Value;
+        offPage.SetPosition(1);
+        factory.Context.Habits.AddRange(habit, offPage);
+        await factory.Context.SaveChangesAsync();
+        factory.Context.ChangeTracker.Clear();
+
+        var dateService = Substitute.For<IUserDateService>();
+        dateService.GetUserTodayAsync(userId, Arg.Any<CancellationToken>()).Returns(Today);
+        var handler = new GetHabitScheduleQueryHandler(
+            new GenericRepository<Habit>(factory.Context),
+            new HabitScheduleLogReader(factory.Context),
+            new HabitSchedulePageLoader(factory.Context),
+            dateService,
+            Substitute.For<IUnitOfWork>());
+
+        counter.Reset();
+        var result = await handler.Handle(
+            new GetHabitScheduleQuery(userId, Today, Today, PageSize: 1), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Items.Should().ContainSingle();
+        result.Value.Items[0].Description.Should().Be("Display details");
+        result.Value.Items[0].ChecklistItems.Should().ContainSingle(item => item.Text == "First step");
+        var candidateSql = counter.Commands.First(command =>
+            command.Sql.Contains("FROM \"Habits\" AS \"h\"")
+            && command.Sql.Contains("NOT (\"h\".\"IsGeneral\")"));
+        candidateSql.Sql.Should().NotContain("\"Description\"");
+        candidateSql.Sql.Should().NotContain("\"ChecklistItems\"");
+        candidateSql.Rows.Should().Be(2);
+        var pageSql = counter.Commands.Single(command =>
+            command.Sql.Contains("FROM \"Habits\" AS \"h\"")
+            && command.Sql.Contains("\"ChecklistItems\"")
+            && command.Parameters.Any(parameter => parameter.Contains(habit.Id.ToString())));
+        pageSql.Parameters.Should().NotContain(parameter => parameter.Contains(offPage.Id.ToString()));
+    }
+
+    [Fact]
+    public async Task SearchCandidates_UseDescriptionsAndTags()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var userId = Guid.NewGuid();
+        var user = User.Create("Schedule User", $"schedule-search-{userId:N}@example.com").Value;
+        typeof(User).GetProperty("Id")!.SetValue(user, userId);
+        factory.Context.Users.Add(user);
+        var habit = Habit.Create(new HabitCreateParams(
+            userId, "Morning plan", FrequencyUnit.Day, 1, Today,
+            Description: "Quiet reflection")).Value;
+        var tag = Tag.Create(userId, "Mindful", "#fff").Value;
+        habit.AddTag(tag);
+        factory.Context.Habits.Add(habit);
+        factory.Context.Tags.Add(tag);
+        await factory.Context.SaveChangesAsync();
+        factory.Context.ChangeTracker.Clear();
+
+        var dateService = Substitute.For<IUserDateService>();
+        dateService.GetUserTodayAsync(userId, Arg.Any<CancellationToken>()).Returns(Today);
+        var handler = new GetHabitScheduleQueryHandler(
+            new GenericRepository<Habit>(factory.Context),
+            new HabitScheduleLogReader(factory.Context),
+            new HabitSchedulePageLoader(factory.Context),
+            dateService,
+            Substitute.For<IUnitOfWork>());
+
+        var descriptionResult = await handler.Handle(
+            new GetHabitScheduleQuery(userId, Today, Today, Search: "reflection"), CancellationToken.None);
+        var tagResult = await handler.Handle(
+            new GetHabitScheduleQuery(userId, Today, Today, Search: "mindful"), CancellationToken.None);
+
+        descriptionResult.Value.Items.Should().ContainSingle(item => item.Id == habit.Id);
+        tagResult.Value.Items.Should().ContainSingle(item => item.Id == habit.Id);
     }
 
     [Fact]
