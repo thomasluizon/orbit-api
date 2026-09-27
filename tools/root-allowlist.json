@@ -44,6 +44,7 @@
     "bench",
     "caddy_config",
     "caddy_data",
+    "infra",
     "load-tests",
     "src",
     "tests",
