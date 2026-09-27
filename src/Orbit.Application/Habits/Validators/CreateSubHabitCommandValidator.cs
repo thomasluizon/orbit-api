@@ -40,6 +40,7 @@ public class CreateSubHabitCommandValidator : AbstractValidator<CreateSubHabitCo
         SharedHabitRules.AddScheduledReminderRules(RuleFor(x => x.Options != null ? x.Options.ScheduledReminders : null));
 
         SharedHabitRules.AddReminderTimesRules(RuleFor(x => x.Options != null ? x.Options.ReminderTimes : null));
+        SharedHabitRules.AddRelativeReminderRules(RuleFor(x => x.Options != null ? x.Options.RelativeReminders : null));
 
         RuleFor(x => x.TagIds)
             .Must(tags => tags is null || tags.Count <= AppConstants.MaxTagsPerHabit)

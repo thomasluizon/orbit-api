@@ -19,6 +19,7 @@ public class GetDailySummaryQueryHandlerTests
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IGenericRepository<HabitLog> _habitLogRepo = Substitute.For<IGenericRepository<HabitLog>>();
+    private readonly IHabitSummaryLogReader _summaryLogReader = Substitute.For<IHabitSummaryLogReader>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly ISummaryService _summaryService = Substitute.For<ISummaryService>();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
@@ -30,8 +31,10 @@ public class GetDailySummaryQueryHandlerTests
 
     public GetDailySummaryQueryHandlerTests()
     {
+        _summaryLogReader.ReadAsync(Arg.Any<IReadOnlyCollection<HabitSummaryLogWindow>>(),
+            Arg.Any<CancellationToken>()).Returns(Array.Empty<HabitSummaryLogFact>());
         _handler = new GetDailySummaryQueryHandler(
-            _habitRepo, _userRepo, _habitLogRepo, _payGate, _summaryService, _cache);
+            _habitRepo, _userRepo, _habitLogRepo, _summaryLogReader, _payGate, _summaryService, _cache);
     }
 
     private static User CreateTestUser()
@@ -69,7 +72,7 @@ public class GetDailySummaryQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_MultipleCollectionIncludes_UsesSplitQuery()
+    public async Task Handle_HabitLoad_IncludesGoalsWithoutFullLogs()
     {
         Func<IQueryable<Habit>, IQueryable<Habit>>? queryBuilder = null;
         var user = CreateTestUser();
@@ -96,7 +99,7 @@ public class GetDailySummaryQueryHandlerTests
         await using var context = new OrbitDbContext(options);
         var shapedQuery = queryBuilder!(context.Habits);
 
-        shapedQuery.Expression.ToString().Should().Contain(nameof(RelationalQueryableExtensions.AsSplitQuery));
+        shapedQuery.Expression.ToString().Should().Contain("Goals").And.NotContain("Logs");
     }
 
     [Fact]
@@ -142,6 +145,9 @@ public class GetDailySummaryQueryHandlerTests
         var skipped = Habit.Create(new HabitCreateParams(
             UserId, "Flexible workout", FrequencyUnit.Week, 3, DueDate: Today, IsFlexible: true)).Value;
         skipped.SkipFlexible(Today);
+        _summaryLogReader.ReadAsync(Arg.Any<IReadOnlyCollection<HabitSummaryLogWindow>>(),
+            Arg.Any<CancellationToken>()).Returns(
+                [new HabitSummaryLogFact(skipped.Id, Today, 0)]);
 
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -184,10 +190,11 @@ public class GetDailySummaryQueryHandlerTests
             .Returns(new List<Habit> { badHabit }.AsReadOnly());
 
         var slipDate = Today.AddDays(-3);
-        _habitLogRepo.FindAsync(
+        _habitLogRepo.ProjectAsync(
             Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<Func<IQueryable<HabitLog>, IQueryable<HabitSummarySlipDate>>>(),
             Arg.Any<CancellationToken>())
-            .Returns(new List<HabitLog> { HabitLog.Create(badHabit.Id, slipDate, 1) }.AsReadOnly());
+            .Returns(new List<HabitSummarySlipDate> { new(badHabit.Id, slipDate) }.AsReadOnly());
 
         _summaryService.GenerateSummaryAsync(
             Arg.Any<IEnumerable<Habit>>(),
@@ -223,11 +230,14 @@ public class GetDailySummaryQueryHandlerTests
             .Returns(new List<Habit> { badHabit }.AsReadOnly());
 
         Expression<Func<HabitLog, bool>>? readFilter = null;
-        _habitLogRepo.FindAsync(Arg.Any<Expression<Func<HabitLog, bool>>>(), Arg.Any<CancellationToken>())
+        _habitLogRepo.ProjectAsync(
+            Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<Func<IQueryable<HabitLog>, IQueryable<HabitSummarySlipDate>>>(),
+            Arg.Any<CancellationToken>())
             .Returns(call =>
             {
                 readFilter = call.Arg<Expression<Func<HabitLog, bool>>>();
-                return (IReadOnlyList<HabitLog>)new List<HabitLog>();
+                return (IReadOnlyList<HabitSummarySlipDate>)[];
             });
 
         _summaryService.GenerateSummaryAsync(
@@ -270,8 +280,9 @@ public class GetDailySummaryQueryHandlerTests
 
         await _handler.Handle(query, CancellationToken.None);
 
-        await _habitLogRepo.DidNotReceive().FindAsync(
+        await _habitLogRepo.DidNotReceive().ProjectAsync(
             Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<Func<IQueryable<HabitLog>, IQueryable<HabitSummarySlipDate>>>(),
             Arg.Any<CancellationToken>());
         await _summaryService.Received(1).GenerateSummaryAsync(
             Arg.Any<IEnumerable<Habit>>(),
@@ -451,7 +462,7 @@ public class GetDailySummaryQueryHandlerTests
     {
         var capturingCache = new CapturingCache();
         var handler = new GetDailySummaryQueryHandler(
-            _habitRepo, _userRepo, _habitLogRepo, _payGate, _summaryService, capturingCache);
+            _habitRepo, _userRepo, _habitLogRepo, _summaryLogReader, _payGate, _summaryService, capturingCache);
 
         var user = CreateTestUser();
         user.SetTimeZone("America/Sao_Paulo");

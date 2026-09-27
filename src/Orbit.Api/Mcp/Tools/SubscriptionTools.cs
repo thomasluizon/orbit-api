@@ -72,10 +72,10 @@ public class SubscriptionTools(
             : result.Message;
     }
 
-    [McpServerTool(Name = "manage_subscription"), Description("Manage the user's subscription: create a checkout session, open the billing portal, or claim an ad reward.")]
+    [McpServerTool(Name = "manage_subscription"), Description("Manage the user's subscription: create a checkout session or open the billing portal.")]
     public async Task<string> ManageSubscription(
         ClaimsPrincipal user,
-        [Description("Action to perform: create_checkout, create_portal, or claim_ad_reward")] string action,
+        [Description("Action to perform: create_checkout or create_portal")] string action,
         [Description("For create_checkout: billing interval (monthly or yearly)")] string? interval = null,
         [Description("Confirmation token from confirm_agent_operation_v2, after step_up_agent_operation_v2 and verify_step_up_agent_operation_v2 (required: managing a subscription is high-risk and needs step-up)")] string? confirmationToken = null,
         CancellationToken cancellationToken = default)

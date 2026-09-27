@@ -29,23 +29,23 @@ public class GoalProgressReadSyncer(
             return new Dictionary<Guid, int>();
 
         var streakWindowStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
-        var standardWindowStart = candidates
-            .Where(g => g.Type == GoalType.Standard)
-            .Select(g => g.CreatedAtUtc)
-            .DefaultIfEmpty(DateTime.MaxValue)
-            .Min();
         var goalIds = candidates.Select(g => g.Id).ToHashSet();
 
         var goals = await goalRepository.FindAsync(
             g => goalIds.Contains(g.Id),
-            q => q.Include(g => g.Habits).ThenInclude(h => h.Logs.Where(l =>
-                l.Date >= streakWindowStart || l.CreatedAtUtc >= standardWindowStart)),
+            q => q.Include(g => g.Habits).ThenInclude(h => h.Logs.Where(l => l.Date >= streakWindowStart)),
             cancellationToken);
+        var standardIds = goals.Where(goal => goal.Type == GoalType.Standard)
+            .Select(goal => goal.Id).ToList();
+        var standardCounts = await GoalStandardCompletionReader.ReadCountsAsync(
+            goalRepository, userId, standardIds, cancellationToken);
 
         var freshValues = new Dictionary<Guid, int>();
         foreach (var goal in goals)
         {
-            var readValue = GoalProgressSyncService.ComputeReadValue(goal, userToday, weekStartDay);
+            var readValue = goal.Type == GoalType.Standard && goal.HasActiveLinkedHabits
+                ? standardCounts.GetValueOrDefault(goal.Id)
+                : GoalProgressSyncService.ComputeReadValue(goal, userToday, weekStartDay);
             if (readValue.HasValue)
                 freshValues[goal.Id] = readValue.Value;
         }

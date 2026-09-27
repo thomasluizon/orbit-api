@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.Extensions.Options;
 using Orbit.Api.Mcp.Tools;
@@ -194,7 +195,7 @@ public static partial class ServiceCollectionExtensions
             options.AddDefaultPolicy(policy =>
             {
                 policy.WithOrigins(firstPartyOrigins)
-                      .WithHeaders("Authorization", "Content-Type", "Mcp-Session-Id")
+                      .WithHeaders("Authorization", "Content-Type", "Mcp-Session-Id", "Last-Event-ID", "X-Orbit-Event-Origin")
                       .WithMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
                       .AllowCredentials();
             });
@@ -286,6 +287,13 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddOpenApi(options =>
         {
             options.AddDocumentTransformer<BearerSecuritySchemeTransformer>();
+            options.AddOperationTransformer((operation, context, _) =>
+            {
+                if (context.Description.ActionDescriptor is ControllerActionDescriptor action &&
+                    action.MethodInfo.IsDefined(typeof(ObsoleteAttribute), false))
+                    operation.Deprecated = true;
+                return Task.CompletedTask;
+            });
         });
     }
 

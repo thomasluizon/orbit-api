@@ -162,7 +162,7 @@ public sealed class PendingOperationRevisionServiceTests
 
     [Theory]
     [InlineData("days")]
-    [InlineData("reminder_times")]
+    [InlineData("scheduled_reminders")]
     public async Task ReviseAsync_RejectsDerivedFieldsThatCannotBeReplaced(string field)
     {
         var habit = field == "days"
@@ -177,7 +177,7 @@ public sealed class PendingOperationRevisionServiceTests
             : """{"filter":{"all":true},"updates":{"scheduled_reminders":[{"when":"same_day","time":"08:30"}]}}""";
         var editJson = field == "days"
             ? """{"days":["Tuesday"]}"""
-            : """{"reminder_times":[15]}""";
+            : """{"scheduled_reminders":[{"when":"same_day","time":"08:45"}]}""";
         using var arguments = JsonDocument.Parse(argumentJson);
         using var edits = JsonDocument.Parse(editJson);
         _store.GetExecution(_userId, pendingId).Returns(new PendingAgentOperationExecution(

@@ -212,6 +212,7 @@ public class GetProfileQueryHandlerTests
             new JsonSerializerOptions(JsonSerializerDefaults.Web));
 
         json.Should().Contain($"\"userId\":\"{callerId:D}\"");
+        json.Should().Contain("\"adRewardsClaimedToday\":0");
         json.Should().Contain("\"lastCompletionDate\":null");
         legacyProfile.Should().Be(new LegacyProfileResponse("Legacy User", "test@example.com"));
     }

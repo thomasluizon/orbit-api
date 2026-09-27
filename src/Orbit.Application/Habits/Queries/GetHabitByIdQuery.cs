@@ -30,7 +30,9 @@ public record HabitChildResponse(
     bool IsOverdue,
     IReadOnlyList<HabitChildResponse> Children,
     string? Emoji = null,
-    int? IntervalWeeks = null);
+    int? IntervalWeeks = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    DateTime? CreatedAtUtc = null);
 
 public record HabitDetailResponse(
     Guid Id,
@@ -59,7 +61,8 @@ public record HabitDetailResponse(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<LinkedGoalDto>? LinkedGoals = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    bool? SlipAlertEnabled = null);
+    bool? SlipAlertEnabled = null,
+    IReadOnlyList<RelativeReminderTime>? RelativeReminders = null);
 
 public record GetHabitByIdQuery(Guid UserId, Guid HabitId) : IRequest<Result<HabitDetailResponse>>;
 
@@ -117,12 +120,13 @@ public class GetHabitByIdQueryHandler(
             habit.Position,
             habit.ReminderEnabled,
             habit.ReminderTimes,
-            habit.ScheduledReminders,
+            habit.GetScheduledRemindersForLegacyClients(),
             habit.ChecklistItems,
             habit.CreatedAtUtc,
             children,
             Emoji: habit.Emoji,
-            IntervalWeeks: habit.IntervalWeeks));
+            IntervalWeeks: habit.IntervalWeeks,
+            RelativeReminders: habit.RelativeReminders));
     }
 }
 
@@ -199,7 +203,8 @@ internal static class HabitDetailChildMapper
         DetermineOverdueStatus(child, userToday, weekStartDay, descendantLogsByHabitId),
         MapChildren(child, userToday, weekStartDay, descendantLogsByHabitId),
         Emoji: child.Emoji,
-        IntervalWeeks: child.IntervalWeeks);
+        IntervalWeeks: child.IntervalWeeks,
+        CreatedAtUtc: child.CreatedAtUtc);
 
     private static bool GetResponseCompletion(
         Habit habit,

@@ -61,6 +61,7 @@ public static class DomainErrors
     public static readonly AppError TitleRequired = new("TITLE_REQUIRED", "Title is required.");
     public static readonly AppError CannotLogCompletedHabit = new("HABIT_ALREADY_COMPLETED", "Cannot log a completed habit.");
     public static readonly AppError AlreadyLoggedForDate = new("ALREADY_LOGGED", "This habit has already been logged for this date.");
+    public static readonly AppError AllInstancesDone = new("ALL_INSTANCES_DONE", "All instances for this period have already been completed or skipped.");
     public static readonly AppError OnlyFlexibleHabitsSkippable = new("NOT_FLEXIBLE_HABIT", "Only flexible habits can be skipped this way.");
     public static readonly AppError CannotSkipOneTimeTask = new("CANNOT_SKIP_ONE_TIME", "Cannot skip a one-time task.");
     public static readonly AppError LogNotFoundForDate = new("LOG_NOT_FOUND", "No log found for this date.");
@@ -79,6 +80,7 @@ public static class DomainErrors
     public static readonly AppError MaxScheduledReminders = new("MAX_SCHEDULED_REMINDERS", "A habit can have at most {0} scheduled reminders.");
     public static readonly AppError MaxReminderTimes = new("MAX_REMINDER_TIMES", "A habit can have at most {0} reminder times.");
     public static readonly AppError DuplicateScheduledReminders = new("DUPLICATE_SCHEDULED_REMINDERS", "Scheduled reminders must not contain duplicate entries.");
+    public static readonly AppError InvalidRelativeReminders = new("INVALID_RELATIVE_REMINDERS", "Relative reminders must be unique and have a valid offset or local time.");
     public static readonly AppError EmojiTooLong = new("EMOJI_TOO_LONG", "Habit emoji must not exceed {0} characters.");
 
     public static readonly AppError TargetValueInvalid = new("TARGET_VALUE_INVALID", "Target value must be greater than 0.");

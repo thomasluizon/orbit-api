@@ -10,14 +10,14 @@ namespace Orbit.Infrastructure.Services;
 /// <summary>Groups the repositories the streak service touches to keep its constructor small.</summary>
 public record UserStreakRepositories(
     IGenericRepository<User> Users,
-    IGenericRepository<Habit> Habits,
     IGenericRepository<HabitLog> HabitLogs,
     IGenericRepository<StreakFreeze> StreakFreezes);
 
 public class UserStreakService(
     UserStreakRepositories repos,
     IUserDateService userDateService,
-    IFriendFeedEventEmitter friendFeedEventEmitter) : IUserStreakService
+    IFriendFeedEventEmitter friendFeedEventEmitter,
+    HabitScheduleSnapshotStore scheduleSnapshots) : IUserStreakService
 {
     public async Task<UserStreakState?> RecalculateAsync(
         Guid userId,
@@ -294,18 +294,20 @@ public class UserStreakService(
     private async Task<(HashSet<DateOnly> CompletionDates, HashSet<DateOnly> FreezeDates, List<Habit> EligibleHabits)>
         LoadStreakDataAsync(Guid userId, DateOnly lookbackStart, CancellationToken cancellationToken)
     {
-        var allHabits = await repos.Habits.FindAsync(h => h.UserId == userId, cancellationToken);
-        var streakEligibleHabitIds = allHabits
-            .Where(h => !h.IsDeleted && !h.IsBadHabit)
+        var eligibleHabits = (await scheduleSnapshots.GetAsync(userId, cancellationToken))
+            .Where(snapshot => !snapshot.IsDeleted && !snapshot.IsBadHabit)
+            .Select(Habit.FromScheduleSnapshot)
+            .ToList();
+        var streakEligibleHabitIds = eligibleHabits
             .Select(h => h.Id)
             .ToHashSet();
 
         var completionDateSet = streakEligibleHabitIds.Count == 0
             ? new HashSet<DateOnly>()
-            : (await repos.HabitLogs.FindAsync(
+            : (await repos.HabitLogs.ProjectAsync(
                 l => streakEligibleHabitIds.Contains(l.HabitId) && l.Value > 0 && l.Date >= lookbackStart,
+                query => query.Select(log => log.Date).Distinct(),
                 cancellationToken))
-                .Select(log => log.Date)
                 .ToHashSet();
 
         var freezeDateSet = (await repos.StreakFreezes.FindAsync(
@@ -313,10 +315,6 @@ public class UserStreakService(
             cancellationToken))
             .Select(freeze => freeze.UsedOnDate)
             .ToHashSet();
-
-        var eligibleHabits = allHabits
-            .Where(habit => !habit.IsDeleted && !habit.IsBadHabit)
-            .ToList();
 
         return (completionDateSet, freezeDateSet, eligibleHabits);
     }

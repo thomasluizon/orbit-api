@@ -41,6 +41,7 @@ public record ProfileResponse(
     int TotalXp,
     int Level,
     string LevelTitle,
+    /// <summary>Retained for installed clients until thomasluizon/orbit-tickets#765 removes this field.</summary>
     int AdRewardsClaimedToday,
     int CurrentStreak,
     int LongestStreak,

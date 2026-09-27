@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -81,12 +82,19 @@ public sealed class GoalCompletionService(
         bool passiveSync,
         CancellationToken cancellationToken)
     {
+        var streakLogCutoff = HabitMetricsCalculator.GetStreakLogCutoff(userToday);
         var candidates = await goalRepository.FindAsync(
             goal => candidateIds.Contains(goal.Id) && goal.UserId == userId,
-            query => query.Include(goal => goal.Habits).ThenInclude(habit => habit.Logs),
+            query => query.Include(goal => goal.Habits)
+                .ThenInclude(habit => habit.Logs.Where(log => log.Date >= streakLogCutoff)),
             cancellationToken);
+        var standardIds = candidates.Where(goal => goal.Type == GoalType.Standard)
+            .Select(goal => goal.Id).ToList();
+        var standardCounts = await GoalStandardCompletionReader.ReadCountsAsync(
+            goalRepository, userId, standardIds, cancellationToken);
         var snapshots = candidates
-            .Select(goal => CreateSnapshot(goal, userToday, weekStartDay, passiveSync))
+            .Select(goal => CreateSnapshot(
+                goal, userToday, weekStartDay, passiveSync, standardCounts.GetValueOrDefault(goal.Id)))
             .Where(snapshot => snapshot.HasValue)
             .Select(snapshot => snapshot!.Value)
             .ToList();
@@ -123,7 +131,8 @@ public sealed class GoalCompletionService(
         Goal goal,
         DateOnly userToday,
         int weekStartDay,
-        bool passiveSync)
+        bool passiveSync,
+        int standardCompletionCount)
     {
         if (goal.Status != GoalStatus.Active)
             return null;
@@ -133,7 +142,7 @@ public sealed class GoalCompletionService(
             if (!goal.HasActiveLinkedHabits)
                 return null;
 
-            var completionCount = GoalProgressSyncService.CalculateStandardCompletions(goal);
+            var completionCount = standardCompletionCount;
             return new DerivedGoalSnapshot(
                 goal.Id,
                 goal.Type,

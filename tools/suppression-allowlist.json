@@ -389,12 +389,6 @@
         "reason": "bucket: the UTC-date dedupe key for SentProactiveCheckin; per-user send timing uses the converted user clock."
       }
     },
-    "src/Orbit.Infrastructure/Services/ReminderSchedulerService.cs": {
-      "ORBIT0004": {
-        "count": 2,
-        "reason": "bucket: the scheduled-reminder UTC-date prefetch window (minimum local date across all timezones) and its UTC-date dedupe key; relative reminders use the converted user clock only."
-      }
-    },
     "src/Orbit.Infrastructure/Services/SlipAlertSchedulerService.cs": {
       "ORBIT0004": {
         "count": 1,

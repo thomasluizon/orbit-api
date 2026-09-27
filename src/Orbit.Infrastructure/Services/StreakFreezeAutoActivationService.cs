@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Notifications;
 using Orbit.Application.Common;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -161,37 +162,32 @@ public partial class StreakFreezeAutoActivationService(
         var lookbackStart = userTodayById.Values
             .Min()
             .AddDays(-AppConstants.MaxStreakLookbackDays);
-        var eligibleHabits = await dbContext.Habits
+        var eligibleHabits = (await HabitScheduleProjection.Select(dbContext.Habits
             .AsNoTracking()
             .Where(habit => candidateIds.Contains(habit.UserId)
                 && !habit.IsDeleted
-                && !habit.IsBadHabit)
-            .ToListAsync(cancellationToken);
+                && !habit.IsBadHabit))
+            .ToListAsync(cancellationToken))
+            .Select(Habit.FromScheduleSnapshot)
+            .ToList();
         var eligibleHabitsByUser = eligibleHabits
             .GroupBy(habit => habit.UserId)
             .ToDictionary(group => group.Key, group => group.ToList());
 
-        var ownerByHabitId = eligibleHabits.ToDictionary(habit => habit.Id, habit => habit.UserId);
-        var eligibleHabitIds = ownerByHabitId.Keys.ToList();
-        var logs = eligibleHabitIds.Count == 0
-            ? []
-            : await dbContext.HabitLogs
-                .AsNoTracking()
-                .Where(log => eligibleHabitIds.Contains(log.HabitId)
-                    && log.Value > 0
-                    && log.Date >= lookbackStart)
-                .ToListAsync(cancellationToken);
-        var completionDatesByUser = new Dictionary<Guid, HashSet<DateOnly>>();
-        foreach (var log in logs)
-        {
-            var userId = ownerByHabitId[log.HabitId];
-            if (!completionDatesByUser.TryGetValue(userId, out var dates))
-            {
-                dates = [];
-                completionDatesByUser[userId] = dates;
-            }
-            dates.Add(log.Date);
-        }
+        var completionPairs = await (
+            from log in dbContext.HabitLogs.AsNoTracking()
+            join habit in dbContext.Habits.AsNoTracking() on log.HabitId equals habit.Id
+            where candidateIds.Contains(habit.UserId)
+                && !habit.IsDeleted
+                && !habit.IsBadHabit
+                && log.Value > 0
+                && log.Date >= lookbackStart
+            select new { habit.UserId, log.Date })
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var completionDatesByUser = completionPairs
+            .GroupBy(pair => pair.UserId)
+            .ToDictionary(group => group.Key, group => group.Select(pair => pair.Date).ToHashSet());
 
         var freezes = await dbContext.StreakFreezes
             .AsNoTracking()

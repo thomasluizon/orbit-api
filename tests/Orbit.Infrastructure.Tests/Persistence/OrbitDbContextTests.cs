@@ -334,7 +334,7 @@ public class OrbitDbContextTests
             (typeof(User), new[] { nameof(User.PlayPurchaseToken) }),
             (typeof(User), new[] { nameof(User.PublicProfileSlug) }),
             (typeof(Habit), new[] { nameof(Habit.UserId), nameof(Habit.GoogleEventId) }),
-            (typeof(HabitLog), new[] { nameof(HabitLog.HabitId), nameof(HabitLog.Date) }),
+            (typeof(HabitLog), new[] { nameof(HabitLog.HabitId), nameof(HabitLog.Date), nameof(HabitLog.CompletionOrdinal) }),
             (typeof(Tag), new[] { nameof(Tag.UserId), nameof(Tag.Name) }),
             (typeof(PushSubscription), new[] { nameof(PushSubscription.Endpoint) }),
             (typeof(SentReminder), new[]
@@ -409,7 +409,7 @@ public class OrbitDbContextTests
             (typeof(User), new[] { nameof(User.PublicProfileSlug) }, "\"PublicProfileSlug\" IS NOT NULL"),
             (typeof(User), new[] { nameof(User.GoogleCalendarAutoSyncEnabled), nameof(User.GoogleCalendarLastSyncedAt) }, "\"GoogleCalendarAutoSyncEnabled\" = TRUE"),
             (typeof(Habit), new[] { nameof(Habit.UserId), nameof(Habit.GoogleEventId) }, "\"GoogleEventId\" IS NOT NULL AND \"IsDeleted\" = FALSE"),
-            (typeof(HabitLog), new[] { nameof(HabitLog.HabitId), nameof(HabitLog.Date) }, "\"Value\" > 0 AND NOT \"IsDeleted\""),
+            (typeof(HabitLog), new[] { nameof(HabitLog.HabitId), nameof(HabitLog.Date), nameof(HabitLog.CompletionOrdinal) }, "\"Value\" > 0 AND NOT \"IsDeleted\""),
             (typeof(FriendFeedEvent), new[] { nameof(FriendFeedEvent.ActorUserId), nameof(FriendFeedEvent.AchievementId) }, "\"AchievementId\" IS NOT NULL"),
             (typeof(FriendFeedEvent), new[] { nameof(FriendFeedEvent.ActorUserId), nameof(FriendFeedEvent.Type), nameof(FriendFeedEvent.Value) }, "\"AchievementId\" IS NULL"),
             (typeof(ChallengeParticipant), new[] { nameof(ChallengeParticipant.ChallengeId), nameof(ChallengeParticipant.UserId) }, "\"LeftAtUtc\" IS NULL"),

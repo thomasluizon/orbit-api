@@ -4,6 +4,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -97,6 +98,7 @@ public partial class CreateHabitCommandHandler(
             IsGeneral: request.IsGeneral,
             IsFlexible: opts.IsFlexible,
             ScheduledReminders: opts.ScheduledReminders,
+            RelativeReminders: opts.RelativeReminders,
             Position: nextPosition,
             IntervalWeeks: request.IntervalWeeks));
 
@@ -110,7 +112,7 @@ public partial class CreateHabitCommandHandler(
             return subResult.PropagateError<Guid>();
 
         var linkResult = await LinkTagsAndGoalsAsync(
-            habit, request.UserId, request.TagIds, request.GoalIds, cancellationToken);
+            habit, request.UserId, request.TagIds, request.GoalIds, today, cancellationToken);
         if (linkResult.IsFailure)
             return linkResult.PropagateError<Guid>();
 
@@ -194,7 +196,7 @@ public partial class CreateHabitCommandHandler(
 
     private async Task<Result<IReadOnlyList<Guid>>> LinkTagsAndGoalsAsync(
         Habit habit, Guid userId, IReadOnlyList<Guid>? tagIds,
-        IReadOnlyList<Guid>? goalIds, CancellationToken cancellationToken)
+        IReadOnlyList<Guid>? goalIds, DateOnly today, CancellationToken cancellationToken)
     {
         if (tagIds is { Count: > 0 })
         {
@@ -212,9 +214,10 @@ public partial class CreateHabitCommandHandler(
 
         if (goalIds is { Count: > 0 })
         {
+            var logCutoff = HabitMetricsCalculator.GetStreakLogCutoff(today);
             var goals = await repos.GoalRepository.FindTrackedAsync(
                 g => goalIds.Contains(g.Id) && g.UserId == userId,
-                q => q.Include(g => g.Habits).ThenInclude(h => h.Logs),
+                q => q.Include(g => g.Habits).ThenInclude(h => h.Logs.Where(log => log.Date >= logCutoff)),
                 cancellationToken);
 
             var goalsResolved = OwnershipValidation.AllResolved(goalIds, goals, g => g.Id, ErrorMessages.GoalNotFound);

@@ -6,6 +6,7 @@ using Orbit.Api.Extensions;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
+using Orbit.Domain.Events;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Api.Controllers;
@@ -13,7 +14,7 @@ namespace Orbit.Api.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/[controller]")]
-public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncController> logger) : ControllerBase
+public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncController> logger, IAccountEventCollector? eventCollector = null) : ControllerBase
 {
     private static readonly TimeSpan MaxSyncWindow = TimeSpan.FromDays(AppConstants.MaxSyncWindowDays);
 
@@ -58,7 +59,8 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
         DateTime CreatedAtUtc,
         DateTime UpdatedAtUtc,
         string? Emoji = null,
-        int? IntervalWeeks = null);
+        int? IntervalWeeks = null,
+        IReadOnlyList<Orbit.Domain.ValueObjects.RelativeReminderTime>? RelativeReminders = null);
 
     public record SyncHabitLogDto(Guid Id, Guid HabitId, DateOnly Date, decimal Value, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
 
@@ -300,6 +302,7 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
                         catch
                         {
                             dbContext.ChangeTracker.Clear();
+                            eventCollector?.Clear();
                             throw;
                         }
                     });
@@ -339,14 +342,15 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
             habit.IsFlexible,
             habit.SlipAlertEnabled,
             habit.ChecklistItems,
-            habit.ScheduledReminders,
+            habit.GetScheduledRemindersForLegacyClients(),
             habit.EndDate,
             habit.Position,
             habit.ParentHabitId,
             habit.CreatedAtUtc,
             habit.UpdatedAtUtc,
             Emoji: habit.Emoji,
-            IntervalWeeks: habit.IntervalWeeks);
+            IntervalWeeks: habit.IntervalWeeks,
+            RelativeReminders: habit.RelativeReminders);
     }
 
     private static SyncHabitLogDto MapHabitLog(HabitLog habitLog)

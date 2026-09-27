@@ -9,6 +9,10 @@ public interface IGenericRepository<T> where T : Entity
     Task<IReadOnlyList<T>> GetAllAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<T>> FindAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<T>> FindAsync(Expression<Func<T, bool>> predicate, Func<IQueryable<T>, IQueryable<T>>? includes, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<TResult>> ProjectAsync<TResult>(
+        Expression<Func<T, bool>> predicate,
+        Func<IQueryable<T>, IQueryable<TResult>> projection,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Loads untracked entities with global query filters disabled and optional navigations included.

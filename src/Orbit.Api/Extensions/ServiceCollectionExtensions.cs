@@ -18,9 +18,12 @@ using Orbit.Application.Common;
 using Orbit.Application.Gamification;
 using Orbit.Application.Gamification.Services;
 using Orbit.Application.Goals.Services;
+using Orbit.Application.Habits.Services;
 using Orbit.Application.Habits.Validators;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Events;
 using Orbit.Infrastructure.Configuration;
+using Orbit.Infrastructure.Events;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
 using Orbit.Infrastructure.Services.Calendar;
@@ -63,6 +66,10 @@ public static partial class ServiceCollectionExtensions
         var databaseSettings = DatabaseConnectionSettings.From(builder.Configuration);
         builder.Services.AddSingleton(databaseSettings);
         builder.Services.AddSingleton<SlowQueryCommandInterceptor>();
+        builder.Services.AddSingleton<IAccountEventBus, InMemoryAccountEventBus>();
+        builder.Services.AddScoped<AccountEventCollector>();
+        builder.Services.AddScoped<IAccountEventCollector>(sp => sp.GetRequiredService<AccountEventCollector>());
+        builder.Services.AddScoped<AccountEventTransactionInterceptor>();
         builder.Services.AddDbContext<OrbitDbContext>((serviceProvider, options) =>
             options
                 .UseNpgsql(
@@ -72,10 +79,14 @@ public static partial class ServiceCollectionExtensions
                         npgsql.EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(5), errorCodesToAdd: null);
                         npgsql.CommandTimeout(databaseSettings.CommandTimeoutSeconds);
                     })
-                .AddInterceptors(serviceProvider.GetRequiredService<SlowQueryCommandInterceptor>()));
+                .AddInterceptors(
+                    serviceProvider.GetRequiredService<SlowQueryCommandInterceptor>(),
+                    serviceProvider.GetRequiredService<AccountEventCollector>(),
+                    serviceProvider.GetRequiredService<AccountEventTransactionInterceptor>()));
 
         builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
         builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+        builder.Services.AddScoped<EventTicketService>();
         builder.Services.AddScoped<IAccountResetRepository, AccountResetRepository>();
         builder.Services.AddScoped<IFoundingAchievementReader, FoundingAchievementReader>();
         builder.Services.AddScoped<IIdempotencyStore, IdempotencyStore>();
@@ -86,6 +97,13 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAgentStepUpAuthorizationBridge>(sp =>
             sp.GetRequiredService<Orbit.Application.ApiKeys.Services.ApiKeyManagementAuthorization>());
         builder.Services.AddScoped<IUserDateService, UserDateService>();
+        builder.Services.AddScoped(sp =>
+        {
+            var snapshots = new HabitScheduleSnapshotStore(
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>());
+            HabitScheduleSnapshotInvalidation.Attach(sp.GetRequiredService<OrbitDbContext>(), snapshots);
+            return snapshots;
+        });
         builder.Services.AddScoped<IUserStreakService, UserStreakService>();
         builder.Services.AddScoped<IGoalProgressReadSyncer, GoalProgressReadSyncer>();
         builder.Services.AddScoped<IGoalCompletionService, GoalCompletionService>();
@@ -112,6 +130,9 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IFriendFeedReader, FriendFeedReader>();
         builder.Services.AddScoped<ISocialGraphReader, SocialGraphReader>();
         builder.Services.AddScoped<IHabitLogReader, HabitLogReader>();
+        builder.Services.AddScoped<IHabitScheduleLogReader, HabitScheduleLogReader>();
+        builder.Services.AddScoped<IHabitSummaryLogReader, HabitSummaryLogReader>();
+        builder.Services.AddScoped<IHabitSchedulePageLoader, HabitSchedulePageLoader>();
         builder.Services.AddScoped<Orbit.Application.Challenges.Services.IChallengeProgressService, Orbit.Application.Challenges.Services.ChallengeProgressService>();
         builder.Services.AddScoped<Orbit.Application.Challenges.Services.ChallengeProgressRepositories>(sp =>
             new Orbit.Application.Challenges.Services.ChallengeProgressRepositories(
@@ -168,7 +189,6 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<Orbit.Infrastructure.Services.UserStreakRepositories>(sp =>
             new Orbit.Infrastructure.Services.UserStreakRepositories(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.HabitLog>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.StreakFreeze>>()));
         builder.Services.AddScoped<Orbit.Application.Profile.Queries.ExportUserDataRepositories>(sp =>
@@ -252,11 +272,16 @@ public static partial class ServiceCollectionExtensions
                 }
             };
         })
+        .AddJwtBearer("EventTicket", options => ConfigureEventTicket(options, jwtSettings))
         .AddScheme<AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>("ApiKey", null)
         .AddPolicyScheme("MultiScheme", "JWT or API Key", options =>
         {
             options.ForwardDefaultSelector = context =>
             {
+                if (HttpMethods.IsGet(context.Request.Method)
+                    && context.Request.Path.Equals("/api/events", StringComparison.OrdinalIgnoreCase)
+                    && context.Request.Query.ContainsKey("ticket"))
+                    return "EventTicket";
                 var auth = context.Request.Headers.Authorization.FirstOrDefault();
                 if (auth?.StartsWith("Bearer orb_", StringComparison.OrdinalIgnoreCase) == true)
                     return "ApiKey";
@@ -270,6 +295,42 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAuthorizationHandler, AdminAuthorizationHandler>();
 
         return builder;
+    }
+
+    private static void ConfigureEventTicket(JwtBearerOptions options, JwtSettings settings)
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = settings.Issuer,
+            ValidAudience = EventTicketService.AudienceFor(settings),
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(settings.SecretKey)),
+            ClockSkew = TimeSpan.Zero
+        };
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                if (HttpMethods.IsGet(context.Request.Method)
+                    && context.Request.Path.Equals("/api/events", StringComparison.OrdinalIgnoreCase))
+                    context.Token = context.Request.Query["ticket"].ToString();
+                return Task.CompletedTask;
+            },
+            OnTokenValidated = async context =>
+            {
+                var sessionClaim = context.Principal?.FindFirst("orbit_session_id")?.Value;
+                var userClaim = context.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (!Guid.TryParse(sessionClaim, out var sessionId)
+                    || !Guid.TryParse(userClaim, out var userId)
+                    || !await context.HttpContext.RequestServices
+                        .GetRequiredService<IAuthSessionService>()
+                        .IsSessionActiveAsync(sessionId, userId, context.HttpContext.RequestAborted))
+                    context.Fail("Session is no longer active.");
+            }
+        };
     }
 
     public static WebApplicationBuilder AddOrbitAiServices(this WebApplicationBuilder builder)

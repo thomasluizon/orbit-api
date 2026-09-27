@@ -7,6 +7,7 @@ public class HabitLog : Entity, ITimestamped, ISoftDeletable
     public Guid HabitId { get; private set; }
     public DateOnly Date { get; private set; }
     public decimal Value { get; private set; }
+    public int CompletionOrdinal { get; private set; }
     public bool? IsSlip { get; private set; }
     public string? Note { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
@@ -16,13 +17,46 @@ public class HabitLog : Entity, ITimestamped, ISoftDeletable
 
     private HabitLog() { }
 
-    internal static HabitLog Create(Guid habitId, DateOnly date, decimal value, string? note = null, bool isSlip = false)
+    public static HabitLog FromSummaryRead(Guid habitId, DateOnly date, decimal value)
+    {
+        if (habitId == Guid.Empty)
+            throw new ArgumentException("Summary log habit id must be set.");
+
+        return new HabitLog { HabitId = habitId, Date = date, Value = value };
+    }
+
+    public static HabitLog FromScheduleRead(
+        Guid id,
+        Guid habitId,
+        DateOnly date,
+        decimal value,
+        int completionOrdinal,
+        DateTime createdAtUtc)
+    {
+        if (id == Guid.Empty || habitId == Guid.Empty)
+            throw new ArgumentException("Schedule log ids must be set.");
+
+        return new HabitLog
+        {
+            Id = id,
+            HabitId = habitId,
+            Date = date,
+            Value = value,
+            CompletionOrdinal = completionOrdinal,
+            CreatedAtUtc = createdAtUtc,
+            UpdatedAtUtc = createdAtUtc
+        };
+    }
+
+    internal static HabitLog Create(Guid habitId, DateOnly date, decimal value, string? note = null,
+        bool isSlip = false, int completionOrdinal = 0)
     {
         return new HabitLog
         {
             HabitId = habitId,
             Date = date,
             Value = value,
+            CompletionOrdinal = completionOrdinal,
             IsSlip = isSlip,
             Note = note?.Trim(),
             CreatedAtUtc = DateTime.UtcNow,

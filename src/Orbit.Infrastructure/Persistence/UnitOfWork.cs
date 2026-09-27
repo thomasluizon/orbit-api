@@ -1,10 +1,16 @@
 using Microsoft.EntityFrameworkCore;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Events;
 using Orbit.Infrastructure.Configuration;
 
 namespace Orbit.Infrastructure.Persistence;
 
-public sealed class UnitOfWork(OrbitDbContext context, DatabaseConnectionSettings databaseSettings)
+public sealed class UnitOfWork(
+    OrbitDbContext context,
+    DatabaseConnectionSettings databaseSettings,
+    IAccountEventCollector? eventCollector = null,
+    HabitScheduleSnapshotStore? scheduleSnapshots = null)
     : IUnitOfWork, IAsyncDisposable
 {
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
@@ -58,6 +64,8 @@ public sealed class UnitOfWork(OrbitDbContext context, DatabaseConnectionSetting
                 catch
                 {
                     context.ChangeTracker.Clear();
+                    scheduleSnapshots?.Invalidate();
+                    eventCollector?.Clear();
                     throw;
                 }
             });
@@ -98,6 +106,7 @@ public sealed class UnitOfWork(OrbitDbContext context, DatabaseConnectionSetting
     public void ResetTracking()
     {
         context.ChangeTracker.Clear();
+        scheduleSnapshots?.Invalidate();
     }
 
     public void Dispose()

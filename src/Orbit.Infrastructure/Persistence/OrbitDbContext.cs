@@ -809,6 +809,14 @@ public class OrbitDbContext : DbContext
                 .HasDefaultValueSql(EmptyJsonArraySql)
                 .Metadata.SetValueComparer(CreateReadOnlyListComparer<ScheduledReminderTime>());
 
+            entity.Property(h => h.RelativeReminders)
+                .HasConversion(
+                    v => SerializeJson(v),
+                    v => DeserializeJson(v, new List<RelativeReminderTime>()))
+                .HasColumnType(JsonbColumnType)
+                .HasDefaultValueSql(EmptyJsonArraySql)
+                .Metadata.SetValueComparer(CreateReadOnlyListComparer<RelativeReminderTime>());
+
             if (encConverter is null || nullableEncConverter is null)
                 return;
 
@@ -846,9 +854,10 @@ public class OrbitDbContext : DbContext
     {
         modelBuilder.Entity<HabitLog>(entity =>
         {
+            entity.Property(l => l.CompletionOrdinal).HasDefaultValue(0);
             entity.HasIndex(l => new { l.HabitId, l.Date }, "IX_HabitLogs_HabitId_Date");
 
-            entity.HasIndex(l => new { l.HabitId, l.Date }, "IX_HabitLogs_HabitId_Date_Completed")
+            entity.HasIndex(l => new { l.HabitId, l.Date, l.CompletionOrdinal }, "IX_HabitLogs_HabitId_Date_Completed")
                 .HasFilter("\"Value\" > 0 AND NOT \"IsDeleted\"")
                 .IsUnique();
 

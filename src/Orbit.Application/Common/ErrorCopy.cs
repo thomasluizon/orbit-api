@@ -83,6 +83,7 @@ public static class ErrorCopy
         (DomainErrors.EndDateBeforeStartDate.Code, "Set the end date on or after the start date.", "Defina a data de fim igual ou depois da data de início."),
         (DomainErrors.MaxScheduledReminders.Code, "A habit holds {0} scheduled reminders. Remove one to add another.", "Um hábito guarda {0} lembretes agendados. Remova um para adicionar outro."),
         (DomainErrors.MaxReminderTimes.Code, "A habit holds {0} reminder times. Remove one to add another.", "Um hábito guarda {0} horários de lembrete. Remova um para adicionar outro."),
+        (DomainErrors.InvalidRelativeReminders.Code, "Choose unique reminders with a valid offset or local time.", "Escolha lembretes únicos com um intervalo ou horário local válido."),
         (DomainErrors.DuplicateScheduledReminders.Code, "Two reminders point at the same moment. Change one of them.", "Dois lembretes apontam para o mesmo momento. Mude um deles."),
         (DomainErrors.EmojiTooLong.Code, "Pick a single emoji for this habit.", "Escolha um único emoji para este hábito."),
     ];

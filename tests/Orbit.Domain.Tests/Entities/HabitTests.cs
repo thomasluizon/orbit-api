@@ -1075,6 +1075,163 @@ public class HabitTests
     }
 
     [Fact]
+    public void Create_DueTimeWithScheduledReminders_FoldsEveryClockReminder()
+    {
+        var result = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Exercise", FrequencyUnit.Day, 1, Today,
+            DueTime: new TimeOnly(9, 0),
+            ReminderTimes: [30],
+            ScheduledReminders:
+            [
+                new(ScheduledReminderWhen.SameDay, new TimeOnly(10, 0)),
+                new(ScheduledReminderWhen.DayBefore, new TimeOnly(20, 0))
+            ]));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.ScheduledReminders.Should().BeEmpty();
+        result.Value.ReminderTimes.Should().BeEquivalentTo([30]);
+        result.Value.RelativeReminders.Should().BeEquivalentTo(
+        [
+            new RelativeReminderTime(When: ScheduledReminderWhen.SameDay, Time: new TimeOnly(10, 0)),
+            new RelativeReminderTime(When: ScheduledReminderWhen.DayBefore, Time: new TimeOnly(20, 0))
+        ]);
+        result.Value.GetScheduledRemindersForLegacyClients().Should().BeEquivalentTo(
+        [
+            new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(10, 0)),
+            new ScheduledReminderTime(ScheduledReminderWhen.DayBefore, new TimeOnly(20, 0))
+        ]);
+    }
+
+    [Fact]
+    public void Create_DueTimeWithRelativeClockReminder_HasNoImplicitOffset()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Exercise", FrequencyUnit.Day, 1, Today,
+            DueTime: new TimeOnly(9, 0),
+            RelativeReminders: [new RelativeReminderTime(When: ScheduledReminderWhen.SameDay, Time: new TimeOnly(8, 45))])).Value;
+
+        habit.ReminderTimes.Should().BeEmpty();
+        habit.RelativeReminders.Should().ContainSingle();
+    }
+
+    [Fact]
+    public void Create_InvalidSignedOffset_ReturnsFailure()
+    {
+        var result = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Exercise", FrequencyUnit.Day, 1, Today,
+            DueTime: new TimeOnly(9, 0),
+            RelativeReminders: [new RelativeReminderTime(MinutesBefore: -1440)]));
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("INVALID_RELATIVE_REMINDERS");
+    }
+
+    [Fact]
+    public void Update_NoDueTimeWithRelativeReminder_ReturnsFailure()
+    {
+        var habit = CreateValidHabit();
+
+        var result = habit.Update(new HabitUpdateParams(
+            habit.Title, habit.Description, FrequencyUnit.Day, 1, null, false, null,
+            RelativeReminders: [new RelativeReminderTime(MinutesBefore: -60)]));
+
+        result.IsFailure.Should().BeTrue();
+        habit.RelativeReminders.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Update_MixedHabitWithNoReminderFields_FoldsExistingScheduledReminders()
+    {
+        var habit = CreateValidHabit();
+        var first = habit.Update(new HabitUpdateParams(
+            habit.Title, habit.Description, FrequencyUnit.Day, 1, null, false, null,
+            ScheduledReminders: [new(ScheduledReminderWhen.DayBefore, new TimeOnly(20, 0))]));
+        first.IsSuccess.Should().BeTrue();
+
+        var second = habit.Update(new HabitUpdateParams(
+            habit.Title, habit.Description, FrequencyUnit.Day, 1, null, false, null,
+            DueTime: new TimeOnly(9, 0)));
+
+        second.IsSuccess.Should().BeTrue();
+        habit.ScheduledReminders.Should().BeEmpty();
+        habit.RelativeReminders.Should().ContainSingle(r =>
+            r.When == ScheduledReminderWhen.DayBefore && r.Time == new TimeOnly(20, 0));
+    }
+
+    [Fact]
+    public void Update_LegacyScheduledEdit_ReplacesRelativeClockReminders()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Exercise", FrequencyUnit.Day, 1, Today,
+            DueTime: new TimeOnly(9, 0),
+            ScheduledReminders: [new(ScheduledReminderWhen.SameDay, new TimeOnly(8, 0))])).Value;
+
+        var result = habit.Update(new HabitUpdateParams(
+            habit.Title, habit.Description, FrequencyUnit.Day, 1, null, false, null,
+            DueTime: habit.DueTime,
+            ScheduledReminders: [new(ScheduledReminderWhen.DayBefore, new TimeOnly(20, 0))]));
+
+        result.IsSuccess.Should().BeTrue();
+        habit.ScheduledReminders.Should().BeEmpty();
+        habit.RelativeReminders.Should().ContainSingle(r =>
+            r.When == ScheduledReminderWhen.DayBefore && r.Time == new TimeOnly(20, 0));
+    }
+
+    [Fact]
+    public void Update_LegacyEmptyScheduledEdit_ClearsClockRulesAndLegacyRead()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Exercise", FrequencyUnit.Day, 1, Today,
+            DueTime: new TimeOnly(9, 0), ReminderTimes: [30],
+            RelativeReminders: [new RelativeReminderTime(When: ScheduledReminderWhen.SameDay, Time: new TimeOnly(8, 45))])).Value;
+        habit.GetScheduledRemindersForLegacyClients().Should().ContainSingle();
+
+        var result = habit.Update(new HabitUpdateParams(
+            habit.Title, habit.Description, FrequencyUnit.Day, 1, null, false, null,
+            DueTime: habit.DueTime, ScheduledReminders: []));
+
+        result.IsSuccess.Should().BeTrue();
+        habit.ReminderTimes.Should().Equal(30);
+        habit.RelativeReminders.Should().BeEmpty();
+        habit.GetScheduledRemindersForLegacyClients().Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Update_LegacyScheduledEditWithExistingClock_KeepsClockRules()
+    {
+        var clock = new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(8, 45));
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Exercise", FrequencyUnit.Day, 1, Today,
+            DueTime: new TimeOnly(9, 0), ReminderTimes: [30], ScheduledReminders: [clock])).Value;
+
+        var result = habit.Update(new HabitUpdateParams(
+            habit.Title, habit.Description, FrequencyUnit.Day, 1, null, false, null,
+            DueTime: habit.DueTime, ScheduledReminders: [clock]));
+
+        result.IsSuccess.Should().BeTrue();
+        habit.ReminderTimes.Should().Equal(30);
+        habit.GetScheduledRemindersForLegacyClients().Should().Equal(clock);
+    }
+
+    [Fact]
+    public void Update_ExplicitRelativeRules_IgnoreLegacyScheduledField()
+    {
+        var oldClock = new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(8, 45));
+        var newClock = new RelativeReminderTime(When: ScheduledReminderWhen.DayBefore, Time: new TimeOnly(20, 0));
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Exercise", FrequencyUnit.Day, 1, Today,
+            DueTime: new TimeOnly(9, 0), ScheduledReminders: [oldClock])).Value;
+
+        var result = habit.Update(new HabitUpdateParams(
+            habit.Title, habit.Description, FrequencyUnit.Day, 1, null, false, null,
+            DueTime: habit.DueTime, ScheduledReminders: [oldClock], RelativeReminders: [newClock]));
+
+        result.IsSuccess.Should().BeTrue();
+        habit.RelativeReminders.Should().Equal(newClock);
+        habit.GetScheduledRemindersForLegacyClients().Should().Equal(new ScheduledReminderTime(ScheduledReminderWhen.DayBefore, new TimeOnly(20, 0)));
+    }
+
+    [Fact]
     public void Update_AllOptionalFields_Applied()
     {
         var habit = CreateValidHabit();

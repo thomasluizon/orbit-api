@@ -130,6 +130,18 @@ public static class SharedHabitRules
             .WithMessage("Reminder times must not contain duplicate values");
     }
 
+    public static void AddRelativeReminderRules<T>(IRuleBuilder<T, IReadOnlyList<RelativeReminderTime>?> rule)
+    {
+        rule.Must(reminders => reminders is null ||
+            (reminders.Count <= AppConstants.MaxRelativeReminders
+            && reminders.Distinct().Count() == reminders.Count
+            && reminders.All(r => (r.MinutesBefore.HasValue != r.When.HasValue)
+                && (r.When.HasValue == r.Time.HasValue)
+                && (!r.MinutesBefore.HasValue || r.MinutesBefore.Value is >= -1439 and <= AppConstants.MaxReminderMinutesBefore)
+                && (!r.When.HasValue || Enum.IsDefined(r.When.Value)))))
+            .WithMessage("Relative reminders must be unique and have a valid offset or local time");
+    }
+
     public static void AddGoalIdsRules<T>(
         AbstractValidator<T> validator,
         System.Linq.Expressions.Expression<Func<T, IReadOnlyList<Guid>?>> expression)

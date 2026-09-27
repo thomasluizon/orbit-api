@@ -4,6 +4,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -35,6 +36,7 @@ public partial class CreateGoalCommandHandler(
     public async Task<Result<Guid>> Handle(CreateGoalCommand request, CancellationToken cancellationToken)
     {
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var logCutoff = HabitMetricsCalculator.GetStreakLogCutoff(today);
         if (request.Deadline is { } deadline && deadline < today)
             return Result.Failure<Guid>(ErrorMessages.DeadlineInPast);
 
@@ -61,7 +63,7 @@ public partial class CreateGoalCommandHandler(
 
             var habits = await habitRepository.FindTrackedAsync(
                 h => habitIds.Contains(h.Id) && h.UserId == request.UserId,
-                q => q.Include(h => h.Logs),
+                q => q.Include(h => h.Logs.Where(log => log.Date >= logCutoff)),
                 cancellationToken);
 
             var habitsResolved = OwnershipValidation.AllResolved(habitIds, habits, h => h.Id, ErrorMessages.HabitNotFound);

@@ -1260,6 +1260,12 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<int?>("Position")
                         .HasColumnType("integer");
 
+                    b.Property<string>("RelativeReminders")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
                     b.Property<bool>("ReminderEnabled")
                         .HasColumnType("boolean");
 
@@ -1314,6 +1320,10 @@ namespace Orbit.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int>("CompletionOrdinal")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -1347,7 +1357,7 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasIndex(new[] { "HabitId", "Date" }, "IX_HabitLogs_HabitId_Date");
 
-                    b.HasIndex(new[] { "HabitId", "Date" }, "IX_HabitLogs_HabitId_Date_Completed")
+                    b.HasIndex(new[] { "HabitId", "Date", "CompletionOrdinal" }, "IX_HabitLogs_HabitId_Date_Completed")
                         .IsUnique()
                         .HasFilter("\"Value\" > 0 AND NOT \"IsDeleted\"");
 

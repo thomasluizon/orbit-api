@@ -62,6 +62,18 @@ public class HabitMetricsCalculatorTests
     }
 
     [Fact]
+    public void CalculateProjected_UsesSameLogValuesAsEntityCalculation()
+    {
+        var habit = CreateDailyHabitWithLogs([Today.AddDays(-1), Today]);
+        var projected = habit.Logs
+            .Select(log => new HabitMetricLog(log.HabitId, log.Date, log.Value, log.IsDeleted))
+            .ToList();
+
+        HabitMetricsCalculator.CalculateProjected(habit, projected, Today, 1)
+            .Should().Be(HabitMetricsCalculator.Calculate(habit, Today, 1));
+    }
+
+    [Fact]
     public void Calculate_NoLogs_ReturnsZeroes()
     {
         var habit = Habit.Create(new HabitCreateParams(
@@ -1030,7 +1042,8 @@ public class HabitMetricsCalculatorTests
         inactiveMetrics.CurrentStreak.Should().Be(0);
         inactiveMetrics.MonthlyCompletionRate.Should().Be(0);
 
-        habit.Log(new DateOnly(2026, 3, 16), advanceDueDate: false);
+        habit.Unlog(new DateOnly(2026, 3, 10)).IsSuccess.Should().BeTrue();
+        habit.Log(new DateOnly(2026, 3, 16), advanceDueDate: false).IsSuccess.Should().BeTrue();
         var activeMetrics = HabitMetricsCalculator.Calculate(habit, evaluationDate, 0);
 
         activeMetrics.CurrentStreak.Should().Be(1);

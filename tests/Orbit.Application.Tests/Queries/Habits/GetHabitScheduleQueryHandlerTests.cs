@@ -6,13 +6,16 @@ using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using System.Reflection;
+using System.Text.Json;
 
 namespace Orbit.Application.Tests.Queries.Habits;
 
 public class GetHabitScheduleQueryHandlerTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
-    private readonly IGenericRepository<HabitLog> _habitLogRepo = Substitute.For<IGenericRepository<HabitLog>>();
+    private readonly IHabitScheduleLogReader _scheduleLogReader = Substitute.For<IHabitScheduleLogReader>();
+    private readonly IHabitSchedulePageLoader _pageLoader = Substitute.For<IHabitSchedulePageLoader>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly GetHabitScheduleQueryHandler _handler;
@@ -24,10 +27,19 @@ public class GetHabitScheduleQueryHandlerTests
     {
         _handler = new GetHabitScheduleQueryHandler(
             _habitRepo,
-            _habitLogRepo,
+            _scheduleLogReader,
+            _pageLoader,
             _userDateService,
             _unitOfWork);
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
+        _scheduleLogReader.ReadDaysAsync(
+            Arg.Any<IReadOnlyCollection<Guid>>(),
+            Arg.Any<DateOnly>(),
+            Arg.Any<DateOnly>(),
+            Arg.Any<CancellationToken>()).Returns(Array.Empty<HabitScheduleLogDay>());
+        _scheduleLogReader.ReadResolvedDueDateIdsAsync(
+            Arg.Any<IReadOnlyCollection<Guid>>(),
+            Arg.Any<CancellationToken>()).Returns(new HashSet<Guid>());
     }
 
     private static Habit CreateTestHabit(
@@ -63,6 +75,38 @@ public class GetHabitScheduleQueryHandlerTests
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(habitList);
+        _scheduleLogReader.ReadDaysAsync(
+            Arg.Any<IReadOnlyCollection<Guid>>(),
+            Arg.Any<DateOnly>(),
+            Arg.Any<DateOnly>(),
+            Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var ids = call.ArgAt<IReadOnlyCollection<Guid>>(0).ToHashSet();
+                var from = call.ArgAt<DateOnly>(1);
+                var to = call.ArgAt<DateOnly>(2);
+                return habits.Where(habit => ids.Contains(habit.Id))
+                    .SelectMany(habit => habit.Logs.Where(log => !log.IsDeleted && log.Date >= from && log.Date <= to))
+                    .GroupBy(log => new { log.HabitId, log.Date })
+                    .Select(group => new HabitScheduleLogDay(
+                        group.Key.HabitId,
+                        group.Key.Date,
+                        group.Count(log => log.Value > 0),
+                        group.Count(log => log.Value == 0),
+                        true))
+                    .ToArray();
+            });
+        _scheduleLogReader.ReadResolvedDueDateIdsAsync(
+            Arg.Any<IReadOnlyCollection<Guid>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var ids = call.ArgAt<IReadOnlyCollection<Guid>>(0).ToHashSet();
+                return habits.Where(habit => ids.Contains(habit.Id)
+                    && habit.Logs.Any(log => !log.IsDeleted && log.Date == habit.DueDate && log.Value >= 0))
+                    .Select(habit => habit.Id)
+                    .ToHashSet();
+            });
     }
 
     [Fact]
@@ -74,6 +118,34 @@ public class GetHabitScheduleQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Items.Should().BeEmpty();
         result.Value.TotalCount.Should().Be(0);
+        await _pageLoader.DidNotReceiveWithAnyArgs().LoadAsync(default!, default, default, default);
+    }
+
+    [Fact]
+    public async Task Handle_YearlyFlexibleHabit_LoadsFactsAndPageLogsFromWindowStart()
+    {
+        var selectedDay = new DateOnly(2026, 12, 31);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Yearly flexible", FrequencyUnit.Year, 1,
+            new DateOnly(2026, 1, 1), IsFlexible: true)).Value;
+        SetupHabits(habit);
+
+        var result = await _handler.Handle(
+            new GetHabitScheduleQuery(UserId, selectedDay, selectedDay),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Items.Should().ContainSingle(item => item.Id == habit.Id);
+        await _scheduleLogReader.Received(1).ReadDaysAsync(
+            Arg.Is<IReadOnlyCollection<Guid>>(ids => ids.Contains(habit.Id)),
+            new DateOnly(2026, 1, 1),
+            selectedDay,
+            Arg.Any<CancellationToken>());
+        await _pageLoader.Received(1).LoadAsync(
+            Arg.Is<IReadOnlyCollection<Habit>>(habits => habits.Single().Id == habit.Id),
+            new DateOnly(2026, 1, 1),
+            selectedDay,
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -371,7 +443,7 @@ public class GetHabitScheduleQueryHandlerTests
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>())
-            .Returns(scheduledHabits, scheduledHabits, generalHabits);
+            .Returns(scheduledHabits, generalHabits);
 
         var result = await _handler.Handle(
             new GetHabitScheduleQuery(UserId, Today, Today, IncludeGeneral: true),
@@ -398,7 +470,7 @@ public class GetHabitScheduleQueryHandlerTests
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>())
-            .Returns(scheduledHabits, scheduledHabits, generalHabits);
+            .Returns(scheduledHabits, generalHabits);
 
         var result = await _handler.Handle(
             new GetHabitScheduleQuery(UserId, selectedDay, selectedDay, IncludeGeneral: true),
@@ -889,9 +961,17 @@ public class GetHabitScheduleQueryHandlerTests
     [Fact]
     public async Task Handle_NoDateRange_IncludesChildrenForParent()
     {
-        var parent = CreateTestHabit(title: "Parent", dueDate: Today);
-        var child = CreateTestHabit(title: "Child", dueDate: Today, parentHabitId: parent.Id);
-        SetupHabits(parent, child);
+        var parent = CreateTestHabit(title: "Parent", dueDate: Today.AddDays(-2));
+        var child = CreateTestHabit(title: "Child", dueDate: Today.AddDays(-3), parentHabitId: parent.Id);
+        var grandchild = CreateTestHabit(title: "Grandchild", dueDate: Today.AddDays(-4), parentHabitId: child.Id);
+        var parentCreated = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc);
+        var childCreated = parentCreated.AddDays(1);
+        var grandchildCreated = childCreated.AddDays(1);
+        var createdAtProperty = typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc), BindingFlags.Instance | BindingFlags.Public)!;
+        createdAtProperty.SetValue(parent, parentCreated);
+        createdAtProperty.SetValue(child, childCreated);
+        createdAtProperty.SetValue(grandchild, grandchildCreated);
+        SetupHabits(parent, child, grandchild);
 
         var query = new GetHabitScheduleQuery(UserId);
         var result = await _handler.Handle(query, CancellationToken.None);
@@ -899,6 +979,14 @@ public class GetHabitScheduleQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Items.Should().HaveCount(1);
         result.Value.Items[0].Children.Should().HaveCount(1);
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result.Value.Items[0], new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        var childJson = json.RootElement.GetProperty("children")[0];
+        childJson.GetProperty("createdAtUtc").GetDateTime().Should().Be(childCreated);
+        childJson.GetProperty("children")[0].GetProperty("createdAtUtc").GetDateTime().Should().Be(grandchildCreated);
+        var legacyChildJson = JsonSerializer.Serialize(result.Value.Items[0].Children[0] with { CreatedAtUtc = null },
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        using var legacyJson = JsonDocument.Parse(legacyChildJson);
+        legacyJson.RootElement.TryGetProperty("createdAtUtc", out _).Should().BeFalse();
     }
 
     [Fact]

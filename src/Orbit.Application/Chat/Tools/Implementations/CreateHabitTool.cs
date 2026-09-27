@@ -203,10 +203,8 @@ public class CreateHabitTool(
         bool isBadHabit = JsonArgumentParser.GetOptionalBool(args, "is_bad_habit") ?? false;
 
         var dueTime = JsonArgumentParser.ParseTimeOnly(args, "due_time");
-        var (reminderTimes, scheduledReminders) = ReminderStoreNormalizer.Normalize(
-            dueTime,
-            JsonArgumentParser.ParseIntArray(args, "reminder_times"),
-            JsonArgumentParser.ParseScheduledReminders(args));
+        var reminderTimes = JsonArgumentParser.ParseIntArray(args, "reminder_times");
+        var scheduledReminders = JsonArgumentParser.ParseScheduledReminders(args);
 
         return Habit.Create(new HabitCreateParams(
             userId, title, frequencyUnit, frequencyQuantity,

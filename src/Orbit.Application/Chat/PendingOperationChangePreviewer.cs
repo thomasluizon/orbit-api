@@ -276,7 +276,7 @@ public sealed class PendingOperationChangePreviewer(
             habit.DueDate, habit.DueTime, habit.EndDate, habit.FrequencyUnit,
             habit.FrequencyQuantity, habit.IntervalWeeks, habit.IsBadHabit, habit.IsFlexible,
             habit.ReminderEnabled, habit.ReminderTimes, habit.Days, habit.ChecklistItems,
-            habit.ScheduledReminders, habit.IsDeleted
+            habit.ScheduledReminders, habit.RelativeReminders, habit.IsDeleted
         }));
 
     private static void AddChanges(List<PendingOperationChange> rows, Habit habit, Habit effective,
@@ -315,8 +315,10 @@ public sealed class PendingOperationChangePreviewer(
         AddList("checklist_items", habit.ChecklistItems, effective.ChecklistItems,
             FormatChecklistItem, JsonSerializer.SerializeToElement(effective.ChecklistItems.Select(item =>
                 new { text = item.Text, is_checked = item.IsChecked })));
-        AddList("scheduled_reminders", habit.ScheduledReminders, effective.ScheduledReminders,
-            FormatScheduledReminder, JsonSerializer.SerializeToElement(effective.ScheduledReminders.Select(item =>
+        var oldScheduledReminders = habit.GetScheduledRemindersForLegacyClients();
+        var newScheduledReminders = effective.GetScheduledRemindersForLegacyClients();
+        AddList("scheduled_reminders", oldScheduledReminders, newScheduledReminders,
+            FormatScheduledReminder, JsonSerializer.SerializeToElement(newScheduledReminders.Select(item =>
                 new { when = item.When == ScheduledReminderWhen.DayBefore ? "day_before" : "same_day",
                     time = item.Time.ToString("HH:mm", CultureInfo.InvariantCulture) })));
 

@@ -154,6 +154,8 @@ public class DuplicateHabitCommandHandler(
             IsFlexible: source.IsFlexible,
             EndDate: source.EndDate,
             ScheduledReminders: source.ScheduledReminders,
+            RelativeReminders: source.RelativeReminders,
+            ReminderTimes: source.ReminderTimes,
             Position: position,
             IntervalWeeks: source.IntervalWeeks));
 

@@ -595,7 +595,7 @@ public class LogHabitCommandHandlerTests
     public async Task Handle_FlexibleHabit_DoesNotToggleOnDuplicateDate()
     {
         var habit = Habit.Create(new HabitCreateParams(
-            UserId, "Flexible", FrequencyUnit.Week, 3, DueDate: Today, IsFlexible: true)).Value;
+            UserId, "Flexible", FrequencyUnit.Week, 2, DueDate: Today, IsFlexible: true)).Value;
         habit.Log(Today);
 
         _habitRepo.FindOneTrackedAsync(
@@ -607,8 +607,12 @@ public class LogHabitCommandHandlerTests
         var command = new LogHabitCommand(UserId, habit.Id);
 
         var result = await _handler.Handle(command, CancellationToken.None);
+        var excess = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
+        excess.IsFailure.Should().BeTrue();
+        excess.ErrorCode.Should().Be(ErrorCodes.AllInstancesDone);
+        habit.Logs.Count(l => l.Value > 0).Should().Be(2);
         await _habitLogRepo.Received(1).AddAsync(Arg.Any<HabitLog>(), Arg.Any<CancellationToken>());
         _habitLogRepo.DidNotReceive().Remove(Arg.Any<HabitLog>());
     }
