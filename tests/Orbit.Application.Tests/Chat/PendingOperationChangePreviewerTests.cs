@@ -177,10 +177,9 @@ public sealed class PendingOperationChangePreviewerTests
         var preview = await Preview("bulk_update_habits", """{"filter":{"all":true},"updates":{"scheduled_reminders":[{"when":"same_day","time":"08:30"}]}}""");
 
         preview!.Changes.Should().ContainSingle().Which.Should().Match<Orbit.Domain.Models.PendingOperationChange>(
-            row => row.Field == "reminder_times" && row.OldValue == "(none)" && row.NewValue == "30 min before due");
-        preview.Items![0].Fields.Single(field => field.Field == "reminder_times")
-            .ProposedValue!.Value.EnumerateArray().Select(value => value.GetInt32())
-            .Should().Equal(30);
+            row => row.Field == "scheduled_reminders" && row.OldValue == "(none)" && row.NewValue == "same_day 08:30");
+        preview.Items![0].Fields.Single(field => field.Field == "scheduled_reminders")
+            .ProposedValue!.Value[0].GetProperty("time").GetString().Should().Be("08:30");
         habit.ReminderTimes.Should().BeEmpty();
     }
 

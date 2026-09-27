@@ -122,7 +122,7 @@ public static class ErrorMessages
     public static readonly AppError CannotSkipFutureDate = From(ErrorCodes.CannotSkipFutureDate);
     public static readonly AppError HabitNotYetDue = From(ErrorCodes.HabitNotYetDue);
     public static readonly AppError NotScheduledOnDate = From(ErrorCodes.NotScheduledOnDate);
-    public static readonly AppError AllInstancesDone = DomainErrors.AllInstancesDone;
+    public static readonly AppError AllInstancesDone = From(ErrorCodes.AllInstancesDone);
     public static readonly AppError CannotLogFutureDate = From(ErrorCodes.CannotLogFutureDate);
     public static readonly AppError BeyondOverdueWindow = From(ErrorCodes.BeyondOverdueWindow);
     public static readonly AppError SelfParent = From(ErrorCodes.SelfParent);
