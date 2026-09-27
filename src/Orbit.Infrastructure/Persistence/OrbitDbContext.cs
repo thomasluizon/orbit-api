@@ -27,6 +27,7 @@ public class OrbitDbContext : DbContext
     public bool HasEncryptionService => _encryptionService is not null;
 
     public DbSet<User> Users => Set<User>();
+    public DbSet<MarketingContact> MarketingContacts => Set<MarketingContact>();
     public DbSet<Habit> Habits => Set<Habit>();
     public DbSet<HabitLog> HabitLogs => Set<HabitLog>();
     public DbSet<UserFact> UserFacts => Set<UserFact>();
@@ -86,6 +87,7 @@ public class OrbitDbContext : DbContext
             nullableEncConverter = new NullableEncryptionValueConverter(_encryptionService);
         }
         ConfigureUserEntity(modelBuilder, nullableEncConverter);
+        ConfigureMarketingContactEntity(modelBuilder);
         ConfigureHabitEntity(modelBuilder, isPostgres, encConverter, nullableEncConverter);
 
         if (isPostgres)
@@ -134,6 +136,17 @@ public class OrbitDbContext : DbContext
         ConfigureAccountabilityPairHabitEntity(modelBuilder);
         ConfigureAccountabilityCheckInEntity(modelBuilder);
         ConfigureClosedMonthRecapEntity(modelBuilder);
+    }
+
+    private static void ConfigureMarketingContactEntity(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<MarketingContact>(entity =>
+        {
+            entity.HasIndex(contact => contact.Email).IsUnique();
+            entity.Property(contact => contact.Email).HasMaxLength(254).IsRequired();
+            entity.Property(contact => contact.Language).HasMaxLength(10).IsRequired();
+            entity.Property(contact => contact.Source).HasMaxLength(32).IsRequired();
+        });
     }
 
     private static void ConfigureClosedMonthRecapEntity(ModelBuilder modelBuilder)

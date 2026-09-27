@@ -12,10 +12,13 @@ public class ConfirmWaitlistCommandHandler(
 {
     public async Task<Result> Handle(ConfirmWaitlistCommand request, CancellationToken cancellationToken)
     {
-        if (!tokenService.TryValidateToken(request.Token, out var email, out _))
+        if (!tokenService.TryValidateToken(request.Token, out var email, out var language))
             return Result.Failure("Invalid or expired confirmation link.");
 
-        await contactsService.AddContactAsync(email, cancellationToken);
+        if (!WaitlistLanguage.TryCanonicalize(language, out var canonicalLanguage))
+            return Result.Failure("Invalid or expired confirmation link.");
+
+        await contactsService.AddContactAsync(email, canonicalLanguage, cancellationToken);
 
         return Result.Success();
     }

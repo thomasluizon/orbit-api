@@ -5,8 +5,6 @@ namespace Orbit.Application.Waitlist.Validators;
 
 public class JoinWaitlistCommandValidator : AbstractValidator<JoinWaitlistCommand>
 {
-    private static readonly string[] SupportedLanguages = ["en", "pt-BR"];
-
     public JoinWaitlistCommandValidator()
     {
         RuleFor(x => x.Email)
@@ -15,7 +13,7 @@ public class JoinWaitlistCommandValidator : AbstractValidator<JoinWaitlistComman
             .EmailAddress();
 
         RuleFor(x => x.Language)
-            .Must(language => SupportedLanguages.Contains(language, StringComparer.OrdinalIgnoreCase))
+            .Must(language => WaitlistLanguage.TryCanonicalize(language, out _))
             .WithMessage("Language must be one of: en, pt-BR.");
     }
 }
