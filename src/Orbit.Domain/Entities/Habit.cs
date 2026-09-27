@@ -102,6 +102,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     public string? GoogleEventId { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
+    public long ReminderProbeVersion { get; private set; }
     public bool IsDeleted { get; private set; }
     public DateTime? DeletedAtUtc { get; private set; }
     public ICollection<System.DayOfWeek> Days { get; private set; } = [];
@@ -146,10 +147,10 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
 
     private Habit() { }
 
-    public static Habit FromScheduleSnapshot(HabitScheduleSnapshot snapshot) => new()
+    public static Habit FromScheduleSnapshot(HabitScheduleSnapshot snapshot, Guid userId) => new()
     {
         Id = snapshot.Id,
-        UserId = snapshot.UserId,
+        UserId = userId,
         ParentHabitId = snapshot.ParentHabitId,
         FrequencyUnit = snapshot.FrequencyUnit,
         FrequencyQuantity = snapshot.FrequencyQuantity,

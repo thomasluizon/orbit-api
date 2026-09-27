@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Orbit.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    partial class OrbitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260927014645_DropFoldDueTimeScheduledRemindersTrigger")]
+    partial class DropFoldDueTimeScheduledRemindersTrigger
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1269,9 +1272,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<bool>("ReminderEnabled")
                         .HasColumnType("boolean");
 
-                    b.Property<long>("ReminderProbeVersion")
-                        .HasColumnType("bigint");
-
                     b.Property<string>("ReminderTimes")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -1481,14 +1481,6 @@ namespace Orbit.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
-
-                    b.Property<string>("PreviewFingerprint")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<int>("RevisionNumber")
-                        .IsConcurrencyToken()
-                        .HasColumnType("integer");
 
                     b.Property<string>("RiskClass")
                         .IsRequired()
@@ -2107,9 +2099,6 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.Property<Guid?>("ReferredByUserId")
                         .HasColumnType("uuid");
-
-                    b.Property<int>("ReminderPreferencesVersion")
-                        .HasColumnType("integer");
 
                     b.Property<DateTime?>("ScheduledDeletionAt")
                         .HasColumnType("timestamp with time zone");

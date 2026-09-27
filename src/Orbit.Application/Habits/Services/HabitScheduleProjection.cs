@@ -8,7 +8,6 @@ public static class HabitScheduleProjection
     public static IQueryable<HabitScheduleSnapshot> Select(IQueryable<Habit> query) =>
         query.Select(habit => new HabitScheduleSnapshot(
             habit.Id,
-            habit.UserId,
             habit.ParentHabitId,
             habit.FrequencyUnit,
             habit.FrequencyQuantity,
@@ -25,4 +24,28 @@ public static class HabitScheduleProjection
             habit.IsGeneral,
             habit.IsFlexible,
             habit.Days.ToList()));
+
+    public static IQueryable<UserHabitScheduleSnapshot> SelectForFreeze(IQueryable<Habit> query) =>
+        query.Select(habit => new UserHabitScheduleSnapshot(
+            habit.UserId,
+            new HabitScheduleSnapshot(
+                habit.Id,
+                habit.ParentHabitId,
+                habit.FrequencyUnit,
+                habit.FrequencyQuantity,
+                habit.IntervalWeeks,
+                habit.DueDate,
+                habit.ScheduledStartDate,
+                habit.OriginalDayOfMonth,
+                habit.EndDate,
+                habit.CreatedAtUtc,
+                habit.DeletedAtUtc,
+                habit.IsDeleted,
+                habit.IsBadHabit,
+                habit.IsCompleted,
+                habit.IsGeneral,
+                habit.IsFlexible,
+                habit.Days.ToList())));
 }
+
+public sealed record UserHabitScheduleSnapshot(Guid UserId, HabitScheduleSnapshot Snapshot);

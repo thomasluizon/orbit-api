@@ -942,6 +942,12 @@ public class OrbitDbContext : DbContext
 #pragma warning disable ORBIT0004
         var now = DateTime.UtcNow;
 #pragma warning restore ORBIT0004
+        foreach (var entry in ChangeTracker.Entries<Habit>()
+            .Where(e => e.State == EntityState.Modified))
+        {
+            entry.Property(h => h.ReminderProbeVersion).CurrentValue++;
+        }
+
         foreach (var entry in ChangeTracker.Entries<ITimestamped>()
             .Where(e => e.State is EntityState.Modified or EntityState.Added))
         {

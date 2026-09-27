@@ -12,11 +12,16 @@ using Orbit.Domain.Interfaces;
 using Orbit.Domain.ValueObjects;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
+using Orbit.Infrastructure.Tests.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
-public class ReminderSchedulerServiceTests
+public class ReminderSchedulerServiceTests : IDisposable
 {
+    private SqliteOrbitDbContextFactory? _factory;
+
+    public void Dispose() => _factory?.Dispose();
+
     private static readonly DateOnly UtcToday = DateOnly.FromDateTime(DateTime.UtcNow);
     private static readonly int[] ReminderTimes = new[] { 0 };
     private static string FormatReminderText(int minutesBefore, string lang)
@@ -258,7 +263,7 @@ public class ReminderSchedulerServiceTests
     [Fact]
     public async Task CheckAndSendReminders_TwoSameDayScheduledReminders_PersistsBothWithoutUniqueViolation()
     {
-        await using var dbContext = CreateInMemoryDbContext();
+        await using var dbContext = CreateSqliteDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
 
         var user = User.Create("Alex", "alex@test.com").Value;
@@ -290,7 +295,7 @@ public class ReminderSchedulerServiceTests
     [Fact]
     public async Task CheckAndSendReminders_DayBeforeScheduledReminder_KeysOnSendDateNotDueDate()
     {
-        await using var dbContext = CreateInMemoryDbContext();
+        await using var dbContext = CreateSqliteDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
 
         var dueTomorrow = UtcToday.AddDays(1);
@@ -322,7 +327,7 @@ public class ReminderSchedulerServiceTests
     [Fact]
     public async Task CheckAndSendReminders_DayBeforeAlreadySentYesterdayForTodayDue_DoesNotBlockSameDay()
     {
-        await using var dbContext = CreateInMemoryDbContext();
+        await using var dbContext = CreateSqliteDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
 
         var reminderTime = new TimeOnly(0, 0);
@@ -355,7 +360,7 @@ public class ReminderSchedulerServiceTests
     [Fact]
     public async Task CheckAndSendReminders_SameDayAndDayBeforeSameTime_PersistsBothWithoutCollision()
     {
-        await using var dbContext = CreateInMemoryDbContext();
+        await using var dbContext = CreateSqliteDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
 
         var reminderTime = new TimeOnly(0, 0);
@@ -390,7 +395,7 @@ public class ReminderSchedulerServiceTests
     [Fact]
     public async Task CheckAndSendReminders_ScheduledReminderAlreadySent_DoesNotResend()
     {
-        await using var dbContext = CreateInMemoryDbContext();
+        await using var dbContext = CreateSqliteDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
 
         var reminderTime = new TimeOnly(0, 0);
@@ -420,7 +425,7 @@ public class ReminderSchedulerServiceTests
     [Fact]
     public async Task CheckAndSendReminders_RelativeReminderDueButUnsent_FiresAndRecords()
     {
-        await using var dbContext = CreateInMemoryDbContext();
+        await using var dbContext = CreateSqliteDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
 
         var user = User.Create("Alex", "alex@test.com").Value;
@@ -458,7 +463,7 @@ public class ReminderSchedulerServiceTests
     public async Task CheckAndSendReminders_RelativeReminder_FiresAtInstantForDueOccurrence(
         string instant, string timeZoneId, string dueDateText, int dueHour, int dueMinute, int minutesBefore)
     {
-        await using var dbContext = CreateInMemoryDbContext();
+        await using var dbContext = CreateSqliteDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
         var dueDate = DateOnly.Parse(dueDateText);
         var reminderInstant = DateTimeOffset.Parse(instant);
@@ -501,7 +506,7 @@ public class ReminderSchedulerServiceTests
         string instant, string timeZoneId, string dueDateText, int dueHour, int dueMinute,
         ScheduledReminderWhen when, int reminderHour, int reminderMinute)
     {
-        await using var dbContext = CreateInMemoryDbContext();
+        await using var dbContext = CreateSqliteDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
         var clock = new MutableTimeProvider(DateTimeOffset.Parse(instant).AddMinutes(-1));
         var user = User.Create("Alex", "alex@test.com").Value;
@@ -541,7 +546,7 @@ public class ReminderSchedulerServiceTests
     [InlineData(true)]
     public async Task CheckAndSendReminders_RelativeClockAtOffsetInstant_DeliversOnce(bool explicitOffset)
     {
-        await using var dbContext = CreateInMemoryDbContext();
+        await using var dbContext = CreateSqliteDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
         var instant = new DateTimeOffset(2027, 9, 26, 8, 45, 0, TimeSpan.Zero);
         var clock = new MutableTimeProvider(instant.AddMinutes(-1));
@@ -577,7 +582,7 @@ public class ReminderSchedulerServiceTests
     public async Task CheckAndSendReminders_SignedOffsetAfterDueTime_FiresOnce(
         string instant, string timeZoneId, string dueDateText, int dueHour, int dueMinute, int minutesBefore)
     {
-        await using var dbContext = CreateInMemoryDbContext();
+        await using var dbContext = CreateSqliteDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
         var reminderInstant = DateTimeOffset.Parse(instant);
         var clock = new MutableTimeProvider(reminderInstant.AddMinutes(-1));
@@ -615,7 +620,7 @@ public class ReminderSchedulerServiceTests
     [Fact]
     public async Task CheckAndSendReminders_RelativeReminderAfterItsLocalDay_DoesNotSendLate()
     {
-        await using var dbContext = CreateInMemoryDbContext();
+        await using var dbContext = CreateSqliteDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
         var dueDate = new DateOnly(2027, 9, 26);
         var clock = new MutableTimeProvider(new DateTimeOffset(2027, 9, 26, 9, 0, 0, TimeSpan.Zero));
@@ -643,7 +648,7 @@ public class ReminderSchedulerServiceTests
     [Fact]
     public async Task CheckAndSendReminders_RelativeReminder_LoggedBeforeInstant_DoesNotSend()
     {
-        await using var dbContext = CreateInMemoryDbContext();
+        await using var dbContext = CreateSqliteDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
         var dueDate = new DateOnly(2027, 9, 26);
         var clock = new MutableTimeProvider(new DateTimeOffset(2027, 9, 25, 9, 0, 0, TimeSpan.Zero));
@@ -672,7 +677,7 @@ public class ReminderSchedulerServiceTests
     [Fact]
     public async Task CheckAndSendReminders_RelativeReminderAlreadySent_DoesNotDoubleSend()
     {
-        await using var dbContext = CreateInMemoryDbContext();
+        await using var dbContext = CreateSqliteDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
 
         var user = User.Create("Alex", "alex@test.com").Value;
@@ -699,7 +704,7 @@ public class ReminderSchedulerServiceTests
     [Fact]
     public async Task CheckAndSendReminders_RelativeReminderAlreadySentOnUserLocalDate_DoesNotResendWhenLocalDiffersFromUtc()
     {
-        await using var dbContext = CreateInMemoryDbContext();
+        await using var dbContext = CreateSqliteDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
 
         var nowUtc = DateTime.UtcNow;
@@ -733,7 +738,7 @@ public class ReminderSchedulerServiceTests
     [Fact]
     public async Task CheckAndSendReminders_RelativeReminderHabitLoggedOnUserLocalDate_DoesNotSendWhenLocalDiffersFromUtc()
     {
-        await using var dbContext = CreateInMemoryDbContext();
+        await using var dbContext = CreateSqliteDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
 
         var nowUtc = DateTime.UtcNow;
@@ -767,7 +772,7 @@ public class ReminderSchedulerServiceTests
     [Fact]
     public async Task CheckAndSendReminders_RelativeReminderSentYesterday_DoesNotBlockToday()
     {
-        await using var dbContext = CreateInMemoryDbContext();
+        await using var dbContext = CreateSqliteDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
 
         var user = User.Create("Alex", "alex@test.com").Value;
@@ -796,7 +801,7 @@ public class ReminderSchedulerServiceTests
     [Fact]
     public async Task CheckAndSendReminders_ManyDueReminders_DeliversEachRecipientExactlyOnce()
     {
-        await using var dbContext = CreateInMemoryDbContext();
+        await using var dbContext = CreateSqliteDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
 
         var users = SeedDueRelativeReminders(dbContext, count: 6);
@@ -818,7 +823,7 @@ public class ReminderSchedulerServiceTests
     [Fact]
     public async Task CheckAndSendReminders_OneRecipientPushThrows_OthersStillRecordedAndDelivered()
     {
-        await using var dbContext = CreateInMemoryDbContext();
+        await using var dbContext = CreateSqliteDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
 
         var users = SeedDueRelativeReminders(dbContext, count: 4);
@@ -842,7 +847,7 @@ public class ReminderSchedulerServiceTests
     [Fact]
     public async Task ExecuteAsync_HostedLifecycle_RunsOneReminderPassThenStopsGracefully()
     {
-        await using var dbContext = CreateInMemoryDbContext();
+        await using var dbContext = CreateSqliteDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
 
         var user = User.Create("Alex", "alex@test.com").Value;
@@ -887,8 +892,9 @@ public class ReminderSchedulerServiceTests
             ReminderEnabled: true, DueDate: UtcToday, DueTime: new TimeOnly(0, 0),
             ReminderTimes: ReminderTimes)).Value;
 
-        await using var dbContext = CreateInterceptingDbContext(
+        using var factory = new SqliteOrbitDbContextFactory(
             new ThrowForHabitReminderInterceptor(throwingHabit.Id));
+        var dbContext = factory.Context;
         var pushService = Substitute.For<IPushNotificationService>();
 
         dbContext.Users.AddRange(throwingUser, healthyUser);
@@ -927,10 +933,7 @@ public class ReminderSchedulerServiceTests
         return users;
     }
 
-    private static OrbitDbContext CreateInMemoryDbContext() =>
-        new(new DbContextOptionsBuilder<OrbitDbContext>()
-            .UseInMemoryDatabase($"ReminderSchedulerServiceTests_{Guid.NewGuid()}")
-            .Options);
+    private OrbitDbContext CreateSqliteDbContext() => (_factory ??= new SqliteOrbitDbContextFactory()).Context;
 
     private static ReminderSchedulerService CreateService(
         OrbitDbContext dbContext, IPushNotificationService pushService, TimeProvider? timeProvider = null)
@@ -953,12 +956,6 @@ public class ReminderSchedulerServiceTests
 
         public void SetUtcNow(DateTimeOffset instant) => _now = instant;
     }
-
-    private static OrbitDbContext CreateInterceptingDbContext(ISaveChangesInterceptor interceptor) =>
-        new(new DbContextOptionsBuilder<OrbitDbContext>()
-            .UseInMemoryDatabase($"ReminderSchedulerServiceTests_{Guid.NewGuid()}")
-            .AddInterceptors(interceptor)
-            .Options);
 
     private sealed class ThrowForHabitReminderInterceptor(Guid habitId) : SaveChangesInterceptor
     {
