@@ -36,6 +36,10 @@ resource "render_web_service" "staging_web" {
   health_check_path = var.web_health_check_path
   custom_domains    = length(var.staging_web_custom_domains) > 0 ? [for domain in var.staging_web_custom_domains : { name = domain }] : null
 
+  lifecycle {
+    ignore_changes = [runtime_source.image.digest]
+  }
+
   runtime_source = {
     image = {
       image_url = "ghcr.io/thomasluizon/orbit-web"
