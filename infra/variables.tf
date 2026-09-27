@@ -44,7 +44,7 @@ variable "staging_web_digest" {
 variable "web_health_check_path" {
   description = "Health endpoint supplied by the web image ticket."
   type        = string
-  default     = "/"
+  default     = "/api/health"
 }
 
 variable "web_custom_domains" {

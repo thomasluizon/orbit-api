@@ -4,12 +4,18 @@ import {
 }
 
 resource "render_web_service" "production_api" {
+  environment_id    = render_project.orbit.environments["Production"].id
   name              = "orbit-api"
   plan              = "starter"
   region            = "ohio"
   health_check_path = "/health"
   env_vars          = { ORBIT_TERRAFORM_ENV_GROUP = { value = "production-api" } }
   custom_domains    = [{ name = "api.useorbit.org" }]
+
+  lifecycle {
+    # The imported service's own variables stay until the linked group is verified live, so the first apply cannot strip production's configuration.
+    ignore_changes = [env_vars]
+  }
 
   runtime_source = {
     docker = {
@@ -23,6 +29,7 @@ resource "render_web_service" "production_api" {
 }
 
 resource "render_postgres" "production" {
+  environment_id            = render_project.orbit.environments["Production"].id
   name                      = "orbit-production"
   database_name             = "orbit_production"
   database_user             = "orbit_production"
@@ -33,11 +40,12 @@ resource "render_postgres" "production" {
 }
 
 resource "render_web_service" "production_web" {
+  environment_id    = render_project.orbit.environments["Production"].id
   name              = "orbit-web"
   plan              = "0.5c-512mb"
   region            = "ohio"
   health_check_path = var.web_health_check_path
-  custom_domains    = [for domain in var.web_custom_domains : { name = domain }]
+  custom_domains    = length(var.web_custom_domains) > 0 ? [for domain in var.web_custom_domains : { name = domain }] : null
 
   runtime_source = {
     image = {
@@ -48,13 +56,14 @@ resource "render_web_service" "production_web" {
 }
 
 resource "render_static_site" "landing" {
+  environment_id = render_project.orbit.environments["Production"].id
   name           = "orbit-landing"
   repo_url       = "https://github.com/thomasluizon/orbit-landing-page"
   branch         = "main"
   build_command  = "npm ci && npm run build"
   publish_path   = "dist"
-  auto_deploy    = true
-  custom_domains = [for domain in var.landing_custom_domains : { name = domain }]
+  auto_deploy    = false
+  custom_domains = length(var.landing_custom_domains) > 0 ? [for domain in var.landing_custom_domains : { name = domain }] : null
 
   headers = [
     { path = "/", name = "Link", value = "<https://useorbit.org/>; rel=\"canonical\"" },

@@ -1,4 +1,5 @@
 resource "render_postgres" "staging" {
+  environment_id            = render_project.orbit.environments["Staging"].id
   name                      = "orbit-staging"
   database_name             = "orbit_staging"
   database_user             = "orbit_staging"
@@ -9,11 +10,12 @@ resource "render_postgres" "staging" {
 }
 
 resource "render_web_service" "staging_api" {
+  environment_id    = render_project.orbit.environments["Staging"].id
   name              = "orbit-api-staging"
   plan              = "free"
   region            = "ohio"
   health_check_path = "/health"
-  custom_domains    = [for domain in var.staging_api_custom_domains : { name = domain }]
+  custom_domains    = length(var.staging_api_custom_domains) > 0 ? [for domain in var.staging_api_custom_domains : { name = domain }] : null
 
   runtime_source = {
     docker = {
@@ -27,11 +29,12 @@ resource "render_web_service" "staging_api" {
 }
 
 resource "render_web_service" "staging_web" {
+  environment_id    = render_project.orbit.environments["Staging"].id
   name              = "orbit-web-staging"
   plan              = "free"
   region            = "ohio"
   health_check_path = var.web_health_check_path
-  custom_domains    = [for domain in var.staging_web_custom_domains : { name = domain }]
+  custom_domains    = length(var.staging_web_custom_domains) > 0 ? [for domain in var.staging_web_custom_domains : { name = domain }] : null
 
   runtime_source = {
     image = {

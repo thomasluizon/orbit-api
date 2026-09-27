@@ -33,6 +33,7 @@ locals {
     GooglePlay__RtdnAudience            = "https://api.useorbit.org/api/subscriptions/play/rtdn"
     GooglePlay__RtdnServiceAccountEmail = "orbit-299@orbit-490614.iam.gserviceaccount.com"
     GooglePlay__YearlyBasePlanId        = "yearly"
+    Google__AllowedRedirectUris__0      = "https://app.useorbit.org/auth-callback"
     Google__ClientId                    = "355604968359-tqco1o3l874mg7rvme91vniael7pn3tk.apps.googleusercontent.com"
     Jwt__Audience                       = "OrbitClient"
     Jwt__ExpiryHours                    = "168"
@@ -56,9 +57,23 @@ locals {
   }
 
   staging_api_values = merge(local.production_api_values, {
-    ASPNETCORE_ENVIRONMENT  = "Staging"
-    Cors__AllowedOrigins__0 = "https://staging.useorbit.org"
-    Sentry__Environment     = "staging"
+    ASPNETCORE_ENVIRONMENT         = "Staging"
+    Cors__AllowedOrigins__0        = "https://staging.useorbit.org"
+    Frontend__BaseUrl              = "https://staging.useorbit.org"
+    Google__AllowedRedirectUris__0 = "https://staging.useorbit.org/auth-callback"
+    Google__AllowedRedirectUris__1 = "https://app.useorbit.org/auth-callback"
+    Marketing__ApiBaseUrl          = "https://api-staging.useorbit.org"
+    Sentry__Environment            = "staging"
+    Stripe__CancelUrl              = "https://staging.useorbit.org/upgrade"
+    Stripe__MonthlyPriceIdBrl      = "price_staging_unset_monthly_brl"
+    Stripe__MonthlyPriceIdUsd      = "price_staging_unset_monthly_usd"
+    Stripe__ProProductId           = "prod_staging_unset"
+    Stripe__PublishableKey         = "pk_test_staging_unset"
+    Stripe__SuccessUrl             = "https://staging.useorbit.org/settings?subscription=success"
+    Stripe__YearlyPriceIdBrl       = "price_staging_unset_yearly_brl"
+    Stripe__YearlyPriceIdUsd       = "price_staging_unset_yearly_usd"
+    Supabase__Url                  = "https://staging-storage-disabled.invalid"
+    Waitlist__ApiBaseUrl           = "https://api-staging.useorbit.org"
   })
 
   production_web_values = {
