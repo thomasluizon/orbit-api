@@ -102,6 +102,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     public string? GoogleEventId { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
+    public long ReminderProbeVersion { get; private set; }
     public bool IsDeleted { get; private set; }
     public DateTime? DeletedAtUtc { get; private set; }
     public ICollection<System.DayOfWeek> Days { get; private set; } = [];

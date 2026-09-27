@@ -1,6 +1,5 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,6 +13,7 @@ using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
+using Orbit.Infrastructure.Tests.Persistence;
 using OrbitServiceCollectionExtensions = Orbit.Api.Extensions.ServiceCollectionExtensions;
 
 namespace Orbit.Infrastructure.Tests.BackgroundJobs;
@@ -136,7 +136,8 @@ public class ScheduledJobRegistryTests
     [Fact]
     public async Task RunAsync_ExecutesUnderlyingScan_WithoutDoubleRunningSideEffects()
     {
-        await using var dbContext = NewDbContext();
+        using var factory = new SqliteOrbitDbContextFactory();
+        var dbContext = factory.Context;
         var pushService = Substitute.For<IPushNotificationService>();
         var scopeFactory = ScopeFactoryFor(dbContext, pushService);
 
@@ -175,11 +176,6 @@ public class ScheduledJobRegistryTests
     ];
 
     private static IServiceScopeFactory ScopeFactory() => Substitute.For<IServiceScopeFactory>();
-
-    private static OrbitDbContext NewDbContext() =>
-        new(new DbContextOptionsBuilder<OrbitDbContext>()
-            .UseInMemoryDatabase($"ScheduledJobRegistryTests_{Guid.NewGuid()}")
-            .Options);
 
     private static IServiceScopeFactory ScopeFactoryFor(OrbitDbContext dbContext, IPushNotificationService pushService)
     {
