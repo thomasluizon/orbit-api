@@ -70,6 +70,16 @@ public class GetHabitScheduleQueryHandlerTests
     private void SetupHabits(params Habit[] habits)
     {
         var habitList = habits.ToList().AsReadOnly();
+        _habitRepo.ProjectAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<HabitScheduleCandidate>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<IQueryable<Habit>, IQueryable<HabitScheduleCandidate>>>(1)(
+                habitList.AsQueryable()).ToList());
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(habitList);
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
@@ -437,13 +447,13 @@ public class GetHabitScheduleQueryHandlerTests
             frequencyQuantity: null,
             isGeneral: true);
         general.Log(Today).IsSuccess.Should().BeTrue();
-        IReadOnlyList<Habit> scheduledHabits = [scheduled];
+        SetupHabits(scheduled);
         IReadOnlyList<Habit> generalHabits = [general];
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>())
-            .Returns(scheduledHabits, generalHabits);
+            .Returns(generalHabits);
 
         var result = await _handler.Handle(
             new GetHabitScheduleQuery(UserId, Today, Today, IncludeGeneral: true),
@@ -464,13 +474,13 @@ public class GetHabitScheduleQueryHandlerTests
             frequencyQuantity: null,
             isGeneral: true);
         general.Log(selectedDay).IsSuccess.Should().BeTrue();
-        IReadOnlyList<Habit> scheduledHabits = [scheduled];
+        SetupHabits(scheduled);
         IReadOnlyList<Habit> generalHabits = [general];
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>())
-            .Returns(scheduledHabits, generalHabits);
+            .Returns(generalHabits);
 
         var result = await _handler.Handle(
             new GetHabitScheduleQuery(UserId, selectedDay, selectedDay, IncludeGeneral: true),

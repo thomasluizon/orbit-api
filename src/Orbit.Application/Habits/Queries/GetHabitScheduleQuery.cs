@@ -6,6 +6,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using Orbit.Domain.ValueObjects;
 using System.Text.Json.Serialization;
 
@@ -218,6 +219,7 @@ public class GetHabitScheduleQueryHandler(
             logFrom = flexibleFrom;
         var allHabits = await LoadScheduleHabits(
             request.UserId,
+            includeDescription: !string.IsNullOrWhiteSpace(request.Search),
             includeTags: HabitScheduleFilters.NeedsTagsForFiltering(request),
             cancellationToken);
         var candidateIds = allHabits.Select(habit => habit.Id).ToArray();
@@ -346,13 +348,43 @@ public class GetHabitScheduleQueryHandler(
 
     private async Task<IReadOnlyList<Habit>> LoadScheduleHabits(
         Guid userId,
+        bool includeDescription,
         bool includeTags,
         CancellationToken cancellationToken)
     {
-        return await habitRepository.FindAsync(
+        var candidates = await habitRepository.ProjectAsync(
             h => h.UserId == userId && !h.IsGeneral,
-            q => includeTags ? q.Include(h => h.Tags) : q,
+            q => q.Select(h => new HabitScheduleCandidate(
+                new HabitScheduleSnapshot(
+                    h.Id,
+                    h.ParentHabitId,
+                    h.FrequencyUnit,
+                    h.FrequencyQuantity,
+                    h.IntervalWeeks,
+                    h.DueDate,
+                    h.ScheduledStartDate,
+                    h.OriginalDayOfMonth,
+                    h.EndDate,
+                    h.CreatedAtUtc,
+                    h.DeletedAtUtc,
+                    h.IsDeleted,
+                    h.IsBadHabit,
+                    h.IsCompleted,
+                    h.IsGeneral,
+                    h.IsFlexible,
+                    h.Days.ToList()),
+                h.Title,
+                includeDescription ? h.Description : null,
+                h.Position,
+                includeTags ? h.Tags.ToList() : new List<Tag>())).AsSplitQuery(),
             cancellationToken);
+        return candidates.Select(candidate =>
+        {
+            var habit = Habit.FromScheduleSnapshot(candidate.Schedule, userId);
+            habit.LoadScheduleCandidateFieldsForRead(
+                candidate.Title, candidate.Description, candidate.Position, candidate.Tags);
+            return habit;
+        }).ToArray();
     }
 
     private async Task<ILookup<Guid?, Habit>> LoadPageHabitLookup(
@@ -369,7 +401,8 @@ public class GetHabitScheduleQueryHandler(
         if (ids.Count == 0)
             return Enumerable.Empty<Habit>().ToLookup(h => h.ParentHabitId);
 
-        var pageHabits = baseLookup.SelectMany(group => group)
+        var pageHabits = (await habitRepository.FindAsync(
+            h => ids.Contains(h.Id), cancellationToken))
             .Where(h => ids.Contains(h.Id))
             .ToArray();
         await pageLoader.LoadAsync(pageHabits, logFrom, logTo, cancellationToken);

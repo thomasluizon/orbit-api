@@ -146,6 +146,16 @@ public class GetHabitWidgetQueryHandlerTests
 
     private void SetupHabits(params Habit[] habits)
     {
+        _habitRepository.ProjectAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<HabitScheduleCandidate>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<IQueryable<Habit>, IQueryable<HabitScheduleCandidate>>>(1)(
+                habits.AsQueryable()).ToList());
+        _habitRepository.FindAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(habits.ToList().AsReadOnly());
         _habitRepository.FindAsync(
                 Arg.Any<Expression<Func<Habit, bool>>>(),
                 Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
