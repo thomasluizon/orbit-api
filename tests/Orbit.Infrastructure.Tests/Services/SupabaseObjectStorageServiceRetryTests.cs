@@ -35,7 +35,7 @@ public class SupabaseObjectStorageServiceRetryTests
             SequencedHttpMessageHandler.Status(HttpStatusCode.BadGateway),
             SequencedHttpMessageHandler.Status(HttpStatusCode.OK, SignedUrlBody)));
 
-        var result = await sut.CreateSignedUploadAsync("key");
+        var result = await sut.CreateSignedUploadAsync("key", "image/png", 1024);
 
         handler.CallCount.Should().Be(2);
         result.SignedUrl.Should().Contain("token=signed");
@@ -48,7 +48,7 @@ public class SupabaseObjectStorageServiceRetryTests
             SequencedHttpMessageHandler.Throws(),
             SequencedHttpMessageHandler.Status(HttpStatusCode.OK, SignedUrlBody)));
 
-        var result = await sut.CreateSignedUploadAsync("key");
+        var result = await sut.CreateSignedUploadAsync("key", "image/png", 1024);
 
         handler.CallCount.Should().Be(2);
         result.SignedUrl.Should().Contain("token=signed");
@@ -60,7 +60,7 @@ public class SupabaseObjectStorageServiceRetryTests
         var (sut, handler) = Build(new SequencedHttpMessageHandler(
             SequencedHttpMessageHandler.Status(HttpStatusCode.ServiceUnavailable)));
 
-        var act = () => sut.CreateSignedUploadAsync("key");
+        var act = () => sut.CreateSignedUploadAsync("key", "image/png", 1024);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
         handler.CallCount.Should().Be(3);
@@ -72,7 +72,7 @@ public class SupabaseObjectStorageServiceRetryTests
         var (sut, handler) = Build(new SequencedHttpMessageHandler(
             SequencedHttpMessageHandler.Status(HttpStatusCode.BadRequest)));
 
-        var act = () => sut.CreateSignedUploadAsync("key");
+        var act = () => sut.CreateSignedUploadAsync("key", "image/png", 1024);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
         handler.CallCount.Should().Be(1);

@@ -1,7 +1,10 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Orbit.Api.Extensions;
+using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Extensions;
 
@@ -79,6 +82,25 @@ public class StartupConfigValidationTests
 
         act.Should().Throw<InvalidOperationException>()
             .WithMessage($"Configuration key '{blankedKey}' is missing or empty.");
+    }
+
+    [Fact]
+    public void AddOrbitInfrastructure_S3_RegistersS3StorageWithoutSupabaseStorageSecret()
+    {
+        var values = ValidSupabase();
+        values.Remove("Supabase:SecretKey");
+        values["Storage:Provider"] = "S3";
+        values["Storage:S3:Bucket"] = "orbit-uploads-staging-713285551626";
+        values["Storage:S3:Region"] = "us-east-2";
+        values["Storage:S3:AccessKeyId"] = "AKIAEXAMPLE123456789";
+        values["Storage:S3:SecretAccessKey"] = "example-secret-key";
+        values["ConnectionStrings:DefaultConnection"] = "Host=localhost;Database=orbit;Username=orbit;Password=unused";
+        var builder = BuildWith(values);
+
+        builder.AddOrbitInfrastructure();
+
+        builder.Services.Single(service => service.ServiceType == typeof(IObjectStorageService))
+            .ImplementationType.Should().Be<S3ObjectStorageService>();
     }
 
     private static WebApplicationBuilder BuildWith(Dictionary<string, string?> values)

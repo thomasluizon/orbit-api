@@ -19,11 +19,11 @@ public class SignUploadCommandHandlerTests
         _handler = new SignUploadCommandHandler(_objectStorage);
 
         _objectStorage
-            .CreateSignedUploadAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .CreateSignedUploadAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(call => new SignedUpload(
-                call.Arg<string>(),
-                $"https://project.supabase.co/storage/v1/object/upload/sign/uploads/{call.Arg<string>()}?token=jwt",
-                $"https://project.supabase.co/storage/v1/object/public/uploads/{call.Arg<string>()}"));
+                call.ArgAt<string>(0),
+                $"https://project.supabase.co/storage/v1/object/upload/sign/uploads/{call.ArgAt<string>(0)}?token=jwt",
+                $"https://project.supabase.co/storage/v1/object/public/uploads/{call.ArgAt<string>(0)}"));
     }
 
     [Fact]
@@ -60,7 +60,22 @@ public class SignUploadCommandHandlerTests
 
         await _objectStorage.Received(1).CreateSignedUploadAsync(
             Arg.Is<string>(key => key.StartsWith($"{UserId}/") && key.EndsWith(".webp")),
+            "image/webp",
+            4096,
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_MintsFreshKeyForEveryRequest()
+    {
+        var command = new SignUploadCommand(UserId, "image/png", 1024);
+
+        var first = await _handler.Handle(command, CancellationToken.None);
+        var second = await _handler.Handle(command, CancellationToken.None);
+
+        first.Value.Key.Should().StartWith($"{UserId}/");
+        second.Value.Key.Should().StartWith($"{UserId}/");
+        first.Value.Key.Should().NotBe(second.Value.Key);
     }
 }
 
