@@ -130,7 +130,7 @@ public class AuthControllerTests
     }
 
     [Fact]
-    public async Task GoogleCodeAuth_ReturnsLoginResponseAndDispatchesRetryableCommand()
+    public async Task GoogleCodeAuth_ReturnsLoginResponseAndDispatchesCodeCommand()
     {
         var login = new LoginResponse(UserId, "token", "Name", "test@example.com", false, "refresh");
         _mediator.Send(Arg.Any<GoogleCodeAuthCommand>(), Arg.Any<CancellationToken>())
@@ -142,7 +142,7 @@ public class AuthControllerTests
 
         result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(login);
         await _mediator.Received(1).Send(Arg.Is<GoogleCodeAuthCommand>(command =>
-            command is IConcurrencyRetryable && command.CodeVerifier == "verifier"
+            !(command is IConcurrencyRetryable) && command.CodeVerifier == "verifier"
             && command.RedirectUri == "https://app.test/callback" && command.ReferralCode == "friend"),
             Arg.Any<CancellationToken>());
     }

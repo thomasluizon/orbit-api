@@ -1,6 +1,5 @@
 using MediatR;
 using Orbit.Application.Auth.Queries;
-using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
@@ -12,11 +11,11 @@ public record GoogleCodeAuthCommand(
     string CodeVerifier,
     string RedirectUri,
     string Language = "en",
-    string? ReferralCode = null) : IRequest<Result<LoginResponse>>, IConcurrencyRetryable;
+    string? ReferralCode = null) : IRequest<Result<LoginResponse>>;
 
 public sealed class GoogleCodeAuthCommandHandler(
     IGoogleAuthorizationCodeService authorizationCodeService,
-    GoogleSignInFlow signInFlow) : IRequestHandler<GoogleCodeAuthCommand, Result<LoginResponse>>
+    IMediator mediator) : IRequestHandler<GoogleCodeAuthCommand, Result<LoginResponse>>
 {
     public async Task<Result<LoginResponse>> Handle(GoogleCodeAuthCommand request, CancellationToken cancellationToken)
     {
@@ -25,13 +24,12 @@ public sealed class GoogleCodeAuthCommandHandler(
         if (identity.IsFailure)
             return identity.PropagateError<LoginResponse>();
 
-        return await signInFlow.CompleteAsync(
+        return await mediator.Send(new CompleteGoogleSignInCommand(
             identity.Value.Email,
             identity.Value.Name,
             request.Language,
             request.ReferralCode,
             identity.Value.AccessToken,
-            identity.Value.RefreshToken,
-            cancellationToken);
+            identity.Value.RefreshToken), cancellationToken);
     }
 }

@@ -1,9 +1,11 @@
 using System.Linq.Expressions;
 using FluentAssertions;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using Orbit.Application.Behaviors;
 using Orbit.Application.Auth.Commands;
 using Orbit.Application.Common;
 using Orbit.Application.Referrals.Commands;
@@ -24,6 +26,7 @@ public class GoogleCodeAuthCommandHandlerTests
     private readonly IEmailService _email = Substitute.For<IEmailService>();
     private readonly IProductAnalytics _analytics = Substitute.For<IProductAnalytics>();
     private readonly IMediator _mediator = Substitute.For<IMediator>();
+    private readonly IMediator _signInMediator = Substitute.For<IMediator>();
     private readonly GoogleCodeAuthCommandHandler _handler;
 
     public GoogleCodeAuthCommandHandlerTests()
@@ -36,7 +39,14 @@ public class GoogleCodeAuthCommandHandlerTests
         scopeFactory.CreateScope().Returns(scope);
         var flow = new GoogleSignInFlow(_users, _work, _sessions, _email, scopeFactory, _analytics,
             NullLogger<GoogleSignInFlow>.Instance);
-        _handler = new GoogleCodeAuthCommandHandler(_exchange, flow);
+        _handler = new GoogleCodeAuthCommandHandler(_exchange, _signInMediator);
+        _signInMediator.Send(Arg.Any<CompleteGoogleSignInCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var request = call.Arg<CompleteGoogleSignInCommand>();
+                return flow.CompleteAsync(request.Email, request.Name, request.Language, request.ReferralCode,
+                    request.GoogleAccessToken, request.GoogleRefreshToken, call.Arg<CancellationToken>());
+            });
         _exchange.ExchangeAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new GoogleCodeIdentity(Email, "Google User", "access", "refresh")));
         _sessions.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -120,5 +130,55 @@ public class GoogleCodeAuthCommandHandlerTests
         result.ErrorCode.Should().Be(code);
         await _users.DidNotReceive().AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
         await _sessions.DidNotReceive().CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ConcurrencyConflict_RetriesSignInWithoutRedeemingCodeAgain()
+    {
+        var staleUser = User.Create("Stale", Email).Value;
+        var currentUser = User.Create("Current", Email).Value;
+        var trackerWasReset = false;
+        _work.When(work => work.ResetTracking()).Do(_ => trackerWasReset = true);
+        _users.FindOneTrackedIgnoringFiltersAsync(
+                Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(_ => trackerWasReset ? currentUser : staleUser);
+        var saves = 0;
+        _work.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => ++saves == 1
+                ? throw new DbUpdateConcurrencyException("stale user")
+                : Task.FromResult(1));
+        var exchanges = 0;
+        _exchange.ExchangeAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ => ++exchanges == 1
+                ? Result.Success(new GoogleCodeIdentity(Email, "Google User", "access", "refresh"))
+                : Result.Failure<GoogleCodeIdentity>("Code already redeemed", ErrorCodes.GoogleCodeExchangeFailed));
+
+        using var provider = new ServiceCollection()
+            .AddLogging()
+            .AddMediatR(cfg =>
+            {
+                cfg.RegisterServicesFromAssemblyContaining<GoogleCodeAuthCommand>();
+                cfg.AddOpenBehavior(typeof(ConcurrencyRetryBehavior<,>));
+            })
+            .AddScoped<GoogleSignInFlow>()
+            .AddSingleton(_exchange)
+            .AddSingleton(_users)
+            .AddSingleton(_work)
+            .AddSingleton(_sessions)
+            .AddSingleton(_email)
+            .AddSingleton(_analytics)
+            .BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var result = await scope.ServiceProvider.GetRequiredService<IMediator>().Send(
+            new GoogleCodeAuthCommand("code", "verifier", "https://app.test/callback"), CancellationToken.None);
+
+        exchanges.Should().Be(1);
+        result.IsSuccess.Should().BeTrue();
+        result.Value.UserId.Should().Be(currentUser.Id);
+        currentUser.GoogleAccessToken.Should().Be("access");
+        currentUser.GoogleRefreshToken.Should().Be("refresh");
+        saves.Should().Be(2);
+        _work.Received(1).ResetTracking();
     }
 }
