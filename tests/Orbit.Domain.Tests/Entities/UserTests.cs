@@ -13,6 +13,24 @@ public class UserTests
     }
 
     [Fact]
+    public void ReminderPreferencesVersion_AdvancesForEverySchedulerPreference()
+    {
+        var user = CreateValidUser();
+        user.ReminderPreferencesVersion.Should().Be(0);
+
+        user.SetTimeZone("UTC").IsSuccess.Should().BeTrue();
+        user.ReminderPreferencesVersion.Should().Be(1);
+        user.SetLanguage("pt-BR");
+        user.ReminderPreferencesVersion.Should().Be(2);
+        user.SetWeekStartDay(0).IsSuccess.Should().BeTrue();
+        user.ReminderPreferencesVersion.Should().Be(3);
+
+        user.SetTimeZone("Invalid/Timezone").IsFailure.Should().BeTrue();
+        user.SetWeekStartDay(2).IsFailure.Should().BeTrue();
+        user.ReminderPreferencesVersion.Should().Be(3);
+    }
+
+    [Fact]
     public void Create_ValidInput_ReturnsSuccess()
     {
         var result = User.Create("Alex", "alex@example.com");
