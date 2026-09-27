@@ -52,7 +52,7 @@ locals {
     Stripe__YearlyPriceIdBrl            = "price_1U59lVGwWZvarDk3FBO8ci6L"
     Stripe__YearlyPriceIdUsd            = "price_1U59ncGwWZvarDk3Ydiw7jP7"
     Supabase__Url                       = "https://wdscxamegetmhqldqsdg.supabase.co"
-    Storage__Provider                   = "Supabase"
+    Storage__Provider                   = var.production_storage_provider
     Storage__S3__Bucket                 = aws_s3_bucket.uploads["production"].bucket
     Storage__S3__Region                 = "us-east-2"
     Vapid__PublicKey                    = "BCotrosa_VZSere_khAKbxMVRj-NZIuHs4lK4sep1Fv5N6fx8z-99q9-pDPeEs0GwKiwOwf44SiI4NN5XX-htow"
@@ -76,6 +76,7 @@ locals {
     Stripe__YearlyPriceIdBrl       = "price_staging_unset_yearly_brl"
     Stripe__YearlyPriceIdUsd       = "price_staging_unset_yearly_usd"
     Supabase__Url                  = "https://staging-storage-disabled.invalid"
+    Storage__Provider              = var.staging_storage_provider
     Storage__S3__Bucket            = aws_s3_bucket.uploads["staging"].bucket
     Waitlist__ApiBaseUrl           = "https://api-staging.useorbit.org"
   })
