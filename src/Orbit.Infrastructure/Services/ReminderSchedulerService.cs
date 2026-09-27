@@ -104,8 +104,9 @@ public partial class ReminderSchedulerService(
 
     private async Task<ReminderSnapshot> GetSnapshotAsync(OrbitDbContext dbContext, DateTime nowUtc, CancellationToken ct)
     {
-        var probe = await dbContext.Database.SqlQueryRaw<ReminderProbe>(ReminderProbeSql)
-            .SingleAsync(ct);
+        var probe = dbContext.Database.IsRelational()
+            ? await dbContext.Database.SqlQueryRaw<ReminderProbe>(ReminderProbeSql).SingleAsync(ct)
+            : await GetInMemoryProbeAsync(dbContext, ct);
 
         if (_snapshot is not null && nowUtc >= _snapshot.LoadedAtUtc
             && nowUtc - _snapshot.LoadedAtUtc < TimeSpan.FromHours(1)
@@ -114,6 +115,22 @@ public partial class ReminderSchedulerService(
 
         _snapshot = await LoadSnapshotAsync(dbContext, probe, nowUtc, ct);
         return _snapshot;
+    }
+
+    private static async Task<ReminderProbe> GetInMemoryProbeAsync(OrbitDbContext dbContext, CancellationToken ct)
+    {
+        var rows = await (from habit in dbContext.Habits.AsNoTracking()
+                          join user in dbContext.Users.AsNoTracking() on habit.UserId equals user.Id
+                          where !habit.IsCompleted && !habit.IsGeneral && habit.ReminderEnabled
+                          select new { habit.UpdatedAtUtc, user.ReminderPreferencesVersion })
+            .ToListAsync(ct);
+
+        return new ReminderProbe
+        {
+            HabitCount = rows.Count,
+            LatestHabitUpdateUtc = rows.Count > 0 ? rows.Max(row => row.UpdatedAtUtc) : null,
+            UserPreferencesVersionSum = rows.Sum(row => (long)row.ReminderPreferencesVersion)
+        };
     }
 
     private static async Task<ReminderSnapshot> LoadSnapshotAsync(
