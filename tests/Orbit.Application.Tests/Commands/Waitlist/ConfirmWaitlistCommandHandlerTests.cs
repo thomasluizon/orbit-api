@@ -31,7 +31,7 @@ public class ConfirmWaitlistCommandHandlerTests
         var result = await _handler.Handle(new ConfirmWaitlistCommand("good-token"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _contactsService.Received(1).AddContactAsync("user@test.com", Arg.Any<CancellationToken>());
+        await _contactsService.Received(1).AddContactAsync("user@test.com", "en", Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -44,6 +44,6 @@ public class ConfirmWaitlistCommandHandlerTests
         var result = await _handler.Handle(new ConfirmWaitlistCommand("bad-token"), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        await _contactsService.DidNotReceive().AddContactAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _contactsService.DidNotReceive().AddContactAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 }

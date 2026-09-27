@@ -12,13 +12,14 @@ public class UnsubscribeMarketingCommandHandlerTests
 {
     private readonly IMarketingUnsubscribeTokenService _tokenService = Substitute.For<IMarketingUnsubscribeTokenService>();
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
+    private readonly IGenericRepository<MarketingContact> _contactRepo = Substitute.For<IGenericRepository<MarketingContact>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly UnsubscribeMarketingCommandHandler _handler;
 
     public UnsubscribeMarketingCommandHandlerTests()
     {
         _handler = new UnsubscribeMarketingCommandHandler(
-            _tokenService, _userRepo, _unitOfWork, NullLogger<UnsubscribeMarketingCommandHandler>.Instance);
+            _tokenService, _userRepo, _contactRepo, _unitOfWork, NullLogger<UnsubscribeMarketingCommandHandler>.Instance);
     }
 
     private void ValidTokenFor(Guid userId) =>
@@ -91,5 +92,23 @@ public class UnsubscribeMarketingCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WaitlistContact_MarksUnsubscribed()
+    {
+        var contact = MarketingContact.ConfirmWaitlist("person@example.com", "en");
+        ValidTokenFor(contact.Id);
+        SetupUserFound(null);
+        _contactRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<MarketingContact, bool>>>(),
+            Arg.Any<Func<IQueryable<MarketingContact>, IQueryable<MarketingContact>>?>(),
+            Arg.Any<CancellationToken>()).Returns(contact);
+
+        var result = await _handler.Handle(new UnsubscribeMarketingCommand("valid"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        contact.UnsubscribedAtUtc.Should().NotBeNull();
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 }

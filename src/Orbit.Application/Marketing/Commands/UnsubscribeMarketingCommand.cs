@@ -12,6 +12,7 @@ public record UnsubscribeMarketingCommand(string Token) : IRequest<Result>;
 public partial class UnsubscribeMarketingCommandHandler(
     IMarketingUnsubscribeTokenService unsubscribeTokenService,
     IGenericRepository<User> userRepository,
+    IGenericRepository<MarketingContact> contactRepository,
     IUnitOfWork unitOfWork,
     ILogger<UnsubscribeMarketingCommandHandler> logger) : IRequestHandler<UnsubscribeMarketingCommand, Result>
 {
@@ -25,7 +26,17 @@ public partial class UnsubscribeMarketingCommandHandler(
             cancellationToken: cancellationToken);
 
         if (user is null)
+        {
+            var contact = await contactRepository.FindOneTrackedAsync(
+                candidate => candidate.Id == userId,
+                cancellationToken: cancellationToken);
+            if (contact is null || contact.UnsubscribedAtUtc is not null)
+                return Result.Success();
+
+            contact.Unsubscribe();
+            await unitOfWork.SaveChangesAsync(cancellationToken);
             return Result.Success();
+        }
 
         if (user.MarketingEmailConsent == false)
             return Result.Success();

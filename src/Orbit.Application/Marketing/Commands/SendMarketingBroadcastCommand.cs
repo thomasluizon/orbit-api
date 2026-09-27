@@ -22,6 +22,7 @@ public record MarketingBroadcastResult(int RecipientCount, bool WasTest);
 
 public partial class SendMarketingBroadcastCommandHandler(
     IGenericRepository<User> userRepository,
+    IGenericRepository<MarketingContact> contactRepository,
     IBackgroundJobClient backgroundJobClient,
     IMarketingUnsubscribeTokenService unsubscribeTokenService,
     IServiceScopeFactory scopeFactory,
@@ -46,12 +47,26 @@ public partial class SendMarketingBroadcastCommandHandler(
             return Result.Success(new MarketingBroadcastResult(RecipientCount: 1, WasTest: true));
         }
 
-        var audience = await userRepository.FindAsync(
-            user => user.MarketingEmailConsent == true, cancellationToken);
+        var users = await userRepository.FindIgnoringFiltersAsync(user => true, cancellationToken: cancellationToken);
+        var contacts = await contactRepository.GetAllAsync(cancellationToken);
 
-        var recipients = audience
+        var userEmails = users.Select(user => user.Email.Trim().ToLowerInvariant()).ToHashSet(StringComparer.Ordinal);
+        var blockedEmails = contacts
+            .Where(contact => contact.UnsubscribedAtUtc is not null || contact.SuppressedAtUtc is not null)
+            .Select(contact => contact.Email)
+            .ToHashSet(StringComparer.Ordinal);
+        var recipients = users
+            .Where(user => !user.IsDeactivated && user.MarketingEmailConsent == true &&
+                !blockedEmails.Contains(user.Email.Trim().ToLowerInvariant()))
             .Select(user => new MarketingRecipient(user.Id, user.Email, user.Language ?? "en"))
+            .GroupBy(recipient => recipient.Email.Trim().ToLowerInvariant(), StringComparer.Ordinal)
+            .Select(group => group.First())
             .ToList();
+
+        recipients.AddRange(contacts
+            .Where(contact => !userEmails.Contains(contact.Email) &&
+                contact.UnsubscribedAtUtc is null && contact.SuppressedAtUtc is null)
+            .Select(contact => new MarketingRecipient(contact.Id, contact.Email, contact.Language)));
 
         LogBroadcastQueued(logger, recipients.Count, request.SubjectEn);
         FanOutInBackground(request, recipients);

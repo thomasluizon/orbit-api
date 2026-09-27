@@ -20,6 +20,7 @@ namespace Orbit.Application.Tests.Commands.Marketing;
 public class SendMarketingBroadcastCommandHandlerTests
 {
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
+    private readonly IGenericRepository<MarketingContact> _contactRepo = Substitute.For<IGenericRepository<MarketingContact>>();
     private readonly RecordingEmailService _emailService = new();
     private readonly IMarketingUnsubscribeTokenService _tokenService = Substitute.For<IMarketingUnsubscribeTokenService>();
     private readonly IBackgroundJobClient _backgroundJobClient = Substitute.For<IBackgroundJobClient>();
@@ -28,6 +29,7 @@ public class SendMarketingBroadcastCommandHandlerTests
 
     public SendMarketingBroadcastCommandHandlerTests()
     {
+        _contactRepo.GetAllAsync(Arg.Any<CancellationToken>()).Returns(Array.Empty<MarketingContact>());
         _tokenService.CreateToken(Arg.Any<Guid>()).Returns(call => $"token-{call.Arg<Guid>():N}");
         _backgroundJobClient.Create(Arg.Do<Job>(job => _enqueuedJob = job), Arg.Any<IState>());
 
@@ -49,7 +51,7 @@ public class SendMarketingBroadcastCommandHandlerTests
         });
 
         _handler = new SendMarketingBroadcastCommandHandler(
-            _userRepo, _backgroundJobClient, _tokenService, scopeFactory, settings,
+            _userRepo, _contactRepo, _backgroundJobClient, _tokenService, scopeFactory, settings,
             NullLogger<SendMarketingBroadcastCommandHandler>.Instance);
     }
 
@@ -57,8 +59,11 @@ public class SendMarketingBroadcastCommandHandlerTests
         new("EN Subject", "PT Assunto", "<p>EN body</p>", "<p>PT corpo</p>", testEmail);
 
     private void AudienceReturns(params User[] users) =>
-        _userRepo.FindAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>())
+        _userRepo.FindIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>())
             .Returns(users);
+
+    private void ContactsReturn(params MarketingContact[] contacts) =>
+        _contactRepo.GetAllAsync(Arg.Any<CancellationToken>()).Returns(contacts);
 
     private static async Task WaitForSendCountAsync(RecordingEmailService email, int expected)
     {
@@ -71,11 +76,14 @@ public class SendMarketingBroadcastCommandHandlerTests
     {
         var enUser = User.Create("En", "en@example.com").Value;
         var ptUser = User.Create("Pt", "pt@example.com").Value;
+        enUser.SetMarketingConsent(true);
+        ptUser.SetMarketingConsent(true);
         ptUser.SetLanguage("pt-BR");
 
         Expression<Func<User, bool>>? capturedPredicate = null;
-        _userRepo.FindAsync(
+        _userRepo.FindIgnoringFiltersAsync(
                 Arg.Do<Expression<Func<User, bool>>>(predicate => capturedPredicate = predicate),
+                Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
                 Arg.Any<CancellationToken>())
             .Returns([enUser, ptUser]);
 
@@ -93,8 +101,8 @@ public class SendMarketingBroadcastCommandHandlerTests
         optedOut.SetMarketingConsent(false);
         var neverAsked = User.Create("N", "n@example.com").Value;
         predicate(consenting).Should().BeTrue();
-        predicate(optedOut).Should().BeFalse();
-        predicate(neverAsked).Should().BeFalse();
+        predicate(optedOut).Should().BeTrue();
+        predicate(neverAsked).Should().BeTrue();
 
         await WaitForSendCountAsync(_emailService, 2);
         _emailService.MarketingSends.Should().HaveCount(2);
@@ -132,8 +140,8 @@ public class SendMarketingBroadcastCommandHandlerTests
 
         _emailService.MarketingSends.Should().BeEmpty();
 
-        await _userRepo.DidNotReceive().FindAsync(
-            Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>());
+        await _userRepo.DidNotReceive().FindIgnoringFiltersAsync(
+            Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -153,7 +161,7 @@ public class SendMarketingBroadcastCommandHandlerTests
     {
         var logger = new CollectingLogger<SendMarketingBroadcastCommandHandler>();
         var handler = new SendMarketingBroadcastCommandHandler(
-            _userRepo, _backgroundJobClient, _tokenService, Substitute.For<IServiceScopeFactory>(),
+            _userRepo, _contactRepo, _backgroundJobClient, _tokenService, Substitute.For<IServiceScopeFactory>(),
             Options.Create(new MarketingSettings { ApiBaseUrl = "https://api.useorbit.org", SendDelayMilliseconds = 0 }),
             logger);
 
@@ -172,6 +180,8 @@ public class SendMarketingBroadcastCommandHandlerTests
     {
         var first = User.Create("First", "first@example.com").Value;
         var second = User.Create("Second", "second@example.com").Value;
+        first.SetMarketingConsent(true);
+        second.SetMarketingConsent(true);
         _emailService.FailForEmail = "first@example.com";
         AudienceReturns(first, second);
 
@@ -180,6 +190,39 @@ public class SendMarketingBroadcastCommandHandlerTests
         result.Value.RecipientCount.Should().Be(2);
         await WaitForSendCountAsync(_emailService, 1);
         _emailService.MarketingSends.Should().ContainSingle(send => send.To == "second@example.com");
+    }
+
+    [Fact]
+    public async Task Handle_SharedUserAndContactEmail_SendsOnce()
+    {
+        var user = User.Create("Person", "person@example.com").Value;
+        user.SetMarketingConsent(true);
+        AudienceReturns(user);
+        ContactsReturn(MarketingContact.ConfirmWaitlist("PERSON@example.com", "pt-BR"));
+
+        var result = await _handler.Handle(Command(), CancellationToken.None);
+
+        result.Value.RecipientCount.Should().Be(1);
+        await WaitForSendCountAsync(_emailService, 1);
+        _emailService.MarketingSends.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Handle_SkipsUnsubscribedAndSuppressedAddresses()
+    {
+        AudienceReturns();
+        var eligible = MarketingContact.ConfirmWaitlist("eligible@example.com", "en");
+        var unsubscribed = MarketingContact.ConfirmWaitlist("unsubscribed@example.com", "en");
+        var suppressed = MarketingContact.ConfirmWaitlist("suppressed@example.com", "en");
+        unsubscribed.Unsubscribe();
+        suppressed.Suppress();
+        ContactsReturn(eligible, unsubscribed, suppressed);
+
+        var result = await _handler.Handle(Command(), CancellationToken.None);
+
+        result.Value.RecipientCount.Should().Be(1);
+        await WaitForSendCountAsync(_emailService, 1);
+        _emailService.MarketingSends.Should().ContainSingle(send => send.To == "eligible@example.com");
     }
 
     private sealed class CollectingLogger<T> : ILogger<T>
