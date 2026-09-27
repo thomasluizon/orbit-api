@@ -15,16 +15,28 @@ public class AgentCatalogServiceTests
     private readonly AgentCatalogService _catalogService = new();
 
     [Fact]
-    public void SetColorScheme_ChatAndMcpCapabilities_DoNotRequirePro()
+    public void SetColorScheme_IsAvailableOnlyThroughTheHttpCompatibilityEndpoint()
     {
-        var chatCapability = _catalogService.GetCapabilityByChatTool("set_color_scheme");
-        var mcpCapability = _catalogService.GetCapabilityByMcpTool("set_color_scheme");
+        var chatToolNames = typeof(AiToolRegistry).Assembly
+            .GetTypes()
+            .Where(type => type.IsClass && !type.IsAbstract && typeof(IAiTool).IsAssignableFrom(type))
+            .Select(type => ((IAiTool)RuntimeHelpers.GetUninitializedObject(type)).Name);
+        var mcpToolNames = typeof(Orbit.Api.Mcp.Tools.HabitTools).Assembly
+            .GetTypes()
+            .Where(type => type.GetCustomAttribute<McpServerToolTypeAttribute>() is not null)
+            .SelectMany(type => type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly))
+            .Select(method => method.GetCustomAttribute<McpServerToolAttribute>()?.Name);
 
-        chatCapability.Should().NotBeNull();
-        mcpCapability.Should().NotBeNull();
-        chatCapability!.Id.Should().Be(mcpCapability!.Id);
-        chatCapability.PlanRequirement.Should().BeNull();
-        chatCapability.DisplayName.Should().NotContain("Premium");
+        chatToolNames.Should().NotContain("set_color_scheme");
+        mcpToolNames.Should().NotContain("set_color_scheme");
+        _catalogService.GetCapabilityByChatTool("set_color_scheme").Should().BeNull();
+        _catalogService.GetCapabilityByMcpTool("set_color_scheme").Should().BeNull();
+        _catalogService.IsMappedControllerAction("ProfileController.SetColorScheme").Should().BeTrue();
+        var legacyWrite = _catalogService.GetCapability(Orbit.Domain.Models.AgentCapabilityIds.ProfilePremiumAppearanceWrite);
+        legacyWrite.Should().NotBeNull();
+        legacyWrite!.ChatToolNames.Should().BeNullOrEmpty();
+        legacyWrite.McpToolNames.Should().BeNullOrEmpty();
+        legacyWrite.Description.Should().Contain("one accent").And.Contain("light or dark mode");
     }
 
     [Fact]

@@ -25,7 +25,6 @@ public class ProfileNotificationCalendarToolTests
         var mediator = Substitute.For<IMediator>();
         var profileTool = new GetProfileTool(mediator);
         var preferencesTool = new UpdateProfilePreferencesTool(mediator);
-        var colorSchemeTool = new SetColorSchemeTool(mediator);
         var aiMemoryTool = new SetAiMemoryTool(mediator);
         var aiSummaryTool = new SetAiSummaryTool(mediator);
         var notificationsTool = new GetNotificationsTool(mediator);
@@ -40,9 +39,6 @@ public class ProfileNotificationCalendarToolTests
 
         preferencesTool.Name.Should().Be("update_profile_preferences");
         JsonSerializer.Serialize(preferencesTool.GetParameterSchema()).Should().Contain("set_theme_preference");
-
-        colorSchemeTool.Name.Should().Be("set_color_scheme");
-        JsonSerializer.Serialize(colorSchemeTool.GetParameterSchema()).Should().Contain("color_scheme");
 
         aiMemoryTool.Name.Should().Be("set_ai_memory");
         JsonSerializer.Serialize(aiMemoryTool.GetParameterSchema()).Should().Contain("enabled");
@@ -186,53 +182,6 @@ public class ProfileNotificationCalendarToolTests
 
         result.Success.Should().BeTrue();
         result.EntityName.Should().Be("Theme preference updated");
-    }
-
-    [Fact]
-    public async Task SetColorSchemeTool_RequiresColorSchemeProperty()
-    {
-        var tool = new SetColorSchemeTool(Substitute.For<IMediator>());
-
-        var result = await tool.ExecuteAsync(Parse("""{}"""), UserId, CancellationToken.None);
-
-        result.Success.Should().BeFalse();
-        result.Error.Should().Be("color_scheme is required.");
-    }
-
-    [Fact]
-    public async Task SetColorSchemeTool_SetsColorScheme()
-    {
-        var mediator = Substitute.For<IMediator>();
-        mediator.Send(Arg.Any<SetColorSchemeCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
-        var tool = new SetColorSchemeTool(mediator);
-
-        var result = await tool.ExecuteAsync(
-            Parse("""{"color_scheme":"sunset"}"""),
-            UserId,
-            CancellationToken.None);
-
-        result.Success.Should().BeTrue();
-        result.EntityName.Should().Be("Color scheme updated");
-    }
-
-    [Fact]
-    public async Task SetColorSchemeTool_ReportsTheGrantedAccentBackNotTheRequestedValue()
-    {
-        var mediator = Substitute.For<IMediator>();
-        mediator.Send(Arg.Any<SetColorSchemeCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
-        var tool = new SetColorSchemeTool(mediator);
-
-        var result = await tool.ExecuteAsync(
-            Parse("""{"color_scheme":"rose"}"""),
-            UserId,
-            CancellationToken.None);
-
-        result.Success.Should().BeTrue();
-        var payload = JsonSerializer.Serialize(result.Payload);
-        payload.Should().Contain("orange");
-        payload.Should().NotContain("rose");
     }
 
     [Fact]

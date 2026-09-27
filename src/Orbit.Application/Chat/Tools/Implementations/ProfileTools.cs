@@ -10,7 +10,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 public class GetProfileTool(IMediator mediator) : IAiTool
 {
     public string Name => "get_profile";
-    public string Description => "Read the user's profile, plan, AI settings, timezone, language, theme, and calendar sync status.";
+    public string Description => "Read the user's profile, plan, AI settings, timezone, light or dark mode, and calendar sync status. Orbit uses one accent.";
     public bool IsReadOnly => true;
 
     public object GetParameterSchema() => new
@@ -31,7 +31,7 @@ public class GetProfileTool(IMediator mediator) : IAiTool
 public class UpdateProfilePreferencesTool(IMediator mediator) : IAiTool
 {
     public string Name => "update_profile_preferences";
-    public string Description => "Update profile preferences such as timezone, language, week start day, theme, color scheme, onboarding completion, or tour state.";
+    public string Description => "Update profile preferences such as timezone, language, week start day, light or dark mode, onboarding completion, or tour state. Orbit uses one accent.";
 
     public object GetParameterSchema() => new
     {
@@ -121,35 +121,6 @@ public class UpdateProfilePreferencesTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(command, ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: userId.ToString(), EntityName: entityName, Payload: new { success = true })
-            : ToolResult.FromFailure(result, userId.ToString());
-    }
-}
-
-public class SetColorSchemeTool(IMediator mediator) : IAiTool
-{
-    public string Name => "set_color_scheme";
-    public string Description => "Accept a color scheme from an older app. Orbit renders one accent, so the stored value becomes the granted one and nothing looks different.";
-
-    public object GetParameterSchema() => new
-    {
-        type = JsonSchemaTypes.Object,
-        properties = new
-        {
-            color_scheme = new { type = JsonSchemaTypes.String, nullable = true }
-        },
-        required = new[] { "color_scheme" }
-    };
-
-    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
-    {
-        if (!JsonArgumentParser.PropertyExists(args, "color_scheme"))
-            return new ToolResult(false, Error: "color_scheme is required.");
-
-        var colorScheme = JsonArgumentParser.GetNullableString(args, "color_scheme");
-        var result = await mediator.Send(new SetColorSchemeCommand(userId, colorScheme), ct);
-
-        return result.IsSuccess
-            ? new ToolResult(true, EntityId: userId.ToString(), EntityName: "Color scheme updated", Payload: new { color_scheme = ColorSchemes.Granted })
             : ToolResult.FromFailure(result, userId.ToString());
     }
 }

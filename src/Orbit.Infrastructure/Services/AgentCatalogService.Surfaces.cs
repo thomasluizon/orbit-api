@@ -69,9 +69,9 @@ public partial class AgentCatalogService
             new AppSurface(
                 "profile-preferences",
                 "Profile And Preferences",
-                "Stores identity, timezone, language, theme, color scheme, and week-start preferences.",
-                ["Open Profile.", "Review identity, plan, and settings.", "Update timezone, language, theme, or week-start preferences."],
-                ["Theme and color are user preferences, not authorization signals.", "Preference changes are low-risk writes."],
+                "Stores identity, timezone, language, light or dark mode, and week-start preferences. Orbit uses one accent.",
+                ["Open Profile.", "Review identity, plan, and settings.", "Update timezone, language, light or dark mode, or week-start preferences."],
+                ["Orbit uses one accent with light or dark mode.", "Preference changes are low-risk writes."],
                 [AgentCapabilityIds.ProfileReadBasic, AgentCapabilityIds.ProfilePreferencesWrite, AgentCapabilityIds.ProfilePremiumAppearanceWrite],
                 ["ProfileController.GetProfile", "ProfileController.SetTimezone"]),
 

@@ -77,7 +77,6 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAiTool, GoalReviewTool>();
         builder.Services.AddScoped<IAiTool, GetProfileTool>();
         builder.Services.AddScoped<IAiTool, UpdateProfilePreferencesTool>();
-        builder.Services.AddScoped<IAiTool, SetColorSchemeTool>();
         builder.Services.AddScoped<IAiTool, SetAiMemoryTool>();
         builder.Services.AddScoped<IAiTool, SetAiSummaryTool>();
         builder.Services.AddScoped<IAiTool, GetNotificationsTool>();
