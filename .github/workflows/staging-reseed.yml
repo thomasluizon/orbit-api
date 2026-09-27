@@ -2,6 +2,7 @@ name: Staging reseed
 
 # Required secret: RENDER_API_KEY from Render Account Settings > API Keys.
 # Required variable: SEED_OWNER_EMAIL for the staging owner's Google sign-in email.
+# Required variables: STAGING_ENVIRONMENT_ID and STAGING_API_SERVICE_ID from GitHub Settings > Secrets and variables > Actions > Variables.
 # The AWS role is created by infra/github_oidc.tf before this workflow is enabled.
 on:
   schedule:
@@ -20,24 +21,27 @@ jobs:
   reseed:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      TF_VAR_staging_environment_id: ${{ vars.STAGING_ENVIRONMENT_ID }}
+      TF_VAR_staging_api_service_id: ${{ vars.STAGING_API_SERVICE_ID }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: aws-actions/configure-aws-credentials@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5
         with:
           role-to-assume: arn:aws:iam::713285551626:role/orbit-staging-reseed
           aws-region: us-east-2
-      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
         with:
           terraform_version: 1.16.4
           terraform_wrapper: false
       - name: Read staging database age
         id: age
         run: |
-          terraform -chdir=infra init -input=false
-          database_id="$(terraform -chdir=infra output -raw staging_postgres_id)"
+          [[ -n "$TF_VAR_staging_environment_id" && -n "$TF_VAR_staging_api_service_id" ]]
+          terraform -chdir=infra/staging-database init -input=false
+          database_id="$(terraform -chdir=infra/staging-database output -raw staging_postgres_id)"
           created_at="$(curl --fail --silent --show-error --max-time 30 \
             --header "Authorization: Bearer ${RENDER_API_KEY}" \
             "https://api.render.com/v1/postgres/${database_id}" \
@@ -51,41 +55,83 @@ jobs:
       - name: Replace staging database and refresh its API connection
         if: steps.age.outputs.replace == 'true'
         run: |
-          terraform -chdir=infra plan -input=false \
-            -var-file=example.tfvars \
-            -target=render_env_group.staging_api \
+          terraform -chdir=infra/staging-database plan -input=false \
             -replace=render_postgres.staging \
             -out=staging-reseed.tfplan > /dev/null
-          terraform -chdir=infra show -json staging-reseed.tfplan | jq --exit-status '
+          terraform -chdir=infra/staging-database show -json staging-reseed.tfplan | jq --exit-status '
             [.resource_changes[] | select(.change.actions != ["no-op"])] |
             (length >= 1 and all(.[]; .address == "render_postgres.staging" or
-              (.address == "render_env_group.staging_api" and .change.actions == ["update"]))) and
+              (.address == "render_env_group.staging_database" and .change.actions == ["update"]))) and
             any(.[]; .address == "render_postgres.staging" and
               (.change.actions == ["delete", "create"] or .change.actions == ["create", "delete"]))
           ' > /dev/null
-          terraform -chdir=infra apply -input=false -auto-approve staging-reseed.tfplan > /dev/null
-      - name: Wait for API migration on the new database
-        if: steps.age.outputs.replace == 'true'
-        run: |
-          for ((attempt=1; attempt<=30; attempt++)); do
-            if status="$(curl --silent --show-error --max-time 20 --output /dev/null \
-              --write-out '%{http_code}' https://api-staging.useorbit.org/health)" \
-              && [[ "$status" == 2[0-9][0-9] ]]; then
-              exit 0
-            fi
-            sleep 20
-          done
-          exit 1
-      - uses: actions/setup-dotnet@v6
+          terraform -chdir=infra/staging-database apply -input=false -auto-approve staging-reseed.tfplan > /dev/null
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         if: steps.age.outputs.replace == 'true'
         with:
           dotnet-version: '10.0.x'
+      - name: Apply migrations to the replacement database
+        if: steps.age.outputs.replace == 'true'
+        env:
+          ASPNETCORE_ENVIRONMENT: Staging
+          Seed__OwnerEmail: ${{ vars.SEED_OWNER_EMAIL }}
+        run: |
+          Seed__ExpectedHost="$(terraform -chdir=infra/staging-database output -raw staging_external_host)" \
+            Seed__DatabaseUrl="$(terraform -chdir=infra/staging-database output -raw staging_external_connection_string)" \
+            dotnet run --project src/Orbit.Api/Orbit.Api.csproj -- migrate-staging
+      - name: Deploy the staging API and wait for that deploy
+        if: steps.age.outputs.replace == 'true'
+        run: |
+          triggered_after="$(date -u -d '1 minute ago' +%Y-%m-%dT%H:%M:%SZ)"
+          previous_ids="$(curl --fail --silent --show-error --max-time 30 \
+            --header "Authorization: Bearer ${RENDER_API_KEY}" \
+            --get --data-urlencode "createdAfter=${triggered_after}" \
+            --data-urlencode 'limit=100' \
+            "https://api.render.com/v1/services/${TF_VAR_staging_api_service_id}/deploys" \
+            | jq --compact-output '[.[].deploy.id]')"
+          response="$(mktemp)"
+          status="$(curl --silent --show-error --max-time 30 --output "$response" --write-out '%{http_code}' \
+            --request POST --header "Authorization: Bearer ${RENDER_API_KEY}" \
+            --header 'Content-Type: application/json' --data '{}' \
+            "https://api.render.com/v1/services/${TF_VAR_staging_api_service_id}/deploys")"
+          if [[ "$status" == 201 ]]; then
+            deploy_id="$(jq --exit-status --raw-output '.id' "$response")"
+          elif [[ "$status" == 202 ]]; then
+            deploy_id=''
+            for ((attempt=1; attempt<=30; attempt++)); do
+              deploy_id="$(curl --fail --silent --show-error --max-time 30 \
+                --header "Authorization: Bearer ${RENDER_API_KEY}" \
+                --get --data-urlencode "createdAfter=${triggered_after}" \
+                --data-urlencode 'limit=100' \
+                "https://api.render.com/v1/services/${TF_VAR_staging_api_service_id}/deploys" \
+                | jq --raw-output --argjson previous "$previous_ids" \
+                  '[.[] | select(.deploy.trigger == "api") | .deploy.id | select(. as $id | $previous | index($id) | not)][0] // empty')"
+              [[ -n "$deploy_id" ]] && break
+              sleep 10
+            done
+            [[ -n "$deploy_id" ]]
+          else
+            echo "Render deploy request failed with HTTP ${status}" >&2
+            exit 1
+          fi
+          for ((attempt=1; attempt<=90; attempt++)); do
+            deploy_status="$(curl --fail --silent --show-error --max-time 30 \
+              --header "Authorization: Bearer ${RENDER_API_KEY}" \
+              "https://api.render.com/v1/services/${TF_VAR_staging_api_service_id}/deploys/${deploy_id}" \
+              | jq --exit-status --raw-output --arg id "$deploy_id" 'select(.id == $id) | .status')"
+            case "$deploy_status" in
+              live) exit 0 ;;
+              build_failed|update_failed|pre_deploy_failed|canceled|deactivated) exit 1 ;;
+            esac
+            sleep 20
+          done
+          exit 1
       - name: Seed the owner account
         if: steps.age.outputs.replace == 'true'
         env:
           ASPNETCORE_ENVIRONMENT: Staging
           Seed__OwnerEmail: ${{ vars.SEED_OWNER_EMAIL }}
         run: |
-          Seed__ExpectedHost="$(terraform -chdir=infra output -raw staging_external_host)" \
-            Seed__DatabaseUrl="$(terraform -chdir=infra output -raw staging_external_connection_string)" \
+          Seed__ExpectedHost="$(terraform -chdir=infra/staging-database output -raw staging_external_host)" \
+            Seed__DatabaseUrl="$(terraform -chdir=infra/staging-database output -raw staging_external_connection_string)" \
             dotnet run --project src/Orbit.Api/Orbit.Api.csproj -- seed-staging

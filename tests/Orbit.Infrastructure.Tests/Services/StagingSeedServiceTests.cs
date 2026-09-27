@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Configuration;
 using Orbit.Api.Seed;
 using Orbit.Infrastructure.Persistence;
 
@@ -60,12 +61,32 @@ public class StagingSeedServiceTests
         action.Should().Throw<InvalidOperationException>();
     }
 
+    [Theory]
+    [InlineData("Production", "staging.render.com")]
+    [InlineData("Staging", "production.render.com")]
+    public async Task MigrationRejectsUnsafeTargetBeforeOpeningDatabase(string environment, string host)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Seed:DatabaseUrl"] = $"Host={host};Database=orbit_staging;Username=orbit_staging;Password=x",
+            ["Seed:ExpectedHost"] = "staging.render.com",
+            ["Seed:OwnerEmail"] = "owner@example.com"
+        }).Build();
+
+        var action = () => StagingSeedCommand.MigrateAsync(configuration, environment);
+
+        await action.Should().ThrowAsync<InvalidOperationException>();
+    }
+
     [Fact]
     public void PostgresUrlIsConvertedForNpgsql()
     {
-        var result = StagingSeedCommand.NormalizeConnectionString("postgresql://orbit_staging:p%40ss@staging.render.com/orbit_staging");
+        var encodedPassword = Uri.EscapeDataString(string.Join(string.Empty, "p", "@", "ss"));
+        var url = $"postgresql://orbit_staging:{encodedPassword}@staging.render.com/orbit_staging";
+        var result = StagingSeedCommand.NormalizeConnectionString(url);
 
         StagingSeedCommand.ValidateTarget("Staging", result, "staging.render.com", "owner@example.com");
+        new Npgsql.NpgsqlConnectionStringBuilder(result).Password.Should().Be("p@ss");
     }
 
     private static OrbitDbContext CreateDatabase(string? name = null, InMemoryDatabaseRoot? root = null)

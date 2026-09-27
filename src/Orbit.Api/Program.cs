@@ -9,6 +9,11 @@ if (args is ["seed-staging"])
     await StagingSeedCommand.RunAsync(builder.Configuration, builder.Environment.EnvironmentName);
     return;
 }
+if (args is ["migrate-staging"])
+{
+    await StagingSeedCommand.MigrateAsync(builder.Configuration, builder.Environment.EnvironmentName);
+    return;
+}
 builder.Logging.AddFilter("LuckyPennySoftware.MediatR.License", LogLevel.None);
 builder.Logging.AddFilter("Microsoft.AspNetCore.DataProtection", LogLevel.Error);
 

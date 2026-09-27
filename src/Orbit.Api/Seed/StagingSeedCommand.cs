@@ -15,6 +15,18 @@ namespace Orbit.Api.Seed;
 
 public static class StagingSeedCommand
 {
+    public static async Task MigrateAsync(IConfiguration configuration, string environment)
+    {
+        var connectionString = NormalizeConnectionString(configuration["Seed:DatabaseUrl"]
+            ?? configuration.GetConnectionString("DefaultConnection"));
+        ValidateTarget(environment, connectionString, configuration["Seed:ExpectedHost"], configuration["Seed:OwnerEmail"]);
+        var options = new DbContextOptionsBuilder<OrbitDbContext>()
+            .UseNpgsql(connectionString)
+            .Options;
+        await using var db = new OrbitDbContext(options);
+        await db.Database.MigrateAsync();
+    }
+
     public static async Task RunAsync(IConfiguration configuration, string environment)
     {
         var email = configuration["Seed:OwnerEmail"];
@@ -74,6 +86,8 @@ public static class StagingSeedCommand
 
 public sealed class StagingSeedService(OrbitDbContext db)
 {
+    private sealed record GoalSpec(string Title, int Target, GoalType Type, string HabitTitle);
+
     private sealed record HabitSpec(
         string Title,
         FrequencyUnit? Unit,
@@ -103,6 +117,15 @@ public sealed class StagingSeedService(OrbitDbContext db)
 
     public async Task SeedAsync(string ownerEmail, DateOnly today, CancellationToken cancellationToken = default)
     {
+        var user = await GetOrCreateOwnerAsync(ownerEmail, cancellationToken);
+        var tags = await SeedTagsAsync(user.Id, cancellationToken);
+        var habits = await SeedHabitsAsync(user.Id, tags, today, cancellationToken);
+        await SeedLogsAsync(habits.Values, today, cancellationToken);
+        await SeedGoalsAsync(user.Id, habits, today, cancellationToken);
+    }
+
+    private async Task<User> GetOrCreateOwnerAsync(string ownerEmail, CancellationToken cancellationToken)
+    {
         var normalizedEmail = ownerEmail.Trim().ToLowerInvariant();
         var user = await db.Users.IgnoreQueryFilters().SingleOrDefaultAsync(u => u.Email == normalizedEmail, cancellationToken);
         if (user is null)
@@ -114,11 +137,14 @@ public sealed class StagingSeedService(OrbitDbContext db)
             db.Users.Add(user);
             await db.SaveChangesAsync(cancellationToken);
         }
+        return user;
+    }
 
-        var tags = await SeedTagsAsync(user.Id, cancellationToken);
-
-        var existing = await db.Habits.Include(h => h.Logs).Include(h => h.Tags)
-            .Where(h => h.UserId == user.Id).ToListAsync(cancellationToken);
+    private async Task<Dictionary<string, Habit>> SeedHabitsAsync(Guid userId, List<Tag> tags, DateOnly today,
+        CancellationToken cancellationToken)
+    {
+        var existing = await db.Habits.Include(h => h.Logs).Include(h => h.Tags).AsSplitQuery()
+            .Where(h => h.UserId == userId).ToListAsync(cancellationToken);
         var byTitle = existing.ToDictionary(h => h.Title, StringComparer.Ordinal);
         foreach (var spec in Habits)
         {
@@ -130,7 +156,7 @@ public sealed class StagingSeedService(OrbitDbContext db)
             var zone = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
             var createdAtUtc = TimeZoneInfo.ConvertTimeToUtc(anchor.ToDateTime(TimeOnly.MinValue), zone);
             var habit = Require(Habit.Create(new HabitCreateParams(
-                user.Id, spec.Title, spec.Unit, spec.Quantity, anchor,
+                userId, spec.Title, spec.Unit, spec.Quantity, anchor,
                 Days: spec.Days, IsBadHabit: spec.IsBad, ParentHabitId: parentId,
                 ChecklistItems: spec.Checklist, IsGeneral: spec.IsGeneral, IsFlexible: spec.IsFlexible,
                 CreatedAtUtc: createdAtUtc)));
@@ -142,28 +168,38 @@ public sealed class StagingSeedService(OrbitDbContext db)
         }
 
         await db.SaveChangesAsync(cancellationToken);
+        return byTitle;
+    }
 
-        foreach (var habit in byTitle.Values)
+    private async Task SeedLogsAsync(IEnumerable<Habit> habits, DateOnly today, CancellationToken cancellationToken)
+    {
+        foreach (var habit in habits)
         {
             for (var offset = 29; offset >= 0; offset--)
             {
                 var date = today.AddDays(-offset);
-                if (habit.FrequencyUnit is null && !habit.IsGeneral) continue;
-                if (!habit.IsGeneral && !HabitScheduleService.IsHabitDueOnDate(habit, date)) continue;
-                if (offset > 0 && (date.DayNumber + habit.Title.Length) % 6 == 0) continue;
-                if (habit.IsBadHabit && offset % 11 != 0) continue;
-                if (habit.IsGeneral && offset % 3 != 0) continue;
-                if (habit.IsFlexible && date.DayOfWeek is not (DayOfWeek.Monday or DayOfWeek.Wednesday or DayOfWeek.Friday)) continue;
+                if (!ShouldLog(habit, date, offset)) continue;
                 if (habit.Logs.Any(log => log.Date == date)) continue;
                 db.HabitLogs.Add(Require(habit.Log(date, advanceDueDate: false)));
             }
         }
-
         await db.SaveChangesAsync(cancellationToken);
+    }
 
-        var goals = await db.Goals.Include(g => g.Habits).Where(g => g.UserId == user.Id).ToListAsync(cancellationToken);
-        AddGoal("Read consistently", 30, GoalType.Standard, ["Read for 20 minutes"], goals, byTitle, user.Id, today);
-        AddGoal("Build a hydration streak", 14, GoalType.Streak, ["Drink water"], goals, byTitle, user.Id, today);
+    private static bool ShouldLog(Habit habit, DateOnly date, int offset) =>
+        (habit.FrequencyUnit is not null || habit.IsGeneral)
+        && (habit.IsGeneral || HabitScheduleService.IsHabitDueOnDate(habit, date))
+        && (offset == 0 || (date.DayNumber + habit.Title.Length) % 6 != 0)
+        && (!habit.IsBadHabit || offset % 11 == 0)
+        && (!habit.IsGeneral || offset % 3 == 0)
+        && (!habit.IsFlexible || date.DayOfWeek is DayOfWeek.Monday or DayOfWeek.Wednesday or DayOfWeek.Friday);
+
+    private async Task SeedGoalsAsync(Guid userId, Dictionary<string, Habit> habits, DateOnly today,
+        CancellationToken cancellationToken)
+    {
+        var goals = await db.Goals.Include(g => g.Habits).Where(g => g.UserId == userId).ToListAsync(cancellationToken);
+        AddGoal(new GoalSpec("Read consistently", 30, GoalType.Standard, "Read for 20 minutes"), goals, habits, userId, today);
+        AddGoal(new GoalSpec("Build a hydration streak", 14, GoalType.Streak, "Drink water"), goals, habits, userId, today);
 
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -190,17 +226,16 @@ public sealed class StagingSeedService(OrbitDbContext db)
         return tags;
     }
 
-    private void AddGoal(string title, int target, GoalType type, string[] habitTitles,
-        List<Goal> goals, Dictionary<string, Habit> habits, Guid userId, DateOnly today)
+    private void AddGoal(GoalSpec spec, List<Goal> goals, Dictionary<string, Habit> habits, Guid userId, DateOnly today)
     {
-        if (goals.Any(g => g.Title == title)) return;
-        var goal = Require(Goal.Create(new Goal.CreateGoalParams(userId, title, target, "completions", Type: type)));
-        foreach (var habitTitle in habitTitles) goal.AddHabit(habits[habitTitle]);
-        if (type == GoalType.Standard)
+        if (goals.Any(g => g.Title == spec.Title)) return;
+        var goal = Require(Goal.Create(new Goal.CreateGoalParams(userId, spec.Title, spec.Target, "completions", Type: spec.Type)));
+        goal.AddHabit(habits[spec.HabitTitle]);
+        if (spec.Type == GoalType.Standard)
             Require(goal.SyncStandardProgress(goal.Habits.Sum(h => h.Logs.Count(l => l.Value > 0))));
         else
             Require(goal.SyncStreakProgress(HabitMetricsCalculator.Calculate(
-                habits[habitTitles[0]], today, 1,
+                habits[spec.HabitTitle], today, 1,
                 TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo")).CurrentStreak));
         db.Goals.Add(goal);
         goals.Add(goal);

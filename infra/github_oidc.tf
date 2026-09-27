@@ -32,14 +32,19 @@ data "aws_iam_policy_document" "staging_reseed" {
   statement {
     actions   = ["s3:ListBucket"]
     resources = ["arn:aws:s3:::orbit-terraform-state-713285551626"]
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["render/staging-database.tfstate", "render/staging-database.tfstate.tflock"]
+    }
   }
   statement {
     actions   = ["s3:GetObject", "s3:PutObject"]
-    resources = ["arn:aws:s3:::orbit-terraform-state-713285551626/render/terraform.tfstate", "arn:aws:s3:::orbit-terraform-state-713285551626/render/terraform.tfstate.tflock"]
+    resources = ["arn:aws:s3:::orbit-terraform-state-713285551626/render/staging-database.tfstate", "arn:aws:s3:::orbit-terraform-state-713285551626/render/staging-database.tfstate.tflock"]
   }
   statement {
     actions   = ["s3:DeleteObject"]
-    resources = ["arn:aws:s3:::orbit-terraform-state-713285551626/render/terraform.tfstate.tflock"]
+    resources = ["arn:aws:s3:::orbit-terraform-state-713285551626/render/staging-database.tfstate.tflock"]
   }
   statement {
     actions   = ["ssm:GetParameter", "ssm:GetParameters"]
@@ -54,18 +59,4 @@ resource "aws_iam_role_policy" "staging_reseed" {
 
 output "staging_reseed_role_arn" {
   value = aws_iam_role.staging_reseed.arn
-}
-
-output "staging_external_connection_string" {
-  value     = render_postgres.staging.connection_info.external_connection_string
-  sensitive = true
-}
-
-output "staging_external_host" {
-  value     = regex("@([^:/]+)", render_postgres.staging.connection_info.external_connection_string)[0]
-  sensitive = true
-}
-
-output "staging_postgres_id" {
-  value = render_postgres.staging.id
 }
