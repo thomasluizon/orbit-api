@@ -1,13 +1,18 @@
 using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Habits.Commands;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Application.Tests.Chat.Tools;
@@ -15,6 +20,7 @@ namespace Orbit.Application.Tests.Chat.Tools;
 public class DeleteHabitToolTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
+    private readonly IMediator _mediator = Substitute.For<IMediator>();
     private readonly DeleteHabitTool _tool;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -22,11 +28,13 @@ public class DeleteHabitToolTests
 
     public DeleteHabitToolTests()
     {
-        _tool = new DeleteHabitTool(_habitRepo);
+        _tool = new DeleteHabitTool(_mediator, _habitRepo);
+        _mediator.Send(Arg.Any<DeleteHabitCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success());
     }
 
     [Fact]
-    public async Task SuccessfulDelete_ReturnsSuccessAndRemovesHabit()
+    public async Task SuccessfulDelete_ReturnsSuccessAndSoftDeletesHabit()
     {
         var habit = CreateHabit("Water");
         SetupHabitFound(habit);
@@ -36,7 +44,9 @@ public class DeleteHabitToolTests
         result.Success.Should().BeTrue();
         result.EntityName.Should().Be("Water");
         result.EntityId.Should().Be(habit.Id.ToString());
-        _habitRepo.Received(1).Remove(habit);
+        await _mediator.Received(1).Send(
+            Arg.Is<DeleteHabitCommand>(command => command.UserId == UserId && command.HabitId == habit.Id),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -49,6 +59,21 @@ public class DeleteHabitToolTests
 
         result.Success.Should().BeFalse();
         result.Error.Should().Contain("not found");
+        await _mediator.DidNotReceive().Send(Arg.Any<DeleteHabitCommand>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CommandFailure_ReturnsError()
+    {
+        var habit = CreateHabit("Water");
+        SetupHabitFound(habit);
+        _mediator.Send(Arg.Any<DeleteHabitCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure("Habit not found."));
+
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}"}""");
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be("Habit not found.");
     }
 
     [Fact]
@@ -74,16 +99,29 @@ public class DeleteHabitToolTests
     {
         var databaseName = $"DeleteHabitIsolation_{Guid.NewGuid()}";
         Guid habitId;
+        Guid childId;
         await using (var seed = CreateContext(databaseName))
         {
             var ownerHabit = CreateHabit("Owner-only habit");
-            seed.Habits.Add(ownerHabit);
+            var child = Habit.Create(new HabitCreateParams(UserId, "Child", FrequencyUnit.Day, 1,
+                DueDate: Today, ParentHabitId: ownerHabit.Id)).Value;
+            seed.Habits.AddRange(ownerHabit, child);
             await seed.SaveChangesAsync();
             habitId = ownerHabit.Id;
+            childId = child.Id;
         }
 
         await using var context = CreateContext(databaseName);
-        var tool = new DeleteHabitTool(new GenericRepository<Habit>(context));
+        var repo = new GenericRepository<Habit>(context);
+        var work = new UnitOfWork(context, new DatabaseConnectionSettings());
+        var dates = Substitute.For<IUserDateService>();
+        dates.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
+        var handler = new DeleteHabitCommandHandler(repo, Substitute.For<IUserStreakService>(), work,
+            dates, new MemoryCache(new MemoryCacheOptions()));
+        var mediator = Substitute.For<IMediator>();
+        mediator.Send(Arg.Any<DeleteHabitCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call => handler.Handle(call.Arg<DeleteHabitCommand>(), call.Arg<CancellationToken>()));
+        var tool = new DeleteHabitTool(mediator, repo);
 
         var attackerId = Guid.NewGuid();
         var attackerResult = await tool.ExecuteAsync(ArgsFor(habitId), attackerId, CancellationToken.None);
@@ -96,11 +134,17 @@ public class DeleteHabitToolTests
                 .Should().BeTrue("a foreign user must not delete another user's habit");
 
         var ownerResult = await tool.ExecuteAsync(ArgsFor(habitId), UserId, CancellationToken.None);
-        await context.SaveChangesAsync();
 
         ownerResult.Success.Should().BeTrue("the owner can delete their own habit");
         await using (var afterOwner = CreateContext(databaseName))
-            (await afterOwner.Habits.AnyAsync(h => h.Id == habitId)).Should().BeFalse();
+        {
+            var deleted = await afterOwner.Habits.IgnoreQueryFilters()
+                .Where(h => h.Id == habitId || h.Id == childId).ToListAsync();
+            deleted.Should().HaveCount(2);
+            deleted.Should().OnlyContain(h => h.IsDeleted && h.DeletedAtUtc != null);
+            deleted.Select(h => h.DeletedAtUtc).Distinct().Should().ContainSingle();
+            (await afterOwner.Habits.AnyAsync(h => h.Id == habitId || h.Id == childId)).Should().BeFalse();
+        }
     }
 
     private static JsonElement ArgsFor(Guid habitId) =>
