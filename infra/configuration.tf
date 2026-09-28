@@ -114,10 +114,8 @@ locals {
   }
 
   production_db_host = regex("@([^:/]+)", render_postgres.production.connection_info.internal_connection_string)[0]
-  staging_db_host    = regex("@([^:/]+)", render_postgres.staging.connection_info.internal_connection_string)[0]
 
   production_render_npgsql = "Host=${local.production_db_host};Port=5432;Database=orbit_production;Username=orbit_production;Password=\"${replace(render_postgres.production.connection_info.password, "\"", "\"\"")}\""
-  staging_render_npgsql    = "Host=${local.staging_db_host};Port=5432;Database=orbit_staging;Username=orbit_staging;Password=\"${replace(render_postgres.staging.connection_info.password, "\"", "\"\"")}\""
 
   production_api_database_values = var.api_database == "supabase" ? {
     for key in local.database_keys : key => data.aws_ssm_parameter.production_api_database[key].value
@@ -181,7 +179,6 @@ resource "render_env_group" "staging_api" {
     { for key, value in local.staging_api_values : key => { value = value } },
     { for key in local.api_secret_keys : key => { value = data.aws_ssm_parameter.staging_api[key].value } },
     { for key in local.staging_api_billing_keys : key => { value = data.aws_ssm_parameter.staging_api_billing[key].value } },
-    { for key in local.database_keys : key => { value = local.staging_render_npgsql } },
     {
       Storage__S3__AccessKeyId     = { value = aws_ssm_parameter.uploads_access_key_id["staging"].value }
       Storage__S3__SecretAccessKey = { value = aws_ssm_parameter.uploads_secret_access_key["staging"].value }

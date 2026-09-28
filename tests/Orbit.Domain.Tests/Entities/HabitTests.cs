@@ -8,6 +8,44 @@ namespace Orbit.Domain.Tests.Entities;
 
 public class HabitTests
 {
+    [Fact]
+    public void CreateWithHistoricalUtcInstantPreservesStreakAnchor()
+    {
+        var createdAtUtc = DateTime.UtcNow.AddDays(-30);
+
+        var result = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Historical habit", FrequencyUnit.Day, 1,
+            DateOnly.FromDateTime(createdAtUtc), CreatedAtUtc: createdAtUtc));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.CreatedAtUtc.Should().Be(createdAtUtc);
+    }
+
+    [Theory]
+    [InlineData(DateTimeKind.Local)]
+    [InlineData(DateTimeKind.Unspecified)]
+    public void CreateRejectsNonUtcHistoricalInstant(DateTimeKind kind)
+    {
+        var createdAtUtc = DateTime.SpecifyKind(DateTime.UtcNow.AddDays(-1), kind);
+
+        var result = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Historical habit", FrequencyUnit.Day, 1,
+            DateOnly.FromDateTime(createdAtUtc), CreatedAtUtc: createdAtUtc));
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(DomainErrors.InvalidCreatedAtUtc.Code);
+    }
+
+    [Fact]
+    public void CreateRejectsFutureHistoricalInstant()
+    {
+        var createdAtUtc = DateTime.UtcNow.AddDays(1);
+
+        var result = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Future habit", FrequencyUnit.Day, 1,
+            DateOnly.FromDateTime(DateTime.UtcNow), CreatedAtUtc: createdAtUtc));
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(DomainErrors.InvalidCreatedAtUtc.Code);
+    }
+
     private static readonly Guid ValidUserId = Guid.NewGuid();
     private static readonly int[] ReminderTimes5And10 = [5, 10];
     private static readonly int[] ReminderTimes5And15And30 = [5, 15, 30];

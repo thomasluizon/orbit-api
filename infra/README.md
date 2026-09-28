@@ -1,10 +1,41 @@
 # Orbit infrastructure
 
-This directory is one Terraform state for the Render production and staging resources, Cloudflare DNS and Turnstile, and AWS SSM parameters. `production.tf` imports the existing API and declares the production database, web service, and landing site. `staging.tf` declares the staging database, API, web service, and landing site. `configuration.tf` owns four environment groups and their AWS SSM inputs. `cloudflare.tf` owns the zone, existing DNS records, widget, and its secret parameters. `ses.tf` owns SES identities, new DNS records, event routing, and send credentials. `variables.tf` contains the cutover switches and image digests. `versions.tf` pins the providers and configures the encrypted S3 state with native locking.
+The main Terraform state owns the Render production resources and the staging services, Cloudflare DNS and Turnstile, and AWS SSM parameters. `production.tf` imports the existing API and declares the production database, web service, and landing site. `staging.tf` declares the staging API, web service, and landing site. `configuration.tf` owns the service environment groups and their AWS SSM inputs. `cloudflare.tf` owns the zone, existing DNS records, widget, and its secret parameters. `ses.tf` owns SES identities, new DNS records, event routing, and send credentials. `variables.tf` contains the cutover switches and image digests. `versions.tf` pins the providers and configures the encrypted S3 state with native locking. `staging-database/` is a separate Terraform root that owns only the staging Postgres, its connection environment group, and the link to the staging API.
 
 `uploads.tf` creates a private, encrypted S3 uploads bucket and a scoped IAM user in each environment. Terraform stores each user's access key in SecureString parameters at `/orbit/<environment>/api/Storage__S3__AccessKeyId` and `/orbit/<environment>/api/Storage__S3__SecretAccessKey`, then passes them to the API environment group. The groups keep `Storage__Provider=Supabase` until the storage cutover. Set `production_storage_provider` or `staging_storage_provider` to `S3` in `local.tfvars` for the chosen environment after its bucket and key are provisioned. Keep the S3 bucket and credentials configured when switching new uploads back to Supabase so existing S3 read links keep working. The S3 upload URL expires after 10 minutes. The stable API read URL redirects to a private S3 read URL that expires after 10 minutes. Browsers may cache the redirect for 5 minutes. The API allows 600 read redirects per object per minute, so image pages and viewers sharing an IP have separate budgets for each object.
 
-The Render provider reads `RENDER_API_KEY` from the environment. The Cloudflare provider reads `CLOUDFLARE_API_TOKEN` from the environment. The AWS provider uses the default credential chain in `us-east-2`. The S3 state contains decrypted SecureString values, including the Turnstile and SES secrets, so access to the bucket and its lock file must stay restricted. The existing API is imported with its service ID; do not remove that import block or replace the service.
+The Render provider reads `RENDER_API_KEY` from the environment. The Cloudflare provider reads `CLOUDFLARE_API_TOKEN` from the environment. The AWS provider uses the default credential chain in `us-east-2`. The main S3 state contains decrypted SecureString values, including the Turnstile and SES secrets, so access to that state and its lock file must stay restricted. The staging reseed role can access only the separate staging database state. The existing API is imported with its service ID; do not remove that import block or replace the service.
+
+## Staging lifecycle
+
+The staging keepalive workflow calls the API health endpoint every five minutes from 08:00 through 23:55 in Sao Paulo. The reseed workflow checks the Render Postgres creation time daily and replaces the staging database once it is at least 26 days old. A manual dispatch replaces it immediately. The replacement plan is restricted to `render_postgres.staging` and its staging database environment group, and the workflow rejects a plan that changes another resource. The workflow applies EF migrations to the new database, triggers an API deploy, waits for that deploy to become live, and then seeds the owner account.
+
+Create the GitHub OIDC provider and staging reseed role from `github_oidc.tf` with a reviewed targeted Terraform apply before enabling the workflow. If the GitHub OIDC provider already exists in the AWS account, import it into this state before applying. Set `RENDER_API_KEY` in GitHub Actions secrets from Render Account Settings > API Keys. Set `SEED_OWNER_EMAIL`, `STAGING_ENVIRONMENT_ID`, and `STAGING_API_SERVICE_ID` in GitHub Actions variables. The IDs come from the main Terraform state's `render_project.orbit.environments["Staging"].id` and `render_web_service.staging_api.id`. The role trust policy accepts only workflows on this repository's `main` branch.
+
+Move the staging database state before applying either root. With credentials for the main state and the Render API, record its ID, remove its old state entry, initialize the new root, and import that ID:
+
+```sh
+database_id="$(terraform -chdir=infra state show -no-color render_postgres.staging | awk -F'"' '/^ +id +=/ {print $2; exit}')"
+export TF_VAR_staging_environment_id='<staging environment ID from Render dashboard>'
+export TF_VAR_staging_api_service_id='<staging API service ID from Render dashboard>'
+terraform -chdir=infra state rm render_postgres.staging
+terraform -chdir=infra/staging-database init
+terraform -chdir=infra/staging-database import render_postgres.staging "$database_id"
+```
+
+Apply the new root to create and link `orbit-staging-database`, then apply the main root to remove only the two database connection values from `orbit-staging-api`. Review both plans before applying. The new group contains only `ConnectionStrings__DefaultConnection` and `ConnectionStrings__SessionConnection`; the existing `orbit-staging-api` group retains the other settings. After the main apply, `staging_environment_id` and `staging_api_service_id` outputs give the values for the GitHub variables. The Render provider documentation for version 1.9.1 confirms that both `render_postgres` and `render_env_group` can be imported by ID. The new group is created, so it needs no import.
+
+After the API has migrated the new database, the workflow invokes the seed command using the database connection returned by the staging Terraform resource. To run the same command manually from the repository root after `terraform -chdir=infra/staging-database init`:
+
+```sh
+ASPNETCORE_ENVIRONMENT=Staging \
+Seed__OwnerEmail=owner@example.com \
+Seed__ExpectedHost="$(terraform -chdir=infra/staging-database output -raw staging_external_host)" \
+Seed__DatabaseUrl="$(terraform -chdir=infra/staging-database output -raw staging_external_connection_string)" \
+dotnet run --project src/Orbit.Api/Orbit.Api.csproj -- seed-staging
+```
+
+The command checks the environment, staging host, database name, and database user before opening a connection. It reuses the owner's account by email and adds missing sample records without duplicating existing ones.
 
 ## SSM parameters
 
@@ -77,9 +108,19 @@ Terraform creates `/orbit/production/api/BotProtection__SecretKey` and `/orbit/s
 
 ## DNS cutover
 
-The Cloudflare zone uses full DNS setup on the Free plan. The existing records have automatic TTL and remain unproxied. The default `dns_apex_target`, `dns_www_target`, and `dns_app_target` values point to the current Vercel destinations. Change those variables only during the later Render cutover. `api` continues to point to its existing Render service. Staging CNAMEs take their hostnames from the staging Render resources.
+The Cloudflare zone uses full DNS setup on the Free plan. The existing records have automatic TTL and remain unproxied. At cutover, use these values in `infra/local.tfvars`:
 
-After apply, read the `cloudflare_name_servers` output. Before you change the delegation, run `bash infra/check-dns-cutover.sh <cloudflare-nameserver>` once for each of those nameservers. The script asks the Cloudflare nameserver directly, so it verifies the new zone while Spaceship still serves live traffic. It compares record values and MX priorities while ignoring TTL and TXT chunk boundaries. Switch the nameservers at Spaceship only when every run prints that all answers match. After the switch propagates, run the script again for each nameserver and confirm that `dig NS useorbit.org +short` returns the Cloudflare nameservers.
+```hcl
+dns_apex_target        = "orbit-landing-aaa7.onrender.com"
+dns_www_target         = "orbit-landing-aaa7.onrender.com"
+dns_app_target         = "orbit-web-3qmv.onrender.com"
+landing_custom_domains = ["useorbit.org"]
+web_custom_domains     = ["app.useorbit.org"]
+```
+
+Render adds `www.useorbit.org` as a redirect to `useorbit.org` when the apex is added as a landing custom domain. Cloudflare flattens the unproxied apex CNAME into A answers while leaving its MX and TXT records in place. `api` continues to point to its existing Render service. Staging CNAMEs take their hostnames from the staging Render resources.
+
+After apply, read the `cloudflare_name_servers` output. Run `bash infra/check-dns-cutover.sh <cloudflare-nameserver> [apex-target] [app-target] [www-target]` once for each nameserver. The optional targets default to the Render hostnames above; pass all three configured targets in that order if any differs. The script compares the apex's flattened A answers with the Render target's A answers, checks the `app` and `www` CNAMEs against their targets, and compares the remaining records with Spaceship while ignoring TTL and TXT chunk boundaries. For an initial nameserver cutover, switch the nameservers at Spaceship only when every run succeeds. Confirm that `dig NS useorbit.org +short` returns the Cloudflare nameservers and that Render's Custom Domains screen reports `useorbit.org` verified.
 
 ## Plan and apply
 
@@ -119,4 +160,4 @@ terraform -chdir=infra apply local.tfplan
 
 The initial plan must keep `srv-d6tc2isr85hc739bf75g`, its URL, and `api.useorbit.org` in place. Terraform ignores the imported API's own environment variables (`lifecycle.ignore_changes`), so the first apply only creates `orbit-production-api` and links it; the service keeps its existing variables, which override the group's identical values. After a deploy proves the service healthy on the linked group, remove the duplicated direct variables through the Render API, leaving only `ORBIT_TERRAFORM_ENV_GROUP`. Check the imported service's plan before applying: it must show no change to the service.
 
-Staging reads Stripe test-mode product and price IDs from SSM and uses staging return URLs. `Supabase__Url` points at an invalid host so staging cannot write to production storage. The web image must exist at both selected digests before the first apply. Custom domains for production web and landing remain empty until cutover. DNS and certificate verification follow the domain changes.
+Staging reads Stripe test-mode product and price IDs from SSM and uses staging return URLs. `Supabase__Url` points at an invalid host so staging cannot write to production storage. The web image must exist at both selected digests before the first apply. Set production web and landing custom domains during cutover. DNS and certificate verification follow the domain changes.
