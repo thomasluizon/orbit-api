@@ -1,6 +1,6 @@
 name: Staging reseed
 
-# Required secret: RENDER_API_KEY from Render Account Settings > API Keys.
+# Required secret: RENDER_API_KEY in the render-operations environment.
 # Required variable: SEED_OWNER_EMAIL for the staging owner's Google sign-in email.
 # Required variables: STAGING_ENVIRONMENT_ID and STAGING_API_SERVICE_ID from GitHub Settings > Secrets and variables > Actions > Variables.
 # The AWS role is created by infra/github_oidc.tf before this workflow is enabled.
@@ -22,6 +22,7 @@ jobs:
   reseed:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    environment: render-operations
     timeout-minutes: 60
     env:
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
