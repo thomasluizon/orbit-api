@@ -50,6 +50,25 @@ public class VerifyPlayPurchaseCommandHandlerTests
 
     private static VerifyPlayPurchaseCommand Command() => new(UserId, "orbit_pro", "play_token_123");
 
+    [Fact]
+    public async Task Handle_LicenseTesterPurchase_GrantsPro()
+    {
+        var user = User.Create("Alex", "test@example.com").Value;
+        StubUser(user);
+        using var play = new PlayBillingTestClient("SUBSCRIPTION_STATE_ACTIVE",
+            DateTime.UtcNow.AddMonths(1), UserId, Settings, isTestPurchase: true);
+        StubVerify(await play.Billing.VerifyAsync("orbit_pro", "play_token_123", CancellationToken.None));
+
+        var result = await _handler.Handle(Command(), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.HasProAccess.Should().BeTrue();
+        result.Value.Source.Should().Be("play");
+        user.IsPro.Should().BeTrue();
+        user.PlayPurchaseToken.Should().Be("play_token_123");
+        await _unitOfWork.Received().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
     [Theory]
     [InlineData("SUBSCRIPTION_STATE_IN_GRACE_PERIOD", SubscriptionLapseReason.PaymentFailed)]
     [InlineData("SUBSCRIPTION_STATE_ACTIVE", null)]

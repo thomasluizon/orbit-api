@@ -1,0 +1,48 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.16.4",
+  "resource_changes": [
+    {
+      "address": "render_web_service.staging_web",
+      "change": {
+        "actions": [
+          "update"
+        ],
+        "before": {
+          "health_check_path": "/api/health",
+          "plan": "free",
+          "runtime_source": {
+            "docker": null,
+            "image": {
+              "digest": "sha256:008f7e1bbe0d2e62beaf3d96f6be0079ddc127ec2f7796fa3648253323c39181",
+              "image_url": "ghcr.io/thomasluizon/orbit-web",
+              "registry_credential_id": null,
+              "tag": "008f7e1bbe0d2e62beaf3d96f6be0079ddc127ec2f7796fa3648253323c39181"
+            },
+            "native_runtime": null
+          }
+        },
+        "after": {
+          "health_check_path": "/api/health-probe",
+          "plan": "free",
+          "runtime_source": {
+            "docker": null,
+            "image": {
+              "digest": "sha256:008f7e1bbe0d2e62beaf3d96f6be0079ddc127ec2f7796fa3648253323c39181",
+              "image_url": "ghcr.io/thomasluizon/orbit-web",
+              "registry_credential_id": null
+            },
+            "native_runtime": null
+          }
+        },
+        "after_unknown": {
+          "runtime_source": {
+            "image": {
+              "tag": true
+            }
+          }
+        }
+      }
+    }
+  ]
+}
