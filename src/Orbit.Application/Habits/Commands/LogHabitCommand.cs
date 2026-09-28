@@ -73,6 +73,23 @@ public partial class LogHabitCommandHandler(
             return Result.Failure<LogHabitResponse>(ErrorMessages.HabitNotOwned);
 
         var targetDate = request.Date ?? today;
+        var dateWindowValidation = ValidateDateWindow(habit, targetDate, today);
+        if (dateWindowValidation.IsFailure)
+            return dateWindowValidation.PropagateError<LogHabitResponse>();
+
+        var existingLog = habit.Logs.FirstOrDefault(l => l.Date == targetDate && l.Value > 0 && !l.IsDeleted);
+        if (existingLog is not null && !habit.IsFlexible && !habit.IsBadHabit)
+        {
+            return await HabitCeilingLock.ExecuteEntryAsync<Habit, LogHabitResponse>(
+                unitOfWork,
+                request.UserId,
+                services.PayGate,
+                ct => PrepareUnlogAsync(request, today, ct),
+                HabitLiveRootEntry.FromUnlog,
+                (lockedHabit, ct) => HandleUnlogAsync(lockedHabit, targetDate, today, ct),
+                cancellationToken);
+        }
+
         var weekStartDay = await services.UserDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
         var dueDateResolution = await HabitDueDateResolutionLoader.LoadAsync(
             repos.HabitLogRepository,
@@ -90,19 +107,6 @@ public partial class LogHabitCommandHandler(
             return dateValidation.PropagateError<LogHabitResponse>();
 
         var user = await repos.UserRepository.FindOneTrackedAsync(u => u.Id == request.UserId, cancellationToken: cancellationToken);
-
-        var existingLog = habit.Logs.FirstOrDefault(l => l.Date == targetDate && l.Value > 0);
-        if (existingLog is not null && !habit.IsFlexible && !habit.IsBadHabit)
-        {
-            return await HabitCeilingLock.ExecuteEntryAsync<Habit, LogHabitResponse>(
-                unitOfWork,
-                request.UserId,
-                services.PayGate,
-                ct => PrepareUnlogAsync(request, today, ct),
-                HabitLiveRootEntry.FromUnlog,
-                (lockedHabit, ct) => HandleUnlogAsync(lockedHabit, targetDate, today, ct),
-                cancellationToken);
-        }
 
         return await HandleLogAsync(habit, request, targetDate, today, weekStartDay, user, cancellationToken);
     }
@@ -129,12 +133,6 @@ public partial class LogHabitCommandHandler(
         int weekStartDay,
         bool dueDateResolved)
     {
-        if (targetDate > today && habit.FrequencyUnit is not null)
-            return Result.Failure(ErrorMessages.CannotLogFutureDate);
-
-        if (targetDate < today.AddDays(-AppConstants.DefaultOverdueWindowDays))
-            return Result.Failure(ErrorMessages.BeyondOverdueWindow);
-
         if (habit.FrequencyUnit is not null
             && !HabitScheduleService.IsHabitDueOnDate(habit, targetDate, weekStartDay))
         {
@@ -148,6 +146,17 @@ public partial class LogHabitCommandHandler(
             if (!isOverdue)
                 return Result.Failure(ErrorMessages.NotScheduledOnDate);
         }
+
+        return Result.Success();
+    }
+
+    private static Result ValidateDateWindow(Habit habit, DateOnly targetDate, DateOnly today)
+    {
+        if (targetDate > today && habit.FrequencyUnit is not null)
+            return Result.Failure(ErrorMessages.CannotLogFutureDate);
+
+        if (targetDate < today.AddDays(-AppConstants.DefaultOverdueWindowDays))
+            return Result.Failure(ErrorMessages.BeyondOverdueWindow);
 
         return Result.Success();
     }

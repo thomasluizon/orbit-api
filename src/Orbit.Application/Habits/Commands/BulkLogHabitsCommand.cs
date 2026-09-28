@@ -143,6 +143,9 @@ public partial class BulkLogHabitsCommandHandler(
             return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
                 Error: ErrorMessages.HabitNotFound.Message, ErrorCode: ErrorMessages.HabitNotFound.Code);
 
+        if (!habit.IsFlexible && habit.Logs.Any(l => l.Date == targetDate))
+            return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Success, HabitId: habitId);
+
         if (habit.FrequencyUnit is not null
             && !HabitScheduleService.IsHabitDueOnDate(habit, targetDate, weekStartDay))
         {
@@ -157,9 +160,6 @@ public partial class BulkLogHabitsCommandHandler(
                 return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
                     Error: ErrorMessages.NotScheduledOnDate.Message, ErrorCode: ErrorMessages.NotScheduledOnDate.Code);
         }
-
-        if (!habit.IsFlexible && habit.Logs.Any(l => l.Date == targetDate))
-            return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Success, HabitId: habitId);
 
         var shouldAdvanceDueDate = targetDate >= today;
         var logResult = habit.Log(
