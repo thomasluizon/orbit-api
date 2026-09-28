@@ -17,7 +17,7 @@ public sealed partial class SupabaseObjectStorageService(
 
     private readonly SupabaseStorageSettings _settings = options.Value;
 
-    public async Task<SignedUpload> CreateSignedUploadAsync(string objectKey, CancellationToken cancellationToken = default)
+    public async Task<SignedUpload> CreateSignedUploadAsync(string objectKey, string contentType, long sizeBytes, CancellationToken cancellationToken = default)
     {
         var client = httpClientFactory.CreateClient(HttpClientName);
 
