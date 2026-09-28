@@ -8,11 +8,6 @@ on:
   schedule:
     - cron: '0 10 * * *'
   workflow_dispatch:
-    inputs:
-      allowlist_probe:
-        description: Test temporary runner access on the current staging database
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -24,7 +19,7 @@ concurrency:
 
 jobs:
   reseed:
-    if: github.ref == 'refs/heads/main' || (github.ref == 'refs/heads/fix/ticket-826-reseed-allowlist' && inputs.allowlist_probe)
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -34,45 +29,15 @@ jobs:
       TF_VAR_staging_postgres_ip_allow_list: ${{ vars.STAGING_POSTGRES_IP_ALLOW_LIST }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Probe temporary runner access
-        if: inputs.allowlist_probe
-        env:
-          STAGING_POSTGRES_ID: dpg-dasotg8jo6nc73cok6g0-a
-        run: bash .github/scripts/staging-postgres-access.sh open
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        if: inputs.allowlist_probe
-        with:
-          dotnet-version: '10.0.x'
-      - name: Apply migrations on the current staging database for the probe
-        if: inputs.allowlist_probe
-        env:
-          ASPNETCORE_ENVIRONMENT: Staging
-          Seed__OwnerEmail: ${{ vars.SEED_OWNER_EMAIL }}
-        run: |
-          connection="$(curl --fail-with-body --silent --show-error --max-time 30 \
-            --header "Authorization: Bearer ${RENDER_API_KEY}" \
-            'https://api.render.com/v1/postgres/dpg-dasotg8jo6nc73cok6g0-a/connection-info' \
-            | jq --exit-status --raw-output '.externalConnectionString')"
-          expected_host="$(python3 -c 'from urllib.parse import urlparse; import sys; print(urlparse(sys.argv[1]).hostname)' "$connection")"
-          Seed__ExpectedHost="$expected_host" Seed__DatabaseUrl="$connection" \
-            dotnet run --project src/Orbit.Api/Orbit.Api.csproj --no-launch-profile -- migrate-staging
-      - name: Restore operator access after the probe
-        if: always() && inputs.allowlist_probe
-        env:
-          STAGING_POSTGRES_ID: dpg-dasotg8jo6nc73cok6g0-a
-        run: bash .github/scripts/staging-postgres-access.sh restore
       - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5
-        if: ${{ !inputs.allowlist_probe }}
         with:
           role-to-assume: arn:aws:iam::713285551626:role/orbit-staging-reseed
           aws-region: us-east-2
       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
-        if: ${{ !inputs.allowlist_probe }}
         with:
           terraform_version: 1.16.4
           terraform_wrapper: false
       - name: Initialize staging database state
-        if: ${{ !inputs.allowlist_probe }}
         run: |
           [[ -n "$TF_VAR_staging_environment_id" && -n "$TF_VAR_staging_api_service_id" ]]
           jq --exit-status 'type == "array" and all(.[];
@@ -81,7 +46,6 @@ jobs:
           terraform -chdir=infra/staging-database init -input=false
       - name: Read staging database age
         id: age
-        if: ${{ !inputs.allowlist_probe }}
         run: |
           database_id="$(terraform -chdir=infra/staging-database output -raw staging_postgres_id)"
           created_at="$(curl --fail --silent --show-error --max-time 30 \
