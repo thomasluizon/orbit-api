@@ -141,7 +141,12 @@ public class GetCalendarMonthQueryHandlerTests
     [Fact]
     public async Task Handle_RecurringHabit_ReturnsScheduledDates()
     {
-        var habit = CreateDailyHabit();
+        var loggedDate = new DateOnly(2026, 9, 28);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Caminhar", FrequencyUnit.Week, 3,
+            DueDate: loggedDate)).Value;
+        habit.Log(loggedDate).IsSuccess.Should().BeTrue();
+        habit.DueDate.Should().Be(new DateOnly(2026, 10, 19));
 
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -149,14 +154,156 @@ public class GetCalendarMonthQueryHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(new List<Habit> { habit }.AsReadOnly());
 
-        var query = new GetCalendarMonthQuery(UserId, MonthStart, MonthEnd);
+        var query = new GetCalendarMonthQuery(UserId, new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30));
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Habits.Should().NotBeEmpty();
-        var habitItem = result.Value.Habits[0];
-        habitItem.ScheduledDates.Should().NotBeEmpty();
+        var habitItem = result.Value.Habits.Should().ContainSingle().Subject;
+        habitItem.Id.Should().Be(habit.Id);
+        habitItem.ScheduledDates.Should().Equal(loggedDate);
+        result.Value.Logs[habit.Id].Should().ContainSingle(log => log.Date == loggedDate && log.Value == 1);
+    }
+
+    [Fact]
+    public async Task Handle_DailyHabitLoggedOnLastDay_IncludesDateOnce()
+    {
+        var loggedDate = new DateOnly(2026, 9, 30);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Daily", FrequencyUnit.Day, 1,
+            DueDate: loggedDate)).Value;
+        habit.Log(loggedDate).IsSuccess.Should().BeTrue();
+        habit.DueDate.Should().Be(new DateOnly(2026, 10, 1));
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { habit }.AsReadOnly());
+
+        var result = await _handler.Handle(
+            new GetCalendarMonthQuery(UserId, new DateOnly(2026, 9, 1), loggedDate),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Habits.Should().ContainSingle()
+            .Which.ScheduledDates.Should().Equal(loggedDate);
+        result.Value.Logs[habit.Id].Should().ContainSingle(log => log.Date == loggedDate);
+    }
+
+    [Fact]
+    public async Task Handle_LoggedAndProjectedWeeklyDates_ReturnsSortedUnion()
+    {
+        var loggedDate = new DateOnly(2026, 9, 7);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Weekly", FrequencyUnit.Week, 1,
+            DueDate: loggedDate)).Value;
+        habit.Log(loggedDate).IsSuccess.Should().BeTrue();
+        habit.DueDate.Should().Be(new DateOnly(2026, 9, 14));
+        habit.Log(new DateOnly(2026, 9, 14), advanceDueDate: false).IsSuccess.Should().BeTrue();
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { habit }.AsReadOnly());
+
+        var result = await _handler.Handle(
+            new GetCalendarMonthQuery(UserId, new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30)),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Habits.Should().ContainSingle().Which.ScheduledDates.Should().Equal(
+            loggedDate,
+            new DateOnly(2026, 9, 14),
+            new DateOnly(2026, 9, 21),
+            new DateOnly(2026, 9, 28));
+    }
+
+    [Fact]
+    public async Task Handle_LoggedChild_KeepsParentInMonth()
+    {
+        var loggedDate = new DateOnly(2026, 9, 28);
+        var parent = Habit.Create(new HabitCreateParams(
+            UserId, "Parent", FrequencyUnit.Week, 3,
+            DueDate: new DateOnly(2026, 10, 19))).Value;
+        var child = Habit.Create(new HabitCreateParams(
+            UserId, "Child", FrequencyUnit.Week, 3,
+            DueDate: loggedDate, ParentHabitId: parent.Id)).Value;
+        child.Log(loggedDate).IsSuccess.Should().BeTrue();
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { parent, child }.AsReadOnly());
+
+        var result = await _handler.Handle(
+            new GetCalendarMonthQuery(UserId, new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30)),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var parentItem = result.Value.Habits.Should().ContainSingle().Subject;
+        parentItem.Id.Should().Be(parent.Id);
+        parentItem.ScheduledDates.Should().BeEmpty();
+        var childItem = parentItem.Children.Should().ContainSingle().Subject;
+        childItem.Id.Should().Be(child.Id);
+        childItem.ScheduledDates.Should().Equal(loggedDate);
+    }
+
+    [Fact]
+    public async Task Handle_LoggedChild_KeepsFlexibleParentWithExhaustedTargetInMonth()
+    {
+        var monthStart = new DateOnly(2026, 9, 1);
+        var monthEnd = new DateOnly(2026, 9, 30);
+        var loggedDate = new DateOnly(2026, 9, 28);
+        var parent = Habit.Create(new HabitCreateParams(
+            UserId, "Flexible Parent", FrequencyUnit.Year, 1,
+            DueDate: new DateOnly(2026, 1, 1), IsFlexible: true)).Value;
+        parent.Log(new DateOnly(2026, 8, 31)).IsSuccess.Should().BeTrue();
+        var child = Habit.Create(new HabitCreateParams(
+            UserId, "Child", FrequencyUnit.Week, 3,
+            DueDate: loggedDate, ParentHabitId: parent.Id)).Value;
+        var childLog = child.Log(loggedDate).Value;
+        child.DueDate.Should().Be(new DateOnly(2026, 10, 19));
+
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { parent, child }.AsReadOnly());
+
+        var result = await _handler.Handle(
+            new GetCalendarMonthQuery(UserId, monthStart, monthEnd),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Logs[parent.Id].Should().BeEmpty();
+        var parentItem = result.Value.Habits.Should().ContainSingle().Subject;
+        parentItem.Id.Should().Be(parent.Id);
+        parentItem.ScheduledDates.Should().BeEmpty("an exhausted flexible parent has no occurrence to miss");
+        var childItem = parentItem.Children.Should().ContainSingle().Subject;
+        childItem.Id.Should().Be(child.Id);
+        childItem.ScheduledDates.Should().ContainSingle().Which.Should().Be(loggedDate);
+        childItem.Instances.Should().ContainSingle(instance =>
+            instance.Date == loggedDate && instance.LogId == childLog.Id);
+    }
+
+    [Fact]
+    public async Task Handle_HabitWithoutLoggedOrProjectedDates_StaysOutOfMonth()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Future", FrequencyUnit.Week, 3,
+            DueDate: new DateOnly(2026, 10, 19))).Value;
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { habit }.AsReadOnly());
+
+        var result = await _handler.Handle(
+            new GetCalendarMonthQuery(UserId, new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30)),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Habits.Should().BeEmpty();
     }
 
     [Fact]
