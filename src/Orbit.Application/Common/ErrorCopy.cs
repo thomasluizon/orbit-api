@@ -67,6 +67,7 @@ public static class ErrorCopy
         (ErrorCodes.AllInstancesDone, "Every round for this period is already done or skipped.", "Todas as rodadas deste período já foram feitas ou puladas."),
         (ErrorCodes.BeyondOverdueWindow, "That day is too far back to log. Log a more recent one.", "Esse dia está distante demais para registrar. Registre um mais recente."),
         (DomainErrors.TitleRequired.Code, "Give this a title.", "Dê um título a isto."),
+        (DomainErrors.InvalidCreatedAtUtc.Code, "Choose a creation time in the past using UTC.", "Escolha uma data de criação no passado em UTC."),
         (DomainErrors.AlreadyLoggedForDate.Code, "You already logged this habit on that day.", "Você já registrou este hábito nesse dia."),
         (DomainErrors.OnlyFlexibleHabitsSkippable.Code, "Only a flexible habit can be skipped this way.", "Só um hábito flexível pode ser pulado assim."),
         (DomainErrors.CannotSkipOneTimeTask.Code, "A one-time task cannot be skipped. Delete it if you no longer need it.", "Uma tarefa única não pode ser pulada. Exclua se você não precisar mais dela."),

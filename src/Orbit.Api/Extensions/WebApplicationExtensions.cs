@@ -61,8 +61,11 @@ public static partial class WebApplicationExtensions
         }
 
         app.UseExceptionHandler();
+        app.UseRouting();
         app.UseCors();
         app.UseCookiePolicy();
+        app.UseMiddleware<Orbit.Api.Middleware.UploadObjectKeyValidationMiddleware>();
+        app.UseRateLimiter();
 
         app.UseMiddleware<Orbit.Api.Middleware.MinimumVersionMiddleware>();
 

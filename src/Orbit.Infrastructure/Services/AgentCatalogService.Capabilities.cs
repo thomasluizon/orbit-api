@@ -1047,14 +1047,14 @@ public partial class AgentCatalogService
             CreateCapability(
                 AgentCapabilityIds.MediaUpload,
                 "Upload Media",
-                "Issues short-lived signed URLs so the authenticated user can upload images directly to object storage.",
+                "Issues signed upload URLs and redirects public object reads to short-lived storage URLs.",
                 "media",
                 AgentScopes.UploadMedia,
                 AgentRiskClass.Low,
                 isMutation: true,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                controllerActions: ["UploadsController.SignUpload"]),
+                controllerActions: ["UploadsController.SignUpload", "UploadsController.ReadObject"]),
 
             CreateCapability(
                 AgentCapabilityIds.MarketingManage,
@@ -1070,7 +1070,8 @@ public partial class AgentCatalogService
                 [
                     "AdminController.SendMarketingBroadcast",
                     "MarketingController.Unsubscribe",
-                    "MarketingController.UnsubscribeOneClick"
+                    "MarketingController.UnsubscribeOneClick",
+                    "EmailController.SesEvents"
                 ])
         ];
     }

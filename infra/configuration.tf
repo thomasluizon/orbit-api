@@ -49,6 +49,14 @@ locals {
     Jwt__ExpiryMinutes                  = "0"
     Jwt__Issuer                         = "OrbitApi"
     Jwt__RefreshExpiryDays              = "90"
+    Email__Provider                     = var.production_email_provider
+    Ses__Region                         = "us-east-2"
+    Ses__FromEmail                      = "Orbit <noreply@send.useorbit.org>"
+    Ses__MarketingFromEmail             = "Orbit <news@updates.useorbit.org>"
+    Ses__SupportEmail                   = "contact@useorbit.org"
+    Ses__TransactionalConfigurationSet  = aws_sesv2_configuration_set.orbit["transactional"].configuration_set_name
+    Ses__MarketingConfigurationSet      = aws_sesv2_configuration_set.orbit["marketing"].configuration_set_name
+    Ses__TopicArn                       = aws_sns_topic.ses_events.arn
     Resend__FromEmail                   = "Orbit <noreply@send.useorbit.org>"
     Resend__SupportEmail                = "contact@useorbit.org"
     Sentry__Environment                 = "production"
@@ -60,24 +68,35 @@ locals {
     Stripe__YearlyPriceIdBrl            = "price_1U59lVGwWZvarDk3FBO8ci6L"
     Stripe__YearlyPriceIdUsd            = "price_1U59ncGwWZvarDk3Ydiw7jP7"
     Supabase__Url                       = "https://wdscxamegetmhqldqsdg.supabase.co"
+    Storage__Provider                   = var.production_storage_provider
+    Storage__S3__Bucket                 = aws_s3_bucket.uploads["production"].bucket
+    Storage__S3__Region                 = "us-east-2"
+    Storage__S3__PublicBaseUrl          = "https://api.useorbit.org"
     Vapid__PublicKey                    = "BCotrosa_VZSere_khAKbxMVRj-NZIuHs4lK4sep1Fv5N6fx8z-99q9-pDPeEs0GwKiwOwf44SiI4NN5XX-htow"
     Vapid__Subject                      = "mailto:hello@useorbit.org"
   }
 
   staging_api_values = merge(local.production_api_values, {
-    ASPNETCORE_ENVIRONMENT         = "Staging"
-    Database__MigrateOnStartup     = "true"
-    Cors__AllowedOrigins__0        = "https://staging.useorbit.org"
-    Frontend__BaseUrl              = "https://staging.useorbit.org"
-    GooglePlay__RtdnAudience       = "https://api-staging.useorbit.org/api/subscriptions/play/rtdn"
-    Google__AllowedRedirectUris__0 = "https://staging.useorbit.org/auth-callback"
-    Google__AllowedRedirectUris__1 = "https://app.useorbit.org/auth-callback"
-    Marketing__ApiBaseUrl          = "https://api-staging.useorbit.org"
-    Sentry__Environment            = "staging"
-    Stripe__CancelUrl              = "https://staging.useorbit.org/upgrade"
-    Stripe__SuccessUrl             = "https://staging.useorbit.org/settings?subscription=success"
-    Supabase__Url                  = "https://staging-storage-disabled.invalid"
-    Waitlist__ApiBaseUrl           = "https://api-staging.useorbit.org"
+    Email__Provider                    = var.staging_email_provider
+    Ses__TransactionalConfigurationSet = aws_sesv2_configuration_set.staging["transactional"].configuration_set_name
+    Ses__MarketingConfigurationSet     = aws_sesv2_configuration_set.staging["marketing"].configuration_set_name
+    Ses__TopicArn                      = aws_sns_topic.ses_events_staging.arn
+    ASPNETCORE_ENVIRONMENT             = "Staging"
+    Database__MigrateOnStartup         = "true"
+    Cors__AllowedOrigins__0            = "https://staging.useorbit.org"
+    Frontend__BaseUrl                  = "https://staging.useorbit.org"
+    GooglePlay__RtdnAudience           = "https://api-staging.useorbit.org/api/subscriptions/play/rtdn"
+    Google__AllowedRedirectUris__0     = "https://staging.useorbit.org/auth-callback"
+    Google__AllowedRedirectUris__1     = "https://app.useorbit.org/auth-callback"
+    Marketing__ApiBaseUrl              = "https://api-staging.useorbit.org"
+    Sentry__Environment                = "staging"
+    Stripe__CancelUrl                  = "https://staging.useorbit.org/upgrade"
+    Stripe__SuccessUrl                 = "https://staging.useorbit.org/settings?subscription=success"
+    Supabase__Url                      = "https://staging-storage-disabled.invalid"
+    Storage__Provider                  = var.staging_storage_provider
+    Storage__S3__Bucket                = aws_s3_bucket.uploads["staging"].bucket
+    Storage__S3__PublicBaseUrl         = "https://api-staging.useorbit.org"
+    Waitlist__ApiBaseUrl               = "https://api-staging.useorbit.org"
   })
 
   production_web_values = {
@@ -95,10 +114,9 @@ locals {
   }
 
   production_db_host = regex("@([^:/]+)", render_postgres.production.connection_info.internal_connection_string)[0]
-  staging_db_host    = regex("@([^:/]+)", render_postgres.staging.connection_info.internal_connection_string)[0]
+  production_db_name = regex("^[^:]+://[^/]+/([^/?]+)", render_postgres.production.connection_info.internal_connection_string)[0]
 
-  production_render_npgsql = "Host=${local.production_db_host};Port=5432;Database=orbit_production;Username=orbit_production;Password=\"${replace(render_postgres.production.connection_info.password, "\"", "\"\"")}\""
-  staging_render_npgsql    = "Host=${local.staging_db_host};Port=5432;Database=orbit_staging;Username=orbit_staging;Password=\"${replace(render_postgres.staging.connection_info.password, "\"", "\"\"")}\""
+  production_render_npgsql = "Host=${local.production_db_host};Port=5432;Database=${local.production_db_name};Username=${render_postgres.production.database_user};Password=\"${replace(render_postgres.production.connection_info.password, "\"", "\"\"")}\""
 
   production_api_database_values = var.api_database == "supabase" ? {
     for key in local.database_keys : key => data.aws_ssm_parameter.production_api_database[key].value
@@ -146,7 +164,13 @@ resource "render_env_group" "production_api" {
     { for key, value in local.production_api_values : key => { value = value } },
     { for key in local.api_secret_keys : key => { value = data.aws_ssm_parameter.production_api[key].value } },
     { for key, value in local.production_api_database_values : key => { value = value } },
+    {
+      Storage__S3__AccessKeyId     = { value = aws_ssm_parameter.uploads_access_key_id["production"].value }
+      Storage__S3__SecretAccessKey = { value = aws_ssm_parameter.uploads_secret_access_key["production"].value }
+    },
     { BotProtection__SecretKey = { value = aws_ssm_parameter.turnstile_secret["production"].value } },
+    { Ses__AccessKeyId = { value = aws_ssm_parameter.api_ses_access_key_id["production"].value } },
+    { Ses__SecretAccessKey = { value = aws_ssm_parameter.api_ses_secret_access_key["production"].value } },
   )
 }
 
@@ -156,8 +180,13 @@ resource "render_env_group" "staging_api" {
     { for key, value in local.staging_api_values : key => { value = value } },
     { for key in local.api_secret_keys : key => { value = data.aws_ssm_parameter.staging_api[key].value } },
     { for key in local.staging_api_billing_keys : key => { value = data.aws_ssm_parameter.staging_api_billing[key].value } },
-    { for key in local.database_keys : key => { value = local.staging_render_npgsql } },
+    {
+      Storage__S3__AccessKeyId     = { value = aws_ssm_parameter.uploads_access_key_id["staging"].value }
+      Storage__S3__SecretAccessKey = { value = aws_ssm_parameter.uploads_secret_access_key["staging"].value }
+    },
     { BotProtection__SecretKey = { value = aws_ssm_parameter.turnstile_secret["staging"].value } },
+    { Ses__AccessKeyId = { value = aws_ssm_parameter.api_ses_access_key_id["staging"].value } },
+    { Ses__SecretAccessKey = { value = aws_ssm_parameter.api_ses_secret_access_key["staging"].value } },
   )
 }
 

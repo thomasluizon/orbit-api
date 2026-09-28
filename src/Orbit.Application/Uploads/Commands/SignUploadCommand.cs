@@ -20,7 +20,7 @@ public class SignUploadCommandHandler(IObjectStorageService objectStorage)
         var extension = UploadContentTypes.ExtensionFor(request.ContentType);
         var objectKey = $"{request.UserId}/{Guid.NewGuid()}.{extension}";
 
-        var signed = await objectStorage.CreateSignedUploadAsync(objectKey, cancellationToken);
+        var signed = await objectStorage.CreateSignedUploadAsync(objectKey, request.ContentType, request.SizeBytes, cancellationToken);
 
         return Result.Success(new SignUploadResponse(signed.Key, signed.SignedUrl, signed.PublicUrl));
     }

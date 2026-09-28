@@ -6,18 +6,11 @@ resource "cloudflare_zone" "orbit" {
   type = "full"
 }
 
-resource "cloudflare_zone_subscription" "orbit" {
-  zone_id = cloudflare_zone.orbit.id
-  rate_plan = {
-    id = "free"
-  }
-}
-
 locals {
   existing_dns_records = {
-    apex_a = {
+    apex_cname = {
       name    = "@"
-      type    = "A"
+      type    = "CNAME"
       content = var.dns_apex_target
     }
     api_cname = {
@@ -113,6 +106,11 @@ locals {
       content = split("/", render_web_service.staging_web.url)[2]
     }
   }
+}
+
+moved {
+  from = cloudflare_dns_record.existing["apex_a"]
+  to   = cloudflare_dns_record.existing["apex_cname"]
 }
 
 resource "cloudflare_dns_record" "existing" {
