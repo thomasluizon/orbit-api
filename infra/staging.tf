@@ -1,14 +1,3 @@
-resource "render_postgres" "staging" {
-  environment_id            = render_project.orbit.environments["Staging"].id
-  name                      = "orbit-staging"
-  database_name             = "orbit_staging"
-  database_user             = "orbit_staging"
-  plan                      = "free"
-  region                    = "ohio"
-  version                   = "17"
-  high_availability_enabled = false
-}
-
 resource "render_web_service" "staging_api" {
   environment_id    = render_project.orbit.environments["Staging"].id
   name              = "orbit-api-staging"
@@ -96,4 +85,12 @@ resource "render_env_group_link" "staging_api" {
 resource "render_env_group_link" "staging_web" {
   env_group_id = render_env_group.staging_web.id
   service_ids  = [render_web_service.staging_web.id]
+}
+
+output "staging_environment_id" {
+  value = render_project.orbit.environments["Staging"].id
+}
+
+output "staging_api_service_id" {
+  value = render_web_service.staging_api.id
 }

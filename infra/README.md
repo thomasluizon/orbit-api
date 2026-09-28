@@ -1,8 +1,39 @@
 # Orbit infrastructure
 
-This directory is one Terraform state for the Render production and staging resources, Cloudflare DNS and Turnstile, and AWS SSM parameters. `production.tf` imports the existing API and declares the production database, web service, and landing site. `staging.tf` declares the staging database, API, web service, and landing site. `configuration.tf` owns four environment groups and their AWS SSM inputs. `cloudflare.tf` owns the zone, existing DNS records, widget, and its secret parameters. `ses.tf` owns SES identities, new DNS records, event routing, and send credentials. `variables.tf` contains the cutover switches and image digests. `versions.tf` pins the providers and configures the encrypted S3 state with native locking.
+The main Terraform state owns the Render production resources and the staging services, Cloudflare DNS and Turnstile, and AWS SSM parameters. `production.tf` imports the existing API and declares the production database, web service, and landing site. `staging.tf` declares the staging API, web service, and landing site. `configuration.tf` owns the service environment groups and their AWS SSM inputs. `cloudflare.tf` owns the zone, existing DNS records, widget, and its secret parameters. `ses.tf` owns SES identities, new DNS records, event routing, and send credentials. `variables.tf` contains the cutover switches and image digests. `versions.tf` pins the providers and configures the encrypted S3 state with native locking. `staging-database/` is a separate Terraform root that owns only the staging Postgres, its connection environment group, and the link to the staging API.
 
-The Render provider reads `RENDER_API_KEY` from the environment. The Cloudflare provider reads `CLOUDFLARE_API_TOKEN` from the environment. The AWS provider uses the default credential chain in `us-east-2`. The S3 state contains decrypted SecureString values, including the Turnstile and SES secrets, so access to the bucket and its lock file must stay restricted. The existing API is imported with its service ID; do not remove that import block or replace the service.
+The Render provider reads `RENDER_API_KEY` from the environment. The Cloudflare provider reads `CLOUDFLARE_API_TOKEN` from the environment. The AWS provider uses the default credential chain in `us-east-2`. The main S3 state contains decrypted SecureString values, including the Turnstile and SES secrets, so access to that state and its lock file must stay restricted. The staging reseed role can access only the separate staging database state. The existing API is imported with its service ID; do not remove that import block or replace the service.
+
+## Staging lifecycle
+
+The staging keepalive workflow calls the API health endpoint every five minutes from 08:00 through 23:55 in Sao Paulo. The reseed workflow checks the Render Postgres creation time daily and replaces the staging database once it is at least 26 days old. A manual dispatch replaces it immediately. The replacement plan is restricted to `render_postgres.staging` and its staging database environment group, and the workflow rejects a plan that changes another resource. The workflow applies EF migrations to the new database, triggers an API deploy, waits for that deploy to become live, and then seeds the owner account.
+
+Create the GitHub OIDC provider and staging reseed role from `github_oidc.tf` with a reviewed targeted Terraform apply before enabling the workflow. If the GitHub OIDC provider already exists in the AWS account, import it into this state before applying. Set `RENDER_API_KEY` in GitHub Actions secrets from Render Account Settings > API Keys. Set `SEED_OWNER_EMAIL`, `STAGING_ENVIRONMENT_ID`, and `STAGING_API_SERVICE_ID` in GitHub Actions variables. The IDs come from the main Terraform state's `render_project.orbit.environments["Staging"].id` and `render_web_service.staging_api.id`. The role trust policy accepts only workflows on this repository's `main` branch.
+
+Move the staging database state before applying either root. With credentials for the main state and the Render API, record its ID, remove its old state entry, initialize the new root, and import that ID:
+
+```sh
+database_id="$(terraform -chdir=infra state show -no-color render_postgres.staging | awk -F'"' '/^ +id +=/ {print $2; exit}')"
+export TF_VAR_staging_environment_id='<staging environment ID from Render dashboard>'
+export TF_VAR_staging_api_service_id='<staging API service ID from Render dashboard>'
+terraform -chdir=infra state rm render_postgres.staging
+terraform -chdir=infra/staging-database init
+terraform -chdir=infra/staging-database import render_postgres.staging "$database_id"
+```
+
+Apply the new root to create and link `orbit-staging-database`, then apply the main root to remove only the two database connection values from `orbit-staging-api`. Review both plans before applying. The new group contains only `ConnectionStrings__DefaultConnection` and `ConnectionStrings__SessionConnection`; the existing `orbit-staging-api` group retains the other settings. After the main apply, `staging_environment_id` and `staging_api_service_id` outputs give the values for the GitHub variables. The Render provider documentation for version 1.9.1 confirms that both `render_postgres` and `render_env_group` can be imported by ID. The new group is created, so it needs no import.
+
+After the API has migrated the new database, the workflow invokes the seed command using the database connection returned by the staging Terraform resource. To run the same command manually from the repository root after `terraform -chdir=infra/staging-database init`:
+
+```sh
+ASPNETCORE_ENVIRONMENT=Staging \
+Seed__OwnerEmail=owner@example.com \
+Seed__ExpectedHost="$(terraform -chdir=infra/staging-database output -raw staging_external_host)" \
+Seed__DatabaseUrl="$(terraform -chdir=infra/staging-database output -raw staging_external_connection_string)" \
+dotnet run --project src/Orbit.Api/Orbit.Api.csproj -- seed-staging
+```
+
+The command checks the environment, staging host, database name, and database user before opening a connection. It reuses the owner's account by email and adds missing sample records without duplicating existing ones.
 
 ## SSM parameters
 

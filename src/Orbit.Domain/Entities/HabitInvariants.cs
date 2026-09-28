@@ -48,8 +48,11 @@ internal static class HabitInvariants
     public static AppError? ValidateDateOptions(
         TimeOnly? dueTime, TimeOnly? dueEndTime,
         DateOnly? endDate, FrequencyUnit? frequencyUnit,
-        bool isGeneral, DateOnly dueDate)
+        bool isGeneral, DateOnly dueDate, DateTime? createdAtUtc = null)
     {
+        if (createdAtUtc is { } value && (value.Kind != DateTimeKind.Utc || value > DateTime.UtcNow))
+            return DomainErrors.InvalidCreatedAtUtc;
+
         if (dueEndTime.HasValue && dueTime.HasValue && dueEndTime.Value <= dueTime.Value)
             return DomainErrors.EndTimeBeforeStartTime;
 
