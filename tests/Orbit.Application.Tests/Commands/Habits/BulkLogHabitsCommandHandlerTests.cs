@@ -321,20 +321,26 @@ public class BulkLogHabitsCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_AlreadyLoggedRecurringHabit_FailsScheduleCheckSinceDueDateAdvanced()
+    public async Task Handle_AlreadyLoggedRecurringHabit_ReturnsSuccessWithoutSecondLog()
     {
         var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
-        habit.Log(Today);
         SetupHabitsForUser(new List<Habit> { habit });
 
         var items = new List<BulkLogItem> { new(habit.Id) };
         var command = new BulkLogHabitsCommand(UserId, items);
 
+        var first = await _handler.Handle(command, CancellationToken.None);
+        first.Value.Results[0].Status.Should().Be(BulkItemStatus.Success);
+        habit.DueDate.Should().Be(Today.AddDays(1));
+
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Results[0].Status.Should().Be(BulkItemStatus.Failed);
-        result.Value.Results[0].Error.Should().Contain("not scheduled");
+        result.Value.Results[0].ErrorCode.Should().NotBe(ErrorCodes.NotScheduledOnDate);
+        result.Value.Results[0].Status.Should().Be(BulkItemStatus.Success);
+        result.Value.Results[0].LogId.Should().BeNull();
+        habit.Logs.Should().ContainSingle(l => l.Date == Today && !l.IsDeleted);
+        await _habitLogRepo.Received(1).AddAsync(Arg.Any<HabitLog>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

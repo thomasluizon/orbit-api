@@ -18,7 +18,7 @@ data "aws_iam_policy_document" "staging_reseed_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:thomasluizon/orbit-api:ref:refs/heads/main"]
+      values   = ["repo:thomasluizon/orbit-api:environment:render-operations"]
     }
   }
 }

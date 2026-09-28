@@ -291,6 +291,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         if (IsFlexible && GetRemainingCompletions(date, _logs, weekStartDay) <= 0)
             return Result.Failure<HabitLog>(DomainErrors.AllInstancesDone);
 
+        var restoresDeletedDueDate = RestoresDeletedDueDate(date, advanceDueDate);
         var completionOrdinal = IsFlexible
             ? _logs.Where(l => l.Date == date && l.Value > 0)
                 .Select(l => l.CompletionOrdinal)
@@ -309,6 +310,12 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         {
             if (!IsFlexible && advanceDueDate)
                 AdvanceDueDate(date, weekStartDay);
+            else if (restoresDeletedDueDate)
+            {
+                var advanceResult = AdvancePastResolvedLogs(weekStartDay);
+                if (advanceResult.IsFailure)
+                    return Result.Failure<HabitLog>(DomainErrors.RecurrenceScheduleUnsatisfiable);
+            }
 
             if (ChecklistItems.Count > 0)
                 ChecklistItems = ChecklistItems.Select(i => i with { IsChecked = false }).ToList();
@@ -316,6 +323,25 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
 
         UpdatedAtUtc = DateTime.UtcNow;
         return Result.Success(log);
+    }
+
+    private bool RestoresDeletedDueDate(DateOnly date, bool advanceDueDate) =>
+        !advanceDueDate
+        && !IsFlexible
+        && !IsBadHabit
+        && DueDate == date
+        && _logs.Exists(l => l.Date == date && l.Value > 0 && l.IsDeleted);
+
+    private Result AdvancePastResolvedLogs(int weekStartDay)
+    {
+        do
+        {
+            var result = AdvanceDueDate(DueDate, weekStartDay);
+            if (result.IsFailure)
+                return result;
+        } while (_logs.Any(l => l.Date == DueDate && !l.IsDeleted));
+
+        return Result.Success();
     }
 
     public int GetRemainingCompletions(DateOnly date, IReadOnlyCollection<HabitLog> logs, int weekStartDay)

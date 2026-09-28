@@ -83,15 +83,17 @@ locals {
     Ses__TopicArn                      = aws_sns_topic.ses_events_staging.arn
     ASPNETCORE_ENVIRONMENT             = "Staging"
     Database__MigrateOnStartup         = "true"
-    Cors__AllowedOrigins__0            = "https://staging.useorbit.org"
-    Frontend__BaseUrl                  = "https://staging.useorbit.org"
+    Cors__AllowedOrigins__0            = "https://app-staging.useorbit.org"
+    Cors__AllowedOrigins__1            = "https://staging.useorbit.org"
+    Frontend__BaseUrl                  = "https://app-staging.useorbit.org"
     GooglePlay__RtdnAudience           = "https://api-staging.useorbit.org/api/subscriptions/play/rtdn"
-    Google__AllowedRedirectUris__0     = "https://staging.useorbit.org/auth-callback"
+    Google__AllowedRedirectUris__0     = "https://app-staging.useorbit.org/auth-callback"
     Google__AllowedRedirectUris__1     = "https://app.useorbit.org/auth-callback"
+    Google__AllowedRedirectUris__2     = "https://staging.useorbit.org/auth-callback"
     Marketing__ApiBaseUrl              = "https://api-staging.useorbit.org"
     Sentry__Environment                = "staging"
-    Stripe__CancelUrl                  = "https://staging.useorbit.org/upgrade"
-    Stripe__SuccessUrl                 = "https://staging.useorbit.org/settings?subscription=success"
+    Stripe__CancelUrl                  = "https://app-staging.useorbit.org/upgrade"
+    Stripe__SuccessUrl                 = "https://app-staging.useorbit.org/settings?subscription=success"
     Supabase__Url                      = "https://staging-storage-disabled.invalid"
     Storage__Provider                  = var.staging_storage_provider
     Storage__S3__Bucket                = aws_s3_bucket.uploads["staging"].bucket
@@ -109,7 +111,7 @@ locals {
   staging_web_values = {
     API_BASE                   = "https://api-staging.useorbit.org"
     NEXT_PUBLIC_EVENT_API_BASE = "https://api-staging.useorbit.org"
-    NEXT_PUBLIC_SITE_URL       = "https://staging.useorbit.org"
+    NEXT_PUBLIC_SITE_URL       = "https://app-staging.useorbit.org"
     NODE_ENV                   = "production"
   }
 

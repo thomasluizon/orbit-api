@@ -82,19 +82,38 @@ public class GetCalendarMonthQueryHandler(
         var habitItems = new List<HabitScheduleItem>();
         foreach (var habit in topLevel)
         {
-            var scheduledDates = HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo, ctx.WeekStartDay);
-            if (habit.IsFlexible
-                && !scheduledDates.Any(date =>
-                    HabitScheduleService.IsFlexibleHabitDueOnDate(habit, date, habit.Logs, ctx.WeekStartDay)))
+            var projectedDates = HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo, ctx.WeekStartDay);
+            var loggedDates = GetPositiveLogDates(habit, dateFrom, dateTo);
+            var scheduledDates = MergeDates(projectedDates, loggedDates);
+            var hasDescendantDue = HasAnyDescendantDue(habit.Id, lookup, dateFrom, dateTo, ctx.WeekStartDay);
+            var flexibleTargetExhausted = habit.IsFlexible
+                && loggedDates.Count == 0
+                && !projectedDates.Any(date =>
+                    HabitScheduleService.IsFlexibleHabitDueOnDate(habit, date, habit.Logs, ctx.WeekStartDay));
+            if (flexibleTargetExhausted && !hasDescendantDue)
                 continue;
 
-            var isOverdue = DetermineOverdueStatus(habit, dateFrom, scheduledDates, ctx.WeekStartDay);
-            var hasDescendantDue = HasAnyDescendantDue(habit.Id, lookup, dateFrom, dateTo, ctx.WeekStartDay);
+            var occurrenceDates = flexibleTargetExhausted ? loggedDates : scheduledDates;
+            var isOverdue = DetermineOverdueStatus(habit, dateFrom, projectedDates, ctx.WeekStartDay);
 
-            if (scheduledDates.Count > 0 || isOverdue || hasDescendantDue)
-                habitItems.Add(MapToScheduleItem(habit, scheduledDates, isOverdue, ctx));
+            if (occurrenceDates.Count > 0 || isOverdue || hasDescendantDue)
+                habitItems.Add(MapToScheduleItem(habit, occurrenceDates, isOverdue, ctx));
         }
         return habitItems;
+    }
+
+    private static List<DateOnly> GetPositiveLogDates(Habit habit, DateOnly dateFrom, DateOnly dateTo)
+    {
+        return habit.Logs
+            .Where(log => log.Value > 0 && log.Date >= dateFrom && log.Date <= dateTo)
+            .Select(log => log.Date)
+            .Distinct()
+            .ToList();
+    }
+
+    private static List<DateOnly> MergeDates(List<DateOnly> projectedDates, List<DateOnly> loggedDates)
+    {
+        return projectedDates.Union(loggedDates).OrderBy(date => date).ToList();
     }
 
     /// <summary>
@@ -221,11 +240,14 @@ public class GetCalendarMonthQueryHandler(
             .ThenBy(c => c.CreatedAtUtc)
             .Select(c => MapChildItem(c, ctx))
             .ToList();
-        var scheduledDates = (ctx.DateFrom.HasValue && ctx.DateTo.HasValue)
+        var projectedDates = (ctx.DateFrom.HasValue && ctx.DateTo.HasValue)
             ? HabitScheduleService.GetScheduledDates(child, ctx.DateFrom.Value, ctx.DateTo.Value, ctx.WeekStartDay)
             : [];
+        var scheduledDates = (ctx.DateFrom.HasValue && ctx.DateTo.HasValue)
+            ? MergeDates(projectedDates, GetPositiveLogDates(child, ctx.DateFrom.Value, ctx.DateTo.Value))
+            : projectedDates;
         var isOverdue = ctx.DateFrom.HasValue
-            && DetermineOverdueStatus(child, ctx.DateFrom.Value, scheduledDates, ctx.WeekStartDay);
+            && DetermineOverdueStatus(child, ctx.DateFrom.Value, projectedDates, ctx.WeekStartDay);
 
         var isLoggedInRange = ctx.DateFrom.HasValue && ctx.DateTo.HasValue &&
             child.Logs.Any(l => l.Date >= ctx.DateFrom.Value && l.Date <= ctx.DateTo.Value && l.Value > 0);
@@ -272,7 +294,8 @@ public class GetCalendarMonthQueryHandler(
         {
             var childDates = HabitScheduleService.GetScheduledDates(child, dateFrom, dateTo, weekStartDay);
             var childIsOverdue = DetermineOverdueStatus(child, dateFrom, childDates, weekStartDay);
-            if (childDates.Count > 0 || childIsOverdue) return true;
+            if (childDates.Count > 0 || childIsOverdue || GetPositiveLogDates(child, dateFrom, dateTo).Count > 0)
+                return true;
             if (HasAnyDescendantDue(child.Id, lookup, dateFrom, dateTo, weekStartDay)) return true;
         }
         return false;
