@@ -75,9 +75,19 @@ Terraform creates `/orbit/production/api/BotProtection__SecretKey` and `/orbit/s
 
 ## DNS cutover
 
-The Cloudflare zone uses full DNS setup on the Free plan. The existing records have automatic TTL and remain unproxied. The default `dns_apex_target`, `dns_www_target`, and `dns_app_target` values point to the current Vercel destinations. Change those variables only during the later Render cutover. `api` continues to point to its existing Render service. Staging CNAMEs take their hostnames from the staging Render resources.
+The Cloudflare zone uses full DNS setup on the Free plan. The existing records have automatic TTL and remain unproxied. At cutover, use these values in `infra/local.tfvars`:
 
-After apply, read the `cloudflare_name_servers` output. Before you change the delegation, run `bash infra/check-dns-cutover.sh <cloudflare-nameserver>` once for each of those nameservers. The script asks the Cloudflare nameserver directly, so it verifies the new zone while Spaceship still serves live traffic. It compares record values and MX priorities while ignoring TTL and TXT chunk boundaries. Switch the nameservers at Spaceship only when every run prints that all answers match. After the switch propagates, run the script again for each nameserver and confirm that `dig NS useorbit.org +short` returns the Cloudflare nameservers.
+```hcl
+dns_apex_target        = "orbit-landing-aaa7.onrender.com"
+dns_www_target         = "orbit-landing-aaa7.onrender.com"
+dns_app_target         = "orbit-web-3qmv.onrender.com"
+landing_custom_domains = ["useorbit.org"]
+web_custom_domains     = ["app.useorbit.org"]
+```
+
+Render adds `www.useorbit.org` as a redirect to `useorbit.org` when the apex is added as a landing custom domain. Cloudflare flattens the unproxied apex CNAME into A answers while leaving its MX and TXT records in place. `api` continues to point to its existing Render service. Staging CNAMEs take their hostnames from the staging Render resources.
+
+After apply, read the `cloudflare_name_servers` output. Run `bash infra/check-dns-cutover.sh <cloudflare-nameserver> [apex-target] [app-target] [www-target]` once for each nameserver. The optional targets default to the Render hostnames above; pass all three configured targets in that order if any differs. The script compares the apex's flattened A answers with the Render target's A answers, checks the `app` and `www` CNAMEs against their targets, and compares the remaining records with Spaceship while ignoring TTL and TXT chunk boundaries. For an initial nameserver cutover, switch the nameservers at Spaceship only when every run succeeds. Confirm that `dig NS useorbit.org +short` returns the Cloudflare nameservers and that Render's Custom Domains screen reports `useorbit.org` verified.
 
 ## Plan and apply
 
@@ -117,4 +127,4 @@ terraform -chdir=infra apply local.tfplan
 
 The initial plan must keep `srv-d6tc2isr85hc739bf75g`, its URL, and `api.useorbit.org` in place. Terraform ignores the imported API's own environment variables (`lifecycle.ignore_changes`), so the first apply only creates `orbit-production-api` and links it; the service keeps its existing variables, which override the group's identical values. After a deploy proves the service healthy on the linked group, remove the duplicated direct variables through the Render API, leaving only `ORBIT_TERRAFORM_ENV_GROUP`. Check the imported service's plan before applying: it must show no change to the service.
 
-Staging reads Stripe test-mode product and price IDs from SSM and uses staging return URLs. `Supabase__Url` points at an invalid host so staging cannot write to production storage. The web image must exist at both selected digests before the first apply. Custom domains for production web and landing remain empty until cutover. DNS and certificate verification follow the domain changes.
+Staging reads Stripe test-mode product and price IDs from SSM and uses staging return URLs. `Supabase__Url` points at an invalid host so staging cannot write to production storage. The web image must exist at both selected digests before the first apply. Set production web and landing custom domains during cutover. DNS and certificate verification follow the domain changes.

@@ -88,9 +88,14 @@ variable "staging_web_custom_domains" {
 }
 
 variable "dns_apex_target" {
-  description = "A record target for the zone apex."
+  description = "CNAME hostname for the zone apex."
   type        = string
-  default     = "216.198.79.1"
+  default     = "orbit-landing-aaa7.onrender.com"
+
+  validation {
+    condition     = can(regex("^([a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\\.)+[a-zA-Z](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$", var.dns_apex_target)) && length(var.dns_apex_target) <= 253
+    error_message = "dns_apex_target must be a DNS hostname without a trailing dot."
+  }
 }
 
 variable "dns_www_target" {
