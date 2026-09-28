@@ -1,7 +1,7 @@
 locals {
   upload_environments = {
     production = "https://app.useorbit.org"
-    staging    = "https://staging.useorbit.org"
+    staging    = "https://app-staging.useorbit.org"
   }
 }
 

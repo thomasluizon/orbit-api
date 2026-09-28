@@ -127,7 +127,7 @@ variable "staging_api_custom_domains" {
 variable "staging_web_custom_domains" {
   description = "Staging web custom domains."
   type        = set(string)
-  default     = ["staging.useorbit.org"]
+  default     = ["app-staging.useorbit.org", "staging.useorbit.org"]
 }
 
 variable "dns_apex_target" {
