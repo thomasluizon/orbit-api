@@ -1,0 +1,42 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.16.4",
+  "resource_changes": [
+    {
+      "address": "render_web_service.staging_api",
+      "change": {
+        "actions": [
+          "update"
+        ],
+        "before": {
+          "custom_domains": [
+            {
+              "domain_type": "subdomain",
+              "id": "cdm-dasotgp7lnhs73a5b5ng",
+              "name": "api-staging.useorbit.org",
+              "public_suffix": "org",
+              "redirect_for_name": ""
+            }
+          ]
+        },
+        "after": {
+          "custom_domains": [
+            {
+              "name": "fixture.invalid"
+            }
+          ]
+        },
+        "after_unknown": {
+          "custom_domains": [
+            {
+              "domain_type": true,
+              "id": true,
+              "public_suffix": true,
+              "redirect_for_name": true
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
