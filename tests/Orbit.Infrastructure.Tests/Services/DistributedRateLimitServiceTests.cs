@@ -63,18 +63,12 @@ public class DistributedRateLimitServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task TryAcquireAsync_UploadReadPolicy_AllowsImagePageButStopsRepeatedObjectRequests()
+    public async Task UploadReads_AreNotAStoredRateLimitPolicy()
     {
-        for (var index = 0; index < 200; index++)
-            (await _service.TryAcquireAsync("upload-reads", $"object:image-{index}")).Allowed.Should().BeTrue();
+        var acquire = () => _service.TryAcquireAsync("upload-reads", "ip:203.0.113.7");
 
-        for (var attempt = 0; attempt < 600; attempt++)
-            (await _service.TryAcquireAsync("upload-reads", "object:hot-image")).Allowed.Should().BeTrue();
-
-        var blocked = await _service.TryAcquireAsync("upload-reads", "object:hot-image");
-        blocked.Allowed.Should().BeFalse();
-        blocked.PermitLimit.Should().Be(600);
-        (await _service.TryAcquireAsync("upload-reads", "object:another-image")).Allowed.Should().BeTrue();
+        await acquire.Should().ThrowAsync<InvalidOperationException>();
+        _dbContext.DistributedRateLimitBuckets.Should().BeEmpty();
     }
 
     [Fact]

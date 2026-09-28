@@ -2,9 +2,11 @@ using System.Text.Json.Serialization;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Logging;
 using Orbit.Api.Extensions;
 using Orbit.Api.RateLimiting;
+using Orbit.Api.Uploads;
 using Orbit.Application.Uploads.Commands;
 using Orbit.Domain.Interfaces;
 
@@ -38,30 +40,13 @@ public partial class UploadsController(IMediator mediator, IObjectStorageReadSer
 
     [AllowAnonymous]
     [HttpGet("object/{userId}/{fileName}")]
-    [DistributedRateLimit("upload-reads")]
+    [EnableRateLimiting(UploadReadRateLimitPolicy.Name)]
     [ProducesResponseType(StatusCodes.Status302Found)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ReadObject(string userId, string fileName, CancellationToken cancellationToken)
     {
-        var extensionSeparator = fileName.LastIndexOf('.');
-        if (!Guid.TryParseExact(userId, "D", out var parsedUserId) ||
-            extensionSeparator < 0 ||
-            !Guid.TryParseExact(fileName.AsSpan(0, extensionSeparator), "D", out var parsedFileId))
+        if (!UploadObjectKey.TryCreate(userId, fileName, out var objectKey))
             return NotFound();
-
-        var parsedExtension = fileName[(extensionSeparator + 1)..] switch
-        {
-            "png" => "png",
-            "jpg" => "jpg",
-            "webp" => "webp",
-            _ => null
-        };
-        var canonicalFileId = parsedFileId.ToString("D");
-        if (parsedExtension is null || canonicalFileId[14] != '4' ||
-            canonicalFileId[19] is not ('8' or '9' or 'a' or 'b'))
-            return NotFound();
-
-        var objectKey = $"{parsedUserId:D}/{canonicalFileId}.{parsedExtension}";
         var readUrl = await objectReader.CreateReadUrlAsync(objectKey, cancellationToken);
         Response.Headers.CacheControl = "public, max-age=300";
         return Redirect(readUrl);

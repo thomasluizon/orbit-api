@@ -13,6 +13,7 @@ using Orbit.Api.Authorization;
 using Orbit.Api.Idempotency;
 using Orbit.Api.OAuth;
 using Orbit.Api.Observability;
+using Orbit.Api.RateLimiting;
 using Orbit.Application.Auth.Commands;
 using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
@@ -414,6 +415,11 @@ public static partial class ServiceCollectionExtensions
     public static WebApplicationBuilder AddOrbitRateLimiting(this WebApplicationBuilder builder)
     {
         builder.Services.AddScoped<IDistributedRateLimitService, DistributedRateLimitService>();
+        builder.Services.AddRateLimiter(options =>
+        {
+            options.AddPolicy(UploadReadRateLimitPolicy.Name, UploadReadRateLimitPolicy.GetPartition);
+            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+        });
 
         return builder;
     }

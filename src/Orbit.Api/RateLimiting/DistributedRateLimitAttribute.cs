@@ -110,11 +110,6 @@ public sealed partial class DistributedRateLimitFilter(
         IEnumerable<object?> actionArguments,
         CancellationToken cancellationToken)
     {
-        if (string.Equals(policyName, "upload-reads", StringComparison.OrdinalIgnoreCase) &&
-            context.Request.RouteValues["userId"] is string userId && userId.Length == 36 &&
-            context.Request.RouteValues["fileName"] is string fileName && fileName.Length is > 36 and <= 41)
-            return $"object:{userId}/{fileName}";
-
         if (context.User.Identity?.IsAuthenticated == true)
             return $"user:{context.GetUserId()}";
 

@@ -5,6 +5,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Api.Controllers;
@@ -115,12 +116,13 @@ public class UploadsControllerTests
     }
 
     [Fact]
-    public void ReadObject_IsAnonymousAndRateLimited()
+    public void ReadObject_UsesInProcessRateLimit()
     {
         var method = typeof(UploadsController).GetMethod(nameof(UploadsController.ReadObject))
             ?? throw new InvalidOperationException("ReadObject action is missing.");
 
         method.GetCustomAttribute<AllowAnonymousAttribute>().Should().NotBeNull();
-        method.GetCustomAttribute<DistributedRateLimitAttribute>().Should().NotBeNull();
+        method.GetCustomAttribute<EnableRateLimitingAttribute>().Should().NotBeNull();
+        method.GetCustomAttribute<DistributedRateLimitAttribute>().Should().BeNull();
     }
 }
