@@ -18,7 +18,6 @@ on:
 
 permissions:
   contents: read
-  deployments: write
 
 concurrency:
   group: api-release-${{ inputs.environment }}
@@ -26,16 +25,17 @@ concurrency:
   queue: max
 
 jobs:
-  deploy:
+  prepare:
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
-    timeout-minutes: 170
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
     env:
-      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-      RENDER_SERVICE_ID: ${{ inputs.environment == 'production' && vars.RENDER_PRODUCTION_SERVICE_ID || vars.RENDER_STAGING_SERVICE_ID }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Validate release selection
+        env:
+          RELEASE_ENVIRONMENT: ${{ inputs.environment }}
+          RELEASE_BRANCH: ${{ inputs.branch }}
         run: |
           set -euo pipefail
           if [ "$GITHUB_REF" != 'refs/heads/main' ]; then
@@ -50,9 +50,6 @@ jobs:
             echo '::error::Production releases require branch main'
             exit 1
           fi
-        env:
-          RELEASE_ENVIRONMENT: ${{ inputs.environment }}
-          RELEASE_BRANCH: ${{ inputs.branch }}
 
       - uses: actions/checkout@v7
         with:
@@ -73,32 +70,28 @@ jobs:
           fi
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
-      - name: Select staging branch
-        if: inputs.environment == 'staging'
-        env:
-          RELEASE_BRANCH: ${{ inputs.branch }}
-        run: |
-          set -euo pipefail
-          test -n "$RENDER_API_KEY"
-          test -n "$RENDER_SERVICE_ID"
-          payload=$(jq -cn --arg branch "$RELEASE_BRANCH" '{branch: $branch, autoDeploy: "no"}')
-          response=$(curl --fail-with-body --silent --show-error \
-            --request PATCH "https://api.render.com/v1/services/$RENDER_SERVICE_ID" \
-            --header "Authorization: Bearer $RENDER_API_KEY" \
-            --header 'Content-Type: application/json' \
-            --data "$payload")
-          jq -e --arg branch "$RELEASE_BRANCH" '.branch == $branch and .autoDeploy == "no"' <<< "$response"
-
+  production:
+    if: inputs.environment == 'production'
+    needs: prepare
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      deployments: write
+    timeout-minutes: 170
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID: ${{ vars.RENDER_PRODUCTION_SERVICE_ID }}
+      COMMIT_SHA: ${{ needs.prepare.outputs.sha }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
       - name: Trigger and monitor Render deploy
         id: render
-        env:
-          COMMIT_SHA: ${{ steps.commit.outputs.sha }}
         run: |
           set -euo pipefail
           test -n "$RENDER_API_KEY"
           test -n "$RENDER_SERVICE_ID"
           payload=$(jq -cn --arg sha "$COMMIT_SHA" '{commitId: $sha}')
-          triggered_after=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           response_file=$(mktemp)
           http_status=$(curl --fail-with-body --silent --show-error \
             --output "$response_file" --write-out '%{http_code}' \
@@ -109,20 +102,10 @@ jobs:
           case "$http_status" in
             201) deploy_id=$(jq -er '.id' < "$response_file") ;;
             202)
-              deploy_id=
-              for attempt in {1..30}; do
-                deploy_id=$(curl --fail-with-body --silent --show-error --get \
-                  "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
-                  --header "Authorization: Bearer $RENDER_API_KEY" \
-                  --data-urlencode 'limit=20' --data-urlencode "createdAfter=$triggered_after" |
-                  jq -r --arg sha "$COMMIT_SHA" '[.[] | select(.deploy.commit.id == $sha) | .deploy.id][0] // empty')
-                if [ -n "$deploy_id" ]; then break; fi
-                sleep 2
-              done
-              if [ -z "$deploy_id" ]; then
-                echo "::error::Render queued a deploy of $COMMIT_SHA but did not list it"
-                exit 1
-              fi ;;
+              # Render queues a request behind a running deploy and returns no deploy, so nothing
+              # identifies which later deploy is this request's. Releases are serialized, so fail closed.
+              echo "::error::Render queued the deploy of $COMMIT_SHA behind another deploy and returned no deploy ID; rerun the release once the service is idle"
+              exit 1 ;;
             *)
               echo "::error::Render answered HTTP $http_status to the deploy request"
               exit 1 ;;
@@ -152,23 +135,12 @@ jobs:
           echo "::error::Render deploy $deploy_id timed out. Logs: $log_url"
           exit 1
 
-      - name: Verify API health
-        env:
-          HEALTH_URL: ${{ inputs.environment == 'production' && 'https://api.useorbit.org/health' || 'https://api-staging.useorbit.org/health' }}
+      - name: Verify API health and live commit
         run: |
           set -euo pipefail
           health=$(curl --fail-with-body --silent --show-error --retry 10 --retry-all-errors --retry-delay 5 \
-            "$HEALTH_URL")
+            'https://api.useorbit.org/health')
           jq -e '.status == "Healthy"' <<< "$health"
-
-      - name: Record deployment
-        env:
-          COMMIT_SHA: ${{ steps.commit.outputs.sha }}
-          RENDER_LOG_URL: ${{ steps.render.outputs.log_url }}
-          RELEASE_ENVIRONMENT: ${{ inputs.environment }}
-          SERVICE_URL: ${{ inputs.environment == 'production' && 'https://api.useorbit.org' || 'https://api-staging.useorbit.org' }}
-        run: |
-          set -euo pipefail
           live_commit=$(curl --fail-with-body --silent --show-error --get \
             "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
             --header "Authorization: Bearer $RENDER_API_KEY" \
@@ -178,11 +150,127 @@ jobs:
             echo "::error::Render now serves $live_commit, not the released $COMMIT_SHA"
             exit 1
           fi
-          deployment=$(jq -cn --arg ref "$COMMIT_SHA" --arg environment "$RELEASE_ENVIRONMENT" \
-            '{ref: $ref, environment: $environment, auto_merge: false, required_contexts: []}')
+
+      - name: Record deployment
+        env:
+          RENDER_LOG_URL: ${{ steps.render.outputs.log_url }}
+        run: |
+          set -euo pipefail
+          deployment=$(jq -cn --arg ref "$COMMIT_SHA" \
+            '{ref: $ref, environment: "production", auto_merge: false, required_contexts: []}')
           deployment_id=$(gh api --method POST "repos/$GITHUB_REPOSITORY/deployments" \
             --input - --jq '.id' <<< "$deployment")
-          status=$(jq -cn --arg log_url "$RENDER_LOG_URL" --arg environment "$RELEASE_ENVIRONMENT" --arg url "$SERVICE_URL" \
-            '{state: "success", environment: $environment, log_url: $log_url, environment_url: $url}')
+          status=$(jq -cn --arg log_url "$RENDER_LOG_URL" \
+            '{state: "success", environment: "production", log_url: $log_url, environment_url: "https://api.useorbit.org"}')
+          gh api --method POST "repos/$GITHUB_REPOSITORY/deployments/$deployment_id/statuses" \
+            --input - <<< "$status"
+
+  staging:
+    if: inputs.environment == 'staging'
+    needs: prepare
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: read
+      deployments: write
+    timeout-minutes: 170
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID: ${{ vars.RENDER_STAGING_SERVICE_ID }}
+      COMMIT_SHA: ${{ needs.prepare.outputs.sha }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Select staging branch
+        env:
+          RELEASE_BRANCH: ${{ inputs.branch }}
+        run: |
+          set -euo pipefail
+          test -n "$RENDER_API_KEY"
+          test -n "$RENDER_SERVICE_ID"
+          payload=$(jq -cn --arg branch "$RELEASE_BRANCH" '{branch: $branch, autoDeploy: "no"}')
+          response=$(curl --fail-with-body --silent --show-error \
+            --request PATCH "https://api.render.com/v1/services/$RENDER_SERVICE_ID" \
+            --header "Authorization: Bearer $RENDER_API_KEY" \
+            --header 'Content-Type: application/json' \
+            --data "$payload")
+          jq -e --arg branch "$RELEASE_BRANCH" '.branch == $branch and .autoDeploy == "no"' <<< "$response"
+
+      - name: Trigger and monitor Render deploy
+        id: render
+        run: |
+          set -euo pipefail
+          test -n "$RENDER_API_KEY"
+          test -n "$RENDER_SERVICE_ID"
+          payload=$(jq -cn --arg sha "$COMMIT_SHA" '{commitId: $sha}')
+          response_file=$(mktemp)
+          http_status=$(curl --fail-with-body --silent --show-error \
+            --output "$response_file" --write-out '%{http_code}' \
+            --request POST "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
+            --header "Authorization: Bearer $RENDER_API_KEY" \
+            --header 'Content-Type: application/json' \
+            --data "$payload")
+          case "$http_status" in
+            201) deploy_id=$(jq -er '.id' < "$response_file") ;;
+            202)
+              # Render queues a request behind a running deploy and returns no deploy, so nothing
+              # identifies which later deploy is this request's. Releases are serialized, so fail closed.
+              echo "::error::Render queued the deploy of $COMMIT_SHA behind another deploy and returned no deploy ID; rerun the release once the service is idle"
+              exit 1 ;;
+            *)
+              echo "::error::Render answered HTTP $http_status to the deploy request"
+              exit 1 ;;
+          esac
+          log_url="https://dashboard.render.com/web/$RENDER_SERVICE_ID/deploys/$deploy_id"
+          echo "log_url=$log_url" >> "$GITHUB_OUTPUT"
+          echo "Render deploy: $log_url"
+
+          for attempt in {1..640}; do
+            response=$(curl --fail-with-body --silent --show-error \
+              "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys/$deploy_id" \
+              --header "Authorization: Bearer $RENDER_API_KEY")
+            status=$(jq -er '.status' <<< "$response")
+            echo "Render deploy status: $status (poll $attempt)"
+            case "$status" in
+              live) exit 0 ;;
+              build_failed|pre_deploy_failed|update_failed|canceled|deactivated)
+                echo "::error::Render deploy $deploy_id ended with $status. Logs: $log_url"
+                exit 1 ;;
+              created|queued|build_in_progress|pre_deploy_in_progress|update_in_progress)
+                sleep 15 ;;
+              *)
+                echo "::error::Render deploy $deploy_id returned unknown status $status. Logs: $log_url"
+                exit 1 ;;
+            esac
+          done
+          echo "::error::Render deploy $deploy_id timed out. Logs: $log_url"
+          exit 1
+
+      - name: Verify staging health and live commit
+        run: |
+          set -euo pipefail
+          health=$(curl --fail-with-body --silent --show-error --retry 10 --retry-all-errors --retry-delay 5 \
+            'https://api-staging.useorbit.org/health')
+          jq -e --arg sha "$COMMIT_SHA" '.status == "Healthy" and .commit == $sha' <<< "$health"
+          live_commit=$(curl --fail-with-body --silent --show-error --get \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
+            --header "Authorization: Bearer $RENDER_API_KEY" \
+            --data-urlencode 'status=live' --data-urlencode 'limit=1' |
+            jq -er '.[0].deploy.commit.id')
+          if [ "$live_commit" != "$COMMIT_SHA" ]; then
+            echo "::error::Render now serves $live_commit, not the released $COMMIT_SHA"
+            exit 1
+          fi
+
+      - name: Record deployment
+        env:
+          RENDER_LOG_URL: ${{ steps.render.outputs.log_url }}
+        run: |
+          set -euo pipefail
+          deployment=$(jq -cn --arg ref "$COMMIT_SHA" \
+            '{ref: $ref, environment: "staging", auto_merge: false, required_contexts: []}')
+          deployment_id=$(gh api --method POST "repos/$GITHUB_REPOSITORY/deployments" \
+            --input - --jq '.id' <<< "$deployment")
+          status=$(jq -cn --arg log_url "$RENDER_LOG_URL" \
+            '{state: "success", environment: "staging", log_url: $log_url, environment_url: "https://api-staging.useorbit.org"}')
           gh api --method POST "repos/$GITHUB_REPOSITORY/deployments/$deployment_id/statuses" \
             --input - <<< "$status"
