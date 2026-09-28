@@ -121,6 +121,16 @@ resource "aws_kms_key" "ses_events" {
         Principal = { Service = "sns.amazonaws.com" }
         Action    = ["kms:GenerateDataKey*", "kms:Decrypt"]
         Resource  = "*"
+      },
+      {
+        Sid       = "AllowCloudWatchAlarmPublishing"
+        Effect    = "Allow"
+        Principal = { Service = "cloudwatch.amazonaws.com" }
+        Action    = ["kms:GenerateDataKey*", "kms:Decrypt"]
+        Resource  = "*"
+        Condition = {
+          StringEquals = { "aws:SourceAccount" = "713285551626" }
+        }
       }
     ]
   })
@@ -192,16 +202,166 @@ resource "aws_sesv2_configuration_set_event_destination" "sns_staging" {
   depends_on = [aws_sns_topic_policy.ses_events_staging]
 }
 
+resource "aws_sqs_queue" "ses_events" {
+  name                      = "orbit-ses-events-dead-letter"
+  message_retention_seconds = 1209600
+  kms_master_key_id         = aws_kms_key.ses_events.arn
+}
+
+resource "aws_sqs_queue" "ses_events_staging" {
+  name                      = "orbit-ses-events-staging-dead-letter"
+  message_retention_seconds = 1209600
+  kms_master_key_id         = aws_kms_key.ses_events.arn
+}
+
+resource "aws_sns_topic" "ses_dead_letter_alerts" {
+  name              = "orbit-ses-dead-letter-alerts"
+  kms_master_key_id = aws_kms_key.ses_events.arn
+}
+
+resource "aws_sns_topic" "ses_dead_letter_alerts_staging" {
+  name              = "orbit-ses-dead-letter-alerts-staging"
+  kms_master_key_id = aws_kms_key.ses_events.arn
+}
+
+resource "aws_cloudwatch_metric_alarm" "ses_events_dead_letter" {
+  alarm_name          = "orbit-ses-events-dead-letter-visible"
+  alarm_description   = "Production SES events need webhook recovery from the dead-letter queue."
+  namespace           = "AWS/SQS"
+  metric_name         = "ApproximateNumberOfMessagesVisible"
+  statistic           = "Maximum"
+  period              = 60
+  evaluation_periods  = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.ses_dead_letter_alerts.arn]
+
+  dimensions = {
+    QueueName = aws_sqs_queue.ses_events.name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "ses_events_staging_dead_letter" {
+  alarm_name          = "orbit-ses-events-staging-dead-letter-visible"
+  alarm_description   = "Staging SES events need webhook recovery from the dead-letter queue."
+  namespace           = "AWS/SQS"
+  metric_name         = "ApproximateNumberOfMessagesVisible"
+  statistic           = "Maximum"
+  period              = 60
+  evaluation_periods  = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.ses_dead_letter_alerts_staging.arn]
+
+  dimensions = {
+    QueueName = aws_sqs_queue.ses_events_staging.name
+  }
+}
+
+resource "aws_sns_topic_policy" "ses_dead_letter_alerts" {
+  arn = aws_sns_topic.ses_dead_letter_alerts.arn
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "cloudwatch.amazonaws.com" }
+      Action    = "SNS:Publish"
+      Resource  = aws_sns_topic.ses_dead_letter_alerts.arn
+      Condition = {
+        ArnEquals    = { "aws:SourceArn" = aws_cloudwatch_metric_alarm.ses_events_dead_letter.arn }
+        StringEquals = { "aws:SourceAccount" = "713285551626" }
+      }
+    }]
+  })
+}
+
+resource "aws_sns_topic_policy" "ses_dead_letter_alerts_staging" {
+  arn = aws_sns_topic.ses_dead_letter_alerts_staging.arn
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "cloudwatch.amazonaws.com" }
+      Action    = "SNS:Publish"
+      Resource  = aws_sns_topic.ses_dead_letter_alerts_staging.arn
+      Condition = {
+        ArnEquals    = { "aws:SourceArn" = aws_cloudwatch_metric_alarm.ses_events_staging_dead_letter.arn }
+        StringEquals = { "aws:SourceAccount" = "713285551626" }
+      }
+    }]
+  })
+}
+
+resource "aws_sns_topic_subscription" "ses_dead_letter_alerts" {
+  count     = var.production_ses_dlq_alert_email == "" ? 0 : 1
+  topic_arn = aws_sns_topic.ses_dead_letter_alerts.arn
+  protocol  = "email"
+  endpoint  = var.production_ses_dlq_alert_email
+}
+
+resource "aws_sns_topic_subscription" "ses_dead_letter_alerts_staging" {
+  count     = var.staging_ses_dlq_alert_email == "" ? 0 : 1
+  topic_arn = aws_sns_topic.ses_dead_letter_alerts_staging.arn
+  protocol  = "email"
+  endpoint  = var.staging_ses_dlq_alert_email
+}
+
+resource "aws_sqs_queue_policy" "ses_events" {
+  queue_url = aws_sqs_queue.ses_events.url
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "sns.amazonaws.com" }
+      Action    = "sqs:SendMessage"
+      Resource  = aws_sqs_queue.ses_events.arn
+      Condition = {
+        ArnEquals    = { "aws:SourceArn" = aws_sns_topic.ses_events.arn }
+        StringEquals = { "aws:SourceAccount" = "713285551626" }
+      }
+    }]
+  })
+}
+
+resource "aws_sqs_queue_policy" "ses_events_staging" {
+  queue_url = aws_sqs_queue.ses_events_staging.url
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "sns.amazonaws.com" }
+      Action    = "sqs:SendMessage"
+      Resource  = aws_sqs_queue.ses_events_staging.arn
+      Condition = {
+        ArnEquals    = { "aws:SourceArn" = aws_sns_topic.ses_events_staging.arn }
+        StringEquals = { "aws:SourceAccount" = "713285551626" }
+      }
+    }]
+  })
+}
+
 resource "aws_sns_topic_subscription" "ses_events_api" {
   topic_arn = aws_sns_topic.ses_events.arn
   protocol  = "https"
   endpoint  = "https://api.useorbit.org/api/email/ses-events"
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.ses_events.arn
+  })
+
+  depends_on = [aws_sqs_queue_policy.ses_events]
 }
 
 resource "aws_sns_topic_subscription" "ses_events_staging_api" {
   topic_arn = aws_sns_topic.ses_events_staging.arn
   protocol  = "https"
   endpoint  = "https://api-staging.useorbit.org/api/email/ses-events"
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.ses_events_staging.arn
+  })
+
+  depends_on = [aws_sqs_queue_policy.ses_events_staging]
 }
 
 resource "aws_sesv2_account_suppression_attributes" "orbit" {
