@@ -18,7 +18,6 @@ on:
 
 permissions:
   contents: read
-  deployments: write
 
 concurrency:
   group: api-release-${{ inputs.environment }}
@@ -76,6 +75,9 @@ jobs:
     needs: prepare
     runs-on: ubuntu-latest
     environment: production
+    permissions:
+      contents: read
+      deployments: write
     timeout-minutes: 170
     env:
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
@@ -90,6 +92,10 @@ jobs:
           test -n "$RENDER_API_KEY"
           test -n "$RENDER_SERVICE_ID"
           payload=$(jq -cn --arg sha "$COMMIT_SHA" '{commitId: $sha}')
+          known_deploy_ids=$(curl --fail-with-body --silent --show-error --get \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
+            --header "Authorization: Bearer $RENDER_API_KEY" \
+            --data-urlencode 'limit=20' | jq -c '[.[].deploy.id]')
           triggered_after=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           response_file=$(mktemp)
           http_status=$(curl --fail-with-body --silent --show-error \
@@ -101,13 +107,21 @@ jobs:
           case "$http_status" in
             201) deploy_id=$(jq -er '.id' < "$response_file") ;;
             202)
+              # A queued request returns no deploy, so only a single deploy of this commit that did not
+              # exist before the request can be ours; anything else fails closed.
               deploy_id=
               for attempt in {1..30}; do
-                deploy_id=$(curl --fail-with-body --silent --show-error --get \
+                new_deploy_ids=$(curl --fail-with-body --silent --show-error --get \
                   "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
                   --header "Authorization: Bearer $RENDER_API_KEY" \
                   --data-urlencode 'limit=20' --data-urlencode "createdAfter=$triggered_after" |
-                  jq -r --arg sha "$COMMIT_SHA" '[.[] | select(.deploy.commit.id == $sha) | .deploy.id][0] // empty')
+                  jq -c --arg sha "$COMMIT_SHA" --argjson known "$known_deploy_ids" \
+                    '[.[] | select(.deploy.commit.id == $sha) | .deploy.id | select(. as $id | $known | index($id) | not)]')
+                if [ "$(jq 'length' <<< "$new_deploy_ids")" -gt 1 ]; then
+                  echo "::error::Render lists more than one new deploy of $COMMIT_SHA, so the queued request cannot be identified"
+                  exit 1
+                fi
+                deploy_id=$(jq -r '.[0] // empty' <<< "$new_deploy_ids")
                 if [ -n "$deploy_id" ]; then break; fi
                 sleep 2
               done
@@ -179,6 +193,9 @@ jobs:
     needs: prepare
     runs-on: ubuntu-latest
     environment: staging
+    permissions:
+      contents: read
+      deployments: write
     timeout-minutes: 170
     env:
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
@@ -208,6 +225,10 @@ jobs:
           test -n "$RENDER_API_KEY"
           test -n "$RENDER_SERVICE_ID"
           payload=$(jq -cn --arg sha "$COMMIT_SHA" '{commitId: $sha}')
+          known_deploy_ids=$(curl --fail-with-body --silent --show-error --get \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
+            --header "Authorization: Bearer $RENDER_API_KEY" \
+            --data-urlencode 'limit=20' | jq -c '[.[].deploy.id]')
           triggered_after=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           response_file=$(mktemp)
           http_status=$(curl --fail-with-body --silent --show-error \
@@ -219,13 +240,21 @@ jobs:
           case "$http_status" in
             201) deploy_id=$(jq -er '.id' < "$response_file") ;;
             202)
+              # A queued request returns no deploy, so only a single deploy of this commit that did not
+              # exist before the request can be ours; anything else fails closed.
               deploy_id=
               for attempt in {1..30}; do
-                deploy_id=$(curl --fail-with-body --silent --show-error --get \
+                new_deploy_ids=$(curl --fail-with-body --silent --show-error --get \
                   "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
                   --header "Authorization: Bearer $RENDER_API_KEY" \
                   --data-urlencode 'limit=20' --data-urlencode "createdAfter=$triggered_after" |
-                  jq -r --arg sha "$COMMIT_SHA" '[.[] | select(.deploy.commit.id == $sha) | .deploy.id][0] // empty')
+                  jq -c --arg sha "$COMMIT_SHA" --argjson known "$known_deploy_ids" \
+                    '[.[] | select(.deploy.commit.id == $sha) | .deploy.id | select(. as $id | $known | index($id) | not)]')
+                if [ "$(jq 'length' <<< "$new_deploy_ids")" -gt 1 ]; then
+                  echo "::error::Render lists more than one new deploy of $COMMIT_SHA, so the queued request cannot be identified"
+                  exit 1
+                fi
+                deploy_id=$(jq -r '.[0] // empty' <<< "$new_deploy_ids")
                 if [ -n "$deploy_id" ]; then break; fi
                 sleep 2
               done
