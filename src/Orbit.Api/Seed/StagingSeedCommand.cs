@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
@@ -57,7 +58,7 @@ public static class StagingSeedCommand
 
         var connection = new NpgsqlConnectionStringBuilder(connectionString);
         if (!string.Equals(connection.Host, expectedHost, StringComparison.OrdinalIgnoreCase)
-            || !string.Equals(connection.Database, "orbit_staging", StringComparison.Ordinal)
+            || !Regex.IsMatch(connection.Database ?? string.Empty, "^orbit_staging(_[a-z0-9]+)?$", RegexOptions.CultureInvariant)
             || !string.Equals(connection.Username, "orbit_staging", StringComparison.Ordinal))
             throw new InvalidOperationException("Seed target is not the configured staging database.");
     }

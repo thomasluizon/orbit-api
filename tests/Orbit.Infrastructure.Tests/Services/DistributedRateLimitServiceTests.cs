@@ -63,6 +63,15 @@ public class DistributedRateLimitServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task UploadReads_AreNotAStoredRateLimitPolicy()
+    {
+        var acquire = () => _service.TryAcquireAsync("upload-reads", "ip:203.0.113.7");
+
+        await acquire.Should().ThrowAsync<InvalidOperationException>();
+        _dbContext.DistributedRateLimitBuckets.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task ChatLease_AcquireRefuseRelease_AllowsUsersIndependently()
     {
         using var scope = new RelationalRateLimitScope(new FixedTimeProvider(MidWindowInstant));
