@@ -23,6 +23,7 @@ permissions:
 concurrency:
   group: api-release-${{ inputs.environment }}
   cancel-in-progress: false
+  queue: max
 
 jobs:
   deploy:

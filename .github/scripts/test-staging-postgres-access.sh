@@ -115,4 +115,21 @@ if bash "$script" reconcile > /dev/null 2>&1; then
 fi
 assert_list "$drift"
 
+assert_staging_queue() {
+  local workflow="$1"
+  local group="$2"
+  local concurrency
+  concurrency="$(awk '/^concurrency:/{found=1;next} found && /^[^[:space:]]/{exit} found {print}' "$workflow")"
+  if ! grep -Fxq "  group: $group" <<< "$concurrency" ||
+    ! grep -Fxq '  cancel-in-progress: false' <<< "$concurrency" ||
+    ! grep -Fxq '  queue: max' <<< "$concurrency"; then
+    echo "Staging workflow can replace a queued reseed: $workflow" >&2
+    return 1
+  fi
+}
+
+assert_staging_queue "$repo_root/.github/workflows/staging-reseed.yml" 'api-release-staging'
+assert_staging_queue "$repo_root/.github/workflows/staging-postgres-access-reconcile.yml" 'api-release-staging'
+assert_staging_queue "$repo_root/.github/workflows/release.yml" 'api-release-${{ inputs.environment }}'
+
 echo 'Staging access drift, partial open, restoration, and timeout reconciliation passed'
