@@ -156,10 +156,12 @@ public class AuthControllerTests
         var result = await _controller.GoogleCodeAuth(
             new AuthController.GoogleCodeAuthRequest("code", "verifier", "https://evil.test"), CancellationToken.None);
 
-        result.Should().BeOfType<ObjectResult>().Which.Value.Should().BeEquivalentTo(new
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(401);
+        objectResult.Value.Should().BeEquivalentTo(new
         {
-            error = ErrorMessages.GoogleRedirectUriNotAllowed.Message,
-            errorCode = ErrorCodes.GoogleRedirectUriNotAllowed
+            Error = ErrorMessages.GoogleRedirectUriNotAllowed.Message,
+            ErrorCode = ErrorCodes.GoogleRedirectUriNotAllowed
         });
     }
 
