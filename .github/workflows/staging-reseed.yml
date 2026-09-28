@@ -39,13 +39,23 @@ jobs:
         env:
           STAGING_POSTGRES_ID: dpg-dasotg8jo6nc73cok6g0-a
         run: bash .github/scripts/staging-postgres-access.sh open
-      - name: Inspect staging connection fields for the probe
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         if: inputs.allowlist_probe
+        with:
+          dotnet-version: '10.0.x'
+      - name: Apply migrations on the current staging database for the probe
+        if: inputs.allowlist_probe
+        env:
+          ASPNETCORE_ENVIRONMENT: Staging
+          Seed__OwnerEmail: ${{ vars.SEED_OWNER_EMAIL }}
         run: |
-          response="$(curl --fail-with-body --silent --show-error --max-time 30 \
+          connection="$(curl --fail-with-body --silent --show-error --max-time 30 \
             --header "Authorization: Bearer ${RENDER_API_KEY}" \
-            'https://api.render.com/v1/postgres/dpg-dasotg8jo6nc73cok6g0-a/connection-info')"
-          jq 'keys' <<< "$response"
+            'https://api.render.com/v1/postgres/dpg-dasotg8jo6nc73cok6g0-a/connection-info' \
+            | jq --exit-status --raw-output '.externalConnectionString')"
+          expected_host="$(python3 -c 'from urllib.parse import urlparse; import sys; print(urlparse(sys.argv[1]).hostname)' "$connection")"
+          Seed__ExpectedHost="$expected_host" Seed__DatabaseUrl="$connection" \
+            dotnet run --project src/Orbit.Api/Orbit.Api.csproj -- migrate-staging
       - name: Restore operator access after the probe
         if: always() && inputs.allowlist_probe
         env:
