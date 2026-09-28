@@ -1,4 +1,7 @@
 using System.IO.Compression;
+using Amazon;
+using Amazon.Runtime;
+using Amazon.S3;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.Extensions.Options;
@@ -26,7 +29,6 @@ public static partial class ServiceCollectionExtensions
     {
         var supabaseUrl = RequireConfigValue(builder, "Supabase:Url");
         var supabaseAnonKey = RequireConfigValue(builder, "Supabase:AnonKey");
-        var supabaseSecretKey = RequireConfigValue(builder, "Supabase:SecretKey");
 
         builder.Services.AddHttpClient("Supabase", client =>
         {
@@ -35,18 +37,44 @@ public static partial class ServiceCollectionExtensions
             client.Timeout = httpTimeout;
         });
 
-        builder.Services.Configure<SupabaseStorageSettings>(
-            builder.Configuration.GetSection(SupabaseStorageSettings.SectionName));
-
-        builder.Services.AddHttpClient(SupabaseObjectStorageService.HttpClientName, client =>
+        var storageProvider = builder.Configuration["Storage:Provider"] ?? "Supabase";
+        builder.Services.Configure<S3StorageSettings>(
+            builder.Configuration.GetSection(S3StorageSettings.SectionName));
+        builder.Services.AddSingleton<IAmazonS3>(_ => new AmazonS3Client(
+            new BasicAWSCredentials(
+                RequireConfigValue(builder, "Storage:S3:AccessKeyId"),
+                RequireConfigValue(builder, "Storage:S3:SecretAccessKey")),
+            RegionEndpoint.GetBySystemName(RequireConfigValue(builder, "Storage:S3:Region"))));
+        builder.Services.AddScoped<S3ObjectStorageService>();
+        builder.Services.AddScoped<IObjectStorageReadService>(serviceProvider =>
+            serviceProvider.GetRequiredService<S3ObjectStorageService>());
+        if (storageProvider.Equals("Supabase", StringComparison.OrdinalIgnoreCase))
         {
-            // Secret keys use the apikey header only — on Authorization: Bearer the gateway parses them as a JWT and rejects the request: https://supabase.com/docs/guides/getting-started/migrating-to-new-api-keys
-            client.BaseAddress = new Uri(supabaseUrl);
-            client.DefaultRequestHeaders.Add("apikey", supabaseSecretKey);
-            client.Timeout = httpTimeout;
-        });
-
-        builder.Services.AddScoped<IObjectStorageService, SupabaseObjectStorageService>();
+            var supabaseSecretKey = RequireConfigValue(builder, "Supabase:SecretKey");
+            builder.Services.Configure<SupabaseStorageSettings>(
+                builder.Configuration.GetSection(SupabaseStorageSettings.SectionName));
+            builder.Services.AddHttpClient(SupabaseObjectStorageService.HttpClientName, client =>
+            {
+                client.BaseAddress = new Uri(supabaseUrl);
+                client.DefaultRequestHeaders.Add("apikey", supabaseSecretKey);
+                client.Timeout = httpTimeout;
+            });
+            builder.Services.AddScoped<IObjectStorageService, SupabaseObjectStorageService>();
+        }
+        else if (storageProvider.Equals("S3", StringComparison.OrdinalIgnoreCase))
+        {
+            RequireConfigValue(builder, "Storage:S3:Bucket");
+            RequireConfigValue(builder, "Storage:S3:PublicBaseUrl");
+            RequireConfigValue(builder, "Storage:S3:Region");
+            RequireConfigValue(builder, "Storage:S3:AccessKeyId");
+            RequireConfigValue(builder, "Storage:S3:SecretAccessKey");
+            builder.Services.AddScoped<IObjectStorageService>(serviceProvider =>
+                serviceProvider.GetRequiredService<S3ObjectStorageService>());
+        }
+        else
+        {
+            throw new InvalidOperationException($"Unsupported Storage:Provider '{storageProvider}'.");
+        }
 
         builder.Services.Configure<ResendSettings>(
             builder.Configuration.GetSection(ResendSettings.SectionName));

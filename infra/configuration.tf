@@ -68,6 +68,10 @@ locals {
     Stripe__YearlyPriceIdBrl            = "price_1U59lVGwWZvarDk3FBO8ci6L"
     Stripe__YearlyPriceIdUsd            = "price_1U59ncGwWZvarDk3Ydiw7jP7"
     Supabase__Url                       = "https://wdscxamegetmhqldqsdg.supabase.co"
+    Storage__Provider                   = var.production_storage_provider
+    Storage__S3__Bucket                 = aws_s3_bucket.uploads["production"].bucket
+    Storage__S3__Region                 = "us-east-2"
+    Storage__S3__PublicBaseUrl          = "https://api.useorbit.org"
     Vapid__PublicKey                    = "BCotrosa_VZSere_khAKbxMVRj-NZIuHs4lK4sep1Fv5N6fx8z-99q9-pDPeEs0GwKiwOwf44SiI4NN5XX-htow"
     Vapid__Subject                      = "mailto:hello@useorbit.org"
   }
@@ -89,6 +93,9 @@ locals {
     Stripe__CancelUrl                  = "https://staging.useorbit.org/upgrade"
     Stripe__SuccessUrl                 = "https://staging.useorbit.org/settings?subscription=success"
     Supabase__Url                      = "https://staging-storage-disabled.invalid"
+    Storage__Provider                  = var.staging_storage_provider
+    Storage__S3__Bucket                = aws_s3_bucket.uploads["staging"].bucket
+    Storage__S3__PublicBaseUrl         = "https://api-staging.useorbit.org"
     Waitlist__ApiBaseUrl               = "https://api-staging.useorbit.org"
   })
 
@@ -156,6 +163,10 @@ resource "render_env_group" "production_api" {
     { for key, value in local.production_api_values : key => { value = value } },
     { for key in local.api_secret_keys : key => { value = data.aws_ssm_parameter.production_api[key].value } },
     { for key, value in local.production_api_database_values : key => { value = value } },
+    {
+      Storage__S3__AccessKeyId     = { value = aws_ssm_parameter.uploads_access_key_id["production"].value }
+      Storage__S3__SecretAccessKey = { value = aws_ssm_parameter.uploads_secret_access_key["production"].value }
+    },
     { BotProtection__SecretKey = { value = aws_ssm_parameter.turnstile_secret["production"].value } },
     { Ses__AccessKeyId = { value = aws_ssm_parameter.api_ses_access_key_id["production"].value } },
     { Ses__SecretAccessKey = { value = aws_ssm_parameter.api_ses_secret_access_key["production"].value } },
@@ -168,6 +179,10 @@ resource "render_env_group" "staging_api" {
     { for key, value in local.staging_api_values : key => { value = value } },
     { for key in local.api_secret_keys : key => { value = data.aws_ssm_parameter.staging_api[key].value } },
     { for key in local.staging_api_billing_keys : key => { value = data.aws_ssm_parameter.staging_api_billing[key].value } },
+    {
+      Storage__S3__AccessKeyId     = { value = aws_ssm_parameter.uploads_access_key_id["staging"].value }
+      Storage__S3__SecretAccessKey = { value = aws_ssm_parameter.uploads_secret_access_key["staging"].value }
+    },
     { BotProtection__SecretKey = { value = aws_ssm_parameter.turnstile_secret["staging"].value } },
     { Ses__AccessKeyId = { value = aws_ssm_parameter.api_ses_access_key_id["staging"].value } },
     { Ses__SecretAccessKey = { value = aws_ssm_parameter.api_ses_secret_access_key["staging"].value } },

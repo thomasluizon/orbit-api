@@ -15,6 +15,28 @@ variable "api_database" {
   }
 }
 
+variable "production_storage_provider" {
+  description = "Production upload storage provider."
+  type        = string
+  default     = "Supabase"
+
+  validation {
+    condition     = contains(["Supabase", "S3"], var.production_storage_provider)
+    error_message = "production_storage_provider must be Supabase or S3."
+  }
+}
+
+variable "staging_storage_provider" {
+  description = "Staging upload storage provider."
+  type        = string
+  default     = "Supabase"
+
+  validation {
+    condition     = contains(["Supabase", "S3"], var.staging_storage_provider)
+    error_message = "staging_storage_provider must be Supabase or S3."
+  }
+}
+
 variable "production_email_provider" {
   description = "Email provider for the production API."
   type        = string
