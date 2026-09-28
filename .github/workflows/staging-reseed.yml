@@ -8,6 +8,11 @@ on:
   schedule:
     - cron: '0 10 * * *'
   workflow_dispatch:
+    inputs:
+      migration_probe:
+        description: Run an idempotent migration on the current staging database
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -19,7 +24,7 @@ concurrency:
 
 jobs:
   reseed:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || (github.ref == 'refs/heads/fix/ticket-826-reseed-allowlist' && inputs.migration_probe)
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -27,6 +32,7 @@ jobs:
       TF_VAR_staging_environment_id: ${{ vars.STAGING_ENVIRONMENT_ID }}
       TF_VAR_staging_api_service_id: ${{ vars.STAGING_API_SERVICE_ID }}
       TF_VAR_staging_postgres_ip_allow_list: ${{ vars.STAGING_POSTGRES_IP_ALLOW_LIST }}
+      SEED_OWNER_EMAIL: ${{ vars.SEED_OWNER_EMAIL }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5
@@ -37,11 +43,14 @@ jobs:
         with:
           terraform_version: 1.16.4
           terraform_wrapper: false
-      - name: Read staging database age
-        id: age
+      - name: Initialize staging database state
         run: |
           [[ -n "$TF_VAR_staging_environment_id" && -n "$TF_VAR_staging_api_service_id" ]]
           terraform -chdir=infra/staging-database init -input=false
+      - name: Read staging database age
+        id: age
+        if: ${{ !inputs.migration_probe }}
+        run: |
           database_id="$(terraform -chdir=infra/staging-database output -raw staging_postgres_id)"
           created_at="$(curl --fail --silent --show-error --max-time 30 \
             --header "Authorization: Bearer ${RENDER_API_KEY}" \
@@ -67,19 +76,14 @@ jobs:
               (.change.actions == ["delete", "create"] or .change.actions == ["create", "delete"]))
           ' > /dev/null
           terraform -chdir=infra/staging-database apply -input=false -auto-approve staging-reseed.tfplan > /dev/null
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        if: steps.age.outputs.replace == 'true'
-        with:
-          dotnet-version: '10.0.x'
+      - name: Refresh state outputs for the migration probe
+        if: inputs.migration_probe
+        run: terraform -chdir=infra/staging-database apply -refresh-only -input=false -auto-approve
       - name: Apply migrations to the replacement database
-        if: steps.age.outputs.replace == 'true'
-        env:
-          ASPNETCORE_ENVIRONMENT: Staging
-          Seed__OwnerEmail: ${{ vars.SEED_OWNER_EMAIL }}
+        if: steps.age.outputs.replace == 'true' || inputs.migration_probe
         run: |
-          Seed__ExpectedHost="$(terraform -chdir=infra/staging-database output -raw staging_external_host)" \
-            Seed__DatabaseUrl="$(terraform -chdir=infra/staging-database output -raw staging_external_connection_string)" \
-            dotnet run --project src/Orbit.Api/Orbit.Api.csproj -- migrate-staging
+          STAGING_INTERNAL_HOST="$(terraform -chdir=infra/staging-database output -raw staging_internal_host)" \
+            bash .github/scripts/run-render-staging-job.sh migrate-staging
       - name: Deploy the staging API and wait for that deploy
         if: steps.age.outputs.replace == 'true'
         run: |
@@ -141,10 +145,6 @@ jobs:
           exit 1
       - name: Seed the owner account
         if: steps.age.outputs.replace == 'true'
-        env:
-          ASPNETCORE_ENVIRONMENT: Staging
-          Seed__OwnerEmail: ${{ vars.SEED_OWNER_EMAIL }}
         run: |
-          Seed__ExpectedHost="$(terraform -chdir=infra/staging-database output -raw staging_external_host)" \
-            Seed__DatabaseUrl="$(terraform -chdir=infra/staging-database output -raw staging_external_connection_string)" \
-            dotnet run --project src/Orbit.Api/Orbit.Api.csproj -- seed-staging
+          STAGING_INTERNAL_HOST="$(terraform -chdir=infra/staging-database output -raw staging_internal_host)" \
+            bash .github/scripts/run-render-staging-job.sh seed-staging

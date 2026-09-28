@@ -46,3 +46,7 @@ output "staging_external_host" {
 output "staging_postgres_id" {
   value = render_postgres.staging.id
 }
+
+output "staging_internal_host" {
+  value = local.staging_db_host
+}
