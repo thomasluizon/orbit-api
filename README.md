@@ -167,13 +167,15 @@ Tests use xUnit with FluentAssertions. Unit tests only — there is no integrati
 
 | Component | Service |
 |-----------|---------|
-| Hosting | [Render](https://render.com) (Docker, auto-deploy on push to `main`) |
+| Hosting | [Render](https://render.com) (Docker, manual API releases) |
 | Database | [Supabase](https://supabase.com) PostgreSQL (session pooler) |
 | Domain | `api.useorbit.org` |
 | Push | Firebase project `orbit-11d4a` (FCM) |
 | Email | [Resend](https://resend.com) |
 | Payments | [Stripe](https://stripe.com) + Google Play Billing |
 | Monitoring | [Sentry](https://sentry.io) |
+
+Run `release.yml` from `main` with an `environment` of `production` or `staging` and a `branch` to release. Production accepts only `main`. Staging deploys the selected branch head. The workflow verifies API health and the live Render commit before recording a GitHub Deployment. Set the repository secret `RENDER_API_KEY` and the repository variables `RENDER_PRODUCTION_SERVICE_ID` and `RENDER_STAGING_SERVICE_ID` before running it.
 
 Turnstile remains disabled after deployment. Create a Turnstile widget for `useorbit.org` in the Cloudflare dashboard and set `BotProtection__SecretKey` in the Render `orbit-api` environment. Keep `BotProtection__Enabled` unset or false until all three conditions hold:
 

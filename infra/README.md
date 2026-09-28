@@ -1,6 +1,6 @@
 # Orbit infrastructure
 
-The main Terraform state owns the Render production resources and the staging services, Cloudflare DNS and Turnstile, and AWS SSM parameters. `production.tf` imports the existing API and declares the production database, web service, and landing site. `staging.tf` declares the staging services. `configuration.tf` owns the service environment groups and their AWS SSM inputs. `cloudflare.tf` owns the zone, DNS records, widget, and its secret parameters. `variables.tf` contains the cutover switches and image digests. `versions.tf` pins the providers and configures the encrypted S3 state with native locking. `staging-database/` is a separate Terraform root that owns only the staging Postgres, its connection environment group, and the link to the staging API.
+The main Terraform state owns the Render production resources and the staging services, Cloudflare DNS and Turnstile, and AWS SSM parameters. `production.tf` imports the existing API and declares the production database, web service, and landing site. `staging.tf` declares the staging API, web service, and landing site. `configuration.tf` owns the service environment groups and their AWS SSM inputs. `cloudflare.tf` owns the zone, DNS records, widget, and its secret parameters. `variables.tf` contains the cutover switches and image digests. `versions.tf` pins the providers and configures the encrypted S3 state with native locking. `staging-database/` is a separate Terraform root that owns only the staging Postgres, its connection environment group, and the link to the staging API.
 
 The Render provider reads `RENDER_API_KEY` from the environment. The Cloudflare provider reads `CLOUDFLARE_API_TOKEN` from the environment. The AWS provider uses the default credential chain in `us-east-2`. The main S3 state contains decrypted SecureString values, including the Turnstile secret, so access to that state and its lock file must stay restricted. The staging reseed role can access only the separate staging database state. The existing API is imported with its service ID; do not remove that import block or replace the service.
 
@@ -112,7 +112,11 @@ Set `RENDER_API_KEY` and `CLOUDFLARE_API_TOKEN` in the shell and provide AWS cre
 
 The `production_web_digest` and `staging_web_digest` variables seed the web images only when Terraform first creates each service. Terraform ignores later digest changes on both web services. The `web-image.yml` and `deploy-web.yml` release workflows own subsequent staging and production web deploys by digest.
 
-With Render provider v1.9.1, a refreshed digest image path also populates a computed image tag. On any web service update, the provider sends an image reference built from the planned tag before considering the digest. Ignoring the entire image block retains that computed tag and does not make the update safe. Once either web service exists, do not apply changes to any attribute of `render_web_service.production_web` or `render_web_service.staging_web`, including plan, region, health check path, custom domains, or runtime source. Before every apply, inspect the plan and stop if either web service has an update. Defer those service-setting changes until the provider can preserve digest image paths on update.
+With Render provider v1.9.1, a refreshed digest image path also populates a computed image tag. On any web service update, the provider sends an image reference built from the planned tag before considering the digest. Ignoring the entire image block retains that computed tag and does not make the update safe. Run `terraform -chdir=infra show -json local.tfplan | node infra/check-web-plan.mjs` on the saved plan before every local apply. The guard blocks an in-place update, replacement, or deletion of either web service and names the changed attributes. Initial creation remains allowed.
+
+For a deliberate web service setting change, review the saved plan and its blocked attributes, then apply that specific plan as an explicit exception. Immediately redeploy the approved digest through the `orbit-ui-mobile` release workflow (`web-image.yml` for staging or `deploy-web.yml` for production) and verify the live `imagePath` against that approved digest before proceeding with another apply. Keep the exception scoped to the intended service change.
+
+A web service replacement or deletion requires separate recovery review before apply. For a replacement, confirm the currently approved digest, set the matching Terraform digest variable, and plan service continuity, domains, and service ID changes with the owner. Apply only the reviewed saved plan, redeploy the approved digest through the release workflow, and verify the live `imagePath`. For a deletion, confirm the service is intentionally being retired and arrange its traffic cutover before applying the reviewed plan.
 
 After every apply, read each web service's live `imagePath` from Render using its service ID and compare it with the digest approved by its latest release workflow. The expected value is `ghcr.io/thomasluizon/orbit-web@sha256:<approved digest without the sha256: prefix>`. Do not use the Terraform digest variables as the expected value after creation. For each service, run:
 
@@ -123,7 +127,9 @@ curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
 
 If either image differs, stop further applies and redeploy the approved digest through the corresponding release workflow.
 
-Changing a Render service's build or deploy settings through Terraform starts a Render deploy of the tracked branch head, including when the change is to an API service. Before applying such a change, arrange to pause or cancel that deploy, or apply only when an approved release of the same commit is intended.
+Changing a Render service's build or deploy settings through Terraform starts a Render deploy of the tracked branch head, including when the change is to an API service. Cancel that deploy unless it is an intended release of the same commit. The API and landing staging services have auto-deploy disabled. Their tracked branches are selected by their release workflows, and Terraform ignores later branch changes.
+
+After apply, set the `RENDER_STAGING_SERVICE_ID` repository variable in the Orbit API GitHub repository to the staging API service ID. Set `RENDER_LANDING_STAGING_SERVICE_ID` in the Orbit landing repository to the `landing_staging_service_id` Terraform output. Confirm each variable in its repository Actions variables screen before running the corresponding `release.yml` from `main`.
 
 Run:
 
@@ -132,6 +138,7 @@ terraform -chdir=infra init
 terraform fmt -check -recursive infra
 terraform -chdir=infra validate
 terraform -chdir=infra plan -var-file=local.tfvars -out=local.tfplan
+terraform -chdir=infra show -json local.tfplan | node infra/check-web-plan.mjs
 terraform -chdir=infra apply local.tfplan
 ```
 
