@@ -4,7 +4,6 @@ public class StripeSettings
 {
     public const string SectionName = "Stripe";
     public string SecretKey { get; set; } = "";
-    public string PublishableKey { get; set; } = "";
     public string WebhookSecret { get; set; } = "";
     public string MonthlyPriceIdUsd { get; set; } = "";
     public string YearlyPriceIdUsd { get; set; } = "";
