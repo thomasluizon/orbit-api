@@ -67,6 +67,40 @@ test("each SES webhook retains undeliverable events in its own queue", () => {
   }
 })
 
+test("each SES dead-letter queue alerts its own operations topic", () => {
+  const variables = readFileSync(join(root, "variables.tf"), "utf8")
+  for (const [queue, alarm, topic, topicName, emailVariable] of [
+    ["ses_events", "ses_events_dead_letter", "ses_dead_letter_alerts", "orbit-ses-dead-letter-alerts", "production_ses_dlq_alert_email"],
+    ["ses_events_staging", "ses_events_staging_dead_letter", "ses_dead_letter_alerts_staging", "orbit-ses-dead-letter-alerts-staging", "staging_ses_dlq_alert_email"],
+  ]) {
+    const deadLetterQueue = block(ses, `resource "aws_sqs_queue" "${queue}"`)
+    const alert = block(ses, `resource "aws_cloudwatch_metric_alarm" "${alarm}"`)
+    const operationsTopic = block(ses, `resource "aws_sns_topic" "${topic}"`)
+    const subscription = block(ses, `resource "aws_sns_topic_subscription" "${topic}"`)
+    const topicPolicy = block(ses, `resource "aws_sns_topic_policy" "${topic}"`)
+    const email = block(variables, `variable "${emailVariable}"`)
+
+    assert.match(deadLetterQueue, /message_retention_seconds\s*=\s*1209600/)
+    assert.match(alert, /namespace\s*=\s*"AWS\/SQS"/)
+    assert.match(alert, /metric_name\s*=\s*"ApproximateNumberOfMessagesVisible"/)
+    assert.match(alert, new RegExp(`QueueName\\s*=\\s*aws_sqs_queue\\.${queue}\\.name`))
+    assert.match(alert, /comparison_operator\s*=\s*"GreaterThanOrEqualToThreshold"/)
+    assert.match(alert, /threshold\s*=\s*1/)
+    assert.match(alert, /evaluation_periods\s*=\s*1/)
+    assert.match(alert, /treat_missing_data\s*=\s*"notBreaching"/)
+    assert.match(alert, new RegExp(`alarm_actions\\s*=\\s*\\[aws_sns_topic\\.${topic}\\.arn\\]`))
+    assert.ok(operationsTopic.includes(`name = "${topicName}"`))
+    assert.match(subscription, new RegExp(`topic_arn\\s*=\\s*aws_sns_topic\\.${topic}\\.arn`))
+    assert.match(subscription, /protocol\s*=\s*"email"/)
+    assert.match(subscription, new RegExp(`endpoint\\s*=\\s*var\\.${emailVariable}`))
+    assert.match(subscription, new RegExp(`count\\s*=\\s*var\\.${emailVariable}\\s*==\\s*""\\s*\\?\\s*0\\s*:\\s*1`))
+    assert.match(topicPolicy, /cloudwatch\.amazonaws\.com/)
+    assert.match(topicPolicy, new RegExp(`aws_cloudwatch_metric_alarm\\.${alarm}\\.arn`))
+    assert.match(topicPolicy, new RegExp(`Resource\\s*=\\s*aws_sns_topic\\.${topic}\\.arn`))
+    assert.match(email, /default\s*=\s*""/)
+  }
+})
+
 test("each API environment has credentials scoped to its own configuration sets", () => {
   const productionPolicy = block(ses, 'resource "aws_iam_user_policy" "api_ses"')
   const stagingPolicy = block(ses, 'resource "aws_iam_user_policy" "api_ses_staging"')
