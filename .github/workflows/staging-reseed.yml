@@ -94,7 +94,7 @@ jobs:
           response="$(curl --fail-with-body --silent --show-error --max-time 30 \
             --header "Authorization: Bearer ${RENDER_API_KEY}" \
             'https://api.render.com/v1/postgres?limit=100')"
-          jq 'if type == "array" then {type: type, first: (.[0] | keys)} else {type: type, keys: keys} end' <<< "$response"
+          jq '.[0].postgres | keys' <<< "$response"
       - name: Deploy the staging API and wait for that deploy
         if: steps.age.outputs.replace == 'true'
         run: |
