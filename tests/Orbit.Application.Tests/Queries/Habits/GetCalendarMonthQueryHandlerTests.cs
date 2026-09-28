@@ -278,6 +278,7 @@ public class GetCalendarMonthQueryHandlerTests
         result.Value.Logs[parent.Id].Should().BeEmpty();
         var parentItem = result.Value.Habits.Should().ContainSingle().Subject;
         parentItem.Id.Should().Be(parent.Id);
+        parentItem.ScheduledDates.Should().BeEmpty("an exhausted flexible parent has no occurrence to miss");
         var childItem = parentItem.Children.Should().ContainSingle().Subject;
         childItem.Id.Should().Be(child.Id);
         childItem.ScheduledDates.Should().ContainSingle().Which.Should().Be(loggedDate);
