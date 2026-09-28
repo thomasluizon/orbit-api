@@ -37,6 +37,24 @@ public class HealthCheckResponseTests
     }
 
     [Fact]
+    public async Task HealthyReport_ExposesRenderCommit()
+    {
+        const string commit = "1234567890abcdef1234567890abcdef12345678";
+        var previous = Environment.GetEnvironmentVariable("RENDER_GIT_COMMIT");
+        try
+        {
+            Environment.SetEnvironmentVariable("RENDER_GIT_COMMIT", commit);
+            var (_, _, body, _) = await InvokeAsync(Report(HealthStatus.Healthy));
+
+            body.RootElement.GetProperty("commit").GetString().Should().Be(commit);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("RENDER_GIT_COMMIT", previous);
+        }
+    }
+
+    [Fact]
     public async Task HealthyReport_Returns200WithJsonContentType()
     {
         var report = Report(

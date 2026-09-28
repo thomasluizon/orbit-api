@@ -106,6 +106,7 @@ public static partial class WebApplicationExtensions
         var result = new
         {
             status = report.Status.ToString(),
+            commit = Environment.GetEnvironmentVariable("RENDER_GIT_COMMIT"),
             checks = report.Entries.Select(e => new
             {
                 name = e.Key,
