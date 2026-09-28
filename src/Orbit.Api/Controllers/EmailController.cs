@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Orbit.Application.Email.Commands;
 using Orbit.Api.RateLimiting;
+using Orbit.Infrastructure.Services;
 
 namespace Orbit.Api.Controllers;
 
@@ -20,6 +21,13 @@ public sealed class EmailController(ISender sender) : ControllerBase
     {
         using var reader = new StreamReader(Request.Body);
         var payload = await reader.ReadToEndAsync(cancellationToken);
-        return await sender.Send(new ProcessSesEventCommand(payload), cancellationToken) ? Ok() : BadRequest();
+        try
+        {
+            return await sender.Send(new ProcessSesEventCommand(payload), cancellationToken) ? Ok() : BadRequest();
+        }
+        catch (SnsCertificateFetchException)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
     }
 }

@@ -51,7 +51,7 @@ public sealed partial class SnsMessageVerifier(
                 version == "2" ? HashAlgorithmName.SHA256 : HashAlgorithmName.SHA1,
                 RSASignaturePadding.Pkcs1);
         }
-        catch (Exception ex) when (ex is HttpRequestException or CryptographicException or FormatException)
+        catch (Exception ex) when (ex is CryptographicException or FormatException)
         {
             return false;
         }
@@ -101,12 +101,22 @@ public sealed partial class SnsMessageVerifier(
         {
             if (certificateCache.TryGetValue(url, out cached))
                 return cached;
-            using var response = await httpClientFactory.CreateClient("SnsCertificate").GetAsync(url, cancellationToken);
-            if (!response.IsSuccessStatusCode)
-                return null;
-            var pem = await response.Content.ReadAsStringAsync(cancellationToken);
-            certificateCache.Set(url, pem, CertificateCacheDuration);
-            return pem;
+            try
+            {
+                using var response = await httpClientFactory.CreateClient("SnsCertificate").GetAsync(url, cancellationToken);
+                response.EnsureSuccessStatusCode();
+                var pem = await response.Content.ReadAsStringAsync(cancellationToken);
+                certificateCache.Set(url, pem, CertificateCacheDuration);
+                return pem;
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new SnsCertificateFetchException("SNS signing certificate is unavailable", ex);
+            }
+            catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                throw new SnsCertificateFetchException("SNS signing certificate is unavailable", ex);
+            }
         }
         finally
         {
@@ -168,3 +178,6 @@ public sealed partial class SnsMessageVerifier(
     [GeneratedRegex(@"^/SimpleNotificationService-[0-9a-fA-F]+\.pem$", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 100)]
     private static partial Regex CertificatePathRegex();
 }
+
+public sealed class SnsCertificateFetchException(string message, Exception innerException)
+    : Exception(message, innerException);

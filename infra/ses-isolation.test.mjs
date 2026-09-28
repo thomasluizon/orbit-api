@@ -51,6 +51,22 @@ test("SES event destinations and subscriptions stay within the sending environme
   }
 })
 
+test("each SES webhook retains undeliverable events in its own queue", () => {
+  for (const [subscription, queue, topic] of [
+    ["ses_events_api", "ses_events", "ses_events"],
+    ["ses_events_staging_api", "ses_events_staging", "ses_events_staging"],
+  ]) {
+    const hook = block(ses, `resource "aws_sns_topic_subscription" "${subscription}"`)
+    const deadLetterQueue = block(ses, `resource "aws_sqs_queue" "${queue}"`)
+    const queuePolicy = block(ses, `resource "aws_sqs_queue_policy" "${queue}"`)
+    assert.match(hook, new RegExp(`redrive_policy\\s*=\\s*jsonencode\\(\\{\\s*deadLetterTargetArn\\s*=\\s*aws_sqs_queue\\.${queue}\\.arn`))
+    assert.match(deadLetterQueue, /message_retention_seconds\s*=\s*1209600/)
+    assert.match(deadLetterQueue, /kms_master_key_id\s*=\s*aws_kms_key\.ses_events\.arn/)
+    assert.match(queuePolicy, new RegExp(`aws_sns_topic\\.${topic}\\.arn`))
+    assert.match(queuePolicy, /sns\.amazonaws\.com/)
+  }
+})
+
 test("each API environment has credentials scoped to its own configuration sets", () => {
   const productionPolicy = block(ses, 'resource "aws_iam_user_policy" "api_ses"')
   const stagingPolicy = block(ses, 'resource "aws_iam_user_policy" "api_ses_staging"')
