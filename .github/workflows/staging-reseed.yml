@@ -39,6 +39,13 @@ jobs:
         env:
           STAGING_POSTGRES_ID: dpg-dasotg8jo6nc73cok6g0-a
         run: bash .github/scripts/staging-postgres-access.sh open
+      - name: Inspect staging connection fields for the probe
+        if: inputs.allowlist_probe
+        run: |
+          response="$(curl --fail-with-body --silent --show-error --max-time 30 \
+            --header "Authorization: Bearer ${RENDER_API_KEY}" \
+            'https://api.render.com/v1/postgres/dpg-dasotg8jo6nc73cok6g0-a/connection-info')"
+          jq 'keys' <<< "$response"
       - name: Restore operator access after the probe
         if: always() && inputs.allowlist_probe
         env:
