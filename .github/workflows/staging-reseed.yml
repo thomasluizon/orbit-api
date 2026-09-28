@@ -55,7 +55,7 @@ jobs:
             | jq --exit-status --raw-output '.externalConnectionString')"
           expected_host="$(python3 -c 'from urllib.parse import urlparse; import sys; print(urlparse(sys.argv[1]).hostname)' "$connection")"
           Seed__ExpectedHost="$expected_host" Seed__DatabaseUrl="$connection" \
-            dotnet run --project src/Orbit.Api/Orbit.Api.csproj -- migrate-staging
+            dotnet run --project src/Orbit.Api/Orbit.Api.csproj --no-launch-profile -- migrate-staging
       - name: Restore operator access after the probe
         if: always() && inputs.allowlist_probe
         env:
@@ -127,7 +127,7 @@ jobs:
         run: |
           Seed__ExpectedHost="$(terraform -chdir=infra/staging-database output -raw staging_external_host)" \
             Seed__DatabaseUrl="$(terraform -chdir=infra/staging-database output -raw staging_external_connection_string)" \
-            dotnet run --project src/Orbit.Api/Orbit.Api.csproj -- migrate-staging
+            dotnet run --project src/Orbit.Api/Orbit.Api.csproj --no-launch-profile -- migrate-staging
       - name: Restore operator access after migrations
         id: migration_cleanup
         if: always() && steps.replace.outputs.database_id != ''
@@ -206,7 +206,7 @@ jobs:
         run: |
           Seed__ExpectedHost="$(terraform -chdir=infra/staging-database output -raw staging_external_host)" \
             Seed__DatabaseUrl="$(terraform -chdir=infra/staging-database output -raw staging_external_connection_string)" \
-            dotnet run --project src/Orbit.Api/Orbit.Api.csproj -- seed-staging
+            dotnet run --project src/Orbit.Api/Orbit.Api.csproj --no-launch-profile -- seed-staging
       - name: Restore operator access after the owner seed
         if: always() && steps.replace.outputs.database_id != ''
         env:

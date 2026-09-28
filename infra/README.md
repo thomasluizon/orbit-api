@@ -44,7 +44,7 @@ ASPNETCORE_ENVIRONMENT=Staging \
 Seed__OwnerEmail=owner@example.com \
 Seed__ExpectedHost="$(terraform -chdir=infra/staging-database output -raw staging_external_host)" \
 Seed__DatabaseUrl="$(terraform -chdir=infra/staging-database output -raw staging_external_connection_string)" \
-dotnet run --project src/Orbit.Api/Orbit.Api.csproj -- seed-staging
+dotnet run --project src/Orbit.Api/Orbit.Api.csproj --no-launch-profile -- seed-staging
 ```
 
 The command checks the environment, staging host, database name, and database user before opening a connection. It reuses the owner's account by email and adds missing sample records without duplicating existing ones.
