@@ -74,7 +74,7 @@ Pre-commit hook: a git-level `pre-commit` (lefthook, `lefthook.yml`) runs `dotne
 
 ## Deployment
 
-Render (Docker, auto-deploy on push to main) + Supabase PostgreSQL (session pooler) + Resend (email) + Firebase (FCM) + Stripe.
+Render (Docker, manual API releases through `release.yml`) + Supabase PostgreSQL (session pooler) + Resend (email) + Firebase (FCM) + Stripe.
 
 ## Generated gating matrix
 
