@@ -82,6 +82,7 @@ jobs:
         if: steps.age.outputs.replace == 'true'
         env:
           STAGING_POSTGRES_ID: ${{ steps.replace.outputs.database_id }}
+          STAGING_ACCESS_MARKER: ${{ runner.temp }}/staging-migration-access
         run: bash .github/scripts/staging-postgres-access.sh open
       - name: Apply migrations to the replacement database
         if: steps.age.outputs.replace == 'true'
@@ -97,6 +98,7 @@ jobs:
         if: always() && steps.replace.outputs.database_id != ''
         env:
           STAGING_POSTGRES_ID: ${{ steps.replace.outputs.database_id }}
+          STAGING_ACCESS_MARKER: ${{ runner.temp }}/staging-migration-access
         run: bash .github/scripts/staging-postgres-access.sh restore
       - name: Deploy the staging API and wait for that deploy
         if: steps.age.outputs.replace == 'true'
@@ -161,6 +163,7 @@ jobs:
         if: steps.age.outputs.replace == 'true'
         env:
           STAGING_POSTGRES_ID: ${{ steps.replace.outputs.database_id }}
+          STAGING_ACCESS_MARKER: ${{ runner.temp }}/staging-seed-access
         run: bash .github/scripts/staging-postgres-access.sh open
       - name: Seed the owner account
         if: steps.age.outputs.replace == 'true'
@@ -175,4 +178,5 @@ jobs:
         if: always() && steps.replace.outputs.database_id != ''
         env:
           STAGING_POSTGRES_ID: ${{ steps.replace.outputs.database_id }}
+          STAGING_ACCESS_MARKER: ${{ runner.temp }}/staging-seed-access
         run: bash .github/scripts/staging-postgres-access.sh restore

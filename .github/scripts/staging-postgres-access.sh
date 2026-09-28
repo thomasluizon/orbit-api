@@ -9,7 +9,7 @@ action="$1"
 operator_list="$(jq -ce '
   select(type == "array" and all(.[];
     (.cidr_block | type == "string" and length > 0) and
-    (.description | type == "string")))
+    (.description | type == "string" and . != "github-actions-staging-reseed")))
   | map({cidrBlock: .cidr_block, description}) | sort_by(.cidrBlock, .description)
 ' <<< "$TF_VAR_staging_postgres_ip_allow_list")"
 database_url="https://api.render.com/v1/postgres/${STAGING_POSTGRES_ID}"
@@ -19,6 +19,19 @@ read_allow_list() {
     --header "Authorization: Bearer ${RENDER_API_KEY}" "$database_url" \
     | jq -ce --arg id "$STAGING_POSTGRES_ID" \
       'select(.id == $id) | .ipAllowList | select(type == "array") | sort_by(.cidrBlock, .description)'
+}
+
+remove_temporary_access() {
+  local current desired
+  current="$(read_allow_list)"
+  desired="$(jq -ce 'map(select(.description != "github-actions-staging-reseed"))' <<< "$current")"
+  if [[ "$current" != "$desired" ]]; then
+    set_allow_list "$desired"
+  fi
+  if [[ "$desired" != "$operator_list" ]]; then
+    echo 'Staging database operator allow list differs from the configured addresses' >&2
+    return 1
+  fi
 }
 
 set_allow_list() {
@@ -55,12 +68,26 @@ case "$action" in
       $operators + (if any($operators[]; .cidrBlock == $cidr) then []
         else [{cidrBlock: $cidr, description: "github-actions-staging-reseed"}] end)
       | sort_by(.cidrBlock, .description)')"
-    set_allow_list "$temporary_list"
+    if [[ "$temporary_list" != "$operator_list" ]]; then
+      : "${STAGING_ACCESS_MARKER:?}"
+      touch "$STAGING_ACCESS_MARKER"
+      set_allow_list "$temporary_list"
+    fi
     echo "Temporary runner access: $runner_cidr"
     ;;
   restore)
-    set_allow_list "$operator_list"
-    echo "Restored staging database allow list: $(read_allow_list)"
+    : "${STAGING_ACCESS_MARKER:?}"
+    if [[ -f "$STAGING_ACCESS_MARKER" ]]; then
+      remove_temporary_access
+      rm "$STAGING_ACCESS_MARKER"
+      echo "Restored staging database allow list: $(read_allow_list)"
+    else
+      echo 'No temporary runner access was opened'
+    fi
+    ;;
+  reconcile)
+    remove_temporary_access
+    echo "Reconciled staging database allow list: $(read_allow_list)"
     ;;
   *)
     echo "Unsupported allow list action: $action" >&2

@@ -1,0 +1,43 @@
+name: Staging Postgres access reconciliation
+
+on:
+  workflow_run:
+    workflows: [Staging reseed]
+    types: [completed]
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: api-release-staging
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      TF_VAR_staging_environment_id: ${{ vars.STAGING_ENVIRONMENT_ID }}
+      TF_VAR_staging_api_service_id: ${{ vars.STAGING_API_SERVICE_ID }}
+      TF_VAR_staging_postgres_ip_allow_list: ${{ vars.STAGING_POSTGRES_IP_ALLOW_LIST }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5
+        with:
+          role-to-assume: arn:aws:iam::713285551626:role/orbit-staging-reseed
+          aws-region: us-east-2
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: 1.16.4
+          terraform_wrapper: false
+      - name: Remove stale runner access and verify operator addresses
+        run: |
+          terraform -chdir=infra/staging-database init -input=false
+          STAGING_POSTGRES_ID="$(terraform -chdir=infra/staging-database output -raw staging_postgres_id)" \
+            bash .github/scripts/staging-postgres-access.sh reconcile
