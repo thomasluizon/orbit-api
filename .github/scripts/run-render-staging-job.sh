@@ -27,12 +27,20 @@ else
     | map(@sh) | join(" ")')"
 fi
 payload="$(jq -nc --arg command "$start_command" '{startCommand: $command}')"
-job="$(curl --fail-with-body --silent --show-error --max-time 30 \
+response_file="$(mktemp)"
+trap 'rm -f "$response_file"' EXIT
+http_status="$(curl --silent --show-error --max-time 30 --output "$response_file" --write-out '%{http_code}' \
   --request POST \
   --header "Authorization: Bearer ${RENDER_API_KEY}" \
   --header 'Content-Type: application/json' \
   --data "$payload" \
   "https://api.render.com/v1/services/${TF_VAR_staging_api_service_id}/jobs")"
+if [[ "$http_status" != 201 ]]; then
+  echo "Render job request failed with HTTP $http_status" >&2
+  jq -c 'if type == "object" then del(.startCommand) else . end' "$response_file" >&2
+  exit 1
+fi
+job="$(cat "$response_file")"
 job_id="$(jq -er --arg service "$TF_VAR_staging_api_service_id" \
   'select(.serviceId == $service) | .id | select(type == "string" and startswith("job-"))' <<< "$job")"
 echo "Render staging job: $job_id ($command_name)"
