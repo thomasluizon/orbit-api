@@ -25,7 +25,7 @@ public static partial class ServiceCollectionExtensions
         return value;
     }
 
-    private static void AddEmailAndSupabaseClients(WebApplicationBuilder builder, TimeSpan httpTimeout)
+    internal static void AddEmailAndSupabaseClients(WebApplicationBuilder builder, TimeSpan httpTimeout)
     {
         var supabaseUrl = RequireConfigValue(builder, "Supabase:Url");
         var supabaseAnonKey = RequireConfigValue(builder, "Supabase:AnonKey");
@@ -88,7 +88,29 @@ public static partial class ServiceCollectionExtensions
             client.Timeout = httpTimeout;
         });
 
-        builder.Services.AddScoped<IEmailService, ResendEmailService>();
+        builder.Services.Configure<SesSettings>(builder.Configuration.GetSection(SesSettings.SectionName));
+        builder.Services.AddHttpClient("SnsCertificate").ConfigurePrimaryHttpMessageHandler(() =>
+            new HttpClientHandler { AllowAutoRedirect = false });
+        builder.Services.AddHttpClient("SnsConfirmation").ConfigurePrimaryHttpMessageHandler(() =>
+            new HttpClientHandler { AllowAutoRedirect = false });
+        builder.Services.AddScoped<SnsMessageVerifier>();
+        builder.Services.AddScoped<ISesEventProcessor, SesEventProcessor>();
+        var provider = builder.Configuration["Email:Provider"] ?? "Resend";
+        if (string.Equals(provider, "Ses", StringComparison.OrdinalIgnoreCase))
+        {
+            var ses = builder.Configuration.GetSection(SesSettings.SectionName).Get<SesSettings>() ?? new SesSettings();
+            if (string.IsNullOrWhiteSpace(ses.AccessKeyId) || string.IsNullOrWhiteSpace(ses.SecretAccessKey))
+                throw new InvalidOperationException("SES credentials are required when Email:Provider is Ses.");
+            builder.Services.AddSingleton<Amazon.SimpleEmailV2.IAmazonSimpleEmailServiceV2>(_ =>
+                new Amazon.SimpleEmailV2.AmazonSimpleEmailServiceV2Client(
+                    new Amazon.Runtime.BasicAWSCredentials(ses.AccessKeyId, ses.SecretAccessKey),
+                    Amazon.RegionEndpoint.GetBySystemName(ses.Region)));
+            builder.Services.AddScoped<IEmailService, SesEmailService>();
+        }
+        else if (string.Equals(provider, "Resend", StringComparison.OrdinalIgnoreCase))
+            builder.Services.AddScoped<IEmailService, ResendEmailService>();
+        else
+            throw new InvalidOperationException("Email:Provider must be Resend or Ses.");
 
         builder.Services.Configure<WaitlistSettings>(
             builder.Configuration.GetSection(WaitlistSettings.SectionName));

@@ -7,6 +7,7 @@
 
   <ItemGroup>
     <PackageReference Include="AWSSDK.S3" Version="4.0.103.4" />
+    <PackageReference Include="AWSSDK.SimpleEmailV2" Version="4.0.105" />
     <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
     <PackageReference Include="FileSignatures" Version="7.3.0" />
     <PackageReference Include="FirebaseAdmin" Version="3.6.0" />

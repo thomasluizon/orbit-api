@@ -1071,7 +1071,8 @@ public partial class AgentCatalogService
                 [
                     "AdminController.SendMarketingBroadcast",
                     "MarketingController.Unsubscribe",
-                    "MarketingController.UnsubscribeOneClick"
+                    "MarketingController.UnsubscribeOneClick",
+                    "EmailController.SesEvents"
                 ])
         ];
     }
