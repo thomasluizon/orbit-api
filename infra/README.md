@@ -81,7 +81,11 @@ Set `RENDER_API_KEY` and `CLOUDFLARE_API_TOKEN` in the shell and provide AWS cre
 
 The `production_web_digest` and `staging_web_digest` variables seed the web images only when Terraform first creates each service. Terraform ignores later digest changes on both web services. The `web-image.yml` and `deploy-web.yml` release workflows own subsequent staging and production web deploys by digest.
 
-With Render provider v1.9.1, a refreshed digest image path also populates a computed image tag. On any web service update, the provider sends an image reference built from the planned tag before considering the digest. Ignoring the entire image block retains that computed tag and does not make the update safe. Once either web service exists, do not apply changes to any attribute of `render_web_service.production_web` or `render_web_service.staging_web`, including plan, region, health check path, custom domains, or runtime source. Before every apply, inspect the plan and stop if either web service has an update. Defer those service-setting changes until the provider can preserve digest image paths on update.
+With Render provider v1.9.1, a refreshed digest image path also populates a computed image tag. On any web service update, the provider sends an image reference built from the planned tag before considering the digest. Ignoring the entire image block retains that computed tag and does not make the update safe. Run `terraform -chdir=infra show -json local.tfplan | node infra/check-web-plan.mjs` on the saved plan before every local apply. The guard blocks an in-place update, replacement, or deletion of either web service and names the changed attributes. Initial creation remains allowed.
+
+For a deliberate web service setting change, review the saved plan and its blocked attributes, then apply that specific plan as an explicit exception. Immediately redeploy the approved digest through the `orbit-ui-mobile` release workflow (`web-image.yml` for staging or `deploy-web.yml` for production) and verify the live `imagePath` against that approved digest before proceeding with another apply. Keep the exception scoped to the intended service change.
+
+A web service replacement or deletion requires separate recovery review before apply. For a replacement, confirm the currently approved digest, set the matching Terraform digest variable, and plan service continuity, domains, and service ID changes with the owner. Apply only the reviewed saved plan, redeploy the approved digest through the release workflow, and verify the live `imagePath`. For a deletion, confirm the service is intentionally being retired and arrange its traffic cutover before applying the reviewed plan.
 
 After every apply, read each web service's live `imagePath` from Render using its service ID and compare it with the digest approved by its latest release workflow. The expected value is `ghcr.io/thomasluizon/orbit-web@sha256:<approved digest without the sha256: prefix>`. Do not use the Terraform digest variables as the expected value after creation. For each service, run:
 
@@ -101,6 +105,7 @@ terraform -chdir=infra init
 terraform fmt -check -recursive infra
 terraform -chdir=infra validate
 terraform -chdir=infra plan -var-file=local.tfvars -out=local.tfplan
+terraform -chdir=infra show -json local.tfplan | node infra/check-web-plan.mjs
 terraform -chdir=infra apply local.tfplan
 ```
 
