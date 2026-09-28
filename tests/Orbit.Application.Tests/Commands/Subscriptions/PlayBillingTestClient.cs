@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Google.Apis.AndroidPublisher.v3;
 using Google.Apis.AndroidPublisher.v3.Data;
 using Google.Apis.Http;
@@ -18,12 +19,13 @@ internal sealed class PlayBillingTestClient : IDisposable
     public IPlayBillingService Billing { get; }
 
     public PlayBillingTestClient(string subscriptionState, DateTime expiresAt, Guid userId,
-        IOptions<GooglePlaySettings> settings)
+        IOptions<GooglePlaySettings> settings, bool isTestPurchase = false)
     {
         var json = JsonSerializer.Serialize(new
         {
             subscriptionState,
             acknowledgementState = "ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED",
+            testPurchase = isTestPurchase ? new { } : null,
             externalAccountIdentifiers = new { obfuscatedExternalAccountId = userId.ToString() },
             lineItems = new[]
             {
@@ -34,7 +36,7 @@ internal sealed class PlayBillingTestClient : IDisposable
                     offerDetails = new { basePlanId = "monthly" },
                 },
             },
-        });
+        }, new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull });
         _publisher = new AndroidPublisherService(new BaseClientService.Initializer
         {
             HttpClientFactory = new ResponseFactory(json),
