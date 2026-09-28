@@ -7,6 +7,7 @@ import { test } from "node:test"
 const root = dirname(fileURLToPath(import.meta.url))
 const ses = readFileSync(join(root, "ses.tf"), "utf8")
 const configuration = readFileSync(join(root, "configuration.tf"), "utf8")
+const literal = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
 function block(source, header) {
   const start = source.indexOf(header)
@@ -30,9 +31,9 @@ test("each API environment uses its own SES configuration sets and event topic",
   ]) {
     for (const stream of ["transactional", "marketing"]) {
       const key = stream === "transactional" ? "Ses__TransactionalConfigurationSet" : "Ses__MarketingConfigurationSet"
-      assert.match(values, new RegExp(`${key}\\s*=\\s*aws_sesv2_configuration_set\\.${resource}\\["${stream}"\\]\\.configuration_set_name`), environment)
+      assert.match(values, new RegExp(`${literal(key)}\\s*=\\s*aws_sesv2_configuration_set\\.${literal(resource)}\\["${literal(stream)}"\\]\\.configuration_set_name`), environment)
     }
-    assert.match(values, new RegExp(`Ses__TopicArn\\s*=\\s*aws_sns_topic\\.${topic}\\.arn`), environment)
+    assert.match(values, new RegExp(`Ses__TopicArn\\s*=\\s*aws_sns_topic\\.${literal(topic)}\\.arn`), environment)
   }
 })
 
@@ -43,9 +44,9 @@ test("SES event destinations and subscriptions stay within the sending environme
   ]) {
     const event = block(ses, `resource "aws_sesv2_configuration_set_event_destination" "${destination}"`)
     const hook = block(ses, `resource "aws_sns_topic_subscription" "${subscription}"`)
-    assert.match(event, new RegExp(`for_each\\s*=\\s*aws_sesv2_configuration_set\\.${resource}`))
-    assert.match(event, new RegExp(`topic_arn\\s*=\\s*aws_sns_topic\\.${topic}\\.arn`))
-    assert.match(hook, new RegExp(`topic_arn\\s*=\\s*aws_sns_topic\\.${topic}\\.arn`))
+    assert.match(event, new RegExp(`for_each\\s*=\\s*aws_sesv2_configuration_set\\.${literal(resource)}`))
+    assert.match(event, new RegExp(`topic_arn\\s*=\\s*aws_sns_topic\\.${literal(topic)}\\.arn`))
+    assert.match(hook, new RegExp(`topic_arn\\s*=\\s*aws_sns_topic\\.${literal(topic)}\\.arn`))
     assert.ok(hook.includes(`endpoint  = "${endpoint}"`))
   }
 })
