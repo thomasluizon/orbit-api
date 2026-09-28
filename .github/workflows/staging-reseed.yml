@@ -9,8 +9,8 @@ on:
     - cron: '0 10 * * *'
   workflow_dispatch:
     inputs:
-      migration_probe:
-        description: Run an idempotent migration on the current staging database
+      allowlist_probe:
+        description: Test temporary runner access on the current staging database
         type: boolean
         default: false
 
@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   reseed:
-    if: github.ref == 'refs/heads/main' || (github.ref == 'refs/heads/fix/ticket-826-reseed-allowlist' && inputs.migration_probe)
+    if: github.ref == 'refs/heads/main' || (github.ref == 'refs/heads/fix/ticket-826-reseed-allowlist' && inputs.allowlist_probe)
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -32,27 +32,39 @@ jobs:
       TF_VAR_staging_environment_id: ${{ vars.STAGING_ENVIRONMENT_ID }}
       TF_VAR_staging_api_service_id: ${{ vars.STAGING_API_SERVICE_ID }}
       TF_VAR_staging_postgres_ip_allow_list: ${{ vars.STAGING_POSTGRES_IP_ALLOW_LIST }}
-      SEED_OWNER_EMAIL: ${{ vars.SEED_OWNER_EMAIL }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Probe temporary runner access
+        if: inputs.allowlist_probe
+        env:
+          STAGING_POSTGRES_ID: dpg-dasotg8jo6nc73cok6g0-a
+        run: bash .github/scripts/staging-postgres-access.sh open
+      - name: Restore operator access after the probe
+        if: always() && inputs.allowlist_probe
+        env:
+          STAGING_POSTGRES_ID: dpg-dasotg8jo6nc73cok6g0-a
+        run: bash .github/scripts/staging-postgres-access.sh restore
       - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5
-        if: ${{ !inputs.migration_probe }}
+        if: ${{ !inputs.allowlist_probe }}
         with:
           role-to-assume: arn:aws:iam::713285551626:role/orbit-staging-reseed
           aws-region: us-east-2
       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
-        if: ${{ !inputs.migration_probe }}
+        if: ${{ !inputs.allowlist_probe }}
         with:
           terraform_version: 1.16.4
           terraform_wrapper: false
       - name: Initialize staging database state
-        if: ${{ !inputs.migration_probe }}
+        if: ${{ !inputs.allowlist_probe }}
         run: |
           [[ -n "$TF_VAR_staging_environment_id" && -n "$TF_VAR_staging_api_service_id" ]]
+          jq --exit-status 'type == "array" and all(.[];
+            (.cidr_block | type == "string" and length > 0) and
+            (.description | type == "string"))' <<< "$TF_VAR_staging_postgres_ip_allow_list"
           terraform -chdir=infra/staging-database init -input=false
       - name: Read staging database age
         id: age
-        if: ${{ !inputs.migration_probe }}
+        if: ${{ !inputs.allowlist_probe }}
         run: |
           database_id="$(terraform -chdir=infra/staging-database output -raw staging_postgres_id)"
           created_at="$(curl --fail --silent --show-error --max-time 30 \
@@ -66,6 +78,7 @@ jobs:
             echo 'replace=false' >> "$GITHUB_OUTPUT"
           fi
       - name: Replace staging database and refresh its API connection
+        id: replace
         if: steps.age.outputs.replace == 'true'
         run: |
           terraform -chdir=infra/staging-database plan -input=false \
@@ -79,22 +92,31 @@ jobs:
               (.change.actions == ["delete", "create"] or .change.actions == ["create", "delete"]))
           ' > /dev/null
           terraform -chdir=infra/staging-database apply -input=false -auto-approve staging-reseed.tfplan > /dev/null
+          echo "database_id=$(terraform -chdir=infra/staging-database output -raw staging_postgres_id)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        if: steps.age.outputs.replace == 'true'
+        with:
+          dotnet-version: '10.0.x'
+      - name: Allow runner access for migrations
+        if: steps.age.outputs.replace == 'true'
+        env:
+          STAGING_POSTGRES_ID: ${{ steps.replace.outputs.database_id }}
+        run: bash .github/scripts/staging-postgres-access.sh open
       - name: Apply migrations to the replacement database
         if: steps.age.outputs.replace == 'true'
+        env:
+          ASPNETCORE_ENVIRONMENT: Staging
+          Seed__OwnerEmail: ${{ vars.SEED_OWNER_EMAIL }}
         run: |
-          if [[ "${{ inputs.migration_probe }}" == true ]]; then
-            MIGRATION_PROBE=true bash .github/scripts/run-render-staging-job.sh migrate-staging
-          else
-            STAGING_INTERNAL_HOST="$(terraform -chdir=infra/staging-database output -raw staging_internal_host)" \
-              bash .github/scripts/run-render-staging-job.sh migrate-staging
-          fi
-      - name: Inspect staging database API for the probe
-        if: inputs.migration_probe
-        run: |
-          response="$(curl --fail-with-body --silent --show-error --max-time 30 \
-            --header "Authorization: Bearer ${RENDER_API_KEY}" \
-            'https://api.render.com/v1/postgres?limit=100')"
-          jq -c '[.[] | .postgres | select(.name == "orbit-staging") | {id, environmentId, ipAllowList}]' <<< "$response"
+          Seed__ExpectedHost="$(terraform -chdir=infra/staging-database output -raw staging_external_host)" \
+            Seed__DatabaseUrl="$(terraform -chdir=infra/staging-database output -raw staging_external_connection_string)" \
+            dotnet run --project src/Orbit.Api/Orbit.Api.csproj -- migrate-staging
+      - name: Restore operator access after migrations
+        id: migration_cleanup
+        if: always() && steps.replace.outputs.database_id != ''
+        env:
+          STAGING_POSTGRES_ID: ${{ steps.replace.outputs.database_id }}
+        run: bash .github/scripts/staging-postgres-access.sh restore
       - name: Deploy the staging API and wait for that deploy
         if: steps.age.outputs.replace == 'true'
         run: |
@@ -154,8 +176,22 @@ jobs:
             sleep 20
           done
           exit 1
+      - name: Allow runner access for the owner seed
+        if: steps.age.outputs.replace == 'true'
+        env:
+          STAGING_POSTGRES_ID: ${{ steps.replace.outputs.database_id }}
+        run: bash .github/scripts/staging-postgres-access.sh open
       - name: Seed the owner account
         if: steps.age.outputs.replace == 'true'
+        env:
+          ASPNETCORE_ENVIRONMENT: Staging
+          Seed__OwnerEmail: ${{ vars.SEED_OWNER_EMAIL }}
         run: |
-          STAGING_INTERNAL_HOST="$(terraform -chdir=infra/staging-database output -raw staging_internal_host)" \
-            bash .github/scripts/run-render-staging-job.sh seed-staging
+          Seed__ExpectedHost="$(terraform -chdir=infra/staging-database output -raw staging_external_host)" \
+            Seed__DatabaseUrl="$(terraform -chdir=infra/staging-database output -raw staging_external_connection_string)" \
+            dotnet run --project src/Orbit.Api/Orbit.Api.csproj -- seed-staging
+      - name: Restore operator access after the owner seed
+        if: always() && steps.replace.outputs.database_id != ''
+        env:
+          STAGING_POSTGRES_ID: ${{ steps.replace.outputs.database_id }}
+        run: bash .github/scripts/staging-postgres-access.sh restore
