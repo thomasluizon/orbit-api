@@ -85,14 +85,15 @@ public class GetCalendarMonthQueryHandler(
             var projectedDates = HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo, ctx.WeekStartDay);
             var loggedDates = GetPositiveLogDates(habit, dateFrom, dateTo);
             var scheduledDates = MergeDates(projectedDates, loggedDates);
+            var hasDescendantDue = HasAnyDescendantDue(habit.Id, lookup, dateFrom, dateTo, ctx.WeekStartDay);
             if (habit.IsFlexible
                 && loggedDates.Count == 0
+                && !hasDescendantDue
                 && !projectedDates.Any(date =>
                     HabitScheduleService.IsFlexibleHabitDueOnDate(habit, date, habit.Logs, ctx.WeekStartDay)))
                 continue;
 
             var isOverdue = DetermineOverdueStatus(habit, dateFrom, projectedDates, ctx.WeekStartDay);
-            var hasDescendantDue = HasAnyDescendantDue(habit.Id, lookup, dateFrom, dateTo, ctx.WeekStartDay);
 
             if (scheduledDates.Count > 0 || isOverdue || hasDescendantDue)
                 habitItems.Add(MapToScheduleItem(habit, scheduledDates, isOverdue, ctx));

@@ -249,6 +249,43 @@ public class GetCalendarMonthQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_LoggedChild_KeepsFlexibleParentWithExhaustedTargetInMonth()
+    {
+        var monthStart = new DateOnly(2026, 9, 1);
+        var monthEnd = new DateOnly(2026, 9, 30);
+        var loggedDate = new DateOnly(2026, 9, 28);
+        var parent = Habit.Create(new HabitCreateParams(
+            UserId, "Flexible Parent", FrequencyUnit.Year, 1,
+            DueDate: new DateOnly(2026, 1, 1), IsFlexible: true)).Value;
+        parent.Log(new DateOnly(2026, 8, 31)).IsSuccess.Should().BeTrue();
+        var child = Habit.Create(new HabitCreateParams(
+            UserId, "Child", FrequencyUnit.Week, 3,
+            DueDate: loggedDate, ParentHabitId: parent.Id)).Value;
+        var childLog = child.Log(loggedDate).Value;
+        child.DueDate.Should().Be(new DateOnly(2026, 10, 19));
+
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { parent, child }.AsReadOnly());
+
+        var result = await _handler.Handle(
+            new GetCalendarMonthQuery(UserId, monthStart, monthEnd),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Logs[parent.Id].Should().BeEmpty();
+        var parentItem = result.Value.Habits.Should().ContainSingle().Subject;
+        parentItem.Id.Should().Be(parent.Id);
+        var childItem = parentItem.Children.Should().ContainSingle().Subject;
+        childItem.Id.Should().Be(child.Id);
+        childItem.ScheduledDates.Should().ContainSingle().Which.Should().Be(loggedDate);
+        childItem.Instances.Should().ContainSingle(instance =>
+            instance.Date == loggedDate && instance.LogId == childLog.Id);
+    }
+
+    [Fact]
     public async Task Handle_HabitWithoutLoggedOrProjectedDates_StaysOutOfMonth()
     {
         var habit = Habit.Create(new HabitCreateParams(
