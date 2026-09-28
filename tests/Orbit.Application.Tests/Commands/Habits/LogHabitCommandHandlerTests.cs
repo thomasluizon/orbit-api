@@ -169,8 +169,6 @@ public class LogHabitCommandHandlerTests
     public async Task Handle_AlreadyLogged_TogglesUnlog()
     {
         var habit = CreateTestHabit();
-        habit.Log(Today, advanceDueDate: false);
-
         _habitRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
@@ -179,13 +177,124 @@ public class LogHabitCommandHandlerTests
 
         var command = new LogHabitCommand(UserId, habit.Id);
 
+        var logged = await _handler.Handle(command, CancellationToken.None);
+        logged.IsSuccess.Should().BeTrue();
+        habit.DueDate.Should().Be(Today.AddDays(1));
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.ErrorCode.Should().NotBe(ErrorCodes.NotScheduledOnDate);
+        result.IsSuccess.Should().BeTrue();
+        habit.DueDate.Should().Be(Today);
+        _habitLogRepo.DidNotReceive().Remove(Arg.Any<HabitLog>());
+        habit.Logs.Should().ContainSingle(l => l.Date == Today).Which.IsDeleted.Should().BeTrue();
+        habit.Logs.Should().NotContain(l => l.Date == Today && !l.IsDeleted);
+        await _goalCompletionService.Received(2).SyncDerivedGoalsAsync(
+            UserId, Arg.Any<IReadOnlyCollection<Guid>>(), Today, false, Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(FrequencyUnit.Week)]
+    [InlineData(FrequencyUnit.Month)]
+    public async Task Handle_WeeklyOrMonthlyHabitLoggedToday_TogglesUnlog(FrequencyUnit frequency)
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Recurring", frequency, 1, DueDate: Today)).Value;
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>()).Returns(habit);
+
+        var command = new LogHabitCommand(UserId, habit.Id);
+        (await _handler.Handle(command, CancellationToken.None)).IsSuccess.Should().BeTrue();
+        habit.DueDate.Should().BeAfter(Today);
+
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        _habitLogRepo.DidNotReceive().Remove(Arg.Any<HabitLog>());
-        habit.Logs.Should().ContainSingle(l => l.Date == Today).Which.IsDeleted.Should().BeTrue();
-        await _goalCompletionService.Received(1).SyncDerivedGoalsAsync(
-            UserId, Arg.Any<IReadOnlyCollection<Guid>>(), Today, false, Arg.Any<CancellationToken>());
+        habit.DueDate.Should().Be(Today);
+        habit.Logs.Should().NotContain(l => l.Date == Today && !l.IsDeleted);
+    }
+
+    [Fact]
+    public async Task Handle_OverdueHabitLoggedToday_TogglesUnlog()
+    {
+        var missedDate = Today.AddDays(-1);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Overdue", FrequencyUnit.Week, 1, DueDate: missedDate)).Value;
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>()).Returns(habit);
+
+        var command = new LogHabitCommand(UserId, habit.Id);
+        (await _handler.Handle(command, CancellationToken.None)).IsSuccess.Should().BeTrue();
+        habit.DueDate.Should().BeAfter(Today);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        habit.DueDate.Should().Be(Today);
+        habit.Logs.Should().NotContain(l => l.Date == Today && !l.IsDeleted);
+    }
+
+    [Fact]
+    public async Task Handle_PastDateInsideOverdueWindow_TogglesUnlog()
+    {
+        var targetDate = Today.AddDays(-1);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Daily", FrequencyUnit.Day, 1, DueDate: targetDate)).Value;
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>()).Returns(habit);
+
+        var command = new LogHabitCommand(UserId, habit.Id, targetDate);
+        (await _handler.Handle(command, CancellationToken.None)).IsSuccess.Should().BeTrue();
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        habit.DueDate.Should().Be(targetDate);
+        habit.Logs.Should().NotContain(l => l.Date == targetDate && !l.IsDeleted);
+    }
+
+    [Fact]
+    public async Task Handle_ExistingLogBeyondOverdueWindow_TogglesUnlog()
+    {
+        var targetDate = Today.AddDays(-(AppConstants.DefaultOverdueWindowDays + 1));
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Daily", FrequencyUnit.Day, 1, DueDate: targetDate)).Value;
+        habit.Log(targetDate, advanceDueDate: false).IsSuccess.Should().BeTrue();
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>()).Returns(habit);
+
+        var result = await _handler.Handle(
+            new LogHabitCommand(UserId, habit.Id, targetDate), CancellationToken.None);
+
+        result.ErrorCode.Should().NotBe(ErrorCodes.BeyondOverdueWindow);
+        result.IsSuccess.Should().BeTrue();
+        habit.Logs.Should().NotContain(l => l.Date == targetDate && !l.IsDeleted);
+    }
+
+    [Fact]
+    public async Task Handle_ExistingFutureLog_TogglesUnlog()
+    {
+        var targetDate = Today.AddDays(1);
+        var habit = CreateTestHabit();
+        habit.Log(targetDate, advanceDueDate: false).IsSuccess.Should().BeTrue();
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>()).Returns(habit);
+
+        var result = await _handler.Handle(
+            new LogHabitCommand(UserId, habit.Id, targetDate), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        habit.Logs.Should().NotContain(l => l.Date == targetDate && !l.IsDeleted);
     }
 
     [Fact]
@@ -405,6 +514,24 @@ public class LogHabitCommandHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be("Habit is not scheduled on this date.");
+    }
+
+    [Fact]
+    public async Task Handle_WeeklyHabitDueLater_RejectsToday()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Weekly", FrequencyUnit.Week, 1, DueDate: Today.AddDays(3))).Value;
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>()).Returns(habit);
+
+        var result = await _handler.Handle(
+            new LogHabitCommand(UserId, habit.Id), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.NotScheduledOnDate);
+        habit.Logs.Should().BeEmpty();
     }
 
     [Fact]

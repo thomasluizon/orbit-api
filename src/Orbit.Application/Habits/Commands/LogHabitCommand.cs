@@ -73,6 +73,19 @@ public partial class LogHabitCommandHandler(
             return Result.Failure<LogHabitResponse>(ErrorMessages.HabitNotOwned);
 
         var targetDate = request.Date ?? today;
+        var existingLog = habit.Logs.FirstOrDefault(l => l.Date == targetDate && l.Value > 0);
+        if (existingLog is not null && !habit.IsFlexible && !habit.IsBadHabit)
+        {
+            return await HabitCeilingLock.ExecuteEntryAsync<Habit, LogHabitResponse>(
+                unitOfWork,
+                request.UserId,
+                services.PayGate,
+                ct => PrepareUnlogAsync(request, today, ct),
+                HabitLiveRootEntry.FromUnlog,
+                (lockedHabit, ct) => HandleUnlogAsync(lockedHabit, targetDate, today, ct),
+                cancellationToken);
+        }
+
         var weekStartDay = await services.UserDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
         var dueDateResolution = await HabitDueDateResolutionLoader.LoadAsync(
             repos.HabitLogRepository,
@@ -90,19 +103,6 @@ public partial class LogHabitCommandHandler(
             return dateValidation.PropagateError<LogHabitResponse>();
 
         var user = await repos.UserRepository.FindOneTrackedAsync(u => u.Id == request.UserId, cancellationToken: cancellationToken);
-
-        var existingLog = habit.Logs.FirstOrDefault(l => l.Date == targetDate && l.Value > 0);
-        if (existingLog is not null && !habit.IsFlexible && !habit.IsBadHabit)
-        {
-            return await HabitCeilingLock.ExecuteEntryAsync<Habit, LogHabitResponse>(
-                unitOfWork,
-                request.UserId,
-                services.PayGate,
-                ct => PrepareUnlogAsync(request, today, ct),
-                HabitLiveRootEntry.FromUnlog,
-                (lockedHabit, ct) => HandleUnlogAsync(lockedHabit, targetDate, today, ct),
-                cancellationToken);
-        }
 
         return await HandleLogAsync(habit, request, targetDate, today, weekStartDay, user, cancellationToken);
     }
