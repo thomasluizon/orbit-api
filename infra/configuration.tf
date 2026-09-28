@@ -21,6 +21,14 @@ locals {
     "Waitlist__SigningKey",
   ])
 
+  staging_api_billing_keys = toset([
+    "Stripe__MonthlyPriceIdBrl",
+    "Stripe__MonthlyPriceIdUsd",
+    "Stripe__ProProductId",
+    "Stripe__YearlyPriceIdBrl",
+    "Stripe__YearlyPriceIdUsd",
+  ])
+
   production_api_values = {
     AI__BaseUrl                         = "https://api.openai.com/v1"
     AI__Model                           = "gpt-4.1-mini"
@@ -48,7 +56,6 @@ locals {
     Stripe__MonthlyPriceIdBrl           = "price_1U59khGwWZvarDk3duqWRGu7"
     Stripe__MonthlyPriceIdUsd           = "price_1U59miGwWZvarDk3c7Jomocl"
     Stripe__ProProductId                = "prod_UBUPrTlZg8chuk"
-    Stripe__PublishableKey              = "pk_live_51TD75tGwWZvarDk3YaoxByBsqgWLkjVZgoJptemlASbjn4HzU1TGTgwVm3teV3kOi6wyq7efqnAUeUXsjvNYN5IT00hnfdEHFJ"
     Stripe__SuccessUrl                  = "https://app.useorbit.org/settings?subscription=success"
     Stripe__YearlyPriceIdBrl            = "price_1U59lVGwWZvarDk3FBO8ci6L"
     Stripe__YearlyPriceIdUsd            = "price_1U59ncGwWZvarDk3Ydiw7jP7"
@@ -62,18 +69,13 @@ locals {
     Database__MigrateOnStartup     = "true"
     Cors__AllowedOrigins__0        = "https://staging.useorbit.org"
     Frontend__BaseUrl              = "https://staging.useorbit.org"
+    GooglePlay__RtdnAudience       = "https://api-staging.useorbit.org/api/subscriptions/play/rtdn"
     Google__AllowedRedirectUris__0 = "https://staging.useorbit.org/auth-callback"
     Google__AllowedRedirectUris__1 = "https://app.useorbit.org/auth-callback"
     Marketing__ApiBaseUrl          = "https://api-staging.useorbit.org"
     Sentry__Environment            = "staging"
     Stripe__CancelUrl              = "https://staging.useorbit.org/upgrade"
-    Stripe__MonthlyPriceIdBrl      = "price_staging_unset_monthly_brl"
-    Stripe__MonthlyPriceIdUsd      = "price_staging_unset_monthly_usd"
-    Stripe__ProProductId           = "prod_staging_unset"
-    Stripe__PublishableKey         = "pk_test_staging_unset"
     Stripe__SuccessUrl             = "https://staging.useorbit.org/settings?subscription=success"
-    Stripe__YearlyPriceIdBrl       = "price_staging_unset_yearly_brl"
-    Stripe__YearlyPriceIdUsd       = "price_staging_unset_yearly_usd"
     Supabase__Url                  = "https://staging-storage-disabled.invalid"
     Waitlist__ApiBaseUrl           = "https://api-staging.useorbit.org"
   })
@@ -118,6 +120,11 @@ data "aws_ssm_parameter" "staging_api" {
   name     = "/orbit/staging/api/${each.key}"
 }
 
+data "aws_ssm_parameter" "staging_api_billing" {
+  for_each = local.staging_api_billing_keys
+  name     = "/orbit/staging/api/${each.key}"
+}
+
 data "aws_ssm_parameter" "production_api_database" {
   for_each = var.api_database == "supabase" ? local.database_keys : toset([])
   name     = "/orbit/production/api/${each.key}"
@@ -146,6 +153,7 @@ resource "render_env_group" "staging_api" {
   env_vars = merge(
     { for key, value in local.staging_api_values : key => { value = value } },
     { for key in local.api_secret_keys : key => { value = data.aws_ssm_parameter.staging_api[key].value } },
+    { for key in local.staging_api_billing_keys : key => { value = data.aws_ssm_parameter.staging_api_billing[key].value } },
     { BotProtection__SecretKey = { value = aws_ssm_parameter.turnstile_secret["staging"].value } },
   )
 }
