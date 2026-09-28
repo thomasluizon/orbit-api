@@ -1,7 +1,9 @@
 locals {
+  # staging.useorbit.org stays a domain of the staging web service and redirects to the new host,
+  # so a tab still on the old build keeps uploading through the cutover.
   upload_environments = {
-    production = "https://app.useorbit.org"
-    staging    = "https://app-staging.useorbit.org"
+    production = ["https://app.useorbit.org"]
+    staging    = ["https://app-staging.useorbit.org", "https://staging.useorbit.org"]
   }
 }
 
@@ -131,7 +133,7 @@ resource "aws_s3_bucket_cors_configuration" "uploads" {
   cors_rule {
     allowed_headers = ["Content-Type", "x-upsert"]
     allowed_methods = ["PUT", "GET"]
-    allowed_origins = [each.value]
+    allowed_origins = each.value
     max_age_seconds = 300
   }
 }
