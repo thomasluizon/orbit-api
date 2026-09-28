@@ -101,6 +101,10 @@ locals {
       name    = "api-staging.useorbit.org"
       content = split("/", render_web_service.staging_api.url)[2]
     }
+    app_staging = {
+      name    = "app-staging.useorbit.org"
+      content = split("/", render_web_service.staging_web.url)[2]
+    }
     staging = {
       name    = "staging.useorbit.org"
       content = split("/", render_web_service.staging_web.url)[2]
@@ -142,7 +146,7 @@ resource "cloudflare_turnstile_widget" "orbit" {
   mode       = "managed"
   domains = [
     "app.useorbit.org",
-    "staging.useorbit.org",
+    "app-staging.useorbit.org",
     "useorbit.org",
     "www.useorbit.org",
   ]
