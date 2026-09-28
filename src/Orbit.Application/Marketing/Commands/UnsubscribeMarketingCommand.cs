@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
+using Orbit.Application.Marketing.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -12,6 +13,7 @@ public record UnsubscribeMarketingCommand(string Token) : IRequest<Result>;
 public partial class UnsubscribeMarketingCommandHandler(
     IMarketingUnsubscribeTokenService unsubscribeTokenService,
     IGenericRepository<User> userRepository,
+    IGenericRepository<MarketingContact> contactRepository,
     IUnitOfWork unitOfWork,
     ILogger<UnsubscribeMarketingCommandHandler> logger) : IRequestHandler<UnsubscribeMarketingCommand, Result>
 {
@@ -25,13 +27,25 @@ public partial class UnsubscribeMarketingCommandHandler(
             cancellationToken: cancellationToken);
 
         if (user is null)
-            return Result.Success();
+        {
+            var contact = await contactRepository.FindOneTrackedAsync(
+                candidate => candidate.Id == userId,
+                cancellationToken: cancellationToken);
+            if (contact is null || contact.UnsubscribedAtUtc is not null)
+                return Result.Success();
 
-        if (user.MarketingEmailConsent == false)
+            contact.Unsubscribe();
+            await unitOfWork.SaveChangesAsync(cancellationToken);
             return Result.Success();
+        }
 
-        user.SetMarketingConsent(false);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await unitOfWork.ExecuteInTransactionAsync(async ct =>
+        {
+            await MarketingContactOptOut.RecordAsync(user.Email, contactRepository, unitOfWork, ct);
+            if (user.MarketingEmailConsent != false)
+                user.SetMarketingConsent(false);
+            await unitOfWork.SaveChangesAsync(ct);
+        }, cancellationToken);
 
         LogConsentRevoked(logger, user.Id);
         return Result.Success();

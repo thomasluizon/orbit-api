@@ -1025,6 +1025,8 @@ public partial class AgentCatalogService
                     "AuthController.VerifyCodeOperation",
                     "AuthController.GoogleAuth",
                     "AuthController.GoogleAuthOperation",
+                    "AuthController.GoogleCodeAuth",
+                    "AuthController.GoogleCodeAuthOperation",
                     "AuthController.Refresh",
                     "AuthController.RefreshOperation",
                     "AuthController.Logout",

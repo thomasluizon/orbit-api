@@ -93,7 +93,7 @@ public class HandleWebhookCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_CheckoutSessionCompleted_WithValidUser_UpgradesPro()
+    public async Task Handle_TestModeCheckoutSessionCompleted_WithValidUser_UpgradesPro()
     {
         var subscriptionId = "sub_test_123";
         var customerId = "cus_test_456";
@@ -116,6 +116,9 @@ public class HandleWebhookCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
+        user.IsPro.Should().BeTrue();
+        user.StripeSubscriptionId.Should().Be(subscriptionId);
+        user.StripeCustomerId.Should().Be(customerId);
         await _unitOfWork.Received().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 

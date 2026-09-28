@@ -424,6 +424,7 @@ public partial class User : Entity
 
     public void SetGoogleTokens(string accessToken, string? refreshToken)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(accessToken);
         GoogleAccessToken = accessToken;
         if (refreshToken is not null)
             GoogleRefreshToken = refreshToken;

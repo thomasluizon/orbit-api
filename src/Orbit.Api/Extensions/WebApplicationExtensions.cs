@@ -33,10 +33,8 @@ public static partial class WebApplicationExtensions
 
     public static async Task ConfigureOrbitPipeline(this WebApplication app)
     {
-        if (!BuildTimeDocumentGeneration.IsActive)
+        await MigrateDatabaseIfEnabledAsync(app.Configuration, async (migrationConnectionString, databaseSettings) =>
         {
-            var migrationConnectionString = OrbitConnectionStringFactory.ForSession(app.Configuration);
-            var databaseSettings = DatabaseConnectionSettings.From(app.Configuration);
             var migrationOptions = new DbContextOptionsBuilder<OrbitDbContext>()
                 .UseNpgsql(migrationConnectionString, npgsql =>
                 {
@@ -46,7 +44,7 @@ public static partial class WebApplicationExtensions
                 .Options;
             await using var migrationDb = new OrbitDbContext(migrationOptions);
             await migrationDb.Database.MigrateAsync();
-        }
+        });
 
         app.UseMiddleware<Orbit.Api.Middleware.SecurityHeadersMiddleware>();
         app.UseForwardedHeaders(BuildForwardedHeadersOptions(app));
@@ -79,6 +77,20 @@ public static partial class WebApplicationExtensions
         {
             ResponseWriter = WriteHealthCheckResponseAsync
         }).AllowAnonymous();
+    }
+
+    internal static async Task MigrateDatabaseIfEnabledAsync(
+        IConfiguration configuration,
+        Func<string, DatabaseConnectionSettings, Task> migrate)
+    {
+        if (BuildTimeDocumentGeneration.IsActive)
+            return;
+
+        var settings = DatabaseConnectionSettings.From(configuration);
+        if (!settings.MigrateOnStartup)
+            return;
+
+        await migrate(OrbitConnectionStringFactory.ForSession(configuration), settings);
     }
 
     internal static async Task WriteHealthCheckResponseAsync(HttpContext context, HealthReport report)

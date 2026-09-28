@@ -36,6 +36,8 @@ public static class ErrorCodes
     public const string CodeExpired = "CODE_EXPIRED";
     public const string TooManyAttempts = "TOO_MANY_ATTEMPTS";
     public const string InvalidGoogleToken = "INVALID_GOOGLE_TOKEN";
+    public const string GoogleRedirectUriNotAllowed = "GOOGLE_REDIRECT_URI_NOT_ALLOWED";
+    public const string GoogleCodeExchangeFailed = "GOOGLE_CODE_EXCHANGE_FAILED";
     public const string PayGate = Result.PayGateErrorCode;
     public const string InvalidSession = "INVALID_SESSION";
     public const string SessionCreationFailed = "SESSION_CREATION_FAILED";
