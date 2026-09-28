@@ -132,4 +132,14 @@ assert_staging_queue "$repo_root/.github/workflows/staging-reseed.yml" 'api-rele
 assert_staging_queue "$repo_root/.github/workflows/staging-postgres-access-reconcile.yml" 'api-release-staging'
 assert_staging_queue "$repo_root/.github/workflows/release.yml" 'api-release-${{ inputs.environment }}'
 
+staging_release="$(sed -n '/^  staging:/,$p' "$repo_root/.github/workflows/release.yml")"
+if ! grep -Fq 'environment: staging' <<< "$staging_release" ||
+  ! grep -Fq 'RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}' <<< "$staging_release" ||
+  ! grep -Fq '/deploys/$deploy_id' <<< "$staging_release" ||
+  ! grep -Fq 'live) exit 0' <<< "$staging_release" ||
+  grep -Fq 'RENDER_STAGING_DEPLOY_HOOK_URL' <<< "$staging_release"; then
+  echo 'Staging release must wait for its Render deploy before recording success' >&2
+  exit 1
+fi
+
 echo 'Staging access drift, partial open, restoration, and timeout reconciliation passed'

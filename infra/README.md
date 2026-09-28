@@ -163,7 +163,7 @@ If either image differs, stop further applies and redeploy the approved digest t
 
 Changing a Render service's build or deploy settings through Terraform starts a Render deploy of the tracked branch head, including when the change is to an API service. Cancel that deploy unless it is an intended release of the same commit. The API and landing staging services have auto-deploy disabled. Their tracked branches are selected by their release workflows, and Terraform ignores later branch changes.
 
-After apply, set the `RENDER_STAGING_SERVICE_ID` repository variable in the Orbit API GitHub repository to the staging API service ID. In the staging API service's Render Dashboard Settings tab, copy its Deploy Hook URL into the Orbit API GitHub `staging` environment secret `RENDER_STAGING_DEPLOY_HOOK_URL`. Restrict that environment to deployment branch `main`. Set `RENDER_LANDING_STAGING_SERVICE_ID` in the Orbit landing repository to the `landing_staging_service_id` Terraform output. Confirm each variable in its repository Actions variables screen before running the corresponding `release.yml` from `main`.
+After apply, set the `RENDER_STAGING_SERVICE_ID` repository variable in the Orbit API GitHub repository to the staging API service ID. Set `RENDER_API_KEY` as the Orbit API GitHub `staging` environment secret and restrict that environment to deployment branch `main`. Set `RENDER_LANDING_STAGING_SERVICE_ID` in the Orbit landing repository to the `landing_staging_service_id` Terraform output. Confirm each variable in its repository Actions variables screen before running the corresponding `release.yml` from `main`.
 
 Run:
 
