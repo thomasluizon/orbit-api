@@ -12,6 +12,8 @@ The staging keepalive workflow calls the API health endpoint every five minutes 
 
 Create the GitHub OIDC provider and staging reseed role from `github_oidc.tf` with a reviewed targeted Terraform apply before enabling the workflow. If the GitHub OIDC provider already exists in the AWS account, import it into this state before applying. Set `RENDER_API_KEY` in GitHub Actions secrets from Render Account Settings > API Keys. Set `SEED_OWNER_EMAIL`, `STAGING_ENVIRONMENT_ID`, and `STAGING_API_SERVICE_ID` in GitHub Actions variables. The IDs come from the main Terraform state's `render_project.orbit.environments["Staging"].id` and `render_web_service.staging_api.id`. The role trust policy accepts only workflows on this repository's `main` branch.
 
+Set `STAGING_POSTGRES_IP_ALLOW_LIST` in GitHub Actions variables to the same JSON array of `cidr_block` and `description` objects used for `staging_postgres_ip_allow_list` in the staging database root. Use `[]` when no external addresses are allowed. The reseed workflow uses that value when it creates a replacement database.
+
 Move the staging database state before applying either root. With credentials for the main state and the Render API, record its ID, remove its old state entry, initialize the new root, and import that ID:
 
 ```sh
@@ -23,7 +25,17 @@ terraform -chdir=infra/staging-database init
 terraform -chdir=infra/staging-database import render_postgres.staging "$database_id"
 ```
 
-Apply the new root to create and link `orbit-staging-database`, then apply the main root to remove only the two database connection values from `orbit-staging-api`. Review both plans before applying. The new group contains only `ConnectionStrings__DefaultConnection` and `ConnectionStrings__SessionConnection`; the existing `orbit-staging-api` group retains the other settings. After the main apply, `staging_environment_id` and `staging_api_service_id` outputs give the values for the GitHub variables. The Render provider documentation for version 1.9.1 confirms that both `render_postgres` and `render_env_group` can be imported by ID. The new group is created, so it needs no import.
+Before the first apply that creates or updates `orbit-staging-database`, copy the existing staging data from `orbit_staging` into the Render URL database `orbit_staging_jo8c`. Linking the new group changes the staging API connection immediately. Quiesce staging writes before the dump and keep them stopped until both group updates are applied and the copied records are verified. On an operator machine with PostgreSQL client tools, obtain the external host, port, database user, and password from the Render Postgres Connections screen. Set `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, and `PGSSLMODE=require` in the operator shell. Confirm the destination has no independent data, then run the dump and restore from a protected directory outside the repository:
+
+```sh
+pg_dump --dbname=orbit_staging --format=custom --no-owner --no-acl --file=staging-cutover.dump
+pg_restore --dbname=orbit_staging_jo8c --clean --if-exists --no-owner --no-acl staging-cutover.dump
+for database in orbit_staging orbit_staging_jo8c; do
+  psql --dbname="$database" --no-psqlrc -Atc 'SELECT (SELECT count(*) FROM "Users"), (SELECT count(*) FROM "Habits")'
+done
+```
+
+Compare the counts and spot-check the same user and habit records in both databases. Review the staging root plan and confirm `render_postgres.staging` is not replaced, its IP allow list matches the live Render list, and both connection strings name `orbit_staging_jo8c`. Apply the staging root to create and link `orbit-staging-database`, then apply the main root to remove only the two database connection values from `orbit-staging-api`. Review both plans before applying. Confirm the staging API reads the copied records through the new group before allowing writes. Keep `orbit_staging` intact until that verification succeeds; then connect to `orbit_staging_jo8c` and run `DROP DATABASE orbit_staging`. The new group contains only `ConnectionStrings__DefaultConnection` and `ConnectionStrings__SessionConnection`; the existing `orbit-staging-api` group retains the other settings. After the main apply, `staging_environment_id` and `staging_api_service_id` outputs give the values for the GitHub variables. The Render provider documentation for version 1.9.1 confirms that both `render_postgres` and `render_env_group` can be imported by ID. The new group is created, so it needs no import.
 
 After the API has migrated the new database, the workflow invokes the seed command using the database connection returned by the staging Terraform resource. To run the same command manually from the repository root after `terraform -chdir=infra/staging-database init`:
 
@@ -124,7 +136,7 @@ After apply, read the `cloudflare_name_servers` output. Run `bash infra/check-dn
 
 ## Plan and apply
 
-Set `RENDER_API_KEY` and `CLOUDFLARE_API_TOKEN` in the shell and provide AWS credentials through the default credential chain. Make a local `infra/local.tfvars` containing the published production and staging image digests and any approved domain or database cutover settings. This file is ignored; `example.tfvars` shows the shape only.
+Set `RENDER_API_KEY` and `CLOUDFLARE_API_TOKEN` in the shell and provide AWS credentials through the default credential chain. Make a local `infra/local.tfvars` containing the published production and staging image digests and any approved domain or database cutover settings. This file is ignored; `example.tfvars` shows the shape only. Copy the production Postgres IP allow list from the Render Postgres Networking screen into `production_postgres_ip_allow_list`. Set `staging_postgres_ip_allow_list` to the staging instance's live list in an ignored `infra/staging-database/local.tfvars`, or set `TF_VAR_staging_postgres_ip_allow_list` to the equivalent JSON array. Both variables default to `[]`, which removes external access when applied. Check both database resources in every plan before applying; neither database should be replaced, and an existing operator address must not be removed. The requested `database_name` and `database_user` values are creation inputs; Terraform ignores later changes to those fields because Render assigns the live database name with a suffix. Connection strings read the database name from the resource URL.
 
 The `production_web_digest` and `staging_web_digest` variables seed the web images only when Terraform first creates each service. Terraform ignores later digest changes on both web services. The `web-image.yml` and `deploy-web.yml` release workflows own subsequent staging and production web deploys by digest.
 
@@ -158,6 +170,8 @@ terraform -chdir=infra show -json local.tfplan | node infra/check-web-plan.mjs
 terraform -chdir=infra apply local.tfplan
 ```
 
-The initial plan must keep `srv-d6tc2isr85hc739bf75g`, its URL, and `api.useorbit.org` in place. Terraform ignores the imported API's own environment variables (`lifecycle.ignore_changes`), so the first apply only creates `orbit-production-api` and links it; the service keeps its existing variables, which override the group's identical values. After a deploy proves the service healthy on the linked group, remove the duplicated direct variables through the Render API, leaving only `ORBIT_TERRAFORM_ENV_GROUP`. Check the imported service's plan before applying: it must show no change to the service.
+The initial plan must keep `srv-d6tc2isr85hc739bf75g`, its URL, and `api.useorbit.org` in place. Terraform ignores the imported API's own environment variables (`lifecycle.ignore_changes`), so the first apply only creates `orbit-production-api` and links it; the service keeps its existing variables, which override the group's identical values. Check the imported service's plan before applying: it must show no change to the service.
+
+For the production database cutover, first confirm the production data is present in the Render database shown on the Render Postgres Connections screen. Set `api_database = "render"` in `infra/local.tfvars` and run a fresh plan. Confirm both `ConnectionStrings__DefaultConnection` and `ConnectionStrings__SessionConnection` in the production API environment group name `orbit_production_9g8l`, as derived from that Render connection URL. Confirm `render_postgres.production` is unchanged and neither web service nor the imported API service changes in place. Apply the plan only after those checks. Verify the linked environment group and production API health, then remove the production API service's duplicated direct variables in the Render service Environment screen, leaving `ORBIT_TERRAFORM_ENV_GROUP`. Confirm the service still uses the Render database after the direct variables are removed.
 
 Staging reads Stripe test-mode product and price IDs from SSM and uses staging return URLs. `Supabase__Url` points at an invalid host so staging cannot write to production storage. The web image must exist at both selected digests before the first apply. Set production web and landing custom domains during cutover. DNS and certificate verification follow the domain changes.

@@ -52,8 +52,12 @@ public class StagingSeedServiceTests
 
     [Theory]
     [InlineData("Production", "Host=staging.render.com;Database=orbit_staging;Username=orbit_staging;Password=x", "staging.render.com")]
-    [InlineData("Staging", "Host=production.render.com;Database=orbit_production;Username=orbit_production;Password=x", "staging.render.com")]
+    [InlineData("Staging", "Host=production.render.com;Database=orbit_production_9g8l;Username=orbit_production;Password=x", "staging.render.com")]
     [InlineData("Staging", "Host=production.render.com;Database=orbit_staging;Username=orbit_staging;Password=x", "staging.render.com")]
+    [InlineData("Staging", "Host=staging.render.com;Database=orbit_production_9g8l;Username=orbit_staging;Password=x", "staging.render.com")]
+    [InlineData("Staging", "Host=staging.render.com;Database=other_staging_jo8c;Username=orbit_staging;Password=x", "staging.render.com")]
+    [InlineData("Staging", "Host=staging.render.com;Database=orbit_staging_jo8c_extra;Username=orbit_staging;Password=x", "staging.render.com")]
+    [InlineData("Staging", "Host=staging.render.com;Database=orbit_staging_jo8c;Username=orbit_production;Password=x", "staging.render.com")]
     public void ProductionTargetIsRejectedBeforeOpeningDatabase(string environment, string connection, string expectedHost)
     {
         var action = () => StagingSeedCommand.ValidateTarget(environment, connection, expectedHost, "owner@example.com");
@@ -62,13 +66,27 @@ public class StagingSeedServiceTests
     }
 
     [Theory]
-    [InlineData("Production", "staging.render.com")]
-    [InlineData("Staging", "production.render.com")]
-    public async Task MigrationRejectsUnsafeTargetBeforeOpeningDatabase(string environment, string host)
+    [InlineData("orbit_staging")]
+    [InlineData("orbit_staging_jo8c")]
+    [InlineData("orbit_staging_abc123")]
+    public void StagingTargetIsAcceptedBeforeOpeningDatabase(string database)
+    {
+        var connection = $"Host=staging.render.com;Database={database};Username=orbit_staging;Password=x";
+
+        var action = () => StagingSeedCommand.ValidateTarget("Staging", connection, "staging.render.com", "owner@example.com");
+
+        action.Should().NotThrow();
+    }
+
+    [Theory]
+    [InlineData("Production", "staging.render.com", "orbit_staging")]
+    [InlineData("Staging", "production.render.com", "orbit_staging")]
+    [InlineData("Staging", "staging.render.com", "orbit_production_9g8l")]
+    public async Task MigrationRejectsUnsafeTargetBeforeOpeningDatabase(string environment, string host, string database)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["Seed:DatabaseUrl"] = $"Host={host};Database=orbit_staging;Username=orbit_staging;Password=x",
+            ["Seed:DatabaseUrl"] = $"Host={host};Database={database};Username=orbit_staging;Password=x",
             ["Seed:ExpectedHost"] = "staging.render.com",
             ["Seed:OwnerEmail"] = "owner@example.com"
         }).Build();
@@ -82,10 +100,11 @@ public class StagingSeedServiceTests
     public void PostgresUrlIsConvertedForNpgsql()
     {
         var encodedPassword = Uri.EscapeDataString(string.Join(string.Empty, "p", "@", "ss"));
-        var url = $"postgresql://orbit_staging:{encodedPassword}@staging.render.com/orbit_staging";
+        var url = $"postgresql://orbit_staging:{encodedPassword}@staging.render.com/orbit_staging_jo8c";
         var result = StagingSeedCommand.NormalizeConnectionString(url);
 
         StagingSeedCommand.ValidateTarget("Staging", result, "staging.render.com", "owner@example.com");
+        new Npgsql.NpgsqlConnectionStringBuilder(result).Database.Should().Be("orbit_staging_jo8c");
         new Npgsql.NpgsqlConnectionStringBuilder(result).Password.Should().Be("p@ss");
     }
 

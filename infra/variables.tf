@@ -15,6 +15,15 @@ variable "api_database" {
   }
 }
 
+variable "production_postgres_ip_allow_list" {
+  description = "Operator addresses allowed to connect to production Postgres. Copy the live Render list into local.tfvars before planning."
+  type = list(object({
+    cidr_block  = string
+    description = string
+  }))
+  default = []
+}
+
 variable "production_storage_provider" {
   description = "Production upload storage provider."
   type        = string
