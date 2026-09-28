@@ -80,7 +80,7 @@ jobs:
           ' > /dev/null
           terraform -chdir=infra/staging-database apply -input=false -auto-approve staging-reseed.tfplan > /dev/null
       - name: Apply migrations to the replacement database
-        if: steps.age.outputs.replace == 'true' || inputs.migration_probe
+        if: steps.age.outputs.replace == 'true'
         run: |
           if [[ "${{ inputs.migration_probe }}" == true ]]; then
             MIGRATION_PROBE=true bash .github/scripts/run-render-staging-job.sh migrate-staging
@@ -88,6 +88,13 @@ jobs:
             STAGING_INTERNAL_HOST="$(terraform -chdir=infra/staging-database output -raw staging_internal_host)" \
               bash .github/scripts/run-render-staging-job.sh migrate-staging
           fi
+      - name: Inspect staging database API for the probe
+        if: inputs.migration_probe
+        run: |
+          response="$(curl --fail-with-body --silent --show-error --max-time 30 \
+            --header "Authorization: Bearer ${RENDER_API_KEY}" \
+            'https://api.render.com/v1/postgres?limit=100')"
+          jq 'if type == "array" then {type: type, first: (.[0] | keys)} else {type: type, keys: keys} end' <<< "$response"
       - name: Deploy the staging API and wait for that deploy
         if: steps.age.outputs.replace == 'true'
         run: |
