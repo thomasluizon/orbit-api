@@ -121,6 +121,16 @@ resource "aws_kms_key" "ses_events" {
         Principal = { Service = "sns.amazonaws.com" }
         Action    = ["kms:GenerateDataKey*", "kms:Decrypt"]
         Resource  = "*"
+      },
+      {
+        Sid       = "AllowCloudWatchAlarmPublishing"
+        Effect    = "Allow"
+        Principal = { Service = "cloudwatch.amazonaws.com" }
+        Action    = ["kms:GenerateDataKey*", "kms:Decrypt"]
+        Resource  = "*"
+        Condition = {
+          StringEquals = { "aws:SourceAccount" = "713285551626" }
+        }
       }
     ]
   })
@@ -205,11 +215,13 @@ resource "aws_sqs_queue" "ses_events_staging" {
 }
 
 resource "aws_sns_topic" "ses_dead_letter_alerts" {
-  name = "orbit-ses-dead-letter-alerts"
+  name              = "orbit-ses-dead-letter-alerts"
+  kms_master_key_id = aws_kms_key.ses_events.arn
 }
 
 resource "aws_sns_topic" "ses_dead_letter_alerts_staging" {
-  name = "orbit-ses-dead-letter-alerts-staging"
+  name              = "orbit-ses-dead-letter-alerts-staging"
+  kms_master_key_id = aws_kms_key.ses_events.arn
 }
 
 resource "aws_cloudwatch_metric_alarm" "ses_events_dead_letter" {
