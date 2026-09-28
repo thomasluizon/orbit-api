@@ -14,7 +14,7 @@ using Orbit.Infrastructure.Configuration;
 
 namespace Orbit.Api.Seed;
 
-public static class StagingSeedCommand
+public static partial class StagingSeedCommand
 {
     public static async Task MigrateAsync(IConfiguration configuration, string environment)
     {
@@ -58,10 +58,13 @@ public static class StagingSeedCommand
 
         var connection = new NpgsqlConnectionStringBuilder(connectionString);
         if (!string.Equals(connection.Host, expectedHost, StringComparison.OrdinalIgnoreCase)
-            || !Regex.IsMatch(connection.Database ?? string.Empty, "^orbit_staging(_[a-z0-9]+)?$", RegexOptions.CultureInvariant)
+            || !StagingDatabaseName().IsMatch(connection.Database ?? string.Empty)
             || !string.Equals(connection.Username, "orbit_staging", StringComparison.Ordinal))
             throw new InvalidOperationException("Seed target is not the configured staging database.");
     }
+
+    [GeneratedRegex("^orbit_staging(_[a-z0-9]+)?$", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex StagingDatabaseName();
 
     public static string? NormalizeConnectionString(string? source)
     {
