@@ -38,6 +38,16 @@ public static partial class ServiceCollectionExtensions
         });
 
         var storageProvider = builder.Configuration["Storage:Provider"] ?? "Supabase";
+        builder.Services.Configure<S3StorageSettings>(
+            builder.Configuration.GetSection(S3StorageSettings.SectionName));
+        builder.Services.AddSingleton<IAmazonS3>(_ => new AmazonS3Client(
+            new BasicAWSCredentials(
+                RequireConfigValue(builder, "Storage:S3:AccessKeyId"),
+                RequireConfigValue(builder, "Storage:S3:SecretAccessKey")),
+            RegionEndpoint.GetBySystemName(RequireConfigValue(builder, "Storage:S3:Region"))));
+        builder.Services.AddScoped<S3ObjectStorageService>();
+        builder.Services.AddScoped<IObjectStorageReadService>(serviceProvider =>
+            serviceProvider.GetRequiredService<S3ObjectStorageService>());
         if (storageProvider.Equals("Supabase", StringComparison.OrdinalIgnoreCase))
         {
             var supabaseSecretKey = RequireConfigValue(builder, "Supabase:SecretKey");
@@ -55,15 +65,11 @@ public static partial class ServiceCollectionExtensions
         {
             RequireConfigValue(builder, "Storage:S3:Bucket");
             RequireConfigValue(builder, "Storage:S3:PublicBaseUrl");
-            var region = RequireConfigValue(builder, "Storage:S3:Region");
-            var accessKeyId = RequireConfigValue(builder, "Storage:S3:AccessKeyId");
-            var secretAccessKey = RequireConfigValue(builder, "Storage:S3:SecretAccessKey");
-            builder.Services.Configure<S3StorageSettings>(
-                builder.Configuration.GetSection(S3StorageSettings.SectionName));
-            builder.Services.AddSingleton<IAmazonS3>(_ => new AmazonS3Client(
-                new BasicAWSCredentials(accessKeyId, secretAccessKey),
-                RegionEndpoint.GetBySystemName(region)));
-            builder.Services.AddScoped<IObjectStorageService, S3ObjectStorageService>();
+            RequireConfigValue(builder, "Storage:S3:Region");
+            RequireConfigValue(builder, "Storage:S3:AccessKeyId");
+            RequireConfigValue(builder, "Storage:S3:SecretAccessKey");
+            builder.Services.AddScoped<IObjectStorageService>(serviceProvider =>
+                serviceProvider.GetRequiredService<S3ObjectStorageService>());
         }
         else
         {

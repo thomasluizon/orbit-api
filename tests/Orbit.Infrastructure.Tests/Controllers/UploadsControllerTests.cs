@@ -19,7 +19,7 @@ public class UploadsControllerTests
 {
     private readonly IMediator _mediator = Substitute.For<IMediator>();
     private readonly ILogger<UploadsController> _logger = Substitute.For<ILogger<UploadsController>>();
-    private readonly IObjectStorageService _objectStorage = Substitute.For<IObjectStorageService>();
+    private readonly IObjectStorageReadService _objectStorage = Substitute.For<IObjectStorageReadService>();
     private readonly UploadsController _controller;
     private static readonly Guid UserId = Guid.NewGuid();
 
@@ -83,7 +83,7 @@ public class UploadsControllerTests
         var result = await _controller.ReadObject(userId, fileName, CancellationToken.None);
 
         result.Should().BeOfType<RedirectResult>().Which.Url.Should().Be("https://example.s3.amazonaws.com/signed-read");
-        _controller.Response.Headers.CacheControl.ToString().Should().Be("no-store");
+        _controller.Response.Headers.CacheControl.ToString().Should().Be("public, max-age=300");
         await _objectStorage.Received(1).CreateReadUrlAsync(key, Arg.Any<CancellationToken>());
     }
 

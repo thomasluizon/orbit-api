@@ -105,6 +105,29 @@ public class DistributedRateLimitFilterTests
     }
 
     [Fact]
+    public async Task UploadReads_PartitionByObjectAcrossViewersSharingAnIp()
+    {
+        var partitions = new List<string>();
+        _service.TryAcquireAsync("upload-reads", Arg.Do<string>(partitions.Add), Arg.Any<CancellationToken>())
+            .Returns(new DistributedRateLimitDecision(true, 600, 1, DateTime.UtcNow.AddMinutes(1)));
+        var filter = new DistributedRateLimitFilter("upload-reads", _service, _authSessionService, _logger);
+        const string userId = "2b3b1fc7-813c-4eb6-ad02-bd7754299703";
+
+        for (var index = 0; index < 200; index++)
+        {
+            var (context, httpContext) = CreateExecutingContext();
+            httpContext.Connection.RemoteIpAddress = System.Net.IPAddress.Parse("203.0.113.7");
+            httpContext.Request.RouteValues["userId"] = userId;
+            httpContext.Request.RouteValues["fileName"] = $"{Guid.NewGuid():D}.webp";
+            await filter.OnActionExecutionAsync(context, () => Task.FromResult(CreateExecutedContext(context)));
+            context.Result.Should().BeNull();
+        }
+
+        partitions.Should().HaveCount(200).And.OnlyHaveUniqueItems();
+        partitions.Should().OnlyContain(partition => partition.StartsWith($"object:{userId}/", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task RefreshPolicy_PartitionsUnauthenticatedRequestByRefreshToken_WhenTokenMapsToRealSession()
     {
         var refreshToken = new string('A', RefreshTokenRules.TokenLength);

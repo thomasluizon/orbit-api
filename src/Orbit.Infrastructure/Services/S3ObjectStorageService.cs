@@ -7,7 +7,7 @@ using Orbit.Infrastructure.Configuration;
 
 namespace Orbit.Infrastructure.Services;
 
-public sealed class S3ObjectStorageService(IAmazonS3 client, IOptions<S3StorageSettings> options) : IObjectStorageService
+public sealed class S3ObjectStorageService(IAmazonS3 client, IOptions<S3StorageSettings> options) : IObjectStorageService, IObjectStorageReadService
 {
     private static readonly TimeSpan UploadLifetime = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan ReadLifetime = TimeSpan.FromMinutes(10);

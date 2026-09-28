@@ -13,7 +13,7 @@ namespace Orbit.Api.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/uploads")]
-public partial class UploadsController(IMediator mediator, IObjectStorageService objectStorage, ILogger<UploadsController> logger) : ControllerBase
+public partial class UploadsController(IMediator mediator, IObjectStorageReadService objectReader, ILogger<UploadsController> logger) : ControllerBase
 {
     public record SignUploadRequest(string ContentType, [property: JsonRequired] long SizeBytes);
 
@@ -62,8 +62,8 @@ public partial class UploadsController(IMediator mediator, IObjectStorageService
             return NotFound();
 
         var objectKey = $"{parsedUserId:D}/{canonicalFileId}.{parsedExtension}";
-        var readUrl = await objectStorage.CreateReadUrlAsync(objectKey, cancellationToken);
-        Response.Headers.CacheControl = "no-store";
+        var readUrl = await objectReader.CreateReadUrlAsync(objectKey, cancellationToken);
+        Response.Headers.CacheControl = "public, max-age=300";
         return Redirect(readUrl);
     }
 
