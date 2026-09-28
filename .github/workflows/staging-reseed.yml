@@ -14,7 +14,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: staging-database-lifecycle
+  group: api-release-staging
   cancel-in-progress: false
 
 jobs:
@@ -82,34 +82,46 @@ jobs:
       - name: Deploy the staging API and wait for that deploy
         if: steps.age.outputs.replace == 'true'
         run: |
-          triggered_after="$(date -u -d '1 minute ago' +%Y-%m-%dT%H:%M:%SZ)"
-          previous_ids="$(curl --fail --silent --show-error --max-time 30 \
+          set -euo pipefail
+          commit_id="$(curl --fail --silent --show-error --max-time 30 \
             --header "Authorization: Bearer ${RENDER_API_KEY}" \
-            --get --data-urlencode "createdAfter=${triggered_after}" \
-            --data-urlencode 'limit=100' \
+            --get --data-urlencode 'status=live' --data-urlencode 'limit=1' \
             "https://api.render.com/v1/services/${TF_VAR_staging_api_service_id}/deploys" \
-            | jq --compact-output '[.[].deploy.id]')"
+            | jq --exit-status --raw-output '.[0].deploy.commit.id | select(type == "string" and length > 0)')"
+          payload="$(jq --null-input --compact-output --arg commit "$commit_id" '{commitId: $commit}')"
+          triggered_after="$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)"
           response="$(mktemp)"
           status="$(curl --silent --show-error --max-time 30 --output "$response" --write-out '%{http_code}' \
             --request POST --header "Authorization: Bearer ${RENDER_API_KEY}" \
-            --header 'Content-Type: application/json' --data '{}' \
+            --header 'Content-Type: application/json' --data "$payload" \
             "https://api.render.com/v1/services/${TF_VAR_staging_api_service_id}/deploys")"
           if [[ "$status" == 201 ]]; then
-            deploy_id="$(jq --exit-status --raw-output '.id' "$response")"
+            deploy_id="$(jq --exit-status --raw-output '.id | select(type == "string" and length > 0)' "$response")"
           elif [[ "$status" == 202 ]]; then
             deploy_id=''
             for ((attempt=1; attempt<=30; attempt++)); do
-              deploy_id="$(curl --fail --silent --show-error --max-time 30 \
+              candidates="$(curl --fail --silent --show-error --max-time 30 \
                 --header "Authorization: Bearer ${RENDER_API_KEY}" \
                 --get --data-urlencode "createdAfter=${triggered_after}" \
                 --data-urlencode 'limit=100' \
                 "https://api.render.com/v1/services/${TF_VAR_staging_api_service_id}/deploys" \
-                | jq --raw-output --argjson previous "$previous_ids" \
-                  '[.[] | select(.deploy.trigger == "api") | .deploy.id | select(. as $id | $previous | index($id) | not)][0] // empty')"
-              [[ -n "$deploy_id" ]] && break
+                | jq --compact-output --arg commit "$commit_id" \
+                  '[.[] | select(.deploy.commit.id == $commit) | .deploy.id]')"
+              candidate_count="$(jq 'length' <<< "$candidates")"
+              if ((candidate_count > 1)); then
+                echo "Multiple deploys of ${commit_id} appeared after the trigger; cannot identify the requested deploy" >&2
+                exit 1
+              fi
+              if ((candidate_count == 1)); then
+                deploy_id="$(jq --raw-output '.[0]' <<< "$candidates")"
+                break
+              fi
               sleep 10
             done
-            [[ -n "$deploy_id" ]]
+            if [[ -z "$deploy_id" ]]; then
+              echo "Render queued a deploy of ${commit_id} but did not list it" >&2
+              exit 1
+            fi
           else
             echo "Render deploy request failed with HTTP ${status}" >&2
             exit 1
