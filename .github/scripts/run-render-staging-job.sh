@@ -9,16 +9,23 @@ esac
 
 : "${RENDER_API_KEY:?}"
 : "${TF_VAR_staging_api_service_id:?}"
-: "${STAGING_INTERNAL_HOST:?}"
 : "${SEED_OWNER_EMAIL:?}"
 
-start_command="$(jq -nr \
-  --arg host "$STAGING_INTERNAL_HOST" \
-  --arg email "$SEED_OWNER_EMAIL" \
-  --arg command "$command_name" \
-  '["env", "ASPNETCORE_ENVIRONMENT=Staging", "Seed__ExpectedHost=" + $host,
-    "Seed__OwnerEmail=" + $email, "dotnet", "Orbit.Api.dll", $command]
-  | map(@sh) | join(" ")')"
+if [[ "${MIGRATION_PROBE:-}" == true ]]; then
+  start_command="$(jq -nr --arg email "$SEED_OWNER_EMAIL" \
+    '["env", "ASPNETCORE_ENVIRONMENT=Staging", "Seed__OwnerEmail=" + $email,
+      "sh", "-c", "export Seed__ExpectedHost=$(printf %s \"$ConnectionStrings__DefaultConnection\" | sed -n \"s/.*Host=\\([^;]*\\).*/\\1/p\"); exec dotnet Orbit.Api.dll migrate-staging"]
+    | map(@sh) | join(" ")')"
+else
+  : "${STAGING_INTERNAL_HOST:?}"
+  start_command="$(jq -nr \
+    --arg host "$STAGING_INTERNAL_HOST" \
+    --arg email "$SEED_OWNER_EMAIL" \
+    --arg command "$command_name" \
+    '["env", "ASPNETCORE_ENVIRONMENT=Staging", "Seed__ExpectedHost=" + $host,
+      "Seed__OwnerEmail=" + $email, "dotnet", "Orbit.Api.dll", $command]
+    | map(@sh) | join(" ")')"
+fi
 payload="$(jq -nc --arg command "$start_command" '{startCommand: $command}')"
 job="$(curl --fail-with-body --silent --show-error --max-time 30 \
   --request POST \

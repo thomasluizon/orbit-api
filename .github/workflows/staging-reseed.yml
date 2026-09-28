@@ -36,14 +36,17 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5
+        if: ${{ !inputs.migration_probe }}
         with:
           role-to-assume: arn:aws:iam::713285551626:role/orbit-staging-reseed
           aws-region: us-east-2
       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        if: ${{ !inputs.migration_probe }}
         with:
           terraform_version: 1.16.4
           terraform_wrapper: false
       - name: Initialize staging database state
+        if: ${{ !inputs.migration_probe }}
         run: |
           [[ -n "$TF_VAR_staging_environment_id" && -n "$TF_VAR_staging_api_service_id" ]]
           terraform -chdir=infra/staging-database init -input=false
@@ -76,14 +79,15 @@ jobs:
               (.change.actions == ["delete", "create"] or .change.actions == ["create", "delete"]))
           ' > /dev/null
           terraform -chdir=infra/staging-database apply -input=false -auto-approve staging-reseed.tfplan > /dev/null
-      - name: Refresh state outputs for the migration probe
-        if: inputs.migration_probe
-        run: terraform -chdir=infra/staging-database apply -refresh-only -input=false -auto-approve
       - name: Apply migrations to the replacement database
         if: steps.age.outputs.replace == 'true' || inputs.migration_probe
         run: |
-          STAGING_INTERNAL_HOST="$(terraform -chdir=infra/staging-database output -raw staging_internal_host)" \
-            bash .github/scripts/run-render-staging-job.sh migrate-staging
+          if [[ "${{ inputs.migration_probe }}" == true ]]; then
+            MIGRATION_PROBE=true bash .github/scripts/run-render-staging-job.sh migrate-staging
+          else
+            STAGING_INTERNAL_HOST="$(terraform -chdir=infra/staging-database output -raw staging_internal_host)" \
+              bash .github/scripts/run-render-staging-job.sh migrate-staging
+          fi
       - name: Deploy the staging API and wait for that deploy
         if: steps.age.outputs.replace == 'true'
         run: |
