@@ -260,12 +260,14 @@ public class LogHabitCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ExistingLogBeyondOverdueWindow_TogglesUnlog()
+    public async Task Handle_ExistingLogBeyondOverdueWindow_RejectsUnlog()
     {
         var targetDate = Today.AddDays(-(AppConstants.DefaultOverdueWindowDays + 1));
         var habit = Habit.Create(new HabitCreateParams(
             UserId, "Daily", FrequencyUnit.Day, 1, DueDate: targetDate)).Value;
-        habit.Log(targetDate, advanceDueDate: false).IsSuccess.Should().BeTrue();
+        for (var offset = 0; offset < 3; offset++)
+            habit.Log(targetDate.AddDays(offset)).IsSuccess.Should().BeTrue();
+        var dueDateBeforeUnlog = habit.DueDate;
         _habitRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
@@ -274,13 +276,15 @@ public class LogHabitCommandHandlerTests
         var result = await _handler.Handle(
             new LogHabitCommand(UserId, habit.Id, targetDate), CancellationToken.None);
 
-        result.ErrorCode.Should().NotBe(ErrorCodes.BeyondOverdueWindow);
-        result.IsSuccess.Should().BeTrue();
-        habit.Logs.Should().NotContain(l => l.Date == targetDate && !l.IsDeleted);
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.BeyondOverdueWindow);
+        habit.DueDate.Should().Be(dueDateBeforeUnlog);
+        habit.Logs.Where(l => !l.IsDeleted).Select(l => l.Date)
+            .Should().BeEquivalentTo([targetDate, targetDate.AddDays(1), targetDate.AddDays(2)]);
     }
 
     [Fact]
-    public async Task Handle_ExistingFutureLog_TogglesUnlog()
+    public async Task Handle_ExistingFutureLog_RejectsUnlog()
     {
         var targetDate = Today.AddDays(1);
         var habit = CreateTestHabit();
@@ -293,8 +297,48 @@ public class LogHabitCommandHandlerTests
         var result = await _handler.Handle(
             new LogHabitCommand(UserId, habit.Id, targetDate), CancellationToken.None);
 
-        result.IsSuccess.Should().BeTrue();
-        habit.Logs.Should().NotContain(l => l.Date == targetDate && !l.IsDeleted);
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.CannotLogFutureDate);
+        habit.Logs.Should().ContainSingle(l => l.Date == targetDate && !l.IsDeleted);
+    }
+
+    [Fact]
+    public async Task Handle_UnlogOldestOfThreeRecentCompletions_AllowsRelogAndRestoresNextDueDate()
+    {
+        var oldest = Today.AddDays(-2);
+        var currentDate = oldest;
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(_ => currentDate);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Daily", FrequencyUnit.Day, 1, DueDate: oldest)).Value;
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>()).Returns(habit);
+
+        for (var offset = 0; offset < 3; offset++)
+        {
+            currentDate = oldest.AddDays(offset);
+            (await _handler.Handle(new LogHabitCommand(UserId, habit.Id), CancellationToken.None))
+                .IsSuccess.Should().BeTrue();
+        }
+
+        habit.DueDate.Should().Be(Today.AddDays(1));
+        var unlog = await _handler.Handle(
+            new LogHabitCommand(UserId, habit.Id, oldest), CancellationToken.None);
+
+        unlog.IsSuccess.Should().BeTrue();
+        habit.DueDate.Should().Be(oldest);
+        habit.Logs.Where(l => !l.IsDeleted).Select(l => l.Date)
+            .Should().BeEquivalentTo([oldest.AddDays(1), Today]);
+
+        var relog = await _handler.Handle(
+            new LogHabitCommand(UserId, habit.Id, oldest), CancellationToken.None);
+
+        relog.IsSuccess.Should().BeTrue("relog returned {0}: {1}", relog.ErrorCode, relog.Error);
+        habit.DueDate.Should().Be(Today.AddDays(1));
+        habit.Logs.Where(l => !l.IsDeleted).Select(l => l.Date)
+            .Should().BeEquivalentTo([oldest, oldest.AddDays(1), Today]);
     }
 
     [Fact]

@@ -482,6 +482,26 @@ public class HabitTests
     }
 
     [Fact]
+    public void Log_AfterUnloggingOldestCompletion_AdvancesPastRemainingCompletions()
+    {
+        var oldest = new DateOnly(2026, 3, 18);
+        var habit = CreateValidHabit(
+            frequencyUnit: FrequencyUnit.Day,
+            frequencyQuantity: 1,
+            dueDate: oldest);
+        for (var offset = 0; offset < 3; offset++)
+            habit.Log(oldest.AddDays(offset)).IsSuccess.Should().BeTrue();
+
+        habit.Unlog(oldest).IsSuccess.Should().BeTrue();
+        habit.DueDate.Should().Be(oldest);
+        habit.Log(oldest, advanceDueDate: false).IsSuccess.Should().BeTrue();
+
+        habit.DueDate.Should().Be(oldest.AddDays(3));
+        habit.Logs.Where(l => !l.IsDeleted).Select(l => l.Date)
+            .Should().BeEquivalentTo([oldest, oldest.AddDays(1), oldest.AddDays(2)]);
+    }
+
+    [Fact]
     public void Update_ValidInput_UpdatesFields()
     {
         var habit = CreateValidHabit();
