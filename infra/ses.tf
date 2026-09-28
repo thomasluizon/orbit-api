@@ -78,8 +78,19 @@ resource "aws_sesv2_configuration_set" "orbit" {
   configuration_set_name = each.value.configuration_set
 }
 
+resource "aws_sesv2_configuration_set" "staging" {
+  for_each               = local.ses_streams
+  configuration_set_name = "orbit-staging-${each.key}"
+}
+
 resource "aws_sns_topic" "ses_events" {
   name              = "orbit-ses-events"
+  signature_version = 2
+  kms_master_key_id = aws_kms_key.ses_events.arn
+}
+
+resource "aws_sns_topic" "ses_events_staging" {
+  name              = "orbit-ses-events-staging"
   signature_version = 2
   kms_master_key_id = aws_kms_key.ses_events.arn
 }
@@ -133,6 +144,24 @@ resource "aws_sns_topic_policy" "ses_events" {
   })
 }
 
+resource "aws_sns_topic_policy" "ses_events_staging" {
+  arn = aws_sns_topic.ses_events_staging.arn
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "AllowStagingSesEvents"
+      Effect    = "Allow"
+      Principal = { Service = "ses.amazonaws.com" }
+      Action    = "SNS:Publish"
+      Resource  = aws_sns_topic.ses_events_staging.arn
+      Condition = {
+        StringEquals = { "AWS:SourceAccount" = "713285551626" }
+        ArnEquals    = { "AWS:SourceArn" = [for configuration in aws_sesv2_configuration_set.staging : configuration.arn] }
+      }
+    }]
+  })
+}
+
 resource "aws_sesv2_configuration_set_event_destination" "sns" {
   for_each               = aws_sesv2_configuration_set.orbit
   configuration_set_name = each.value.configuration_set_name
@@ -148,10 +177,31 @@ resource "aws_sesv2_configuration_set_event_destination" "sns" {
   depends_on = [aws_sns_topic_policy.ses_events]
 }
 
+resource "aws_sesv2_configuration_set_event_destination" "sns_staging" {
+  for_each               = aws_sesv2_configuration_set.staging
+  configuration_set_name = each.value.configuration_set_name
+  event_destination_name = "orbit-sns"
+
+  event_destination {
+    matching_event_types = ["BOUNCE", "COMPLAINT", "REJECT"]
+    sns_destination {
+      topic_arn = aws_sns_topic.ses_events_staging.arn
+    }
+  }
+
+  depends_on = [aws_sns_topic_policy.ses_events_staging]
+}
+
 resource "aws_sns_topic_subscription" "ses_events_api" {
   topic_arn = aws_sns_topic.ses_events.arn
   protocol  = "https"
   endpoint  = "https://api.useorbit.org/api/email/ses-events"
+}
+
+resource "aws_sns_topic_subscription" "ses_events_staging_api" {
+  topic_arn = aws_sns_topic.ses_events_staging.arn
+  protocol  = "https"
+  endpoint  = "https://api-staging.useorbit.org/api/email/ses-events"
 }
 
 resource "aws_sesv2_account_suppression_attributes" "orbit" {
@@ -160,6 +210,10 @@ resource "aws_sesv2_account_suppression_attributes" "orbit" {
 
 resource "aws_iam_user" "api_ses" {
   name = "orbit-api-ses"
+}
+
+resource "aws_iam_user" "api_ses_staging" {
+  name = "orbit-api-ses-staging"
 }
 
 resource "aws_iam_user_policy" "api_ses" {
@@ -182,16 +236,36 @@ resource "aws_iam_access_key" "api_ses" {
   user = aws_iam_user.api_ses.name
 }
 
+resource "aws_iam_user_policy" "api_ses_staging" {
+  name = "orbit-api-ses-staging-send"
+  user = aws_iam_user.api_ses_staging.name
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = ["ses:SendEmail", "ses:SendRawEmail"]
+      Resource = concat(
+        [for identity in aws_sesv2_email_identity.orbit : identity.arn],
+        [for configuration in aws_sesv2_configuration_set.staging : configuration.arn]
+      )
+    }]
+  })
+}
+
+resource "aws_iam_access_key" "api_ses_staging" {
+  user = aws_iam_user.api_ses_staging.name
+}
+
 resource "aws_ssm_parameter" "api_ses_access_key_id" {
   for_each = toset(["production", "staging"])
   name     = "/orbit/${each.key}/api/Ses__AccessKeyId"
   type     = "SecureString"
-  value    = aws_iam_access_key.api_ses.id
+  value    = each.key == "production" ? aws_iam_access_key.api_ses.id : aws_iam_access_key.api_ses_staging.id
 }
 
 resource "aws_ssm_parameter" "api_ses_secret_access_key" {
   for_each = toset(["production", "staging"])
   name     = "/orbit/${each.key}/api/Ses__SecretAccessKey"
   type     = "SecureString"
-  value    = aws_iam_access_key.api_ses.secret
+  value    = each.key == "production" ? aws_iam_access_key.api_ses.secret : aws_iam_access_key.api_ses_staging.secret
 }

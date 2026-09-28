@@ -54,8 +54,8 @@ locals {
     Ses__FromEmail                      = "Orbit <noreply@send.useorbit.org>"
     Ses__MarketingFromEmail             = "Orbit <news@updates.useorbit.org>"
     Ses__SupportEmail                   = "contact@useorbit.org"
-    Ses__TransactionalConfigurationSet  = "orbit-transactional"
-    Ses__MarketingConfigurationSet      = "orbit-marketing"
+    Ses__TransactionalConfigurationSet  = aws_sesv2_configuration_set.orbit["transactional"].configuration_set_name
+    Ses__MarketingConfigurationSet      = aws_sesv2_configuration_set.orbit["marketing"].configuration_set_name
     Ses__TopicArn                       = aws_sns_topic.ses_events.arn
     Resend__FromEmail                   = "Orbit <noreply@send.useorbit.org>"
     Resend__SupportEmail                = "contact@useorbit.org"
@@ -73,20 +73,23 @@ locals {
   }
 
   staging_api_values = merge(local.production_api_values, {
-    Email__Provider                = var.staging_email_provider
-    ASPNETCORE_ENVIRONMENT         = "Staging"
-    Database__MigrateOnStartup     = "true"
-    Cors__AllowedOrigins__0        = "https://staging.useorbit.org"
-    Frontend__BaseUrl              = "https://staging.useorbit.org"
-    GooglePlay__RtdnAudience       = "https://api-staging.useorbit.org/api/subscriptions/play/rtdn"
-    Google__AllowedRedirectUris__0 = "https://staging.useorbit.org/auth-callback"
-    Google__AllowedRedirectUris__1 = "https://app.useorbit.org/auth-callback"
-    Marketing__ApiBaseUrl          = "https://api-staging.useorbit.org"
-    Sentry__Environment            = "staging"
-    Stripe__CancelUrl              = "https://staging.useorbit.org/upgrade"
-    Stripe__SuccessUrl             = "https://staging.useorbit.org/settings?subscription=success"
-    Supabase__Url                  = "https://staging-storage-disabled.invalid"
-    Waitlist__ApiBaseUrl           = "https://api-staging.useorbit.org"
+    Email__Provider                    = var.staging_email_provider
+    Ses__TransactionalConfigurationSet = aws_sesv2_configuration_set.staging["transactional"].configuration_set_name
+    Ses__MarketingConfigurationSet     = aws_sesv2_configuration_set.staging["marketing"].configuration_set_name
+    Ses__TopicArn                      = aws_sns_topic.ses_events_staging.arn
+    ASPNETCORE_ENVIRONMENT             = "Staging"
+    Database__MigrateOnStartup         = "true"
+    Cors__AllowedOrigins__0            = "https://staging.useorbit.org"
+    Frontend__BaseUrl                  = "https://staging.useorbit.org"
+    GooglePlay__RtdnAudience           = "https://api-staging.useorbit.org/api/subscriptions/play/rtdn"
+    Google__AllowedRedirectUris__0     = "https://staging.useorbit.org/auth-callback"
+    Google__AllowedRedirectUris__1     = "https://app.useorbit.org/auth-callback"
+    Marketing__ApiBaseUrl              = "https://api-staging.useorbit.org"
+    Sentry__Environment                = "staging"
+    Stripe__CancelUrl                  = "https://staging.useorbit.org/upgrade"
+    Stripe__SuccessUrl                 = "https://staging.useorbit.org/settings?subscription=success"
+    Supabase__Url                      = "https://staging-storage-disabled.invalid"
+    Waitlist__ApiBaseUrl               = "https://api-staging.useorbit.org"
   })
 
   production_web_values = {
