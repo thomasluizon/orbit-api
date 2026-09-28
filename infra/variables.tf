@@ -68,6 +68,18 @@ variable "staging_email_provider" {
   }
 }
 
+variable "production_ses_dlq_alert_email" {
+  description = "Email recipient for production SES dead-letter queue alarms. An empty value leaves the operations topic unsubscribed."
+  type        = string
+  default     = ""
+}
+
+variable "staging_ses_dlq_alert_email" {
+  description = "Email recipient for staging SES dead-letter queue alarms. An empty value leaves the operations topic unsubscribed."
+  type        = string
+  default     = ""
+}
+
 variable "production_web_digest" {
   description = "Published GHCR digest for the production web image."
   type        = string
