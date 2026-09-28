@@ -59,6 +59,7 @@ public static class DomainErrors
     public static readonly AppError ApiKeyScopesInvalid = new("API_KEY_SCOPES_INVALID", "API key scopes must be non-empty strings.");
 
     public static readonly AppError TitleRequired = new("TITLE_REQUIRED", "Title is required.");
+    public static readonly AppError InvalidCreatedAtUtc = new("INVALID_CREATED_AT_UTC", "Creation time must be a past UTC instant.");
     public static readonly AppError CannotLogCompletedHabit = new("HABIT_ALREADY_COMPLETED", "Cannot log a completed habit.");
     public static readonly AppError AlreadyLoggedForDate = new("ALREADY_LOGGED", "This habit has already been logged for this date.");
     public static readonly AppError AllInstancesDone = new("ALL_INSTANCES_DONE", "All instances for this period have already been completed or skipped.");

@@ -15,6 +15,37 @@ variable "api_database" {
   }
 }
 
+variable "production_postgres_ip_allow_list" {
+  description = "Operator addresses allowed to connect to production Postgres. Copy the live Render list into local.tfvars before planning."
+  type = list(object({
+    cidr_block  = string
+    description = string
+  }))
+  default = []
+}
+
+variable "production_email_provider" {
+  description = "Email provider for the production API."
+  type        = string
+  default     = "Resend"
+
+  validation {
+    condition     = contains(["Resend", "Ses"], var.production_email_provider)
+    error_message = "production_email_provider must be Resend or Ses."
+  }
+}
+
+variable "staging_email_provider" {
+  description = "Email provider for the staging API."
+  type        = string
+  default     = "Resend"
+
+  validation {
+    condition     = contains(["Resend", "Ses"], var.staging_email_provider)
+    error_message = "staging_email_provider must be Resend or Ses."
+  }
+}
+
 variable "production_web_digest" {
   description = "Published GHCR digest for the production web image."
   type        = string

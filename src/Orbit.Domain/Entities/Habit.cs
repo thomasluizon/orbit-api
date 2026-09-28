@@ -32,7 +32,8 @@ public record HabitCreateParams(
     string? GoogleEventId = null,
     string? Emoji = null,
     int? IntervalWeeks = null,
-    IReadOnlyList<RelativeReminderTime>? RelativeReminders = null);
+    IReadOnlyList<RelativeReminderTime>? RelativeReminders = null,
+    DateTime? CreatedAtUtc = null);
 
 public record HabitUpdateParams(
     string Title,
@@ -222,7 +223,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable, IHabitSchedule
             return Result.Failure<Habit>(scheduleValidation);
 
         var dateValidation = HabitInvariants.ValidateDateOptions(
-            p.DueTime, p.DueEndTime, p.EndDate, p.FrequencyUnit, p.IsGeneral, p.DueDate);
+            p.DueTime, p.DueEndTime, p.EndDate, p.FrequencyUnit, p.IsGeneral, p.DueDate, p.CreatedAtUtc);
         if (dateValidation is not null)
             return Result.Failure<Habit>(dateValidation);
 
@@ -270,9 +271,11 @@ public class Habit : Entity, ITimestamped, ISoftDeletable, IHabitSchedule
             EndDate = p.EndDate,
             Position = p.Position,
             GoogleEventId = p.GoogleEventId,
-            CreatedAtUtc = DateTime.UtcNow
+            CreatedAtUtc = ResolveCreatedAtUtc(p.CreatedAtUtc)
         });
     }
+
+    private static DateTime ResolveCreatedAtUtc(DateTime? createdAtUtc) => createdAtUtc ?? DateTime.UtcNow;
 
     public Result<HabitLog> Log(
         DateOnly date,

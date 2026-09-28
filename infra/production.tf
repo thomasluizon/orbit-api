@@ -34,10 +34,15 @@ resource "render_postgres" "production" {
   name                      = "orbit-production"
   database_name             = "orbit_production"
   database_user             = "orbit_production"
+  ip_allow_list             = var.production_postgres_ip_allow_list
   plan                      = "basic_1gb"
   region                    = "ohio"
   version                   = "17"
   high_availability_enabled = false
+
+  lifecycle {
+    ignore_changes = [database_name, database_user]
+  }
 }
 
 resource "render_web_service" "production_web" {
