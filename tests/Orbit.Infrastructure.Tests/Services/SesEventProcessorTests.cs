@@ -26,6 +26,8 @@ public sealed class SesEventProcessorTests : IDisposable
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly List<MarketingContact> _added = [];
     private readonly List<string> _fetchedUrls = [];
+    private HttpStatusCode _certificateStatus = HttpStatusCode.OK;
+    private string _certificateFailure = "none";
     private readonly SesEventProcessor _processor;
 
     public SesEventProcessorTests()
@@ -36,7 +38,8 @@ public sealed class SesEventProcessorTests : IDisposable
         _certificate = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddHours(1));
         var factory = Substitute.For<IHttpClientFactory>();
         factory.CreateClient(Arg.Any<string>()).Returns(call => new HttpClient(new StubHandler(
-            _certificate.ExportCertificatePem(), _fetchedUrls)));
+            _certificate.ExportCertificatePem(), _fetchedUrls, () => _certificateStatus,
+            () => _certificateFailure)));
         _contacts.AddAsync(Arg.Do<MarketingContact>(_added.Add), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
         _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
@@ -119,6 +122,22 @@ public sealed class SesEventProcessorTests : IDisposable
         _fetchedUrls.Should().BeEmpty();
     }
 
+    [Theory]
+    [InlineData("http")]
+    [InlineData("transport")]
+    [InlineData("timeout")]
+    public async Task CertificateFetchFailureIsRetryable(string failure)
+    {
+        _certificateStatus = HttpStatusCode.ServiceUnavailable;
+        _certificateFailure = failure;
+        var payload = Signed("Notification", JsonSerializer.Serialize(new { eventType = "Complaint", complaint = new { complainedRecipients = new[] { new { emailAddress = "person@example.com" } } } }));
+
+        var action = () => _processor.ProcessAsync(payload, CancellationToken.None);
+
+        await action.Should().ThrowAsync<SnsCertificateFetchException>();
+        _added.Should().BeEmpty();
+    }
+
     private string Signed(string type, string message, string version = "2")
     {
         var fields = new Dictionary<string, string>
@@ -150,13 +169,21 @@ public sealed class SesEventProcessorTests : IDisposable
         _key.Dispose();
     }
 
-    private sealed class StubHandler(string certificatePem, List<string> fetchedUrls) : HttpMessageHandler
+    private sealed class StubHandler(string certificatePem, List<string> fetchedUrls,
+        Func<HttpStatusCode> certificateStatus, Func<string> certificateFailure) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var url = request.RequestUri!.ToString();
             fetchedUrls.Add(url);
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            if (url == CertificateUrl)
+            {
+                if (certificateFailure() == "transport")
+                    throw new HttpRequestException("Certificate fetch failed");
+                if (certificateFailure() == "timeout")
+                    throw new TaskCanceledException("Certificate fetch timed out");
+            }
+            return Task.FromResult(new HttpResponseMessage(url == CertificateUrl ? certificateStatus() : HttpStatusCode.OK)
             {
                 Content = new StringContent(url == CertificateUrl ? certificatePem : "confirmed")
             });

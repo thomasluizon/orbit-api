@@ -192,16 +192,72 @@ resource "aws_sesv2_configuration_set_event_destination" "sns_staging" {
   depends_on = [aws_sns_topic_policy.ses_events_staging]
 }
 
+resource "aws_sqs_queue" "ses_events" {
+  name                      = "orbit-ses-events-dead-letter"
+  message_retention_seconds = 1209600
+  kms_master_key_id         = aws_kms_key.ses_events.arn
+}
+
+resource "aws_sqs_queue" "ses_events_staging" {
+  name                      = "orbit-ses-events-staging-dead-letter"
+  message_retention_seconds = 1209600
+  kms_master_key_id         = aws_kms_key.ses_events.arn
+}
+
+resource "aws_sqs_queue_policy" "ses_events" {
+  queue_url = aws_sqs_queue.ses_events.url
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "sns.amazonaws.com" }
+      Action    = "sqs:SendMessage"
+      Resource  = aws_sqs_queue.ses_events.arn
+      Condition = {
+        ArnEquals    = { "aws:SourceArn" = aws_sns_topic.ses_events.arn }
+        StringEquals = { "aws:SourceAccount" = "713285551626" }
+      }
+    }]
+  })
+}
+
+resource "aws_sqs_queue_policy" "ses_events_staging" {
+  queue_url = aws_sqs_queue.ses_events_staging.url
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "sns.amazonaws.com" }
+      Action    = "sqs:SendMessage"
+      Resource  = aws_sqs_queue.ses_events_staging.arn
+      Condition = {
+        ArnEquals    = { "aws:SourceArn" = aws_sns_topic.ses_events_staging.arn }
+        StringEquals = { "aws:SourceAccount" = "713285551626" }
+      }
+    }]
+  })
+}
+
 resource "aws_sns_topic_subscription" "ses_events_api" {
   topic_arn = aws_sns_topic.ses_events.arn
   protocol  = "https"
   endpoint  = "https://api.useorbit.org/api/email/ses-events"
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.ses_events.arn
+  })
+
+  depends_on = [aws_sqs_queue_policy.ses_events]
 }
 
 resource "aws_sns_topic_subscription" "ses_events_staging_api" {
   topic_arn = aws_sns_topic.ses_events_staging.arn
   protocol  = "https"
   endpoint  = "https://api-staging.useorbit.org/api/email/ses-events"
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.ses_events_staging.arn
+  })
+
+  depends_on = [aws_sqs_queue_policy.ses_events_staging]
 }
 
 resource "aws_sesv2_account_suppression_attributes" "orbit" {
