@@ -89,7 +89,8 @@ test("each SES dead-letter queue alerts its own operations topic", () => {
     assert.match(alert, /evaluation_periods\s*=\s*1/)
     assert.match(alert, /treat_missing_data\s*=\s*"notBreaching"/)
     assert.match(alert, new RegExp(`alarm_actions\\s*=\\s*\\[aws_sns_topic\\.${topic}\\.arn\\]`))
-    assert.ok(operationsTopic.includes(`name = "${topicName}"`))
+    assert.match(operationsTopic, new RegExp(`name\\s*=\\s*"${literal(topicName)}"`))
+    assert.match(operationsTopic, /kms_master_key_id\s*=\s*aws_kms_key\.ses_events\.arn/)
     assert.match(subscription, new RegExp(`topic_arn\\s*=\\s*aws_sns_topic\\.${topic}\\.arn`))
     assert.match(subscription, /protocol\s*=\s*"email"/)
     assert.match(subscription, new RegExp(`endpoint\\s*=\\s*var\\.${emailVariable}`))
@@ -99,6 +100,18 @@ test("each SES dead-letter queue alerts its own operations topic", () => {
     assert.match(topicPolicy, new RegExp(`Resource\\s*=\\s*aws_sns_topic\\.${topic}\\.arn`))
     assert.match(email, /default\s*=\s*""/)
   }
+})
+
+test("the SES encryption key lets CloudWatch publish encrypted alarm notifications from this account", () => {
+  const key = block(ses, 'resource "aws_kms_key" "ses_events"')
+  const grant = key.match(/\{\s*Sid\s*=\s*"AllowCloudWatchAlarmPublishing"[\s\S]*?\n      \}/)?.[0]
+
+  assert.ok(grant, "Missing CloudWatch KMS grant")
+  assert.match(grant, /Effect\s*=\s*"Allow"/)
+  assert.match(grant, /Principal\s*=\s*\{ Service = "cloudwatch\.amazonaws\.com" \}/)
+  assert.match(grant, /Action\s*=\s*\["kms:GenerateDataKey\*", "kms:Decrypt"\]/)
+  assert.match(grant, /Resource\s*=\s*"\*"/)
+  assert.match(grant, /StringEquals\s*=\s*\{ "aws:SourceAccount" = "713285551626" \}/)
 })
 
 test("each API environment has credentials scoped to its own configuration sets", () => {
