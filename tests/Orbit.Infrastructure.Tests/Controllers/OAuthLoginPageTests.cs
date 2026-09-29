@@ -32,8 +32,8 @@ public class OAuthLoginPageTests : IDisposable
         });
         _controller = new OAuthController(
             Substitute.For<IMediator>(), _authStore,
-            Substitute.For<IGenericRepository<ApiKey>>(), Substitute.For<IGenericRepository<User>>(),
-            Substitute.For<IUnitOfWork>(), Substitute.For<IHttpClientFactory>(),
+            Substitute.For<IGenericRepository<ApiKey>>(),
+            Substitute.For<IUnitOfWork>(),
             googleSettings, new ConfigurationBuilder().Build(),
             Substitute.For<ILogger<OAuthController>>());
 

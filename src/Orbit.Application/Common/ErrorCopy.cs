@@ -18,7 +18,6 @@ public static class ErrorCopy
         (ErrorCodes.GoogleRedirectUriNotAllowed, "Google sign-in redirect URI is not allowed", "O endereço de retorno do acesso com o Google não é permitido."),
         (ErrorCodes.GoogleCodeExchangeFailed, "Could not exchange Google sign-in code", "Não foi possível trocar o código de acesso do Google."),
         (ErrorCodes.GoogleEmailUnavailable, "Google did not share an email address. Allow email access and try again.", "O Google não compartilhou um e-mail. Permita o acesso ao e-mail e tente de novo."),
-        (ErrorCodes.GoogleTokenAudienceMismatch, "That Google sign-in was issued for another app. Sign in from Orbit again.", "Esse acesso do Google foi emitido para outro aplicativo. Entre pelo Orbit de novo."),
         (ErrorCodes.InvalidUnsubscribeToken, "That unsubscribe link expired. Use the link in a newer email.", "Esse link para cancelar inscrição expirou. Use o link de um e-mail mais recente."),
         (ErrorCodes.InvalidWaitlistConfirmation, "That confirmation link expired. Join the list again to get a new one.", "Esse link de confirmação expirou. Entre na lista de novo para receber outro."),
         (ErrorCodes.UpgradeRequired, "This version of Orbit is no longer supported. Update the app to continue.", "Esta versão do Orbit não é mais suportada. Atualize o aplicativo para continuar."),
