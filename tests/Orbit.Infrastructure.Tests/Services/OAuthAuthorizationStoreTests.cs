@@ -198,4 +198,79 @@ public class OAuthAuthorizationStoreTests : IDisposable
         entry.Should().NotBeNull();
         entry!.Nonce.Should().BeNull();
     }
+
+    [Fact]
+    public void GoogleRequest_BindsMcpValuesAndCanBeConsumedOnlyOnce()
+    {
+        var created = _store.TryCreateGoogleRequest("client-123", "https://claude.ai/callback",
+            "client-state", "mcp-challenge", "mcp-nonce",
+            "https://api.useorbit.org/oauth/google/callback", "en");
+
+        created.Should().NotBeNull();
+        created!.GoogleState.Should().NotBeNullOrWhiteSpace();
+        var pending = _store.ConsumeGoogleRequest(created.GoogleState);
+        pending.Should().NotBeNull();
+        pending!.ClientId.Should().Be("client-123");
+        pending.RedirectUri.Should().Be("https://claude.ai/callback");
+        pending.ClientState.Should().Be("client-state");
+        pending.CodeChallenge.Should().Be("mcp-challenge");
+        pending.Nonce.Should().Be("mcp-nonce");
+        pending.GoogleCodeChallenge.Should().Be(Convert.ToBase64String(
+                SHA256.HashData(Encoding.ASCII.GetBytes(pending.GoogleCodeVerifier)))
+            .Replace("+", "-").Replace("/", "_").TrimEnd('='));
+        _store.ConsumeGoogleRequest(created.GoogleState).Should().BeNull();
+        _store.ConsumeGoogleRequest("forged-state").Should().BeNull();
+    }
+
+    [Fact]
+    public void GoogleRequest_ExpiredStateCannotBeConsumed()
+    {
+        var time = new MutableTimeProvider();
+        using var store = new OAuthAuthorizationStore(NullLogger<OAuthAuthorizationStore>.Instance, time);
+        var created = store.TryCreateGoogleRequest("client", "https://claude.ai/callback", "state",
+            "challenge", null, "https://api.useorbit.org/oauth/google/callback", "en");
+
+        time.Advance(TimeSpan.FromMinutes(6));
+
+        store.ConsumeGoogleRequest(created!.GoogleState).Should().BeNull();
+    }
+
+    [Fact]
+    public void TryCreateGoogleRequest_RefusesOnceTheCapIsReached()
+    {
+        for (var i = 0; i < OAuthAuthorizationStore.MaxPendingGoogleRequests; i++)
+            CreatePending(_store).Should().NotBeNull();
+
+        CreatePending(_store).Should().BeNull();
+    }
+
+    [Fact]
+    public void TryCreateGoogleRequest_EvictsExpiredEntriesOnInsertAndFreesTheCap()
+    {
+        var time = new MutableTimeProvider();
+        using var store = new OAuthAuthorizationStore(NullLogger<OAuthAuthorizationStore>.Instance, time);
+        var first = CreatePending(store);
+        for (var i = 1; i < OAuthAuthorizationStore.MaxPendingGoogleRequests; i++)
+            CreatePending(store).Should().NotBeNull();
+
+        CreatePending(store).Should().BeNull();
+
+        time.Advance(TimeSpan.FromMinutes(6));
+
+        CreatePending(store).Should().NotBeNull();
+        store.ConsumeGoogleRequest(first!.GoogleState).Should().BeNull();
+    }
+
+    private static GoogleAuthorizationRequest? CreatePending(OAuthAuthorizationStore store) =>
+        store.TryCreateGoogleRequest("client", "https://claude.ai/callback", "client-state",
+            "mcp-challenge", null, "https://api.useorbit.org/oauth/google/callback", "en");
+
+    private sealed class MutableTimeProvider : TimeProvider
+    {
+        private DateTimeOffset _now = DateTimeOffset.UtcNow;
+
+        public override DateTimeOffset GetUtcNow() => _now;
+
+        public void Advance(TimeSpan duration) => _now += duration;
+    }
 }

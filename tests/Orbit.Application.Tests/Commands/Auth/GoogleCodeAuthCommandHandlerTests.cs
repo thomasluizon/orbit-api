@@ -103,6 +103,24 @@ public class GoogleCodeAuthCommandHandlerTests
     }
 
     [Fact]
+    public async Task McpIdentityOnlyExchange_DoesNotReplaceCalendarTokens()
+    {
+        var user = User.Create("Existing", Email).Value;
+        user.SetGoogleTokens("calendar-access", "calendar-refresh");
+        _users.FindOneTrackedIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(user);
+
+        var result = await _handler.Handle(
+            new GoogleCodeAuthCommand("code", "verifier", "https://api.useorbit.org/oauth/google/callback",
+                PersistGoogleTokens: false),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.GoogleAccessToken.Should().Be("calendar-access");
+        user.GoogleRefreshToken.Should().Be("calendar-refresh");
+    }
+
+    [Fact]
     public async Task DeactivatedUser_IsReactivated()
     {
         var user = User.Create("Existing", Email).Value;

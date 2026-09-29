@@ -31,14 +31,14 @@ public sealed partial class AudioTranscriptionService : IAudioTranscriptionServi
             });
     }
 
-    public async Task<Result<string>> TranscribeAsync(Stream audio, string fileName, CancellationToken cancellationToken = default)
+    public async Task<Result<string>> TranscribeAsync(Stream audio, string fileName, string? language, CancellationToken cancellationToken = default)
     {
         try
         {
             var transcription = await _audioClient.TranscribeAudioAsync(
                 audio,
                 fileName,
-                new AudioTranscriptionOptions(),
+                new AudioTranscriptionOptions { Language = language },
                 cancellationToken);
 
             var text = transcription.Value.Text?.Trim();
