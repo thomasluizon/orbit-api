@@ -9049,6 +9049,55 @@
         }
       }
     },
+    "/api/notifications/subscriptions": {
+      "get": {
+        "tags": [
+          "Notification"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetPushSubscriptionsResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetPushSubscriptionsResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetPushSubscriptionsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/notifications/{id}/read": {
       "put": {
         "tags": [
@@ -15209,6 +15258,29 @@
       "FrequencyUnit": {
         "type": "integer"
       },
+      "GetPushSubscriptionsResponse": {
+        "required": [
+          "items",
+          "max"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PushSubscriptionItemDto"
+            }
+          },
+          "max": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
       "GoalListCard": {
         "required": [
           "items"
@@ -16518,6 +16590,31 @@
           },
           "showTopHabits": {
             "type": "boolean"
+          }
+        }
+      },
+      "PushSubscriptionItemDto": {
+        "required": [
+          "id",
+          "transport",
+          "createdAtUtc",
+          "endpointHash"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "transport": {
+            "type": "string"
+          },
+          "createdAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endpointHash": {
+            "type": "string"
           }
         }
       },

@@ -30,6 +30,15 @@ public partial class NotificationController(
         return result.ToPayGateAwareResult(v => Ok(v));
     }
 
+    [HttpGet("subscriptions")]
+    [ProducesResponseType(typeof(GetPushSubscriptionsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetSubscriptions(CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GetPushSubscriptionsQuery(HttpContext.GetUserId()), cancellationToken);
+        return result.ToPayGateAwareResult(value => Ok(value));
+    }
+
     [HttpPut("{id:guid}/read")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
