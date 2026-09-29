@@ -84,4 +84,34 @@ public class HabitScheduleLogFactsTests
             new(habit.Id, DueDate, 0, 3, true)]);
         skippedFacts.IsFlexibleDue(habit, DueDate.AddDays(2), 1).Should().BeFalse();
     }
+
+    [Theory]
+    [InlineData(false, true, false)]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, true)]
+    public void GetVisibleScheduledDates_UsesPositiveCompletionWhenSkipSharesDate(
+        bool complete, bool skip, bool visible)
+    {
+        var habit = CreateHabit();
+        if (complete)
+            habit.Log(DueDate).IsSuccess.Should().BeTrue();
+        if (skip)
+            habit.SkipFlexible(DueDate).IsSuccess.Should().BeTrue();
+        var facts = new HabitScheduleLogFacts([
+            new HabitScheduleLogDay(
+                habit.Id, DueDate,
+                habit.Logs.Count(log => !log.IsDeleted && log.Value > 0),
+                habit.Logs.Count(log => !log.IsDeleted && log.Value == 0),
+                true)]);
+
+        foreach (var source in new HabitScheduleLogFacts?[] { facts, null })
+        {
+            var dates = HabitScheduleFilters.GetVisibleScheduledDates(
+                habit, DueDate, DueDate, 1, source);
+            if (visible)
+                dates.Should().ContainSingle().Which.Should().Be(DueDate);
+            else
+                dates.Should().BeEmpty();
+        }
+    }
 }

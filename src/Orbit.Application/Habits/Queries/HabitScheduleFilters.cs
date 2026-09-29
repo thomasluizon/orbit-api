@@ -85,8 +85,10 @@ internal static class HabitScheduleFilters
     {
         var dates = HabitScheduleService.GetScheduledDates(habit, from, to, weekStartDay);
         if (habit.IsFlexible)
-            dates.RemoveAll(date => logFacts?.HasSkipped(habit.Id, date)
-                ?? habit.Logs.Any(log => !log.IsDeleted && log.Date == date && log.Value == 0));
+            dates.RemoveAll(date => logFacts is not null
+                ? logFacts.HasSkipped(habit.Id, date) && !logFacts.HasCompleted(habit.Id, date, date)
+                : habit.Logs.Any(log => !log.IsDeleted && log.Date == date && log.Value == 0)
+                    && !habit.Logs.Any(log => !log.IsDeleted && log.Date == date && log.Value > 0));
         return dates;
     }
 
