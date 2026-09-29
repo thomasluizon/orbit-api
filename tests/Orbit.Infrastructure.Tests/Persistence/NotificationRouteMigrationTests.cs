@@ -67,6 +67,58 @@ public class NotificationRouteMigrationTests
         downSql.Should().Contain("LIMIT 1000");
     }
 
+    [Fact]
+    public void LinkGamificationNotifications_UpAndDown_UseBoundedReversibleRewrites()
+    {
+        var upSql = GetOperations<LinkGamificationNotificationsToProgress>("Up")
+            .OfType<SqlOperation>().Should().ContainSingle().Subject.Sql;
+        upSql.Should().Contain("\"Url\" IS NULL");
+        upSql.Should().Contain("Conquista Desbloqueada: %");
+        upSql.Should().Contain("Achievement Unlocked: %");
+        upSql.Should().Contain("Subiu de nível! Agora você está no nível %");
+        upSql.Should().Contain("Level Up! You''re now Level %");
+        upSql.Should().Contain("\"Url\" = '/progress'");
+        upSql.Should().Contain("'Nova conquista: '");
+        upSql.Should().Contain("'New achievement: '");
+        upSql.Should().Contain("'O nível '");
+        upSql.Should().Contain("'Level '");
+        upSql.Should().Contain("^Você alcançou (.*)! Continue assim!$");
+        upSql.Should().Contain("^You''ve reached (.*)! Keep going!$");
+        upSql.Should().Contain("LIMIT 1000");
+        upSql.Should().Contain("RAISE NOTICE");
+        upSql.Should().Contain("INSERT INTO \"__LinkGamificationNotificationsToProgress\"");
+
+        var downSql = GetOperations<LinkGamificationNotificationsToProgress>("Down")
+            .OfType<SqlOperation>().Should().ContainSingle().Subject.Sql;
+        downSql.Should().Contain("DELETE FROM \"__LinkGamificationNotificationsToProgress\"");
+        downSql.Should().Contain("RETURNING \"Id\", \"Title\", \"Body\"");
+        downSql.Should().Contain("\"Url\" = NULL");
+        downSql.Should().Contain("\"Title\" = restored.\"Title\"");
+        downSql.Should().Contain("\"Body\" = restored.\"Body\"");
+        downSql.Should().Contain("LIMIT 1000");
+        downSql.Should().Contain("DROP TABLE \"__LinkGamificationNotificationsToProgress\"");
+    }
+
+    [Fact]
+    public void HistoricalGamificationTitles_AppearOnlyInMigrations()
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !File.Exists(Path.Combine(root.FullName, "Orbit.slnx")))
+            root = root.Parent;
+
+        root.Should().NotBeNull();
+        var sourceFiles = Directory.GetFiles(Path.Combine(root!.FullName, "src"), "*.cs", SearchOption.AllDirectories)
+            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}Migrations{Path.DirectorySeparatorChar}")
+                && !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
+                && !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"));
+
+        foreach (var path in sourceFiles)
+        {
+            var source = File.ReadAllText(path);
+            source.Should().NotContainAny("Conquista Desbloqueada", "Achievement Unlocked", "Subiu de nível!", "Level Up!");
+        }
+    }
+
     private static IReadOnlyList<MigrationOperation> GetOperations<TMigration>(string methodName)
         where TMigration : Migration, new()
     {
