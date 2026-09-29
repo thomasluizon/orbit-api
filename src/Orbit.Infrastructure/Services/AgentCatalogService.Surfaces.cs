@@ -91,7 +91,7 @@ public partial class AgentCatalogService
                 ["Open Notifications.", "Mark items read or manage subscriptions.", "Delete individual items only after confirmation."],
                 ["Push subscription cryptographic material is never AI-readable.", "Deletion requires confirmation."],
                 [AgentCapabilityIds.NotificationsRead, AgentCapabilityIds.NotificationsWrite, AgentCapabilityIds.NotificationsDelete],
-                ["NotificationController.GetNotifications", "NotificationController.Subscribe"])
+                ["NotificationController.GetNotifications", "NotificationController.GetSubscriptions", "NotificationController.Subscribe"])
         ];
     }
 
