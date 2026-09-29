@@ -16,6 +16,7 @@ namespace Orbit.Application.Tests.Queries.Profile;
 public class GetProfileQueryHandlerTests
 {
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
+    private readonly IGenericRepository<ApiKey> _apiKeyRepo = Substitute.For<IGenericRepository<ApiKey>>();
     private readonly IGenericRepository<StreakFreeze> _streakFreezeRepo = Substitute.For<IGenericRepository<StreakFreeze>>();
     private readonly IHabitLogReader _habitLogReader = Substitute.For<IHabitLogReader>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
@@ -32,6 +33,7 @@ public class GetProfileQueryHandlerTests
             .Returns(Array.Empty<string>());
         _handler = new GetProfileQueryHandler(
             _userRepo,
+            _apiKeyRepo,
             _streakFreezeRepo,
             _habitLogReader,
             _userDateService,
@@ -65,6 +67,45 @@ public class GetProfileQueryHandlerTests
             Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
             Arg.Any<CancellationToken>())
             .Returns(new List<StreakFreeze>().AsReadOnly());
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(3)]
+    public async Task Handle_CountsOnlyCallersActiveApiKeys(int activeCount)
+    {
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(CreateTestUser());
+        StubFreezeRepoEmpty();
+
+        var keys = Enumerable.Range(0, activeCount)
+            .Select(index => ApiKey.Create(UserId, $"Active {index}").Value.Entity)
+            .ToList();
+        var revoked = ApiKey.Create(UserId, "Revoked").Value.Entity;
+        revoked.Revoke();
+        keys.Add(revoked);
+        keys.Add(ApiKey.Create(Guid.NewGuid(), "Other account").Value.Entity);
+        var expired = ApiKey.Create(UserId, "Expired").Value.Entity;
+        typeof(ApiKey).GetProperty(nameof(ApiKey.ExpiresAtUtc))!
+            .SetValue(expired, DateTime.UtcNow.AddMinutes(-1));
+        keys.Add(expired);
+
+        _apiKeyRepo.CountAsync(Arg.Any<Expression<Func<ApiKey, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => keys.Count(call.ArgAt<Expression<Func<ApiKey, bool>>>(0).Compile()));
+
+        var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.ActiveApiKeyCount.Should().Be(activeCount);
+        await _apiKeyRepo.Received(1).CountAsync(
+            Arg.Any<Expression<Func<ApiKey, bool>>>(), Arg.Any<CancellationToken>());
+
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result.Value, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        json.RootElement.GetProperty("activeApiKeyCount").GetInt32().Should().Be(activeCount);
+        json.RootElement.EnumerateObject()
+            .Where(property => property.Name.Contains("key", StringComparison.OrdinalIgnoreCase))
+            .Select(property => property.Name)
+            .Should().Equal("activeApiKeyCount");
     }
 
     [Fact]

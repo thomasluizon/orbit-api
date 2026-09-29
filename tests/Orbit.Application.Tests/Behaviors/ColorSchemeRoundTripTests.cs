@@ -46,6 +46,7 @@ public class ColorSchemeRoundTripTests
         _writeHandler = new SetColorSchemeCommandHandler(_userRepo, _unitOfWork);
         _readHandler = new GetProfileQueryHandler(
             _userRepo,
+            Substitute.For<IGenericRepository<ApiKey>>(),
             _streakFreezeRepo,
             _habitLogReader,
             _userDateService,
