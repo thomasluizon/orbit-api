@@ -1077,16 +1077,88 @@ public class GetHabitScheduleQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        var item = result.Value.Items.Should().ContainSingle().Subject;
-        item.Id.Should().Be(accepted.Id);
-        item.SearchMatches.Should().Equal(expectedMatch);
+        result.Value.Items.Select(h => h.Id).Should().BeEquivalentTo(new[] { accepted.Id, rejected.Id });
+        result.Value.Items.Single(h => h.Id == accepted.Id).SearchMatches.Should().Equal(expectedMatch, expectedMatch);
+        result.Value.Items.Single(h => h.Id == rejected.Id).SearchMatches.Should().Equal(expectedMatch);
 
         var withOverdue = await _handler.Handle(query with { IncludeOverdue = true }, CancellationToken.None);
 
         withOverdue.IsSuccess.Should().BeTrue();
         withOverdue.Value.Items.Select(h => h.Id).Should().BeEquivalentTo(new[] { accepted.Id, rejected.Id });
-        withOverdue.Value.Items.Single(h => h.Id == accepted.Id).SearchMatches.Should().Equal(expectedMatch, expectedMatch);
-        withOverdue.Value.Items.Single(h => h.Id == rejected.Id).SearchMatches.Should().Equal(expectedMatch);
+        withOverdue.Value.Items.Single(h => h.Id == accepted.Id).SearchMatches.Should().Equal(expectedMatch, expectedMatch, expectedMatch);
+        withOverdue.Value.Items.Single(h => h.Id == rejected.Id).SearchMatches.Should().Equal(expectedMatch, expectedMatch);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Handle_SearchTraversesHiddenMiddleChild_ReportsOnlyDueGrandchild(bool skipped)
+    {
+        var root = CreateTestHabit(title: "Morning Routine");
+        var middle = CreateHiddenMiddleChild(root.Id, skipped);
+        var grandchild = CreateTestHabit(title: "Meditation", parentHabitId: middle.Id);
+        SetupHabits(root, middle, grandchild);
+        var query = new GetHabitScheduleQuery(UserId, Today, Today);
+
+        var withoutSearch = await _handler.Handle(query, CancellationToken.None);
+        var withSearch = await _handler.Handle(query with { Search = "Meditation" }, CancellationToken.None);
+
+        withoutSearch.IsSuccess.Should().BeTrue();
+        withSearch.IsSuccess.Should().BeTrue();
+        var regularRoot = withoutSearch.Value.Items.Should().ContainSingle().Subject;
+        var searchRoot = withSearch.Value.Items.Should().ContainSingle().Subject;
+        regularRoot.Id.Should().Be(root.Id);
+        searchRoot.Id.Should().Be(root.Id);
+        regularRoot.SearchMatches.Should().BeNull();
+        searchRoot.SearchMatches.Should().Equal(new SearchMatchField("child", grandchild.Title));
+
+        var regularMiddle = regularRoot.Children.Should().ContainSingle().Subject;
+        var searchMiddle = searchRoot.Children.Should().ContainSingle().Subject;
+        regularMiddle.Id.Should().Be(middle.Id);
+        searchMiddle.Id.Should().Be(middle.Id);
+        regularMiddle.ScheduledDates.Should().BeEmpty();
+        searchMiddle.ScheduledDates.Should().BeEmpty();
+        regularMiddle.IsOverdue.Should().BeFalse();
+        searchMiddle.IsOverdue.Should().BeFalse();
+        searchMiddle.SearchMatches.Should().Equal(new SearchMatchField("child", grandchild.Title));
+        regularMiddle.Children.Should().ContainSingle().Subject.Id.Should().Be(grandchild.Id);
+        var dueGrandchild = searchMiddle.Children.Should().ContainSingle().Subject;
+        dueGrandchild.Id.Should().Be(grandchild.Id);
+        dueGrandchild.ScheduledDates.Should().ContainSingle().Which.Should().Be(Today);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Handle_SearchMatchesOnlyHiddenMiddleChild_ExcludesFamily(bool skipped)
+    {
+        var root = CreateTestHabit(title: "Morning Routine");
+        var middle = CreateHiddenMiddleChild(root.Id, skipped);
+        var grandchild = CreateTestHabit(title: "Read", parentHabitId: middle.Id);
+        SetupHabits(root, middle, grandchild);
+
+        var result = await _handler.Handle(
+            new GetHabitScheduleQuery(UserId, Today, Today, Search: "Meditation"),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Items.Should().BeEmpty();
+    }
+
+    private static Habit CreateHiddenMiddleChild(Guid parentId, bool skipped)
+    {
+        if (!skipped)
+            return CreateTestHabit(
+                title: "Meditation plan",
+                frequencyUnit: FrequencyUnit.Week,
+                dueDate: Today.AddDays(-1),
+                parentHabitId: parentId);
+
+        var middle = Habit.Create(new HabitCreateParams(
+            UserId, "Meditation plan", FrequencyUnit.Week, 3, Today.AddDays(-2),
+            ParentHabitId: parentId, IsFlexible: true)).Value;
+        middle.SkipFlexible(Today).IsSuccess.Should().BeTrue();
+        return middle;
     }
 
     private static Habit CreateSearchDescendant(
