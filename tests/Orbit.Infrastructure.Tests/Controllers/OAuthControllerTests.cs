@@ -6,6 +6,7 @@ using FluentAssertions;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -31,9 +32,7 @@ public class OAuthControllerTests : IDisposable
     private readonly MutableTimeProvider _timeProvider = new();
     private readonly OAuthAuthorizationStore _authStore;
     private readonly IGenericRepository<ApiKey> _apiKeyRepo = Substitute.For<IGenericRepository<ApiKey>>();
-    private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
-    private readonly IHttpClientFactory _httpClientFactory = Substitute.For<IHttpClientFactory>();
     private readonly ILogger<OAuthController> _logger = Substitute.For<ILogger<OAuthController>>();
     private readonly OAuthController _controller;
 
@@ -56,8 +55,7 @@ public class OAuthControllerTests : IDisposable
             .Build();
 
         _controller = new OAuthController(
-            _mediator, _authStore, _apiKeyRepo, _userRepo, _unitOfWork, _httpClientFactory,
-            googleSettings, config, _logger);
+            _mediator, _authStore, _apiKeyRepo, _unitOfWork, googleSettings, config, _logger);
 
         var httpContext = new DefaultHttpContext();
         httpContext.Request.Scheme = "https";
@@ -313,7 +311,7 @@ public class OAuthControllerTests : IDisposable
             AllowedRedirectUris = callbackAllowed ? ["https://api.useorbit.org/oauth/google/callback"] : []
         });
         var controller = new OAuthController(_mediator, _authStore, _apiKeyRepo,
-            _userRepo, _unitOfWork, _httpClientFactory, settings, new ConfigurationBuilder().Build(), _logger)
+            _unitOfWork, settings, new ConfigurationBuilder().Build(), _logger)
         {
             ControllerContext = _controller.ControllerContext
         };
@@ -360,14 +358,18 @@ public class OAuthControllerTests : IDisposable
     }
 
     [Fact]
-    public void GoogleAuth_RouteRemainsAvailableAndDeprecated()
+    public void GoogleAuth_OneTapRoute_IsGoneSoAPostTo_OauthGoogle_Returns404()
     {
-        var route = typeof(OAuthController).GetMethods()
-            .SingleOrDefault(method => method.GetCustomAttributes(typeof(HttpPostAttribute), false)
-                .Cast<HttpPostAttribute>().Any(attribute => attribute.Template == "/oauth/google"));
+        var templates = typeof(OAuthController).Assembly.GetTypes()
+            .Where(type => type.IsClass && !type.IsAbstract && typeof(ControllerBase).IsAssignableFrom(type))
+            .SelectMany(type => type.GetMethods(BindingFlags.Instance | BindingFlags.Public))
+            .SelectMany(method => method.GetCustomAttributes(typeof(HttpMethodAttribute), false)
+                .Cast<HttpMethodAttribute>())
+            .Select(attribute => attribute.Template)
+            .ToList();
 
-        route.Should().NotBeNull();
-        route!.GetCustomAttributes(typeof(ObsoleteAttribute), false).Should().ContainSingle();
+        templates.Should().NotContain("/oauth/google");
+        templates.Should().Contain("/oauth/google/start").And.Contain("/oauth/google/callback");
     }
 
     [Fact]

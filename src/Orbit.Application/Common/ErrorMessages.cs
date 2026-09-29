@@ -71,7 +71,6 @@ public static class ErrorMessages
     public static readonly AppError GoogleRedirectUriNotAllowed = new(ErrorCodes.GoogleRedirectUriNotAllowed, "Google sign-in redirect URI is not allowed");
     public static readonly AppError GoogleCodeExchangeFailed = new(ErrorCodes.GoogleCodeExchangeFailed, "Could not exchange Google sign-in code");
     public static readonly AppError GoogleEmailUnavailable = new(ErrorCodes.GoogleEmailUnavailable, "Could not retrieve email from Google account");
-    public static readonly AppError GoogleTokenAudienceMismatch = new(ErrorCodes.GoogleTokenAudienceMismatch, "Google token was not issued for this application");
     public static readonly AppError TemplateNotFound = new(ErrorCodes.TemplateNotFound, "Template not found.");
     public static readonly AppError SuggestionNotFound = new(ErrorCodes.SuggestionNotFound, "Suggestion not found.");
     public static readonly AppError PushEndpointInvalid = new(ErrorCodes.PushEndpointInvalid, "Push subscription endpoint must be an absolute https:// URL.");
