@@ -39,6 +39,12 @@ public record CalendarEventItem(
     [JsonIgnore]
     public IReadOnlyList<DateTime>? ExpandedOccurrencesUtc { get; init; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? IsImported { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? ImportedHabitId { get; init; }
+
     internal bool NeedsRecurrenceEvidenceRefresh => IsRecurring && StartTime is not null
         && (string.IsNullOrWhiteSpace(SourceTimeZone) || RecurrenceStartUtc is null
             || ExpandedOccurrencesUtc is null);
@@ -332,7 +338,7 @@ public record CalendarEventItem(
             : [sourceTimeZone.GetUtcOffset(sourceLocal)];
 }
 
-public record GetCalendarEventsQuery(Guid UserId) : IRequest<Result<List<CalendarEventItem>>>, IConcurrencyRetryable;
+public record GetCalendarEventsQuery(Guid UserId, bool IncludeImported = false) : IRequest<Result<List<CalendarEventItem>>>, IConcurrencyRetryable;
 
 /// <summary>Groups the repositories the calendar events query touches to keep the handler constructor small.</summary>
 public record GetCalendarEventsRepositories(
@@ -367,12 +373,17 @@ public partial class GetCalendarEventsQueryHandler(
             var fetched = await eventFetcher.FetchAsync(
                 accessToken, user.GetSelectedCalendarIds(), updatedMin: null, cancellationToken);
 
-            var importedEventIds = await BuildImportedEventIdSet(request.UserId, cancellationToken);
+            var importedEventIds = request.IncludeImported
+                ? null
+                : await BuildImportedEventIdSet(request.UserId, cancellationToken);
+            var importedHabits = request.IncludeImported
+                ? await BuildImportedHabitMap(request.UserId, cancellationToken)
+                : null;
             var timeZone = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, request.UserId);
             var items = new List<CalendarEventItem>();
             foreach (var source in fetched)
             {
-                if (importedEventIds.Contains(source.Id))
+                if (importedEventIds?.Contains(source.Id) == true)
                     continue;
 
                 if (source.HasUnrepresentableRecurrenceAfterProjection(timeZone))
@@ -382,6 +393,12 @@ public partial class GetCalendarEventsQueryHandler(
 
                 if (source.DropsEndTimeAfterProjection(projected))
                     LogProjectedEndTimeOmitted(logger, source.Id, request.UserId);
+
+                if (importedHabits is not null)
+                {
+                    Guid? habitId = importedHabits.TryGetValue(source.Id, out var id) ? id : null;
+                    projected = projected with { IsImported = habitId.HasValue, ImportedHabitId = habitId };
+                }
 
                 items.Add(projected);
             }
@@ -451,6 +468,11 @@ public partial class GetCalendarEventsQueryHandler(
             set.Add(id);
         return set;
     }
+
+    private async Task<Dictionary<string, Guid>> BuildImportedHabitMap(Guid userId, CancellationToken ct)
+        => (await repos.Habits.FindAsync(
+                h => h.UserId == userId && !h.IsDeleted && h.GoogleEventId != null, ct))
+            .ToDictionary(h => h.GoogleEventId!, h => h.Id, StringComparer.Ordinal);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Google Calendar API error for user {UserId}")]
     private static partial void LogGoogleCalendarApiError(ILogger logger, Exception ex, Guid userId);

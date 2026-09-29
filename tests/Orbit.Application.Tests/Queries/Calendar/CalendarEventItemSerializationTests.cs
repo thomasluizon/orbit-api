@@ -18,6 +18,40 @@ public class CalendarEventItemSerializationTests
     private static readonly JsonSerializerOptions ResponseOptions = new(JsonSerializerDefaults.Web);
 
     [Fact]
+    public void DefaultResponseBody_ExactlyMatchesTheExistingContract()
+    {
+        var item = new CalendarEventItem("evt", "Event", null, "2026-05-01", null, null, false, null, []);
+
+        var actual = JsonSerializer.Serialize(item, ResponseOptions);
+        var expected = JsonSerializer.Serialize(new
+        {
+            id = "evt", title = "Event", description = (string?)null, startDate = "2026-05-01",
+            startTime = (string?)null, endTime = (string?)null, isRecurring = false,
+            recurrenceRule = (string?)null, reminders = Array.Empty<int>(), startUtc = (DateTime?)null,
+            calendarId = "", calendarName = "", endUtc = (DateTime?)null,
+            recurrenceTimeZone = (string?)null
+        }, ResponseOptions);
+
+        actual.Should().Be(expected);
+    }
+
+    [Fact]
+    public void OptInResponseBody_ContainsImportState()
+    {
+        var habitId = Guid.NewGuid();
+        var item = new CalendarEventItem("evt", "Event", null, "2026-05-01", null, null, false, null, [])
+        {
+            IsImported = true,
+            ImportedHabitId = habitId
+        };
+
+        using var response = JsonDocument.Parse(JsonSerializer.Serialize(item, ResponseOptions));
+
+        response.RootElement.GetProperty("isImported").GetBoolean().Should().BeTrue();
+        response.RootElement.GetProperty("importedHabitId").GetGuid().Should().Be(habitId);
+    }
+
+    [Fact]
     public void ResponseBody_CarriesEndUtcAndOmitsTheSourceTimeZone()
     {
         var json = JsonSerializer.Serialize(LisbonSeries(), ResponseOptions);

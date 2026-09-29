@@ -14,12 +14,12 @@ namespace Orbit.Api.Controllers;
 public partial class CalendarController(IMediator mediator, ILogger<CalendarController> logger) : ControllerBase
 {
     [HttpGet("events")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(List<CalendarEventItem>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> GetEvents(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetEvents(CancellationToken cancellationToken, [FromQuery] bool includeImported = false)
     {
-        var query = new GetCalendarEventsQuery(HttpContext.GetUserId());
+        var query = new GetCalendarEventsQuery(HttpContext.GetUserId(), includeImported);
         var result = await mediator.Send(query, cancellationToken);
 
         if (result.IsFailure && logger.IsEnabled(LogLevel.Warning))
