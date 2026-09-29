@@ -58,12 +58,14 @@ public record ProfileResponse(
     PublicProfileSettings? PublicProfile = null,
     bool ProactiveAstraEnabled = false,
     bool? MarketingEmailConsent = null,
-    DateOnly? LastCompletionDate = null);
+    DateOnly? LastCompletionDate = null,
+    int? ActiveApiKeyCount = null);
 
 public record GetProfileQuery(Guid UserId) : IRequest<Result<ProfileResponse>>;
 
 public class GetProfileQueryHandler(
     IGenericRepository<User> userRepository,
+    IGenericRepository<ApiKey> apiKeyRepository,
     IGenericRepository<StreakFreeze> streakFreezeRepository,
     IHabitLogReader habitLogReader,
     IUserDateService userDateService,
@@ -94,6 +96,11 @@ public class GetProfileQueryHandler(
         var freezesAvailable = Math.Max(0, AppConstants.MaxStreakFreezesPerMonth - recentFreezes.Count);
         var liveCompletionDate = await habitLogReader.GetLastCompletionDateAsync(request.UserId, cancellationToken);
         var lastCompletionDate = user.GetLastCompletionDate(liveCompletionDate);
+        var nowAtUtc = DateTime.UtcNow;
+        var activeApiKeyCount = await apiKeyRepository.CountAsync(
+            key => key.UserId == request.UserId && !key.IsRevoked &&
+                (key.ExpiresAtUtc == null || key.ExpiresAtUtc > nowAtUtc),
+            cancellationToken);
 
         var publicProfile = new PublicProfileSettings(
             user.PublicProfileSlug is not null,
@@ -153,6 +160,7 @@ public class GetProfileQueryHandler(
             publicProfile,
             user.ProactiveAstraEnabled,
             user.MarketingEmailConsent,
-            lastCompletionDate));
+            lastCompletionDate,
+            activeApiKeyCount));
     }
 }
