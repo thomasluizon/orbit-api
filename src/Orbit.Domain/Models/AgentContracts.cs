@@ -134,7 +134,8 @@ public record PendingAgentOperation(
     IReadOnlyList<PendingOperationChange>? Changes = null,
     int? ChangeTargetCount = null,
     IReadOnlyList<PendingOperationItem>? Items = null,
-    string? PreviewFingerprint = null);
+    string? PreviewFingerprint = null,
+    string? ActionKey = null);
 
 public record PendingOperationItem(
     string ItemId,

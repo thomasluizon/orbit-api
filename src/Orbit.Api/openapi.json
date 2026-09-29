@@ -16025,6 +16025,12 @@
               "null",
               "string"
             ]
+          },
+          "actionKey": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

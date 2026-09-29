@@ -26,6 +26,8 @@ public class PendingAgentOperationStore(
         string operationFingerprint,
         AgentExecutionSurface surface)
     {
+        PendingOperationActionKeys.GetRequired(operationId, argumentsJson);
+
         var existing = dbContext.PendingAgentOperations
             .Where(item =>
                 item.UserId == userId &&
@@ -188,7 +190,8 @@ public class PendingAgentOperationStore(
             entity.Summary,
             entity.RiskClass,
             entity.ConfirmationRequirement,
-            entity.ExpiresAtUtc);
+            entity.ExpiresAtUtc,
+            ActionKey: PendingOperationActionKeys.GetRequired(entity.OperationId, entity.ArgumentsJson));
     }
 
     private static JsonElement ParseArguments(string argumentsJson)

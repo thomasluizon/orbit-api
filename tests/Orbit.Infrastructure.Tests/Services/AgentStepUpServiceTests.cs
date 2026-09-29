@@ -53,10 +53,10 @@ public class AgentStepUpServiceTests : IDisposable
         var pendingOperation = _pendingOperationStore.Create(
             _userId,
             capability,
-            "create_api_key",
-            "{\"name\":\"Claude\"}",
+            "manage_api_keys",
+            "{\"action\":\"create\",\"name\":\"Claude\"}",
             "Create API key",
-            "create_api_key:{\"name\":\"Claude\"}",
+            "manage_api_keys:{\"action\":\"create\",\"name\":\"Claude\"}",
             AgentExecutionSurface.Chat);
 
         var challengeResult = await _stepUpService.IssueChallengeAsync(
@@ -77,6 +77,7 @@ public class AgentStepUpServiceTests : IDisposable
 
         verifyResult.IsSuccess.Should().BeTrue();
         verifyResult.Value.Id.Should().Be(pendingOperation.Id);
+        verifyResult.Value.ActionKey.Should().Be("createApiKey");
 
         var storedPendingOperation = await _dbContext.PendingAgentOperations.FirstAsync(item => item.Id == pendingOperation.Id);
         storedPendingOperation.StepUpSatisfiedAtUtc.Should().NotBeNull();
@@ -89,10 +90,10 @@ public class AgentStepUpServiceTests : IDisposable
         var pendingOperation = _pendingOperationStore.Create(
             _userId,
             capability,
-            "create_api_key",
-            "{\"name\":\"Claude\"}",
+            "manage_api_keys",
+            "{\"action\":\"create\",\"name\":\"Claude\"}",
             "Create API key",
-            "create_api_key:{\"name\":\"Claude\"}",
+            "manage_api_keys:{\"action\":\"create\",\"name\":\"Claude\"}",
             AgentExecutionSurface.Chat);
 
         var challengeResult = await _stepUpService.IssueChallengeAsync(
@@ -119,10 +120,10 @@ public class AgentStepUpServiceTests : IDisposable
         var pendingOperation = _pendingOperationStore.Create(
             _userId,
             capability,
-            "create_api_key",
-            "{\"name\":\"Claude\"}",
+            "manage_api_keys",
+            "{\"action\":\"create\",\"name\":\"Claude\"}",
             "Create API key",
-            "create_api_key:{\"name\":\"Claude\"}",
+            "manage_api_keys:{\"action\":\"create\",\"name\":\"Claude\"}",
             AgentExecutionSurface.Chat);
 
         _emailService.ThrowOnNextSend = true;
