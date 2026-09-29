@@ -9,6 +9,7 @@ using Orbit.Application.Gamification;
 using Orbit.Application.Gamification.Models;
 using Orbit.Application.Gamification.Services;
 using Orbit.Application.Habits.Services;
+using Orbit.Application.Notifications;
 using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -1036,7 +1037,23 @@ public class GamificationServiceTests
         await _sut.ProcessHabitCreated(UserId);
 
         await _notificationRepo.Received(1).AddAsync(
-            Arg.Is<Notification>(n => n.Title.Contains("Achievement Unlocked")),
+            Arg.Is<Notification>(n => n.Title == "New achievement: First Orbit" && n.Url == NotificationUrls.Progress),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessHabitCreated_NewAchievement_UsesPortugueseCopyAndProgressUrl()
+    {
+        var user = CreateProUser();
+        user.SetLanguage("pt-BR");
+        SetupUserLookup(user);
+        SetupNoEarnedAchievements();
+        SetupHabitCount(1);
+
+        await _sut.ProcessHabitCreated(UserId);
+
+        await _notificationRepo.Received(1).AddAsync(
+            Arg.Is<Notification>(n => n.Title == "Nova conquista: Primeira Órbita" && n.Url == NotificationUrls.Progress),
             Arg.Any<CancellationToken>());
     }
 
@@ -1053,10 +1070,33 @@ public class GamificationServiceTests
 
         await _pushService.Received(1).SendToUserAsync(
             UserId,
-            Arg.Is<string>(s => s.Contains("Achievement Unlocked")),
-            Arg.Any<string>(),
-            Arg.Any<string?>(),
+            "New achievement: First Orbit",
+            "Create your first habit (+25 XP)",
+            NotificationUrls.Progress,
             Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("en", "You reached level 2", "Level 2 is called Explorer.")]
+    [InlineData("pt-BR", "Você chegou ao nível 2", "O nível 2 se chama Explorador.")]
+    public async Task ProcessGoalCompleted_LevelUp_UsesLocalizedCopyAndProgressUrl(
+        string language, string title, string body)
+    {
+        var user = CreateProUser();
+        user.SetLanguage(language);
+        SetupUserLookup(user);
+        SetupEarnedAchievements(AchievementDefinitions.GoalCrusher);
+        SetupCompletedGoalCount(1);
+
+        await _sut.ProcessGoalCompleted(UserId, GoalId);
+
+        title.Should().NotContain("!");
+        body.Should().NotContain("!");
+        await _notificationRepo.Received(1).AddAsync(
+            Arg.Is<Notification>(n => n.Title == title && n.Body == body && n.Url == NotificationUrls.Progress),
+            Arg.Any<CancellationToken>());
+        await _pushService.Received(1).SendToUserAsync(
+            UserId, title, body, NotificationUrls.Progress, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -1083,7 +1123,7 @@ public class GamificationServiceTests
         _unitOfWork.Received(1).ResetTracking();
         await _pushService.Received(1).SendToUserAsync(
             UserId,
-            Arg.Is<string>(s => s.Contains("Achievement Unlocked")),
+            Arg.Is<string>(s => s.Contains("New achievement")),
             Arg.Any<string>(),
             Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
@@ -1326,7 +1366,7 @@ public class GamificationServiceTests
             Arg.Any<CancellationToken>());
         user.TotalXp.Should().Be(75);
         await _notificationRepo.Received(1).AddAsync(
-            Arg.Is<Notification>(n => n.Title.Contains("Achievement Unlocked")),
+            Arg.Is<Notification>(n => n.Title.Contains("New achievement")),
             Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
