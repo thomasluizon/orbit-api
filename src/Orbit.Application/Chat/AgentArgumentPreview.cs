@@ -17,7 +17,9 @@ public sealed record AgentPreviewTarget(
 
 /// <summary>
 /// Builds the approval preview of a held chat write from its own arguments: one item, one row
-/// per argument, and the current value of every argument the target already holds.
+/// per argument, and the current value of every argument the target already holds. A row is
+/// editable only when the editable schema declares its field. The previewer passes the schema of
+/// a tool that checks its own arguments, so the revise route can hold every edit to its rules.
 /// </summary>
 public static class AgentArgumentPreview
 {
@@ -34,7 +36,8 @@ public static class AgentArgumentPreview
     public static PendingOperationChangePreview? Build(
         string operationId,
         JsonElement arguments,
-        AgentPreviewTarget? target)
+        AgentPreviewTarget? target,
+        JsonElement editableSchema)
     {
         if (arguments.ValueKind != JsonValueKind.Object)
             return null;
@@ -51,7 +54,7 @@ public static class AgentArgumentPreview
                 FormatValue(property.Value),
                 ResolveValueType(property.Name, property.Value),
                 property.Value.Clone(),
-                IsEditable(property.Name)))
+                IsEditable(property.Name) && AgentArgumentSchema.Declares(editableSchema, property.Name)))
             .ToList();
 
         var item = new PendingOperationItem(itemId, target?.EntityId, entityName, fields,
@@ -62,7 +65,7 @@ public static class AgentArgumentPreview
         return new PendingOperationChangePreview(fields, 1, [item], fingerprint);
     }
 
-    public static bool IsEditable(string field) =>
+    private static bool IsEditable(string field) =>
         !FixedFields.Contains(field) && !IsIdentifier(field);
 
     public static string? FormatValue(JsonElement value) => value.ValueKind switch
@@ -109,9 +112,9 @@ public static class AgentArgumentPreview
             return "number";
         if (field == "emoji")
             return "emoji";
-        if (field.EndsWith("_date", StringComparison.Ordinal) || field == "date")
+        if (AgentArgumentSchema.IsDateField(field))
             return "date";
-        if (field.EndsWith("_time", StringComparison.Ordinal))
+        if (AgentArgumentSchema.IsTimeField(field))
             return "time";
         return "text";
     }

@@ -17,6 +17,7 @@ public sealed class PendingOperationChangePreviewer(
     IGenericRepository<Goal> goalRepository,
     IGenericRepository<Tag> tagRepository,
     IUserDateService userDateService,
+    AiToolRegistry toolRegistry,
     IDestructiveOperationPreviewer? destructivePreviewer = null) : IPendingOperationChangePreviewer
 {
     private const int MaxDisplayedEntries = 3;
@@ -44,7 +45,7 @@ public sealed class PendingOperationChangePreviewer(
             return destructivePreviewer is not null && destructivePreviewer.Handles(operationId)
                 ? await destructivePreviewer.PreviewAsync(userId, operationId, arguments, cancellationToken)
                 : AgentArgumentPreview.Build(operationId, arguments,
-                    await ResolveTargetAsync(userId, arguments, cancellationToken));
+                    await ResolveTargetAsync(userId, arguments, cancellationToken), EditableSchema(operationId));
         }
 
         if (operationId == "bulk_update_habit_emojis"
@@ -105,6 +106,15 @@ public sealed class PendingOperationChangePreviewer(
         return BuildPreview(operationId, rows, items);
     }
 
+    /// <summary>
+    /// The parameter schema of a tool that checks its own arguments. A tool with no check offers
+    /// no editable field, because the revise route could not hold an edit to the tool's rules.
+    /// </summary>
+    private JsonElement EditableSchema(string operationId) =>
+        toolRegistry.GetTool(operationId) is { } tool and IArgumentCheckTool
+            ? JsonSerializer.SerializeToElement(tool.GetParameterSchema())
+            : default;
+
     private async Task<AgentPreviewTarget?> ResolveTargetAsync(
         Guid userId, JsonElement arguments, CancellationToken cancellationToken)
     {
@@ -113,11 +123,17 @@ public sealed class PendingOperationChangePreviewer(
 
         if (TryReadId(arguments, "habit_id", out var habitId))
         {
+            var readsTags = HasTagArguments(arguments);
+            Func<IQueryable<Habit>, IQueryable<Habit>>? includes = readsTags ? AssignTagsTool.IncludeTags : null;
             var habits = await habitRepository.FindAsync(
-                item => item.Id == habitId && item.UserId == userId, cancellationToken);
+                item => item.Id == habitId && item.UserId == userId, includes, cancellationToken);
             var habit = habits.FirstOrDefault();
-            return habit is null ? null : new AgentPreviewTarget(
-                habit.Id, habit.Title, HabitValues(habit), FingerprintHabit(habit));
+            if (habit is null)
+                return null;
+            var values = HabitValues(habit);
+            if (readsTags)
+                values["tag_names"] = values["tag_ids"] = FormatTags(habit);
+            return new AgentPreviewTarget(habit.Id, habit.Title, values, FingerprintHabit(habit));
         }
 
         if (TryReadId(arguments, "goal_id", out var goalId))
@@ -167,6 +183,13 @@ public sealed class PendingOperationChangePreviewer(
         ["reminder_times"] = string.Join(", ", habit.ReminderTimes),
         ["checklist_items"] = string.Join(", ", habit.ChecklistItems.Select(FormatChecklistItem))
     };
+
+    private static bool HasTagArguments(JsonElement arguments) =>
+        arguments.TryGetProperty("tag_names", out _) || arguments.TryGetProperty("tag_ids", out _);
+
+    private static string? FormatTags(Habit habit) => habit.Tags.Count == 0
+        ? null
+        : string.Join(", ", habit.Tags.Select(tag => tag.Name).Order(StringComparer.Ordinal));
 
     private static Dictionary<string, string?> GoalValues(Goal goal) => new(StringComparer.Ordinal)
     {

@@ -25,6 +25,17 @@ public interface IClarificationPrecheckTool
     bool NeedsClarification(JsonElement args);
 }
 
+/// <summary>
+/// A write tool that checks its arguments with no write, with the rules its execute path
+/// applies that the parameter schema does not declare, such as list caps and ranges. The
+/// revise route runs this check on an edited approval preview, so the person cannot approve
+/// a value that the tool refuses or reads as another value.
+/// </summary>
+public interface IArgumentCheckTool
+{
+    Task<Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct);
+}
+
 public record ToolResult(
     bool Success,
     string? EntityId = null,

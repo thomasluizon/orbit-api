@@ -3,6 +3,7 @@ using System.Text.Json;
 using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Chat;
+using Orbit.Application.Chat.Tools;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -283,7 +284,8 @@ public sealed class PendingOperationChangePreviewerTests
     }
 
     private async Task<Orbit.Domain.Models.PendingOperationChangePreview?> Preview(string operation, string json) =>
-        await new PendingOperationChangePreviewer(_habits, _goals, _tags, _userDateService).PreviewAsync(
+        await new PendingOperationChangePreviewer(_habits, _goals, _tags, _userDateService,
+            new AiToolRegistry([])).PreviewAsync(
             UserId, operation, JsonDocument.Parse(json).RootElement);
 
     private void Setup(IReadOnlyList<Habit> habits) =>

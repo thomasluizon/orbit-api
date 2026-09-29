@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 using Orbit.Api.Controllers;
 using Orbit.Application.Chat;
+using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Models;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
@@ -40,7 +41,8 @@ public class AiControllerTests
             _operationExecutor,
             new PendingOperationRevisionService(_pendingOperationStore,
                 _changePreviewer,
-                Substitute.For<IValidator<RevisePendingOperationRequest>>()),
+                Substitute.For<IValidator<RevisePendingOperationRequest>>(),
+                new AiToolRegistry([])),
             _resolveClarificationValidator);
 
         var claims = new[] { new Claim(ClaimTypes.NameIdentifier, UserId.ToString()) };

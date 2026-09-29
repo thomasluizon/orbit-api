@@ -13,12 +13,14 @@ using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Chat.Validators;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Queries;
 using Orbit.Application.Tests.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.Configuration;
@@ -58,6 +60,8 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
     private readonly PendingAgentOperationStore _pendingOperationStore;
     private readonly AgentOperationExecutor _executor;
     private readonly CreateHabitTool _createHabitTool;
+    private readonly AiToolRegistry _toolRegistry;
+    private readonly PendingOperationChangePreviewer _previewer;
 
     public ChatWriteHoldHandlerTests()
     {
@@ -72,7 +76,9 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
 
         _createHabitTool = new CreateHabitTool(_habitRepo, _tagRepo, _goalRepo, _userDateService,
             _payGate, _unitOfWork);
-        var toolRegistry = new AiToolRegistry([_createHabitTool]);
+        _toolRegistry = new AiToolRegistry([_createHabitTool]);
+        _previewer = new PendingOperationChangePreviewer(_habitRepo, _goalRepo, _tagRepo, _userDateService,
+            _toolRegistry);
         _catalogService = new AgentCatalogService([_createHabitTool]);
         var settings = Options.Create(new AgentPlatformSettings());
         _pendingOperationStore = new PendingAgentOperationStore(_dbContext, settings);
@@ -88,8 +94,8 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
             Substitute.For<IAgentAuditService>(),
             ownership,
             stepUpBridge,
-            toolRegistry,
-            new PendingOperationChangePreviewer(_habitRepo, _goalRepo, _tagRepo, _userDateService),
+            _toolRegistry,
+            _previewer,
             _unitOfWork,
             NullLogger<AgentOperationExecutor>.Instance);
 
@@ -177,6 +183,42 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
         pending.Items.Should().BeNull();
         pending.PreviewFingerprint.Should().BeNull();
         await _habitRepo.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
+    }
+
+    [Theory]
+    [InlineData("""{"frequency_unit":"EveryDay"}""")]
+    [InlineData("""{"frequency_quantity":"2"}""")]
+    [InlineData("""{"reminder_times":[1,2,3,4,5,6,7,8,9,10,11]}""")]
+    public async Task Handle_EditOutsideTheToolRules_IsRejectedAndExecuteRunsTheHeldArguments(string edits)
+    {
+        ScriptToolCall("""{"title":"Beber agua","frequency_unit":"Day","frequency_quantity":1,"due_time":"08:00","reminder_times":[15]}""");
+        var held = await CreateHandler().Handle(new ProcessUserChatCommand(
+            _userId, "Crie o habito", ClientContext: new AgentClientContext(
+                SupportsPendingOperationChanges: true)), CancellationToken.None);
+        var pending = held.Value.PendingOperations!.Single();
+        using var document = JsonDocument.Parse(edits);
+
+        var revision = await new PendingOperationRevisionService(_pendingOperationStore, _previewer,
+            new RevisePendingOperationRequestValidator(), _toolRegistry).ReviseAsync(_userId, pending.Id,
+            new RevisePendingOperationRequest(pending.PreviewFingerprint!,
+                [new RevisedPendingOperationItem("0", document.RootElement.Clone())]),
+            CancellationToken.None);
+        var execution = _pendingOperationStore.GetExecution(_userId, pending.Id)!;
+        var confirmation = _pendingOperationStore.Confirm(_userId, pending.Id)!;
+        var executed = await _executor.ExecuteAsync(new AgentExecuteOperationRequest(
+            _userId,
+            execution.OperationId,
+            execution.Arguments,
+            execution.Surface,
+            AgentAuthMethod.Jwt,
+            ConfirmationToken: confirmation.ConfirmationToken), CancellationToken.None);
+
+        revision.IsSuccess.Should().BeFalse();
+        revision.Error.Should().Be("invalid_revision");
+        executed.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
+        await _habitRepo.Received(1).AddAsync(Arg.Is<Habit>(habit =>
+            habit.FrequencyUnit == FrequencyUnit.Day && habit.FrequencyQuantity == 1
+            && habit.ReminderTimes.SequenceEqual(new[] { 15 })), Arg.Any<CancellationToken>());
     }
 
     private ProcessUserChatCommandHandler CreateHandler()

@@ -15,7 +15,7 @@ public class CreateHabitTool(
     IGenericRepository<Goal> goalRepository,
     IUserDateService userDateService,
     IPayGateService payGate,
-    IUnitOfWork unitOfWork) : IAiTool, IClarificationPrecheckTool
+    IUnitOfWork unitOfWork) : IAiTool, IClarificationPrecheckTool, IArgumentCheckTool
 {
     private const string TitleProperty = "title";
 
@@ -159,6 +159,29 @@ public class CreateHabitTool(
             ct);
     }
 
+    public async Task<Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
+        if (!args.TryGetProperty(TitleProperty, out var titleEl) || titleEl.ValueKind != JsonValueKind.String
+            || string.IsNullOrWhiteSpace(titleEl.GetString()))
+            return Domain.Common.Result.Failure("title is required.");
+
+        var subHabits = args.TryGetProperty("sub_habits", out var subEl) && subEl.ValueKind == JsonValueKind.Array
+            ? subEl.EnumerateArray().ToList()
+            : [];
+        var fieldError = BulkHabitToolArguments.CheckHabitFields(args)
+            ?? subHabits.Select(BulkHabitToolArguments.CheckHabitFields).FirstOrDefault(error => error is not null);
+        if (fieldError is not null)
+            return Domain.Common.Result.Failure(fieldError);
+
+        var today = await userDateService.GetUserTodayAsync(userId, ct);
+        var parent = BuildParentHabit(args, userId, titleEl.GetString()!, today);
+        if (parent.IsFailure)
+            return parent;
+
+        var children = BuildChildHabits(args, subHabits, userId, parent.Value, today);
+        return children.IsFailure ? children : Domain.Common.Result.Success();
+    }
+
     private async Task<ToolResult> ExecuteLockedAsync(
         JsonElement args,
         Guid userId,
@@ -234,12 +257,26 @@ public class CreateHabitTool(
         if (subGate.IsFailure)
             return ToolResult.FromFailure(subGate);
 
+        var children = BuildChildHabits(args, subEl.EnumerateArray().ToList(), userId, parent, parentDueDate);
+        if (children.IsFailure)
+            return ToolResult.FromFailure(children);
+
+        foreach (var child in children.Value)
+            await habitRepository.AddAsync(child, ct);
+
+        return null;
+    }
+
+    private static Domain.Common.Result<List<Habit>> BuildChildHabits(
+        JsonElement args, IReadOnlyList<JsonElement> subHabits, Guid userId, Habit parent, DateOnly parentDueDate)
+    {
         var parentFreqUnit = JsonArgumentParser.ParseFrequencyUnit(args);
         var parentFreqQty = JsonArgumentParser.GetOptionalInt(args, "frequency_quantity")
             ?? (parentFreqUnit is not null ? 1 : null);
         var parentDays = JsonArgumentParser.ParseDays(args);
 
-        foreach (var sub in subEl.EnumerateArray())
+        var children = new List<Habit>();
+        foreach (var sub in subHabits)
         {
             var childResult = BuildChildHabit(
                 sub,
@@ -251,12 +288,12 @@ public class CreateHabitTool(
                 parentDueDate,
                 parent.IntervalWeeks);
             if (childResult.IsFailure)
-                return ToolResult.FromFailure(childResult);
+                return childResult.PropagateError<List<Habit>>();
 
-            await habitRepository.AddAsync(childResult.Value, ct);
+            children.Add(childResult.Value);
         }
 
-        return null;
+        return Domain.Common.Result.Success(children);
     }
 
     private static Domain.Common.Result<Habit> BuildChildHabit(
