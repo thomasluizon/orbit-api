@@ -16,6 +16,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="OAuth/Assets/geist-latin.woff2" LogicalName="orbit.oauth.geist-latin.woff2" />
+    <EmbeddedResource Include="OAuth/Assets/geist-mono-latin.woff2" LogicalName="orbit.oauth.geist-mono-latin.woff2" />
+    <EmbeddedResource Include="OAuth/Assets/space-grotesk-latin.woff2" LogicalName="orbit.oauth.space-grotesk-latin.woff2" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Hangfire.AspNetCore" Version="1.8.25" />
     <PackageReference Include="Hangfire.PostgreSql" Version="1.21.1" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
