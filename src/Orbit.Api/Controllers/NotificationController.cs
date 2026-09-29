@@ -107,7 +107,11 @@ public partial class NotificationController(
         [FromBody] SubscribeRequest request,
         CancellationToken cancellationToken)
     {
-        var command = new UnsubscribePushCommand(HttpContext.GetUserId(), request.Endpoint);
+        var command = new UnsubscribePushCommand(
+            HttpContext.GetUserId(),
+            request.Endpoint,
+            request.P256dh,
+            request.Auth);
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)

@@ -10,9 +10,9 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Tests.Persistence;
 
 /// <summary>
-/// Drives <see cref="SubscribePushCommandHandler"/> through the real repository, unit of work and
-/// unique endpoint index, one context per request, so the per-account row counts below are the ones
-/// the subscriptions list reads.
+/// Drives <see cref="SubscribePushCommandHandler"/> and <see cref="UnsubscribePushCommandHandler"/>
+/// through the real repository, unit of work and unique endpoint index, one context per request, so
+/// the per-account row counts below are the ones the subscriptions list reads.
 /// </summary>
 public sealed class PushSubscriptionAccountSwitchTests : IDisposable
 {
@@ -73,14 +73,40 @@ public sealed class PushSubscriptionAccountSwitchTests : IDisposable
     }
 
     [Fact]
+    public async Task NewAccountTurnsPushOffOnTheBrowser_OldAccountNoLongerListsIt()
+    {
+        (await Subscribe(_firstAccount, WebEndpoint, WebP256dh, WebAuth)).IsSuccess.Should().BeTrue();
+
+        var result = await Unsubscribe(_secondAccount, WebEndpoint, WebP256dh, WebAuth);
+
+        result.IsSuccess.Should().BeTrue();
+        CountFor(_firstAccount).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task NewAccountSignsOutOfTheAndroidDevice_OldAccountNoLongerListsIt()
+    {
+        (await Subscribe(_firstAccount, FcmToken, PushSubscription.FcmSentinel, PushSubscription.FcmSentinel)).IsSuccess.Should().BeTrue();
+
+        var result = await Unsubscribe(_secondAccount, FcmToken, PushSubscription.FcmSentinel, PushSubscription.FcmSentinel);
+
+        result.IsSuccess.Should().BeTrue();
+        CountFor(_firstAccount).Should().Be(0);
+    }
+
+    [Fact]
     public async Task AnotherAccountWithTheEndpointButNotItsKeys_CannotTakeOrRemoveTheDevice()
     {
         (await Subscribe(_firstAccount, WebEndpoint, WebP256dh, WebAuth)).IsSuccess.Should().BeTrue();
 
-        var result = await Subscribe(_secondAccount, WebEndpoint, WebP256dh, "guessed-auth-secret");
+        var takeover = await Subscribe(_secondAccount, WebEndpoint, WebP256dh, "guessed-auth-secret");
+        var guessedRemoval = await Unsubscribe(_secondAccount, WebEndpoint, WebP256dh, "guessed-auth-secret");
+        var endpointOnlyRemoval = await Unsubscribe(_secondAccount, WebEndpoint, null, null);
 
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be(ErrorCodes.PushEndpointOwnedByOtherUser);
+        takeover.IsFailure.Should().BeTrue();
+        takeover.ErrorCode.Should().Be(ErrorCodes.PushEndpointOwnedByOtherUser);
+        guessedRemoval.IsSuccess.Should().BeTrue();
+        endpointOnlyRemoval.IsSuccess.Should().BeTrue();
         CountFor(_firstAccount).Should().Be(1);
         CountFor(_secondAccount).Should().Be(0);
     }
@@ -93,6 +119,16 @@ public sealed class PushSubscriptionAccountSwitchTests : IDisposable
             new UnitOfWork(context, new DatabaseConnectionSettings()));
 
         return await handler.Handle(new SubscribePushCommand(userId, endpoint, p256dh, auth), CancellationToken.None);
+    }
+
+    private async Task<Result> Unsubscribe(Guid userId, string endpoint, string? p256dh, string? auth)
+    {
+        await using var context = _factory.CreateContext();
+        var handler = new UnsubscribePushCommandHandler(
+            new GenericRepository<PushSubscription>(context),
+            new UnitOfWork(context, new DatabaseConnectionSettings()));
+
+        return await handler.Handle(new UnsubscribePushCommand(userId, endpoint, p256dh, auth), CancellationToken.None);
     }
 
     private int CountFor(Guid userId)

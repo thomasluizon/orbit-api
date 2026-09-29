@@ -179,6 +179,20 @@ public class NotificationControllerTests
     }
 
     [Fact]
+    public async Task Unsubscribe_ForwardsTheDeviceKeysSoAnotherAccountsRowCanBeReleased()
+    {
+        _mediator.Send(Arg.Any<UnsubscribePushCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success());
+
+        var request = new NotificationController.SubscribeRequest("https://endpoint", "p256dh", "auth");
+        await _controller.Unsubscribe(request, CancellationToken.None);
+
+        await _mediator.Received(1).Send(
+            Arg.Is<UnsubscribePushCommand>(c => c.Endpoint == "https://endpoint" && c.P256dh == "p256dh" && c.Auth == "auth"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Unsubscribe_Failure_ReturnsBadRequest()
     {
         _mediator.Send(Arg.Any<UnsubscribePushCommand>(), Arg.Any<CancellationToken>())

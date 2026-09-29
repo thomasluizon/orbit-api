@@ -125,13 +125,59 @@ public class UnsubscribePushCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(subscription);
 
-        var command = new UnsubscribePushCommand(UserId, "https://push.example.com/endpoint");
+        var command = new UnsubscribePushCommand(UserId, "https://push.example.com/endpoint", "p256dh", "auth");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         _pushSubRepo.Received(1).Remove(subscription);
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_OtherAccountsRowWithItsDeviceKeys_RemovesAndSaves()
+    {
+        var subscription = PushSubscription.Create(Guid.NewGuid(), "https://push.example.com/endpoint", "p256dh", "auth").Value;
+        ArrangeFound(subscription);
+
+        var command = new UnsubscribePushCommand(UserId, "https://push.example.com/endpoint", "p256dh", "auth");
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        _pushSubRepo.Received(1).Remove(subscription);
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("p256dh", "other-auth")]
+    [InlineData(null, null)]
+    public async Task Handle_OtherAccountsRowWithoutItsDeviceKeys_LeavesItInPlace(string? p256dh, string? auth)
+    {
+        var subscription = PushSubscription.Create(Guid.NewGuid(), "https://push.example.com/endpoint", "p256dh", "auth").Value;
+        ArrangeFound(subscription);
+
+        var command = new UnsubscribePushCommand(UserId, "https://push.example.com/endpoint", p256dh, auth);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        _pushSubRepo.DidNotReceive().Remove(Arg.Any<PushSubscription>());
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_OwnRowWithoutDeviceKeys_RemovesAndSaves()
+    {
+        var subscription = PushSubscription.Create(UserId, "https://push.example.com/endpoint", "p256dh", "auth").Value;
+        ArrangeFound(subscription);
+
+        var command = new UnsubscribePushCommand(UserId, "https://push.example.com/endpoint", null, null);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        _pushSubRepo.Received(1).Remove(subscription);
     }
 
     [Fact]
@@ -143,11 +189,20 @@ public class UnsubscribePushCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns((PushSubscription?)null);
 
-        var command = new UnsubscribePushCommand(UserId, "https://push.example.com/endpoint");
+        var command = new UnsubscribePushCommand(UserId, "https://push.example.com/endpoint", "p256dh", "auth");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         _pushSubRepo.DidNotReceive().Remove(Arg.Any<PushSubscription>());
+    }
+
+    private void ArrangeFound(PushSubscription subscription)
+    {
+        _pushSubRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<PushSubscription, bool>>>(),
+            Arg.Any<Func<IQueryable<PushSubscription>, IQueryable<PushSubscription>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(subscription);
     }
 }

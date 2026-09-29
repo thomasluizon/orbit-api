@@ -107,9 +107,12 @@ public class UpdateNotificationsTool(IMediator mediator) : IAiTool
         if (string.IsNullOrWhiteSpace(endpoint))
             return new ToolResult(false, Error: "endpoint is required.");
 
+        var p256dh = JsonArgumentParser.GetOptionalString(args, "p256dh");
+        var auth = JsonArgumentParser.GetOptionalString(args, "auth");
+
         return await ChatToolMediator.RunAsync(
             mediator,
-            new UnsubscribePushCommand(userId, endpoint),
+            new UnsubscribePushCommand(userId, endpoint, p256dh, auth),
             userId,
             "Push subscription removed",
             new { action = "unsubscribe_push", endpoint },

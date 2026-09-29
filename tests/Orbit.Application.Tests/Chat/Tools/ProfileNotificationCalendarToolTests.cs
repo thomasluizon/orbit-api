@@ -461,6 +461,24 @@ public class ProfileNotificationCalendarToolTests
     }
 
     [Fact]
+    public async Task UpdateNotificationsTool_UnsubscribePushForwardsTheDeviceKeys()
+    {
+        var mediator = Substitute.For<IMediator>();
+        mediator.Send(Arg.Any<UnsubscribePushCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success());
+        var tool = new UpdateNotificationsTool(mediator);
+
+        await tool.ExecuteAsync(
+            Parse("""{"action":"unsubscribe_push","endpoint":"https://push","p256dh":"key","auth":"secret"}"""),
+            UserId,
+            CancellationToken.None);
+
+        await mediator.Received(1).Send(
+            Arg.Is<UnsubscribePushCommand>(c => c.UserId == UserId && c.Endpoint == "https://push" && c.P256dh == "key" && c.Auth == "secret"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task UpdateNotificationsTool_RequiresEndpointForUnsubscribe()
     {
         var tool = new UpdateNotificationsTool(Substitute.For<IMediator>());
