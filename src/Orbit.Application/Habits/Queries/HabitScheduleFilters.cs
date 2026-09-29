@@ -52,14 +52,7 @@ internal static class HabitScheduleFilters
         {
             var hasCompletedLogInRange = logFacts?.HasCompleted(habit.Id, dateFrom, dateTo)
                 ?? HabitScheduleService.HasCompletedLogInRange(habit, dateFrom, dateTo);
-            var scheduledDates = HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo, weekStartDay);
-
-            if (habit.IsFlexible
-                && !hasCompletedLogInRange
-                && !scheduledDates.Any(date =>
-                    (logFacts?.IsFlexibleDue(habit, date, weekStartDay)
-                        ?? HabitScheduleService.IsFlexibleHabitDueOnDate(habit, date, habit.Logs, weekStartDay))))
-                continue;
+            var scheduledDates = GetVisibleScheduledDates(habit, dateFrom, dateTo, weekStartDay, logFacts);
 
             var isOverdue = DetermineOverdueStatus(habit, dateFrom, includeOverdue, weekStartDay, dueDateResolution, logFacts);
             var hasDescendantDue = HasAnyDescendantDue(
@@ -72,12 +65,38 @@ internal static class HabitScheduleFilters
                 dueDateResolution,
                 logFacts);
 
+            if (habit.IsFlexible
+                && !hasCompletedLogInRange
+                && !hasDescendantDue
+                && !scheduledDates.Any(date =>
+                    (logFacts?.IsFlexibleDue(habit, date, weekStartDay)
+                        ?? HabitScheduleService.IsFlexibleHabitDueOnDate(habit, date, habit.Logs, weekStartDay))))
+                continue;
+
             if (scheduledDates.Count > 0 || isOverdue || hasDescendantDue || hasCompletedLogInRange)
                 filtered.Add((habit, scheduledDates, isOverdue));
         }
 
         return filtered;
     }
+
+    internal static List<DateOnly> GetVisibleScheduledDates(
+        Habit habit, DateOnly from, DateOnly to, int weekStartDay, HabitScheduleLogFacts? logFacts)
+    {
+        var dates = HabitScheduleService.GetScheduledDates(habit, from, to, weekStartDay);
+        if (habit.IsFlexible)
+            dates.RemoveAll(date => logFacts?.HasSkipped(habit.Id, date)
+                ?? habit.Logs.Any(log => !log.IsDeleted && log.Date == date && log.Value == 0));
+        return dates;
+    }
+
+    private static bool HasVisibleLogInRange(
+        Habit habit, DateOnly from, DateOnly to, HabitScheduleLogFacts? logFacts) =>
+        habit.IsFlexible
+            ? (logFacts?.HasCompleted(habit.Id, from, to)
+                ?? habit.Logs.Any(log => !log.IsDeleted && log.Date >= from && log.Date <= to && log.Value > 0))
+            : (logFacts?.HasLog(habit.Id, from, to)
+                ?? habit.Logs.Any(log => !log.IsDeleted && log.Date >= from && log.Date <= to));
 
     /// <summary>
     /// Whether a habit is overdue on the reference date, honoring the request's
@@ -231,7 +250,7 @@ internal static class HabitScheduleFilters
         if (child.IsCompleted) return false;
         if (!dateFrom.HasValue || !dateTo.HasValue) return true;
 
-        var scheduledDates = HabitScheduleService.GetScheduledDates(child, dateFrom.Value, dateTo.Value, weekStartDay);
+        var scheduledDates = GetVisibleScheduledDates(child, dateFrom.Value, dateTo.Value, weekStartDay, logFacts);
         var isOverdue = DetermineOverdueStatus(
             child,
             dateFrom.Value,
@@ -376,7 +395,7 @@ internal static class HabitScheduleFilters
     {
         foreach (var child in lookup[parentId])
         {
-            var scheduledDates = HabitScheduleService.GetScheduledDates(child, dateFrom, dateTo, weekStartDay);
+            var scheduledDates = GetVisibleScheduledDates(child, dateFrom, dateTo, weekStartDay, logFacts);
             var isOverdue = DetermineOverdueStatus(
                 child,
                 dateFrom,
@@ -387,8 +406,7 @@ internal static class HabitScheduleFilters
 
             if (scheduledDates.Count > 0 || isOverdue)
                 return true;
-            if (logFacts?.HasLog(child.Id, dateFrom, dateTo)
-                ?? child.Logs.Any(l => l.Date >= dateFrom && l.Date <= dateTo))
+            if (HasVisibleLogInRange(child, dateFrom, dateTo, logFacts))
                 return true;
             if (HasAnyDescendantDue(
                     child.Id,
@@ -436,7 +454,7 @@ internal static class HabitScheduleFilters
                             ctx.WeekStartDay,
                             ctx.DueDateResolution,
                             ctx.LogFacts)
-                        || c.Logs.Any(l => l.Date >= df && l.Date <= dt);
+                        || HasVisibleLogInRange(c, df, dt, ctx.LogFacts);
                 });
         }
 
