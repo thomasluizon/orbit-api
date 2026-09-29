@@ -110,6 +110,7 @@ public partial class OAuthController(
 #pragma warning restore S6932
 
     [HttpGet("/oauth/authorize")]
+    [DistributedRateLimit("auth")]
     public IActionResult Authorize(
         [FromQuery] string client_id,
         [FromQuery] string redirect_uri,
@@ -132,12 +133,7 @@ public partial class OAuthController(
         if (string.IsNullOrEmpty(state))
             return BadRequest(new { error = MissingStateError, error_description = "state is required for CSRF protection" });
 
-        var language = Request.Headers.AcceptLanguage.ToString().StartsWith("pt", StringComparison.OrdinalIgnoreCase)
-            ? "pt-BR" : "en";
-        var scheme = Request.Headers["X-Forwarded-Proto"].FirstOrDefault() ?? Request.Scheme;
-        var googleRedirectUri = $"{scheme}://{Request.Host}/oauth/google/callback";
-        var googleState = authStore.CreateGoogleRequest(client_id, redirect_uri, state,
-            code_challenge, nonce, googleRedirectUri, language);
+        var language = ResolveLanguage();
         var errorMessage = google_error switch
         {
             "cancelled" => language == "pt-BR"
@@ -153,7 +149,7 @@ public partial class OAuthController(
         };
         var html = OAuthLoginPage.Render(
             client_id, redirect_uri, state,
-            code_challenge, code_challenge_method, googleState, nonce, errorMessage, language);
+            code_challenge, code_challenge_method, nonce, errorMessage, language);
 
         return Content(html, "text/html");
     }
@@ -202,17 +198,37 @@ public partial class OAuthController(
         return Ok(new { redirectUrl });
     }
 
+    /// <summary>
+    /// Starts Google sign-in for an MCP authorization request. The authorize page links here with the same
+    /// parameters it was itself given, and this action revalidates every one of them before it allocates any
+    /// server state, so a page view alone allocates nothing and cannot grow the pending-request store.
+    /// </summary>
     [HttpGet("/oauth/google/start")]
     [DistributedRateLimit("auth")]
-    public IActionResult GoogleStart([FromQuery] string state)
+    public IActionResult GoogleStart(
+        [FromQuery] string client_id,
+        [FromQuery] string redirect_uri,
+        [FromQuery] string state,
+        [FromQuery] string code_challenge,
+        [FromQuery] string code_challenge_method,
+        [FromQuery] string? nonce = null)
     {
-        var pending = authStore.GetGoogleRequest(state);
-        if (pending is null)
+        if (string.IsNullOrWhiteSpace(client_id)
+            || string.IsNullOrEmpty(state)
+            || string.IsNullOrEmpty(code_challenge)
+            || code_challenge_method != "S256"
+            || !IsRedirectUriAllowed(redirect_uri))
             return InvalidGoogleState();
 
+        var googleRedirectUri = BuildGoogleRedirectUri();
         if (string.IsNullOrWhiteSpace(googleSettings.Value.ClientId)
-            || !googleSettings.Value.AllowedRedirectUris.Contains(pending.GoogleRedirectUri, StringComparer.Ordinal))
-            return RedirectToAuthorize(pending, "unavailable");
+            || !googleSettings.Value.AllowedRedirectUris.Contains(googleRedirectUri, StringComparer.Ordinal))
+            return RedirectToAuthorize(client_id, redirect_uri, state, code_challenge, nonce, "unavailable");
+
+        var pending = authStore.TryCreateGoogleRequest(client_id, redirect_uri, state,
+            code_challenge, nonce, googleRedirectUri, ResolveLanguage());
+        if (pending is null)
+            return RedirectToAuthorize(client_id, redirect_uri, state, code_challenge, nonce, "unavailable");
 
         var url = "https://accounts.google.com/o/oauth2/v2/auth"
             + $"?client_id={Uri.EscapeDataString(googleSettings.Value.ClientId)}"
@@ -261,20 +277,37 @@ public partial class OAuthController(
         StatusCode = StatusCodes.Status400BadRequest
     };
 
-    private static IActionResult RedirectToAuthorize(GoogleAuthorizationRequest pending, string googleError)
+    private static IActionResult RedirectToAuthorize(GoogleAuthorizationRequest pending, string googleError) =>
+        RedirectToAuthorize(pending.ClientId, pending.RedirectUri, pending.ClientState,
+            pending.CodeChallenge, pending.Nonce, googleError);
+
+    private static IActionResult RedirectToAuthorize(string clientId, string redirectUri, string clientState,
+        string codeChallenge, string? nonce, string googleError)
     {
         var url = "/oauth/authorize"
-            + $"?client_id={Uri.EscapeDataString(pending.ClientId)}"
-            + $"&redirect_uri={Uri.EscapeDataString(pending.RedirectUri)}"
+            + $"?client_id={Uri.EscapeDataString(clientId)}"
+            + $"&redirect_uri={Uri.EscapeDataString(redirectUri)}"
             + "&response_type=code"
-            + $"&state={Uri.EscapeDataString(pending.ClientState)}"
-            + $"&code_challenge={Uri.EscapeDataString(pending.CodeChallenge)}"
+            + $"&state={Uri.EscapeDataString(clientState)}"
+            + $"&code_challenge={Uri.EscapeDataString(codeChallenge)}"
             + "&code_challenge_method=S256"
             + $"&google_error={Uri.EscapeDataString(googleError)}";
-        if (pending.Nonce is not null)
-            url += $"&nonce={Uri.EscapeDataString(pending.Nonce)}";
+        if (nonce is not null)
+            url += $"&nonce={Uri.EscapeDataString(nonce)}";
         return new RedirectResult(url);
     }
+
+    private string ResolveLanguage() =>
+        Request.Headers.AcceptLanguage.ToString().StartsWith("pt", StringComparison.OrdinalIgnoreCase)
+            ? "pt-BR" : "en";
+
+#pragma warning disable S6932 // Raw Request.Headers needed for reverse proxy X-Forwarded-Proto detection
+    private string BuildGoogleRedirectUri()
+    {
+        var scheme = Request.Headers["X-Forwarded-Proto"].FirstOrDefault() ?? Request.Scheme;
+        return $"{scheme}://{Request.Host}/oauth/google/callback";
+    }
+#pragma warning restore S6932
 
     public record GoogleAuthRequest(
         string Credential,

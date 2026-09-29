@@ -13,6 +13,13 @@ public sealed partial class OAuthAuthorizationStore : IDisposable
     private readonly TimeProvider _timeProvider;
     private static readonly TimeSpan CodeExpiry = TimeSpan.FromMinutes(5);
 
+    /// <summary>
+    /// Hard ceiling on pending Google sign-in requests held in memory. An entry is only allocated once a person
+    /// starts Google sign-in and it lives at most <see cref="CodeExpiry"/>, so this cap bounds the store's
+    /// footprint while leaving far more headroom than real concurrent sign-in traffic needs.
+    /// </summary>
+    internal const int MaxPendingGoogleRequests = 1_000;
+
     public OAuthAuthorizationStore(ILogger<OAuthAuthorizationStore> logger) : this(logger, TimeProvider.System) { }
 
     public OAuthAuthorizationStore(ILogger<OAuthAuthorizationStore> logger, TimeProvider timeProvider)
@@ -25,20 +32,35 @@ public sealed partial class OAuthAuthorizationStore : IDisposable
         }, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
     }
 
-    public string CreateGoogleRequest(string clientId, string redirectUri, string clientState,
+    /// <summary>
+    /// Allocates a single-use Google sign-in request, or returns <c>null</c> when the store already holds
+    /// <see cref="MaxPendingGoogleRequests"/> live entries. Expired entries are evicted first, so the cap only
+    /// refuses genuine pressure. The count is re-read after the insert and the new entry is withdrawn when it
+    /// crossed the cap, so concurrent callers can never leave the store above its ceiling.
+    /// </summary>
+    public GoogleAuthorizationRequest? TryCreateGoogleRequest(string clientId, string redirectUri, string clientState,
         string codeChallenge, string? nonce, string googleRedirectUri, string language)
     {
+        EvictExpiredGoogleRequests();
+        if (_googleRequests.Count >= MaxPendingGoogleRequests)
+            return null;
+
         var state = NewSecret();
         var verifier = NewSecret();
         var challenge = Convert.ToBase64String(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)))
             .Replace("+", "-").Replace("/", "_").TrimEnd('=');
-        _googleRequests[state] = new GoogleAuthorizationRequest(state, clientId, redirectUri, clientState,
+        var request = new GoogleAuthorizationRequest(state, clientId, redirectUri, clientState,
             codeChallenge, nonce, googleRedirectUri, language, verifier, challenge, _timeProvider.GetUtcNow());
-        return state;
-    }
+        _googleRequests[state] = request;
 
-    public GoogleAuthorizationRequest? GetGoogleRequest(string state) =>
-        _googleRequests.TryGetValue(state, out var request) && !IsExpired(request.CreatedAtUtc) ? request : null;
+        if (_googleRequests.Count > MaxPendingGoogleRequests)
+        {
+            _googleRequests.TryRemove(state, out _);
+            return null;
+        }
+
+        return request;
+    }
 
     public GoogleAuthorizationRequest? ConsumeGoogleRequest(string state) =>
         _googleRequests.TryRemove(state, out var request) && !IsExpired(request.CreatedAtUtc) ? request : null;
@@ -93,6 +115,11 @@ public sealed partial class OAuthAuthorizationStore : IDisposable
             if (kvp.Value.CreatedAt < cutoff)
                 _codes.TryRemove(kvp.Key, out _);
         }
+        EvictExpiredGoogleRequests();
+    }
+
+    private void EvictExpiredGoogleRequests()
+    {
         foreach (var kvp in _googleRequests)
         {
             if (IsExpired(kvp.Value.CreatedAtUtc))
