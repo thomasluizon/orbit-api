@@ -19,7 +19,7 @@ public class SecurityHeadersMiddleware(RequestDelegate next)
 
         if (context.Request.Path.StartsWithSegments("/oauth"))
         {
-            headers[ContentSecurityPolicyHeader] = "default-src 'self'; script-src 'self' https://accounts.google.com https://apis.google.com 'unsafe-inline'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none'";
+            headers[ContentSecurityPolicyHeader] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self'; frame-ancestors 'none'";
         }
         else if (!context.Request.Path.StartsWithSegments("/scalar") &&
                  !context.Request.Path.StartsWithSegments("/openapi"))
