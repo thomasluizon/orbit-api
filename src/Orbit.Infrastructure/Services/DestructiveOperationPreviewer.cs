@@ -10,6 +10,14 @@ namespace Orbit.Infrastructure.Services;
 
 public sealed class DestructiveOperationPreviewer(OrbitDbContext dbContext) : IDestructiveOperationPreviewer
 {
+    private static readonly HashSet<string> HandledOperations = new(StringComparer.Ordinal)
+    {
+        "delete_goal", "delete_tag", "delete_checklist_template", "delete_user_facts",
+        "delete_notifications", "manage_calendar_sync"
+    };
+
+    public bool Handles(string operationId) => HandledOperations.Contains(operationId);
+
     public Task<PendingOperationChangePreview?> PreviewAsync(Guid userId, string operationId,
         JsonElement arguments, CancellationToken cancellationToken = default) =>
         arguments.ValueKind != JsonValueKind.Object

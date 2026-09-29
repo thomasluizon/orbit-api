@@ -184,7 +184,7 @@ public sealed class PendingOperationRevisionService(
             root["action"] = "delete_selected";
             return true;
         }
-        return false;
+        return selected.Count == 1 && ApplyEdits(root, selected[0].Edits);
     }
 
     private static bool BuildCalendarArguments(JsonObject root,

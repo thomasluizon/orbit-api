@@ -14,6 +14,8 @@ public sealed class PendingOperationChangePreviewerTests
 {
     private static readonly Guid UserId = Guid.NewGuid();
     private readonly IGenericRepository<Habit> _habits = Substitute.For<IGenericRepository<Habit>>();
+    private readonly IGenericRepository<Goal> _goals = Substitute.For<IGenericRepository<Goal>>();
+    private readonly IGenericRepository<Tag> _tags = Substitute.For<IGenericRepository<Tag>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
 
     public PendingOperationChangePreviewerTests() =>
@@ -281,7 +283,7 @@ public sealed class PendingOperationChangePreviewerTests
     }
 
     private async Task<Orbit.Domain.Models.PendingOperationChangePreview?> Preview(string operation, string json) =>
-        await new PendingOperationChangePreviewer(_habits, _userDateService).PreviewAsync(
+        await new PendingOperationChangePreviewer(_habits, _goals, _tags, _userDateService).PreviewAsync(
             UserId, operation, JsonDocument.Parse(json).RootElement);
 
     private void Setup(IReadOnlyList<Habit> habits) =>

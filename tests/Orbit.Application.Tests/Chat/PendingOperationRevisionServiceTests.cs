@@ -17,6 +17,8 @@ public sealed class PendingOperationRevisionServiceTests
     private readonly Guid _userId = Guid.NewGuid();
     private readonly IPendingAgentOperationStore _store = Substitute.For<IPendingAgentOperationStore>();
     private readonly IGenericRepository<Habit> _habits = Substitute.For<IGenericRepository<Habit>>();
+    private readonly IGenericRepository<Goal> _goals = Substitute.For<IGenericRepository<Goal>>();
+    private readonly IGenericRepository<Tag> _tags = Substitute.For<IGenericRepository<Tag>>();
     private readonly IUserDateService _dateService = Substitute.For<IUserDateService>();
 
     [Fact]
@@ -34,7 +36,7 @@ public sealed class PendingOperationRevisionServiceTests
         _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
             Arg.Any<string>(), Arg.Any<string>()).Returns(true);
         var service = new PendingOperationRevisionService(_store,
-            new PendingOperationChangePreviewer(_habits, _dateService),
+            new PendingOperationChangePreviewer(_habits, _goals, _tags, _dateService),
             new RevisePendingOperationRequestValidator());
 
         var result = await service.RefreshAsync(_userId, pendingId, CancellationToken.None);
@@ -109,7 +111,7 @@ public sealed class PendingOperationRevisionServiceTests
             AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation));
         _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
             Arg.Any<string>(), Arg.Any<string>()).Returns(true);
-        var previewer = new PendingOperationChangePreviewer(_habits, _dateService);
+        var previewer = new PendingOperationChangePreviewer(_habits, _goals, _tags, _dateService);
         var original = await previewer.PreviewAsync(_userId, "bulk_update_habits", arguments);
         var service = new PendingOperationRevisionService(_store, previewer,
             new RevisePendingOperationRequestValidator());
@@ -142,7 +144,7 @@ public sealed class PendingOperationRevisionServiceTests
         _store.GetExecution(_userId, pendingId).Returns(new PendingAgentOperationExecution(
             pendingId, AgentCapabilityIds.HabitsBulkWrite, "bulk_update_habits", arguments,
             AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation));
-        var previewer = new PendingOperationChangePreviewer(_habits, _dateService);
+        var previewer = new PendingOperationChangePreviewer(_habits, _goals, _tags, _dateService);
         var original = await previewer.PreviewAsync(_userId, "bulk_update_habits", arguments);
         var service = new PendingOperationRevisionService(_store, previewer,
             new RevisePendingOperationRequestValidator());
@@ -186,7 +188,7 @@ public sealed class PendingOperationRevisionServiceTests
             AgentConfirmationRequirement.FreshConfirmation));
         _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
             Arg.Any<string>(), Arg.Any<string>()).Returns(true);
-        var previewer = new PendingOperationChangePreviewer(_habits, _dateService);
+        var previewer = new PendingOperationChangePreviewer(_habits, _goals, _tags, _dateService);
         var preview = await previewer.PreviewAsync(_userId, "bulk_update_habits", arguments.RootElement);
         var service = new PendingOperationRevisionService(_store, previewer,
             new RevisePendingOperationRequestValidator());
@@ -213,7 +215,7 @@ public sealed class PendingOperationRevisionServiceTests
             pendingId, AgentCapabilityIds.HabitsBulkWrite, "bulk_update_habit_emojis", arguments,
             AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation));
         var service = new PendingOperationRevisionService(_store,
-            new PendingOperationChangePreviewer(_habits, _dateService),
+            new PendingOperationChangePreviewer(_habits, _goals, _tags, _dateService),
             new RevisePendingOperationRequestValidator());
 
         var result = await service.ReviseAsync(_userId, pendingId,
@@ -240,7 +242,7 @@ public sealed class PendingOperationRevisionServiceTests
             AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation));
         _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
             Arg.Any<string>(), Arg.Any<string>()).Returns(true);
-        var previewer = new PendingOperationChangePreviewer(_habits, _dateService);
+        var previewer = new PendingOperationChangePreviewer(_habits, _goals, _tags, _dateService);
         var preview = await previewer.PreviewAsync(_userId, "bulk_log_habits", arguments);
         using var edits = JsonDocument.Parse("{\"date\":\"2026-09-26\"}");
         var service = new PendingOperationRevisionService(_store, previewer,
@@ -277,7 +279,7 @@ public sealed class PendingOperationRevisionServiceTests
                 };
                 return true;
             });
-        var previewer = new PendingOperationChangePreviewer(_habits, _dateService);
+        var previewer = new PendingOperationChangePreviewer(_habits, _goals, _tags, _dateService);
         var service = new PendingOperationRevisionService(_store, previewer,
             new RevisePendingOperationRequestValidator());
         var original = await previewer.PreviewAsync(_userId, "bulk_create_habits", arguments);
@@ -310,7 +312,7 @@ public sealed class PendingOperationRevisionServiceTests
             pendingId, AgentCapabilityIds.HabitsBulkDelete, "bulk_delete_habits", arguments,
             AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation));
         _store.Cancel(_userId, pendingId, Arg.Any<string>()).Returns(true);
-        var previewer = new PendingOperationChangePreviewer(_habits, _dateService);
+        var previewer = new PendingOperationChangePreviewer(_habits, _goals, _tags, _dateService);
         var preview = await previewer.PreviewAsync(_userId, "bulk_delete_habits", arguments);
         var service = new PendingOperationRevisionService(_store, previewer,
             new RevisePendingOperationRequestValidator());

@@ -55,7 +55,7 @@ public partial class AgentCatalogService
                 "chat",
                 "AI Chat",
                 "Lets the assistant explain the app and execute safe Orbit operations.",
-                ["Send a prompt to the chat endpoint.", "The backend resolves tool calls.", "Review pending confirmations before destructive actions."],
+                ["Send a prompt to the chat endpoint.", "The backend resolves tool calls.", "Approve the pending confirmation of every write before it runs."],
                 ["Chat may use clientContext as UI hints only.", "Authorization is always backend-enforced."],
                 [AgentCapabilityIds.ChatInteract],
                 ["ChatController.ProcessChat", "ChatController.ProcessChatStream", "ChatController.Transcribe"])

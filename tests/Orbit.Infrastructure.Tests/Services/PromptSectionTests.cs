@@ -33,13 +33,14 @@ public class CoreIdentitySectionTests
     }
 
     [Fact]
-    public void Build_SoftenedGuidance_RoutesDestructiveAndAmbiguousThroughCards()
+    public void Build_SoftenedGuidance_RoutesEveryWriteAndAmbiguityThroughCards()
     {
         var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
         var result = new CoreIdentitySection().Build(ctx);
 
-        result.Should().Contain("Act directly");
-        result.Should().Contain("confirmation card");
+        result.Should().Contain("Call the tool right away");
+        result.Should().Contain("Every write goes through an approval card");
+        result.Should().Contain("Never say a write happened before the user approves it.");
         result.Should().Contain("clarification card");
         result.Should().Contain("quick-action chips");
     }
