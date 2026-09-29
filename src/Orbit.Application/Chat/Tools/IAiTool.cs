@@ -15,6 +15,16 @@ public interface IAiTool
 
 public interface IConcurrencyRetryableTool;
 
+/// <summary>
+/// A tool that asks the person a question before it writes anything. The chat hold reads
+/// the same condition the tool itself reads, so the question reaches the person first and
+/// the approval card comes after the answer.
+/// </summary>
+public interface IClarificationPrecheckTool
+{
+    bool NeedsClarification(JsonElement args);
+}
+
 public record ToolResult(
     bool Success,
     string? EntityId = null,

@@ -15,7 +15,7 @@ public class CreateHabitTool(
     IGenericRepository<Goal> goalRepository,
     IUserDateService userDateService,
     IPayGateService payGate,
-    IUnitOfWork unitOfWork) : IAiTool
+    IUnitOfWork unitOfWork) : IAiTool, IClarificationPrecheckTool
 {
     private const string TitleProperty = "title";
 
@@ -169,7 +169,7 @@ public class CreateHabitTool(
         if (habitGate.IsFailure)
             return ToolResult.FromFailure(habitGate);
 
-        if (!args.TryGetProperty("frequency_unit", out _) && IsHabitFlavoredTitle(title))
+        if (NeedsClarification(args))
         {
             return new ToolResult(true, EntityName: title, Payload: BuildFrequencyClarification());
         }
@@ -343,6 +343,15 @@ public class CreateHabitTool(
             @"\bhabit\b",
             System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled,
             TimeSpan.FromSeconds(1));
+
+    public bool NeedsClarification(JsonElement args)
+    {
+        return !args.TryGetProperty("frequency_unit", out _)
+            && args.ValueKind == JsonValueKind.Object
+            && args.TryGetProperty(TitleProperty, out var titleElement)
+            && titleElement.ValueKind == JsonValueKind.String
+            && IsHabitFlavoredTitle(titleElement.GetString() ?? string.Empty);
+    }
 
     private static bool IsHabitFlavoredTitle(string title)
     {

@@ -512,7 +512,7 @@ public class AgentPolicyEvaluatorTests : IDisposable
     [Theory]
     [InlineData("create_habit")]
     [InlineData("log_habit")]
-    public void Evaluate_LowRiskHabitWrite_OnChatSurface_IsAllowed(string sourceName)
+    public void Evaluate_LowRiskHabitWrite_OnChatSurface_WaitsForApproval(string sourceName)
     {
         var decision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.HabitsWrite,
@@ -522,6 +522,29 @@ public class AgentPolicyEvaluatorTests : IDisposable
             [],
             sourceName,
             $"{sourceName} via chat",
+            OperationFingerprint: $"{sourceName}:{{\"title\":\"Meditate\"}}",
+            ConfirmationRequirementOverride: AgentConfirmationRequirement.FreshConfirmation));
+
+        decision.Status.Should().Be(AgentPolicyDecisionStatus.ConfirmationRequired);
+        decision.Reason.Should().Be("confirmation_required");
+        decision.PendingOperation.Should().NotBeNull();
+        decision.PendingOperation!.ConfirmationRequirement
+            .Should().Be(AgentConfirmationRequirement.FreshConfirmation);
+    }
+
+    [Theory]
+    [InlineData("create_habit")]
+    [InlineData("log_habit")]
+    public void Evaluate_LowRiskHabitWrite_OnMcpSurface_IsAllowed(string sourceName)
+    {
+        var decision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+            AgentCapabilityIds.HabitsWrite,
+            _userId,
+            AgentExecutionSurface.Mcp,
+            AgentAuthMethod.Jwt,
+            [],
+            sourceName,
+            $"{sourceName} via mcp",
             OperationFingerprint: $"{sourceName}:{{\"title\":\"Meditate\"}}"));
 
         decision.Status.Should().Be(AgentPolicyDecisionStatus.Allowed);

@@ -432,7 +432,8 @@ public class AiController(
             HttpContext.User.GetGrantedAgentScopes(),
             HttpContext.User.IsReadOnlyCredential(),
             ConfirmationToken: null,
-            HttpContext.TraceIdentifier), cancellationToken);
+            HttpContext.TraceIdentifier,
+            IncludeChangePreview: true), cancellationToken);
 
         await RecordResolveAuditAsync(
             userId,
