@@ -120,13 +120,15 @@ public class AgentPolicyEvaluatorTests : IDisposable
             AgentExecutionSurface.Chat,
             AgentAuthMethod.Jwt,
             [],
-            "manage_api_key",
+            "manage_api_keys",
             "Create API key",
-            OperationFingerprint: "create_api_key:{\"name\":\"Claude\"}"));
+            OperationFingerprint: "manage_api_keys:{\"action\":\"create\",\"name\":\"Claude\"}",
+            OperationArgumentsJson: "{\"action\":\"create\",\"name\":\"Claude\"}"));
 
         decision.Status.Should().Be(AgentPolicyDecisionStatus.ConfirmationRequired);
         decision.Reason.Should().Be("step_up_required");
         decision.PendingOperation.Should().NotBeNull();
+        decision.PendingOperation!.ActionKey.Should().Be("createApiKey");
     }
 
     [Fact]
@@ -169,9 +171,10 @@ public class AgentPolicyEvaluatorTests : IDisposable
             AgentExecutionSurface.Chat,
             AgentAuthMethod.Jwt,
             [],
-            "manage_api_key",
+            "manage_api_keys",
             "Create API key",
-            OperationFingerprint: "create_api_key:{\"name\":\"Claude\"}"));
+            OperationFingerprint: "manage_api_keys:{\"action\":\"create\",\"name\":\"Claude\"}",
+            OperationArgumentsJson: "{\"action\":\"create\",\"name\":\"Claude\"}"));
 
         var pendingOperation = initialDecision.PendingOperation;
         pendingOperation.Should().NotBeNull();
@@ -189,9 +192,9 @@ public class AgentPolicyEvaluatorTests : IDisposable
             AgentExecutionSurface.Chat,
             AgentAuthMethod.Jwt,
             [],
-            "manage_api_key",
+            "manage_api_keys",
             "Create API key",
-            OperationFingerprint: "create_api_key:{\"name\":\"Claude\"}",
+            OperationFingerprint: "manage_api_keys:{\"action\":\"create\",\"name\":\"Claude\"}",
             ConfirmationToken: confirmation!.ConfirmationToken));
 
         confirmedDecision.Status.Should().Be(AgentPolicyDecisionStatus.Allowed);

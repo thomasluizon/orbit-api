@@ -1,4 +1,5 @@
 using FluentAssertions;
+using System.Text.Json;
 using Orbit.Domain.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -13,6 +14,26 @@ namespace Orbit.Infrastructure.Tests.Services;
 
 public class PendingAgentOperationStoreTests : IDisposable
 {
+    private static readonly IReadOnlyDictionary<string, string> GatedOperationKeys = new Dictionary<string, string>
+    {
+        ["delete_habit"] = "deleteHabit",
+        ["bulk_update_habits"] = "updateHabits",
+        ["bulk_reschedule_habits"] = "rescheduleHabits",
+        ["bulk_log_habits"] = "logHabits",
+        ["bulk_skip_habits"] = "skipHabits",
+        ["bulk_create_habits"] = "createHabits",
+        ["bulk_delete_habits"] = "deleteHabits",
+        ["delete_goal"] = "deleteGoal",
+        ["delete_tag"] = "deleteTag",
+        ["delete_notifications"] = "deleteNotifications",
+        ["manage_calendar_sync"] = "manageCalendarSync",
+        ["delete_user_facts"] = "deleteUserFacts",
+        ["manage_subscription"] = "manageSubscription",
+        ["get_api_keys"] = "viewApiKeys",
+        ["manage_api_keys"] = "manageApiKeys",
+        ["manage_account"] = "manageAccount"
+    };
+
     private readonly OrbitDbContext _dbContext;
     private readonly PendingAgentOperationStore _store;
     private readonly AgentCatalogService _catalogService = new();
@@ -40,6 +61,86 @@ public class PendingAgentOperationStoreTests : IDisposable
         _dbContext.Dispose();
         GC.SuppressFinalize(this);
     }
+
+    [Fact]
+    public void Create_EveryConfirmationGatedOperationHasAnActionKey()
+    {
+        var gated = _catalogService.GetCapabilities()
+            .Where(capability => capability.ConfirmationRequirement is
+                AgentConfirmationRequirement.FreshConfirmation or AgentConfirmationRequirement.StepUp)
+            .SelectMany(capability => capability.ChatToolNames ?? [])
+            .Append("get_api_keys")
+            .ToHashSet(StringComparer.Ordinal);
+
+        gated.Should().BeEquivalentTo(GatedOperationKeys.Keys);
+
+        foreach (var (operationId, expectedKey) in GatedOperationKeys)
+        {
+            var capability = _catalogService.GetCapabilityByChatTool(operationId)!;
+            var pending = _store.Create(_userId, capability, operationId, "{}", operationId,
+                $"{operationId}:{Guid.NewGuid()}", AgentExecutionSurface.Chat);
+
+            pending.ActionKey.Should().Be(expectedKey, operationId);
+        }
+    }
+
+    [Theory]
+    [InlineData("delete_notifications", "delete_one", "deleteNotification")]
+    [InlineData("delete_notifications", "delete_all", "deleteAllNotifications")]
+    [InlineData("delete_notifications", "delete_selected", "deleteNotifications")]
+    [InlineData("manage_calendar_sync", "set_auto_sync", "setCalendarSync")]
+    [InlineData("manage_calendar_sync", "dismiss_import", "dismissCalendarImport")]
+    [InlineData("manage_calendar_sync", "dismiss_suggestion", "dismissCalendarSuggestion")]
+    [InlineData("manage_calendar_sync", "run_sync", "syncCalendar")]
+    [InlineData("manage_subscription", "create_checkout", "createCheckout")]
+    [InlineData("manage_subscription", "create_portal", "openBillingPortal")]
+    [InlineData("manage_api_keys", "create", "createApiKey")]
+    [InlineData("manage_api_keys", "revoke", "revokeApiKey")]
+    [InlineData("manage_account", "reset_account", "resetAccount")]
+    [InlineData("manage_account", "request_deletion", "requestAccountDeletion")]
+    [InlineData("manage_account", "confirm_deletion", "confirmAccountDeletion")]
+    public void Create_MultiActionOperationUsesItsSelectedConsequence(
+        string operationId, string action, string expectedKey)
+    {
+        var capability = _catalogService.GetCapabilityByChatTool(operationId)!;
+        var pending = _store.Create(_userId, capability, operationId,
+            JsonSerializer.Serialize(new { action }), operationId, Guid.NewGuid().ToString(),
+            AgentExecutionSurface.Chat);
+
+        pending.ActionKey.Should().Be(expectedKey);
+    }
+
+    [Fact]
+    public void Create_SerializedActionKeyIsAdditiveForAnOlderClient()
+    {
+        var capability = _catalogService.GetCapability(AgentCapabilityIds.HabitsBulkWrite)!;
+        var pending = _store.Create(_userId, capability, "bulk_log_habits", "{}", "Log habits",
+            Guid.NewGuid().ToString(), AgentExecutionSurface.Chat);
+        var json = JsonSerializer.Serialize(pending, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        using var document = JsonDocument.Parse(json);
+        document.RootElement.GetProperty("actionKey").GetString().Should().Be("logHabits");
+        var oldClient = JsonSerializer.Deserialize<OldPendingOperation>(json,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        oldClient.Should().NotBeNull();
+        oldClient!.CapabilityId.Should().Be(AgentCapabilityIds.HabitsBulkWrite);
+    }
+
+    [Fact]
+    public void Create_UnknownOperationFailsBeforeItIsStored()
+    {
+        var capability = _catalogService.GetCapability(AgentCapabilityIds.HabitsBulkWrite)!;
+
+        var create = () => _store.Create(_userId, capability, "unknown_operation", "{}",
+            "Unknown", Guid.NewGuid().ToString(), AgentExecutionSurface.Chat);
+
+        create.Should().Throw<InvalidOperationException>();
+        _dbContext.PendingAgentOperations.Should().BeEmpty();
+    }
+
+    private sealed record OldPendingOperation(Guid Id, string CapabilityId, string DisplayName,
+        string Summary, AgentRiskClass RiskClass, AgentConfirmationRequirement ConfirmationRequirement,
+        DateTime ExpiresAtUtc);
 
     [Fact]
     public void GetExecution_ReturnsStoredOperationPayload()
