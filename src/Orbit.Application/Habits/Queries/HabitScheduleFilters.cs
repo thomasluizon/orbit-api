@@ -213,7 +213,8 @@ internal static class HabitScheduleFilters
     {
         foreach (var child in lookup[parentId])
         {
-            if (!IsChildRelevantForSearch(
+            if (child.IsCompleted) continue;
+            if (IsChildRelevantForSearch(
                     child,
                     dateFrom,
                     dateTo,
@@ -221,10 +222,11 @@ internal static class HabitScheduleFilters
                     weekStartDay,
                     dueDateResolution,
                     logFacts))
-                continue;
-            if (FuzzyMatcher.FuzzyContains(child.Title, term)) return true;
-            if (child.Description != null && FuzzyMatcher.FuzzyContains(child.Description, term)) return true;
-            if (child.Tags.Any(t => FuzzyMatcher.FuzzyContains(t.Name, term))) return true;
+            {
+                if (FuzzyMatcher.FuzzyContains(child.Title, term)) return true;
+                if (child.Description != null && FuzzyMatcher.FuzzyContains(child.Description, term)) return true;
+                if (child.Tags.Any(t => FuzzyMatcher.FuzzyContains(t.Name, term))) return true;
+            }
             if (HasDescendantMatchingSearch(
                     child.Id,
                     lookup,
@@ -338,18 +340,23 @@ internal static class HabitScheduleFilters
         return (target, completed);
     }
 
-    private static List<SearchMatchField>? ComputeSearchMatches(Habit h, ScheduleMapContext ctx)
+    private static List<SearchMatchField>? ComputeSearchMatches(Habit h, ScheduleMapContext ctx, bool isChild = false)
     {
         if (string.IsNullOrWhiteSpace(ctx.Search)) return null;
 
         var matches = new List<SearchMatchField>();
-        if (FuzzyMatcher.FuzzyContains(h.Title, ctx.Search))
-            matches.Add(new SearchMatchField("title", null));
-        if (h.Description != null && FuzzyMatcher.FuzzyContains(h.Description, ctx.Search))
-            matches.Add(new SearchMatchField("description", null));
-        matches.AddRange(h.Tags
-            .Where(tag => FuzzyMatcher.FuzzyContains(tag.Name, ctx.Search))
-            .Select(tag => new SearchMatchField("tag", tag.Name)));
+        if (!isChild || IsChildRelevantForSearch(
+                h, ctx.DateFrom, ctx.DateTo, ctx.IncludeOverdue,
+                ctx.WeekStartDay, ctx.DueDateResolution, ctx.LogFacts))
+        {
+            if (FuzzyMatcher.FuzzyContains(h.Title, ctx.Search))
+                matches.Add(new SearchMatchField("title", null));
+            if (h.Description != null && FuzzyMatcher.FuzzyContains(h.Description, ctx.Search))
+                matches.Add(new SearchMatchField("description", null));
+            matches.AddRange(h.Tags
+                .Where(tag => FuzzyMatcher.FuzzyContains(tag.Name, ctx.Search))
+                .Select(tag => new SearchMatchField("tag", tag.Name)));
+        }
         AddChildSearchMatches(matches, h.Id, ctx);
         return matches.Count > 0 ? matches : null;
     }
@@ -360,6 +367,7 @@ internal static class HabitScheduleFilters
         foreach (var child in ctx.ChildLookup[parentId])
         {
             if (child.IsCompleted) continue;
+            var childIsRelevant = true;
             if (ctx.DateFrom.HasValue && ctx.DateTo.HasValue)
             {
                 var childScheduledDates = ctx.GetScheduledDates(child);
@@ -371,13 +379,12 @@ internal static class HabitScheduleFilters
                     ctx.DueDateResolution,
                     ctx.LogFacts);
 
-                if (childScheduledDates.Count == 0 && !childIsOverdue)
-                    continue;
+                childIsRelevant = childScheduledDates.Count > 0 || childIsOverdue;
             }
 
-            var childMatches = FuzzyMatcher.FuzzyContains(child.Title, ctx.Search!)
+            var childMatches = childIsRelevant && (FuzzyMatcher.FuzzyContains(child.Title, ctx.Search!)
                 || child.Description != null && FuzzyMatcher.FuzzyContains(child.Description, ctx.Search!)
-                || child.Tags.Any(tag => FuzzyMatcher.FuzzyContains(tag.Name, ctx.Search!));
+                || child.Tags.Any(tag => FuzzyMatcher.FuzzyContains(tag.Name, ctx.Search!)));
             if (childMatches)
                 matches.Add(new SearchMatchField("child", child.Title));
 
@@ -503,7 +510,7 @@ internal static class HabitScheduleFilters
             MapChildren(c.Id, ctx),
             HasSubHabits(c.Id, ctx.ChildLookup), ft, fc, isLoggedInRange,
             instances,
-            ComputeSearchMatches(c, ctx),
+            ComputeSearchMatches(c, ctx, isChild: true),
             Emoji: c.Emoji,
             IntervalWeeks: c.IntervalWeeks,
             CreatedAtUtc: c.CreatedAtUtc);
