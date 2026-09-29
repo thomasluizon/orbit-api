@@ -17,6 +17,7 @@ public static partial class HabitListCardBuilder
 {
     public const string ScopeToday = "today";
     public const string ScopeAll = "all";
+    private const string ScopeRemaining = "remaining";
 
     public const string StatusToday = "today";
     public const string StatusOverdue = "overdue";
@@ -29,14 +30,19 @@ public static partial class HabitListCardBuilder
         This app can display the user's habits as a live, interactive card. When the user asks to see or list their habits, or what is due, scheduled, left, or overdue (for example "what are my habits today", "show my habits", "list everything", "o que tenho pra hoje"), do NOT write the habits out as text and do NOT enumerate them. This rule overrides any earlier instruction to list habits from the index.
         Instead reply with a brief one-line intro and then, on its own final line, exactly ONE directive token:
         - [[orbit:habits:today]] - the user's habits due today, including ones already logged today, plus anything overdue.
+        - [[orbit:habits:remaining]] - habits still due today or overdue, excluding every habit done today. Use this when the user asks what is left or remains.
         - [[orbit:habits:all]] - every active habit.
         The app replaces the directive with the rendered habit list, so never list the habits yourself when you emit a directive. Emit at most one directive, always as the last thing in your reply. For every other kind of question, answer normally and do not emit a directive.
         """;
 
     public static bool TryExtractScope(string? message, out string scope, out string stripped)
+        => TryExtractScope(message, out scope, out stripped, out _);
+
+    internal static bool TryExtractScope(string? message, out string scope, out string stripped, out bool remaining)
     {
         scope = ScopeAll;
         stripped = message ?? string.Empty;
+        remaining = false;
         if (string.IsNullOrEmpty(message))
             return false;
 
@@ -44,9 +50,10 @@ public static partial class HabitListCardBuilder
         if (!match.Success)
             return false;
 
-        scope = match.Groups[1].Value.Equals(ScopeToday, StringComparison.OrdinalIgnoreCase)
-            ? ScopeToday
-            : ScopeAll;
+        var directiveScope = match.Groups[1].Value;
+        remaining = directiveScope.Equals(ScopeRemaining, StringComparison.OrdinalIgnoreCase);
+        scope = remaining || directiveScope.Equals(ScopeToday, StringComparison.OrdinalIgnoreCase)
+            ? ScopeToday : ScopeAll;
         stripped = DirectiveRegex().Replace(message, string.Empty).Trim();
         return true;
     }
@@ -63,9 +70,10 @@ public static partial class HabitListCardBuilder
         DateOnly today,
         string scope,
         HabitTodaySnapshot todayFacts,
-        bool supportsDoneStatus = false)
+        bool supportsDoneStatus = false,
+        bool remaining = false)
     {
-        var includedIds = ResolveIncludedIds(activeHabits, today, scope, todayFacts, supportsDoneStatus);
+        var includedIds = ResolveIncludedIds(activeHabits, scope, todayFacts, remaining);
         var items = new List<HabitListCardItem>();
         AppendLevel(activeHabits, parentId: null, depth: 0, today, todayFacts, includedIds, supportsDoneStatus, items);
         return new HabitListCard(scope, items);
@@ -73,24 +81,24 @@ public static partial class HabitListCardBuilder
 
     private static HashSet<Guid> ResolveIncludedIds(
         IReadOnlyList<Habit> activeHabits,
-        DateOnly today,
         string scope,
         HabitTodaySnapshot todayFacts,
-        bool supportsDoneStatus)
+        bool remaining)
     {
         if (!scope.Equals(ScopeToday, StringComparison.OrdinalIgnoreCase))
             return activeHabits.Select(habit => habit.Id).ToHashSet();
 
         var byId = activeHabits.ToDictionary(habit => habit.Id);
         var included = new HashSet<Guid>();
-        foreach (var habit in activeHabits.Where(habit => supportsDoneStatus
-            ? todayFacts.TodayIds.Contains(habit.Id) || todayFacts.OverdueIds.Contains(habit.Id)
-            : !habit.IsGeneral && habit.DueDate <= today))
+        foreach (var habit in activeHabits.Where(habit =>
+            (todayFacts.TodayIds.Contains(habit.Id) || todayFacts.OverdueIds.Contains(habit.Id))
+            && (!remaining || !todayFacts.DoneTodayIds.Contains(habit.Id))))
         {
             var current = habit;
-            while (included.Add(current.Id) &&
-                   current.ParentHabitId is Guid parentId &&
-                   byId.TryGetValue(parentId, out var parent))
+            while ((!remaining || !todayFacts.DoneTodayIds.Contains(current.Id))
+                && included.Add(current.Id)
+                && current.ParentHabitId is Guid parentId
+                && byId.TryGetValue(parentId, out var parent))
             {
                 current = parent;
             }
@@ -110,7 +118,10 @@ public static partial class HabitListCardBuilder
         List<HabitListCardItem> items)
     {
         var children = activeHabits
-            .Where(habit => habit.ParentHabitId == parentId && includedIds.Contains(habit.Id))
+            .Where(habit => includedIds.Contains(habit.Id)
+                && (parentId is null
+                    ? habit.ParentHabitId is null || !includedIds.Contains(habit.ParentHabitId.Value)
+                    : habit.ParentHabitId == parentId))
             .OrderBy(habit => habit.Position);
 
         foreach (var habit in children)
@@ -134,6 +145,8 @@ public static partial class HabitListCardBuilder
     {
         if (!supportsDoneStatus)
         {
+            if (habit.IsCompleted && todayFacts.DoneTodayIds.Contains(habit.Id))
+                return StatusNone;
             if (habit.IsGeneral)
                 return StatusGeneral;
             if (habit.DueDate < today)
@@ -152,6 +165,6 @@ public static partial class HabitListCardBuilder
         return StatusNone;
     }
 
-    [GeneratedRegex(@"\[\[orbit:habits:(today|all)\]\]", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\[\[orbit:habits:(today|remaining|all)\]\]", RegexOptions.IgnoreCase)]
     private static partial Regex DirectiveRegex();
 }

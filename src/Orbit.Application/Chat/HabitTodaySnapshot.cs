@@ -19,6 +19,9 @@ internal sealed record HabitTodaySnapshot(
     {
         var logFacts = new HabitScheduleLogFacts(logDays);
         var active = habits.Where(habit => !habit.IsCompleted).ToList();
+        var completedToday = habits.Where(habit =>
+            habit.IsCompleted && habit.FrequencyUnit is null && !habit.IsGeneral
+            && logFacts.HasCompleted(habit.Id, today, today)).ToList();
         var candidates = active.Where(habit => !habit.IsGeneral);
         var emptyLookup = Array.Empty<Habit>().ToLookup(habit => habit.ParentHabitId);
         var scheduled = HabitScheduleFilters.FilterScheduledHabits(
@@ -34,9 +37,11 @@ internal sealed record HabitTodaySnapshot(
         return new HabitTodaySnapshot(
             scheduled.Where(item => !item.isOverdue
                 && HabitScheduleService.WasScheduledOnDate(item.habit, today, weekStartDay))
-                .Select(item => item.habit.Id).ToHashSet(),
+                .Select(item => item.habit.Id)
+                .Concat(completedToday.Select(habit => habit.Id)).ToHashSet(),
             scheduled.Where(item => item.isOverdue).Select(item => item.habit.Id).ToHashSet(),
-            active.Where(habit => !habit.IsBadHabit && logFacts.HasCompleted(habit.Id, today, today))
+            active.Concat(completedToday)
+                .Where(habit => !habit.IsBadHabit && logFacts.HasCompleted(habit.Id, today, today))
                 .Select(habit => habit.Id).ToHashSet());
     }
 

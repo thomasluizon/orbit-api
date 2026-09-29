@@ -27,7 +27,8 @@ public partial class ProcessUserChatCommandHandler
         var userToday = await execution.UserDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var weekStartDay = await execution.UserDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
         var logFrom = userToday.AddDays(-AppConstants.MaxRangeDays);
-        var activeIds = activeHabits.Select(habit => habit.Id).ToArray();
+        var activeIds = userHabits.Where(habit => !habit.IsCompleted
+            || habit.FrequencyUnit is null && !habit.IsGeneral).Select(habit => habit.Id).ToArray();
         var logDays = await execution.ScheduleLogReader.ReadDaysAsync(
             activeIds, logFrom, userToday, cancellationToken);
         var logFacts = new HabitScheduleLogFacts(logDays);
@@ -51,7 +52,9 @@ public partial class ProcessUserChatCommandHandler
             dueDateResolution.UnionWith(olderResolutions);
         }
         var todayFacts = HabitTodaySnapshot.Build(
-            activeHabits, userToday, weekStartDay, logDays, dueDateResolution);
+            userHabits, userToday, weekStartDay, logDays, dueDateResolution);
+        var todayHabits = userHabits.Where(habit => !habit.IsCompleted
+            || habit.FrequencyUnit is null && todayFacts.DoneTodayIds.Contains(habit.Id)).ToList();
         var promptHabitIndex = BuildPromptHabitIndex(userHabits, userToday, todayFacts);
         if (promptHabitIndex.IsPartial)
         {
@@ -102,6 +105,7 @@ public partial class ProcessUserChatCommandHandler
 
         return Result.Success(new ChatContext(
             activeHabits,
+            todayHabits,
             promptHabitIndex.Habits,
             promptHabitIndex.IsPartial,
             user,
@@ -129,7 +133,8 @@ public partial class ProcessUserChatCommandHandler
         var habitsById = userHabits.ToDictionary(habit => habit.Id);
         var allIndexedHabitIds = new HashSet<Guid>();
 
-        foreach (var habit in userHabits.Where(habit => !habit.IsCompleted))
+        foreach (var habit in userHabits.Where(habit => !habit.IsCompleted
+            || habit.FrequencyUnit is null && todayFacts.DoneTodayIds.Contains(habit.Id)))
         {
             var current = habit;
 
@@ -152,7 +157,8 @@ public partial class ProcessUserChatCommandHandler
 
         var selectedHabitIds = new HashSet<Guid>();
         var prioritizedActiveHabits = userHabits
-            .Where(habit => !habit.IsCompleted)
+            .Where(habit => !habit.IsCompleted
+                || habit.FrequencyUnit is null && todayFacts.DoneTodayIds.Contains(habit.Id))
             .OrderBy(habit => GetPromptPriority(habit, todayFacts))
             .ThenBy(habit => habit.Position ?? int.MaxValue)
             .ThenBy(habit => habit.Id)
@@ -221,6 +227,7 @@ public partial class ProcessUserChatCommandHandler
 
     private sealed record ChatContext(
         List<Habit> ActiveHabits,
+        List<Habit> TodayHabits,
         List<Habit> PromptHabits,
         bool IsPromptHabitIndexPartial,
         User? User,
