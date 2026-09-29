@@ -106,7 +106,6 @@ public static class OAuthLoginPage
             font-family: 'Manrope', sans-serif;
             font-size: 0.9375rem;
             font-weight: 600;
-            text-decoration: none;
             cursor: pointer;
             transition: opacity 0.2s, transform 0.1s;
         }
@@ -141,6 +140,7 @@ public static class OAuthLoginPage
             font-family: 'Manrope', sans-serif;
             font-size: 0.9375rem;
             font-weight: 600;
+            text-decoration: none;
             cursor: pointer;
             display: flex;
             align-items: center;
