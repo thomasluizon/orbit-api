@@ -139,4 +139,19 @@ public class ChatControllerTests
 
         result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
+
+    [Fact]
+    public async Task Transcribe_UsesSignedInUserId()
+    {
+        TranscribeAudioCommand? capturedCommand = null;
+        _mediator.Send(Arg.Do<TranscribeAudioCommand>(command => capturedCommand = command), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new TranscribeAudioResponse("Hello")));
+        var file = new FormFile(new MemoryStream([1, 2, 3]), 0, 3, "audio", "clip.webm");
+
+        var result = await _controller.Transcribe(file, CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+        capturedCommand.Should().NotBeNull();
+        capturedCommand!.UserId.Should().Be(UserId);
+    }
 }
