@@ -85,7 +85,7 @@
         "reason": "the OAuth and MCP well-known URLs follow protocol-mandated paths with no common prefix, so a shared route prefix is not available."
       },
       "S6932": {
-        "count": 2,
+        "count": 3,
         "reason": "the raw Request.Body and Request.Headers are needed for signature verification: Play RTDN push, the Stripe webhook, and reverse-proxy X-Forwarded-Proto detection."
       }
     },
