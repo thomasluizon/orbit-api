@@ -134,8 +134,8 @@ public class ActiveHabitsSectionTests
     {
         var oneTimeHabit = Habit.Create(new HabitCreateParams(
             ValidUserId, "Done Task", null, null,
-            DueDate: Today)).Value;
-        oneTimeHabit.Log(Today);
+            DueDate: Today.AddDays(-1))).Value;
+        oneTimeHabit.Log(Today.AddDays(-1));
 
         var context = CreateContext(habits: [oneTimeHabit]);
 
@@ -143,6 +143,25 @@ public class ActiveHabitsSectionTests
 
         result.Should().NotContain("Done Task");
         result.Should().Contain("0 total");
+    }
+
+    [Fact]
+    public void Build_OneTimeTaskCompletedToday_ShowsTodayAndDoneFacts()
+    {
+        var task = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Filed taxes", null, null, DueDate: Today.AddDays(-1))).Value;
+        task.Log(Today).IsSuccess.Should().BeTrue();
+        var context = new PromptContext(
+            ActiveHabits: [task], UserFacts: [], HasImage: false, RoutinePatterns: null,
+            UserTags: null, UserToday: Today, HabitMetrics: null,
+            TodayHabitIds: new HashSet<Guid> { task.Id },
+            DoneTodayHabitIds: new HashSet<Guid> { task.Id });
+
+        var result = _sut.Build(context);
+
+        result.Should().Contain("1 due today");
+        result.Should().Contain("Filed taxes");
+        result.Should().Contain("TODAY, DONE TODAY, COMPLETED");
     }
 
     [Fact]

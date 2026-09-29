@@ -62,6 +62,18 @@ public class HabitListCardBuilderTests
     }
 
     [Fact]
+    public void TryExtractScope_RemainingDirective_UsesTodayCardScope()
+    {
+        var found = HabitListCardBuilder.TryExtractScope(
+            "Still due:\n[[orbit:habits:remaining]]", out var scope, out var stripped, out var remaining);
+
+        found.Should().BeTrue();
+        scope.Should().Be(HabitListCardBuilder.ScopeToday);
+        stripped.Should().Be("Still due:");
+        remaining.Should().BeTrue();
+    }
+
+    [Fact]
     public void Build_TodayScope_IncludesDueTodayAndOverdue_ExcludesFutureAndGeneral()
     {
         var dueToday = CreateHabit("Meditate", Today, position: 0);
@@ -127,7 +139,7 @@ public class HabitListCardBuilderTests
         card.Items.Should().OnlyContain(item =>
             item.Status == HabitListCardBuilder.StatusToday || item.Status == HabitListCardBuilder.StatusNone);
         if (scope == HabitListCardBuilder.ScopeToday)
-            card.Items.Select(item => item.Title).Should().Equal("Meditate");
+            card.Items.Select(item => item.Title).Should().BeEquivalentTo(["Water", "Meditate"]);
         else
             card.Items.Single(item => item.Title == "Water").Status.Should().Be(HabitListCardBuilder.StatusNone);
     }
@@ -171,6 +183,25 @@ public class HabitListCardBuilderTests
         parentItem.Depth.Should().Be(0);
         childItem.Depth.Should().Be(1);
         card.Items.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void Build_Remaining_ExcludesDoneAncestorAndKeepsDueChild()
+    {
+        var parent = Habit.Create(new HabitCreateParams(
+            UserId, "Finished project", null, null, DueDate: Today)).Value;
+        parent.Log(Today).IsSuccess.Should().BeTrue();
+        var child = CreateHabit("Review notes", Today, parentId: parent.Id);
+        var habits = new[] { parent, child };
+        var facts = HabitTodaySnapshot.FromLoadedHabits(habits, Today);
+
+        var card = HabitListCardBuilder.Build(
+            habits, Today, HabitListCardBuilder.ScopeToday, facts,
+            supportsDoneStatus: true, remaining: true);
+
+        card.Items.Should().ContainSingle();
+        card.Items[0].Title.Should().Be("Review notes");
+        card.Items[0].Depth.Should().Be(0);
     }
 
     [Fact]

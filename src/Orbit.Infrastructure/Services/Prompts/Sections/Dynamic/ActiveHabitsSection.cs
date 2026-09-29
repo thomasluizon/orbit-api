@@ -18,7 +18,7 @@ public class ActiveHabitsSection : IPromptSection
 
         var indexedHabits = context.ActiveHabits.ToList();
         var parents = indexedHabits
-            .Where(h => h.ParentHabitId is null && ShouldIncludeInIndex(h, indexedHabits))
+            .Where(h => h.ParentHabitId is null && ShouldIncludeInIndex(h, indexedHabits, context))
             .ToList();
         var (total, general, dueToday, overdue) = ComputeHabitCounts(indexedHabits, context);
 
@@ -42,7 +42,7 @@ public class ActiveHabitsSection : IPromptSection
         sb.AppendLine();
 
         sb.AppendLine("### Active Habit Index:");
-        sb.AppendLine("Completed parents may appear only to preserve the path to active sub-habits. Only non-COMPLETED entries count for duplicate checks.");
+        sb.AppendLine("Completed one-time tasks logged today appear for today's schedule. Other completed parents may preserve the path to active sub-habits. Only non-COMPLETED entries count for duplicate checks.");
         var orderedParents = parents.OrderBy(habit => habit.Position).ToList();
         var parentSuffixes = SiblingTitleDisambiguator.ComputeSuffixes(orderedParents);
         foreach (var habit in orderedParents)
@@ -66,7 +66,7 @@ public class ActiveHabitsSection : IPromptSection
         if (!context.UserToday.HasValue)
             return (activeHabits.Count, general, 0, 0);
 
-        var dueToday = activeHabits.Count(habit => IsToday(habit, context));
+        var dueToday = indexedHabits.Count(habit => IsToday(habit, context));
         var overdue = activeHabits.Count(habit => IsOverdue(habit, context));
         return (activeHabits.Count, general, dueToday, overdue);
     }
@@ -100,7 +100,8 @@ public class ActiveHabitsSection : IPromptSection
     }
 
     private static bool IsToday(Habit habit, PromptContext context) =>
-        !habit.IsGeneral && !habit.IsCompleted && context.UserToday.HasValue
+        !habit.IsGeneral && context.UserToday.HasValue
+        && (!habit.IsCompleted || habit.FrequencyUnit is null && IsDoneToday(habit, context))
         && (context.TodayHabitIds?.Contains(habit.Id)
             ?? HabitScheduleService.WasScheduledOnDate(habit, context.UserToday.Value, 1));
 
@@ -114,9 +115,11 @@ public class ActiveHabitsSection : IPromptSection
             ?? habit.Logs.Any(log => !log.IsDeleted
                 && log.Date == context.UserToday.Value && log.Value > 0 && log.IsSlip != true));
 
-    private static bool ShouldIncludeInIndex(Habit habit, IReadOnlyList<Habit> allHabits)
+    private static bool ShouldIncludeInIndex(Habit habit, IReadOnlyList<Habit> allHabits, PromptContext context)
     {
-        return !habit.IsCompleted || HasActiveDescendant(allHabits, habit.Id);
+        return !habit.IsCompleted
+            || habit.FrequencyUnit is null && IsDoneToday(habit, context)
+            || HasActiveDescendant(allHabits, habit.Id);
     }
 
     private static bool HasActiveDescendant(IReadOnlyList<Habit> allHabits, Guid parentId)
