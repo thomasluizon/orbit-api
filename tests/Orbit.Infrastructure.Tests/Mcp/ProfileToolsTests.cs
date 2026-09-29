@@ -66,6 +66,7 @@ public class ProfileToolsTests
         result.Should().Contain("alex@example.com");
         result.Should().Contain("Pro");
         result.Should().Contain("Monday");
+        result.Should().Contain("Clock: 24-hour");
     }
 
     [Fact]
@@ -218,6 +219,30 @@ public class ProfileToolsTests
         StubExecutor(AgentOperationStatus.Failed, policyReason: "Invalid");
 
         var result = await _tools.SetWeekStartDay(_user, 5);
+
+        result.Should().StartWith("Error: ");
+    }
+
+    [Fact]
+    public async Task SetClockFormat_RoutesChoiceThroughPreferencesTool()
+    {
+        StubExecutor(AgentOperationStatus.Succeeded);
+
+        string result = string.Empty;
+        var request = await CapturedRequestAsync(async () => result = await _tools.SetClockFormat(_user, false));
+
+        request.OperationId.Should().Be("update_profile_preferences");
+        request.Arguments.GetProperty("action").GetString().Should().Be("set_clock_format");
+        request.Arguments.GetProperty("uses_24_hour_clock").GetBoolean().Should().BeFalse();
+        result.Should().Be("Clock set to 12-hour");
+    }
+
+    [Fact]
+    public async Task SetClockFormat_FailureReturnsMessage()
+    {
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "Invalid");
+
+        var result = await _tools.SetClockFormat(_user, false);
 
         result.Should().StartWith("Error: ");
     }

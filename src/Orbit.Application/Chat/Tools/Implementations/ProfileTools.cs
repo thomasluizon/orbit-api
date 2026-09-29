@@ -10,7 +10,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 public class GetProfileTool(IMediator mediator) : IAiTool
 {
     public string Name => "get_profile";
-    public string Description => "Read the user's profile, plan, AI settings, timezone, light or dark mode, and calendar sync status. Orbit uses one accent.";
+    public string Description => "Read the user's profile, plan, AI settings, timezone, clock format, light or dark mode, and calendar sync status. Orbit uses one accent.";
     public bool IsReadOnly => true;
 
     public object GetParameterSchema() => new
@@ -31,7 +31,7 @@ public class GetProfileTool(IMediator mediator) : IAiTool
 public class UpdateProfilePreferencesTool(IMediator mediator) : IAiTool
 {
     public string Name => "update_profile_preferences";
-    public string Description => "Update profile preferences such as timezone, language, week start day, light or dark mode, onboarding completion, or tour state. Orbit uses one accent.";
+    public string Description => "Update profile preferences such as timezone, language, week start day, clock format, light or dark mode, onboarding completion, or tour state. Orbit uses one accent.";
 
     public object GetParameterSchema() => new
     {
@@ -46,6 +46,7 @@ public class UpdateProfilePreferencesTool(IMediator mediator) : IAiTool
                     "set_timezone",
                     "set_language",
                     "set_week_start_day",
+                    "set_clock_format",
                     "set_theme_preference",
                     "complete_onboarding",
                     "complete_tour",
@@ -55,6 +56,7 @@ public class UpdateProfilePreferencesTool(IMediator mediator) : IAiTool
             timezone = new { type = JsonSchemaTypes.String, nullable = true },
             language = new { type = JsonSchemaTypes.String, nullable = true },
             week_start_day = new { type = JsonSchemaTypes.Integer, nullable = true },
+            uses_24_hour_clock = new { type = JsonSchemaTypes.Boolean, nullable = true },
             theme_preference = new { type = JsonSchemaTypes.String, nullable = true }
         },
         required = new[] { "action" }
@@ -71,6 +73,7 @@ public class UpdateProfilePreferencesTool(IMediator mediator) : IAiTool
             "set_timezone" => await SetTimezoneAsync(args, userId, ct),
             "set_language" => await SetLanguageAsync(args, userId, ct),
             "set_week_start_day" => await SetWeekStartDayAsync(args, userId, ct),
+            "set_clock_format" => await SetClockFormatAsync(args, userId, ct),
             "set_theme_preference" => await SetThemePreferenceAsync(args, userId, ct),
             "complete_onboarding" => await ExecuteAsync(new CompleteOnboardingCommand(userId), userId, "Onboarding completed", ct),
             "complete_tour" => await ExecuteAsync(new CompleteTourCommand(userId), userId, "Tour completed", ct),
@@ -105,6 +108,16 @@ public class UpdateProfilePreferencesTool(IMediator mediator) : IAiTool
 
         var label = weekStartDay == 0 ? "Sunday" : "Monday";
         return await ExecuteAsync(new SetWeekStartDayCommand(userId, weekStartDay.Value), userId, $"Week start day set to {label}", ct);
+    }
+
+    private async Task<ToolResult> SetClockFormatAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
+        var uses24HourClock = JsonArgumentParser.GetOptionalBool(args, "uses_24_hour_clock");
+        if (!uses24HourClock.HasValue)
+            return new ToolResult(false, Error: "uses_24_hour_clock is required.");
+
+        var label = uses24HourClock.Value ? "24-hour" : "12-hour";
+        return await ExecuteAsync(new SetClockFormatCommand(userId, uses24HourClock.Value), userId, $"Clock set to {label}", ct);
     }
 
     private async Task<ToolResult> SetThemePreferenceAsync(JsonElement args, Guid userId, CancellationToken ct)

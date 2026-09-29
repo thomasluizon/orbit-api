@@ -145,7 +145,7 @@ public class AgentCatalogServiceTests
             var prompt = _catalogService.BuildDynamicSupplement(snapshot);
 
             prompt.Should().Contain("Plan: pro\nLanguage: en\nTimezone: America/Sao_Paulo\n");
-            prompt.Should().Contain("AI memory: enabled\nAI summary: disabled\nWeek starts on: Sunday\n");
+            prompt.Should().Contain("AI memory: enabled\nAI summary: disabled\nWeek starts on: Sunday\nClock: 24-hour\n");
             prompt.Should().Contain("Theme: dark\nGoogle Calendar connected: yes\n");
             prompt.Should().Contain("Calendar auto-sync: disabled (Idle)\n");
             prompt.Should().Contain("Feature flags: api_keys\nTags: focus\nChecklist templates: Morning Reset\n");

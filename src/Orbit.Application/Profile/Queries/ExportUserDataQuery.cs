@@ -92,7 +92,8 @@ public class ExportUserDataQueryHandler(
                 user.ColorScheme,
                 user.AiMemoryEnabled,
                 user.AiSummaryEnabled,
-                user.ProactiveAstraEnabled),
+                user.ProactiveAstraEnabled,
+                user.Uses24HourClockPreference),
             new ExportedSubscription(
                 user.Plan.ToString(),
                 user.IsLifetimePro,

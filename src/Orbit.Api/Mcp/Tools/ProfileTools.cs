@@ -30,7 +30,8 @@ public class ProfileTools(IMediator mediator, McpExecutorBridge executorBridge)
                (p.Language is not null ? $"Language: {p.Language}\n" : "") +
                $"AI Messages: {p.AiMessagesUsed}/{p.AiMessagesLimit}\n" +
                $"Level: {p.Level} ({p.LevelTitle}) - {p.TotalXp} XP\n" +
-               $"Week starts on: {(p.WeekStartDay == 0 ? "Sunday" : "Monday")}";
+               $"Week starts on: {(p.WeekStartDay == 0 ? "Sunday" : "Monday")}\n" +
+               $"Clock: {(p.Uses24HourClock ? "24-hour" : "12-hour")}";
     }
 
     [McpServerTool(Name = "set_timezone"), Description("Set the user's timezone.")]
@@ -113,5 +114,23 @@ public class ProfileTools(IMediator mediator, McpExecutorBridge executorBridge)
             return result.Message;
 
         return weekStartDay == 0 ? "Week start day set to Sunday" : "Week start day set to Monday";
+    }
+
+    [McpServerTool(Name = "set_clock_format"), Description("Set the user's clock format.")]
+    public async Task<string> SetClockFormat(
+        ClaimsPrincipal user,
+        [Description("True for a 24-hour clock, false for a 12-hour clock")] bool uses24HourClock,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await executorBridge.ExecuteAsync(user, "update_profile_preferences", new
+        {
+            action = "set_clock_format",
+            uses_24_hour_clock = uses24HourClock
+        }, confirmationToken: null, cancellationToken);
+
+        if (!result.Succeeded)
+            return result.Message;
+
+        return uses24HourClock ? "Clock set to 24-hour" : "Clock set to 12-hour";
     }
 }

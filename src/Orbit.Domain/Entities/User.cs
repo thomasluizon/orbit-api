@@ -57,6 +57,7 @@ public partial class User : Entity
     public DateTime? DeactivatedAt { get; private set; }
     public DateTime? ScheduledDeletionAt { get; private set; }
     public int WeekStartDay { get; private set; } = 1;
+    public bool? Uses24HourClockPreference { get; private set; }
     public int ReminderPreferencesVersion { get; private set; }
     public string? ReferralCode { get; private set; }
     public Guid? ReferredByUserId { get; private set; }
@@ -509,6 +510,8 @@ public partial class User : Entity
         ReminderPreferencesVersion++;
         return Result.Success();
     }
+
+    public void SetClockFormat(bool uses24HourClock) => Uses24HourClockPreference = uses24HourClock;
 
     public void SetReferralCode(string code) => ReferralCode = code;
 

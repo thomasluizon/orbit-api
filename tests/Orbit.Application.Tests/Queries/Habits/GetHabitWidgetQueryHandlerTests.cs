@@ -49,6 +49,26 @@ public class GetHabitWidgetQueryHandlerTests
         result.Value.EmptyReason.Should().BeNull();
     }
 
+    [Theory]
+    [InlineData("America/New_York", null, false)]
+    [InlineData("America/Sao_Paulo", null, true)]
+    [InlineData("America/New_York", true, true)]
+    [InlineData("America/Sao_Paulo", false, false)]
+    public async Task Handle_UsesStoredClockChoiceOrTimeZone(string timeZone, bool? preference, bool expected)
+    {
+        var user = User.Create("Orbit User", "clock@example.com").Value;
+        user.SetTimeZone(timeZone);
+        if (preference.HasValue)
+            user.SetClockFormat(preference.Value);
+        _userRepository.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        SetupHabits();
+
+        var result = await _handler.Handle(new GetHabitWidgetQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Uses24HourClock.Should().Be(expected);
+    }
+
     [Fact]
     public async Task Handle_ReturnsNothingScheduledWhenTodayAndTomorrowAreEmpty()
     {

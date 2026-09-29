@@ -156,7 +156,7 @@ public class GetProfileQueryHandler(
             canViewGamification,
             user.Handle,
             user.SocialOptIn,
-            TimeFormatResolver.Uses24HourClock(user.TimeZone),
+            TimeFormatResolver.Uses24HourClock(user.Uses24HourClockPreference, user.TimeZone),
             publicProfile,
             user.ProactiveAstraEnabled,
             user.MarketingEmailConsent,
