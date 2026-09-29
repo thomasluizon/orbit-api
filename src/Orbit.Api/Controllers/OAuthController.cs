@@ -1,4 +1,3 @@
-using System.Net.Http.Headers;
 using System.Text.Json;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -118,7 +117,8 @@ public partial class OAuthController(
         [FromQuery] string state,
         [FromQuery] string code_challenge,
         [FromQuery] string code_challenge_method,
-        [FromQuery] string? nonce = null)
+        [FromQuery] string? nonce = null,
+        [FromQuery] string? google_error = null)
     {
         if (response_type != "code")
             return BadRequest(new { error = "unsupported_response_type" });
@@ -132,10 +132,28 @@ public partial class OAuthController(
         if (string.IsNullOrEmpty(state))
             return BadRequest(new { error = MissingStateError, error_description = "state is required for CSRF protection" });
 
-        var googleClientId = googleSettings.Value.ClientId ?? "";
+        var language = Request.Headers.AcceptLanguage.ToString().StartsWith("pt", StringComparison.OrdinalIgnoreCase)
+            ? "pt-BR" : "en";
+        var scheme = Request.Headers["X-Forwarded-Proto"].FirstOrDefault() ?? Request.Scheme;
+        var googleRedirectUri = $"{scheme}://{Request.Host}/oauth/google/callback";
+        var googleState = authStore.CreateGoogleRequest(client_id, redirect_uri, state,
+            code_challenge, nonce, googleRedirectUri, language);
+        var errorMessage = google_error switch
+        {
+            "cancelled" => language == "pt-BR"
+                ? "O acesso com Google foi cancelado. Tente novamente ou use seu email."
+                : "Google sign-in was cancelled. Try again or use email.",
+            "failed" => language == "pt-BR"
+                ? "Não foi possível entrar com Google. Tente novamente ou use seu email."
+                : "Google sign-in failed. Try again or use email.",
+            "unavailable" => language == "pt-BR"
+                ? "O acesso com Google está indisponível. Use seu email."
+                : "Google sign-in is unavailable. Use email instead.",
+            _ => null
+        };
         var html = OAuthLoginPage.Render(
             client_id, redirect_uri, state,
-            code_challenge, code_challenge_method, googleClientId, nonce);
+            code_challenge, code_challenge_method, googleState, nonce, errorMessage, language);
 
         return Content(html, "text/html");
     }
@@ -184,12 +202,87 @@ public partial class OAuthController(
         return Ok(new { redirectUrl });
     }
 
+    [HttpGet("/oauth/google/start")]
+    [DistributedRateLimit("auth")]
+    public IActionResult GoogleStart([FromQuery] string state)
+    {
+        var pending = authStore.GetGoogleRequest(state);
+        if (pending is null)
+            return InvalidGoogleState();
+
+        if (string.IsNullOrWhiteSpace(googleSettings.Value.ClientId)
+            || !googleSettings.Value.AllowedRedirectUris.Contains(pending.GoogleRedirectUri, StringComparer.Ordinal))
+            return RedirectToAuthorize(pending, "unavailable");
+
+        var url = "https://accounts.google.com/o/oauth2/v2/auth"
+            + $"?client_id={Uri.EscapeDataString(googleSettings.Value.ClientId)}"
+            + $"&redirect_uri={Uri.EscapeDataString(pending.GoogleRedirectUri)}"
+            + "&response_type=code&scope=openid%20email%20profile"
+            + $"&state={Uri.EscapeDataString(pending.GoogleState)}"
+            + $"&code_challenge={Uri.EscapeDataString(pending.GoogleCodeChallenge)}"
+            + "&code_challenge_method=S256&prompt=select_account";
+        return Redirect(url);
+    }
+
+    [HttpGet("/oauth/google/callback")]
+    [DistributedRateLimit("auth")]
+    public async Task<IActionResult> GoogleCallback(
+        [FromQuery] string? state, [FromQuery] string? code, [FromQuery] string? error, CancellationToken ct)
+    {
+        var pending = state is null ? null : authStore.ConsumeGoogleRequest(state);
+        if (pending is null)
+            return InvalidGoogleState();
+
+        if (!IsRedirectUriAllowed(pending.RedirectUri))
+            return InvalidGoogleState();
+
+        if (error is not null)
+            return RedirectToAuthorize(pending, error == "access_denied" ? "cancelled" : "failed");
+
+        if (string.IsNullOrEmpty(code))
+            return RedirectToAuthorize(pending, "failed");
+
+        var result = await mediator.Send(new GoogleCodeAuthCommand(
+            code, pending.GoogleCodeVerifier, pending.GoogleRedirectUri, pending.Language,
+            PersistGoogleTokens: false), ct);
+        if (result.IsFailure)
+            return RedirectToAuthorize(pending, "failed");
+
+        var authCode = authStore.CreateCode(result.Value.UserId, pending.CodeChallenge,
+            pending.RedirectUri, pending.ClientId, pending.Nonce);
+        var separator = pending.RedirectUri.Contains('?') ? "&" : "?";
+        return Redirect($"{pending.RedirectUri}{separator}code={Uri.EscapeDataString(authCode)}&state={Uri.EscapeDataString(pending.ClientState)}");
+    }
+
+    private static IActionResult InvalidGoogleState() => new ContentResult
+    {
+        Content = "<html><body><p>This authorization request is invalid or expired. Return to your MCP client and try again.</p></body></html>",
+        ContentType = "text/html",
+        StatusCode = StatusCodes.Status400BadRequest
+    };
+
+    private static IActionResult RedirectToAuthorize(GoogleAuthorizationRequest pending, string googleError)
+    {
+        var url = "/oauth/authorize"
+            + $"?client_id={Uri.EscapeDataString(pending.ClientId)}"
+            + $"&redirect_uri={Uri.EscapeDataString(pending.RedirectUri)}"
+            + "&response_type=code"
+            + $"&state={Uri.EscapeDataString(pending.ClientState)}"
+            + $"&code_challenge={Uri.EscapeDataString(pending.CodeChallenge)}"
+            + "&code_challenge_method=S256"
+            + $"&google_error={Uri.EscapeDataString(googleError)}";
+        if (pending.Nonce is not null)
+            url += $"&nonce={Uri.EscapeDataString(pending.Nonce)}";
+        return new RedirectResult(url);
+    }
+
     public record GoogleAuthRequest(
         string Credential,
         string State, string CodeChallenge, string RedirectUri, string ClientId,
         string? Nonce = null);
 
     [HttpPost("/oauth/google")]
+    [Obsolete]
     [DistributedRateLimit("auth")]
     public async Task<IActionResult> GoogleAuth([FromBody] GoogleAuthRequest request, CancellationToken ct)
     {

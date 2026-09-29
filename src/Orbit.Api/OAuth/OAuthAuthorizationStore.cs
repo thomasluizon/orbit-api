@@ -8,17 +8,45 @@ namespace Orbit.Api.OAuth;
 public sealed partial class OAuthAuthorizationStore : IDisposable
 {
     private readonly ConcurrentDictionary<string, AuthorizationEntry> _codes = new();
+    private readonly ConcurrentDictionary<string, GoogleAuthorizationRequest> _googleRequests = new();
     private readonly Timer _cleanupTimer;
+    private readonly TimeProvider _timeProvider;
     private static readonly TimeSpan CodeExpiry = TimeSpan.FromMinutes(5);
 
-    public OAuthAuthorizationStore(ILogger<OAuthAuthorizationStore> logger)
+    public OAuthAuthorizationStore(ILogger<OAuthAuthorizationStore> logger) : this(logger, TimeProvider.System) { }
+
+    public OAuthAuthorizationStore(ILogger<OAuthAuthorizationStore> logger, TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _cleanupTimer = new Timer(_ =>
         {
             try { Cleanup(); }
             catch (Exception ex) { LogCleanupFailed(logger, ex); }
         }, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
     }
+
+    public string CreateGoogleRequest(string clientId, string redirectUri, string clientState,
+        string codeChallenge, string? nonce, string googleRedirectUri, string language)
+    {
+        var state = NewSecret();
+        var verifier = NewSecret();
+        var challenge = Convert.ToBase64String(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)))
+            .Replace("+", "-").Replace("/", "_").TrimEnd('=');
+        _googleRequests[state] = new GoogleAuthorizationRequest(state, clientId, redirectUri, clientState,
+            codeChallenge, nonce, googleRedirectUri, language, verifier, challenge, _timeProvider.GetUtcNow());
+        return state;
+    }
+
+    public GoogleAuthorizationRequest? GetGoogleRequest(string state) =>
+        _googleRequests.TryGetValue(state, out var request) && !IsExpired(request.CreatedAtUtc) ? request : null;
+
+    public GoogleAuthorizationRequest? ConsumeGoogleRequest(string state) =>
+        _googleRequests.TryRemove(state, out var request) && !IsExpired(request.CreatedAtUtc) ? request : null;
+
+    private bool IsExpired(DateTimeOffset createdAtUtc) => _timeProvider.GetUtcNow() - createdAtUtc > CodeExpiry;
+
+    private static string NewSecret() => Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+        .Replace("+", "-").Replace("/", "_").TrimEnd('=');
 
     public string CreateCode(Guid userId, string codeChallenge, string redirectUri, string clientId, string? nonce = null)
     {
@@ -65,6 +93,11 @@ public sealed partial class OAuthAuthorizationStore : IDisposable
             if (kvp.Value.CreatedAt < cutoff)
                 _codes.TryRemove(kvp.Key, out _);
         }
+        foreach (var kvp in _googleRequests)
+        {
+            if (IsExpired(kvp.Value.CreatedAtUtc))
+                _googleRequests.TryRemove(kvp.Key, out _);
+        }
     }
 
     public void Dispose() => _cleanupTimer.Dispose();
@@ -80,3 +113,16 @@ public record AuthorizationEntry(
     string ClientId,
     string? Nonce,
     DateTime CreatedAt);
+
+public record GoogleAuthorizationRequest(
+    string GoogleState,
+    string ClientId,
+    string RedirectUri,
+    string ClientState,
+    string CodeChallenge,
+    string? Nonce,
+    string GoogleRedirectUri,
+    string Language,
+    string GoogleCodeVerifier,
+    string GoogleCodeChallenge,
+    DateTimeOffset CreatedAtUtc);
