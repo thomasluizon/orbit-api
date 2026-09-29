@@ -62,6 +62,18 @@ public class HabitListCardBuilderTests
     }
 
     [Fact]
+    public void TryExtractScope_RemainingDirective_UsesTodayCardScope()
+    {
+        var found = HabitListCardBuilder.TryExtractScope(
+            "Still due:\n[[orbit:habits:remaining]]", out var scope, out var stripped, out var remaining);
+
+        found.Should().BeTrue();
+        scope.Should().Be(HabitListCardBuilder.ScopeToday);
+        stripped.Should().Be("Still due:");
+        remaining.Should().BeTrue();
+    }
+
+    [Fact]
     public void Build_TodayScope_IncludesDueTodayAndOverdue_ExcludesFutureAndGeneral()
     {
         var dueToday = CreateHabit("Meditate", Today, position: 0);
@@ -82,12 +94,80 @@ public class HabitListCardBuilderTests
     public void Build_TodayScope_AssignsStatuses()
     {
         var dueToday = CreateHabit("Meditate", Today);
-        var overdue = CreateHabit("Floss", Today.AddDays(-2), position: 1);
+        var overdue = Habit.Create(new HabitCreateParams(
+            UserId, "Floss", null, null, DueDate: Today.AddDays(-2))).Value;
 
         var card = HabitListCardBuilder.Build([dueToday, overdue], Today, HabitListCardBuilder.ScopeToday);
 
         card.Items.Single(item => item.Title == "Meditate").Status.Should().Be(HabitListCardBuilder.StatusToday);
         card.Items.Single(item => item.Title == "Floss").Status.Should().Be(HabitListCardBuilder.StatusOverdue);
+    }
+
+    [Fact]
+    public void Build_TodayScope_KeepsLoggedDailyAndWeeklyHabitsDone()
+    {
+        var daily = CreateHabit("Water", Today);
+        daily.Log(Today).IsSuccess.Should().BeTrue();
+        var weekly = Habit.Create(new HabitCreateParams(
+            UserId, "Walk", FrequencyUnit.Week, 1, DueDate: Today)).Value;
+        weekly.Log(Today).IsSuccess.Should().BeTrue();
+        var monthly = Habit.Create(new HabitCreateParams(
+            UserId, "Budget", FrequencyUnit.Month, 1, DueDate: Today.AddDays(3))).Value;
+        monthly.Log(Today).IsSuccess.Should().BeTrue();
+
+        var habits = new[] { daily, weekly, monthly };
+        var logDays = habits.SelectMany(habit => habit.Logs.Select(log => new Orbit.Domain.Interfaces.HabitScheduleLogDay(
+            habit.Id, log.Date, log.Value > 0 ? 1 : 0, log.Value == 0 ? 1 : 0, true))).ToList();
+        var facts = HabitTodaySnapshot.Build(habits, Today, 1, logDays, new HashSet<Guid>());
+        var card = HabitListCardBuilder.Build(habits, Today, HabitListCardBuilder.ScopeToday, facts, supportsDoneStatus: true);
+
+        card.Items.Select(item => item.Title).Should().BeEquivalentTo(["Water", "Walk"]);
+        card.Items.Should().OnlyContain(item => item.Status == "done");
+    }
+
+    [Theory]
+    [InlineData("today")]
+    [InlineData("all")]
+    public void Build_LoggedHabitWithoutDoneCapability_KeepsLegacyCardShape(string scope)
+    {
+        var logged = CreateHabit("Water", Today);
+        logged.Log(Today).IsSuccess.Should().BeTrue();
+        var due = CreateHabit("Meditate", Today);
+
+        var card = HabitListCardBuilder.Build([logged, due], Today, scope);
+
+        card.Items.Should().OnlyContain(item =>
+            item.Status == HabitListCardBuilder.StatusToday || item.Status == HabitListCardBuilder.StatusNone);
+        if (scope == HabitListCardBuilder.ScopeToday)
+            card.Items.Select(item => item.Title).Should().BeEquivalentTo(["Water", "Meditate"]);
+        else
+            card.Items.Single(item => item.Title == "Water").Status.Should().Be(HabitListCardBuilder.StatusNone);
+    }
+
+    [Fact]
+    public void Build_AllScope_WithDoneCapability_MarksLoggedHabitDone()
+    {
+        var logged = CreateHabit("Water", Today);
+        logged.Log(Today).IsSuccess.Should().BeTrue();
+
+        var card = HabitListCardBuilder.Build(
+            [logged], Today, HabitListCardBuilder.ScopeAll, supportsDoneStatus: true);
+
+        card.Items.Should().ContainSingle().Which.Status.Should().Be(HabitListCardBuilder.StatusDone);
+    }
+
+    [Fact]
+    public void Build_BadHabitSlipToday_DoesNotMarkCardOrPromptDone()
+    {
+        var bad = CreateHabit("Smoking", Today, isBadHabit: true);
+        var slip = bad.Log(Today).Value;
+        slip.IsSlip.Should().BeTrue();
+
+        var card = HabitListCardBuilder.Build([bad], Today, HabitListCardBuilder.ScopeAll, supportsDoneStatus: true);
+        var facts = HabitTodaySnapshot.FromLoadedHabits([bad], Today);
+
+        card.Items.Single().Status.Should().NotBe(HabitListCardBuilder.StatusDone);
+        facts.DoneTodayIds.Should().NotContain(bad.Id);
     }
 
     [Fact]
@@ -103,6 +183,25 @@ public class HabitListCardBuilderTests
         parentItem.Depth.Should().Be(0);
         childItem.Depth.Should().Be(1);
         card.Items.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void Build_Remaining_ExcludesDoneAncestorAndKeepsDueChild()
+    {
+        var parent = Habit.Create(new HabitCreateParams(
+            UserId, "Finished project", null, null, DueDate: Today)).Value;
+        parent.Log(Today).IsSuccess.Should().BeTrue();
+        var child = CreateHabit("Review notes", Today, parentId: parent.Id);
+        var habits = new[] { parent, child };
+        var facts = HabitTodaySnapshot.FromLoadedHabits(habits, Today);
+
+        var card = HabitListCardBuilder.Build(
+            habits, Today, HabitListCardBuilder.ScopeToday, facts,
+            supportsDoneStatus: true, remaining: true);
+
+        card.Items.Should().ContainSingle();
+        card.Items[0].Title.Should().Be("Review notes");
+        card.Items[0].Depth.Should().Be(0);
     }
 
     [Fact]

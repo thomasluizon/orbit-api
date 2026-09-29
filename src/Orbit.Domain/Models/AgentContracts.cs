@@ -236,7 +236,8 @@ public record AgentClientContext(
     bool? SupportsStreakCard = null,
     bool? SupportsCalendarCard = null,
     bool? SupportsRecordListCard = null,
-    bool? SupportsAccountRowsCard = null);
+    bool? SupportsAccountRowsCard = null,
+    bool? SupportsHabitListDoneStatus = null);
 
 public record AgentContextSnapshot(
     string Plan,

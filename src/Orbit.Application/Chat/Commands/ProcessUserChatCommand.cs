@@ -128,7 +128,8 @@ public record ChatExecutionDependencies(
     IGoalProgressReadSyncer GoalProgressReadSyncer,
     IGamificationService GamificationService,
     IMediator Mediator,
-    IProductAnalytics ProductAnalytics);
+    IProductAnalytics ProductAnalytics,
+    IHabitScheduleLogReader ScheduleLogReader);
 
 public partial class ProcessUserChatCommandHandler(
     ChatDataDependencies data,
@@ -503,11 +504,17 @@ public partial class ProcessUserChatCommandHandler(
         CancellationToken cancellationToken)
     {
         HabitListCard? habitList = null;
-        if (HabitListCardBuilder.TryExtractScope(aiMessage, out var habitListScope, out var strippedMessage))
+        if (HabitListCardBuilder.TryExtractScope(aiMessage, out var habitListScope, out var strippedMessage, out var remaining))
         {
             aiMessage = strippedMessage;
             if (request.ClientContext?.SupportsHabitListCard == true)
-                habitList = HabitListCardBuilder.Build(context.ActiveHabits, context.UserToday, habitListScope);
+                habitList = HabitListCardBuilder.Build(
+                    habitListScope == HabitListCardBuilder.ScopeToday ? context.TodayHabits : context.ActiveHabits,
+                    context.UserToday,
+                    habitListScope,
+                    context.TodayFacts,
+                    request.ClientContext.SupportsHabitListDoneStatus == true,
+                    remaining);
         }
 
         GoalListCard? goalList = null;
