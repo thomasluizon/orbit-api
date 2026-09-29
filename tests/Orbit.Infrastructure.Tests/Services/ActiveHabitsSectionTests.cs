@@ -134,8 +134,8 @@ public class ActiveHabitsSectionTests
     {
         var oneTimeHabit = Habit.Create(new HabitCreateParams(
             ValidUserId, "Done Task", null, null,
-            DueDate: Today)).Value;
-        oneTimeHabit.Log(Today);
+            DueDate: Today.AddDays(-1))).Value;
+        oneTimeHabit.Log(Today.AddDays(-1));
 
         var context = CreateContext(habits: [oneTimeHabit]);
 
@@ -146,6 +146,25 @@ public class ActiveHabitsSectionTests
     }
 
     [Fact]
+    public void Build_OneTimeTaskCompletedToday_ShowsTodayAndDoneFacts()
+    {
+        var task = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Filed taxes", null, null, DueDate: Today.AddDays(-1))).Value;
+        task.Log(Today).IsSuccess.Should().BeTrue();
+        var context = new PromptContext(
+            ActiveHabits: [task], UserFacts: [], HasImage: false, RoutinePatterns: null,
+            UserTags: null, UserToday: Today, HabitMetrics: null,
+            TodayHabitIds: new HashSet<Guid> { task.Id },
+            DoneTodayHabitIds: new HashSet<Guid> { task.Id });
+
+        var result = _sut.Build(context);
+
+        result.Should().Contain("1 due today");
+        result.Should().Contain("Filed taxes");
+        result.Should().Contain("TODAY, DONE TODAY, COMPLETED");
+    }
+
+    [Fact]
     public void Build_CompletedParentWithActiveChild_KeepsHierarchyInIndex()
     {
         var parent = Habit.Create(new HabitCreateParams(
@@ -153,12 +172,26 @@ public class ActiveHabitsSectionTests
             DueDate: Today)).Value;
         parent.Log(Today);
         var child = CreateHabit("Push-ups", parentId: parent.Id);
-        var context = CreateContext(habits: [parent, child]);
+        var earlierParent = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Errands", null, null, DueDate: Today.AddDays(-2))).Value;
+        earlierParent.Log(Today.AddDays(-2)).IsSuccess.Should().BeTrue();
+        var completedToday = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Pick up parcel", null, null, DueDate: Today.AddDays(-1),
+            ParentHabitId: earlierParent.Id)).Value;
+        completedToday.Log(Today).IsSuccess.Should().BeTrue();
+        var completedEarlier = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Buy stamps", null, null, DueDate: Today.AddDays(-2),
+            ParentHabitId: earlierParent.Id)).Value;
+        completedEarlier.Log(Today.AddDays(-2)).IsSuccess.Should().BeTrue();
+        var context = CreateContext(habits: [parent, child, earlierParent, completedToday, completedEarlier]);
 
         var result = _sut.Build(context);
 
         result.Should().Contain("Fitness");
         result.Should().Contain("Push-ups");
+        result.Should().Contain("Errands");
+        result.Should().Contain("Pick up parcel");
+        result.Should().NotContain("Buy stamps");
         result.Should().Contain("COMPLETED");
         result.Should().Contain("1 total");
     }

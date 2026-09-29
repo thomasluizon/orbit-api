@@ -504,16 +504,17 @@ public partial class ProcessUserChatCommandHandler(
         CancellationToken cancellationToken)
     {
         HabitListCard? habitList = null;
-        if (HabitListCardBuilder.TryExtractScope(aiMessage, out var habitListScope, out var strippedMessage))
+        if (HabitListCardBuilder.TryExtractScope(aiMessage, out var habitListScope, out var strippedMessage, out var remaining))
         {
             aiMessage = strippedMessage;
             if (request.ClientContext?.SupportsHabitListCard == true)
                 habitList = HabitListCardBuilder.Build(
-                    context.ActiveHabits,
+                    habitListScope == HabitListCardBuilder.ScopeToday ? context.TodayHabits : context.ActiveHabits,
                     context.UserToday,
                     habitListScope,
                     context.TodayFacts,
-                    request.ClientContext.SupportsHabitListDoneStatus == true);
+                    request.ClientContext.SupportsHabitListDoneStatus == true,
+                    remaining);
         }
 
         GoalListCard? goalList = null;
