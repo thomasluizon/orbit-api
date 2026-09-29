@@ -119,6 +119,50 @@ public class CreateApiKeyCommandHandlerTests
         await _apiKeyRepo.DidNotReceive().AddAsync(Arg.Any<ApiKey>(), Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData(0, true)]
+    [InlineData(1, true)]
+    [InlineData(3, true)]
+    [InlineData(5, false)]
+    public async Task Handle_CountsOnlyCallersActiveKeysAgainstLimit(int activeCount, bool canCreate)
+    {
+        var keys = Enumerable.Range(0, activeCount)
+            .Select(index => ApiKey.Create(UserId, $"Active {index}").Value.Entity)
+            .ToList();
+        for (var index = 0; index < 5; index++)
+        {
+            var expired = ApiKey.Create(UserId, $"Expired {index}").Value.Entity;
+            typeof(ApiKey).GetProperty(nameof(ApiKey.ExpiresAtUtc))!
+                .SetValue(expired, DateTime.UtcNow.AddMinutes(-1));
+            keys.Add(expired);
+        }
+
+        var revoked = ApiKey.Create(UserId, "Revoked").Value.Entity;
+        revoked.Revoke();
+        keys.Add(revoked);
+        keys.Add(ApiKey.Create(Guid.NewGuid(), "Other account").Value.Entity);
+
+        var countedKeys = -1;
+        _apiKeyRepo.CountAsync(Arg.Any<Expression<Func<ApiKey, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                countedKeys = keys.Count(call.ArgAt<Expression<Func<ApiKey, bool>>>(0).Compile());
+                return countedKeys;
+            });
+
+        var result = await _handler.Handle(new CreateApiKeyCommand(UserId, "New key"), CancellationToken.None);
+
+        countedKeys.Should().Be(activeCount);
+        result.IsSuccess.Should().Be(canCreate);
+        if (canCreate)
+            await _apiKeyRepo.Received(1).AddAsync(Arg.Any<ApiKey>(), Arg.Any<CancellationToken>());
+        else
+        {
+            result.ErrorCode.Should().Be(ErrorCodes.MaxApiKeys);
+            await _apiKeyRepo.DidNotReceive().AddAsync(Arg.Any<ApiKey>(), Arg.Any<CancellationToken>());
+        }
+    }
+
     [Fact]
     public async Task Handle_EmptyName_ReturnsFailure()
     {

@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.Options;
+using Orbit.Application.ApiKeys.Services;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification;
 using Orbit.Application.Profile.Commands;
@@ -98,8 +99,7 @@ public class GetProfileQueryHandler(
         var lastCompletionDate = user.GetLastCompletionDate(liveCompletionDate);
         var nowAtUtc = DateTime.UtcNow;
         var activeApiKeyCount = await apiKeyRepository.CountAsync(
-            key => key.UserId == request.UserId && !key.IsRevoked &&
-                (key.ExpiresAtUtc == null || key.ExpiresAtUtc > nowAtUtc),
+            ActiveApiKeyPredicate.ForUser(request.UserId, nowAtUtc),
             cancellationToken);
 
         var publicProfile = new PublicProfileSettings(
