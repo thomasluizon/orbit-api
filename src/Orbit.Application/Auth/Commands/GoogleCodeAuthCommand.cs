@@ -11,7 +11,8 @@ public record GoogleCodeAuthCommand(
     string CodeVerifier,
     string RedirectUri,
     string Language = "en",
-    string? ReferralCode = null) : IRequest<Result<LoginResponse>>;
+    string? ReferralCode = null,
+    bool PersistGoogleTokens = true) : IRequest<Result<LoginResponse>>;
 
 public sealed class GoogleCodeAuthCommandHandler(
     IGoogleAuthorizationCodeService authorizationCodeService,
@@ -29,7 +30,7 @@ public sealed class GoogleCodeAuthCommandHandler(
             identity.Value.Name,
             request.Language,
             request.ReferralCode,
-            identity.Value.AccessToken,
-            identity.Value.RefreshToken), cancellationToken);
+            request.PersistGoogleTokens ? identity.Value.AccessToken : null,
+            request.PersistGoogleTokens ? identity.Value.RefreshToken : null), cancellationToken);
     }
 }
