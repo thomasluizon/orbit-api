@@ -1037,6 +1037,7 @@ public partial class AgentCatalogService
                     "OAuthController.Register",
                     "OAuthController.GetProtectedResourceMetadata",
                     "OAuthController.Authorize",
+                    "OAuthController.Asset",
                     "OAuthController.SendCode",
                     "OAuthController.VerifyCode",
                     "OAuthController.GoogleAuth",

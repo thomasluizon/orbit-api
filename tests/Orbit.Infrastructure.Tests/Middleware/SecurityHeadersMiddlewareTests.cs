@@ -114,18 +114,20 @@ public class SecurityHeadersMiddlewareTests
     }
 
     [Fact]
-    public async Task InvokeAsync_OAuthPath_SetsGoogleCSP()
+    public async Task InvokeAsync_OAuthPath_AllowsOnlySameOriginFontsStylesAndScripts()
     {
         var context = new DefaultHttpContext();
-        context.Request.Path = "/oauth/callback";
+        context.Request.Path = "/oauth/authorize";
         var middleware = new SecurityHeadersMiddleware(_ => Task.CompletedTask);
 
         await middleware.InvokeAsync(context);
 
         var csp = context.Response.Headers[HeaderNames.ContentSecurityPolicy].ToString();
-        csp.Should().Contain("accounts.google.com");
-        csp.Should().Contain("apis.google.com");
-        csp.Should().Contain("fonts.googleapis.com");
+        csp.Should().Contain("font-src 'self'");
+        csp.Should().Contain("style-src 'self' 'unsafe-inline'");
+        csp.Should().Contain("script-src 'self' 'unsafe-inline'");
+        csp.Should().NotContain("google");
+        csp.Should().NotContain("gstatic");
     }
 
     [Fact]

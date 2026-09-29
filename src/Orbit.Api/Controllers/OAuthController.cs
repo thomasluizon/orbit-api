@@ -154,6 +154,22 @@ public partial class OAuthController(
         return Content(html, "text/html");
     }
 
+    /// <summary>
+    /// Serves one self-hosted webfont the authorize page loads. The name is matched against
+    /// <see cref="OAuthPageAssets"/>'s closed map, so no path reaches the file system and no third-party
+    /// font host appears on a sign-in surface.
+    /// </summary>
+    [HttpGet("/oauth/assets/{name}")]
+    public IActionResult Asset(string name)
+    {
+        var asset = OAuthPageAssets.TryRead(name);
+        if (asset is null)
+            return NotFound();
+
+        Response.Headers.CacheControl = $"public, max-age={OAuthPageAssets.CacheSeconds}, immutable";
+        return File(asset.Value.Content, asset.Value.ContentType);
+    }
+
     public record SendCodeRequest(string Email, string? Language = "en");
 
     [HttpPost("/oauth/send-code")]

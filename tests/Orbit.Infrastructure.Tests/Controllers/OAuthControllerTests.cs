@@ -288,9 +288,9 @@ public class OAuthControllerTests : IDisposable
         var page = _controller.Authorize("client-123", "https://claude.ai/callback", "code",
             "client-state", "mcp-challenge", "S256", google_error: "cancelled")
             .Should().BeOfType<ContentResult>().Subject;
-        page.Content.Should().Contain("O acesso com Google foi cancelado");
+        ReadRenderedError(page.Content!).Should().StartWith("O acesso com Google foi cancelado");
         page.Content.Should().Contain("/oauth/send-code");
-        page.Content.Should().Contain("if (initialError) showError(initialError)");
+        page.Content.Should().Contain("if (request.error) setAlert(request.error)");
     }
 
     [Fact]
@@ -342,9 +342,7 @@ public class OAuthControllerTests : IDisposable
             "client-state", "mcp-challenge", "S256", google_error: error)
             .Should().BeOfType<ContentResult>().Subject;
 
-        var encodedError = System.Text.RegularExpressions.Regex.Match(page.Content!,
-            @"const initialError = (.*);").Groups[1].Value;
-        JsonSerializer.Deserialize<string>(encodedError).Should().StartWith(message);
+        ReadRenderedError(page.Content!).Should().StartWith(message);
         page.Content.Should().Contain("/oauth/send-code");
     }
 
@@ -1235,6 +1233,14 @@ public class OAuthControllerTests : IDisposable
         var limit = CustomAttributeData.GetCustomAttributes(action!)
             .Should().ContainSingle(data => data.AttributeType == typeof(DistributedRateLimitAttribute)).Subject;
         limit.ConstructorArguments[0].Value.Should().Be("auth");
+    }
+
+    private static string? ReadRenderedError(string page)
+    {
+        var block = System.Text.RegularExpressions.Regex.Match(page,
+            "<script type=\"application/json\" id=\"oauth-request\">(.*?)</script>",
+            System.Text.RegularExpressions.RegexOptions.Singleline).Groups[1].Value;
+        return JsonDocument.Parse(block).RootElement.GetProperty("error").GetString();
     }
 
     private IActionResult StartGoogle(string challenge = "mcp-challenge",
