@@ -539,7 +539,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.None,
                 chatTools: ["get_notifications"],
                 mcpTools: ["get_notifications", "get_notification_page"],
-                controllerActions: ["NotificationController.GetNotifications", "ChatController.GetRecordListPage"]),
+                controllerActions: ["NotificationController.GetNotifications", "NotificationController.GetSubscriptions", "ChatController.GetRecordListPage"]),
 
             CreateCapability(
                 AgentCapabilityIds.NotificationsWrite,
