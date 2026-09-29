@@ -120,6 +120,7 @@ public class ExportUserDataQueryHandlerTests
         result.Value.Account.Plan.Should().Be("free");
         result.Value.Settings.AiMemoryEnabled.Should().Be(user.AiMemoryEnabled);
         result.Value.Settings.ProactiveAstraEnabled.Should().Be(user.ProactiveAstraEnabled);
+        result.Value.Settings.Uses24HourClock.Should().BeNull();
         result.Value.Habits.Should().BeEmpty();
         result.Value.Goals.Should().BeEmpty();
         result.Value.Tags.Should().BeEmpty();
@@ -129,6 +130,19 @@ public class ExportUserDataQueryHandlerTests
         result.Value.BlockedUsers.Should().BeEmpty();
         result.Value.Reports.Should().BeEmpty();
         result.Value.FriendFeedEvents.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_ExportsStoredClockChoice()
+    {
+        var user = CreateTestUser();
+        user.SetClockFormat(false);
+        ArrangeUser(user);
+
+        var result = await _handler.Handle(new ExportUserDataQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Settings.Uses24HourClock.Should().BeFalse();
     }
 
     [Fact]

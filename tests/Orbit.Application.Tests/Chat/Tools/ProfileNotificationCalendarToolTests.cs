@@ -157,6 +157,35 @@ public class ProfileNotificationCalendarToolTests
     }
 
     [Fact]
+    public async Task UpdateProfilePreferencesTool_RequiresClockFormatFlag()
+    {
+        var tool = new UpdateProfilePreferencesTool(Substitute.For<IMediator>());
+
+        var result = await tool.ExecuteAsync(Parse("""{"action":"set_clock_format"}"""), UserId, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be("uses_24_hour_clock is required.");
+    }
+
+    [Fact]
+    public async Task UpdateProfilePreferencesTool_SetsClockFormat()
+    {
+        var mediator = Substitute.For<IMediator>();
+        mediator.Send(Arg.Any<SetClockFormatCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success());
+        var tool = new UpdateProfilePreferencesTool(mediator);
+
+        var result = await tool.ExecuteAsync(
+            Parse("""{"action":"set_clock_format","uses_24_hour_clock":false}"""),
+            UserId, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        await mediator.Received(1).Send(
+            Arg.Is<SetClockFormatCommand>(command => command.UserId == UserId && !command.Uses24HourClock),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task UpdateProfilePreferencesTool_RequiresThemePreferenceProperty()
     {
         var tool = new UpdateProfilePreferencesTool(Substitute.For<IMediator>());

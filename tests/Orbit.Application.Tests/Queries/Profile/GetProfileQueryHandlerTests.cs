@@ -504,6 +504,26 @@ public class GetProfileQueryHandlerTests
         result.Value.Uses24HourClock.Should().BeFalse();
     }
 
+    [Theory]
+    [InlineData("America/New_York", true)]
+    [InlineData("America/Sao_Paulo", false)]
+    public async Task Handle_StoredClockChoiceOverridesTimeZone(string timeZone, bool uses24HourClock)
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone(timeZone);
+        user.SetClockFormat(uses24HourClock);
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(20);
+        _streakFreezeRepo.FindAsync(
+            Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<StreakFreeze>().AsReadOnly());
+
+        var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
+
+        result.Value.Uses24HourClock.Should().Be(uses24HourClock);
+    }
+
     [Fact]
     public async Task Handle_ProUser_CanViewGamificationTrue()
     {

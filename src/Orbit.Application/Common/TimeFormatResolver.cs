@@ -38,4 +38,7 @@ public static class TimeFormatResolver
     /// </summary>
     public static bool Uses24HourClock(string? ianaTimeZone) =>
         ianaTimeZone is null || !TwelveHourTimeZones.Contains(ianaTimeZone);
+
+    public static bool Uses24HourClock(bool? preference, string? ianaTimeZone) =>
+        preference ?? Uses24HourClock(ianaTimeZone);
 }

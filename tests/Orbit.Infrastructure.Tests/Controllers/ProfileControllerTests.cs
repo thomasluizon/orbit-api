@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using FluentAssertions;
 using MediatR;
 using Microsoft.AspNetCore.Http;
@@ -189,6 +190,46 @@ public class ProfileControllerTests
         var result = await _controller.SetWeekStartDay(request, CancellationToken.None);
 
         result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SetClockFormat_SendsBodyValueAndReturnsNoContent(bool uses24HourClock)
+    {
+        _mediator.Send(Arg.Any<SetClockFormatCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success());
+
+        var result = await _controller.SetClockFormat(
+            new ProfileController.SetClockFormatRequest(uses24HourClock), CancellationToken.None);
+
+        result.Should().BeOfType<NoContentResult>();
+        await _mediator.Received(1).Send(
+            Arg.Is<SetClockFormatCommand>(command => command.UserId == UserId && command.Uses24HourClock == uses24HourClock),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SetClockFormat_FailureReturnsBadRequest()
+    {
+        _mediator.Send(Arg.Any<SetClockFormatCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure("Error"));
+
+        var result = await _controller.SetClockFormat(
+            new ProfileController.SetClockFormatRequest(false), CancellationToken.None);
+
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
+    }
+
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("{\"uses24HourClock\":\"false\"}")]
+    public void SetClockFormat_InvalidBodyFailsDeserialization(string json)
+    {
+        var deserialize = () => JsonSerializer.Deserialize<ProfileController.SetClockFormatRequest>(
+            json, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        deserialize.Should().Throw<JsonException>();
     }
 
     [Fact]

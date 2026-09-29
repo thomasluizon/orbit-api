@@ -255,7 +255,8 @@ public record AgentContextSnapshot(
     IReadOnlyList<string>? ChecklistTemplateNames = null,
     IReadOnlyList<string>? RecentHabitTitles = null,
     IReadOnlyList<string>? RecentGoalTitles = null,
-    AgentClientContext? ClientContext = null);
+    AgentClientContext? ClientContext = null,
+    bool Uses24HourClock = true);
 
 public record AgentAuditEntry(
     Guid UserId,

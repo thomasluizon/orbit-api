@@ -441,7 +441,7 @@ public partial class AgentCatalogService
             CreateCapability(
                 AgentCapabilityIds.ProfilePreferencesWrite,
                 "Write Preferences",
-                "Writes display name, timezone, language, light or dark mode, onboarding, and week-start preferences. Orbit uses one accent.",
+                "Writes display name, timezone, language, clock format, light or dark mode, onboarding, and week-start preferences. Orbit uses one accent.",
                 "profile",
                 AgentScopes.WriteProfilePreferences,
                 AgentRiskClass.Low,
@@ -449,13 +449,14 @@ public partial class AgentCatalogService
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
                 chatTools: ["update_profile_preferences"],
-                mcpTools: ["set_timezone", "set_language", "set_week_start_day"],
+                mcpTools: ["set_timezone", "set_language", "set_week_start_day", "set_clock_format"],
                 controllerActions:
                 [
                     "ProfileController.SetName",
                     "ProfileController.SetTimezone",
                     "ProfileController.SetLanguage",
                     "ProfileController.SetWeekStartDay",
+                    "ProfileController.SetClockFormat",
                     "ProfileController.SetThemePreference",
                     "ProfileController.CompleteOnboarding",
                     "ProfileController.ApplyOnboarding",

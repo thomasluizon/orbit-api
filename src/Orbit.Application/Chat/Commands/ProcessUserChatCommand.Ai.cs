@@ -209,7 +209,8 @@ public partial class ProcessUserChatCommandHandler
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Take(8)
                 .ToList(),
-            ClientContext: clientContext);
+            ClientContext: clientContext,
+            Uses24HourClock: TimeFormatResolver.Uses24HourClock(user?.Uses24HourClockPreference, user?.TimeZone));
     }
 
     private static ResponseDirectiveStreamFilter? BuildAiStreamFilter(Func<ChatStreamEvent, Task>? streamSink)
