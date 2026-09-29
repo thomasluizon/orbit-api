@@ -29,7 +29,9 @@ public class OAuthControllerTests : IDisposable
     private readonly MutableTimeProvider _timeProvider = new();
     private readonly OAuthAuthorizationStore _authStore;
     private readonly IGenericRepository<ApiKey> _apiKeyRepo = Substitute.For<IGenericRepository<ApiKey>>();
+    private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
+    private readonly IHttpClientFactory _httpClientFactory = Substitute.For<IHttpClientFactory>();
     private readonly ILogger<OAuthController> _logger = Substitute.For<ILogger<OAuthController>>();
     private readonly OAuthController _controller;
 
@@ -52,7 +54,7 @@ public class OAuthControllerTests : IDisposable
             .Build();
 
         _controller = new OAuthController(
-            _mediator, _authStore, _apiKeyRepo, _unitOfWork,
+            _mediator, _authStore, _apiKeyRepo, _userRepo, _unitOfWork, _httpClientFactory,
             googleSettings, config, _logger);
 
         var httpContext = new DefaultHttpContext();
@@ -250,6 +252,74 @@ public class OAuthControllerTests : IDisposable
             .Should().BeOfType<RedirectResult>().Subject;
 
         ExtractQueryParam(redirect.Url!, "google_error").Should().Be("failed");
+    }
+
+    [Theory]
+    [InlineData("", true)]
+    [InlineData("test-google-client-id", false)]
+    public void GoogleStart_MissingConfigurationReturnsUnavailable(string clientId, bool callbackAllowed)
+    {
+        var state = CreatePendingGoogleState(nonce: "preserved-nonce");
+        var settings = Options.Create(new GoogleSettings
+        {
+            ClientId = clientId,
+            AllowedRedirectUris = callbackAllowed ? ["https://api.useorbit.org/oauth/google/callback"] : []
+        });
+        var controller = new OAuthController(_mediator, _authStore, _apiKeyRepo,
+            _userRepo, _unitOfWork, _httpClientFactory, settings, new ConfigurationBuilder().Build(), _logger)
+        {
+            ControllerContext = _controller.ControllerContext
+        };
+
+        var redirect = controller.GoogleStart(state).Should().BeOfType<RedirectResult>().Subject;
+        ExtractQueryParam(redirect.Url!, "google_error").Should().Be("unavailable");
+        ExtractQueryParam(redirect.Url!, "nonce").Should().Be("preserved-nonce");
+    }
+
+    [Theory]
+    [InlineData("en", "failed", "Google sign-in failed")]
+    [InlineData("pt-BR", "failed", "Não foi possível entrar com Google")]
+    [InlineData("en", "unavailable", "Google sign-in is unavailable")]
+    [InlineData("pt-BR", "unavailable", "O acesso com Google está indisponível")]
+    public void Authorize_GoogleErrorRendersLocalizedMessageAndEmailPath(
+        string language, string error, string message)
+    {
+        _controller.HttpContext.Request.Headers.AcceptLanguage = language;
+
+        var page = _controller.Authorize("client-123", "https://claude.ai/callback", "code",
+            "client-state", "mcp-challenge", "S256", google_error: error)
+            .Should().BeOfType<ContentResult>().Subject;
+
+        var encodedError = System.Text.RegularExpressions.Regex.Match(page.Content!,
+            @"const initialError = (.*);").Groups[1].Value;
+        JsonSerializer.Deserialize<string>(encodedError).Should().StartWith(message);
+        page.Content.Should().Contain("/oauth/send-code");
+    }
+
+    [Fact]
+    public async Task GoogleCallback_RejectsStoredRedirectUriThatIsNoLongerAllowed()
+    {
+        var state = _authStore.CreateGoogleRequest("client-123", "https://evil.example/callback",
+            "client-state", "mcp-challenge", null,
+            "https://api.useorbit.org/oauth/google/callback", "en");
+        _mediator.Send(Arg.Any<GoogleCodeAuthCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new LoginResponse(UserId, "jwt", "Alex", "alex@example.com")));
+
+        var result = await _controller.GoogleCallback(state, "google-code", null, CancellationToken.None);
+
+        result.Should().BeOfType<ContentResult>().Which.StatusCode.Should().Be(400);
+        await _mediator.DidNotReceive().Send(Arg.Any<GoogleCodeAuthCommand>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public void GoogleAuth_RouteRemainsAvailableAndDeprecated()
+    {
+        var route = typeof(OAuthController).GetMethods()
+            .SingleOrDefault(method => method.GetCustomAttributes(typeof(HttpPostAttribute), false)
+                .Cast<HttpPostAttribute>().Any(attribute => attribute.Template == "/oauth/google"));
+
+        route.Should().NotBeNull();
+        route!.GetCustomAttributes(typeof(ObsoleteAttribute), false).Should().ContainSingle();
     }
 
     [Fact]

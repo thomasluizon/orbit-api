@@ -32,7 +32,7 @@ public sealed partial class OAuthAuthorizationStore : IDisposable
         var verifier = NewSecret();
         var challenge = Convert.ToBase64String(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)))
             .Replace("+", "-").Replace("/", "_").TrimEnd('=');
-        _googleRequests[state] = new GoogleAuthorizationRequest(clientId, redirectUri, clientState,
+        _googleRequests[state] = new GoogleAuthorizationRequest(state, clientId, redirectUri, clientState,
             codeChallenge, nonce, googleRedirectUri, language, verifier, challenge, _timeProvider.GetUtcNow());
         return state;
     }
@@ -115,6 +115,7 @@ public record AuthorizationEntry(
     DateTime CreatedAt);
 
 public record GoogleAuthorizationRequest(
+    string GoogleState,
     string ClientId,
     string RedirectUri,
     string ClientState,

@@ -1039,6 +1039,7 @@ public partial class AgentCatalogService
                     "OAuthController.Authorize",
                     "OAuthController.SendCode",
                     "OAuthController.VerifyCode",
+                    "OAuthController.GoogleAuth",
                     "OAuthController.GoogleStart",
                     "OAuthController.GoogleCallback",
                     "OAuthController.Token",
