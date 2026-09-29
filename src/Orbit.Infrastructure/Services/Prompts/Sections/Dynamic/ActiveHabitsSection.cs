@@ -119,14 +119,14 @@ public class ActiveHabitsSection : IPromptSection
     {
         return !habit.IsCompleted
             || habit.FrequencyUnit is null && IsDoneToday(habit, context)
-            || HasActiveDescendant(allHabits, habit.Id);
+            || HasRelevantDescendant(allHabits, habit.Id, context);
     }
 
-    private static bool HasActiveDescendant(IReadOnlyList<Habit> allHabits, Guid parentId)
+    private static bool HasRelevantDescendant(IReadOnlyList<Habit> allHabits, Guid parentId, PromptContext context)
     {
         foreach (var child in allHabits.Where(h => h.ParentHabitId == parentId))
         {
-            if (!child.IsCompleted || HasActiveDescendant(allHabits, child.Id))
+            if (ShouldIncludeInIndex(child, allHabits, context))
                 return true;
         }
 
@@ -137,7 +137,7 @@ public class ActiveHabitsSection : IPromptSection
     {
         var indent = new string(' ', depth * 2);
         var children = allHabits
-            .Where(h => h.ParentHabitId == parentId)
+            .Where(h => h.ParentHabitId == parentId && ShouldIncludeInIndex(h, allHabits, context))
             .OrderBy(h => h.Position)
             .ToList();
         var childSuffixes = SiblingTitleDisambiguator.ComputeSuffixes(children);

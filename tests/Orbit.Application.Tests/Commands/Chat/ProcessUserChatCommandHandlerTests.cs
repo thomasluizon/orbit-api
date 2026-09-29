@@ -869,13 +869,16 @@ public class ProcessUserChatCommandHandlerTests
     }
 
     [Theory]
-    [InlineData("what do I have today", "today", true)]
-    [InlineData("what do I have left today", "remaining", false)]
+    [InlineData("what do I have today", "today", true, true)]
+    [InlineData("what do I have left today", "remaining", false, true)]
+    [InlineData("what do I have today", "today", true, false)]
+    [InlineData("what do I have left today", "remaining", false, false)]
     public async Task Handle_CompletedOneTimeTask_OnlyAppearsInTodaysSchedule(
-        string message, string directive, bool includesDone)
+        string message, string directive, bool includesDone, bool supportsDoneStatus)
     {
         SetupUserAndPayGate();
-        var completedToday = CreateHabit("Filed taxes");
+        var completedToday = Habit.Create(new HabitCreateParams(
+            UserId, "Filed taxes", null, null, DueDate: Today.AddDays(-1))).Value;
         var todayLog = completedToday.Log(Today).Value;
         var completedEarlier = Habit.Create(new HabitCreateParams(
             UserId, "Paid bill", null, null, DueDate: Today.AddDays(-1))).Value;
@@ -894,16 +897,19 @@ public class ProcessUserChatCommandHandlerTests
 
         var result = await CreateHandler().Handle(new ProcessUserChatCommand(
             UserId, message,
-            ClientContext: new AgentClientContext(SupportsHabitListCard: true, SupportsHabitListDoneStatus: true)),
+            ClientContext: new AgentClientContext(SupportsHabitListCard: true, SupportsHabitListDoneStatus: supportsDoneStatus)),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.HabitList!.Scope.Should().Be(HabitListCardBuilder.ScopeToday);
         result.Value.HabitList.Items.Select(item => item.Title).Should().NotContain("Paid bill");
         result.Value.HabitList.Items.Should().ContainSingle(item => item.Title == "Meditate");
-        if (includesDone)
+        if (includesDone && supportsDoneStatus)
             result.Value.HabitList.Items.Single(item => item.Title == "Filed taxes")
                 .Status.Should().Be(HabitListCardBuilder.StatusDone);
+        else if (includesDone)
+            result.Value.HabitList.Items.Single(item => item.Title == "Filed taxes")
+                .Status.Should().Be(HabitListCardBuilder.StatusNone);
         else
             result.Value.HabitList.Items.Select(item => item.Title).Should().NotContain("Filed taxes");
         _promptBuilder.Received(1).BuildDynamic(Arg.Is<PromptBuildRequest>(request =>

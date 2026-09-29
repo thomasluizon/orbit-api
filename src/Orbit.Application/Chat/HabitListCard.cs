@@ -145,6 +145,8 @@ public static partial class HabitListCardBuilder
     {
         if (!supportsDoneStatus)
         {
+            if (habit.IsCompleted && todayFacts.DoneTodayIds.Contains(habit.Id))
+                return StatusNone;
             if (habit.IsGeneral)
                 return StatusGeneral;
             if (habit.DueDate < today)

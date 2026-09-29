@@ -172,12 +172,26 @@ public class ActiveHabitsSectionTests
             DueDate: Today)).Value;
         parent.Log(Today);
         var child = CreateHabit("Push-ups", parentId: parent.Id);
-        var context = CreateContext(habits: [parent, child]);
+        var earlierParent = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Errands", null, null, DueDate: Today.AddDays(-2))).Value;
+        earlierParent.Log(Today.AddDays(-2)).IsSuccess.Should().BeTrue();
+        var completedToday = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Pick up parcel", null, null, DueDate: Today.AddDays(-1),
+            ParentHabitId: earlierParent.Id)).Value;
+        completedToday.Log(Today).IsSuccess.Should().BeTrue();
+        var completedEarlier = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Buy stamps", null, null, DueDate: Today.AddDays(-2),
+            ParentHabitId: earlierParent.Id)).Value;
+        completedEarlier.Log(Today.AddDays(-2)).IsSuccess.Should().BeTrue();
+        var context = CreateContext(habits: [parent, child, earlierParent, completedToday, completedEarlier]);
 
         var result = _sut.Build(context);
 
         result.Should().Contain("Fitness");
         result.Should().Contain("Push-ups");
+        result.Should().Contain("Errands");
+        result.Should().Contain("Pick up parcel");
+        result.Should().NotContain("Buy stamps");
         result.Should().Contain("COMPLETED");
         result.Should().Contain("1 total");
     }
