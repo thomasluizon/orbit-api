@@ -386,7 +386,10 @@ public partial class GetCalendarEventsQueryHandler(
                 if (importedEventIds?.Contains(source.Id) == true)
                     continue;
 
-                if (source.HasUnrepresentableRecurrenceAfterProjection(timeZone))
+                Guid? habitId = importedHabits is not null && importedHabits.TryGetValue(source.Id, out var id)
+                    ? id
+                    : null;
+                if (!habitId.HasValue && source.HasUnrepresentableRecurrenceAfterProjection(timeZone))
                     continue;
 
                 var projected = source.ProjectTo(timeZone);
@@ -396,7 +399,6 @@ public partial class GetCalendarEventsQueryHandler(
 
                 if (importedHabits is not null)
                 {
-                    Guid? habitId = importedHabits.TryGetValue(source.Id, out var id) ? id : null;
                     projected = projected with { IsImported = habitId.HasValue, ImportedHabitId = habitId };
                 }
 

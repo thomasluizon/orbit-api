@@ -310,6 +310,33 @@ public class GetCalendarEventsQueryHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().BeEmpty();
+
+        var unlinkedOptInResult = await _handler.Handle(
+            new GetCalendarEventsQuery(UserId, IncludeImported: true), CancellationToken.None);
+        unlinkedOptInResult.IsSuccess.Should().BeTrue();
+        unlinkedOptInResult.Value.Should().BeEmpty();
+
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Tokyo breakfast", Domain.Enums.FrequencyUnit.Week, 1,
+            DueDate: new DateOnly(2026, 4, 15), GoogleEventId: "evt_tokyo")).Value;
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(call => new[] { habit }
+                .Where(call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile()).ToList());
+
+        var importedResult = await _handler.Handle(
+            new GetCalendarEventsQuery(UserId, IncludeImported: true), CancellationToken.None);
+
+        importedResult.IsSuccess.Should().BeTrue();
+        importedResult.Value.Should().ContainSingle();
+        importedResult.Value[0].Id.Should().Be("evt_tokyo");
+        importedResult.Value[0].IsImported.Should().BeTrue();
+        importedResult.Value[0].ImportedHabitId.Should().Be(habit.Id);
+
+        var linkedDefaultResult = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+        linkedDefaultResult.IsSuccess.Should().BeTrue();
+        linkedDefaultResult.Value.Should().BeEmpty();
     }
 
     [Fact]
