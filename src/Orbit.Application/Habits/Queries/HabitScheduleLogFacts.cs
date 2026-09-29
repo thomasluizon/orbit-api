@@ -20,6 +20,9 @@ internal sealed class HabitScheduleLogFacts(IEnumerable<HabitScheduleLogDay> day
     internal bool HasLog(Guid habitId, DateOnly from, DateOnly to) =>
         _byHabit[habitId].Any(day => day.Date >= from && day.Date <= to && day.HasLog);
 
+    internal bool HasSkipped(Guid habitId, DateOnly date) =>
+        _byHabit[habitId].Any(day => day.Date == date && day.SkippedCount > 0);
+
     internal bool IsFlexibleDue(Habit habit, DateOnly date, int weekStartDay)
     {
         if (!habit.IsFlexible || habit.FrequencyUnit is null || date < habit.DueDate
