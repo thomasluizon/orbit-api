@@ -1,8 +1,11 @@
 using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
+using MediatR;
 using NSubstitute;
 using Orbit.Application.Chat;
+using Orbit.Application.Chat.Tools;
+using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Chat.Validators;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -17,7 +20,10 @@ public sealed class PendingOperationRevisionServiceTests
     private readonly Guid _userId = Guid.NewGuid();
     private readonly IPendingAgentOperationStore _store = Substitute.For<IPendingAgentOperationStore>();
     private readonly IGenericRepository<Habit> _habits = Substitute.For<IGenericRepository<Habit>>();
+    private readonly IGenericRepository<Goal> _goals = Substitute.For<IGenericRepository<Goal>>();
+    private readonly IGenericRepository<Tag> _tags = Substitute.For<IGenericRepository<Tag>>();
     private readonly IUserDateService _dateService = Substitute.For<IUserDateService>();
+    private readonly AiToolRegistry _tools = new([new BulkCreateHabitsTool(Substitute.For<IMediator>())]);
 
     [Fact]
     public async Task RefreshAsync_RegeneratesStoredIntentAndPersistsNewFingerprint()
@@ -34,8 +40,8 @@ public sealed class PendingOperationRevisionServiceTests
         _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
             Arg.Any<string>(), Arg.Any<string>()).Returns(true);
         var service = new PendingOperationRevisionService(_store,
-            new PendingOperationChangePreviewer(_habits, _dateService),
-            new RevisePendingOperationRequestValidator());
+            new PendingOperationChangePreviewer(_habits, _goals, _tags, _dateService, _tools),
+            new RevisePendingOperationRequestValidator(), _tools);
 
         var result = await service.RefreshAsync(_userId, pendingId, CancellationToken.None);
 
@@ -79,7 +85,7 @@ public sealed class PendingOperationRevisionServiceTests
                 Arg.Any<string>(), Arg.Any<string>()).Returns(false);
         }
         var service = new PendingOperationRevisionService(_store, previewer,
-            new RevisePendingOperationRequestValidator());
+            new RevisePendingOperationRequestValidator(), _tools);
 
         var result = await service.RefreshAsync(_userId, pendingId, CancellationToken.None);
 
@@ -109,10 +115,10 @@ public sealed class PendingOperationRevisionServiceTests
             AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation));
         _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
             Arg.Any<string>(), Arg.Any<string>()).Returns(true);
-        var previewer = new PendingOperationChangePreviewer(_habits, _dateService);
+        var previewer = new PendingOperationChangePreviewer(_habits, _goals, _tags, _dateService, _tools);
         var original = await previewer.PreviewAsync(_userId, "bulk_update_habits", arguments);
         var service = new PendingOperationRevisionService(_store, previewer,
-            new RevisePendingOperationRequestValidator());
+            new RevisePendingOperationRequestValidator(), _tools);
         using var edits = JsonDocument.Parse("{\"emoji\":\"B\"}");
 
         var result = await service.ReviseAsync(_userId, pendingId,
@@ -142,10 +148,10 @@ public sealed class PendingOperationRevisionServiceTests
         _store.GetExecution(_userId, pendingId).Returns(new PendingAgentOperationExecution(
             pendingId, AgentCapabilityIds.HabitsBulkWrite, "bulk_update_habits", arguments,
             AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation));
-        var previewer = new PendingOperationChangePreviewer(_habits, _dateService);
+        var previewer = new PendingOperationChangePreviewer(_habits, _goals, _tags, _dateService, _tools);
         var original = await previewer.PreviewAsync(_userId, "bulk_update_habits", arguments);
         var service = new PendingOperationRevisionService(_store, previewer,
-            new RevisePendingOperationRequestValidator());
+            new RevisePendingOperationRequestValidator(), _tools);
         using var edits = JsonDocument.Parse("{\"title\":\"Changed\"}");
         var item = new RevisedPendingOperationItem(
             caseName == "unlisted_item" ? Guid.NewGuid().ToString() : habit.Id.ToString(),
@@ -186,10 +192,10 @@ public sealed class PendingOperationRevisionServiceTests
             AgentConfirmationRequirement.FreshConfirmation));
         _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
             Arg.Any<string>(), Arg.Any<string>()).Returns(true);
-        var previewer = new PendingOperationChangePreviewer(_habits, _dateService);
+        var previewer = new PendingOperationChangePreviewer(_habits, _goals, _tags, _dateService, _tools);
         var preview = await previewer.PreviewAsync(_userId, "bulk_update_habits", arguments.RootElement);
         var service = new PendingOperationRevisionService(_store, previewer,
-            new RevisePendingOperationRequestValidator());
+            new RevisePendingOperationRequestValidator(), _tools);
 
         var result = await service.ReviseAsync(_userId, pendingId,
             new RevisePendingOperationRequest(preview!.PreviewFingerprint!,
@@ -213,8 +219,8 @@ public sealed class PendingOperationRevisionServiceTests
             pendingId, AgentCapabilityIds.HabitsBulkWrite, "bulk_update_habit_emojis", arguments,
             AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation));
         var service = new PendingOperationRevisionService(_store,
-            new PendingOperationChangePreviewer(_habits, _dateService),
-            new RevisePendingOperationRequestValidator());
+            new PendingOperationChangePreviewer(_habits, _goals, _tags, _dateService, _tools),
+            new RevisePendingOperationRequestValidator(), _tools);
 
         var result = await service.ReviseAsync(_userId, pendingId,
             new RevisePendingOperationRequest("untrusted_fingerprint",
@@ -240,11 +246,11 @@ public sealed class PendingOperationRevisionServiceTests
             AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation));
         _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
             Arg.Any<string>(), Arg.Any<string>()).Returns(true);
-        var previewer = new PendingOperationChangePreviewer(_habits, _dateService);
+        var previewer = new PendingOperationChangePreviewer(_habits, _goals, _tags, _dateService, _tools);
         var preview = await previewer.PreviewAsync(_userId, "bulk_log_habits", arguments);
         using var edits = JsonDocument.Parse("{\"date\":\"2026-09-26\"}");
         var service = new PendingOperationRevisionService(_store, previewer,
-            new RevisePendingOperationRequestValidator());
+            new RevisePendingOperationRequestValidator(), _tools);
 
         var result = await service.ReviseAsync(_userId, pendingId,
             new RevisePendingOperationRequest(preview!.PreviewFingerprint!,
@@ -277,9 +283,9 @@ public sealed class PendingOperationRevisionServiceTests
                 };
                 return true;
             });
-        var previewer = new PendingOperationChangePreviewer(_habits, _dateService);
+        var previewer = new PendingOperationChangePreviewer(_habits, _goals, _tags, _dateService, _tools);
         var service = new PendingOperationRevisionService(_store, previewer,
-            new RevisePendingOperationRequestValidator());
+            new RevisePendingOperationRequestValidator(), _tools);
         var original = await previewer.PreviewAsync(_userId, "bulk_create_habits", arguments);
         using var firstEdit = JsonDocument.Parse("{\"title\":\"Second\"}");
 
@@ -310,10 +316,10 @@ public sealed class PendingOperationRevisionServiceTests
             pendingId, AgentCapabilityIds.HabitsBulkDelete, "bulk_delete_habits", arguments,
             AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation));
         _store.Cancel(_userId, pendingId, Arg.Any<string>()).Returns(true);
-        var previewer = new PendingOperationChangePreviewer(_habits, _dateService);
+        var previewer = new PendingOperationChangePreviewer(_habits, _goals, _tags, _dateService, _tools);
         var preview = await previewer.PreviewAsync(_userId, "bulk_delete_habits", arguments);
         var service = new PendingOperationRevisionService(_store, previewer,
-            new RevisePendingOperationRequestValidator());
+            new RevisePendingOperationRequestValidator(), _tools);
 
         var result = await service.ReviseAsync(_userId, pendingId,
             new RevisePendingOperationRequest(preview!.PreviewFingerprint!, []),

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using FluentValidation;
+using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Habits.Commands;
 using Orbit.Application.Habits.Validators;
@@ -26,7 +27,8 @@ public sealed record PendingOperationRevisionResult(
 public sealed class PendingOperationRevisionService(
     IPendingAgentOperationStore store,
     IPendingOperationChangePreviewer previewer,
-    IValidator<RevisePendingOperationRequest> validator)
+    IValidator<RevisePendingOperationRequest> validator,
+    AiToolRegistry toolRegistry)
 {
     public async Task<PendingOperationRevisionResult> RefreshAsync(
         Guid userId, Guid pendingOperationId, CancellationToken cancellationToken)
@@ -99,6 +101,9 @@ public sealed class PendingOperationRevisionService(
         if (execution.OperationId == "bulk_create_habits"
             && !ValidateCreate(userId, revised.Value))
             return Failure("invalid_revision");
+        if (!await AcceptsEditsAsync(userId, execution.OperationId, revised.Value, request.Items,
+            cancellationToken))
+            return Failure("invalid_revision");
 
         var revisedPreview = await previewer.PreviewAsync(userId, execution.OperationId,
             revised.Value, cancellationToken);
@@ -126,6 +131,36 @@ public sealed class PendingOperationRevisionService(
             execution.Arguments, cancellationToken);
         return current?.PreviewFingerprint == execution.PreviewFingerprint;
     }
+
+    /// <summary>
+    /// Holds every edit to the rules of its tool before the revised preview is accepted: the
+    /// parameter schema (the item schema for a bulk create), then the tool's own check. A tool
+    /// with no check offers no editable field. The other bulk habit writes and the calendar sync
+    /// parse their edits strictly while their arguments or their preview are built.
+    /// </summary>
+    private async Task<bool> AcceptsEditsAsync(Guid userId, string operationId, JsonElement revised,
+        IReadOnlyList<RevisedPendingOperationItem> items, CancellationToken cancellationToken)
+    {
+        var edits = items.Where(HasEdits).SelectMany(item => item.Edits!.Value.EnumerateObject()).ToList();
+        if (edits.Count == 0 || ParsesEditsStrictly(operationId))
+            return true;
+        var tool = toolRegistry.GetTool(operationId);
+        if (tool is null)
+            return false;
+        var schema = JsonSerializer.SerializeToElement(tool.GetParameterSchema());
+        if (operationId == "bulk_create_habits")
+        {
+            var itemSchema = schema.GetProperty("properties").GetProperty("habits").GetProperty("items");
+            return edits.All(edit => AgentArgumentSchema.Accepts(itemSchema, edit.Name, edit.Value));
+        }
+        return tool is IArgumentCheckTool check
+            && edits.All(edit => AgentArgumentSchema.Accepts(schema, edit.Name, edit.Value))
+            && (await check.CheckArgumentsAsync(revised, userId, cancellationToken)).IsSuccess;
+    }
+
+    private static bool ParsesEditsStrictly(string operationId) =>
+        operationId == "manage_calendar_sync"
+        || (operationId != "bulk_create_habits" && operationId.StartsWith("bulk_", StringComparison.Ordinal));
 
     private static JsonElement? BuildArguments(string operationId, JsonElement original,
         IReadOnlyList<RevisedPendingOperationItem> selected,
@@ -184,7 +219,7 @@ public sealed class PendingOperationRevisionService(
             root["action"] = "delete_selected";
             return true;
         }
-        return false;
+        return selected.Count == 1 && ApplyEdits(root, selected[0].Edits);
     }
 
     private static bool BuildCalendarArguments(JsonObject root,

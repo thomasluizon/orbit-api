@@ -14,7 +14,10 @@ namespace Orbit.Application.Chat;
 
 public sealed class PendingOperationChangePreviewer(
     IGenericRepository<Habit> habitRepository,
+    IGenericRepository<Goal> goalRepository,
+    IGenericRepository<Tag> tagRepository,
     IUserDateService userDateService,
+    AiToolRegistry toolRegistry,
     IDestructiveOperationPreviewer? destructivePreviewer = null) : IPendingOperationChangePreviewer
 {
     private const int MaxDisplayedEntries = 3;
@@ -38,8 +41,12 @@ public sealed class PendingOperationChangePreviewer(
         if (operationId is not ("bulk_update_habits" or "bulk_reschedule_habits"
             or "bulk_delete_habits" or "bulk_log_habits" or "bulk_skip_habits"
             or "bulk_update_habit_emojis" or "delete_habit"))
-            return destructivePreviewer is null ? null
-                : await destructivePreviewer.PreviewAsync(userId, operationId, arguments, cancellationToken);
+        {
+            return destructivePreviewer is not null && destructivePreviewer.Handles(operationId)
+                ? await destructivePreviewer.PreviewAsync(userId, operationId, arguments, cancellationToken)
+                : AgentArgumentPreview.Build(operationId, arguments,
+                    await ResolveTargetAsync(userId, arguments, cancellationToken), EditableSchema(operationId));
+        }
 
         if (operationId == "bulk_update_habit_emojis"
             && (JsonArgumentParser.GetOptionalBool(arguments, "infer_from_title")
@@ -98,6 +105,121 @@ public sealed class PendingOperationChangePreviewer(
 
         return BuildPreview(operationId, rows, items);
     }
+
+    /// <summary>
+    /// The parameter schema of a tool that checks its own arguments. A tool with no check offers
+    /// no editable field, because the revise route could not hold an edit to the tool's rules.
+    /// </summary>
+    private JsonElement EditableSchema(string operationId) =>
+        toolRegistry.GetTool(operationId) is { } tool and IArgumentCheckTool
+            ? JsonSerializer.SerializeToElement(tool.GetParameterSchema())
+            : default;
+
+    private async Task<AgentPreviewTarget?> ResolveTargetAsync(
+        Guid userId, JsonElement arguments, CancellationToken cancellationToken)
+    {
+        if (arguments.ValueKind != JsonValueKind.Object)
+            return null;
+
+        if (TryReadId(arguments, "habit_id", out var habitId))
+        {
+            var readsTags = HasTagArguments(arguments);
+            Func<IQueryable<Habit>, IQueryable<Habit>>? includes = readsTags ? AssignTagsTool.IncludeTags : null;
+            var habits = await habitRepository.FindAsync(
+                item => item.Id == habitId && item.UserId == userId, includes, cancellationToken);
+            var habit = habits.FirstOrDefault();
+            if (habit is null)
+                return null;
+            var values = HabitValues(habit);
+            if (readsTags)
+                values["tag_names"] = values["tag_ids"] = FormatTags(habit);
+            return new AgentPreviewTarget(habit.Id, habit.Title, values, FingerprintHabit(habit));
+        }
+
+        if (TryReadId(arguments, "goal_id", out var goalId))
+        {
+            var goals = await goalRepository.FindAsync(
+                item => item.Id == goalId && item.UserId == userId, cancellationToken);
+            var goal = goals.FirstOrDefault();
+            return goal is null ? null : new AgentPreviewTarget(
+                goal.Id, goal.Title, GoalValues(goal), FingerprintGoal(goal));
+        }
+
+        if (TryReadId(arguments, "tag_id", out var tagId))
+        {
+            var tags = await tagRepository.FindAsync(
+                item => item.Id == tagId && item.UserId == userId, cancellationToken);
+            var tag = tags.FirstOrDefault();
+            return tag is null ? null : new AgentPreviewTarget(
+                tag.Id, tag.Name, TagValues(tag), FingerprintTag(tag));
+        }
+
+        return null;
+    }
+
+    private static bool TryReadId(JsonElement arguments, string field, out Guid id)
+    {
+        id = Guid.Empty;
+        return arguments.TryGetProperty(field, out var value)
+            && value.ValueKind == JsonValueKind.String
+            && Guid.TryParse(value.GetString(), out id);
+    }
+
+    private static Dictionary<string, string?> HabitValues(Habit habit) => new(StringComparer.Ordinal)
+    {
+        ["title"] = habit.Title,
+        ["description"] = habit.Description,
+        ["emoji"] = habit.Emoji,
+        ["frequency_unit"] = AgentArgumentPreview.Format(habit.FrequencyUnit),
+        ["frequency_quantity"] = AgentArgumentPreview.Format(habit.FrequencyQuantity),
+        ["interval_weeks"] = AgentArgumentPreview.Format(habit.IntervalWeeks),
+        ["days"] = string.Join(", ", habit.Days),
+        ["due_date"] = AgentArgumentPreview.Format(habit.DueDate),
+        ["end_date"] = AgentArgumentPreview.Format(habit.EndDate),
+        ["due_time"] = AgentArgumentPreview.Format(habit.DueTime),
+        ["is_bad_habit"] = AgentArgumentPreview.Format(habit.IsBadHabit),
+        ["is_flexible"] = AgentArgumentPreview.Format(habit.IsFlexible),
+        ["reminder_enabled"] = AgentArgumentPreview.Format(habit.ReminderEnabled),
+        ["reminder_times"] = string.Join(", ", habit.ReminderTimes),
+        ["checklist_items"] = string.Join(", ", habit.ChecklistItems.Select(FormatChecklistItem))
+    };
+
+    private static bool HasTagArguments(JsonElement arguments) =>
+        arguments.TryGetProperty("tag_names", out _) || arguments.TryGetProperty("tag_ids", out _);
+
+    private static string? FormatTags(Habit habit) => habit.Tags.Count == 0
+        ? null
+        : string.Join(", ", habit.Tags.Select(tag => tag.Name).Order(StringComparer.Ordinal));
+
+    private static Dictionary<string, string?> GoalValues(Goal goal) => new(StringComparer.Ordinal)
+    {
+        ["title"] = goal.Title,
+        ["description"] = goal.Description,
+        ["target_value"] = AgentArgumentPreview.Format(goal.TargetValue),
+        ["current_value"] = AgentArgumentPreview.Format(goal.CurrentValue),
+        ["unit"] = goal.Unit,
+        ["deadline"] = AgentArgumentPreview.Format(goal.Deadline),
+        ["status"] = AgentArgumentPreview.Format(goal.Status)
+    };
+
+    private static Dictionary<string, string?> TagValues(Tag tag) => new(StringComparer.Ordinal)
+    {
+        ["name"] = tag.Name,
+        ["color"] = tag.Color
+    };
+
+    private static string FingerprintGoal(Goal goal) => AgentOperationFingerprint.Compute(
+        goal.Id.ToString(), JsonSerializer.Serialize(new
+        {
+            goal.UpdatedAtUtc, goal.Title, goal.Description, goal.TargetValue,
+            goal.CurrentValue, goal.Unit, goal.Status, goal.Deadline, goal.IsDeleted
+        }));
+
+    private static string FingerprintTag(Tag tag) => AgentOperationFingerprint.Compute(
+        tag.Id.ToString(), JsonSerializer.Serialize(new
+        {
+            tag.UpdatedAtUtc, tag.Name, tag.Color, tag.IsDeleted
+        }));
 
     private static PendingOperationChange BuildActionChange(Habit habit, string operationId,
         JsonElement arguments, JsonElement revisedItems, bool isRevised, DateOnly today)

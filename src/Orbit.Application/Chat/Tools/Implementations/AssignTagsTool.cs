@@ -93,8 +93,15 @@ public class AssignTagsTool(
     private Task<Habit?> LoadHabitAsync(Guid habitId, Guid userId, CancellationToken ct) =>
         habitRepository.FindOneTrackedAsync(
             h => h.Id == habitId && h.UserId == userId,
-            q => q.Include(h => h.Tags),
+            IncludeTags,
             ct);
+
+    /// <summary>
+    /// The tags this tool replaces. The approval preview reads the habit through the same
+    /// include, so the old value it shows is the set of tags that the replacement removes.
+    /// </summary>
+    internal static IQueryable<Habit> IncludeTags(IQueryable<Habit> query) =>
+        query.Include(h => h.Tags);
 
     private async Task<ToolResult> ReplaceTagsAsync(Habit habit, List<Tag> resolvedTags, CancellationToken ct)
     {

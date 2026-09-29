@@ -122,22 +122,14 @@ internal static class BulkHabitToolArguments
         };
         if (updates.EnumerateObject().Any(property => !allowed.Contains(property.Name)))
             return (null, "updates contains an unsupported field.");
-        var kindError = ValidateUpdateKinds(updates);
-        if (kindError is not null)
-            return (null, kindError);
+        var fieldError = CheckHabitFields(updates);
+        if (fieldError is not null)
+            return (null, fieldError);
 
         var dateResult = ParseNullableDate(updates, "due_date", allowNull: false);
-        if (dateResult.Error is not null)
-            return (null, dateResult.Error);
         var endDateResult = ParseNullableDate(updates, "end_date", allowNull: true);
-        if (endDateResult.Error is not null)
-            return (null, endDateResult.Error);
         var timeResult = ParseNullableTime(updates, "due_time");
-        if (timeResult.Error is not null)
-            return (null, timeResult.Error);
         var frequencyResult = ParseFrequency(updates);
-        if (frequencyResult.Error is not null)
-            return (null, frequencyResult.Error);
 
         var changes = new BulkHabitChanges(
             HasTitle: updates.TryGetProperty("title", out _),
@@ -175,6 +167,18 @@ internal static class BulkHabitToolArguments
 
         return (changes, null);
     }
+
+    /// <summary>
+    /// The strict read of the habit fields: every value has the kind, the enum member, the
+    /// weekday name and the date or time format that the habit writes expect. Fields that are
+    /// not habit fields are left to their tool.
+    /// </summary>
+    public static string? CheckHabitFields(JsonElement fields) =>
+        ValidateUpdateKinds(fields)
+            ?? ParseNullableDate(fields, "due_date", allowNull: false).Error
+            ?? ParseNullableDate(fields, "end_date", allowNull: true).Error
+            ?? ParseNullableTime(fields, "due_time").Error
+            ?? ParseFrequency(fields).Error;
 
     public static object FilterSchema() => new
     {

@@ -145,6 +145,12 @@ public interface IDestructiveOperationPreviewer
 {
     Task<PendingOperationChangePreview?> PreviewAsync(Guid userId, string operationId,
         JsonElement arguments, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reports whether this previewer owns <paramref name="operationId"/>. An operation it does
+    /// not own falls back to the preview built from the arguments of the held write.
+    /// </summary>
+    bool Handles(string operationId);
 }
 
 public interface IDistributedRateLimitService

@@ -41,6 +41,16 @@ public partial class AgentOperationExecutor(
         var escalatedRequirement = await stepUpAuthorizationBridge.GetRequiredConfirmationAsync(
             declaredCapability.Id,
             cancellationToken);
+        var tool = toolRegistry.GetTool(operation.Id);
+        if (AgentChatWriteHold.Applies(
+                request.Surface,
+                operation,
+                escalatedRequirement ?? declaredCapability.ConfirmationRequirement)
+            && !AsksClarificationFirst(tool, arguments))
+        {
+            escalatedRequirement = AgentConfirmationRequirement.FreshConfirmation;
+        }
+
         var capability = escalatedRequirement is { } required
             ? declaredCapability with { ConfirmationRequirement = required }
             : declaredCapability;
@@ -72,7 +82,6 @@ public partial class AgentOperationExecutor(
         if (policyDecision.Status == AgentPolicyDecisionStatus.ConfirmationRequired)
             return await RequireConfirmationAsync(execution, policyDecision, cancellationToken);
 
-        var tool = toolRegistry.GetTool(operation.Id);
         if (tool is null)
             return AgentOperationResponseFactory.MissingTool(
                 execution.Operation.Id,
@@ -97,6 +106,9 @@ public partial class AgentOperationExecutor(
 
         return await ExecuteToolAsync(tool, execution, policyDecision, executionCancellationToken);
     }
+
+    private static bool AsksClarificationFirst(IAiTool? tool, JsonElement arguments) =>
+        tool is IClarificationPrecheckTool precheck && precheck.NeedsClarification(arguments);
 
     private async Task<AgentExecuteOperationResponse> DenyUnknownOperationAsync(
         AgentExecuteOperationRequest request,
