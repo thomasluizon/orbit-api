@@ -236,7 +236,8 @@ public partial class OAuthController(
             return RedirectToAuthorize(pending, "failed");
 
         var result = await mediator.Send(new GoogleCodeAuthCommand(
-            code, pending.GoogleCodeVerifier, pending.GoogleRedirectUri, pending.Language), ct);
+            code, pending.GoogleCodeVerifier, pending.GoogleRedirectUri, pending.Language,
+            PersistGoogleTokens: false), ct);
         if (result.IsFailure)
             return RedirectToAuthorize(pending, "failed");
 

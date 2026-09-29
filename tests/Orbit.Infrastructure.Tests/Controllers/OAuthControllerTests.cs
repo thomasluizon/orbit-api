@@ -210,7 +210,8 @@ public class OAuthControllerTests : IDisposable
         await _mediator.Received(1).Send(Arg.Is<GoogleCodeAuthCommand>(command =>
             command.Code == "google-code"
             && command.CodeVerifier == pending.GoogleCodeVerifier
-            && command.RedirectUri == pending.GoogleRedirectUri), Arg.Any<CancellationToken>());
+            && command.RedirectUri == pending.GoogleRedirectUri
+            && !command.PersistGoogleTokens), Arg.Any<CancellationToken>());
 
         var token = await _controller.Token("authorization_code", ExtractQueryParam(url, "code"),
             verifier, "https://claude.ai/callback", CancellationToken.None);
