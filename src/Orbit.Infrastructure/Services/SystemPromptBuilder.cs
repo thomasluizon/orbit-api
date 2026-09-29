@@ -60,5 +60,8 @@ public class SystemPromptBuilder : ISystemPromptBuilder
             request.UserToday,
             request.HabitMetrics,
             request.ActiveGoals,
-            request.IsHabitIndexPartial);
+            request.IsHabitIndexPartial,
+            request.TodayHabitIds,
+            request.OverdueHabitIds,
+            request.DoneTodayHabitIds);
 }
