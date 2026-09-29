@@ -31,6 +31,8 @@ namespace Orbit.Infrastructure.Migrations
                               AND (
                                   "Title" LIKE 'Conquista Desbloqueada: %'
                                   OR "Title" LIKE 'Achievement Unlocked: %'
+                                  OR "Title" LIKE 'Subiu de nivel! Agora voce e Nivel %'
+                                  OR "Title" LIKE 'Subiu de nível! Agora você é Nível %'
                                   OR "Title" LIKE 'Subiu de nível! Agora você está no nível %'
                                   OR "Title" LIKE 'Level Up! You''re now Level %'
                               )
@@ -49,12 +51,22 @@ namespace Orbit.Infrastructure.Migrations
                                     'Nova conquista: ' || substring(notification."Title" FROM length('Conquista Desbloqueada: ') + 1)
                                 WHEN notification."Title" LIKE 'Achievement Unlocked: %' THEN
                                     'New achievement: ' || substring(notification."Title" FROM length('Achievement Unlocked: ') + 1)
+                                WHEN notification."Title" LIKE 'Subiu de nivel! Agora voce e Nivel %' THEN
+                                    'Você chegou ao nível ' || substring(notification."Title" FROM length('Subiu de nivel! Agora voce e Nivel ') + 1)
+                                WHEN notification."Title" LIKE 'Subiu de nível! Agora você é Nível %' THEN
+                                    'Você chegou ao nível ' || substring(notification."Title" FROM length('Subiu de nível! Agora você é Nível ') + 1)
                                 WHEN notification."Title" LIKE 'Subiu de nível! Agora você está no nível %' THEN
                                     'Você chegou ao nível ' || substring(notification."Title" FROM length('Subiu de nível! Agora você está no nível ') + 1)
                                 ELSE
                                     'You reached level ' || substring(notification."Title" FROM length('Level Up! You''re now Level ') + 1)
                             END,
                             "Body" = CASE
+                                WHEN notification."Title" LIKE 'Subiu de nivel! Agora voce e Nivel %' THEN
+                                    'O nível ' || substring(notification."Title" FROM length('Subiu de nivel! Agora voce e Nivel ') + 1)
+                                    || ' se chama ' || regexp_replace(notification."Body", '^Voce alcancou (.*)! Continue assim!$', '\1') || '.'
+                                WHEN notification."Title" LIKE 'Subiu de nível! Agora você é Nível %' THEN
+                                    'O nível ' || substring(notification."Title" FROM length('Subiu de nível! Agora você é Nível ') + 1)
+                                    || ' se chama ' || regexp_replace(notification."Body", '^Você alcançou (.*)! Continue assim!$', '\1') || '.'
                                 WHEN notification."Title" LIKE 'Subiu de nível! Agora você está no nível %' THEN
                                     'O nível ' || substring(notification."Title" FROM length('Subiu de nível! Agora você está no nível ') + 1)
                                     || ' se chama ' || regexp_replace(notification."Body", '^Você alcançou (.*)! Continue assim!$', '\1') || '.'
