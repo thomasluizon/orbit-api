@@ -619,6 +619,35 @@ public class AiControllerTests
             Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task ResolveClarification_AsksForTheChangePreview()
+    {
+        StubValidatorOutcome(isValid: true);
+        StubPendingClarification(
+            toolName: "create_habit",
+            partialArgs: "{\"title\":\"Morning habit\"}",
+            allowedValues: ["{\"frequency_unit\":\"Day\",\"frequency_quantity\":1}"]);
+        _pendingClarificationStore
+            .MarkResolvedAsync(Arg.Any<Guid>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(true);
+        _operationExecutor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new AgentExecuteOperationResponse(new AgentOperationResult(
+                OperationId: "create_habit",
+                SourceName: "create_habit",
+                RiskClass: AgentRiskClass.Low,
+                ConfirmationRequirement: AgentConfirmationRequirement.FreshConfirmation,
+                Status: AgentOperationStatus.PendingConfirmation)));
+
+        await _controller.ResolveClarification(
+            Guid.NewGuid(),
+            new ResolveClarificationRequest("{\"frequency_unit\":\"Day\",\"frequency_quantity\":1}"),
+            CancellationToken.None);
+
+        await _operationExecutor.Received(1).ExecuteAsync(
+            Arg.Is<AgentExecuteOperationRequest>(request => request.IncludeChangePreview),
+            Arg.Any<CancellationToken>());
+    }
+
     private void StubValidatorOutcome(bool isValid, string? propertyName = null, string? message = null)
     {
         var validationResult = isValid

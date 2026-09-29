@@ -221,6 +221,24 @@ public class AgentChatWriteHoldTests : IDisposable
         _pendingOperationStore.GetExecution(_userId, held.PendingOperation.Id).Should().BeNull();
     }
 
+    [Fact]
+    public async Task ExecuteAsync_WrongConfirmationToken_WritesNothing()
+    {
+        var tool = new StubTool("create_habit");
+        var executor = CreateExecutor(new AiToolRegistry([tool]));
+        var arguments = Parse("""{"title":"Beber agua","frequency_unit":"Day"}""");
+        var held = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
+            _userId, "create_habit", arguments, AgentExecutionSurface.Chat, AgentAuthMethod.Jwt));
+        _pendingOperationStore.Confirm(_userId, held.PendingOperation!.Id);
+
+        var executed = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
+            _userId, "create_habit", arguments, AgentExecutionSurface.Chat, AgentAuthMethod.Jwt,
+            ConfirmationToken: "agc_not_the_issued_token"));
+
+        executed.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation);
+        tool.Calls.Should().Be(0);
+    }
+
     private AgentOperationExecutor CreateExecutor(AiToolRegistry toolRegistry)
     {
         var ownership = Substitute.For<IAgentTargetOwnershipService>();
