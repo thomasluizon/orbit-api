@@ -132,7 +132,7 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         using var ms = new MemoryStream();
         await audio.CopyToAsync(ms, cancellationToken);
 
-        var result = await mediator.Send(new TranscribeAudioCommand(ms.ToArray(), audio.FileName), cancellationToken);
+        var result = await mediator.Send(new TranscribeAudioCommand(HttpContext.GetUserId(), ms.ToArray(), audio.FileName), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : result.ToErrorResult();
     }
 
