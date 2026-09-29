@@ -2244,9 +2244,45 @@
         "tags": [
           "Calendar"
         ],
+        "parameters": [
+          {
+            "name": "includeImported",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CalendarEventItem"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CalendarEventItem"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CalendarEventItem"
+                  }
+                }
+              }
+            }
           },
           "400": {
             "description": "Bad Request",
@@ -14407,6 +14443,113 @@
               "string"
             ],
             "format": "date-time"
+          }
+        }
+      },
+      "CalendarEventItem": {
+        "required": [
+          "id",
+          "title",
+          "description",
+          "startDate",
+          "startTime",
+          "endTime",
+          "isRecurring",
+          "recurrenceRule",
+          "reminders"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "startDate": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "startTime": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "endTime": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isRecurring": {
+            "type": "boolean"
+          },
+          "recurrenceRule": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "reminders": {
+            "type": "array",
+            "items": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          "startUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "calendarId": {
+            "type": "string",
+            "default": ""
+          },
+          "calendarName": {
+            "type": "string",
+            "default": ""
+          },
+          "endUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "recurrenceTimeZone": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isImported": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "importedHabitId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },

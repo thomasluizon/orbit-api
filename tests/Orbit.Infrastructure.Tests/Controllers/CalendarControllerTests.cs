@@ -41,6 +41,22 @@ public class CalendarControllerTests
 
         result.Should().BeOfType<OkObjectResult>();
         await _mediator.DidNotReceive().Send(Arg.Any<RunCalendarAutoSyncCommand>(), Arg.Any<CancellationToken>());
+        await _mediator.Received(1).Send(
+            Arg.Is<GetCalendarEventsQuery>(query => query.UserId == UserId && !query.IncludeImported),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetEvents_IncludeImported_ForwardsTheOptIn()
+    {
+        _mediator.Send(Arg.Any<GetCalendarEventsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new List<CalendarEventItem>()));
+
+        await _controller.GetEvents(CancellationToken.None, includeImported: true);
+
+        await _mediator.Received(1).Send(
+            Arg.Is<GetCalendarEventsQuery>(query => query.UserId == UserId && query.IncludeImported),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
