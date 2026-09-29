@@ -5,7 +5,7 @@ namespace Orbit.Api.OAuth;
 public static class OAuthLoginPage
 {
     public static string Render(string clientId, string redirectUri, string state,
-        string codeChallenge, string codeChallengeMethod, string googleState, string? nonce = null,
+        string codeChallenge, string codeChallengeMethod, string? nonce = null,
         string? error = null, string language = "en")
     {
         var oauthParamsJson = JsonSerializer.Serialize(new
@@ -17,7 +17,14 @@ public static class OAuthLoginPage
             codeChallengeMethod,
             nonce
         });
-        var googleStartUrl = System.Net.WebUtility.HtmlEncode($"/oauth/google/start?state={Uri.EscapeDataString(googleState)}");
+        var googleStartQuery = $"client_id={Uri.EscapeDataString(clientId)}"
+            + $"&redirect_uri={Uri.EscapeDataString(redirectUri)}"
+            + $"&state={Uri.EscapeDataString(state)}"
+            + $"&code_challenge={Uri.EscapeDataString(codeChallenge)}"
+            + $"&code_challenge_method={Uri.EscapeDataString(codeChallengeMethod)}";
+        if (nonce is not null)
+            googleStartQuery += $"&nonce={Uri.EscapeDataString(nonce)}";
+        var googleStartUrl = System.Net.WebUtility.HtmlEncode($"/oauth/google/start?{googleStartQuery}");
         var errorJson = JsonSerializer.Serialize(error);
 
         return $$"""

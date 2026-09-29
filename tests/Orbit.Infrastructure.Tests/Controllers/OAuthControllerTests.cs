@@ -2,6 +2,7 @@ using NSubstitute.ExceptionExtensions;
 using Microsoft.EntityFrameworkCore;
 using System.Net;
 using System.Data.Common;
+using System.Reflection;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
@@ -16,6 +17,7 @@ using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Api.Controllers;
 using Orbit.Api.OAuth;
+using Orbit.Api.RateLimiting;
 using Orbit.Application.Auth.Commands;
 using Orbit.Application.Auth.Queries;
 using Orbit.Application.Common;
@@ -146,37 +148,83 @@ public class OAuthControllerTests : IDisposable
 
         var content = result.Should().BeOfType<ContentResult>().Subject;
         content.ContentType.Should().Be("text/html");
-        content.Content.Should().Contain("/oauth/google/start?state=");
+        content.Content.Should().Contain("/oauth/google/start?client_id=");
         content.Content.Should().NotContain("google.accounts.id");
     }
 
     [Fact]
-    public void GoogleStart_RedirectsToGoogleWithBoundStateAndPkce()
+    public async Task GoogleStart_RedirectsToGoogleWithFreshStateAndItsOwnPkce()
     {
-        var state = CreatePendingGoogleState();
-        var pending = _authStore.GetGoogleRequest(state);
-
-        var redirect = _controller.GoogleStart(state).Should().BeOfType<RedirectResult>().Subject;
-        var url = redirect.Url!;
+        var url = StartGoogle(nonce: "mcp-nonce").Should().BeOfType<RedirectResult>().Subject.Url!;
 
         url.Should().StartWith("https://accounts.google.com/o/oauth2/v2/auth?");
         ExtractQueryParam(url, "client_id").Should().Be("test-google-client-id");
         ExtractQueryParam(url, "redirect_uri").Should().Be("https://api.useorbit.org/oauth/google/callback");
         ExtractQueryParam(url, "response_type").Should().Be("code");
         ExtractQueryParam(url, "scope").Should().Be("openid email profile");
-        ExtractQueryParam(url, "state").Should().Be(state);
         ExtractQueryParam(url, "code_challenge_method").Should().Be("S256");
         ExtractQueryParam(url, "prompt").Should().Be("select_account");
-        ExtractQueryParam(url, "code_challenge").Should().Be(pending!.GoogleCodeChallenge);
+        ExtractQueryParam(url, "state").Should().NotBe("client-state");
         url.Should().NotContain("mcp-challenge");
+
+        _mediator.Send(Arg.Any<GoogleCodeAuthCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new LoginResponse(UserId, "jwt", "Alex", "alex@example.com")));
+        await _controller.GoogleCallback(
+            ExtractQueryParam(url, "state"), "google-code", null, CancellationToken.None);
+
+        await _mediator.Received(1).Send(Arg.Is<GoogleCodeAuthCommand>(command =>
+            Challenge(command.CodeVerifier) == ExtractQueryParam(url, "code_challenge")),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public void GoogleStart_AllocatesExactlyOneSingleUseRequest()
+    {
+        var url = StartGoogle().Should().BeOfType<RedirectResult>().Subject.Url!;
+        var googleState = ExtractQueryParam(url, "state");
+
+        _authStore.ConsumeGoogleRequest(googleState).Should().NotBeNull();
+        _authStore.ConsumeGoogleRequest(googleState).Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("", "https://claude.ai/callback", "client-state", "mcp-challenge", "S256")]
+    [InlineData("client-123", "https://claude.ai/callback", "", "mcp-challenge", "S256")]
+    [InlineData("client-123", "https://claude.ai/callback", "client-state", "", "S256")]
+    [InlineData("client-123", "https://claude.ai/callback", "client-state", "mcp-challenge", "plain")]
+    [InlineData("client-123", "https://evil.example/callback", "client-state", "mcp-challenge", "S256")]
+    [InlineData("client-123", "http://claude.ai/callback", "client-state", "mcp-challenge", "S256")]
+    public void GoogleStart_RevalidatesTheRequestBeforeAllocating(
+        string clientId, string redirectUri, string clientState, string challenge, string method)
+    {
+        _controller.GoogleStart(clientId, redirectUri, clientState, challenge, method)
+            .Should().BeOfType<ContentResult>().Which.StatusCode.Should().Be(400);
+    }
+
+    [Fact]
+    public void GoogleStart_CapReachedReturnsUnavailableAndKeepsEmailSignIn()
+    {
+        for (var i = 0; i < OAuthAuthorizationStore.MaxPendingGoogleRequests; i++)
+        {
+            _authStore.TryCreateGoogleRequest("client", "https://claude.ai/callback", "client-state",
+                "mcp-challenge", null, "https://api.useorbit.org/oauth/google/callback", "en")
+                .Should().NotBeNull();
+        }
+
+        var redirect = StartGoogle().Should().BeOfType<RedirectResult>().Subject;
+
+        ExtractQueryParam(redirect.Url!, "google_error").Should().Be("unavailable");
+        var page = _controller.Authorize("client-123", "https://claude.ai/callback", "code",
+            "client-state", "mcp-challenge", "S256", google_error: "unavailable")
+            .Should().BeOfType<ContentResult>().Subject;
+        page.Content.Should().Contain("Google sign-in is unavailable");
+        page.Content.Should().Contain("/oauth/send-code");
     }
 
     [Fact]
     public async Task GoogleCallback_RejectsUnknownAndReusedState()
     {
-        var state = CreatePendingGoogleState();
-        _controller.GoogleStart("forged-state").Should().BeOfType<ContentResult>()
-            .Which.StatusCode.Should().Be(400);
+        var state = CreatePendingGoogleRequest().GoogleState;
         (await _controller.GoogleCallback("forged-state", "code", null, CancellationToken.None))
             .Should().BeOfType<ContentResult>().Which.StatusCode.Should().Be(400);
 
@@ -190,7 +238,7 @@ public class OAuthControllerTests : IDisposable
     [Fact]
     public async Task GoogleCallback_RejectsExpiredState()
     {
-        var state = CreatePendingGoogleState();
+        var state = CreatePendingGoogleRequest().GoogleState;
         _timeProvider.Advance(TimeSpan.FromMinutes(6));
 
         (await _controller.GoogleCallback(state, "google-code", null, CancellationToken.None))
@@ -202,12 +250,12 @@ public class OAuthControllerTests : IDisposable
     public async Task GoogleCallback_SuccessIssuesMcpCodeAcceptedForOriginalVerifierAndRedirectUri()
     {
         var (verifier, challenge) = GeneratePkce();
-        var state = CreatePendingGoogleState(challenge, "client-state&code=forged", "mcp-nonce");
-        var pending = _authStore.GetGoogleRequest(state)!;
+        var pending = CreatePendingGoogleRequest(challenge, "client-state&code=forged", "mcp-nonce");
         _mediator.Send(Arg.Any<GoogleCodeAuthCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new LoginResponse(UserId, "jwt", "Alex", "alex@example.com")));
 
-        var result = await _controller.GoogleCallback(state, "google-code", null, CancellationToken.None);
+        var result = await _controller.GoogleCallback(
+            pending.GoogleState, "google-code", null, CancellationToken.None);
 
         var url = result.Should().BeOfType<RedirectResult>().Subject.Url!;
         url.Should().StartWith("https://claude.ai/callback?code=");
@@ -232,7 +280,7 @@ public class OAuthControllerTests : IDisposable
     public async Task GoogleCallback_CancelledConsentReturnsLocalizedErrorWithEmailPath()
     {
         _controller.HttpContext.Request.Headers.AcceptLanguage = "pt-BR,pt;q=0.9";
-        var state = CreatePendingGoogleState();
+        var state = CreatePendingGoogleRequest().GoogleState;
 
         var redirect = (await _controller.GoogleCallback(state, null, "access_denied", CancellationToken.None))
             .Should().BeOfType<RedirectResult>().Subject;
@@ -248,7 +296,7 @@ public class OAuthControllerTests : IDisposable
     [Fact]
     public async Task GoogleCallback_ExchangeFailureReturnsAuthorizePageWithError()
     {
-        var state = CreatePendingGoogleState();
+        var state = CreatePendingGoogleRequest().GoogleState;
         _mediator.Send(Arg.Any<GoogleCodeAuthCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<LoginResponse>(ErrorMessages.GoogleCodeExchangeFailed));
 
@@ -263,7 +311,6 @@ public class OAuthControllerTests : IDisposable
     [InlineData("test-google-client-id", false)]
     public void GoogleStart_MissingConfigurationReturnsUnavailable(string clientId, bool callbackAllowed)
     {
-        var state = CreatePendingGoogleState(nonce: "preserved-nonce");
         var settings = Options.Create(new GoogleSettings
         {
             ClientId = clientId,
@@ -275,7 +322,8 @@ public class OAuthControllerTests : IDisposable
             ControllerContext = _controller.ControllerContext
         };
 
-        var redirect = controller.GoogleStart(state).Should().BeOfType<RedirectResult>().Subject;
+        var redirect = controller.GoogleStart("client-123", "https://claude.ai/callback", "client-state",
+            "mcp-challenge", "S256", "preserved-nonce").Should().BeOfType<RedirectResult>().Subject;
         ExtractQueryParam(redirect.Url!, "google_error").Should().Be("unavailable");
         ExtractQueryParam(redirect.Url!, "nonce").Should().Be("preserved-nonce");
     }
@@ -303,9 +351,9 @@ public class OAuthControllerTests : IDisposable
     [Fact]
     public async Task GoogleCallback_RejectsStoredRedirectUriThatIsNoLongerAllowed()
     {
-        var state = _authStore.CreateGoogleRequest("client-123", "https://evil.example/callback",
+        var state = _authStore.TryCreateGoogleRequest("client-123", "https://evil.example/callback",
             "client-state", "mcp-challenge", null,
-            "https://api.useorbit.org/oauth/google/callback", "en");
+            "https://api.useorbit.org/oauth/google/callback", "en")!.GoogleState;
         _mediator.Send(Arg.Any<GoogleCodeAuthCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new LoginResponse(UserId, "jwt", "Alex", "alex@example.com")));
 
@@ -1156,17 +1204,51 @@ public class OAuthControllerTests : IDisposable
         JsonSerializer.Serialize(ok.Value).Should().Contain("google-nonce-42");
     }
 
-
-    private string CreatePendingGoogleState(string challenge = "mcp-challenge",
-        string clientState = "client-state", string? nonce = null)
+    [Fact]
+    public void Authorize_PageViewAllocatesNoPendingGoogleRequest()
     {
         var page = _controller.Authorize("client-123", "https://claude.ai/callback", "code",
-            clientState, challenge, "S256", nonce).Should().BeOfType<ContentResult>().Subject;
-        var match = System.Text.RegularExpressions.Regex.Match(page.Content!,
-            "/oauth/google/start\\?state=([^\"&]+)");
-        match.Success.Should().BeTrue();
-        return Uri.UnescapeDataString(match.Groups[1].Value);
+            "client-state", "mcp-challenge", "S256", "mcp-nonce")
+            .Should().BeOfType<ContentResult>().Subject;
+
+        var link = System.Text.RegularExpressions.Regex.Match(page.Content!,
+            "/oauth/google/start\\?([^\"]+)").Groups[1].Value;
+        link.Should().NotBeEmpty();
+
+        foreach (var pair in System.Net.WebUtility.HtmlDecode(link).Split('&'))
+        {
+            var value = Uri.UnescapeDataString(pair.Split('=', 2)[1]);
+            _authStore.ConsumeGoogleRequest(value).Should().BeNull();
+        }
     }
+
+    [Theory]
+    [InlineData("/oauth/authorize")]
+    [InlineData("/oauth/google/start")]
+    public void OAuthBrowserRoutes_CarryTheAuthRateLimit(string template)
+    {
+        var action = typeof(OAuthController).GetMethods()
+            .SingleOrDefault(method => method.GetCustomAttributes(typeof(HttpGetAttribute), false)
+                .Cast<HttpGetAttribute>().Any(attribute => attribute.Template == template));
+
+        action.Should().NotBeNull();
+        var limit = CustomAttributeData.GetCustomAttributes(action!)
+            .Should().ContainSingle(data => data.AttributeType == typeof(DistributedRateLimitAttribute)).Subject;
+        limit.ConstructorArguments[0].Value.Should().Be("auth");
+    }
+
+    private IActionResult StartGoogle(string challenge = "mcp-challenge",
+        string clientState = "client-state", string? nonce = null) =>
+        _controller.GoogleStart("client-123", "https://claude.ai/callback", clientState, challenge, "S256", nonce);
+
+    private GoogleAuthorizationRequest CreatePendingGoogleRequest(string challenge = "mcp-challenge",
+        string clientState = "client-state", string? nonce = null) =>
+        _authStore.TryCreateGoogleRequest("client-123", "https://claude.ai/callback", clientState,
+            challenge, nonce, "https://api.useorbit.org/oauth/google/callback", "en")!;
+
+    private static string Challenge(string verifier) => Convert.ToBase64String(
+            System.Security.Cryptography.SHA256.HashData(Encoding.ASCII.GetBytes(verifier)))
+        .Replace("+", "-").Replace("/", "_").TrimEnd('=');
 
     private static (string verifier, string challenge) GeneratePkce()
     {
