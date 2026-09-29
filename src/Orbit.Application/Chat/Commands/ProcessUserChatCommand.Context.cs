@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
+using Orbit.Application.Chat;
+using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -23,7 +25,34 @@ public partial class ProcessUserChatCommandHandler
             cancellationToken);
         var activeHabits = userHabits.Where(habit => !habit.IsCompleted).ToList();
         var userToday = await execution.UserDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-        var promptHabitIndex = BuildPromptHabitIndex(userHabits, userToday);
+        var weekStartDay = await execution.UserDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
+        var logFrom = userToday.AddDays(-AppConstants.MaxRangeDays);
+        var activeIds = activeHabits.Select(habit => habit.Id).ToArray();
+        var logDays = await execution.ScheduleLogReader.ReadDaysAsync(
+            activeIds, logFrom, userToday, cancellationToken);
+        var logFacts = new HabitScheduleLogFacts(logDays);
+        var dueDateResolution = activeHabits
+            .Where(habit => habit.DueDate >= logFrom
+                && habit.DueDate <= userToday
+                && logFacts.ResolvedDates(habit.Id).Contains(habit.DueDate))
+            .Select(habit => habit.Id)
+            .ToHashSet();
+        var oldDueDateIds = activeHabits
+            .Where(habit => habit.FrequencyUnit is not null
+                && !habit.IsFlexible
+                && !habit.IsBadHabit
+                && habit.DueDate < logFrom)
+            .Select(habit => habit.Id)
+            .ToArray();
+        if (oldDueDateIds.Length > 0)
+        {
+            var olderResolutions = await execution.ScheduleLogReader.ReadResolvedDueDateIdsAsync(
+                oldDueDateIds, cancellationToken);
+            dueDateResolution.UnionWith(olderResolutions);
+        }
+        var todayFacts = HabitTodaySnapshot.Build(
+            activeHabits, userToday, weekStartDay, logDays, dueDateResolution);
+        var promptHabitIndex = BuildPromptHabitIndex(userHabits, userToday, todayFacts);
         if (promptHabitIndex.IsPartial)
         {
             LogPromptHabitIndexTruncated(
@@ -84,15 +113,18 @@ public partial class ProcessUserChatCommandHandler
             checklistTemplates,
             enabledFeatureFlags,
             userToday,
+            todayFacts,
             dbStopwatch.ElapsedMilliseconds));
     }
 
     internal static PromptHabitIndex BuildPromptHabitIndex(
         IReadOnlyCollection<Habit> userHabits,
-        DateOnly userToday)
+        DateOnly userToday,
+        HabitTodaySnapshot? todayFacts = null)
     {
+        todayFacts ??= HabitTodaySnapshot.FromLoadedHabits(userHabits.ToList(), userToday);
         if (userHabits.Count == 0)
-            return new PromptHabitIndex([], false, 0);
+            return new PromptHabitIndex([], false, 0, todayFacts.DoneTodayIds);
 
         var habitsById = userHabits.ToDictionary(habit => habit.Id);
         var allIndexedHabitIds = new HashSet<Guid>();
@@ -114,13 +146,14 @@ public partial class ProcessUserChatCommandHandler
             return new PromptHabitIndex(
                 userHabits.Where(habit => allIndexedHabitIds.Contains(habit.Id)).ToList(),
                 false,
-                allIndexedHabitIds.Count);
+                allIndexedHabitIds.Count,
+                todayFacts.DoneTodayIds);
         }
 
         var selectedHabitIds = new HashSet<Guid>();
         var prioritizedActiveHabits = userHabits
             .Where(habit => !habit.IsCompleted)
-            .OrderBy(habit => GetPromptPriority(habit, userToday))
+            .OrderBy(habit => GetPromptPriority(habit, todayFacts))
             .ThenBy(habit => habit.Position ?? int.MaxValue)
             .ThenBy(habit => habit.Id)
             .ToList();
@@ -141,15 +174,16 @@ public partial class ProcessUserChatCommandHandler
         return new PromptHabitIndex(
             userHabits.Where(habit => selectedHabitIds.Contains(habit.Id)).ToList(),
             true,
-            allIndexedHabitIds.Count);
+            allIndexedHabitIds.Count,
+            todayFacts.DoneTodayIds);
     }
 
-    private static int GetPromptPriority(Habit habit, DateOnly userToday)
+    private static int GetPromptPriority(Habit habit, HabitTodaySnapshot todayFacts)
     {
-        if (!habit.IsGeneral && habit.DueDate < userToday)
+        if (todayFacts.OverdueIds.Contains(habit.Id))
             return 0;
 
-        return !habit.IsGeneral && habit.DueDate == userToday ? 1 : 2;
+        return todayFacts.TodayIds.Contains(habit.Id) ? 1 : 2;
     }
 
     private static List<Habit> BuildMissingHabitPath(
@@ -182,7 +216,8 @@ public partial class ProcessUserChatCommandHandler
     internal sealed record PromptHabitIndex(
         List<Habit> Habits,
         bool IsPartial,
-        int OriginalEntryCount);
+        int OriginalEntryCount,
+        IReadOnlySet<Guid> DoneTodayHabitIds);
 
     private sealed record ChatContext(
         List<Habit> ActiveHabits,
@@ -197,5 +232,6 @@ public partial class ProcessUserChatCommandHandler
         IReadOnlyList<ChecklistTemplate> ChecklistTemplates,
         IReadOnlyList<string> EnabledFeatureFlags,
         DateOnly UserToday,
+        HabitTodaySnapshot TodayFacts,
         long ContextLoadMilliseconds);
 }

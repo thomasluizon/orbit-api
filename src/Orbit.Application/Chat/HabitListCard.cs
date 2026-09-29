@@ -22,12 +22,13 @@ public static partial class HabitListCardBuilder
     public const string StatusOverdue = "overdue";
     public const string StatusGeneral = "general";
     public const string StatusNone = "none";
+    public const string StatusDone = "done";
 
     public const string PromptInstruction = """
         ## Habit list rendering (this client)
         This app can display the user's habits as a live, interactive card. When the user asks to see or list their habits, or what is due, scheduled, left, or overdue (for example "what are my habits today", "show my habits", "list everything", "o que tenho pra hoje"), do NOT write the habits out as text and do NOT enumerate them. This rule overrides any earlier instruction to list habits from the index.
         Instead reply with a brief one-line intro and then, on its own final line, exactly ONE directive token:
-        - [[orbit:habits:today]] - the user's habits due today plus anything overdue.
+        - [[orbit:habits:today]] - the user's habits due today, including ones already logged today, plus anything overdue.
         - [[orbit:habits:all]] - every active habit.
         The app replaces the directive with the rendered habit list, so never list the habits yourself when you emit a directive. Emit at most one directive, always as the last thing in your reply. For every other kind of question, answer normally and do not emit a directive.
         """;
@@ -51,21 +52,32 @@ public static partial class HabitListCardBuilder
     }
 
     public static HabitListCard Build(IReadOnlyList<Habit> activeHabits, DateOnly today, string scope)
+        => Build(activeHabits, today, scope, HabitTodaySnapshot.FromLoadedHabits(activeHabits, today));
+
+    internal static HabitListCard Build(
+        IReadOnlyList<Habit> activeHabits,
+        DateOnly today,
+        string scope,
+        HabitTodaySnapshot todayFacts)
     {
-        var includedIds = ResolveIncludedIds(activeHabits, today, scope);
+        var includedIds = ResolveIncludedIds(activeHabits, scope, todayFacts);
         var items = new List<HabitListCardItem>();
-        AppendLevel(activeHabits, parentId: null, depth: 0, today, includedIds, items);
+        AppendLevel(activeHabits, parentId: null, depth: 0, todayFacts, includedIds, items);
         return new HabitListCard(scope, items);
     }
 
-    private static HashSet<Guid> ResolveIncludedIds(IReadOnlyList<Habit> activeHabits, DateOnly today, string scope)
+    private static HashSet<Guid> ResolveIncludedIds(
+        IReadOnlyList<Habit> activeHabits,
+        string scope,
+        HabitTodaySnapshot todayFacts)
     {
         if (!scope.Equals(ScopeToday, StringComparison.OrdinalIgnoreCase))
             return activeHabits.Select(habit => habit.Id).ToHashSet();
 
         var byId = activeHabits.ToDictionary(habit => habit.Id);
         var included = new HashSet<Guid>();
-        foreach (var habit in activeHabits.Where(habit => !habit.IsGeneral && habit.DueDate <= today))
+        foreach (var habit in activeHabits.Where(habit =>
+            todayFacts.TodayIds.Contains(habit.Id) || todayFacts.OverdueIds.Contains(habit.Id)))
         {
             var current = habit;
             while (included.Add(current.Id) &&
@@ -83,7 +95,7 @@ public static partial class HabitListCardBuilder
         IReadOnlyList<Habit> activeHabits,
         Guid? parentId,
         int depth,
-        DateOnly today,
+        HabitTodaySnapshot todayFacts,
         HashSet<Guid> includedIds,
         List<HabitListCardItem> items)
     {
@@ -99,18 +111,20 @@ public static partial class HabitListCardBuilder
                 string.IsNullOrWhiteSpace(habit.Emoji) ? null : habit.Emoji,
                 depth,
                 habit.IsBadHabit,
-                ResolveStatus(habit, today)));
-            AppendLevel(activeHabits, habit.Id, depth + 1, today, includedIds, items);
+                ResolveStatus(habit, todayFacts)));
+            AppendLevel(activeHabits, habit.Id, depth + 1, todayFacts, includedIds, items);
         }
     }
 
-    private static string ResolveStatus(Habit habit, DateOnly today)
+    private static string ResolveStatus(Habit habit, HabitTodaySnapshot todayFacts)
     {
+        if (todayFacts.DoneTodayIds.Contains(habit.Id))
+            return StatusDone;
         if (habit.IsGeneral)
             return StatusGeneral;
-        if (habit.DueDate < today)
+        if (todayFacts.OverdueIds.Contains(habit.Id))
             return StatusOverdue;
-        if (habit.DueDate == today)
+        if (todayFacts.TodayIds.Contains(habit.Id))
             return StatusToday;
         return StatusNone;
     }

@@ -25,7 +25,10 @@ public partial class ProcessUserChatCommandHandler
             UserTags: context.UserTags,
             UserToday: context.UserToday,
             ActiveGoals: context.ActiveGoals,
-            IsHabitIndexPartial: context.IsPromptHabitIndexPartial);
+            IsHabitIndexPartial: context.IsPromptHabitIndexPartial,
+            TodayHabitIds: context.TodayFacts.TodayIds,
+            OverdueHabitIds: context.TodayFacts.OverdueIds,
+            DoneTodayHabitIds: context.TodayFacts.DoneTodayIds);
         var agentSnapshot = BuildAgentContextSnapshot(
             context.User,
             request.ClientContext,

@@ -82,12 +82,35 @@ public class HabitListCardBuilderTests
     public void Build_TodayScope_AssignsStatuses()
     {
         var dueToday = CreateHabit("Meditate", Today);
-        var overdue = CreateHabit("Floss", Today.AddDays(-2), position: 1);
+        var overdue = Habit.Create(new HabitCreateParams(
+            UserId, "Floss", null, null, DueDate: Today.AddDays(-2))).Value;
 
         var card = HabitListCardBuilder.Build([dueToday, overdue], Today, HabitListCardBuilder.ScopeToday);
 
         card.Items.Single(item => item.Title == "Meditate").Status.Should().Be(HabitListCardBuilder.StatusToday);
         card.Items.Single(item => item.Title == "Floss").Status.Should().Be(HabitListCardBuilder.StatusOverdue);
+    }
+
+    [Fact]
+    public void Build_TodayScope_KeepsLoggedDailyAndWeeklyHabitsDone()
+    {
+        var daily = CreateHabit("Water", Today);
+        daily.Log(Today).IsSuccess.Should().BeTrue();
+        var weekly = Habit.Create(new HabitCreateParams(
+            UserId, "Walk", FrequencyUnit.Week, 1, DueDate: Today)).Value;
+        weekly.Log(Today).IsSuccess.Should().BeTrue();
+        var monthly = Habit.Create(new HabitCreateParams(
+            UserId, "Budget", FrequencyUnit.Month, 1, DueDate: Today.AddDays(3))).Value;
+        monthly.Log(Today).IsSuccess.Should().BeTrue();
+
+        var habits = new[] { daily, weekly, monthly };
+        var logDays = habits.SelectMany(habit => habit.Logs.Select(log => new Orbit.Domain.Interfaces.HabitScheduleLogDay(
+            habit.Id, log.Date, log.Value > 0 ? 1 : 0, log.Value == 0 ? 1 : 0, true))).ToList();
+        var facts = HabitTodaySnapshot.Build(habits, Today, 1, logDays, new HashSet<Guid>());
+        var card = HabitListCardBuilder.Build(habits, Today, HabitListCardBuilder.ScopeToday, facts);
+
+        card.Items.Select(item => item.Title).Should().BeEquivalentTo(["Water", "Walk"]);
+        card.Items.Should().OnlyContain(item => item.Status == "done");
     }
 
     [Fact]

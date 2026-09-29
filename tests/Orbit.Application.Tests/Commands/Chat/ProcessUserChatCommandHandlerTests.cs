@@ -47,6 +47,7 @@ public class ProcessUserChatCommandHandlerTests
     private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
     private readonly IMediator _mediator = Substitute.For<IMediator>();
     private readonly IProductAnalytics _productAnalytics = Substitute.For<IProductAnalytics>();
+    private readonly IHabitScheduleLogReader _scheduleLogReader = Substitute.For<IHabitScheduleLogReader>();
     private readonly ILogger<ProcessUserChatCommandHandler> _logger = Substitute.For<ILogger<ProcessUserChatCommandHandler>>();
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -102,7 +103,8 @@ public class ProcessUserChatCommandHandlerTests
         var dataDeps = new ChatDataDependencies(_habitRepo, _goalRepo, userRepository, _userFactRepo, _tagRepo, _checklistTemplateRepo, _featureFlagService);
         var executionDeps = new ChatExecutionDependencies(
             _userDateService, _userStreakService, payGate, unitOfWork, _scopeFactory, _operationExecutor,
-            _pendingClarificationStore, _goalProgressReadSyncer, _gamificationService, _mediator, _productAnalytics);
+            _pendingClarificationStore, _goalProgressReadSyncer, _gamificationService, _mediator, _productAnalytics,
+            _scheduleLogReader);
 
         return new ProcessUserChatCommandHandler(
             dataDeps, aiDeps, executionDeps, _logger);
@@ -110,6 +112,9 @@ public class ProcessUserChatCommandHandlerTests
 
     public ProcessUserChatCommandHandlerTests()
     {
+        _scheduleLogReader.ReadDaysAsync(
+            Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(),
+            Arg.Any<CancellationToken>()).Returns(Array.Empty<HabitScheduleLogDay>());
         _unitOfWork.PassThroughTransactions();
         SetupScopeFactory();
         _catalogService.GetCapabilities().Returns([BuildCapability("test_capability")]);
@@ -822,6 +827,38 @@ public class ProcessUserChatCommandHandlerTests
         result.Value.HabitList.Should().NotBeNull();
         result.Value.HabitList!.Scope.Should().Be("today");
         result.Value.HabitList.Items.Should().ContainSingle(item => item.Title == "Meditate");
+    }
+
+    [Fact]
+    public async Task Handle_LoggedRecurringHabit_UsesScheduleLogFactsForCardAndPrompt()
+    {
+        SetupUserAndPayGate();
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Water", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var log = habit.Log(Today).Value;
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { habit }.AsReadOnly());
+        _scheduleLogReader.ReadDaysAsync(
+            Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(),
+            Arg.Any<CancellationToken>())
+            .Returns([new HabitScheduleLogDay(habit.Id, log.Date, 1, 0, true)]);
+        SetupAiResponse(new AiResponse { TextMessage = "Done today:\n[[orbit:habits:today]]" });
+
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(
+            UserId, "what are my habits today",
+            ClientContext: new AgentClientContext(SupportsHabitListCard: true)),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.HabitList!.Items.Should().ContainSingle()
+            .Which.Status.Should().Be(HabitListCardBuilder.StatusDone);
+        _promptBuilder.Received(1).BuildDynamic(Arg.Is<PromptBuildRequest>(request =>
+            request.TodayHabitIds!.Contains(habit.Id)
+            && request.DoneTodayHabitIds!.Contains(habit.Id)
+            && request.ActiveHabits.Single().DueDate == Today.AddDays(1)));
     }
 
     [Fact]

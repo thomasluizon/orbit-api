@@ -186,6 +186,7 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IGoalProgressReadSyncer>(),
                 sp.GetRequiredService<IGamificationService>(),
                 sp.GetRequiredService<MediatR.IMediator>(),
-                sp.GetRequiredService<IProductAnalytics>()));
+                sp.GetRequiredService<IProductAnalytics>(),
+                sp.GetRequiredService<IHabitScheduleLogReader>()));
     }
 }
