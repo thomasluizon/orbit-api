@@ -9,6 +9,7 @@ public class TranscribeAudioCommandValidatorTests
     private readonly TranscribeAudioCommandValidator _validator = new();
 
     private static TranscribeAudioCommand ValidCommand() => new(
+        UserId: Guid.NewGuid(),
         Audio: [1, 2, 3],
         FileName: "clip.webm");
 
