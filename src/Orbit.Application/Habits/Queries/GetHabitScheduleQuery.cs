@@ -124,11 +124,11 @@ internal record ScheduleMapContext(
     public List<DateOnly> GetScheduledDates(Habit habit)
     {
         if (ScheduledDatesCache is null || !DateFrom.HasValue || !DateTo.HasValue)
-            return HabitScheduleService.GetScheduledDates(habit, DateFrom ?? default, DateTo ?? default, WeekStartDay);
+            return HabitScheduleFilters.GetVisibleScheduledDates(habit, DateFrom ?? default, DateTo ?? default, WeekStartDay, LogFacts);
 
         if (!ScheduledDatesCache.TryGetValue(habit.Id, out var dates))
         {
-            dates = HabitScheduleService.GetScheduledDates(habit, DateFrom.Value, DateTo.Value, WeekStartDay);
+            dates = HabitScheduleFilters.GetVisibleScheduledDates(habit, DateFrom.Value, DateTo.Value, WeekStartDay, LogFacts);
             ScheduledDatesCache[habit.Id] = dates;
         }
         return dates;

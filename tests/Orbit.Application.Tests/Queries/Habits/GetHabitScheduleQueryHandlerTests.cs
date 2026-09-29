@@ -158,6 +158,191 @@ public class GetHabitScheduleQueryHandlerTests
             Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData(FrequencyUnit.Week, false)]
+    [InlineData(FrequencyUnit.Month, false)]
+    [InlineData(FrequencyUnit.Week, true)]
+    [InlineData(FrequencyUnit.Month, true)]
+    public async Task Handle_FlexibleSkip_RemovesOnlySkippedDateAndPreservesProgress(
+        FrequencyUnit unit, bool isChild)
+    {
+        var parent = isChild ? CreateTestHabit(title: "Parent") : null;
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Flexible", unit, 3, Today.AddDays(-2),
+            ParentHabitId: parent?.Id, IsFlexible: true)).Value;
+        habit.Log(Today.AddDays(-1)).IsSuccess.Should().BeTrue();
+        habit.SkipFlexible(Today).IsSuccess.Should().BeTrue();
+        SetupHabits(parent is null ? [habit] : [parent, habit]);
+
+        var selected = new GetHabitScheduleQuery(UserId, Today, Today);
+        for (var read = 0; read < 2; read++)
+        {
+            var result = await _handler.Handle(selected, CancellationToken.None);
+            result.IsSuccess.Should().BeTrue();
+            if (isChild)
+                result.Value.Items.Single().Children.Should().BeEmpty();
+            else
+                result.Value.Items.Should().BeEmpty();
+        }
+
+        var nextDate = Today.AddDays(1);
+        var next = await _handler.Handle(
+            new GetHabitScheduleQuery(UserId, nextDate, nextDate), CancellationToken.None);
+        next.IsSuccess.Should().BeTrue();
+        var available = isChild
+            ? next.Value.Items.Single().Children.Single()
+            : (object)next.Value.Items.Single();
+        if (available is HabitScheduleChildItem child)
+        {
+            child.ScheduledDates.Should().ContainSingle().Which.Should().Be(nextDate);
+            child.FlexibleTarget.Should().Be(2);
+            child.FlexibleCompleted.Should().Be(1);
+        }
+        else
+        {
+            var item = (HabitScheduleItem)available;
+            item.ScheduledDates.Should().ContainSingle().Which.Should().Be(nextDate);
+            item.FlexibleTarget.Should().Be(2);
+            item.FlexibleCompleted.Should().Be(1);
+        }
+
+        var range = await _handler.Handle(
+            new GetHabitScheduleQuery(UserId, Today, nextDate), CancellationToken.None);
+        range.IsSuccess.Should().BeTrue();
+        var rangeDates = isChild
+            ? range.Value.Items.Single().Children.Single().ScheduledDates
+            : range.Value.Items.Single().ScheduledDates;
+        rangeDates.Should().ContainSingle().Which.Should().Be(nextDate);
+    }
+
+    [Fact]
+    public async Task Handle_CompletedFlexibleLog_KeepsSelectedDateVisible()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Flexible", FrequencyUnit.Week, 1, Today.AddDays(-2),
+            IsFlexible: true)).Value;
+        habit.Log(Today).IsSuccess.Should().BeTrue();
+        SetupHabits(habit);
+
+        var result = await _handler.Handle(
+            new GetHabitScheduleQuery(UserId, Today, Today), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var item = result.Value.Items.Should().ContainSingle().Subject;
+        item.ScheduledDates.Should().ContainSingle().Which.Should().Be(Today);
+        item.IsLoggedInRange.Should().BeTrue();
+        item.FlexibleTarget.Should().Be(1);
+        item.FlexibleCompleted.Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(FrequencyUnit.Week, false, false)]
+    [InlineData(FrequencyUnit.Week, false, true)]
+    [InlineData(FrequencyUnit.Week, true, false)]
+    [InlineData(FrequencyUnit.Week, true, true)]
+    [InlineData(FrequencyUnit.Month, false, false)]
+    [InlineData(FrequencyUnit.Month, false, true)]
+    [InlineData(FrequencyUnit.Month, true, false)]
+    [InlineData(FrequencyUnit.Month, true, true)]
+    public async Task Handle_FlexibleCompletionAndSkipOnSameDate_KeepsCompletedDateVisible(
+        FrequencyUnit unit, bool isChild, bool search)
+    {
+        var parent = isChild ? CreateTestHabit(title: "Parent") : null;
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Flexible meditation", unit, 3, Today.AddDays(-2),
+            ParentHabitId: parent?.Id, IsFlexible: true)).Value;
+        habit.Log(Today).IsSuccess.Should().BeTrue();
+        habit.SkipFlexible(Today).IsSuccess.Should().BeTrue();
+        SetupHabits(parent is null ? [habit] : [parent, habit]);
+
+        var query = new GetHabitScheduleQuery(
+            UserId, Today, Today, Search: search ? "meditation" : null);
+        for (var read = 0; read < 2; read++)
+        {
+            var result = await _handler.Handle(query, CancellationToken.None);
+
+            result.IsSuccess.Should().BeTrue();
+            var item = result.Value.Items.Should().ContainSingle().Subject;
+            if (isChild)
+            {
+                item.Id.Should().Be(parent!.Id);
+                if (search)
+                    item.SearchMatches.Should().Contain(new SearchMatchField("child", habit.Title));
+                var child = item.Children.Should().ContainSingle().Subject;
+                child.Id.Should().Be(habit.Id);
+                child.ScheduledDates.Should().ContainSingle().Which.Should().Be(Today);
+                child.IsLoggedInRange.Should().BeTrue();
+                child.FlexibleTarget.Should().Be(2);
+                child.FlexibleCompleted.Should().Be(1);
+            }
+            else
+            {
+                item.Id.Should().Be(habit.Id);
+                item.ScheduledDates.Should().ContainSingle().Which.Should().Be(Today);
+                item.IsLoggedInRange.Should().BeTrue();
+                item.FlexibleTarget.Should().Be(2);
+                item.FlexibleCompleted.Should().Be(1);
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(false, false, true)]
+    [InlineData(false, true, false)]
+    [InlineData(false, true, true)]
+    [InlineData(true, false, false)]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, false)]
+    [InlineData(true, true, true)]
+    public async Task Handle_FlexibleSingleLog_OnlyCompletionKeepsDateVisible(
+        bool completed, bool isChild, bool search)
+    {
+        var parent = isChild ? CreateTestHabit(title: "Parent") : null;
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Flexible meditation", FrequencyUnit.Week, 3, Today.AddDays(-2),
+            ParentHabitId: parent?.Id, IsFlexible: true)).Value;
+        if (completed)
+            habit.Log(Today).IsSuccess.Should().BeTrue();
+        else
+            habit.SkipFlexible(Today).IsSuccess.Should().BeTrue();
+        SetupHabits(parent is null ? [habit] : [parent, habit]);
+
+        var result = await _handler.Handle(new GetHabitScheduleQuery(
+            UserId, Today, Today, Search: search ? "meditation" : null), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        if (!completed)
+        {
+            if (isChild && !search)
+                result.Value.Items.Should().ContainSingle().Subject.Children.Should().BeEmpty();
+            else
+                result.Value.Items.Should().BeEmpty();
+            return;
+        }
+
+        var item = result.Value.Items.Should().ContainSingle().Subject;
+        if (isChild)
+        {
+            item.Id.Should().Be(parent!.Id);
+            if (search)
+                item.SearchMatches.Should().Contain(new SearchMatchField("child", habit.Title));
+            var child = item.Children.Should().ContainSingle().Subject;
+            child.ScheduledDates.Should().ContainSingle().Which.Should().Be(Today);
+            child.FlexibleTarget.Should().Be(3);
+            child.FlexibleCompleted.Should().Be(1);
+            child.IsLoggedInRange.Should().BeTrue();
+        }
+        else
+        {
+            item.Id.Should().Be(habit.Id);
+            item.ScheduledDates.Should().ContainSingle().Which.Should().Be(Today);
+            item.FlexibleTarget.Should().Be(3);
+            item.FlexibleCompleted.Should().Be(1);
+            item.IsLoggedInRange.Should().BeTrue();
+        }
+    }
+
     [Fact]
     public async Task Handle_SingleDailyHabitInRange_KeepsCandidateCadenceWhenPageChanges()
     {
