@@ -44,8 +44,9 @@ public class CreateApiKeyCommandHandler(
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<CreateApiKeyResponse>();
 
+        var nowAtUtc = DateTime.UtcNow;
         var activeKeyCount = await apiKeyRepository.CountAsync(
-            k => k.UserId == request.UserId && !k.IsRevoked,
+            ActiveApiKeyPredicate.ForUser(request.UserId, nowAtUtc),
             cancellationToken);
 
         if (activeKeyCount >= MaxActiveKeys)
