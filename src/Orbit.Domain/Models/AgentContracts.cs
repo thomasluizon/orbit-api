@@ -195,7 +195,8 @@ public record AgentClientContext(
     bool? SupportsHabitListCard = null,
     bool? SupportsGoalListCard = null,
     bool? SupportsMetricsCard = null,
-    string? EntryPointIntent = null);
+    string? EntryPointIntent = null,
+    bool? SupportsHabitListDoneStatus = null);
 
 public record AgentContextSnapshot(
     string Plan,

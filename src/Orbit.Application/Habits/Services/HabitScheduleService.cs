@@ -228,6 +228,14 @@ public static class HabitScheduleService
         return dates;
     }
 
+    public static bool WasScheduledOnDate(Habit habit, DateOnly target, int weekStartDay)
+    {
+        var start = habit.ScheduledStartDate ?? habit.DueDate;
+        return target >= start
+            && (!habit.EndDate.HasValue || target <= habit.EndDate.Value)
+            && IsHistoricallyDueOnDate(habit, target, start, weekStartDay);
+    }
+
     private static bool IsHistoricallyDueOnDate(
         Habit habit,
         DateOnly target,

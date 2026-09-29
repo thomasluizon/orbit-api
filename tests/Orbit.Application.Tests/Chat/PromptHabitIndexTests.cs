@@ -20,7 +20,8 @@ public class PromptHabitIndexTests
             .Select(index => CreateHabit(
                 $"Overdue {index}",
                 Today.AddDays(-1),
-                index == 0 ? completedParent.Id : null))
+                index == 0 ? completedParent.Id : null,
+                isOneTime: true))
             .ToList();
         var dueToday = Enumerable.Range(0, 40)
             .Select(index => CreateHabit($"Today {index}", Today))
@@ -43,6 +44,30 @@ public class PromptHabitIndexTests
         dueToday.Should().OnlyContain(habit => selectedIds.Contains(habit.Id));
         foreach (var selectedHabit in result.Habits.Where(habit => habit.ParentHabitId.HasValue))
             selectedIds.Should().Contain(selectedHabit.ParentHabitId!.Value);
+    }
+
+    [Fact]
+    public void BuildPromptHabitIndex_LoggedToday_CarriesDoneTodayFact()
+    {
+        var habit = CreateHabit("Water", Today);
+        habit.Log(Today).IsSuccess.Should().BeTrue();
+
+        var result = ProcessUserChatCommandHandler.BuildPromptHabitIndex([habit], Today);
+
+        result.Habits.Should().ContainSingle().Which.DueDate.Should().Be(Today.AddDays(1));
+        result.DoneTodayHabitIds.Should().Contain(habit.Id);
+    }
+
+    [Fact]
+    public void BuildPromptHabitIndex_BadHabitSlipToday_DoesNotCarryDoneTodayFact()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Smoking", FrequencyUnit.Day, 1, DueDate: Today, IsBadHabit: true)).Value;
+        habit.Log(Today).Value.IsSlip.Should().BeTrue();
+
+        var result = ProcessUserChatCommandHandler.BuildPromptHabitIndex([habit], Today);
+
+        result.DoneTodayHabitIds.Should().NotContain(habit.Id);
     }
 
     private static Habit CreateHabit(

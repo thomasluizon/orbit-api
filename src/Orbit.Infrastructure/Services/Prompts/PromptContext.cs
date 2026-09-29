@@ -13,4 +13,7 @@ public record PromptContext(
     DateOnly? UserToday,
     IReadOnlyDictionary<Guid, HabitMetrics>? HabitMetrics,
     IReadOnlyList<Goal>? ActiveGoals = null,
-    bool IsHabitIndexPartial = false);
+    bool IsHabitIndexPartial = false,
+    IReadOnlySet<Guid>? TodayHabitIds = null,
+    IReadOnlySet<Guid>? OverdueHabitIds = null,
+    IReadOnlySet<Guid>? DoneTodayHabitIds = null);
