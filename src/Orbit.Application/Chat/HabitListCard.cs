@@ -51,33 +51,41 @@ public static partial class HabitListCardBuilder
         return true;
     }
 
-    public static HabitListCard Build(IReadOnlyList<Habit> activeHabits, DateOnly today, string scope)
-        => Build(activeHabits, today, scope, HabitTodaySnapshot.FromLoadedHabits(activeHabits, today));
+    public static HabitListCard Build(
+        IReadOnlyList<Habit> activeHabits,
+        DateOnly today,
+        string scope,
+        bool supportsDoneStatus = false)
+        => Build(activeHabits, today, scope, HabitTodaySnapshot.FromLoadedHabits(activeHabits, today), supportsDoneStatus);
 
     internal static HabitListCard Build(
         IReadOnlyList<Habit> activeHabits,
         DateOnly today,
         string scope,
-        HabitTodaySnapshot todayFacts)
+        HabitTodaySnapshot todayFacts,
+        bool supportsDoneStatus = false)
     {
-        var includedIds = ResolveIncludedIds(activeHabits, scope, todayFacts);
+        var includedIds = ResolveIncludedIds(activeHabits, today, scope, todayFacts, supportsDoneStatus);
         var items = new List<HabitListCardItem>();
-        AppendLevel(activeHabits, parentId: null, depth: 0, todayFacts, includedIds, items);
+        AppendLevel(activeHabits, parentId: null, depth: 0, today, todayFacts, includedIds, supportsDoneStatus, items);
         return new HabitListCard(scope, items);
     }
 
     private static HashSet<Guid> ResolveIncludedIds(
         IReadOnlyList<Habit> activeHabits,
+        DateOnly today,
         string scope,
-        HabitTodaySnapshot todayFacts)
+        HabitTodaySnapshot todayFacts,
+        bool supportsDoneStatus)
     {
         if (!scope.Equals(ScopeToday, StringComparison.OrdinalIgnoreCase))
             return activeHabits.Select(habit => habit.Id).ToHashSet();
 
         var byId = activeHabits.ToDictionary(habit => habit.Id);
         var included = new HashSet<Guid>();
-        foreach (var habit in activeHabits.Where(habit =>
-            todayFacts.TodayIds.Contains(habit.Id) || todayFacts.OverdueIds.Contains(habit.Id)))
+        foreach (var habit in activeHabits.Where(habit => supportsDoneStatus
+            ? todayFacts.TodayIds.Contains(habit.Id) || todayFacts.OverdueIds.Contains(habit.Id)
+            : !habit.IsGeneral && habit.DueDate <= today))
         {
             var current = habit;
             while (included.Add(current.Id) &&
@@ -95,8 +103,10 @@ public static partial class HabitListCardBuilder
         IReadOnlyList<Habit> activeHabits,
         Guid? parentId,
         int depth,
+        DateOnly today,
         HabitTodaySnapshot todayFacts,
         HashSet<Guid> includedIds,
+        bool supportsDoneStatus,
         List<HabitListCardItem> items)
     {
         var children = activeHabits
@@ -111,13 +121,26 @@ public static partial class HabitListCardBuilder
                 string.IsNullOrWhiteSpace(habit.Emoji) ? null : habit.Emoji,
                 depth,
                 habit.IsBadHabit,
-                ResolveStatus(habit, todayFacts)));
-            AppendLevel(activeHabits, habit.Id, depth + 1, todayFacts, includedIds, items);
+                ResolveStatus(habit, today, todayFacts, supportsDoneStatus)));
+            AppendLevel(activeHabits, habit.Id, depth + 1, today, todayFacts, includedIds, supportsDoneStatus, items);
         }
     }
 
-    private static string ResolveStatus(Habit habit, HabitTodaySnapshot todayFacts)
+    private static string ResolveStatus(
+        Habit habit,
+        DateOnly today,
+        HabitTodaySnapshot todayFacts,
+        bool supportsDoneStatus)
     {
+        if (!supportsDoneStatus)
+        {
+            if (habit.IsGeneral)
+                return StatusGeneral;
+            if (habit.DueDate < today)
+                return StatusOverdue;
+            return habit.DueDate == today ? StatusToday : StatusNone;
+        }
+
         if (todayFacts.DoneTodayIds.Contains(habit.Id))
             return StatusDone;
         if (habit.IsGeneral)

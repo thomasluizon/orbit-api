@@ -849,7 +849,7 @@ public class ProcessUserChatCommandHandlerTests
 
         var result = await CreateHandler().Handle(new ProcessUserChatCommand(
             UserId, "what are my habits today",
-            ClientContext: new AgentClientContext(SupportsHabitListCard: true)),
+            ClientContext: new AgentClientContext(SupportsHabitListCard: true, SupportsHabitListDoneStatus: true)),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -859,6 +859,42 @@ public class ProcessUserChatCommandHandlerTests
             request.TodayHabitIds!.Contains(habit.Id)
             && request.DoneTodayHabitIds!.Contains(habit.Id)
             && request.ActiveHabits.Single().DueDate == Today.AddDays(1)));
+    }
+
+    [Theory]
+    [InlineData("today")]
+    [InlineData("all")]
+    public async Task Handle_LoggedRecurringHabit_WithoutDoneCapability_KeepsLegacyCardAndPromptFacts(string scope)
+    {
+        SetupUserAndPayGate();
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Water", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var log = habit.Log(Today).Value;
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { habit }.AsReadOnly());
+        _scheduleLogReader.ReadDaysAsync(
+            Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(),
+            Arg.Any<CancellationToken>())
+            .Returns([new HabitScheduleLogDay(habit.Id, log.Date, log.Value > 0 ? 1 : 0, 0, true)]);
+        SetupAiResponse(new AiResponse { TextMessage = $"Your habits:\n[[orbit:habits:{scope}]]" });
+
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(
+            UserId, "show my habits",
+            ClientContext: new AgentClientContext(SupportsHabitListCard: true)),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.HabitList!.Scope.Should().Be(scope);
+        if (scope == HabitListCardBuilder.ScopeToday)
+            result.Value.HabitList.Items.Should().BeEmpty();
+        else
+            result.Value.HabitList.Items.Should().ContainSingle()
+                .Which.Status.Should().Be(HabitListCardBuilder.StatusNone);
+        _promptBuilder.Received(1).BuildDynamic(Arg.Is<PromptBuildRequest>(request =>
+            request.DoneTodayHabitIds!.Contains(habit.Id)));
     }
 
     [Fact]

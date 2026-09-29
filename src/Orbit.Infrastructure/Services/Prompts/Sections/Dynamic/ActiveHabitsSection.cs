@@ -109,10 +109,10 @@ public class ActiveHabitsSection : IPromptSection
         && (context.OverdueHabitIds?.Contains(habit.Id) ?? habit.DueDate < context.UserToday.Value);
 
     private static bool IsDoneToday(Habit habit, PromptContext context) =>
-        context.UserToday.HasValue
+        !habit.IsBadHabit && context.UserToday.HasValue
         && (context.DoneTodayHabitIds?.Contains(habit.Id)
             ?? habit.Logs.Any(log => !log.IsDeleted
-                && log.Date == context.UserToday.Value && log.Value > 0));
+                && log.Date == context.UserToday.Value && log.Value > 0 && log.IsSlip != true));
 
     private static bool ShouldIncludeInIndex(Habit habit, IReadOnlyList<Habit> allHabits)
     {

@@ -221,6 +221,19 @@ public class ActiveHabitsSectionTests
     }
 
     [Fact]
+    public void Build_BadHabitSlipToday_OmitsDoneTodayLabel()
+    {
+        var habit = CreateHabit("Smoking", isBadHabit: true);
+        habit.Log(Today).Value.IsSlip.Should().BeTrue();
+        var context = CreateContext(habits: [habit], userToday: Today);
+
+        var result = _sut.Build(context);
+
+        result.Split('\n').Single(line => line.Contains("Smoking"))
+            .Should().NotContain("DONE TODAY");
+    }
+
+    [Fact]
     public void Build_NullUserToday_OmitsTodayAndOverdueLabels()
     {
         var habit = CreateHabit("Some Habit", dueDate: Today.AddDays(-3));

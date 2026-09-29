@@ -36,7 +36,7 @@ internal sealed record HabitTodaySnapshot(
                 && HabitScheduleService.WasScheduledOnDate(item.habit, today, weekStartDay))
                 .Select(item => item.habit.Id).ToHashSet(),
             scheduled.Where(item => item.isOverdue).Select(item => item.habit.Id).ToHashSet(),
-            active.Where(habit => logFacts.HasCompleted(habit.Id, today, today))
+            active.Where(habit => !habit.IsBadHabit && logFacts.HasCompleted(habit.Id, today, today))
                 .Select(habit => habit.Id).ToHashSet());
     }
 
@@ -48,7 +48,7 @@ internal sealed record HabitTodaySnapshot(
                 .Select(group => new HabitScheduleLogDay(
                     habit.Id,
                     group.Key,
-                    group.Count(log => log.Value > 0),
+                    group.Count(log => log.Value > 0 && log.IsSlip != true),
                     group.Count(log => log.Value == 0),
                     true)))
             .ToList();

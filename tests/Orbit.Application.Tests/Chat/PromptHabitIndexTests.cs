@@ -58,6 +58,18 @@ public class PromptHabitIndexTests
         result.DoneTodayHabitIds.Should().Contain(habit.Id);
     }
 
+    [Fact]
+    public void BuildPromptHabitIndex_BadHabitSlipToday_DoesNotCarryDoneTodayFact()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Smoking", FrequencyUnit.Day, 1, DueDate: Today, IsBadHabit: true)).Value;
+        habit.Log(Today).Value.IsSlip.Should().BeTrue();
+
+        var result = ProcessUserChatCommandHandler.BuildPromptHabitIndex([habit], Today);
+
+        result.DoneTodayHabitIds.Should().NotContain(habit.Id);
+    }
+
     private static Habit CreateHabit(
         string title,
         DateOnly dueDate,
