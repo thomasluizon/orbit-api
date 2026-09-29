@@ -1,5 +1,3 @@
-using System.Data.Common;
-using System.Net;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
@@ -7,13 +5,11 @@ using FluentAssertions;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
-using NSubstitute.ExceptionExtensions;
 using Orbit.Api.Controllers;
 using Orbit.Api.OAuth;
 using Orbit.Application.Auth.Commands;
@@ -30,11 +26,10 @@ namespace Orbit.Infrastructure.Tests.Controllers;
 public class OAuthControllerTests : IDisposable
 {
     private readonly IMediator _mediator = Substitute.For<IMediator>();
-    private readonly OAuthAuthorizationStore _authStore = new(NullLogger<OAuthAuthorizationStore>.Instance);
+    private readonly MutableTimeProvider _timeProvider = new();
+    private readonly OAuthAuthorizationStore _authStore;
     private readonly IGenericRepository<ApiKey> _apiKeyRepo = Substitute.For<IGenericRepository<ApiKey>>();
-    private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
-    private readonly IHttpClientFactory _httpClientFactory = Substitute.For<IHttpClientFactory>();
     private readonly ILogger<OAuthController> _logger = Substitute.For<ILogger<OAuthController>>();
     private readonly OAuthController _controller;
 
@@ -42,7 +37,12 @@ public class OAuthControllerTests : IDisposable
 
     public OAuthControllerTests()
     {
-        var googleSettings = Options.Create(new GoogleSettings { ClientId = "test-google-client-id" });
+        _authStore = new OAuthAuthorizationStore(NullLogger<OAuthAuthorizationStore>.Instance, _timeProvider);
+        var googleSettings = Options.Create(new GoogleSettings
+        {
+            ClientId = "test-google-client-id",
+            AllowedRedirectUris = ["https://api.useorbit.org/oauth/google/callback"]
+        });
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
@@ -52,8 +52,8 @@ public class OAuthControllerTests : IDisposable
             .Build();
 
         _controller = new OAuthController(
-            _mediator, _authStore, _apiKeyRepo, _userRepo, _unitOfWork,
-            _httpClientFactory, googleSettings, config, _logger);
+            _mediator, _authStore, _apiKeyRepo, _unitOfWork,
+            googleSettings, config, _logger);
 
         var httpContext = new DefaultHttpContext();
         httpContext.Request.Scheme = "https";
@@ -140,6 +140,115 @@ public class OAuthControllerTests : IDisposable
 
         var content = result.Should().BeOfType<ContentResult>().Subject;
         content.ContentType.Should().Be("text/html");
+        content.Content.Should().Contain("/oauth/google/start?state=");
+        content.Content.Should().NotContain("google.accounts.id");
+    }
+
+    [Fact]
+    public void GoogleStart_RedirectsToGoogleWithBoundStateAndPkce()
+    {
+        var state = CreatePendingGoogleState();
+        var pending = _authStore.GetGoogleRequest(state);
+
+        var redirect = _controller.GoogleStart(state).Should().BeOfType<RedirectResult>().Subject;
+        var url = redirect.Url!;
+
+        url.Should().StartWith("https://accounts.google.com/o/oauth2/v2/auth?");
+        ExtractQueryParam(url, "client_id").Should().Be("test-google-client-id");
+        ExtractQueryParam(url, "redirect_uri").Should().Be("https://api.useorbit.org/oauth/google/callback");
+        ExtractQueryParam(url, "response_type").Should().Be("code");
+        ExtractQueryParam(url, "scope").Should().Be("openid email profile");
+        ExtractQueryParam(url, "state").Should().Be(state);
+        ExtractQueryParam(url, "code_challenge_method").Should().Be("S256");
+        ExtractQueryParam(url, "prompt").Should().Be("select_account");
+        ExtractQueryParam(url, "code_challenge").Should().Be(pending!.GoogleCodeChallenge);
+        url.Should().NotContain("mcp-challenge");
+    }
+
+    [Fact]
+    public async Task GoogleCallback_RejectsUnknownAndReusedState()
+    {
+        var state = CreatePendingGoogleState();
+        _controller.GoogleStart("forged-state").Should().BeOfType<ContentResult>()
+            .Which.StatusCode.Should().Be(400);
+        (await _controller.GoogleCallback("forged-state", "code", null, CancellationToken.None))
+            .Should().BeOfType<ContentResult>().Which.StatusCode.Should().Be(400);
+
+        (await _controller.GoogleCallback(state, null, "access_denied", CancellationToken.None))
+            .Should().BeOfType<RedirectResult>();
+        (await _controller.GoogleCallback(state, "code", null, CancellationToken.None))
+            .Should().BeOfType<ContentResult>().Which.StatusCode.Should().Be(400);
+        await _mediator.DidNotReceive().Send(Arg.Any<GoogleCodeAuthCommand>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GoogleCallback_RejectsExpiredState()
+    {
+        var state = CreatePendingGoogleState();
+        _timeProvider.Advance(TimeSpan.FromMinutes(6));
+
+        (await _controller.GoogleCallback(state, "google-code", null, CancellationToken.None))
+            .Should().BeOfType<ContentResult>().Which.StatusCode.Should().Be(400);
+        await _mediator.DidNotReceive().Send(Arg.Any<GoogleCodeAuthCommand>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GoogleCallback_SuccessIssuesMcpCodeAcceptedForOriginalVerifierAndRedirectUri()
+    {
+        var (verifier, challenge) = GeneratePkce();
+        var state = CreatePendingGoogleState(challenge, "client-state&code=forged", "mcp-nonce");
+        var pending = _authStore.GetGoogleRequest(state)!;
+        _mediator.Send(Arg.Any<GoogleCodeAuthCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new LoginResponse(UserId, "jwt", "Alex", "alex@example.com")));
+
+        var result = await _controller.GoogleCallback(state, "google-code", null, CancellationToken.None);
+
+        var url = result.Should().BeOfType<RedirectResult>().Subject.Url!;
+        url.Should().StartWith("https://claude.ai/callback?code=");
+        ExtractQueryParam(url, "state").Should().Be("client-state&code=forged");
+        url.Should().NotContain("&code=forged");
+        await _mediator.Received(1).Send(Arg.Is<GoogleCodeAuthCommand>(command =>
+            command.Code == "google-code"
+            && command.CodeVerifier == pending.GoogleCodeVerifier
+            && command.RedirectUri == pending.GoogleRedirectUri), Arg.Any<CancellationToken>());
+
+        var token = await _controller.Token("authorization_code", ExtractQueryParam(url, "code"),
+            verifier, "https://claude.ai/callback", CancellationToken.None);
+        token.Should().BeOfType<OkObjectResult>();
+        JsonSerializer.Serialize(((OkObjectResult)token).Value).Should().Contain("mcp-nonce");
+        (await _controller.Token("authorization_code", ExtractQueryParam(url, "code"),
+            verifier, "https://claude.ai/callback", CancellationToken.None))
+            .Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task GoogleCallback_CancelledConsentReturnsLocalizedErrorWithEmailPath()
+    {
+        _controller.HttpContext.Request.Headers.AcceptLanguage = "pt-BR,pt;q=0.9";
+        var state = CreatePendingGoogleState();
+
+        var redirect = (await _controller.GoogleCallback(state, null, "access_denied", CancellationToken.None))
+            .Should().BeOfType<RedirectResult>().Subject;
+        ExtractQueryParam(redirect.Url!, "google_error").Should().Be("cancelled");
+        var page = _controller.Authorize("client-123", "https://claude.ai/callback", "code",
+            "client-state", "mcp-challenge", "S256", google_error: "cancelled")
+            .Should().BeOfType<ContentResult>().Subject;
+        page.Content.Should().Contain("O acesso com Google foi cancelado");
+        page.Content.Should().Contain("/oauth/send-code");
+        page.Content.Should().Contain("if (initialError) showError(initialError)");
+    }
+
+    [Fact]
+    public async Task GoogleCallback_ExchangeFailureReturnsAuthorizePageWithError()
+    {
+        var state = CreatePendingGoogleState();
+        _mediator.Send(Arg.Any<GoogleCodeAuthCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure<LoginResponse>(ErrorMessages.GoogleCodeExchangeFailed));
+
+        var redirect = (await _controller.GoogleCallback(state, "bad-code", null, CancellationToken.None))
+            .Should().BeOfType<RedirectResult>().Subject;
+
+        ExtractQueryParam(redirect.Url!, "google_error").Should().Be("failed");
     }
 
     [Fact]
@@ -310,226 +419,6 @@ public class OAuthControllerTests : IDisposable
         var ok = result.Should().BeOfType<OkObjectResult>().Subject;
         var json = JsonSerializer.Serialize(ok.Value);
         json.Should().Contain("callback?existing=1\\u0026code=");
-    }
-
-    [Fact]
-    public async Task GoogleAuth_InvalidToken_ReturnsBadRequest()
-    {
-        var mockHandler = new MockHttpMessageHandler(HttpStatusCode.Unauthorized, "{}");
-        var httpClient = new HttpClient(mockHandler);
-        _httpClientFactory.CreateClient().Returns(httpClient);
-
-        var request = new OAuthController.GoogleAuthRequest(
-            "invalid-token", "state-abc", "challenge-xyz",
-            "https://claude.ai/callback", "client-123");
-
-        var result = await _controller.GoogleAuth(request, CancellationToken.None);
-
-        var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
-        var json = JsonSerializer.Serialize(bad.Value);
-        json.Should().Contain("Invalid or expired Google sign-in token");
-    }
-
-    [Fact]
-    public async Task GoogleAuth_InvalidRedirectUri_ReturnsBadRequest()
-    {
-        var request = new OAuthController.GoogleAuthRequest(
-            "valid-token", "state-abc", "challenge-xyz",
-            "https://evil.com/callback", "client-123");
-
-        var result = await _controller.GoogleAuth(request, CancellationToken.None);
-
-        var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
-        JsonSerializer.Serialize(bad.Value).Should().Contain("invalid_redirect_uri");
-    }
-
-    [Fact]
-    public async Task GoogleAuth_NoEmailInToken_ReturnsBadRequest()
-    {
-        var mockHandler = new MockHttpMessageHandler(HttpStatusCode.OK, """{"aud":"test-google-client-id"}""");
-        var httpClient = new HttpClient(mockHandler);
-        _httpClientFactory.CreateClient().Returns(httpClient);
-
-        var request = new OAuthController.GoogleAuthRequest(
-            "valid-token", "state-abc", "challenge-xyz",
-            "https://claude.ai/callback", "client-123");
-
-        var result = await _controller.GoogleAuth(request, CancellationToken.None);
-
-        var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
-        var json = JsonSerializer.Serialize(bad.Value);
-        json.Should().Contain("Could not retrieve email");
-    }
-
-    [Fact]
-    public async Task GoogleAuth_WrongAudience_ReturnsBadRequest()
-    {
-        var mockHandler = new MockHttpMessageHandler(HttpStatusCode.OK,
-            """{"email":"test@example.com","aud":"wrong-client-id"}""");
-        var httpClient = new HttpClient(mockHandler);
-        _httpClientFactory.CreateClient().Returns(httpClient);
-
-        var request = new OAuthController.GoogleAuthRequest(
-            "valid-token", "state-abc", "challenge-xyz",
-            "https://claude.ai/callback", "client-123");
-
-        var result = await _controller.GoogleAuth(request, CancellationToken.None);
-
-        var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
-        var json = JsonSerializer.Serialize(bad.Value);
-        json.Should().Contain("not issued for this application");
-    }
-
-    [Fact]
-    public async Task GoogleAuth_ExistingUser_ReturnsRedirectUrl()
-    {
-        var user = User.Create("Alex", "test@example.com").Value;
-        var mockHandler = new MockHttpMessageHandler(HttpStatusCode.OK,
-            """{"email":"test@example.com","aud":"test-google-client-id","name":"Alex"}""");
-        var httpClient = new HttpClient(mockHandler);
-        _httpClientFactory.CreateClient().Returns(httpClient);
-
-        _userRepo.FindOneTrackedIgnoringFiltersAsync(
-            Arg.Any<System.Linq.Expressions.Expression<Func<User, bool>>>(),
-            Arg.Any<CancellationToken>())
-            .Returns(user);
-
-        var request = new OAuthController.GoogleAuthRequest(
-            "valid-token", "state-abc", "challenge-xyz",
-            "https://claude.ai/callback", "client-123");
-
-        var result = await _controller.GoogleAuth(request, CancellationToken.None);
-
-        var ok = result.Should().BeOfType<OkObjectResult>().Subject;
-        var json = JsonSerializer.Serialize(ok.Value);
-        json.Should().Contain("redirectUrl");
-        json.Should().Contain("claude.ai/callback");
-    }
-
-    [Fact]
-    public async Task GoogleAuth_DeactivatedUser_ReactivatesAndReturnsRedirect()
-    {
-        var user = User.Create("Alex", "test@example.com").Value;
-        user.Deactivate(DateTime.UtcNow.AddDays(7));
-        var mockHandler = new MockHttpMessageHandler(HttpStatusCode.OK,
-            """{"email":"test@example.com","aud":"test-google-client-id","name":"Alex"}""");
-        _httpClientFactory.CreateClient().Returns(new HttpClient(mockHandler));
-
-        _userRepo.FindOneTrackedIgnoringFiltersAsync(
-            Arg.Any<System.Linq.Expressions.Expression<Func<User, bool>>>(),
-            Arg.Any<CancellationToken>())
-            .Returns(user);
-
-        var request = new OAuthController.GoogleAuthRequest(
-            "valid-token", "state-abc", "challenge-xyz",
-            "https://claude.ai/callback", "client-123");
-
-        var result = await _controller.GoogleAuth(request, CancellationToken.None);
-
-        result.Should().BeOfType<OkObjectResult>();
-        user.IsDeactivated.Should().BeFalse();
-        await _userRepo.DidNotReceive().AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
-        await _unitOfWork.Received().SaveChangesAsync(Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task GoogleAuth_NewUser_CreatesUserAndReturnsRedirect()
-    {
-        var mockHandler = new MockHttpMessageHandler(HttpStatusCode.OK,
-            """{"email":"new@example.com","aud":"test-google-client-id","name":"New User"}""");
-        var httpClient = new HttpClient(mockHandler);
-        _httpClientFactory.CreateClient().Returns(httpClient);
-
-        _userRepo.FindOneTrackedIgnoringFiltersAsync(
-            Arg.Any<System.Linq.Expressions.Expression<Func<User, bool>>>(),
-            Arg.Any<CancellationToken>())
-            .Returns((User?)null);
-
-        var request = new OAuthController.GoogleAuthRequest(
-            "valid-token", "state-abc", "challenge-xyz",
-            "https://claude.ai/callback", "client-123");
-
-        var result = await _controller.GoogleAuth(request, CancellationToken.None);
-
-        var ok = result.Should().BeOfType<OkObjectResult>().Subject;
-        await _userRepo.Received(1).AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task GoogleAuth_NewUserWithoutName_UsesEmailPrefix()
-    {
-        var mockHandler = new MockHttpMessageHandler(HttpStatusCode.OK,
-            """{"email":"newuser@example.com","aud":"test-google-client-id"}""");
-        var httpClient = new HttpClient(mockHandler);
-        _httpClientFactory.CreateClient().Returns(httpClient);
-
-        _userRepo.FindOneTrackedIgnoringFiltersAsync(
-            Arg.Any<System.Linq.Expressions.Expression<Func<User, bool>>>(),
-            Arg.Any<CancellationToken>())
-            .Returns((User?)null);
-
-        var request = new OAuthController.GoogleAuthRequest(
-            "valid-token", "state-abc", "challenge-xyz",
-            "https://claude.ai/callback", "client-123");
-
-        var result = await _controller.GoogleAuth(request, CancellationToken.None);
-
-        result.Should().BeOfType<OkObjectResult>();
-        await _userRepo.Received(1).AddAsync(
-            Arg.Is<User>(u => u.Name == "newuser"), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task GoogleAuth_MixedCaseEmail_LogsIntoExistingLowercaseAccount()
-    {
-        var existingUser = User.Create("Alex", "test@example.com").Value;
-        var mockHandler = new MockHttpMessageHandler(HttpStatusCode.OK,
-            """{"email":"Test@Example.com","aud":"test-google-client-id","name":"Alex"}""");
-        _httpClientFactory.CreateClient().Returns(new HttpClient(mockHandler));
-
-        _userRepo.FindOneTrackedIgnoringFiltersAsync(
-            Arg.Any<System.Linq.Expressions.Expression<Func<User, bool>>>(),
-            Arg.Any<CancellationToken>())
-            .Returns(callInfo =>
-            {
-                var predicate = callInfo.Arg<System.Linq.Expressions.Expression<Func<User, bool>>>().Compile();
-                return predicate(existingUser) ? existingUser : null;
-            });
-
-        var request = new OAuthController.GoogleAuthRequest(
-            "valid-token", "state-abc", "challenge-xyz",
-            "https://claude.ai/callback", "client-123");
-
-        var result = await _controller.GoogleAuth(request, CancellationToken.None);
-
-        result.Should().BeOfType<OkObjectResult>();
-        await _userRepo.DidNotReceive().AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task GoogleAuth_ConcurrentFirstLogin_ResolvesToExistingUserWithout500()
-    {
-        var racedUser = User.Create("Raced", "new@example.com").Value;
-        var mockHandler = new MockHttpMessageHandler(HttpStatusCode.OK,
-            """{"email":"new@example.com","aud":"test-google-client-id","name":"Raced"}""");
-        _httpClientFactory.CreateClient().Returns(new HttpClient(mockHandler));
-
-        _userRepo.FindOneTrackedIgnoringFiltersAsync(
-            Arg.Any<System.Linq.Expressions.Expression<Func<User, bool>>>(),
-            Arg.Any<CancellationToken>())
-            .Returns((User?)null, racedUser);
-        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
-            .ThrowsAsync(new DbUpdateException("duplicate", new FakeUniqueViolationException()));
-
-        var request = new OAuthController.GoogleAuthRequest(
-            "valid-token", "state-abc", "challenge-xyz",
-            "https://claude.ai/callback", "client-123");
-
-        var result = await _controller.GoogleAuth(request, CancellationToken.None);
-
-        result.Should().BeOfType<OkObjectResult>();
-        await _userRepo.Received(1).AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -727,20 +616,6 @@ public class OAuthControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task GoogleAuth_WithAttackerDomainRedirectUri_ReturnsBadRequest()
-    {
-        var request = new OAuthController.GoogleAuthRequest(
-            "valid-token", "state-abc", "challenge-xyz",
-            "https://attacker.com/callback", "client-123");
-
-        var result = await _controller.GoogleAuth(request, CancellationToken.None);
-
-        var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
-        var json = JsonSerializer.Serialize(bad.Value);
-        json.Should().Contain("invalid_redirect_uri");
-    }
-
-    [Fact]
     public async Task Token_WithAttackerDomainRedirectUri_ReturnsBadRequest()
     {
         var result = await _controller.Token(
@@ -838,20 +713,6 @@ public class OAuthControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task GoogleAuth_MissingState_ReturnsBadRequestBeforeCallingGoogle()
-    {
-        var request = new OAuthController.GoogleAuthRequest(
-            "valid-token", "", "challenge-xyz",
-            "https://claude.ai/callback", "client-123");
-
-        var result = await _controller.GoogleAuth(request, CancellationToken.None);
-
-        var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
-        JsonSerializer.Serialize(bad.Value).Should().Contain("invalid_request");
-        _httpClientFactory.DidNotReceive().CreateClient();
-    }
-
-    [Fact]
     public async Task VerifyCode_EchoesStateVerbatim_SoClientCanDetectMismatch()
     {
         var state = "state-" + Guid.NewGuid().ToString("N");
@@ -943,31 +804,15 @@ public class OAuthControllerTests : IDisposable
         JsonSerializer.Serialize(ok.Value).Should().Contain("verify-nonce-7");
     }
 
-    [Fact]
-    public async Task GoogleAuth_WithNonce_BindsNonceRetrievableAtTokenExchange()
+    private string CreatePendingGoogleState(string challenge = "mcp-challenge",
+        string clientState = "client-state", string? nonce = null)
     {
-        var (verifier, challenge) = GeneratePkce();
-        var user = User.Create("Alex", "test@example.com").Value;
-        var mockHandler = new MockHttpMessageHandler(HttpStatusCode.OK,
-            """{"email":"test@example.com","aud":"test-google-client-id","name":"Alex"}""");
-        _httpClientFactory.CreateClient().Returns(new HttpClient(mockHandler));
-        _userRepo.FindOneTrackedIgnoringFiltersAsync(
-            Arg.Any<System.Linq.Expressions.Expression<Func<User, bool>>>(),
-            Arg.Any<CancellationToken>())
-            .Returns(user);
-
-        var request = new OAuthController.GoogleAuthRequest(
-            "valid-token", "state-abc", challenge,
-            "https://claude.ai/callback", "client-123", Nonce: "google-nonce-42");
-        var code = ExtractQueryParam(
-            ExtractRedirectUrl(await _controller.GoogleAuth(request, CancellationToken.None)), "code");
-
-        var tokenResult = await _controller.Token(
-            "authorization_code", code, verifier,
-            "https://claude.ai/callback", CancellationToken.None);
-
-        var ok = tokenResult.Should().BeOfType<OkObjectResult>().Subject;
-        JsonSerializer.Serialize(ok.Value).Should().Contain("google-nonce-42");
+        var page = _controller.Authorize("client-123", "https://claude.ai/callback", "code",
+            clientState, challenge, "S256", nonce).Should().BeOfType<ContentResult>().Subject;
+        var match = System.Text.RegularExpressions.Regex.Match(page.Content!,
+            "/oauth/google/start\\?state=([^\"&]+)");
+        match.Success.Should().BeTrue();
+        return Uri.UnescapeDataString(match.Groups[1].Value);
     }
 
     private static (string verifier, string challenge) GeneratePkce()
@@ -999,19 +844,13 @@ public class OAuthControllerTests : IDisposable
         return string.Empty;
     }
 
-    private sealed class FakeUniqueViolationException : DbException
+    private sealed class MutableTimeProvider : TimeProvider
     {
-        public override string SqlState => "23505";
+        private DateTimeOffset _now = DateTimeOffset.UtcNow;
+
+        public override DateTimeOffset GetUtcNow() => _now;
+
+        public void Advance(TimeSpan duration) => _now += duration;
     }
 
-    private sealed class MockHttpMessageHandler(HttpStatusCode statusCode, string content) : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            return Task.FromResult(new HttpResponseMessage(statusCode)
-            {
-                Content = new StringContent(content, Encoding.UTF8, "application/json")
-            });
-        }
-    }
 }

@@ -1,15 +1,12 @@
-using System.Net.Http.Headers;
 using System.Text.Json;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Orbit.Api.Extensions;
 using Orbit.Api.OAuth;
 using Orbit.Api.RateLimiting;
 using Orbit.Application.Auth.Commands;
-using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -26,9 +23,7 @@ public partial class OAuthController(
     IMediator mediator,
     OAuthAuthorizationStore authStore,
     IGenericRepository<ApiKey> apiKeyRepository,
-    IGenericRepository<User> userRepository,
     IUnitOfWork unitOfWork,
-    IHttpClientFactory httpClientFactory,
     IOptions<GoogleSettings> googleSettings,
     IConfiguration configuration,
     ILogger<OAuthController> logger) : ControllerBase
@@ -118,7 +113,8 @@ public partial class OAuthController(
         [FromQuery] string state,
         [FromQuery] string code_challenge,
         [FromQuery] string code_challenge_method,
-        [FromQuery] string? nonce = null)
+        [FromQuery] string? nonce = null,
+        [FromQuery] string? google_error = null)
     {
         if (response_type != "code")
             return BadRequest(new { error = "unsupported_response_type" });
@@ -132,10 +128,28 @@ public partial class OAuthController(
         if (string.IsNullOrEmpty(state))
             return BadRequest(new { error = MissingStateError, error_description = "state is required for CSRF protection" });
 
-        var googleClientId = googleSettings.Value.ClientId ?? "";
+        var language = Request.Headers.AcceptLanguage.ToString().StartsWith("pt", StringComparison.OrdinalIgnoreCase)
+            ? "pt-BR" : "en";
+        var scheme = Request.Headers["X-Forwarded-Proto"].FirstOrDefault() ?? Request.Scheme;
+        var googleRedirectUri = $"{scheme}://{Request.Host}/oauth/google/callback";
+        var googleState = authStore.CreateGoogleRequest(client_id, redirect_uri, state,
+            code_challenge, nonce, googleRedirectUri, language);
+        var errorMessage = google_error switch
+        {
+            "cancelled" => language == "pt-BR"
+                ? "O acesso com Google foi cancelado. Tente novamente ou use seu email."
+                : "Google sign-in was cancelled. Try again or use email.",
+            "failed" => language == "pt-BR"
+                ? "Não foi possível entrar com Google. Tente novamente ou use seu email."
+                : "Google sign-in failed. Try again or use email.",
+            "unavailable" => language == "pt-BR"
+                ? "O acesso com Google está indisponível. Use seu email."
+                : "Google sign-in is unavailable. Use email instead.",
+            _ => null
+        };
         var html = OAuthLoginPage.Render(
             client_id, redirect_uri, state,
-            code_challenge, code_challenge_method, googleClientId, nonce);
+            code_challenge, code_challenge_method, googleState, nonce, errorMessage, language);
 
         return Content(html, "text/html");
     }
@@ -184,100 +198,74 @@ public partial class OAuthController(
         return Ok(new { redirectUrl });
     }
 
-    public record GoogleAuthRequest(
-        string Credential,
-        string State, string CodeChallenge, string RedirectUri, string ClientId,
-        string? Nonce = null);
-
-    [HttpPost("/oauth/google")]
+    [HttpGet("/oauth/google/start")]
     [DistributedRateLimit("auth")]
-    public async Task<IActionResult> GoogleAuth([FromBody] GoogleAuthRequest request, CancellationToken ct)
+    public IActionResult GoogleStart([FromQuery] string state)
     {
-        if (!IsRedirectUriAllowed(request.RedirectUri))
-            return BadRequest(new { error = InvalidRedirectUriError });
+        var pending = authStore.GetGoogleRequest(state);
+        if (pending is null)
+            return InvalidGoogleState();
 
-        if (string.IsNullOrEmpty(request.State))
-            return BadRequest(new { error = MissingStateError });
+        if (string.IsNullOrWhiteSpace(googleSettings.Value.ClientId)
+            || !googleSettings.Value.AllowedRedirectUris.Contains(pending.GoogleRedirectUri, StringComparer.Ordinal))
+            return RedirectToAuthorize(pending, "unavailable");
 
-        var client = httpClientFactory.CreateClient();
-        var response = await client.GetAsync(
-            $"https://oauth2.googleapis.com/tokeninfo?id_token={Uri.EscapeDataString(request.Credential)}", ct);
-
-        if (!response.IsSuccessStatusCode)
-            return BadRequest(ErrorMessages.InvalidGoogleToken.ToErrorBody());
-
-        var json = await response.Content.ReadAsStringAsync(ct);
-        using var doc = JsonDocument.Parse(json);
-        var root = doc.RootElement;
-
-        var rawEmail = root.TryGetProperty("email", out var emailProp) ? emailProp.GetString() : null;
-        if (string.IsNullOrEmpty(rawEmail))
-            return BadRequest(ErrorMessages.GoogleEmailUnavailable.ToErrorBody());
-
-        var email = rawEmail.Trim().ToLowerInvariant();
-
-        var tokenAud = root.TryGetProperty("aud", out var audProp) ? audProp.GetString() : null;
-        var expectedClientId = googleSettings.Value.ClientId;
-        if (!string.IsNullOrEmpty(expectedClientId) && tokenAud != expectedClientId)
-            return BadRequest(ErrorMessages.GoogleTokenAudienceMismatch.ToErrorBody());
-
-        var name = root.TryGetProperty("name", out var nameProp) && nameProp.GetString() is string n
-            ? n : email.Split('@')[0];
-
-        var userResult = await FindOrCreateGoogleUserAsync(email, name, ct);
-        if (userResult.IsFailure)
-            return userResult.ToErrorResult();
-
-        var user = userResult.Value;
-
-        if (user.IsDeactivated)
-        {
-            await ConcurrencyRetry.SaveWithRetryAsync(
-                unitOfWork,
-                async c =>
-                {
-                    var tracked = await userRepository.FindOneTrackedIgnoringFiltersAsync(u => u.Id == user.Id, c);
-                    tracked?.CancelDeactivation();
-                },
-                ct);
-        }
-
-        var authCode = authStore.CreateCode(
-            user.Id, request.CodeChallenge, request.RedirectUri, request.ClientId, request.Nonce);
-
-        var separator = request.RedirectUri.Contains('?') ? "&" : "?";
-        var redirectUrl = $"{request.RedirectUri}{separator}code={Uri.EscapeDataString(authCode)}&state={Uri.EscapeDataString(request.State)}";
-
-        return Ok(new { redirectUrl });
+        var url = "https://accounts.google.com/o/oauth2/v2/auth"
+            + $"?client_id={Uri.EscapeDataString(googleSettings.Value.ClientId)}"
+            + $"&redirect_uri={Uri.EscapeDataString(pending.GoogleRedirectUri)}"
+            + "&response_type=code&scope=openid%20email%20profile"
+            + $"&state={Uri.EscapeDataString(state)}"
+            + $"&code_challenge={Uri.EscapeDataString(pending.GoogleCodeChallenge)}"
+            + "&code_challenge_method=S256&prompt=select_account";
+        return Redirect(url);
     }
 
-    private async Task<Result<Domain.Entities.User>> FindOrCreateGoogleUserAsync(string email, string name, CancellationToken ct)
+    [HttpGet("/oauth/google/callback")]
+    [DistributedRateLimit("auth")]
+    public async Task<IActionResult> GoogleCallback(
+        [FromQuery] string? state, [FromQuery] string? code, [FromQuery] string? error, CancellationToken ct)
     {
-        var existing = await userRepository.FindOneTrackedIgnoringFiltersAsync(u => u.Email == email, ct);
-        if (existing is not null)
-            return Result.Success(existing);
+        var pending = state is null ? null : authStore.ConsumeGoogleRequest(state);
+        if (pending is null)
+            return InvalidGoogleState();
 
-        var createResult = Domain.Entities.User.Create(name, email);
-        if (createResult.IsFailure)
-            return createResult;
+        if (error is not null)
+            return RedirectToAuthorize(pending, error == "access_denied" ? "cancelled" : "failed");
 
-        var user = createResult.Value;
-        await userRepository.AddAsync(user, ct);
+        if (string.IsNullOrEmpty(code))
+            return RedirectToAuthorize(pending, "failed");
 
-        try
-        {
-            await unitOfWork.SaveChangesAsync(ct);
-        }
-        catch (DbUpdateException exception) when (DbUniqueViolation.IsUniqueViolation(exception))
-        {
-            var raced = await userRepository.FindOneTrackedIgnoringFiltersAsync(u => u.Email == email, ct);
-            if (raced is null)
-                throw;
+        var result = await mediator.Send(new GoogleCodeAuthCommand(
+            code, pending.GoogleCodeVerifier, pending.GoogleRedirectUri, pending.Language), ct);
+        if (result.IsFailure)
+            return RedirectToAuthorize(pending, "failed");
 
-            return Result.Success(raced);
-        }
+        var authCode = authStore.CreateCode(result.Value.UserId, pending.CodeChallenge,
+            pending.RedirectUri, pending.ClientId, pending.Nonce);
+        var separator = pending.RedirectUri.Contains('?') ? "&" : "?";
+        return Redirect($"{pending.RedirectUri}{separator}code={Uri.EscapeDataString(authCode)}&state={Uri.EscapeDataString(pending.ClientState)}");
+    }
 
-        return Result.Success(user);
+    private static IActionResult InvalidGoogleState() => new ContentResult
+    {
+        Content = "<html><body><p>This authorization request is invalid or expired. Return to your MCP client and try again.</p></body></html>",
+        ContentType = "text/html",
+        StatusCode = StatusCodes.Status400BadRequest
+    };
+
+    private static IActionResult RedirectToAuthorize(GoogleAuthorizationRequest pending, string googleError)
+    {
+        var url = "/oauth/authorize"
+            + $"?client_id={Uri.EscapeDataString(pending.ClientId)}"
+            + $"&redirect_uri={Uri.EscapeDataString(pending.RedirectUri)}"
+            + "&response_type=code"
+            + $"&state={Uri.EscapeDataString(pending.ClientState)}"
+            + $"&code_challenge={Uri.EscapeDataString(pending.CodeChallenge)}"
+            + "&code_challenge_method=S256"
+            + $"&google_error={Uri.EscapeDataString(googleError)}";
+        if (pending.Nonce is not null)
+            url += $"&nonce={Uri.EscapeDataString(pending.Nonce)}";
+        return new RedirectResult(url);
     }
 
     [HttpPost("/oauth/token")]

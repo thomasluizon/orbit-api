@@ -5,7 +5,8 @@ namespace Orbit.Api.OAuth;
 public static class OAuthLoginPage
 {
     public static string Render(string clientId, string redirectUri, string state,
-        string codeChallenge, string codeChallengeMethod, string googleClientId, string? nonce = null)
+        string codeChallenge, string codeChallengeMethod, string googleState, string? nonce = null,
+        string? error = null, string language = "en")
     {
         var oauthParamsJson = JsonSerializer.Serialize(new
         {
@@ -16,18 +17,18 @@ public static class OAuthLoginPage
             codeChallengeMethod,
             nonce
         });
-        var googleClientIdJson = JsonSerializer.Serialize(googleClientId);
+        var googleStartUrl = System.Net.WebUtility.HtmlEncode($"/oauth/google/start?state={Uri.EscapeDataString(googleState)}");
+        var errorJson = JsonSerializer.Serialize(error);
 
         return $$"""
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{language}}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Authorize Orbit</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -105,6 +106,7 @@ public static class OAuthLoginPage
             font-family: 'Manrope', sans-serif;
             font-size: 0.9375rem;
             font-weight: 600;
+            text-decoration: none;
             cursor: pointer;
             transition: opacity 0.2s, transform 0.1s;
         }
@@ -249,10 +251,10 @@ public static class OAuthLoginPage
             <div class="divider">or</div>
 
             <div id="google-btn-container">
-                <button class="google-btn" id="google-signin-btn" onclick="googleSignIn()">
+                <a class="google-btn" id="google-signin-btn" href="{{googleStartUrl}}">
                     <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
                     Continue with Google
-                </button>
+                </a>
             </div>
         </div>
 
@@ -288,7 +290,7 @@ public static class OAuthLoginPage
 
     <script>
         const oauthParams = {{oauthParamsJson}};
-        const googleClientId = {{googleClientIdJson}};
+        const initialError = {{errorJson}};
         let userEmail = '';
         let resendTimer = null;
 
@@ -433,48 +435,7 @@ public static class OAuthLoginPage
             }
         }
 
-        function googleSignIn() {
-            if (!googleClientId) { showError('Google sign-in is not configured'); return; }
-            google.accounts.id.initialize({
-                client_id: googleClientId,
-                callback: handleGoogleCredential,
-                ux_mode: 'popup'
-            });
-            google.accounts.id.prompt();
-        }
-
-        async function handleGoogleCredential(response) {
-            clearMessages();
-            const btn = document.getElementById('google-signin-btn');
-            btn.disabled = true;
-
-            try {
-                const res = await fetch('/oauth/google', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        credential: response.credential,
-                        state: oauthParams.state,
-                        codeChallenge: oauthParams.codeChallenge,
-                        redirectUri: oauthParams.redirectUri,
-                        clientId: oauthParams.clientId,
-                        nonce: oauthParams.nonce
-                    })
-                });
-                const data = await res.json();
-                if (!res.ok) {
-                    showError(data.error || 'Google sign-in failed');
-                    btn.disabled = false;
-                    return;
-                }
-                showSuccess('Authorized! Redirecting...');
-                window.location.href = data.redirectUrl;
-            } catch {
-                showError('Network error. Please try again.');
-                btn.disabled = false;
-            }
-        }
-
+        if (initialError) showError(initialError);
         document.getElementById('email').addEventListener('keydown', (e) => {
             if (e.key === 'Enter') sendCode();
         });
