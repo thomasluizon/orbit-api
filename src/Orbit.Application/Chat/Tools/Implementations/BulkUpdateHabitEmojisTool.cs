@@ -13,7 +13,7 @@ public sealed partial class BulkUpdateHabitEmojisTool(
     IGenericRepository<Habit> habitRepository,
     IHabitEmojiInferenceService inferenceService,
     IUnitOfWork unitOfWork,
-    ILogger<BulkUpdateHabitEmojisTool> logger) : IAiTool
+    ILogger<BulkUpdateHabitEmojisTool> logger) : IAiTool, IArgumentCheckTool
 {
     internal const int InferenceChunkSize = 25;
 
@@ -53,6 +53,34 @@ public sealed partial class BulkUpdateHabitEmojisTool(
         },
         required = Array.Empty<string>()
     };
+
+    public async Task<Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
+        var overrides = new Dictionary<Guid, string?>();
+        var (filter, error) = args.TryGetProperty("revised_items", out var items)
+            ? ParseRevisedItems(items, overrides) : BulkHabitToolArguments.ParseEmojiFilter(args);
+        if (error is not null)
+            return Result.Failure(error);
+        var hasEmoji = JsonArgumentParser.PropertyExists(args, "emoji");
+        var emoji = JsonArgumentParser.GetNullableString(args, "emoji");
+        var infer = JsonArgumentParser.GetOptionalBool(args, "infer_from_title") ?? !hasEmoji;
+        if (infer || (!hasEmoji && overrides.Count != filter!.HabitIds.Count))
+            return Result.Failure("An edited emoji must be explicit.");
+        if (emoji is not null && !IsSingleEmojiGrapheme(emoji))
+            return Result.Failure("Invalid emoji.");
+        var habits = await BulkHabitSelection.LoadAsync(habitRepository, userId, filter!, ct);
+        var ownership = Orbit.Application.Common.OwnershipValidation.AllResolved(filter!.HabitIds, habits, h => h.Id,
+            Orbit.Application.Common.ErrorMessages.HabitNotFound);
+        if (ownership.IsFailure)
+            return ownership;
+        foreach (var habit in habits)
+        {
+            var validation = habit.ValidateUpdate(EmojiUpdate(habit, overrides.GetValueOrDefault(habit.Id, emoji)));
+            if (validation.IsFailure)
+                return validation;
+        }
+        return habits.Count == 0 ? Result.Failure("No matching habits found.") : Result.Success();
+    }
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
@@ -209,7 +237,10 @@ public sealed partial class BulkUpdateHabitEmojisTool(
 
     private static Result ApplyEmoji(Habit habit, string? emoji)
     {
-        return habit.Update(new HabitUpdateParams(
+        return habit.Update(EmojiUpdate(habit, emoji));
+    }
+
+    private static HabitUpdateParams EmojiUpdate(Habit habit, string? emoji) => new(
             habit.Title,
             habit.Description,
             habit.FrequencyUnit,
@@ -228,6 +259,5 @@ public sealed partial class BulkUpdateHabitEmojisTool(
             EndDate: habit.EndDate,
             ScheduledReminders: habit.ScheduledReminders,
             Emoji: emoji,
-            IntervalWeeks: habit.IntervalWeeks));
-    }
+            IntervalWeeks: habit.IntervalWeeks);
 }

@@ -5,7 +5,7 @@ using Orbit.Application.Habits.Commands;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
-public sealed class BulkRescheduleHabitsTool(IMediator mediator) : IAiTool
+public sealed class BulkRescheduleHabitsTool(IMediator mediator) : IAiTool, IArgumentCheckTool
 {
     public string Name => "bulk_reschedule_habits";
 
@@ -23,11 +23,20 @@ public sealed class BulkRescheduleHabitsTool(IMediator mediator) : IAiTool
         required = new[] { "filter", "due_date" }
     };
 
-    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
+    public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ExecuteCoreAsync(args, userId, ct, checkOnly: false);
+
+    public async Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
+        var result = await ExecuteCoreAsync(args, userId, ct, checkOnly: true);
+        return result.Success ? Orbit.Domain.Common.Result.Success() : Orbit.Domain.Common.Result.Failure(result.Error!);
+    }
+
+    private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         if (args.TryGetProperty("revised_items", out var revisedItems))
             return await BulkUpdateHabitsTool.ExecuteRevisedAsync(mediator,
-                revisedItems, userId, "Rescheduled", ct);
+                revisedItems, userId, "Rescheduled", ct, checkOnly);
 
         var (filter, filterError) = BulkHabitToolArguments.ParseRequiredFilter(args);
         if (filterError is not null)
@@ -40,7 +49,10 @@ public sealed class BulkRescheduleHabitsTool(IMediator mediator) : IAiTool
         }
 
         var changes = new BulkHabitChanges(HasDueDate: true, DueDate: dueDate);
-        var result = await mediator.Send(new BulkUpdateHabitsCommand(userId, filter!, changes), ct);
+        var command = new BulkUpdateHabitsCommand(userId, filter!, changes);
+        if (checkOnly)
+            return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
+        var result = await mediator.Send(command, ct);
         if (result.IsFailure)
             return ToolResult.FromFailure(result);
         return BulkUpdateHabitsTool.BuildResult(result.Value, "Rescheduled");

@@ -8,7 +8,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public sealed class BulkDeleteHabitsTool(
     IMediator mediator,
-    IGenericRepository<Habit> habitRepository) : IAiTool
+    IGenericRepository<Habit> habitRepository) : IAiTool, IArgumentCheckTool
 {
     public string Name => "bulk_delete_habits";
 
@@ -30,6 +30,17 @@ public sealed class BulkDeleteHabitsTool(
         },
         required = Array.Empty<string>()
     };
+
+    public async Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
+        var (filter, error) = BulkHabitToolArguments.ParseActionFilter(args);
+        if (error is not null)
+            return Orbit.Domain.Common.Result.Failure(error);
+        var habits = await BulkHabitSelection.LoadAsync(habitRepository, userId, filter!, ct);
+        return habits.Count == 0 ? Orbit.Domain.Common.Result.Failure("No matching habits found.")
+            : Orbit.Application.Common.OwnershipValidation.AllResolved(filter!.HabitIds, habits, h => h.Id,
+                Orbit.Application.Common.ErrorMessages.HabitNotFound);
+    }
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {

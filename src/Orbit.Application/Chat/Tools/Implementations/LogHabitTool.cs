@@ -11,7 +11,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 public class LogHabitTool(
     IMediator mediator,
     IGenericRepository<Habit> habitRepository,
-    IUserDateService userDateService) : IAiTool
+    IUserDateService userDateService) : IAiTool, IArgumentCheckTool
 {
     public string Name => "log_habit";
 
@@ -22,7 +22,13 @@ public class LogHabitTool(
         "ID of the habit to log",
         "ISO date (YYYY-MM-DD) to log for a specific date, e.g. an overdue instance. Defaults to today.");
 
-    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
+    public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ExecuteCoreAsync(args, userId, ct, checkOnly: false);
+
+    public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ChatToolArgumentCheck.CheckAsync(this, args, () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+
+    private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         if (!HabitToolHelpers.TryParseHabitId(args, out var habitId))
             return HabitToolHelpers.InvalidHabitIdResult();
@@ -48,7 +54,11 @@ public class LogHabitTool(
         if (targetDate > today)
             return new ToolResult(false, Error: ErrorMessages.CannotLogFutureDate.Message);
 
-        var result = await mediator.Send(new LogHabitCommand(userId, habitId, targetDate), ct);
+        var command = new LogHabitCommand(userId, habitId, targetDate);
+        if (checkOnly)
+            return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
+
+        var result = await mediator.Send(command, ct);
         if (result.IsFailure)
             return ToolResult.FromFailure(result);
 

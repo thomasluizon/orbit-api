@@ -30,7 +30,7 @@ public static class AgentArgumentPreview
 
     private static readonly HashSet<string> FixedFields = new(StringComparer.Ordinal)
     {
-        "action", "preview_item_id", "revised_items"
+        "action", "preview_item_id", "revised_items", "goal_name"
     };
 
     public static PendingOperationChangePreview? Build(
@@ -54,7 +54,10 @@ public static class AgentArgumentPreview
                 FormatValue(property.Value),
                 ResolveValueType(property.Name, property.Value),
                 property.Value.Clone(),
-                IsEditable(property.Name) && AgentArgumentSchema.Declares(editableSchema, property.Name)))
+                IsEditable(property.Name) && AgentArgumentSchema.Declares(editableSchema, property.Name)
+                    && AgentEditableArguments.IsConsumed(operationId, arguments, property.Name)
+                    && !(operationId == "skip_habit" && property.Name == "date"
+                        && target?.CurrentValues.GetValueOrDefault("frequency_unit") == string.Empty)))
             .ToList();
 
         var item = new PendingOperationItem(itemId, target?.EntityId, entityName, fields,

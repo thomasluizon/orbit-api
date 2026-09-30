@@ -9,7 +9,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class LinkHabitsToGoalTool(
     IMediator mediator,
-    IGenericRepository<Goal> goalRepository) : IAiTool, IConcurrencyRetryableTool
+    IGenericRepository<Goal> goalRepository) : IAiTool, IArgumentCheckTool, IConcurrencyRetryableTool
 {
     public string Name => "link_habits_to_goal";
 
@@ -32,7 +32,13 @@ public class LinkHabitsToGoalTool(
         required = new[] { "goal_id", "habit_ids" }
     };
 
-    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
+    public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ExecuteCoreAsync(args, userId, ct, checkOnly: false);
+
+    public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ChatToolArgumentCheck.CheckAsync(this, args, () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+
+    private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         if (!args.TryGetProperty("goal_id", out var goalIdEl) ||
             !Guid.TryParse(goalIdEl.GetString(), out var goalId))
@@ -58,7 +64,11 @@ public class LinkHabitsToGoalTool(
         if (goal is null)
             return new ToolResult(false, Error: ErrorMessages.GoalNotFound.Message);
 
-        var result = await mediator.Send(new LinkHabitsToGoalCommand(userId, goalId, habitIds), ct);
+        var command = new LinkHabitsToGoalCommand(userId, goalId, habitIds);
+        if (checkOnly)
+            return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
+
+        var result = await mediator.Send(command, ct);
         if (result.IsFailure)
             return ToolResult.FromFailure(result);
 

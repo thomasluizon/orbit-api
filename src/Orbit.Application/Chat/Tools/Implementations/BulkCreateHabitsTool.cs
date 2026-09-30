@@ -1,11 +1,12 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using MediatR;
 using Orbit.Application.Habits.Commands;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class BulkCreateHabitsTool(
-    IMediator mediator) : IAiTool
+    IMediator mediator) : IAiTool, IArgumentCheckTool
 {
     private const string TitleProperty = "title";
 
@@ -29,7 +30,20 @@ public class BulkCreateHabitsTool(
         required = new[] { "habits" }
     };
 
-    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
+    public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ExecuteCoreAsync(args, userId, ct, checkOnly: false);
+
+    public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
+        var schemaArguments = JsonNode.Parse(args.GetRawText());
+        if (schemaArguments?["habits"] is JsonArray habits)
+            foreach (var habit in habits.OfType<JsonObject>())
+                habit.Remove("preview_item_id");
+        return ChatToolArgumentCheck.CheckAsync(this, JsonSerializer.SerializeToElement(schemaArguments),
+            () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+    }
+
+    private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         if (!args.TryGetProperty("habits", out var habitsEl) || habitsEl.ValueKind != JsonValueKind.Array)
             return new ToolResult(false, Error: "habits is required and must be an array.");
@@ -46,7 +60,11 @@ public class BulkCreateHabitsTool(
         if (items.Count == 0)
             return new ToolResult(false, Error: "No habits provided.");
 
-        var result = await mediator.Send(new BulkCreateHabitsCommand(userId, items), ct);
+        var command = new BulkCreateHabitsCommand(userId, items);
+        if (checkOnly)
+            return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
+
+        var result = await mediator.Send(command, ct);
 
         if (result.IsFailure)
             return ToolResult.FromFailure(result);

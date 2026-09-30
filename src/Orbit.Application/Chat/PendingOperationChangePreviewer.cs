@@ -243,7 +243,7 @@ public sealed class PendingOperationChangePreviewer(
             field == "emoji" ? habit.Emoji : null, value,
             field == "emoji" ? "emoji" : field == "date" ? "date" : "action",
             field == "delete" ? null : JsonSerializer.SerializeToElement(value),
-            field != "delete");
+            field != "delete" && !(operationId == "bulk_skip_habits" && habit.FrequencyUnit is null));
     }
 
     private static void AddProposedFields(List<PendingOperationChange> fields, Habit habit,

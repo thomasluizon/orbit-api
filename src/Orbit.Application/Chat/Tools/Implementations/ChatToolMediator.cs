@@ -15,8 +15,11 @@ internal static class ChatToolMediator
         Guid entityId,
         string entityName,
         object payload,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool checkOnly = false)
     {
+        if (checkOnly)
+            return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
         var result = await mediator.Send(command, ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: entityId.ToString(), EntityName: entityName, Payload: payload)

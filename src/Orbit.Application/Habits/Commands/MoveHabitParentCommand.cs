@@ -55,12 +55,29 @@ public class MoveHabitParentCommandHandler(
             return Result.Success();
         }
 
+        var validation = await CheckArgumentsAsync(request, habitRepository, appConfigService, cancellationToken);
+        if (validation.IsFailure)
+            return validation;
+
+        habit.SetParentHabitId(request.ParentId);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result.Success();
+    }
+
+    internal static async Task<Result> CheckArgumentsAsync(MoveHabitParentCommand request,
+        IGenericRepository<Habit> repository, IAppConfigService config, CancellationToken ct)
+    {
+        var matches = await repository.FindAsync(h => h.Id == request.HabitId && h.UserId == request.UserId, ct);
+        var habit = matches.FirstOrDefault();
+        if (habit is null)
+            return Result.Failure(ErrorMessages.HabitNotFound);
+        if (request.ParentId is null)
+            return Result.Success();
         if (request.ParentId == request.HabitId)
             return Result.Failure(ErrorMessages.SelfParent);
 
-        var parent = await habitRepository.FindOneTrackedAsync(
-            h => h.Id == request.ParentId && h.UserId == request.UserId,
-            cancellationToken: cancellationToken);
+        var parents = await repository.FindAsync(h => h.Id == request.ParentId && h.UserId == request.UserId, ct);
+        var parent = parents.FirstOrDefault();
 
         if (parent is null)
             return Result.Failure(ErrorMessages.TargetParentNotFound);
@@ -68,20 +85,18 @@ public class MoveHabitParentCommandHandler(
         if (parent.IsGeneral != habit.IsGeneral)
             return Result.Failure(ErrorMessages.GeneralMismatchWithParent);
 
-        var allHabits = await habitRepository.FindAsync(h => h.UserId == request.UserId, cancellationToken);
+        var allHabits = await repository.FindAsync(h => h.UserId == request.UserId, ct);
         var habitsById = allHabits.ToDictionary(h => h.Id);
 
         if (WouldCreateCycle(request.HabitId, request.ParentId.Value, habitsById))
             return Result.Failure(ErrorMessages.CircularReference);
 
-        var maxDepth = await appConfigService.GetAsync(AppConfigKeys.MaxHabitDepth, AppConstants.MaxHabitDepth, cancellationToken);
+        var maxDepth = await config.GetAsync(AppConfigKeys.MaxHabitDepth, AppConstants.MaxHabitDepth, ct);
         var parentDepth = GetDepth(parent.Id, habitsById);
         var subtreeHeight = GetSubtreeHeight(request.HabitId, habitsById);
         if (parentDepth + 1 + subtreeHeight > maxDepth - 1)
             return Result.Failure(ErrorMessages.MaxDepthReached.Format(maxDepth));
 
-        habit.SetParentHabitId(request.ParentId);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }
 

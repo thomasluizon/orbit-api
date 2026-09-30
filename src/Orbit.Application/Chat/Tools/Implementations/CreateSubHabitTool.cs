@@ -7,7 +7,7 @@ using Orbit.Domain.ValueObjects;
 namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class CreateSubHabitTool(
-    IMediator mediator) : IAiTool
+    IMediator mediator) : IAiTool, IArgumentCheckTool
 {
     public string Name => "create_sub_habit";
 
@@ -66,7 +66,13 @@ public class CreateSubHabitTool(
         required = new[] { "parent_habit_id", "title" }
     };
 
-    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
+    public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ExecuteCoreAsync(args, userId, ct, checkOnly: false);
+
+    public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ChatToolArgumentCheck.CheckAsync(this, args, () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+
+    private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         if (!args.TryGetProperty("parent_habit_id", out var parentIdEl) ||
             !Guid.TryParse(parentIdEl.GetString(), out var parentHabitId))
@@ -87,8 +93,7 @@ public class CreateSubHabitTool(
         string? description = JsonArgumentParser.GetOptionalString(args, "description");
         string? emoji = JsonArgumentParser.GetOptionalString(args, "emoji");
 
-        var result = await mediator.Send(
-            new Orbit.Application.Habits.Commands.CreateSubHabitCommand(
+        var command = new Orbit.Application.Habits.Commands.CreateSubHabitCommand(
                 userId,
                 parentHabitId,
                 title,
@@ -108,7 +113,11 @@ public class CreateSubHabitTool(
                     ReminderTimes: reminderTimes,
                     SlipAlertEnabled: slipAlertEnabled,
                     IsFlexible: isFlexible,
-                    ScheduledReminders: scheduledReminders)), ct);
+                    ScheduledReminders: scheduledReminders));
+        if (checkOnly)
+            return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
+
+        var result = await mediator.Send(command, ct);
 
         if (result.IsFailure)
             return ToolResult.FromFailure(result);

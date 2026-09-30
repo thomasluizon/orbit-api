@@ -85,6 +85,24 @@ public sealed class EmailChallengeService(IMemoryCache cache, TimeProvider timeP
         }
     }
 
+    public Result CheckConfirmation(EmailChallengeOperation operation, string email, string code)
+    {
+        var normalizedEmail = email.ToLowerInvariant();
+        var cacheKey = ChallengeCacheKey(operation, normalizedEmail);
+        lock (ChallengeLock(cacheKey))
+        {
+            if (CountFailedAttempts(operation, normalizedEmail) >= AppConstants.MaxVerificationAttempts)
+                return Result.Failure(ErrorMessages.TooManyCodeAttempts);
+            if (!cache.TryGetValue(cacheKey, out VerificationEntry? entry) || entry is null
+                || ChallengeTtl - (timeProvider.GetUtcNow().UtcDateTime - entry.CreatedAt) <= TimeSpan.Zero)
+                return Result.Failure(ExpiredError(operation));
+            return CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(entry.Code), Encoding.UTF8.GetBytes(code))
+                ? Result.Success()
+                : Result.Failure(InvalidCodeError(operation, Math.Max(0, AppConstants.MaxVerificationAttempts
+                    - CountFailedAttempts(operation, normalizedEmail) - 1)));
+        }
+    }
+
     public void AuthorizeOnce(
         EmailChallengeOperation operation,
         Guid userId,

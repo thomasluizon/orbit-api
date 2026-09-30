@@ -28,7 +28,7 @@ public class GetNotificationsTool(IMediator mediator) : IAiTool
     }
 }
 
-public class UpdateNotificationsTool(IMediator mediator) : IAiTool
+public class UpdateNotificationsTool(IMediator mediator) : IAiTool, IArgumentCheckTool
 {
     public string Name => "update_notifications";
     public string Description => "Mark notifications as read, manage push subscriptions, or send a test push notification.";
@@ -56,7 +56,13 @@ public class UpdateNotificationsTool(IMediator mediator) : IAiTool
         required = new[] { "action" }
     };
 
-    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
+    public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ExecuteCoreAsync(args, userId, ct, checkOnly: false);
+
+    public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ChatToolArgumentCheck.CheckAsync(this, args, () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+
+    private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         var action = JsonArgumentParser.GetOptionalString(args, "action");
         if (string.IsNullOrWhiteSpace(action))
@@ -64,16 +70,16 @@ public class UpdateNotificationsTool(IMediator mediator) : IAiTool
 
         return action switch
         {
-            "mark_read" => await MarkReadAsync(args, userId, ct),
-            "mark_all_read" => await MarkAllReadAsync(userId, ct),
-            "subscribe_push" => await SubscribeAsync(args, userId, ct),
-            "unsubscribe_push" => await UnsubscribeAsync(args, userId, ct),
-            "test_push" => await TestPushAsync(userId, ct),
+            "mark_read" => await MarkReadAsync(args, userId, ct, checkOnly),
+            "mark_all_read" => await MarkAllReadAsync(userId, ct, checkOnly),
+            "subscribe_push" => await SubscribeAsync(args, userId, ct, checkOnly),
+            "unsubscribe_push" => await UnsubscribeAsync(args, userId, ct, checkOnly),
+            "test_push" => await TestPushAsync(userId, ct, checkOnly),
             _ => new ToolResult(false, Error: $"Unsupported action '{action}'.")
         };
     }
 
-    private async Task<ToolResult> MarkReadAsync(JsonElement args, Guid userId, CancellationToken ct)
+    private async Task<ToolResult> MarkReadAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         var notificationId = JsonArgumentParser.GetOptionalString(args, "notification_id");
         if (!Guid.TryParse(notificationId, out var parsedId))
@@ -85,10 +91,10 @@ public class UpdateNotificationsTool(IMediator mediator) : IAiTool
             parsedId,
             "Marked notification as read",
             new { action = "mark_read", notificationId },
-            ct);
+            ct, checkOnly);
     }
 
-    private async Task<ToolResult> SubscribeAsync(JsonElement args, Guid userId, CancellationToken ct)
+    private async Task<ToolResult> SubscribeAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         var endpoint = JsonArgumentParser.GetOptionalString(args, "endpoint");
         var p256dh = JsonArgumentParser.GetOptionalString(args, "p256dh");
@@ -103,10 +109,10 @@ public class UpdateNotificationsTool(IMediator mediator) : IAiTool
             userId,
             "Push subscription registered",
             new { action = "subscribe_push", endpoint },
-            ct);
+            ct, checkOnly);
     }
 
-    private async Task<ToolResult> UnsubscribeAsync(JsonElement args, Guid userId, CancellationToken ct)
+    private async Task<ToolResult> UnsubscribeAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         var endpoint = JsonArgumentParser.GetOptionalString(args, "endpoint");
         if (string.IsNullOrWhiteSpace(endpoint))
@@ -122,27 +128,35 @@ public class UpdateNotificationsTool(IMediator mediator) : IAiTool
             userId,
             "Push subscription removed",
             new { action = "unsubscribe_push", endpoint },
-            ct);
+            ct, checkOnly);
     }
 
-    private async Task<ToolResult> MarkAllReadAsync(Guid userId, CancellationToken ct)
+    private async Task<ToolResult> MarkAllReadAsync(Guid userId, CancellationToken ct, bool checkOnly)
     {
-        var result = await mediator.Send(new MarkAllNotificationsReadCommand(userId), ct);
+        var command = new MarkAllNotificationsReadCommand(userId);
+        if (checkOnly)
+            return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
+
+        var result = await mediator.Send(command, ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: userId.ToString(), EntityName: "Marked all notifications as read", Payload: new { action = "mark_all_read", markedCount = result.Value })
             : ToolResult.FromFailure(result, userId.ToString());
     }
 
-    private async Task<ToolResult> TestPushAsync(Guid userId, CancellationToken ct)
+    private async Task<ToolResult> TestPushAsync(Guid userId, CancellationToken ct, bool checkOnly)
     {
-        var result = await mediator.Send(new TestPushNotificationCommand(userId), ct);
+        var command = new TestPushNotificationCommand(userId);
+        if (checkOnly)
+            return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
+
+        var result = await mediator.Send(command, ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: userId.ToString(), EntityName: "Test push requested", Payload: result.Value)
             : ToolResult.FromFailure(result, userId.ToString());
     }
 }
 
-public class DeleteNotificationsTool(IMediator mediator) : IAiTool
+public class DeleteNotificationsTool(IMediator mediator) : IAiTool, IArgumentCheckTool
 {
     public string Name => "delete_notifications";
     public string Description => "Delete one notification or clear all notifications.";
@@ -159,7 +173,13 @@ public class DeleteNotificationsTool(IMediator mediator) : IAiTool
         required = new[] { "action" }
     };
 
-    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
+    public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ExecuteCoreAsync(args, userId, ct, checkOnly: false);
+
+    public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ChatToolArgumentCheck.CheckAsync(this, args, () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+
+    private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         var action = JsonArgumentParser.GetOptionalString(args, "action");
         if (string.IsNullOrWhiteSpace(action))
@@ -167,14 +187,14 @@ public class DeleteNotificationsTool(IMediator mediator) : IAiTool
 
         return action switch
         {
-            "delete_one" => await DeleteOneAsync(args, userId, ct),
-            "delete_all" => await ChatToolMediator.RunAsync(mediator, new DeleteAllNotificationsCommand(userId), userId, "Deleted all notifications", new { action }, ct),
-            "delete_selected" => await DeleteSelectedAsync(args, userId, ct),
+            "delete_one" => await DeleteOneAsync(args, userId, ct, checkOnly),
+            "delete_all" => await ChatToolMediator.RunAsync(mediator, new DeleteAllNotificationsCommand(userId), userId, "Deleted all notifications", new { action }, ct, checkOnly),
+            "delete_selected" => await DeleteSelectedAsync(args, userId, ct, checkOnly),
             _ => new ToolResult(false, Error: $"Unsupported action '{action}'.")
         };
     }
 
-    private async Task<ToolResult> DeleteSelectedAsync(JsonElement args, Guid userId, CancellationToken ct)
+    private async Task<ToolResult> DeleteSelectedAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         if (!args.TryGetProperty("notification_ids", out var values)
             || values.ValueKind != JsonValueKind.Array || values.GetArrayLength() == 0)
@@ -189,7 +209,11 @@ public class DeleteNotificationsTool(IMediator mediator) : IAiTool
         }
         foreach (var id in ids)
         {
-            var result = await mediator.Send(new DeleteNotificationCommand(userId, id), ct);
+            var command = new DeleteNotificationCommand(userId, id);
+            if (checkOnly)
+                return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
+
+            var result = await mediator.Send(command, ct);
             if (result.IsFailure)
                 return ToolResult.FromFailure(result);
         }
@@ -197,7 +221,7 @@ public class DeleteNotificationsTool(IMediator mediator) : IAiTool
             EntityName: $"Deleted {ids.Count} notifications");
     }
 
-    private async Task<ToolResult> DeleteOneAsync(JsonElement args, Guid userId, CancellationToken ct)
+    private async Task<ToolResult> DeleteOneAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         var notificationId = JsonArgumentParser.GetOptionalString(args, "notification_id");
         if (!Guid.TryParse(notificationId, out var parsedId))
@@ -209,6 +233,6 @@ public class DeleteNotificationsTool(IMediator mediator) : IAiTool
             parsedId,
             "Deleted notification",
             new { action = "delete_one", notificationId },
-            ct);
+            ct, checkOnly);
     }
 }

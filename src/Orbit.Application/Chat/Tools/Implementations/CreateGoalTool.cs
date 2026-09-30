@@ -8,7 +8,7 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
-public class CreateGoalTool : IAiTool
+public class CreateGoalTool : IAiTool, IArgumentCheckTool
 {
     private readonly IGenericRepository<Goal> _goalRepository;
     private readonly IUnitOfWork _unitOfWork;
@@ -46,7 +46,7 @@ public class CreateGoalTool : IAiTool
             target_value = new { type = "number", description = "Target number to reach (default: 1)" },
             unit = new { type = JsonSchemaTypes.String, description = "Unit of measurement (e.g., 'books', 'kg', 'dollars', 'goal')" },
             deadline = new { type = JsonSchemaTypes.String, description = "Optional deadline in YYYY-MM-DD format" },
-            goal_type = new { type = JsonSchemaTypes.String, description = "Goal type: 'Standard' (default) or 'Streak' (tracks consecutive habit streak)" },
+            goal_type = new { type = JsonSchemaTypes.String, @enum = new[] { "Standard", "Streak" }, description = "Goal type: 'Standard' (default) or 'Streak' (tracks consecutive habit streak)" },
             habit_ids = new
             {
                 type = JsonSchemaTypes.Array,
@@ -57,7 +57,16 @@ public class CreateGoalTool : IAiTool
         required = new[] { "title" }
     };
 
-    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
+    public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        PrepareAsync(args, userId, ct, checkOnly: false);
+
+    public async Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
+        var result = await PrepareAsync(args, userId, ct, checkOnly: true);
+        return result.Success ? Orbit.Domain.Common.Result.Success() : Orbit.Domain.Common.Result.Failure(result.Error!);
+    }
+
+    private async Task<ToolResult> PrepareAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         if (!args.TryGetProperty("title", out var titleEl) || string.IsNullOrWhiteSpace(titleEl.GetString()))
             return new ToolResult(false, Error: "title is required.");
@@ -107,13 +116,27 @@ public class CreateGoalTool : IAiTool
             if (habitsResolved.IsFailure)
                 return ToolResult.FromFailure(habitsResolved);
 
-            foreach (var habit in habits)
-                goal.AddHabit(habit);
+            if (!checkOnly)
+                foreach (var habit in habits)
+                    goal.AddHabit(habit);
+        }
+
+        if (checkOnly)
+        {
+            return ValidateGoal(userId, goal, habitIds);
         }
 
         await _goalRepository.AddAsync(goal, ct);
         await _unitOfWork.SaveChangesAsync(ct);
         return new ToolResult(true, EntityId: goal.Id.ToString(), EntityName: goal.Title);
+    }
+
+    private static ToolResult ValidateGoal(Guid userId, Goal goal, List<Guid> habitIds)
+    {
+        var command = new Orbit.Application.Goals.Commands.CreateGoalCommand(userId, goal.Title, goal.Description,
+            goal.TargetValue, goal.Unit, goal.Deadline, Type: goal.Type, HabitIds: habitIds);
+        var validation = new Orbit.Application.Goals.Validators.CreateGoalCommandValidator().Validate(command);
+        return validation.IsValid ? new ToolResult(true) : new ToolResult(false, Error: validation.ToString());
     }
 
     private static ToolResult? TryParseHabitIds(JsonElement args, out List<Guid> habitIds)
