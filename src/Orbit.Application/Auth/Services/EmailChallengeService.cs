@@ -96,10 +96,13 @@ public sealed class EmailChallengeService(IMemoryCache cache, TimeProvider timeP
             if (!cache.TryGetValue(cacheKey, out VerificationEntry? entry) || entry is null
                 || ChallengeTtl - (timeProvider.GetUtcNow().UtcDateTime - entry.CreatedAt) <= TimeSpan.Zero)
                 return Result.Failure(ExpiredError(operation));
-            return CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(entry.Code), Encoding.UTF8.GetBytes(code))
-                ? Result.Success()
-                : Result.Failure(InvalidCodeError(operation, Math.Max(0, AppConstants.MaxVerificationAttempts
-                    - CountFailedAttempts(operation, normalizedEmail) - 1)));
+            if (!CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(entry.Code), Encoding.UTF8.GetBytes(code)))
+            {
+                var attempts = RecordFailedAttempt(operation, normalizedEmail);
+                var attemptsRemaining = Math.Max(0, AppConstants.MaxVerificationAttempts - attempts);
+                return Result.Failure(InvalidCodeError(operation, attemptsRemaining));
+            }
+            return Result.Success();
         }
     }
 

@@ -50,6 +50,7 @@ internal sealed class HeldWriteTestContext : IDisposable
     public Habit ForeignHabit { get; }
     public Goal ForeignGoal { get; }
     public string DeletionCode { get; }
+    public EmailChallengeService Challenges => _services.GetRequiredService<EmailChallengeService>();
 
     public HeldWriteTestContext()
     {

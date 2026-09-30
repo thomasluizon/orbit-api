@@ -6,8 +6,10 @@ using Orbit.Application.Chat.Tools;
 using Orbit.Application.Auth.Services;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Common;
+using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
+using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Tests.Chat;
 
@@ -235,18 +237,135 @@ public sealed class HeldWriteRevisionTests
         context.Commands.Should().BeEmpty();
     }
 
-    [Fact]
-    public async Task AccountDeletionCheck_DoesNotConsumeCodeOrRecordFailures()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public async Task AccountDeletionRevision_SharesLockoutWithOrdinaryConfirmation(int ordinaryAttempts)
     {
         using var context = new HeldWriteTestContext();
-        var check = (IArgumentCheckTool)context.Tool("manage_account");
-        var valid = JsonSerializer.Deserialize<JsonElement>(context.Expand("""{"action":"confirm_deletion","code":"$code"}"""));
-        var invalid = JsonSerializer.Deserialize<JsonElement>("""{"action":"confirm_deletion","code":"000000"}""");
-        for (var attempt = 0; attempt <= AppConstants.MaxVerificationAttempts; attempt++)
-            (await check.CheckArgumentsAsync(invalid, context.UserId, CancellationToken.None)).IsFailure.Should().BeTrue();
-        (await check.CheckArgumentsAsync(valid, context.UserId, CancellationToken.None)).IsSuccess.Should().BeTrue();
-        (await check.CheckArgumentsAsync(valid, context.UserId, CancellationToken.None)).IsSuccess.Should().BeTrue();
+        var email = context.Records.OfType<User>().Single().Email;
+        var tool = context.Tool("manage_account");
+        const string arguments = """{"action":"confirm_deletion","code":"$code"}""";
+        var original = JsonSerializer.Deserialize<JsonElement>(context.Expand(arguments));
+
+        for (var attempt = 0; attempt < ordinaryAttempts; attempt++)
+            context.Challenges.Confirm(EmailChallengeOperation.AccountDeletion, email, "000000")
+                .Error.Should().Be(ErrorMessages.InvalidDeletionCode.Format(AppConstants.MaxVerificationAttempts - attempt - 1).Message);
+        for (var attempt = ordinaryAttempts; attempt < AppConstants.MaxVerificationAttempts; attempt++)
+        {
+            var (invalid, unchanged) = await context.ReviseAsync(tool, arguments, """{"code":"000000"}""");
+            invalid.Error.Should().Be("invalid_revision");
+            JsonElement.DeepEquals(unchanged, original).Should().BeTrue();
+        }
+
+        var (locked, stored) = await context.ReviseAsync(tool, arguments, """{"code":"$code"}""");
+        locked.Error.Should().Be("invalid_revision");
+        JsonElement.DeepEquals(stored, original).Should().BeTrue();
+        var check = await ((IArgumentCheckTool)tool).CheckArgumentsAsync(original, context.UserId, CancellationToken.None);
+        check.Error.Should().Be(ErrorMessages.TooManyCodeAttempts.Message);
+        var confirmation = context.Challenges.Confirm(EmailChallengeOperation.AccountDeletion, email, context.DeletionCode);
+        confirmation.Error.Should().Be(ErrorMessages.TooManyCodeAttempts.Message);
         context.Commands.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AccountDeletionRevision_LeavesCorrectCodeForOrdinaryConfirmation()
+    {
+        using var context = new HeldWriteTestContext();
+        var tool = context.Tool("manage_account");
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var (revision, _) = await context.ReviseAsync(tool,
+                """{"action":"confirm_deletion","code":"000000"}""", """{"code":"$code"}""");
+            revision.IsSuccess.Should().BeTrue(revision.Error);
+        }
+        var email = context.Records.OfType<User>().Single().Email;
+        context.Challenges.Confirm(EmailChallengeOperation.AccountDeletion, email, context.DeletionCode)
+            .IsSuccess.Should().BeTrue();
+        context.Commands.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(EmailChallengeOperation.AccountDeletion)]
+    [InlineData(EmailChallengeOperation.ApiKeyManagement)]
+    public void ChallengeCheck_WrongCodesExhaustConfirmationBudget(EmailChallengeOperation operation)
+    {
+        using var context = new HeldWriteTestContext();
+        const string email = "challenge@example.com";
+        var code = context.Challenges.Issue(operation, email).Value;
+        for (var attempt = 0; attempt < AppConstants.MaxVerificationAttempts; attempt++)
+        {
+            var invalid = context.Challenges.CheckConfirmation(operation, email, "000000");
+            var expected = operation == EmailChallengeOperation.AccountDeletion
+                ? ErrorMessages.InvalidDeletionCode : ErrorMessages.InvalidApiKeyCreationCode;
+            invalid.Error.Should().Be(expected.Format(AppConstants.MaxVerificationAttempts - attempt - 1).Message);
+        }
+
+        context.Challenges.CheckConfirmation(operation, email, code)
+            .Error.Should().Be(ErrorMessages.TooManyCodeAttempts.Message);
+        context.Challenges.Confirm(operation, email, code)
+            .Error.Should().Be(ErrorMessages.TooManyCodeAttempts.Message);
+    }
+
+    [Theory]
+    [InlineData("checklist_items", """[{"text":"Before"}]""", """[{"text":"After","is_checked":true}]""")]
+    [InlineData("checklist_items", """[{"text":"Before"}]""", """[{"text":"After","is_checked":false}]""")]
+    [InlineData("checklist_items", """[{"text":"Before"}]""", """[{"text":"After"}]""")]
+    [InlineData("scheduled_reminders", """[{"when":"same_day","time":"08:00"}]""", """[{"when":"same_day","time":"09:00"}]""")]
+    [InlineData("scheduled_reminders", """[{"when":"same_day","time":"08:00"}]""", """[{"when":"day_before","time":"09:00"}]""")]
+    public async Task BulkObjectListEdit_ExecutesStoredRevisedValue(string field, string before, string after)
+    {
+        using var context = new HeldWriteTestContext();
+        var tool = context.Tool("bulk_update_habits");
+        var arguments = $$$"""{"filter":{"all":true},"updates":{"{{{field}}}":{{{before}}}}}""";
+        var (revision, revised) = await context.ReviseAsync(tool, arguments, $$"""{"{{field}}":{{after}}}""");
+
+        revision.IsSuccess.Should().BeTrue(revision.Error);
+        context.Commands.Should().BeEmpty();
+        await context.UnitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        var execution = await tool.ExecuteAsync(revised, context.UserId, CancellationToken.None);
+
+        execution.Success.Should().BeTrue(execution.Error);
+        var command = context.Commands.Should().ContainSingle().Subject.Should().BeOfType<BulkUpdateHabitsCommand>().Subject;
+        if (field == "checklist_items")
+        {
+            command.Changes.HasChecklistItems.Should().BeTrue();
+            command.Changes.ChecklistItems.Should().Equal(new ChecklistItem("After", after.Contains("true", StringComparison.Ordinal)));
+        }
+        else
+        {
+            command.Changes.HasScheduledReminders.Should().BeTrue();
+            command.Changes.ScheduledReminders.Should().Equal(new ScheduledReminderTime(
+                after.Contains("day_before", StringComparison.Ordinal) ? ScheduledReminderWhen.DayBefore : ScheduledReminderWhen.SameDay,
+                new TimeOnly(9, 0)));
+        }
+    }
+
+    [Theory]
+    [InlineData("checklist_items", """[{"is_checked":false}]""")]
+    [InlineData("checklist_items", """[{"text":null}]""")]
+    [InlineData("checklist_items", """[{"text":"After","is_checked":"false"}]""")]
+    [InlineData("checklist_items", """[{"text":"After","unexpected":true}]""")]
+    [InlineData("scheduled_reminders", """[{"when":"same_day"}]""")]
+    [InlineData("scheduled_reminders", """[{"time":"09:00"}]""")]
+    [InlineData("scheduled_reminders", """[{"when":"next_day","time":"09:00"}]""")]
+    [InlineData("scheduled_reminders", """[{"when":"same_day","time":"9:00"}]""")]
+    [InlineData("scheduled_reminders", """[{"when":"same_day","time":900}]""")]
+    [InlineData("scheduled_reminders", """[{"when":"same_day","time":"09:00","unexpected":true}]""")]
+    public async Task BulkObjectListMalformedEntry_ReturnsInvalidRevisionAndPreservesHold(string field, string entries)
+    {
+        using var context = new HeldWriteTestContext();
+        var before = field == "checklist_items" ? """[{"text":"Before"}]""" : """[{"when":"same_day","time":"08:00"}]""";
+        var arguments = $$$"""{"filter":{"all":true},"updates":{"{{{field}}}":{{{before}}}}}""";
+        var (revision, stored) = await context.ReviseAsync(context.Tool("bulk_update_habits"), arguments,
+            $$"""{"{{field}}":{{entries}}}""");
+
+        revision.Error.Should().Be("invalid_revision");
+        JsonElement.DeepEquals(stored, JsonSerializer.Deserialize<JsonElement>(arguments)).Should().BeTrue();
+        context.Commands.Should().BeEmpty();
+        await context.UnitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     private static JsonElement AtPath(JsonElement value, string path)

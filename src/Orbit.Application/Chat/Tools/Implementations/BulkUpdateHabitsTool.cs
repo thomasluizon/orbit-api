@@ -39,8 +39,34 @@ public sealed class BulkUpdateHabitsTool(IMediator mediator) : IAiTool, IArgumen
                     is_flexible = new { type = JsonSchemaTypes.Boolean },
                     reminder_enabled = new { type = JsonSchemaTypes.Boolean },
                     reminder_times = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.Integer } },
-                    checklist_items = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.Object } },
-                    scheduled_reminders = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.Object } }
+                    checklist_items = new
+                    {
+                        type = JsonSchemaTypes.Array,
+                        items = new
+                        {
+                            type = JsonSchemaTypes.Object,
+                            properties = new
+                            {
+                                text = new { type = JsonSchemaTypes.String },
+                                is_checked = new { type = JsonSchemaTypes.Boolean }
+                            },
+                            required = new[] { "text" }
+                        }
+                    },
+                    scheduled_reminders = new
+                    {
+                        type = JsonSchemaTypes.Array,
+                        items = new
+                        {
+                            type = JsonSchemaTypes.Object,
+                            properties = new
+                            {
+                                when = new { type = JsonSchemaTypes.String, @enum = JsonSchemaTypes.ScheduledReminderWhenEnum },
+                                time = new { type = JsonSchemaTypes.String }
+                            },
+                            required = new[] { "when", "time" }
+                        }
+                    }
                 }
             }
         },
