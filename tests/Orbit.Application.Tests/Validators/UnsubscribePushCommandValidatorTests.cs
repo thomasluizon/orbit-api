@@ -55,6 +55,34 @@ public class UnsubscribePushCommandValidatorTests
     }
 
     [Fact]
+    public void Validate_ExplicitCrossAccountReleaseWithDeviceKeys_NoErrors()
+    {
+        _validator.TestValidate(ValidCommand() with { ReleaseOtherAccount = true })
+            .ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("", "")]
+    [InlineData(" ", " ")]
+    [InlineData(null, "auth")]
+    [InlineData("p256dh", null)]
+    public void Validate_ExplicitCrossAccountReleaseRequiresBothDeviceKeys(string? p256dh, string? auth)
+    {
+        var result = _validator.TestValidate(ValidCommand() with
+        {
+            P256dh = p256dh,
+            Auth = auth,
+            ReleaseOtherAccount = true
+        });
+
+        if (string.IsNullOrWhiteSpace(p256dh))
+            result.ShouldHaveValidationErrorFor(x => x.P256dh);
+        if (string.IsNullOrWhiteSpace(auth))
+            result.ShouldHaveValidationErrorFor(x => x.Auth);
+    }
+
+    [Fact]
     public void Validate_P256dhOver500Chars_HasError()
     {
         var command = ValidCommand() with { P256dh = new string('a', 501) };

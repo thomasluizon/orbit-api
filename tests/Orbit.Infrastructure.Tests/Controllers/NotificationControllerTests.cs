@@ -172,23 +172,43 @@ public class NotificationControllerTests
         _mediator.Send(Arg.Any<UnsubscribePushCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
 
-        var request = new NotificationController.SubscribeRequest("https://endpoint", "p256dh", "auth");
+        var request = new NotificationController.UnsubscribeRequest("https://endpoint", "p256dh", "auth");
         var result = await _controller.Unsubscribe(request, CancellationToken.None);
 
         result.Should().BeOfType<OkResult>();
     }
 
+    [Theory]
+    [InlineData("""{"endpoint":"https://endpoint"}""")]
+    [InlineData("""{"endpoint":"https://endpoint","p256dh":"fcm","auth":"fcm"}""")]
+    public async Task Unsubscribe_LegacyRequest_ReleasesOnlyTheCallersRow(string json)
+    {
+        _mediator.Send(Arg.Any<UnsubscribePushCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success());
+        var request = System.Text.Json.JsonSerializer.Deserialize<NotificationController.UnsubscribeRequest>(
+            json,
+            new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+
+        request.Should().NotBeNull();
+        var result = await _controller.Unsubscribe(request!, CancellationToken.None);
+
+        result.Should().BeOfType<OkResult>();
+        await _mediator.Received(1).Send(
+            Arg.Is<UnsubscribePushCommand>(c => c.Endpoint == "https://endpoint" && c.P256dh == request.P256dh && c.Auth == request.Auth && !c.ReleaseOtherAccount),
+            Arg.Any<CancellationToken>());
+    }
+
     [Fact]
-    public async Task Unsubscribe_ForwardsTheDeviceKeysSoAnotherAccountsRowCanBeReleased()
+    public async Task Unsubscribe_ForwardsExplicitCrossAccountReleaseWithDeviceKeys()
     {
         _mediator.Send(Arg.Any<UnsubscribePushCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
 
-        var request = new NotificationController.SubscribeRequest("https://endpoint", "p256dh", "auth");
+        var request = new NotificationController.UnsubscribeRequest("https://endpoint", "p256dh", "auth", ReleaseOtherAccount: true);
         await _controller.Unsubscribe(request, CancellationToken.None);
 
         await _mediator.Received(1).Send(
-            Arg.Is<UnsubscribePushCommand>(c => c.Endpoint == "https://endpoint" && c.P256dh == "p256dh" && c.Auth == "auth"),
+            Arg.Is<UnsubscribePushCommand>(c => c.Endpoint == "https://endpoint" && c.P256dh == "p256dh" && c.Auth == "auth" && c.ReleaseOtherAccount),
             Arg.Any<CancellationToken>());
     }
 
@@ -198,7 +218,7 @@ public class NotificationControllerTests
         _mediator.Send(Arg.Any<UnsubscribePushCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure("Error"));
 
-        var request = new NotificationController.SubscribeRequest("https://endpoint", "p256dh", "auth");
+        var request = new NotificationController.UnsubscribeRequest("https://endpoint", "p256dh", "auth");
         var result = await _controller.Unsubscribe(request, CancellationToken.None);
 
         result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);

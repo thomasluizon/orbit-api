@@ -72,12 +72,37 @@ public sealed class PushSubscriptionAccountSwitchTests : IDisposable
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PreviousAccountsDelayedUnsubscribe_AfterAnotherAccountClaimsTheDevice_LeavesTheClaimInPlace(bool native)
+    {
+        var endpoint = native ? FcmToken : WebEndpoint;
+        var p256dh = native ? PushSubscription.FcmSentinel : WebP256dh;
+        var auth = native ? PushSubscription.FcmSentinel : WebAuth;
+        (await Subscribe(_firstAccount, endpoint, p256dh, auth)).IsSuccess.Should().BeTrue();
+        var delayedRelease = new UnsubscribePushCommand(_firstAccount, endpoint, p256dh, auth);
+
+        (await Subscribe(_secondAccount, endpoint, p256dh, auth)).IsSuccess.Should().BeTrue();
+        await using var context = _factory.CreateContext();
+        var handler = new UnsubscribePushCommandHandler(
+            new GenericRepository<PushSubscription>(context),
+            new UnitOfWork(context, new DatabaseConnectionSettings()));
+
+        (await handler.Handle(delayedRelease, CancellationToken.None)).IsSuccess.Should().BeTrue();
+        CountFor(_firstAccount).Should().Be(0);
+        CountFor(_secondAccount).Should().Be(1, "the delayed sign-out must preserve the new account's claim");
+        using var verification = _factory.CreateContext();
+        verification.PushSubscriptions.AsNoTracking().Single(s => s.Endpoint == endpoint)
+            .UserId.Should().Be(_secondAccount);
+    }
+
     [Fact]
     public async Task NewAccountTurnsPushOffOnTheBrowser_OldAccountNoLongerListsIt()
     {
         (await Subscribe(_firstAccount, WebEndpoint, WebP256dh, WebAuth)).IsSuccess.Should().BeTrue();
 
-        var result = await Unsubscribe(_secondAccount, WebEndpoint, WebP256dh, WebAuth);
+        var result = await Unsubscribe(_secondAccount, WebEndpoint, WebP256dh, WebAuth, releaseOtherAccount: true);
 
         result.IsSuccess.Should().BeTrue();
         CountFor(_firstAccount).Should().Be(0);
@@ -88,7 +113,7 @@ public sealed class PushSubscriptionAccountSwitchTests : IDisposable
     {
         (await Subscribe(_firstAccount, FcmToken, PushSubscription.FcmSentinel, PushSubscription.FcmSentinel)).IsSuccess.Should().BeTrue();
 
-        var result = await Unsubscribe(_secondAccount, FcmToken, PushSubscription.FcmSentinel, PushSubscription.FcmSentinel);
+        var result = await Unsubscribe(_secondAccount, FcmToken, PushSubscription.FcmSentinel, PushSubscription.FcmSentinel, releaseOtherAccount: true);
 
         result.IsSuccess.Should().BeTrue();
         CountFor(_firstAccount).Should().Be(0);
@@ -100,8 +125,8 @@ public sealed class PushSubscriptionAccountSwitchTests : IDisposable
         (await Subscribe(_firstAccount, WebEndpoint, WebP256dh, WebAuth)).IsSuccess.Should().BeTrue();
 
         var takeover = await Subscribe(_secondAccount, WebEndpoint, WebP256dh, "guessed-auth-secret");
-        var guessedRemoval = await Unsubscribe(_secondAccount, WebEndpoint, WebP256dh, "guessed-auth-secret");
-        var endpointOnlyRemoval = await Unsubscribe(_secondAccount, WebEndpoint, null, null);
+        var guessedRemoval = await Unsubscribe(_secondAccount, WebEndpoint, WebP256dh, "guessed-auth-secret", releaseOtherAccount: true);
+        var endpointOnlyRemoval = await Unsubscribe(_secondAccount, WebEndpoint, null, null, releaseOtherAccount: true);
 
         takeover.IsFailure.Should().BeTrue();
         takeover.ErrorCode.Should().Be(ErrorCodes.PushEndpointOwnedByOtherUser);
@@ -121,14 +146,14 @@ public sealed class PushSubscriptionAccountSwitchTests : IDisposable
         return await handler.Handle(new SubscribePushCommand(userId, endpoint, p256dh, auth), CancellationToken.None);
     }
 
-    private async Task<Result> Unsubscribe(Guid userId, string endpoint, string? p256dh, string? auth)
+    private async Task<Result> Unsubscribe(Guid userId, string endpoint, string? p256dh, string? auth, bool releaseOtherAccount = false)
     {
         await using var context = _factory.CreateContext();
         var handler = new UnsubscribePushCommandHandler(
             new GenericRepository<PushSubscription>(context),
             new UnitOfWork(context, new DatabaseConnectionSettings()));
 
-        return await handler.Handle(new UnsubscribePushCommand(userId, endpoint, p256dh, auth), CancellationToken.None);
+        return await handler.Handle(new UnsubscribePushCommand(userId, endpoint, p256dh, auth, releaseOtherAccount), CancellationToken.None);
     }
 
     private int CountFor(Guid userId)

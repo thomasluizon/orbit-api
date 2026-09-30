@@ -8,8 +8,9 @@ namespace Orbit.Application.Notifications.Commands;
 public record UnsubscribePushCommand(
     Guid UserId,
     string Endpoint,
-    string? P256dh,
-    string? Auth) : IRequest<Result>;
+    string? P256dh = null,
+    string? Auth = null,
+    bool ReleaseOtherAccount = false) : IRequest<Result>;
 
 public class UnsubscribePushCommandHandler(
     IGenericRepository<PushSubscription> pushSubscriptionRepository,
@@ -31,13 +32,14 @@ public class UnsubscribePushCommandHandler(
     }
 
     /// <summary>
-    /// The owner can always release its own row. Another account signed in on the same device can
-    /// release it only by presenting the device's credentials, so a device left registered to a
-    /// previous account stops counting there once the device turns push off or signs out.
+    /// Ordinary sign-out releases only the caller's row, so a delayed request cannot remove a
+    /// subsequent account's claim. Device cleanup under another account must explicitly opt in
+    /// and present the device's credentials.
     /// </summary>
     private static bool CanRelease(PushSubscription subscription, UnsubscribePushCommand request) =>
         subscription.UserId == request.UserId
-        || (request.P256dh is not null
+        || (request.ReleaseOtherAccount
+            && request.P256dh is not null
             && request.Auth is not null
             && subscription.MatchesCredentials(request.P256dh, request.Auth));
 }

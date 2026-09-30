@@ -461,7 +461,7 @@ public class ProfileNotificationCalendarToolTests
     }
 
     [Fact]
-    public async Task UpdateNotificationsTool_UnsubscribePushForwardsTheDeviceKeys()
+    public async Task UpdateNotificationsTool_UnsubscribePushWithDeviceKeysDefaultsToOwnerOnly()
     {
         var mediator = Substitute.For<IMediator>();
         mediator.Send(Arg.Any<UnsubscribePushCommand>(), Arg.Any<CancellationToken>())
@@ -474,7 +474,30 @@ public class ProfileNotificationCalendarToolTests
             CancellationToken.None);
 
         await mediator.Received(1).Send(
-            Arg.Is<UnsubscribePushCommand>(c => c.UserId == UserId && c.Endpoint == "https://push" && c.P256dh == "key" && c.Auth == "secret"),
+            Arg.Is<UnsubscribePushCommand>(c => c.P256dh == "key" && c.Auth == "secret" && !c.ReleaseOtherAccount),
+            Arg.Any<CancellationToken>());
+        using var schema = JsonDocument.Parse(JsonSerializer.Serialize(tool.GetParameterSchema()));
+        schema.RootElement.GetProperty("properties").GetProperty("release_other_account")
+            .GetProperty("type").GetString().Should().Be("boolean");
+        schema.RootElement.GetProperty("required").EnumerateArray().Select(x => x.GetString())
+            .Should().NotContain("release_other_account");
+    }
+
+    [Fact]
+    public async Task UpdateNotificationsTool_UnsubscribePushForwardsExplicitCrossAccountReleaseAndDeviceKeys()
+    {
+        var mediator = Substitute.For<IMediator>();
+        mediator.Send(Arg.Any<UnsubscribePushCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success());
+        var tool = new UpdateNotificationsTool(mediator);
+
+        await tool.ExecuteAsync(
+            Parse("""{"action":"unsubscribe_push","endpoint":"https://push","p256dh":"key","auth":"secret","release_other_account":true}"""),
+            UserId,
+            CancellationToken.None);
+
+        await mediator.Received(1).Send(
+            Arg.Is<UnsubscribePushCommand>(c => c.UserId == UserId && c.Endpoint == "https://push" && c.P256dh == "key" && c.Auth == "secret" && c.ReleaseOtherAccount),
             Arg.Any<CancellationToken>());
     }
 

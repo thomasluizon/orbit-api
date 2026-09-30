@@ -84,12 +84,18 @@ public class NotificationTools(IMediator mediator, McpExecutorBridge executorBri
     public async Task<string> UnsubscribePush(
         ClaimsPrincipal user,
         [Description("Push service endpoint URL to remove")] string endpoint,
+        [Description("Device public key, or fcm for an Android registration")] string? p256dh = null,
+        [Description("Device authentication secret, or fcm for an Android registration")] string? auth = null,
+        [Description("Explicitly release another account's registration with device credentials; omit for ordinary sign-out")] bool releaseOtherAccount = false,
         CancellationToken cancellationToken = default)
     {
         var result = await executorBridge.ExecuteAsync(user, UpdateNotificationsTool, new
         {
             action = "unsubscribe_push",
-            endpoint
+            endpoint,
+            p256dh,
+            auth,
+            release_other_account = releaseOtherAccount
         }, confirmationToken: null, cancellationToken);
 
         return result.Succeeded ? "Push subscription removed." : result.Message;

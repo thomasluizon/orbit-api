@@ -135,18 +135,35 @@ public class UnsubscribePushCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_OtherAccountsRowWithItsDeviceKeys_RemovesAndSaves()
+    public async Task Handle_ExplicitCrossAccountReleaseWithDeviceKeys_RemovesAndSaves()
     {
         var subscription = PushSubscription.Create(Guid.NewGuid(), "https://push.example.com/endpoint", "p256dh", "auth").Value;
         ArrangeFound(subscription);
 
-        var command = new UnsubscribePushCommand(UserId, "https://push.example.com/endpoint", "p256dh", "auth");
+        var command = new UnsubscribePushCommand(UserId, "https://push.example.com/endpoint", "p256dh", "auth", ReleaseOtherAccount: true);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         _pushSubRepo.Received(1).Remove(subscription);
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_OrdinaryReleaseWithMatchingCredentials_LeavesAnotherAccountsRowInPlace(bool native)
+    {
+        var p256dh = native ? PushSubscription.FcmSentinel : "p256dh";
+        var auth = native ? PushSubscription.FcmSentinel : "auth";
+        var subscription = PushSubscription.Create(Guid.NewGuid(), "endpoint", p256dh, auth).Value;
+        ArrangeFound(subscription);
+
+        var result = await _handler.Handle(new UnsubscribePushCommand(UserId, "endpoint", p256dh, auth), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        _pushSubRepo.DidNotReceive().Remove(Arg.Any<PushSubscription>());
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Theory]
@@ -157,7 +174,7 @@ public class UnsubscribePushCommandHandlerTests
         var subscription = PushSubscription.Create(Guid.NewGuid(), "https://push.example.com/endpoint", "p256dh", "auth").Value;
         ArrangeFound(subscription);
 
-        var command = new UnsubscribePushCommand(UserId, "https://push.example.com/endpoint", p256dh, auth);
+        var command = new UnsubscribePushCommand(UserId, "https://push.example.com/endpoint", p256dh, auth, ReleaseOtherAccount: true);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
