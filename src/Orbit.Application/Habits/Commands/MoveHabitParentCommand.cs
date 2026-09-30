@@ -55,7 +55,10 @@ public class MoveHabitParentCommandHandler(
             return Result.Success();
         }
 
-        var validation = await CheckArgumentsAsync(request, habitRepository, appConfigService, cancellationToken);
+        var parent = await habitRepository.FindOneTrackedAsync(
+            h => h.Id == request.ParentId && h.UserId == request.UserId,
+            cancellationToken: cancellationToken);
+        var validation = await ValidateMoveAsync(request, habit, parent, habitRepository, appConfigService, cancellationToken);
         if (validation.IsFailure)
             return validation;
 
@@ -73,12 +76,15 @@ public class MoveHabitParentCommandHandler(
             return Result.Failure(ErrorMessages.HabitNotFound);
         if (request.ParentId is null)
             return Result.Success();
+        var parents = await repository.FindAsync(h => h.Id == request.ParentId && h.UserId == request.UserId, ct);
+        return await ValidateMoveAsync(request, habit, parents.FirstOrDefault(), repository, config, ct);
+    }
+
+    private static async Task<Result> ValidateMoveAsync(MoveHabitParentCommand request, Habit habit, Habit? parent,
+        IGenericRepository<Habit> repository, IAppConfigService config, CancellationToken ct)
+    {
         if (request.ParentId == request.HabitId)
             return Result.Failure(ErrorMessages.SelfParent);
-
-        var parents = await repository.FindAsync(h => h.Id == request.ParentId && h.UserId == request.UserId, ct);
-        var parent = parents.FirstOrDefault();
-
         if (parent is null)
             return Result.Failure(ErrorMessages.TargetParentNotFound);
 
@@ -88,7 +94,7 @@ public class MoveHabitParentCommandHandler(
         var allHabits = await repository.FindAsync(h => h.UserId == request.UserId, ct);
         var habitsById = allHabits.ToDictionary(h => h.Id);
 
-        if (WouldCreateCycle(request.HabitId, request.ParentId.Value, habitsById))
+        if (WouldCreateCycle(request.HabitId, parent.Id, habitsById))
             return Result.Failure(ErrorMessages.CircularReference);
 
         var maxDepth = await config.GetAsync(AppConfigKeys.MaxHabitDepth, AppConstants.MaxHabitDepth, ct);
