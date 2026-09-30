@@ -1,5 +1,7 @@
+using System.Data.Common;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Orbit.Application.Common;
 using Orbit.Application.Notifications.Commands;
 using Orbit.Domain.Common;
@@ -21,12 +23,14 @@ public sealed class PushSubscriptionAccountSwitchTests : IDisposable
     private const string WebAuth = "browser-1-auth-secret";
     private const string FcmToken = "fcm-token-device-1";
 
-    private readonly SqliteOrbitDbContextFactory _factory = new();
+    private readonly BeforeDeleteInterceptor _beforeDelete = new();
+    private readonly SqliteOrbitDbContextFactory _factory;
     private readonly Guid _firstAccount;
     private readonly Guid _secondAccount;
 
     public PushSubscriptionAccountSwitchTests()
     {
+        _factory = new SqliteOrbitDbContextFactory(_beforeDelete);
         _firstAccount = SeedUser("first@example.com");
         _secondAccount = SeedUser("second@example.com");
     }
@@ -86,14 +90,56 @@ public sealed class PushSubscriptionAccountSwitchTests : IDisposable
         (await Subscribe(_secondAccount, endpoint, p256dh, auth)).IsSuccess.Should().BeTrue();
         await using var context = _factory.CreateContext();
         var handler = new UnsubscribePushCommandHandler(
-            new GenericRepository<PushSubscription>(context),
-            new UnitOfWork(context, new DatabaseConnectionSettings()));
+            new GenericRepository<PushSubscription>(context));
 
         (await handler.Handle(delayedRelease, CancellationToken.None)).IsSuccess.Should().BeTrue();
         CountFor(_firstAccount).Should().Be(0);
         CountFor(_secondAccount).Should().Be(1, "the delayed sign-out must preserve the new account's claim");
         using var verification = _factory.CreateContext();
         verification.PushSubscriptions.AsNoTracking().Single(s => s.Endpoint == endpoint)
+            .UserId.Should().Be(_secondAccount);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task UnsubscribeReadsPreviousOwner_AnotherAccountClaimsBeforeDelete_LeavesTheNewClaimInPlace(
+        bool native, bool releaseOtherAccount)
+    {
+        var endpoint = native ? FcmToken : WebEndpoint;
+        var p256dh = native ? PushSubscription.FcmSentinel : WebP256dh;
+        var auth = native ? PushSubscription.FcmSentinel : WebAuth;
+        (await Subscribe(_firstAccount, endpoint, p256dh, auth)).IsSuccess.Should().BeTrue();
+        await using var context = _factory.CreateContext();
+        var handler = new UnsubscribePushCommandHandler(
+            new GenericRepository<PushSubscription>(context));
+        var command = new UnsubscribePushCommand(
+            releaseOtherAccount ? _secondAccount : _firstAccount,
+            endpoint, p256dh, auth, releaseOtherAccount);
+
+        _beforeDelete.Context = context;
+        _beforeDelete.BeforeDelete = async () =>
+        {
+            var readSubscription = context.ChangeTracker.Entries<PushSubscription>().Single().Entity;
+            readSubscription.UserId.Should().Be(_firstAccount, "unsubscribe must read before the transfer");
+
+            (await Subscribe(_secondAccount, endpoint, p256dh, auth)).IsSuccess.Should().BeTrue();
+
+            using var verification = _factory.CreateContext();
+            var transferred = verification.PushSubscriptions.AsNoTracking().Single(s => s.Endpoint == endpoint);
+            transferred.Id.Should().Be(readSubscription.Id);
+            transferred.UserId.Should().Be(_secondAccount, "the transfer must commit before the delete");
+        };
+
+        (await handler.Handle(command, CancellationToken.None)).IsSuccess.Should().BeTrue();
+
+        _beforeDelete.Invoked.Should().BeTrue();
+        CountFor(_firstAccount).Should().Be(0);
+        CountFor(_secondAccount).Should().Be(1, "the delete must preserve an owner claimed after its read");
+        using var finalVerification = _factory.CreateContext();
+        finalVerification.PushSubscriptions.AsNoTracking().Single(s => s.Endpoint == endpoint)
             .UserId.Should().Be(_secondAccount);
     }
 
@@ -150,8 +196,7 @@ public sealed class PushSubscriptionAccountSwitchTests : IDisposable
     {
         await using var context = _factory.CreateContext();
         var handler = new UnsubscribePushCommandHandler(
-            new GenericRepository<PushSubscription>(context),
-            new UnitOfWork(context, new DatabaseConnectionSettings()));
+            new GenericRepository<PushSubscription>(context));
 
         return await handler.Handle(new UnsubscribePushCommand(userId, endpoint, p256dh, auth, releaseOtherAccount), CancellationToken.None);
     }
@@ -168,5 +213,44 @@ public sealed class PushSubscriptionAccountSwitchTests : IDisposable
         _factory.Context.Users.Add(user);
         _factory.Context.SaveChanges();
         return user.Id;
+    }
+
+    private sealed class BeforeDeleteInterceptor : DbCommandInterceptor
+    {
+        internal DbContext? Context { get; set; }
+        internal Func<Task>? BeforeDelete { get; set; }
+        internal bool Invoked { get; private set; }
+
+        public override async ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            await InterleaveTransfer(eventData);
+            return result;
+        }
+
+        public override async ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            await InterleaveTransfer(eventData);
+            return result;
+        }
+
+        private async Task InterleaveTransfer(CommandEventData eventData)
+        {
+            if (eventData.Context != Context
+                || eventData.CommandSource is not (CommandSource.SaveChanges or CommandSource.ExecuteDelete or CommandSource.ExecuteUpdate)
+                || BeforeDelete is not { } transfer)
+                return;
+
+            BeforeDelete = null;
+            Invoked = true;
+            await transfer();
+        }
     }
 }

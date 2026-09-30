@@ -13,8 +13,7 @@ public record UnsubscribePushCommand(
     bool ReleaseOtherAccount = false) : IRequest<Result>;
 
 public class UnsubscribePushCommandHandler(
-    IGenericRepository<PushSubscription> pushSubscriptionRepository,
-    IUnitOfWork unitOfWork) : IRequestHandler<UnsubscribePushCommand, Result>
+    IGenericRepository<PushSubscription> pushSubscriptionRepository) : IRequestHandler<UnsubscribePushCommand, Result>
 {
     public async Task<Result> Handle(UnsubscribePushCommand request, CancellationToken cancellationToken)
     {
@@ -24,8 +23,11 @@ public class UnsubscribePushCommandHandler(
 
         if (subscription is not null && CanRelease(subscription, request))
         {
-            pushSubscriptionRepository.Remove(subscription);
-            await unitOfWork.SaveChangesAsync(cancellationToken);
+            var subscriptionId = subscription.Id;
+            var ownerId = subscription.UserId;
+            await pushSubscriptionRepository.DeleteAsync(
+                s => s.Id == subscriptionId && s.UserId == ownerId,
+                cancellationToken);
         }
 
         return Result.Success();
