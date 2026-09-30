@@ -9445,17 +9445,17 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SubscribeRequest"
+                "$ref": "#/components/schemas/UnsubscribeRequest"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/SubscribeRequest"
+                "$ref": "#/components/schemas/UnsubscribeRequest"
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/SubscribeRequest"
+                "$ref": "#/components/schemas/UnsubscribeRequest"
               }
             }
           },
@@ -9861,39 +9861,6 @@
             "description": "OK"
           }
         }
-      }
-    },
-    "/oauth/google": {
-      "post": {
-        "tags": [
-          "OAuth"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/GoogleAuthRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/GoogleAuthRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/GoogleAuthRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "deprecated": true
       }
     },
     "/oauth/token": {
@@ -18120,6 +18087,33 @@
               "null",
               "object"
             ]
+          }
+        }
+      },
+      "UnsubscribeRequest": {
+        "required": [
+          "endpoint"
+        ],
+        "type": "object",
+        "properties": {
+          "endpoint": {
+            "type": "string"
+          },
+          "p256dh": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "auth": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "releaseOtherAccount": {
+            "type": "boolean",
+            "default": false
           }
         }
       },

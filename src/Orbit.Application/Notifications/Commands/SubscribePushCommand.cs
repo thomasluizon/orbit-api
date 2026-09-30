@@ -36,12 +36,7 @@ public class SubscribePushCommandHandler(
             cancellationToken: cancellationToken);
 
         if (existing is not null)
-        {
-            if (existing.UserId == request.UserId)
-                return Result.Success();
-
-            return Result.Failure(ErrorMessages.PushEndpointOwnedByOtherUser);
-        }
+            return await ClaimExisting(existing, request, cancellationToken);
 
         var result = PushSubscription.Create(request.UserId, request.Endpoint, request.P256dh, request.Auth);
         if (result.IsFailure)
@@ -61,6 +56,32 @@ public class SubscribePushCommandHandler(
             return Result.Success();
         }
 
+        return Result.Success();
+    }
+
+    /// <summary>
+    /// A device keeps one endpoint across the accounts that sign in on it. When another account
+    /// registers it and proves it holds the device's credentials, the row moves to that account, so
+    /// the previous account neither lists nor counts it toward the device cap.
+    /// </summary>
+    private async Task<Result> ClaimExisting(
+        PushSubscription existing,
+        SubscribePushCommand request,
+        CancellationToken cancellationToken)
+    {
+        if (existing.UserId == request.UserId)
+            return Result.Success();
+
+        if (!existing.MatchesCredentials(request.P256dh, request.Auth))
+            return Result.Failure(ErrorMessages.PushEndpointOwnedByOtherUser);
+
+        var transfer = existing.TransferTo(request.UserId);
+        if (transfer.IsFailure)
+            return transfer;
+
+        EvictOldestBeyondCap(await GetPersistedUserSubscriptions(request.UserId, cancellationToken), existing);
+
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }
 

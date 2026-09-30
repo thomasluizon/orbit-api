@@ -73,7 +73,6 @@ public static class ErrorCodes
     public const string PlayNotificationVerificationFailed = "PLAY_NOTIFICATION_VERIFICATION_FAILED";
     public const string CodeRequestCooldown = "CODE_REQUEST_COOLDOWN";
     public const string GoogleEmailUnavailable = "GOOGLE_EMAIL_UNAVAILABLE";
-    public const string GoogleTokenAudienceMismatch = "GOOGLE_TOKEN_AUDIENCE_MISMATCH";
     public const string TemplateNotFound = "TEMPLATE_NOT_FOUND";
     public const string SuggestionNotFound = "SUGGESTION_NOT_FOUND";
     public const string PushEndpointInvalid = "PUSH_ENDPOINT_INVALID";

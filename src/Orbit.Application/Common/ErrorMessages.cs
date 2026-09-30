@@ -83,7 +83,6 @@ public static class ErrorMessages
     public static readonly AppError GoogleRedirectUriNotAllowed = From(ErrorCodes.GoogleRedirectUriNotAllowed);
     public static readonly AppError GoogleCodeExchangeFailed = From(ErrorCodes.GoogleCodeExchangeFailed);
     public static readonly AppError GoogleEmailUnavailable = From(ErrorCodes.GoogleEmailUnavailable);
-    public static readonly AppError GoogleTokenAudienceMismatch = From(ErrorCodes.GoogleTokenAudienceMismatch);
     public static readonly AppError TemplateNotFound = From(ErrorCodes.TemplateNotFound);
     public static readonly AppError SuggestionNotFound = From(ErrorCodes.SuggestionNotFound);
     public static readonly AppError PushEndpointInvalid = From(ErrorCodes.PushEndpointInvalid);
