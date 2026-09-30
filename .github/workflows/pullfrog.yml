@@ -54,10 +54,12 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 1
-      # Codex is the reviewer. PULLFROG_AGENT selects the Codex harness, and `model` pins
-      # openai/gpt-6.1-sol, which no curated Pullfrog alias resolves to yet, so it passes
-      # through as a raw specifier and overrides the repository config. Both steps pin
-      # the same release commit because a moving tag is an unpinned dependency.
+      # Codex is the reviewer: the stored Codex credential on the default opencode harness, which
+      # keeps the reviewfrog specialist sub-agent. `model` pins openai/gpt-6.1-sol, which no curated
+      # Pullfrog alias resolves to yet, so it passes through as a raw specifier and overrides the
+      # repository config. With no alias there is no effort rung, so no effort is sent and the
+      # model runs at OpenAI's documented default, medium. Both steps pin the same release commit
+      # because a moving tag is an unpinned dependency.
       - name: Run agent
         id: codex
         uses: pullfrog/pullfrog@99c5e781dd54463197d1109998386d37c84f6853 # v0, release 0.1.84
@@ -65,9 +67,6 @@ jobs:
         with:
           prompt: ${{ inputs.prompt }}
           model: openai/gpt-6.1-sol
-          effort: medium
-        env:
-          PULLFROG_AGENT: codex
       # Claude reviews ONLY when the Codex step fails, which is what an
       # exhausted OpenAI allowance looks like. Green runs never reach this.
       - name: Run agent (Claude fallback)
