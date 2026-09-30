@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Orbit.Domain.Common;
 using Orbit.Domain.Enums;
 
@@ -55,4 +57,32 @@ public class PushSubscription : Entity
             CreatedAtUtc = DateTime.UtcNow
         });
     }
+
+    /// <summary>
+    /// True when a registration presents the credentials only the device holding this subscription can
+    /// read. A Web Push endpoint alone is not enough: the request must also carry the browser-generated
+    /// <see cref="P256dh"/> key and <see cref="Auth"/> secret. An FCM registration token is the only
+    /// credential Firebase issues to one app install, so the matched token plus the FCM sentinel is the proof.
+    /// </summary>
+    public bool MatchesCredentials(string p256dh, string auth) =>
+        Transport == PushTransport.Fcm
+            ? ClassifyTransport(p256dh) == PushTransport.Fcm
+            : FixedTimeEquals(P256dh, p256dh) && FixedTimeEquals(Auth, auth);
+
+    /// <summary>
+    /// Moves this device's subscription to the account now registering it, so the previous account
+    /// stops listing, counting and pushing to a device it no longer receives on.
+    /// </summary>
+    public Result TransferTo(Guid userId)
+    {
+        if (userId == Guid.Empty)
+            return Result.Failure(DomainErrors.UserIdRequired);
+
+        UserId = userId;
+        CreatedAtUtc = DateTime.UtcNow;
+        return Result.Success();
+    }
+
+    private static bool FixedTimeEquals(string stored, string presented) =>
+        CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(stored), Encoding.UTF8.GetBytes(presented));
 }

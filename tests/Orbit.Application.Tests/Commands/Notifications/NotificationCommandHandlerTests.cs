@@ -302,6 +302,89 @@ public class SubscribePushCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_SameBrowserUnderNewAccount_TransfersTheRowToTheNewAccount()
+    {
+        var otherUserId = Guid.NewGuid();
+        var existing = PushSubscription.Create(otherUserId, "https://push.example.com/endpoint", "p256dh", "auth").Value;
+        ArrangeExistingEndpoint(existing);
+        ArrangeUserSubscriptions();
+
+        var command = new SubscribePushCommand(UserId, "https://push.example.com/endpoint", "p256dh", "auth");
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        existing.UserId.Should().Be(UserId);
+        await _pushSubRepo.DidNotReceive().AddAsync(Arg.Any<PushSubscription>(), Arg.Any<CancellationToken>());
+        _pushSubRepo.DidNotReceive().Remove(Arg.Any<PushSubscription>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_SameAndroidDeviceUnderNewAccount_TransfersTheRowToTheNewAccount()
+    {
+        var otherUserId = Guid.NewGuid();
+        var existing = PushSubscription.Create(otherUserId, "fcm-token-abc123", PushSubscription.FcmSentinel, PushSubscription.FcmSentinel).Value;
+        ArrangeExistingEndpoint(existing);
+        ArrangeUserSubscriptions();
+
+        var command = new SubscribePushCommand(UserId, "fcm-token-abc123", PushSubscription.FcmSentinel, PushSubscription.FcmSentinel);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        existing.UserId.Should().Be(UserId);
+        await _pushSubRepo.DidNotReceive().AddAsync(Arg.Any<PushSubscription>(), Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("p256dh", "other-auth")]
+    [InlineData("other-p256dh", "auth")]
+    [InlineData(PushSubscription.FcmSentinel, PushSubscription.FcmSentinel)]
+    public async Task Handle_ForeignWebPushEndpointWithoutItsKeys_KeepsTheRowWithItsOwner(string p256dh, string auth)
+    {
+        var otherUserId = Guid.NewGuid();
+        var existing = PushSubscription.Create(otherUserId, "https://push.example.com/endpoint", "p256dh", "auth").Value;
+        ArrangeExistingEndpoint(existing);
+
+        var command = new SubscribePushCommand(UserId, "https://push.example.com/endpoint", p256dh, auth);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.PushEndpointOwnedByOtherUser);
+        existing.UserId.Should().Be(otherUserId);
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_TransferIntoAccountAtCap_EvictsItsOldestAndKeepsTheTransferredRow()
+    {
+        var otherUserId = Guid.NewGuid();
+        var existing = PushSubscription.Create(otherUserId, "https://push.example.com/endpoint", "p256dh", "auth").Value;
+        ArrangeExistingEndpoint(existing);
+        var owned = Enumerable.Range(0, AppConstants.MaxPushSubscriptionsPerUser)
+            .Select(i => PushSubscription.Create(UserId, $"https://push.example.com/{i}", "key", "auth").Value)
+            .ToArray();
+        ArrangeUserSubscriptions(owned);
+
+        List<PushSubscription>? removed = null;
+        _pushSubRepo.When(r => r.RemoveRange(Arg.Any<IEnumerable<PushSubscription>>()))
+            .Do(call => removed = call.Arg<IEnumerable<PushSubscription>>().ToList());
+
+        var command = new SubscribePushCommand(UserId, "https://push.example.com/endpoint", "p256dh", "auth");
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        existing.UserId.Should().Be(UserId);
+        removed.Should().NotBeNull();
+        removed!.Should().ContainSingle();
+        removed.Should().NotContain(existing);
+    }
+
+    [Fact]
     public async Task Handle_NonHttpsEndpoint_RejectsAsSsrfDefense()
     {
         var command = new SubscribePushCommand(UserId, "http://push.example.com/endpoint", "p256dh", "auth");
@@ -422,6 +505,15 @@ public class SubscribePushCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         _pushSubRepo.DidNotReceive().RemoveRange(Arg.Any<IEnumerable<PushSubscription>>());
+    }
+
+    private void ArrangeExistingEndpoint(PushSubscription existing)
+    {
+        _pushSubRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<PushSubscription, bool>>>(),
+            Arg.Any<Func<IQueryable<PushSubscription>, IQueryable<PushSubscription>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(existing);
     }
 
     private void ArrangeNoExistingEndpoint()

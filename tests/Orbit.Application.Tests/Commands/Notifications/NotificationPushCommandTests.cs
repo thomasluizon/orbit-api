@@ -105,20 +105,21 @@ public class TestPushNotificationCommandHandlerTests
 public class UnsubscribePushCommandHandlerTests
 {
     private readonly IGenericRepository<PushSubscription> _pushSubRepo = Substitute.For<IGenericRepository<PushSubscription>>();
-    private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly UnsubscribePushCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
 
     public UnsubscribePushCommandHandlerTests()
     {
-        _handler = new UnsubscribePushCommandHandler(_pushSubRepo, _unitOfWork);
+        _handler = new UnsubscribePushCommandHandler(_pushSubRepo);
     }
 
     [Fact]
-    public async Task Handle_SubscriptionFound_RemovesAndSaves()
+    public async Task Handle_SubscriptionFound_DeletesOnlyTheReadRowAndOwner()
     {
         var subscription = PushSubscription.Create(UserId, "https://push.example.com/endpoint", "p256dh", "auth").Value;
+        var otherSubscription = PushSubscription.Create(UserId, "https://push.example.com/other", "p256dh", "auth").Value;
+        using var cancellation = new CancellationTokenSource();
 
         _pushSubRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<PushSubscription, bool>>>(),
@@ -126,13 +127,86 @@ public class UnsubscribePushCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(subscription);
 
-        var command = new UnsubscribePushCommand(UserId, "https://push.example.com/endpoint");
+        var command = new UnsubscribePushCommand(UserId, "https://push.example.com/endpoint", "p256dh", "auth");
+
+        var result = await _handler.Handle(command, cancellation.Token);
+
+        result.IsSuccess.Should().BeTrue();
+        await _pushSubRepo.Received(1).DeleteAsync(
+            Arg.Is<Expression<Func<PushSubscription, bool>>>(predicate =>
+                predicate.Compile()(subscription) && !predicate.Compile()(otherSubscription)),
+            cancellation.Token);
+
+        subscription.TransferTo(Guid.NewGuid()).IsSuccess.Should().BeTrue();
+        await _pushSubRepo.Received(1).DeleteAsync(
+            Arg.Is<Expression<Func<PushSubscription, bool>>>(predicate => !predicate.Compile()(subscription)),
+            cancellation.Token);
+    }
+
+    [Fact]
+    public async Task Handle_ExplicitCrossAccountReleaseWithDeviceKeys_DeletesThePreviousOwnersRow()
+    {
+        var subscription = PushSubscription.Create(Guid.NewGuid(), "https://push.example.com/endpoint", "p256dh", "auth").Value;
+        ArrangeFound(subscription);
+
+        var command = new UnsubscribePushCommand(UserId, "https://push.example.com/endpoint", "p256dh", "auth", ReleaseOtherAccount: true);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        _pushSubRepo.Received(1).Remove(subscription);
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _pushSubRepo.Received(1).DeleteAsync(
+            Arg.Is<Expression<Func<PushSubscription, bool>>>(predicate => predicate.Compile()(subscription)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_OrdinaryReleaseWithMatchingCredentials_LeavesAnotherAccountsRowInPlace(bool native)
+    {
+        var p256dh = native ? PushSubscription.FcmSentinel : "p256dh";
+        var auth = native ? PushSubscription.FcmSentinel : "auth";
+        var subscription = PushSubscription.Create(Guid.NewGuid(), "endpoint", p256dh, auth).Value;
+        ArrangeFound(subscription);
+
+        var result = await _handler.Handle(new UnsubscribePushCommand(UserId, "endpoint", p256dh, auth), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _pushSubRepo.DidNotReceive().DeleteAsync(
+            Arg.Any<Expression<Func<PushSubscription, bool>>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("p256dh", "other-auth")]
+    [InlineData(null, null)]
+    public async Task Handle_OtherAccountsRowWithoutItsDeviceKeys_LeavesItInPlace(string? p256dh, string? auth)
+    {
+        var subscription = PushSubscription.Create(Guid.NewGuid(), "https://push.example.com/endpoint", "p256dh", "auth").Value;
+        ArrangeFound(subscription);
+
+        var command = new UnsubscribePushCommand(UserId, "https://push.example.com/endpoint", p256dh, auth, ReleaseOtherAccount: true);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _pushSubRepo.DidNotReceive().DeleteAsync(
+            Arg.Any<Expression<Func<PushSubscription, bool>>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_OwnRowWithoutDeviceKeys_DeletesTheRow()
+    {
+        var subscription = PushSubscription.Create(UserId, "https://push.example.com/endpoint", "p256dh", "auth").Value;
+        ArrangeFound(subscription);
+
+        var command = new UnsubscribePushCommand(UserId, "https://push.example.com/endpoint", null, null);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _pushSubRepo.Received(1).DeleteAsync(
+            Arg.Is<Expression<Func<PushSubscription, bool>>>(predicate => predicate.Compile()(subscription)),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -144,11 +218,21 @@ public class UnsubscribePushCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns((PushSubscription?)null);
 
-        var command = new UnsubscribePushCommand(UserId, "https://push.example.com/endpoint");
+        var command = new UnsubscribePushCommand(UserId, "https://push.example.com/endpoint", "p256dh", "auth");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        _pushSubRepo.DidNotReceive().Remove(Arg.Any<PushSubscription>());
+        await _pushSubRepo.DidNotReceive().DeleteAsync(
+            Arg.Any<Expression<Func<PushSubscription, bool>>>(), Arg.Any<CancellationToken>());
+    }
+
+    private void ArrangeFound(PushSubscription subscription)
+    {
+        _pushSubRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<PushSubscription, bool>>>(),
+            Arg.Any<Func<IQueryable<PushSubscription>, IQueryable<PushSubscription>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(subscription);
     }
 }

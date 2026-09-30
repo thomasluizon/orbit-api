@@ -9445,17 +9445,17 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SubscribeRequest"
+                "$ref": "#/components/schemas/UnsubscribeRequest"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/SubscribeRequest"
+                "$ref": "#/components/schemas/UnsubscribeRequest"
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/SubscribeRequest"
+                "$ref": "#/components/schemas/UnsubscribeRequest"
               }
             }
           },
@@ -18087,6 +18087,33 @@
               "null",
               "object"
             ]
+          }
+        }
+      },
+      "UnsubscribeRequest": {
+        "required": [
+          "endpoint"
+        ],
+        "type": "object",
+        "properties": {
+          "endpoint": {
+            "type": "string"
+          },
+          "p256dh": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "auth": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "releaseOtherAccount": {
+            "type": "boolean",
+            "default": false
           }
         }
       },
