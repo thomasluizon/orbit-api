@@ -246,6 +246,107 @@ public class GetCalendarMonthQueryHandlerTests
         var childItem = parentItem.Children.Should().ContainSingle().Subject;
         childItem.Id.Should().Be(child.Id);
         childItem.ScheduledDates.Should().Equal(loggedDate);
+        result.Value.Logs.Should().ContainKey(child.Id)
+            .WhoseValue.Should().ContainSingle(log => log.Date == loggedDate && log.Value == 1);
+    }
+
+    [Theory]
+    [InlineData(FrequencyUnit.Week, true, false)]
+    [InlineData(null, false, false)]
+    [InlineData(FrequencyUnit.Day, false, false)]
+    [InlineData(FrequencyUnit.Week, true, true)]
+    [InlineData(null, false, true)]
+    [InlineData(FrequencyUnit.Day, false, true)]
+    public async Task Handle_LoggedFlexibleOrCompletedDescendant_ReturnsExactLogs(
+        FrequencyUnit? frequencyUnit, bool isFlexible, bool isGrandchild)
+    {
+        var loggedDate = MonthEnd.AddDays(-2);
+        var parent = Habit.Create(new HabitCreateParams(
+            UserId, "Parent", null, null, DueDate: MonthEnd.AddDays(1))).Value;
+        var child = Habit.Create(new HabitCreateParams(
+            UserId, "Child", null, null, DueDate: MonthEnd.AddDays(1), ParentHabitId: parent.Id)).Value;
+        var descendant = Habit.Create(new HabitCreateParams(
+            UserId, "Logged descendant", frequencyUnit, frequencyUnit.HasValue ? 1 : null,
+            DueDate: loggedDate, ParentHabitId: isGrandchild ? child.Id : parent.Id,
+            IsFlexible: isFlexible, EndDate: frequencyUnit == FrequencyUnit.Day ? MonthEnd : null)).Value;
+        var firstLog = descendant.Log(loggedDate);
+        firstLog.IsSuccess.Should().BeTrue();
+        var expectedLogs = new List<HabitLog> { firstLog.Value };
+        if (frequencyUnit == FrequencyUnit.Day)
+        {
+            var lastLog = descendant.Log(MonthEnd);
+            lastLog.IsSuccess.Should().BeTrue();
+            expectedLogs.Insert(0, lastLog.Value);
+            descendant.DueDate.Should().Be(MonthEnd.AddDays(1));
+            descendant.Update(new HabitUpdateParams(
+                descendant.Title, null, frequencyUnit, 1, null, false, MonthStart))
+                .IsSuccess.Should().BeTrue();
+            descendant.DueDate.Should().Be(MonthStart);
+        }
+        descendant.IsCompleted.Should().Be(!isFlexible);
+        var habits = isGrandchild ? new List<Habit> { parent, child, descendant } : [parent, descendant];
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(habits.AsReadOnly());
+
+        var result = await _handler.Handle(
+            new GetCalendarMonthQuery(UserId, MonthStart, MonthEnd), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var parentItem = result.Value.Habits.Should().ContainSingle().Subject;
+        parentItem.Id.Should().Be(parent.Id);
+        parentItem.ScheduledDates.Should().BeEmpty();
+        var descendantItem = parentItem.Children.Should().ContainSingle().Subject;
+        if (isGrandchild)
+            descendantItem = descendantItem.Children.Should().ContainSingle().Subject;
+        descendantItem.Id.Should().Be(descendant.Id);
+        descendantItem.IsCompleted.Should().Be(!isFlexible);
+        descendantItem.Instances.Should().BeEmpty();
+        descendantItem.ScheduledDates.Should().Contain(loggedDate);
+        descendantItem.IsLoggedInRange.Should().BeTrue();
+        result.Value.Logs[parent.Id].Should().BeEmpty();
+        result.Value.Logs.Should().ContainKey(descendant.Id).WhoseValue.Should().Equal(
+            expectedLogs.Select(log => new HabitLogResponse(log.Id, log.Date, log.Value, log.CreatedAtUtc)));
+    }
+
+    [Fact]
+    public async Task Handle_DescendantLogs_PreservesRangeOrderingAndTopLevelLogs()
+    {
+        var parent = Habit.Create(new HabitCreateParams(
+            UserId, "Parent", FrequencyUnit.Month, 5, DueDate: MonthStart, IsFlexible: true)).Value;
+        var child = Habit.Create(new HabitCreateParams(
+            UserId, "Child", FrequencyUnit.Month, 5, DueDate: MonthStart,
+            ParentHabitId: parent.Id, IsFlexible: true)).Value;
+        foreach (var habit in new[] { parent, child })
+        {
+            habit.Log(MonthStart.AddDays(-1)).IsSuccess.Should().BeTrue();
+            habit.Log(MonthStart).IsSuccess.Should().BeTrue();
+            habit.SkipFlexible(Today).IsSuccess.Should().BeTrue();
+            habit.Log(MonthEnd).IsSuccess.Should().BeTrue();
+            habit.Log(MonthEnd.AddDays(1)).IsSuccess.Should().BeTrue();
+        }
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { parent, child }.AsReadOnly());
+
+        var result = await _handler.Handle(
+            new GetCalendarMonthQuery(UserId, MonthStart, MonthEnd), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Logs.Keys.Should().BeEquivalentTo(new[] { parent.Id, child.Id });
+        foreach (var habit in new[] { parent, child })
+        {
+            result.Value.Logs[habit.Id].Should().Equal(habit.Logs
+                .Where(log => log.Date >= MonthStart && log.Date <= MonthEnd)
+                .OrderByDescending(log => log.Date)
+                .Select(log => new HabitLogResponse(log.Id, log.Date, log.Value, log.CreatedAtUtc)));
+            result.Value.Logs[habit.Id].Select(log => log.Date).Should().Equal(MonthEnd, Today, MonthStart);
+            result.Value.Logs[habit.Id].Select(log => log.Value).Should().Equal(1m, 0m, 1m);
+        }
     }
 
     [Fact]

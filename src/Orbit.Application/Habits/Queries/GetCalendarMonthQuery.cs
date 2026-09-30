@@ -64,7 +64,7 @@ public class GetCalendarMonthQueryHandler(
     private async Task<IReadOnlyList<Habit>> LoadHabitsWithLogs(
         GetCalendarMonthQuery request, CancellationToken cancellationToken)
     {
-        var logFrom = request.DateFrom.AddDays(-31);        return await habitRepository.FindAsync(
+        var logFrom = request.DateFrom.AddDays(-31); return await habitRepository.FindAsync(
             h => h.UserId == request.UserId && !h.IsGeneral,
             q => q.Include(h => h.Tags)
                   .Include(h => h.Logs.Where(l => l.Date >= logFrom && l.Date <= request.DateTo))
@@ -163,7 +163,6 @@ public class GetCalendarMonthQueryHandler(
         IReadOnlyList<Habit> allHabits, DateOnly dateFrom, DateOnly dateTo)
     {
         return allHabits
-            .Where(h => h.ParentHabitId == null)
             .ToDictionary(
                 h => h.Id,
                 h => h.Logs
