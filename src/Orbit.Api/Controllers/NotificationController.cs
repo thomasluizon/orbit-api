@@ -19,6 +19,12 @@ public partial class NotificationController(
 {
     public record SubscribeRequest(string Endpoint, string P256dh, string Auth);
 
+    public record UnsubscribeRequest(
+        string Endpoint,
+        string? P256dh = null,
+        string? Auth = null,
+        bool ReleaseOtherAccount = false);
+
     [HttpGet]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -104,10 +110,15 @@ public partial class NotificationController(
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Unsubscribe(
-        [FromBody] SubscribeRequest request,
+        [FromBody] UnsubscribeRequest request,
         CancellationToken cancellationToken)
     {
-        var command = new UnsubscribePushCommand(HttpContext.GetUserId(), request.Endpoint);
+        var command = new UnsubscribePushCommand(
+            HttpContext.GetUserId(),
+            request.Endpoint,
+            request.P256dh,
+            request.Auth,
+            request.ReleaseOtherAccount);
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)

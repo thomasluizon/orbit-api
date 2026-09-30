@@ -84,4 +84,11 @@ public interface IGenericRepository<T> where T : Entity
     void Update(T entity);
     void Remove(T entity);
     void RemoveRange(IEnumerable<T> entities);
+
+    /// <summary>
+    /// Deletes matching rows immediately in the database, without updating tracked entities or
+    /// waiting for SaveChanges. Returns the number of deleted rows. Include any ownership or
+    /// concurrency conditions in the predicate so they are checked atomically with the delete.
+    /// </summary>
+    Task<int> DeleteAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default);
 }

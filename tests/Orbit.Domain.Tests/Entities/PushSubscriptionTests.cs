@@ -97,4 +97,58 @@ public class PushSubscriptionTests
         fcm.Transport.Should().Be(PushTransport.Fcm);
         webPush.Transport.Should().Be(PushTransport.WebPush);
     }
+
+    [Theory]
+    [InlineData("p256dh-key", "auth-secret", true)]
+    [InlineData("p256dh-key", "other-secret", false)]
+    [InlineData("other-key", "auth-secret", false)]
+    [InlineData("p256dh-key", "auth-secre", false)]
+    [InlineData(PushSubscription.FcmSentinel, PushSubscription.FcmSentinel, false)]
+    public void MatchesCredentials_WebPush_RequiresBothBrowserKeys(string p256dh, string auth, bool expected)
+    {
+        var subscription = PushSubscription.Create(ValidUserId, "https://push.example.com/sub/123", "p256dh-key", "auth-secret").Value;
+
+        subscription.MatchesCredentials(p256dh, auth).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(PushSubscription.FcmSentinel, PushSubscription.FcmSentinel, true)]
+    [InlineData(PushSubscription.FcmSentinel, "any-auth", true)]
+    [InlineData("p256dh-key", "auth-secret", false)]
+    public void MatchesCredentials_Fcm_RequiresTheFcmTransport(string p256dh, string auth, bool expected)
+    {
+        var subscription = PushSubscription.Create(ValidUserId, "device-token", PushSubscription.FcmSentinel, PushSubscription.FcmSentinel).Value;
+
+        subscription.MatchesCredentials(p256dh, auth).Should().Be(expected);
+    }
+
+    [Fact]
+    public void TransferTo_MovesTheRowToTheNewAccountAsItsNewestDevice()
+    {
+        var subscription = PushSubscription.Create(ValidUserId, "https://push.example.com/sub/123", "p256dh-key", "auth-secret").Value;
+        var registeredAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        typeof(PushSubscription).GetProperty(nameof(PushSubscription.CreatedAtUtc))!.SetValue(subscription, registeredAt);
+        var newUserId = Guid.NewGuid();
+
+        var result = subscription.TransferTo(newUserId);
+
+        result.IsSuccess.Should().BeTrue();
+        subscription.UserId.Should().Be(newUserId);
+        subscription.CreatedAtUtc.Should().BeAfter(registeredAt);
+        subscription.Endpoint.Should().Be("https://push.example.com/sub/123");
+        subscription.P256dh.Should().Be("p256dh-key");
+        subscription.Auth.Should().Be("auth-secret");
+    }
+
+    [Fact]
+    public void TransferTo_EmptyUserId_FailsAndKeepsTheOwner()
+    {
+        var subscription = PushSubscription.Create(ValidUserId, "https://push.example.com/sub/123", "p256dh-key", "auth-secret").Value;
+
+        var result = subscription.TransferTo(Guid.Empty);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("User ID is required");
+        subscription.UserId.Should().Be(ValidUserId);
+    }
 }

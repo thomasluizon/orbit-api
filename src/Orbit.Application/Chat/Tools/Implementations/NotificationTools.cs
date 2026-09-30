@@ -46,7 +46,12 @@ public class UpdateNotificationsTool(IMediator mediator) : IAiTool
             notification_id = new { type = JsonSchemaTypes.String, nullable = true },
             endpoint = new { type = JsonSchemaTypes.String, nullable = true },
             p256dh = new { type = JsonSchemaTypes.String, nullable = true },
-            auth = new { type = JsonSchemaTypes.String, nullable = true }
+            auth = new { type = JsonSchemaTypes.String, nullable = true },
+            release_other_account = new
+            {
+                type = JsonSchemaTypes.Boolean,
+                description = "Opt in to removing a previous account's device registration using its credentials. Omit for ordinary sign-out."
+            }
         },
         required = new[] { "action" }
     };
@@ -107,9 +112,13 @@ public class UpdateNotificationsTool(IMediator mediator) : IAiTool
         if (string.IsNullOrWhiteSpace(endpoint))
             return new ToolResult(false, Error: "endpoint is required.");
 
+        var p256dh = JsonArgumentParser.GetOptionalString(args, "p256dh");
+        var auth = JsonArgumentParser.GetOptionalString(args, "auth");
+
         return await ChatToolMediator.RunAsync(
             mediator,
-            new UnsubscribePushCommand(userId, endpoint),
+            new UnsubscribePushCommand(userId, endpoint, p256dh, auth,
+                JsonArgumentParser.GetOptionalBool(args, "release_other_account") ?? false),
             userId,
             "Push subscription removed",
             new { action = "unsubscribe_push", endpoint },

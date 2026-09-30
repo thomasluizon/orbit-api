@@ -205,7 +205,21 @@ public class NotificationToolsTests
 
         request.OperationId.Should().Be("update_notifications");
         request.Arguments.GetRawText().Should().Contain("unsubscribe_push");
+        request.Arguments.GetProperty("release_other_account").GetBoolean().Should().BeFalse();
         result.Should().Be("Push subscription removed.");
+    }
+
+    [Fact]
+    public async Task UnsubscribePush_ForwardsExplicitCrossAccountReleaseWithDeviceKeys()
+    {
+        StubExecutor(AgentOperationStatus.Succeeded);
+
+        var request = await CapturedRequestAsync(async () =>
+            await _tools.UnsubscribePush(_user, "https://push.example/x", "device-key", "device-secret", releaseOtherAccount: true));
+
+        request.Arguments.GetProperty("p256dh").GetString().Should().Be("device-key");
+        request.Arguments.GetProperty("auth").GetString().Should().Be("device-secret");
+        request.Arguments.GetProperty("release_other_account").GetBoolean().Should().BeTrue();
     }
 
     [Fact]

@@ -183,4 +183,9 @@ public class GenericRepository<T>(OrbitDbContext context) : IGenericRepository<T
     {
         _dbSet.RemoveRange(entities);
     }
+
+    public Task<int> DeleteAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default)
+    {
+        return _dbSet.Where(predicate).ExecuteDeleteAsync(cancellationToken);
+    }
 }
