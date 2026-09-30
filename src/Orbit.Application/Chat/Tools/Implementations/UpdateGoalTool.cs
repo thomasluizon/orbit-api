@@ -7,7 +7,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class UpdateGoalTool(
     IGenericRepository<Goal> goalRepository,
-    IUnitOfWork unitOfWork) : IAiTool, IConcurrencyRetryableTool
+    IUnitOfWork unitOfWork) : IAiTool, IConcurrencyRetryableTool, IArgumentCheckTool
 {
     public string Name => "update_goal";
 
@@ -28,6 +28,26 @@ public class UpdateGoalTool(
         },
         required = new[] { "goal_id" }
     };
+
+    public async Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
+        if (!GoalToolHelpers.TryParseGoalId(args, out var goalId))
+            return Orbit.Domain.Common.Result.Failure("Invalid goal_id.");
+        var goals = await goalRepository.FindAsync(g => g.Id == goalId && g.UserId == userId, ct);
+        var goal = goals.FirstOrDefault();
+        if (goal is null)
+            return Orbit.Domain.Common.Result.Failure("Goal not found.");
+        if (args.TryGetProperty("title", out var title) && title.ValueKind == JsonValueKind.Null)
+            return Orbit.Domain.Common.Result.Failure("title cannot be cleared.");
+        var command = new Orbit.Application.Goals.Commands.UpdateGoalCommand(userId, goalId,
+            ResolveTitle(args, goal), ResolveDescription(args, goal), ResolveTargetValue(args, goal),
+            ResolveUnit(args, goal), ResolveDeadline(args, goal));
+        var validation = new Orbit.Application.Goals.Validators.UpdateGoalCommandValidator().Validate(command);
+        if (!validation.IsValid)
+            return Orbit.Domain.Common.Result.Failure(validation.ToString());
+        return Goal.Create(new Goal.CreateGoalParams(userId, command.Title, command.TargetValue,
+            command.Unit, command.Description, command.Deadline));
+    }
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {

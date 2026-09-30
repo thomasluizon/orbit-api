@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -10,7 +11,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 public class SkipHabitTool(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<HabitLog> habitLogRepository,
-    IUserDateService userDateService) : IAiTool
+    IUserDateService userDateService) : IAiTool, IArgumentCheckTool
 {
     public string Name => "skip_habit";
 
@@ -20,6 +21,24 @@ public class SkipHabitTool(
     public object GetParameterSchema() => HabitToolHelpers.SingleHabitDateSchema(
         "ID of the habit to skip",
         "ISO date (YYYY-MM-DD) to skip a specific instance. Defaults to today.");
+
+    public async Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
+        if (!HabitToolHelpers.TryParseHabitId(args, out var habitId))
+            return Orbit.Domain.Common.Result.Failure("Invalid habit_id.");
+        var matches = await habitRepository.FindAsync(h => h.Id == habitId && h.UserId == userId,
+            q => q.Include(h => h.Logs), ct);
+        var habit = matches.FirstOrDefault();
+        if (habit is null)
+            return Orbit.Domain.Common.Result.Failure(ErrorMessages.HabitNotFound);
+        var today = await userDateService.GetUserTodayAsync(userId, ct);
+        var target = ParseTargetDate(args, today);
+        if (target is null)
+            return Orbit.Domain.Common.Result.Failure("Invalid date.");
+        var weekStart = await userDateService.GetUserWeekStartDayAsync(userId, ct);
+        return SkipHabitArgumentChecks.Check(habit, target.Value, today, weekStart,
+            allowOverdue: false, dueDateResolved: false, enforceWindow: false);
+    }
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {

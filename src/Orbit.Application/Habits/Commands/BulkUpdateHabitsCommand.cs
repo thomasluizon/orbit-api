@@ -134,6 +134,25 @@ public sealed partial class BulkUpdateHabitsCommandHandler(
             stopped || skippedCount > 0));
     }
 
+    internal static async Task<Result> CheckArgumentsAsync(BulkUpdateHabitsCommand request,
+        IGenericRepository<Habit> repository, IUserDateService dates, CancellationToken ct)
+    {
+        var habits = await BulkHabitSelection.LoadAsync(repository, request.UserId, request.Filter, ct);
+        var ownership = OwnershipValidation.AllResolved(request.Filter.HabitIds, habits, h => h.Id, ErrorMessages.HabitNotFound);
+        if (ownership.IsFailure)
+            return ownership;
+        if (habits.Count == 0)
+            return Result.Failure("No matching habits found.");
+        var today = await dates.GetUserTodayAsync(request.UserId, ct);
+        foreach (var habit in habits)
+        {
+            var result = habit.ValidateUpdate(ResolveUpdate(habit, request.Changes, today));
+            if (result.IsFailure)
+                return result;
+        }
+        return Result.Success();
+    }
+
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Bulk habit update chunk failed after {AppliedCount} of {TotalMatched} matches")]
     private static partial void LogChunkFailed(ILogger logger, int appliedCount, int totalMatched, Exception ex);
 

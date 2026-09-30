@@ -8,7 +8,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class DeleteHabitTool(
     IMediator mediator,
-    IGenericRepository<Habit> habitRepository) : IAiTool
+    IGenericRepository<Habit> habitRepository) : IAiTool, IArgumentCheckTool
 {
     public string Name => "delete_habit";
 
@@ -25,7 +25,13 @@ public class DeleteHabitTool(
         required = new[] { "habit_id" }
     };
 
-    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
+    public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ExecuteCoreAsync(args, userId, ct, checkOnly: false);
+
+    public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ChatToolArgumentCheck.CheckAsync(this, args, () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+
+    private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         if (!HabitToolHelpers.TryParseHabitId(args, out var habitId))
             return HabitToolHelpers.InvalidHabitIdResult();
@@ -35,7 +41,11 @@ public class DeleteHabitTool(
             return HabitToolHelpers.HabitNotFoundResult(habitId);
 
         var title = habit.Title;
-        var result = await mediator.Send(new DeleteHabitCommand(userId, habitId), ct);
+        var command = new DeleteHabitCommand(userId, habitId);
+        if (checkOnly)
+            return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
+
+        var result = await mediator.Send(command, ct);
         if (result.IsFailure)
             return ToolResult.FromFailure(result);
 

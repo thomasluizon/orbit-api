@@ -211,14 +211,24 @@ public sealed class PendingOperationChangePreviewer(
     private static string FingerprintGoal(Goal goal) => AgentOperationFingerprint.Compute(
         goal.Id.ToString(), JsonSerializer.Serialize(new
         {
-            goal.UpdatedAtUtc, goal.Title, goal.Description, goal.TargetValue,
-            goal.CurrentValue, goal.Unit, goal.Status, goal.Deadline, goal.IsDeleted
+            goal.UpdatedAtUtc,
+            goal.Title,
+            goal.Description,
+            goal.TargetValue,
+            goal.CurrentValue,
+            goal.Unit,
+            goal.Status,
+            goal.Deadline,
+            goal.IsDeleted
         }));
 
     private static string FingerprintTag(Tag tag) => AgentOperationFingerprint.Compute(
         tag.Id.ToString(), JsonSerializer.Serialize(new
         {
-            tag.UpdatedAtUtc, tag.Name, tag.Color, tag.IsDeleted
+            tag.UpdatedAtUtc,
+            tag.Name,
+            tag.Color,
+            tag.IsDeleted
         }));
 
     private static PendingOperationChange BuildActionChange(Habit habit, string operationId,
@@ -243,7 +253,7 @@ public sealed class PendingOperationChangePreviewer(
             field == "emoji" ? habit.Emoji : null, value,
             field == "emoji" ? "emoji" : field == "date" ? "date" : "action",
             field == "delete" ? null : JsonSerializer.SerializeToElement(value),
-            field != "delete");
+            field != "delete" && !(operationId == "bulk_skip_habits" && habit.FrequencyUnit is null));
     }
 
     private static void AddProposedFields(List<PendingOperationChange> fields, Habit habit,
@@ -394,11 +404,26 @@ public sealed class PendingOperationChangePreviewer(
     private static string FingerprintHabit(Habit habit) => AgentOperationFingerprint.Compute(
         habit.Id.ToString(), JsonSerializer.Serialize(new
         {
-            habit.UpdatedAtUtc, habit.Title, habit.Description, habit.Emoji, habit.IsCompleted,
-            habit.DueDate, habit.DueTime, habit.EndDate, habit.FrequencyUnit,
-            habit.FrequencyQuantity, habit.IntervalWeeks, habit.IsBadHabit, habit.IsFlexible,
-            habit.ReminderEnabled, habit.ReminderTimes, habit.Days, habit.ChecklistItems,
-            habit.ScheduledReminders, habit.RelativeReminders, habit.IsDeleted
+            habit.UpdatedAtUtc,
+            habit.Title,
+            habit.Description,
+            habit.Emoji,
+            habit.IsCompleted,
+            habit.DueDate,
+            habit.DueTime,
+            habit.EndDate,
+            habit.FrequencyUnit,
+            habit.FrequencyQuantity,
+            habit.IntervalWeeks,
+            habit.IsBadHabit,
+            habit.IsFlexible,
+            habit.ReminderEnabled,
+            habit.ReminderTimes,
+            habit.Days,
+            habit.ChecklistItems,
+            habit.ScheduledReminders,
+            habit.RelativeReminders,
+            habit.IsDeleted
         }));
 
     private static void AddChanges(List<PendingOperationChange> rows, Habit habit, Habit effective,
@@ -441,8 +466,11 @@ public sealed class PendingOperationChangePreviewer(
         var newScheduledReminders = effective.GetScheduledRemindersForLegacyClients();
         AddList("scheduled_reminders", oldScheduledReminders, newScheduledReminders,
             FormatScheduledReminder, JsonSerializer.SerializeToElement(newScheduledReminders.Select(item =>
-                new { when = item.When == ScheduledReminderWhen.DayBefore ? "day_before" : "same_day",
-                    time = item.Time.ToString("HH:mm", CultureInfo.InvariantCulture) })));
+                new
+                {
+                    when = item.When == ScheduledReminderWhen.DayBefore ? "day_before" : "same_day",
+                    time = item.Time.ToString("HH:mm", CultureInfo.InvariantCulture)
+                })));
 
         void AddList<T>(string field, IReadOnlyList<T> oldValues, IReadOnlyList<T> newValues,
             Func<T, string> format, JsonElement typedValue)
@@ -457,17 +485,17 @@ public sealed class PendingOperationChangePreviewer(
 
     private static bool IsEditableUpdateField(string field, Habit habit, Habit effective,
         BulkHabitChanges changes) => field switch
-    {
-        "title" or "description" or "emoji" or "frequency_unit" or "frequency_quantity"
-            or "interval_weeks" or "due_date" or "due_time" or "is_bad_habit"
-            or "is_flexible" or "reminder_enabled" or "checklist_items" => true,
-        "days" => !effective.IsFlexible,
-        "end_date" => !habit.IsGeneral,
-        "reminder_times" => effective.DueTime is null
-            || !changes.HasScheduledReminders || changes.ScheduledReminders is not { Count: > 0 },
-        "scheduled_reminders" => effective.DueTime is null,
-        _ => false
-    };
+        {
+            "title" or "description" or "emoji" or "frequency_unit" or "frequency_quantity"
+                or "interval_weeks" or "due_date" or "due_time" or "is_bad_habit"
+                or "is_flexible" or "reminder_enabled" or "checklist_items" => true,
+            "days" => !effective.IsFlexible,
+            "end_date" => !habit.IsGeneral,
+            "reminder_times" => effective.DueTime is null
+                || !changes.HasScheduledReminders || changes.ScheduledReminders is not { Count: > 0 },
+            "scheduled_reminders" => effective.DueTime is null,
+            _ => false
+        };
 
     private static (string OldText, string NewText) FormatChangedList<T>(
         IReadOnlyList<T> oldValues, IReadOnlyList<T> newValues, Func<T, string> format)

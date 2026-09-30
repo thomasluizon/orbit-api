@@ -148,6 +148,20 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
         return Create(new CreateGoalParams(userId, title, targetValue, unit));
     }
 
+    public Result CheckProgress(decimal newValue)
+    {
+        if (IsProgressDerived)
+            return Result.Failure(DomainErrors.GoalProgressDerived);
+
+        if (Status != GoalStatus.Active)
+            return Result.Failure(DomainErrors.GoalNotActive);
+
+        if (newValue < 0)
+            return Result.Failure(DomainErrors.ProgressValueNegative);
+
+        return Result.Success();
+    }
+
     /// <summary>
     /// Sets the goal's current value, auto-completing it when the target is reached.
     /// The success value is true only when this call transitioned an Active goal to Completed,
@@ -155,14 +169,9 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
     /// </summary>
     public Result<bool> UpdateProgress(decimal newValue)
     {
-        if (IsProgressDerived)
-            return Result.Failure<bool>(DomainErrors.GoalProgressDerived);
-
-        if (Status != GoalStatus.Active)
-            return Result.Failure<bool>(DomainErrors.GoalNotActive);
-
-        if (newValue < 0)
-            return Result.Failure<bool>(DomainErrors.ProgressValueNegative);
+        var validation = CheckProgress(newValue);
+        if (validation.IsFailure)
+            return new Result<bool>(default, false, validation.Error, validation.ErrorCode, validation.ErrorArgs);
 
         CurrentValue = newValue;
         var justCompleted = TryComplete();
@@ -264,8 +273,9 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
 
     public Result MarkCompleted()
     {
-        if (Status == GoalStatus.Completed)
-            return Result.Failure(DomainErrors.GoalAlreadyCompleted);
+        var validation = CheckStatusChange(GoalStatus.Completed);
+        if (validation.IsFailure)
+            return validation;
 
         Status = GoalStatus.Completed;
         RecordCompletion();
@@ -275,8 +285,9 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
 
     public Result MarkAbandoned()
     {
-        if (Status == GoalStatus.Abandoned)
-            return Result.Failure(DomainErrors.GoalAlreadyAbandoned);
+        var validation = CheckStatusChange(GoalStatus.Abandoned);
+        if (validation.IsFailure)
+            return validation;
 
         Status = GoalStatus.Abandoned;
         CompletedAtUtc = null;
@@ -286,12 +297,22 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
 
     public Result Reactivate()
     {
-        if (Status == GoalStatus.Active)
-            return Result.Failure(DomainErrors.GoalAlreadyActive);
+        var validation = CheckStatusChange(GoalStatus.Active);
+        if (validation.IsFailure)
+            return validation;
 
         Status = GoalStatus.Active;
         CompletedAtUtc = null;
         UpdatedAtUtc = DateTime.UtcNow;
         return Result.Success();
     }
+
+    public Result CheckStatusChange(GoalStatus status) => status switch
+    {
+        GoalStatus.Active when Status == status => Result.Failure(DomainErrors.GoalAlreadyActive),
+        GoalStatus.Completed when Status == status => Result.Failure(DomainErrors.GoalAlreadyCompleted),
+        GoalStatus.Abandoned when Status == status => Result.Failure(DomainErrors.GoalAlreadyAbandoned),
+        GoalStatus.Active or GoalStatus.Completed or GoalStatus.Abandoned => Result.Success(),
+        _ => Result.Failure("Invalid goal status.")
+    };
 }

@@ -282,14 +282,9 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         bool advanceDueDate = true,
         int weekStartDay = 1)
     {
-        if (IsCompleted && !IsGeneral)
-            return Result.Failure<HabitLog>(DomainErrors.CannotLogCompletedHabit);
-
-        if (!IsBadHabit && !IsFlexible && _logs.Exists(l => l.Date == date && !l.IsDeleted))
-            return Result.Failure<HabitLog>(DomainErrors.AlreadyLoggedForDate);
-
-        if (IsFlexible && GetRemainingCompletions(date, _logs, weekStartDay) <= 0)
-            return Result.Failure<HabitLog>(DomainErrors.AllInstancesDone);
+        var validation = CheckLog(date, weekStartDay);
+        if (validation.IsFailure)
+            return new Result<HabitLog>(default, false, validation.Error, validation.ErrorCode, validation.ErrorArgs);
 
         var restoresDeletedDueDate = RestoresDeletedDueDate(date, advanceDueDate);
         var completionOrdinal = IsFlexible
@@ -323,6 +318,17 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
 
         UpdatedAtUtc = DateTime.UtcNow;
         return Result.Success(log);
+    }
+
+    public Result CheckLog(DateOnly date, int weekStartDay)
+    {
+        if (IsCompleted && !IsGeneral)
+            return Result.Failure(DomainErrors.CannotLogCompletedHabit);
+        if (!IsBadHabit && !IsFlexible && _logs.Exists(l => l.Date == date && !l.IsDeleted))
+            return Result.Failure(DomainErrors.AlreadyLoggedForDate);
+        if (IsFlexible && GetRemainingCompletions(date, _logs, weekStartDay) <= 0)
+            return Result.Failure(DomainErrors.AllInstancesDone);
+        return Result.Success();
     }
 
     private bool RestoresDeletedDueDate(DateOnly date, bool advanceDueDate) =>

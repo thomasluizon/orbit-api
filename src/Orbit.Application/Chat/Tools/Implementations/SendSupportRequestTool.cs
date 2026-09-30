@@ -4,7 +4,7 @@ using Orbit.Application.Support.Commands;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
-public class SendSupportRequestTool(IMediator mediator) : IAiTool
+public class SendSupportRequestTool(IMediator mediator) : IAiTool, IArgumentCheckTool
 {
     public string Name => "send_support_request";
     public string Description => "Send a support request on behalf of the user.";
@@ -22,7 +22,13 @@ public class SendSupportRequestTool(IMediator mediator) : IAiTool
         required = new[] { "name", "email", "subject", "message" }
     };
 
-    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
+    public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ExecuteCoreAsync(args, userId, ct, checkOnly: false);
+
+    public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ChatToolArgumentCheck.CheckAsync(this, args, () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+
+    private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         var name = JsonArgumentParser.GetOptionalString(args, "name");
         var email = JsonArgumentParser.GetOptionalString(args, "email");
@@ -37,7 +43,11 @@ public class SendSupportRequestTool(IMediator mediator) : IAiTool
             return new ToolResult(false, Error: "name, email, subject, and message are required.");
         }
 
-        var result = await mediator.Send(new SendSupportCommand(userId, name, email, subject, message), ct);
+        var command = new SendSupportCommand(userId, name, email, subject, message);
+        if (checkOnly)
+            return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
+
+        var result = await mediator.Send(command, ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: userId.ToString(), EntityName: "Support request sent", Payload: new { subject })
             : ToolResult.FromFailure(result, userId.ToString());

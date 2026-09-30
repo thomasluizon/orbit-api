@@ -7,6 +7,7 @@ using Orbit.Application.Chat;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Chat.Validators;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -23,7 +24,20 @@ public sealed class PendingOperationRevisionServiceTests
     private readonly IGenericRepository<Goal> _goals = Substitute.For<IGenericRepository<Goal>>();
     private readonly IGenericRepository<Tag> _tags = Substitute.For<IGenericRepository<Tag>>();
     private readonly IUserDateService _dateService = Substitute.For<IUserDateService>();
-    private readonly AiToolRegistry _tools = new([new BulkCreateHabitsTool(Substitute.For<IMediator>())]);
+    private readonly AiToolRegistry _tools;
+
+    public PendingOperationRevisionServiceTests()
+    {
+        var mediator = Substitute.For<IMediator>();
+        mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success());
+        var replay = new BulkHabitReplayPlanner(Substitute.For<IIdempotencyContext>(),
+            Substitute.For<IIdempotencyStore>(), Substitute.For<IUnitOfWork>());
+        _tools = new AiToolRegistry([
+            new BulkCreateHabitsTool(mediator), new BulkUpdateHabitsTool(mediator),
+            new BulkLogHabitsTool(mediator, _habits, _dateService, replay)
+        ]);
+    }
 
     [Fact]
     public async Task RefreshAsync_RegeneratesStoredIntentAndPersistsNewFingerprint()

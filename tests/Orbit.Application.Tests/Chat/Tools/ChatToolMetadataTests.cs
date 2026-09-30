@@ -103,6 +103,8 @@ public class ChatToolMetadataTests
 
     private static void AssertTool(Orbit.Application.Chat.Tools.IAiTool tool, string expectedName, string descriptionFragment, string schemaFragment, bool expectReadOnly = false)
     {
+        if (!expectReadOnly)
+            tool.Should().BeAssignableTo<Orbit.Application.Chat.Tools.IArgumentCheckTool>();
         tool.Name.Should().Be(expectedName);
         tool.Description.Should().NotBeNullOrWhiteSpace();
         tool.Description.ToLowerInvariant().Should().Contain(descriptionFragment.ToLowerInvariant(),

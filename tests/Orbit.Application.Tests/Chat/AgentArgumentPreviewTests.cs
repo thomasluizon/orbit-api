@@ -214,13 +214,24 @@ public sealed class AgentArgumentPreviewTests
     }
 
     [Fact]
-    public async Task ReviseAsync_ToolWithNoArgumentCheck_OffersNoEditableField()
+    public async Task ReviseAsync_GoalEdit_IsValidatedAndExecutesTheEditedValue()
     {
+        var goal = Goal.Create(_userId, "Ler livros", 12, "livros").Value;
         _goals.FindAsync(Arg.Any<Expression<Func<Goal, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(new List<Goal>());
+            .Returns([goal]);
+        _goals.FindOneTrackedAsync(Arg.Any<Expression<Func<Goal, bool>>>(),
+                Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>>(), Arg.Any<CancellationToken>())
+            .Returns(goal);
         var pendingId = Guid.NewGuid();
-        var arguments = Parse($$"""{"goal_id":"{{Guid.NewGuid()}}","title":"Ler 12 livros"}""");
+        var arguments = Parse($$"""{"goal_id":"{{goal.Id}}","title":"Ler 12 livros"}""");
         SetupExecution(pendingId, "update_goal", arguments);
+        JsonElement revised = default;
+        _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<string>(), Arg.Any<string>()).Returns(call =>
+            {
+                revised = Parse(call.ArgAt<string>(3));
+                return true;
+            });
         var previewer = CreatePreviewer();
         var preview = await previewer.PreviewAsync(_userId, "update_goal", arguments);
         using var edits = JsonDocument.Parse("""{"title":"Ler 20 livros"}""");
@@ -230,9 +241,12 @@ public sealed class AgentArgumentPreviewTests
                 [new RevisedPendingOperationItem(preview.Items![0].ItemId, edits.RootElement.Clone())]),
             CancellationToken.None);
 
-        preview.Items[0].Fields.Should().NotBeEmpty().And.OnlyContain(field => !field.IsEditable);
-        result.Error.Should().Be("field_not_offered");
-        _store.DidNotReceiveWithAnyArgs().Revise(default, default, default!, default!, default!, default!);
+        preview.Items[0].Fields.Single(field => field.Field == "title").IsEditable.Should().BeTrue();
+        result.IsSuccess.Should().BeTrue();
+        goal.Title.Should().Be("Ler livros");
+        var executed = await _tools.GetTool("update_goal")!.ExecuteAsync(revised, _userId, CancellationToken.None);
+        executed.Success.Should().BeTrue();
+        goal.Title.Should().Be("Ler 20 livros");
     }
 
     private async Task<(Guid PendingId, PendingOperationChangePreview Preview)> HoldAsync(string operationId)

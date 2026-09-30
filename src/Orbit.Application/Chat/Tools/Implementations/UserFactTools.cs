@@ -27,7 +27,7 @@ public class GetUserFactsTool(IMediator mediator) : IAiTool
     }
 }
 
-public class DeleteUserFactsTool(IMediator mediator) : IAiTool
+public class DeleteUserFactsTool(IMediator mediator) : IAiTool, IArgumentCheckTool
 {
     public string Name => "delete_user_facts";
     public string Description => "Delete one user fact or multiple user facts by ID.";
@@ -47,12 +47,22 @@ public class DeleteUserFactsTool(IMediator mediator) : IAiTool
         }
     };
 
-    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
+    public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ExecuteCoreAsync(args, userId, ct, checkOnly: false);
+
+    public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ChatToolArgumentCheck.CheckAsync(this, args, () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+
+    private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         var factIds = JsonArgumentParser.ParseGuidArray(args, "fact_ids");
         if (factIds is { Count: > 0 })
         {
-            var bulkResult = await mediator.Send(new BulkDeleteUserFactsCommand(userId, factIds), ct);
+            var bulkCommand = new BulkDeleteUserFactsCommand(userId, factIds);
+            if (checkOnly)
+                return await ChatToolArgumentCheck.CheckCommandAsync(mediator, bulkCommand, ct);
+
+            var bulkResult = await mediator.Send(bulkCommand, ct);
             return bulkResult.IsSuccess
                 ? new ToolResult(true, EntityId: userId.ToString(), EntityName: "Deleted user facts", Payload: new { deleted = bulkResult.Value, factIds })
                 : ToolResult.FromFailure(bulkResult, userId.ToString());
@@ -62,7 +72,11 @@ public class DeleteUserFactsTool(IMediator mediator) : IAiTool
         if (!Guid.TryParse(factId, out var parsedId))
             return new ToolResult(false, Error: "fact_id or fact_ids is required.");
 
-        var result = await mediator.Send(new DeleteUserFactCommand(userId, parsedId), ct);
+        var command = new DeleteUserFactCommand(userId, parsedId);
+        if (checkOnly)
+            return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
+
+        var result = await mediator.Send(command, ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: parsedId.ToString(), EntityName: "Deleted user fact", Payload: new { id = parsedId })
             : ToolResult.FromFailure(result, parsedId.ToString());

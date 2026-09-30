@@ -2,9 +2,6 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using FluentValidation;
 using Orbit.Application.Chat.Tools;
-using Orbit.Application.Chat.Tools.Implementations;
-using Orbit.Application.Habits.Commands;
-using Orbit.Application.Habits.Validators;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
@@ -98,9 +95,6 @@ public sealed class PendingOperationRevisionService(
         var revised = BuildArguments(execution.OperationId, execution.Arguments, request.Items, offered);
         if (revised is null)
             return Failure("invalid_revision");
-        if (execution.OperationId == "bulk_create_habits"
-            && !ValidateCreate(userId, revised.Value))
-            return Failure("invalid_revision");
         if (!await AcceptsEditsAsync(userId, execution.OperationId, revised.Value, request.Items,
             cancellationToken))
             return Failure("invalid_revision");
@@ -135,14 +129,13 @@ public sealed class PendingOperationRevisionService(
     /// <summary>
     /// Holds every edit to the rules of its tool before the revised preview is accepted: the
     /// parameter schema (the item schema for a bulk create), then the tool's own check. A tool
-    /// with no check offers no editable field. The other bulk habit writes and the calendar sync
-    /// parse their edits strictly while their arguments or their preview are built.
+    /// with no check offers no editable field. Bulk item fields use the schema of the corresponding single item.
     /// </summary>
     private async Task<bool> AcceptsEditsAsync(Guid userId, string operationId, JsonElement revised,
         IReadOnlyList<RevisedPendingOperationItem> items, CancellationToken cancellationToken)
     {
         var edits = items.Where(HasEdits).SelectMany(item => item.Edits!.Value.EnumerateObject()).ToList();
-        if (edits.Count == 0 || ParsesEditsStrictly(operationId))
+        if (edits.Count == 0)
             return true;
         var tool = toolRegistry.GetTool(operationId);
         if (tool is null)
@@ -151,16 +144,16 @@ public sealed class PendingOperationRevisionService(
         if (operationId == "bulk_create_habits")
         {
             var itemSchema = schema.GetProperty("properties").GetProperty("habits").GetProperty("items");
-            return edits.All(edit => AgentArgumentSchema.Accepts(itemSchema, edit.Name, edit.Value));
+            return edits.All(edit => AgentArgumentSchema.Accepts(itemSchema, edit.Name, edit.Value))
+                && tool is IArgumentCheckTool createCheck
+                && (await createCheck.CheckArgumentsAsync(revised, userId, cancellationToken)).IsSuccess;
         }
+        if (operationId == "bulk_update_habits")
+            schema = schema.GetProperty("properties").GetProperty("updates");
         return tool is IArgumentCheckTool check
             && edits.All(edit => AgentArgumentSchema.Accepts(schema, edit.Name, edit.Value))
             && (await check.CheckArgumentsAsync(revised, userId, cancellationToken)).IsSuccess;
     }
-
-    private static bool ParsesEditsStrictly(string operationId) =>
-        operationId == "manage_calendar_sync"
-        || (operationId != "bulk_create_habits" && operationId.StartsWith("bulk_", StringComparison.Ordinal));
 
     private static JsonElement? BuildArguments(string operationId, JsonElement original,
         IReadOnlyList<RevisedPendingOperationItem> selected,
@@ -370,25 +363,6 @@ public sealed class PendingOperationRevisionService(
         foreach (var field in fields.EnumerateObject())
             target[field.Name] = JsonNode.Parse(field.Value.GetRawText());
         return true;
-    }
-
-    private static bool ValidateCreate(Guid userId, JsonElement arguments)
-    {
-        if (!arguments.TryGetProperty("habits", out var habits)
-            || habits.ValueKind != JsonValueKind.Array)
-            return false;
-        var items = new List<BulkHabitItem>();
-        foreach (var habit in habits.EnumerateArray())
-        {
-            if (habit.ValueKind != JsonValueKind.Object)
-                return false;
-            var item = BulkCreateHabitsTool.ParseBulkHabitItem(habit);
-            if (item is null)
-                return false;
-            items.Add(item);
-        }
-        return new BulkCreateHabitsCommandValidator()
-            .Validate(new BulkCreateHabitsCommand(userId, items)).IsValid;
     }
 
     private static PendingOperationRevisionResult Failure(string error) =>

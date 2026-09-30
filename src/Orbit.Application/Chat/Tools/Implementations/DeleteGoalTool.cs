@@ -6,7 +6,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class DeleteGoalTool(
     IGenericRepository<Goal> goalRepository,
-    IUnitOfWork unitOfWork) : IAiTool, IConcurrencyRetryableTool
+    IUnitOfWork unitOfWork) : IAiTool, IConcurrencyRetryableTool, IArgumentCheckTool
 {
     public string Name => "delete_goal";
 
@@ -22,6 +22,14 @@ public class DeleteGoalTool(
         },
         required = new[] { "goal_id" }
     };
+
+    public async Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
+        if (!GoalToolHelpers.TryParseGoalId(args, out var goalId))
+            return Orbit.Domain.Common.Result.Failure("Invalid goal_id.");
+        return await goalRepository.AnyAsync(g => g.Id == goalId && g.UserId == userId, ct)
+            ? Orbit.Domain.Common.Result.Success() : Orbit.Domain.Common.Result.Failure("Goal not found.");
+    }
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {

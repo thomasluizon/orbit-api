@@ -6,7 +6,7 @@ using Orbit.Domain.Common;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
-public sealed class BulkUpdateHabitsTool(IMediator mediator) : IAiTool
+public sealed class BulkUpdateHabitsTool(IMediator mediator) : IAiTool, IArgumentCheckTool
 {
     public string Name => "bulk_update_habits";
 
@@ -39,18 +39,53 @@ public sealed class BulkUpdateHabitsTool(IMediator mediator) : IAiTool
                     is_flexible = new { type = JsonSchemaTypes.Boolean },
                     reminder_enabled = new { type = JsonSchemaTypes.Boolean },
                     reminder_times = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.Integer } },
-                    checklist_items = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.Object } },
-                    scheduled_reminders = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.Object } }
+                    checklist_items = new
+                    {
+                        type = JsonSchemaTypes.Array,
+                        items = new
+                        {
+                            type = JsonSchemaTypes.Object,
+                            properties = new
+                            {
+                                text = new { type = JsonSchemaTypes.String },
+                                is_checked = new { type = JsonSchemaTypes.Boolean }
+                            },
+                            required = new[] { "text" }
+                        }
+                    },
+                    scheduled_reminders = new
+                    {
+                        type = JsonSchemaTypes.Array,
+                        items = new
+                        {
+                            type = JsonSchemaTypes.Object,
+                            properties = new
+                            {
+                                when = new { type = JsonSchemaTypes.String, @enum = JsonSchemaTypes.ScheduledReminderWhenEnum },
+                                time = new { type = JsonSchemaTypes.String }
+                            },
+                            required = new[] { "when", "time" }
+                        }
+                    }
                 }
             }
         },
         required = new[] { "filter", "updates" }
     };
 
-    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
+    public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ExecuteCoreAsync(args, userId, ct, checkOnly: false);
+
+    public async Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
+        var result = await ExecuteCoreAsync(args, userId, ct, checkOnly: true);
+        return result.Success ? Orbit.Domain.Common.Result.Success() : Orbit.Domain.Common.Result.Failure(result.Error!);
+    }
+
+    private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         if (args.TryGetProperty("revised_items", out var revisedItems))
-            return await ExecuteRevisedAsync(mediator, revisedItems, userId, "Updated", ct);
+            return await ExecuteRevisedAsync(mediator, revisedItems, userId, "Updated", ct, checkOnly);
 
         var (filter, filterError) = BulkHabitToolArguments.ParseRequiredFilter(args);
         if (filterError is not null)
@@ -59,14 +94,17 @@ public sealed class BulkUpdateHabitsTool(IMediator mediator) : IAiTool
         if (changesError is not null)
             return new ToolResult(false, Error: changesError);
 
-        var result = await mediator.Send(new BulkUpdateHabitsCommand(userId, filter!, changes!), ct);
+        var command = new BulkUpdateHabitsCommand(userId, filter!, changes!);
+        if (checkOnly)
+            return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
+        var result = await mediator.Send(command, ct);
         if (result.IsFailure)
             return ToolResult.FromFailure(result);
         return BuildResult(result.Value, "Updated");
     }
 
     internal static async Task<ToolResult> ExecuteRevisedAsync(IMediator mediator,
-        JsonElement items, Guid userId, string verb, CancellationToken ct)
+        JsonElement items, Guid userId, string verb, CancellationToken ct, bool checkOnly = false)
     {
         if (items.ValueKind != JsonValueKind.Array || items.GetArrayLength() == 0)
             return new ToolResult(false, Error: "revised_items must be a non-empty array.");
@@ -90,14 +128,24 @@ public sealed class BulkUpdateHabitsTool(IMediator mediator) : IAiTool
         var applied = 0;
         foreach (var item in parsed)
         {
-            var result = await mediator.Send(new BulkUpdateHabitsCommand(userId,
-                new BulkHabitFilter(false, [item.Id], IncludeCompleted: true), item.Changes), ct);
+            var command = new BulkUpdateHabitsCommand(userId,
+                new BulkHabitFilter(false, [item.Id], IncludeCompleted: true), item.Changes);
+            if (checkOnly)
+            {
+                var check = await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
+                if (!check.Success)
+                    return check;
+                continue;
+            }
+            var result = await mediator.Send(command, ct);
             if (result.IsFailure)
                 return applied == 0 ? ToolResult.FromFailure(result)
                     : BuildResult(new BulkHabitMutationResult(applied, parsed.Count,
                         parsed.Count - applied, true), verb);
             applied += result.Value.AppliedCount;
         }
+        if (checkOnly)
+            return new ToolResult(true);
         return BuildResult(new BulkHabitMutationResult(applied, parsed.Count,
             parsed.Count - applied, applied != parsed.Count), verb);
     }
