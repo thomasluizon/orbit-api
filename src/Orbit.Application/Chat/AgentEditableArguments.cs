@@ -6,6 +6,8 @@ internal static class AgentEditableArguments
 {
     public static bool IsConsumed(string operationId, JsonElement args, string field)
     {
+        if (operationId == "suggest_breakdown")
+            return field == "title";
         if (!args.TryGetProperty("action", out var action) || action.ValueKind != JsonValueKind.String)
             return true;
         var fields = operationId switch

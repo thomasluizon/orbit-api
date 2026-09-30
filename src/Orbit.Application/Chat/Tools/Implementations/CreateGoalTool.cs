@@ -60,11 +60,8 @@ public class CreateGoalTool : IAiTool, IArgumentCheckTool
     public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
         PrepareAsync(args, userId, ct, checkOnly: false);
 
-    public async Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
-    {
-        var result = await PrepareAsync(args, userId, ct, checkOnly: true);
-        return result.Success ? Orbit.Domain.Common.Result.Success() : Orbit.Domain.Common.Result.Failure(result.Error!);
-    }
+    public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ChatToolArgumentCheck.CheckAsync(this, args, () => PrepareAsync(args, userId, ct, checkOnly: true));
 
     private async Task<ToolResult> PrepareAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {

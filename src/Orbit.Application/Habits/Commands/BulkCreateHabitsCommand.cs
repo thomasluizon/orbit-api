@@ -183,39 +183,39 @@ public partial class BulkCreateHabitsCommandHandler(
     private static Result<Habit> BuildChild(Guid userId, BulkHabitItem parentItem, BulkHabitItem subItem,
         Habit parent, DateOnly userToday, int position)
     {
-                    var hasExplicitCadence = subItem.FrequencyUnit is not null
-                        || subItem.FrequencyQuantity is not null
-                        || subItem.IntervalWeeks is not null
-                        || subItem.Days is not null;
-                    var childFrequencyUnit = subItem.FrequencyUnit ?? parentItem.FrequencyUnit;
-                    var childFrequencyQuantity = subItem.FrequencyQuantity ?? parentItem.FrequencyQuantity;
-                    var childDays = subItem.Days;
-                    if (childDays is null
-                        && childFrequencyUnit == FrequencyUnit.Day
-                        && childFrequencyQuantity == 1)
-                    {
-                        childDays = parentItem.Days;
-                    }
+        var hasExplicitCadence = subItem.FrequencyUnit is not null
+            || subItem.FrequencyQuantity is not null
+            || subItem.IntervalWeeks is not null
+            || subItem.Days is not null;
+        var childFrequencyUnit = subItem.FrequencyUnit ?? parentItem.FrequencyUnit;
+        var childFrequencyQuantity = subItem.FrequencyQuantity ?? parentItem.FrequencyQuantity;
+        var childDays = subItem.Days;
+        if (childDays is null
+            && childFrequencyUnit == FrequencyUnit.Day
+            && childFrequencyQuantity == 1)
+        {
+            childDays = parentItem.Days;
+        }
 
-                    return Habit.Create(new HabitCreateParams(
-                        userId,
-                        subItem.Title,
-                        childFrequencyUnit,
-                        childFrequencyQuantity,
-                        subItem.DueDate ?? parentItem.DueDate ?? userToday,
-                        subItem.Description,
-                        Emoji: subItem.Emoji,
-                        Days: childDays,
-                        IsBadHabit: subItem.IsBadHabit,
-                        DueTime: subItem.DueTime,
-                        EndDate: subItem.EndDate,
-                        ChecklistItems: subItem.ChecklistItems,
-                        ParentHabitId: parent.Id,
-                        IsGeneral: parentItem.IsGeneral,
-                        IsFlexible: subItem.IsFlexible,
-                        Position: position,
-                        IntervalWeeks: subItem.IntervalWeeks
-                            ?? (hasExplicitCadence ? null : parentItem.IntervalWeeks)));
+        return Habit.Create(new HabitCreateParams(
+            userId,
+            subItem.Title,
+            childFrequencyUnit,
+            childFrequencyQuantity,
+            subItem.DueDate ?? parentItem.DueDate ?? userToday,
+            subItem.Description,
+            Emoji: subItem.Emoji,
+            Days: childDays,
+            IsBadHabit: subItem.IsBadHabit,
+            DueTime: subItem.DueTime,
+            EndDate: subItem.EndDate,
+            ChecklistItems: subItem.ChecklistItems,
+            ParentHabitId: parent.Id,
+            IsGeneral: parentItem.IsGeneral,
+            IsFlexible: subItem.IsFlexible,
+            Position: position,
+            IntervalWeeks: subItem.IntervalWeeks
+                ?? (hasExplicitCadence ? null : parentItem.IntervalWeeks)));
     }
 
     private async Task<BulkCreateItemResult> CreateSingleHabit(

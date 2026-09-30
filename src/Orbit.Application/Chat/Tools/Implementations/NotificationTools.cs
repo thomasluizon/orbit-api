@@ -211,7 +211,12 @@ public class DeleteNotificationsTool(IMediator mediator) : IAiTool, IArgumentChe
         {
             var command = new DeleteNotificationCommand(userId, id);
             if (checkOnly)
-                return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
+            {
+                var check = await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
+                if (!check.Success)
+                    return check;
+                continue;
+            }
 
             var result = await mediator.Send(command, ct);
             if (result.IsFailure)

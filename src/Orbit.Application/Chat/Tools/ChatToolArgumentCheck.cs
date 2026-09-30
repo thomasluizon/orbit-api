@@ -25,7 +25,7 @@ internal static class ChatToolArgumentCheck
         if (value.ValueKind == JsonValueKind.Array)
             return value.EnumerateArray().All(item => item.ValueKind != JsonValueKind.String
                 ? PreservesListEntries(field, item) : !string.IsNullOrWhiteSpace(item.GetString()));
-        if (field == "text" && value.ValueKind == JsonValueKind.String)
+        if (field is "text" or "title" or "unit" && value.ValueKind == JsonValueKind.String)
             return !string.IsNullOrWhiteSpace(value.GetString());
         return field != "is_read_only" || value.ValueKind != JsonValueKind.Null;
     }

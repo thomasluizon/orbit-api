@@ -284,7 +284,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     {
         var validation = CheckLog(date, weekStartDay);
         if (validation.IsFailure)
-            return Result.Failure<HabitLog>(validation.Error, validation.ErrorCode!);
+            return new Result<HabitLog>(default, false, validation.Error, validation.ErrorCode, validation.ErrorArgs);
 
         var restoresDeletedDueDate = RestoresDeletedDueDate(date, advanceDueDate);
         var completionOrdinal = IsFlexible

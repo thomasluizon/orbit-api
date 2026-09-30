@@ -148,11 +148,6 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
         return Create(new CreateGoalParams(userId, title, targetValue, unit));
     }
 
-    /// <summary>
-    /// Sets the goal's current value, auto-completing it when the target is reached.
-    /// The success value is true only when this call transitioned an Active goal to Completed,
-    /// so callers can fire completion side effects (gamification) exactly once.
-    /// </summary>
     public Result CheckProgress(decimal newValue)
     {
         if (IsProgressDerived)
@@ -167,11 +162,16 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
         return Result.Success();
     }
 
+    /// <summary>
+    /// Sets the goal's current value, auto-completing it when the target is reached.
+    /// The success value is true only when this call transitioned an Active goal to Completed,
+    /// so callers can fire completion side effects (gamification) exactly once.
+    /// </summary>
     public Result<bool> UpdateProgress(decimal newValue)
     {
         var validation = CheckProgress(newValue);
         if (validation.IsFailure)
-            return Result.Failure<bool>(validation.Error, validation.ErrorCode!);
+            return new Result<bool>(default, false, validation.Error, validation.ErrorCode, validation.ErrorArgs);
 
         CurrentValue = newValue;
         var justCompleted = TryComplete();

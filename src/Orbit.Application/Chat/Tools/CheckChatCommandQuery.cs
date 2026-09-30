@@ -112,14 +112,21 @@ public sealed class CheckChatCommandQueryHandler(IServiceProvider services) : IR
 
     private async Task<Result?> CheckTagAsync(object command, CancellationToken ct) => command switch
     {
-        CreateTagCommand create => Tag.Create(create.UserId, create.Name, create.Color),
+        CreateTagCommand create => await CheckTagNameAsync(create.UserId, null, create.Name, create.Color, ct),
         UpdateTagCommand update => (await ExistsAsync<Tag>(t => t.Id == update.TagId && t.UserId == update.UserId, ct)) is { IsFailure: true } failure
-            ? failure : Tag.Create(update.UserId, update.Name, update.Color),
+            ? failure : await CheckTagNameAsync(update.UserId, update.TagId, update.Name, update.Color, ct),
         DeleteTagCommand delete => await ExistsAsync<Tag>(t => t.Id == delete.TagId && t.UserId == delete.UserId, ct),
         CreateChecklistTemplateCommand create => ChecklistTemplate.Create(create.UserId, create.Name, create.Items),
         DeleteChecklistTemplateCommand delete => await ExistsAsync<ChecklistTemplate>(t => t.Id == delete.TemplateId && t.UserId == delete.UserId, ct),
         _ => null
     };
+
+    private async Task<Result> CheckTagNameAsync(Guid userId, Guid? tagId, string name, string color, CancellationToken ct)
+    {
+        if (await Repository<Tag>().AnyAsync(t => t.UserId == userId && t.Name == name.Trim() && t.Id != tagId, ct))
+            return Result.Failure(ErrorMessages.DuplicateTagName);
+        return Tag.Create(userId, name, color);
+    }
 
     private async Task<Result?> CheckProfileAsync(object command, CancellationToken ct) => command switch
     {
