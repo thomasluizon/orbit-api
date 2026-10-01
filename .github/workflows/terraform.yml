@@ -22,4 +22,4 @@ jobs:
       - run: terraform fmt -check -recursive infra
       - run: terraform -chdir=infra init -backend=false -input=false
       - run: terraform -chdir=infra validate
-      - run: node --test infra/check-web-plan.test.mjs infra/ses-isolation.test.mjs infra/google-play-isolation.test.mjs
+      - run: node --test infra/check-web-plan.test.mjs infra/ses-isolation.test.mjs infra/google-play-isolation.test.mjs infra/staging-pinger.test.mjs
