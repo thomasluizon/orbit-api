@@ -795,8 +795,8 @@ public partial class GamificationService(
     {
         var isPt = LocaleHelper.IsPortuguese(language);
         var title = isPt
-            ? $"Subiu de nível! Agora você está no nível {newLevel.Level}"
-            : $"Level up! You're now level {newLevel.Level}";
+            ? $"Você chegou ao nível {newLevel.Level}"
+            : $"You reached level {newLevel.Level}";
         var levelTitle = isPt && LevelTranslationsPt.TryGetValue(Math.Min(newLevel.Level, LevelDefinitions.TableMaxLevel), out var ptTitle)
             ? ptTitle : newLevel.Title;
         var body = isPt

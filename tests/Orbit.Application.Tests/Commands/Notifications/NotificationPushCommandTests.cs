@@ -39,7 +39,7 @@ public class TestPushNotificationCommandHandlerTests
         await _pushService.Received(1).SendToUserAsync(
             UserId,
             "Orbit test",
-            "Push notifications are working!",
+            "Push notifications are working.",
             "/",
             Arg.Any<CancellationToken>());
     }

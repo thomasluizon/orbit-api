@@ -1067,8 +1067,8 @@ public class GamificationServiceTests
             ? "Conquista desbloqueada: mês perfeito"
             : "Achievement unlocked: perfect month"));
         notifications.Should().Contain(n => n.Title == (language == "pt-BR"
-            ? $"Subiu de nível! Agora você está no nível {user.Level}"
-            : $"Level up! You're now level {user.Level}"));
+            ? $"Você chegou ao nível {user.Level}"
+            : $"You reached level {user.Level}"));
         foreach (var notification in notifications)
             await _pushService.Received(1).SendToUserAsync(
                 UserId, notification.Title, notification.Body,

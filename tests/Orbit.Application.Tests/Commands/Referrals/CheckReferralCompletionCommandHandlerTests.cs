@@ -348,8 +348,8 @@ public class CheckReferralCompletionCommandHandlerTests
     }
 
     [Theory]
-    [InlineData("en", "Referral completed!")]
-    [InlineData("pt-BR", "Indicação concluída!")]
+    [InlineData("en", "Referral completed")]
+    [InlineData("pt-BR", "Indicação concluída")]
     public async Task Handle_ThresholdMet_SendsNotificationToReferrer(string language, string expectedTitle)
     {
         var referral = CreatePendingReferral();

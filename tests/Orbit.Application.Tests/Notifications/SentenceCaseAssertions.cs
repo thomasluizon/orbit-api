@@ -33,7 +33,7 @@ public class SentenceCaseAssertionsTests
     [Theory]
     [InlineData("Conquista desbloqueada: mês perfeito")]
     [InlineData("Achievement unlocked: perfect month")]
-    [InlineData("Level up! You're now level 2")]
+    [InlineData("You reached level 2")]
     [InlineData("Your Wrapped is ready")]
     [InlineData("Google Calendar disconnected")]
     [InlineData("Orbit test")]
