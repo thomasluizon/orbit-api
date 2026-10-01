@@ -35,6 +35,7 @@ public sealed partial class AiProactiveCheckinMessageService(
             Rules:
             - Return EXACTLY two lines: first line is the notification title, second line is the body
             - Title: 5-8 words max, personal and encouraging (use their name when it feels natural)
+            - Title must use sentence case: capitalise only the first word, proper nouns and product names (Astra, Orbit); never use title case
             - Body: 1-2 sentences max, supportive and specific to what they fell behind on
             - Be creative and varied -- don't use the same structure every time
             - Tone: supportive friend, not preachy or judgmental

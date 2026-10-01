@@ -1,11 +1,18 @@
 using FluentAssertions;
 using Orbit.Application.Gamification;
+using Orbit.Application.Tests.Notifications;
 using Orbit.Domain.Enums;
 
 namespace Orbit.Application.Tests.Gamification;
 
 public class AchievementDefinitionsTests
 {
+    [Fact]
+    public void All_NameResources_UseSentenceCase()
+    {
+        AchievementDefinitions.All.Should().AllSatisfy(a => SentenceCaseAssertions.AssertTitle(a.Name));
+    }
+
     [Fact]
     public void All_Has39Achievements()
     {
@@ -71,18 +78,18 @@ public class AchievementDefinitionsTests
     }
 
     [Theory]
-    [InlineData(AchievementDefinitions.FirstOrbit, "First Orbit")]
+    [InlineData(AchievementDefinitions.FirstOrbit, "First orbit")]
     [InlineData(AchievementDefinitions.Liftoff, "Liftoff")]
-    [InlineData(AchievementDefinitions.WeekWarrior, "Week Warrior")]
-    [InlineData(AchievementDefinitions.MonthlyMaster, "Monthly Master")]
+    [InlineData(AchievementDefinitions.WeekWarrior, "Week warrior")]
+    [InlineData(AchievementDefinitions.MonthlyMaster, "Monthly master")]
     [InlineData(AchievementDefinitions.Centurion, "Centurion")]
-    [InlineData(AchievementDefinitions.GettingMomentum, "Getting Momentum")]
+    [InlineData(AchievementDefinitions.GettingMomentum, "Getting momentum")]
     [InlineData(AchievementDefinitions.Dedicated, "Dedicated")]
-    [InlineData(AchievementDefinitions.GoalCrusher, "Goal Crusher")]
-    [InlineData(AchievementDefinitions.PerfectDay, "Perfect Day")]
-    [InlineData(AchievementDefinitions.EarlyBird, "Early Bird")]
+    [InlineData(AchievementDefinitions.GoalCrusher, "Goal crusher")]
+    [InlineData(AchievementDefinitions.PerfectDay, "Perfect day")]
+    [InlineData(AchievementDefinitions.EarlyBird, "Early bird")]
     [InlineData(AchievementDefinitions.Comeback, "Comeback")]
-    [InlineData(AchievementDefinitions.BadHabitBreaker, "Bad Habit Breaker")]
+    [InlineData(AchievementDefinitions.BadHabitBreaker, "Bad habit breaker")]
     public void GetById_ValidId_ReturnsDefinition(string id, string expectedName)
     {
         var definition = AchievementDefinitions.GetById(id);
@@ -166,19 +173,19 @@ public class AchievementDefinitionsTests
     }
 
     [Theory]
-    [InlineData(AchievementDefinitions.HalfYearHero, "Half-Year Hero", Domain.Enums.AchievementCategory.Consistency, Domain.Enums.AchievementRarity.Epic, 350)]
-    [InlineData(AchievementDefinitions.StreakTitan, "Streak Titan", Domain.Enums.AchievementCategory.Consistency, Domain.Enums.AchievementRarity.Legendary, 750)]
-    [InlineData(AchievementDefinitions.FirstCheer, "Good Vibes", Domain.Enums.AchievementCategory.Special, Domain.Enums.AchievementRarity.Common, 50)]
-    [InlineData(AchievementDefinitions.OnboardingComplete, "All Systems Go", Domain.Enums.AchievementCategory.GettingStarted, Domain.Enums.AchievementRarity.Common, 50)]
-    [InlineData(AchievementDefinitions.FirstFriend, "First Friend", Domain.Enums.AchievementCategory.Social, Domain.Enums.AchievementRarity.Common, 50)]
-    [InlineData(AchievementDefinitions.SquadGoals, "Squad Goals", Domain.Enums.AchievementCategory.Social, Domain.Enums.AchievementRarity.Rare, 150)]
+    [InlineData(AchievementDefinitions.HalfYearHero, "Half-year hero", Domain.Enums.AchievementCategory.Consistency, Domain.Enums.AchievementRarity.Epic, 350)]
+    [InlineData(AchievementDefinitions.StreakTitan, "Streak titan", Domain.Enums.AchievementCategory.Consistency, Domain.Enums.AchievementRarity.Legendary, 750)]
+    [InlineData(AchievementDefinitions.FirstCheer, "Good vibes", Domain.Enums.AchievementCategory.Special, Domain.Enums.AchievementRarity.Common, 50)]
+    [InlineData(AchievementDefinitions.OnboardingComplete, "All systems go", Domain.Enums.AchievementCategory.GettingStarted, Domain.Enums.AchievementRarity.Common, 50)]
+    [InlineData(AchievementDefinitions.FirstFriend, "First friend", Domain.Enums.AchievementCategory.Social, Domain.Enums.AchievementRarity.Common, 50)]
+    [InlineData(AchievementDefinitions.SquadGoals, "Squad goals", Domain.Enums.AchievementCategory.Social, Domain.Enums.AchievementRarity.Rare, 150)]
     [InlineData(AchievementDefinitions.Cheerleader, "Cheerleader", Domain.Enums.AchievementCategory.Social, Domain.Enums.AchievementRarity.Rare, 150)]
-    [InlineData(AchievementDefinitions.ShowOff, "Show Off", Domain.Enums.AchievementCategory.Sharing, Domain.Enums.AchievementRarity.Uncommon, 75)]
-    [InlineData(AchievementDefinitions.YearInReview, "Year in Review", Domain.Enums.AchievementCategory.Sharing, Domain.Enums.AchievementRarity.Uncommon, 75)]
-    [InlineData(AchievementDefinitions.TeamPlayer, "Team Player", Domain.Enums.AchievementCategory.Together, Domain.Enums.AchievementRarity.Uncommon, 75)]
-    [InlineData(AchievementDefinitions.MissionAccomplished, "Mission Accomplished", Domain.Enums.AchievementCategory.Together, Domain.Enums.AchievementRarity.Rare, 150)]
-    [InlineData(AchievementDefinitions.BattleBuddy, "Battle Buddy", Domain.Enums.AchievementCategory.Together, Domain.Enums.AchievementRarity.Uncommon, 75)]
-    [InlineData(AchievementDefinitions.StreakImmortal, "Streak Immortal", Domain.Enums.AchievementCategory.Consistency, Domain.Enums.AchievementRarity.Legendary, 1500)]
+    [InlineData(AchievementDefinitions.ShowOff, "Show off", Domain.Enums.AchievementCategory.Sharing, Domain.Enums.AchievementRarity.Uncommon, 75)]
+    [InlineData(AchievementDefinitions.YearInReview, "Year in review", Domain.Enums.AchievementCategory.Sharing, Domain.Enums.AchievementRarity.Uncommon, 75)]
+    [InlineData(AchievementDefinitions.TeamPlayer, "Team player", Domain.Enums.AchievementCategory.Together, Domain.Enums.AchievementRarity.Uncommon, 75)]
+    [InlineData(AchievementDefinitions.MissionAccomplished, "Mission accomplished", Domain.Enums.AchievementCategory.Together, Domain.Enums.AchievementRarity.Rare, 150)]
+    [InlineData(AchievementDefinitions.BattleBuddy, "Battle buddy", Domain.Enums.AchievementCategory.Together, Domain.Enums.AchievementRarity.Uncommon, 75)]
+    [InlineData(AchievementDefinitions.StreakImmortal, "Streak immortal", Domain.Enums.AchievementCategory.Consistency, Domain.Enums.AchievementRarity.Legendary, 1500)]
     [InlineData(AchievementDefinitions.Unstoppable, "Unstoppable", Domain.Enums.AchievementCategory.Volume, Domain.Enums.AchievementRarity.Legendary, 1000)]
     public void NewAchievements_HaveExpectedMetadata(
         string id,

@@ -185,7 +185,7 @@ public partial class CheckReferralCompletionCommandHandler(
     {
         if (isReferrer)
         {
-            var title = isPt ? "Indica\u00e7\u00e3o Conclu\u00edda!" : "Referral Completed!";
+            var title = isPt ? "Indica\u00e7\u00e3o conclu\u00edda!" : "Referral completed!";
             var body = (isPt, isPro) switch
             {
                 (true, true) => "Seu amigo come\u00e7ou a usar o Orbit! 10% de desconto aplicado na sua pr\u00f3xima fatura.",

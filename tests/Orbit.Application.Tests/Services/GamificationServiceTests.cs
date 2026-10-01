@@ -5,6 +5,7 @@ using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Npgsql;
 using Orbit.Application.Common;
+using Orbit.Application.Tests.Notifications;
 using Orbit.Application.Gamification;
 using Orbit.Application.Gamification.Models;
 using Orbit.Application.Gamification.Services;
@@ -1024,10 +1025,13 @@ public class GamificationServiceTests
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task ProcessHabitCreated_NewAchievement_SendsNotification()
+    [Theory]
+    [InlineData("en", "Achievement unlocked: first orbit")]
+    [InlineData("pt-BR", "Conquista desbloqueada: primeira órbita")]
+    public async Task ProcessHabitCreated_NewAchievement_SendsNotification(string language, string expectedTitle)
     {
         var user = CreateProUser();
+        user.SetLanguage(language);
         SetupUserLookup(user);
         SetupNoEarnedAchievements();
 
@@ -1036,8 +1040,39 @@ public class GamificationServiceTests
         await _sut.ProcessHabitCreated(UserId);
 
         await _notificationRepo.Received(1).AddAsync(
-            Arg.Is<Notification>(n => n.Title.Contains("Achievement Unlocked")),
+            Arg.Is<Notification>(n => n.Title == expectedTitle),
             Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task TryGrantAchievements_AllTitleResources_UseSentenceCaseInNotificationsAndPush(string language)
+    {
+        var user = CreateProUser();
+        user.SetLanguage(language);
+        SetupUserLookup(user);
+        SetupNoEarnedAchievements();
+        var notifications = new List<Notification>();
+        _notificationRepo.AddAsync(Arg.Do<Notification>(notifications.Add), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        var achievementIds = AchievementDefinitions.Active.Select(a => a.Id).ToList();
+
+        var granted = await _sut.TryGrantAchievementsAsync(UserId, achievementIds);
+
+        granted.Should().BeEquivalentTo(achievementIds);
+        notifications.Should().HaveCount(achievementIds.Count + 1);
+        notifications.Should().AllSatisfy(n => SentenceCaseAssertions.AssertTitle(n.Title));
+        notifications.Should().Contain(n => n.Title == (language == "pt-BR"
+            ? "Conquista desbloqueada: mês perfeito"
+            : "Achievement unlocked: perfect month"));
+        notifications.Should().Contain(n => n.Title == (language == "pt-BR"
+            ? $"Subiu de nível! Agora você está no nível {user.Level}"
+            : $"Level up! You're now level {user.Level}"));
+        foreach (var notification in notifications)
+            await _pushService.Received(1).SendToUserAsync(
+                UserId, notification.Title, notification.Body,
+                Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -1053,7 +1088,7 @@ public class GamificationServiceTests
 
         await _pushService.Received(1).SendToUserAsync(
             UserId,
-            Arg.Is<string>(s => s.Contains("Achievement Unlocked")),
+            Arg.Is<string>(s => s.Contains("Achievement unlocked")),
             Arg.Any<string>(),
             Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
@@ -1083,7 +1118,7 @@ public class GamificationServiceTests
         _unitOfWork.Received(1).ResetTracking();
         await _pushService.Received(1).SendToUserAsync(
             UserId,
-            Arg.Is<string>(s => s.Contains("Achievement Unlocked")),
+            Arg.Is<string>(s => s.Contains("Achievement unlocked")),
             Arg.Any<string>(),
             Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
@@ -1326,7 +1361,7 @@ public class GamificationServiceTests
             Arg.Any<CancellationToken>());
         user.TotalXp.Should().Be(75);
         await _notificationRepo.Received(1).AddAsync(
-            Arg.Is<Notification>(n => n.Title.Contains("Achievement Unlocked")),
+            Arg.Is<Notification>(n => n.Title.Contains("Achievement unlocked")),
             Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
