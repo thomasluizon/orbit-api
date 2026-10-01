@@ -46,15 +46,9 @@ while read -r name type; do
 done <<'RECORDS'
 api.useorbit.org CNAME
 useorbit.org MX
-send.send.useorbit.org MX
-send.updates.useorbit.org MX
 _dmarc.useorbit.org TXT
 useorbit.org TXT
 google._domainkey.useorbit.org TXT
-resend._domainkey.send.useorbit.org TXT
-resend._domainkey.updates.useorbit.org TXT
-send.send.useorbit.org TXT
-send.updates.useorbit.org TXT
 RECORDS
 
 if [[ $status -eq 0 ]]; then

@@ -14,7 +14,7 @@ The backend for **Orbit** -- an AI-powered habit tracker. Provides a REST API fo
 | Validation | [FluentValidation 12](https://docs.fluentvalidation.net) |
 | Auth | JWT Bearer + email verification codes + Google OAuth ([Supabase](https://supabase.com) tokens) |
 | AI | [OpenAI](https://platform.openai.com) — `gpt-4.1-mini` (primary), `gpt-5.4-nano` (sub-tasks), via the OpenAI .NET SDK |
-| Email | [Resend](https://resend.com) (verification codes, contacts) |
+| Email | [Amazon SES](https://aws.amazon.com/ses/) (verification codes, contacts) |
 | Push | [Firebase Admin SDK](https://firebase.google.com/docs/admin/setup) (FCM, native Android) + [WebPush](https://github.com/nichelaboratory/Lib.Net.Http.WebPush) (VAPID, browsers) |
 | Payments | [Stripe](https://stripe.com) (web) + Google Play Billing (native Android) |
 | Storage | [Supabase](https://supabase.com) object storage (`uploads` bucket) |
@@ -40,7 +40,7 @@ The backend for **Orbit** -- an AI-powered habit tracker. Provides a REST API fo
 - **Tags** -- Colored tags for habit organization
 - **User Facts** -- Personal context facts that enhance AI responses (soft-deleted)
 - **Push Notifications** -- Dual delivery: FCM for native Android, VAPID Web Push for browsers, plus background schedulers for reminders, goal deadlines, slip alerts, and check-ins
-- **Email Verification** -- Passwordless code-based login via Resend
+- **Email Verification** -- Passwordless code-based login via Amazon SES
 - **Subscription Billing** -- Stripe (web) and Google Play Billing (native) with webhook / RTDN processing; backend is the source of truth for entitlements
 - **Waitlist** -- Signed-token waitlist confirmation flow
 - **Sync** -- Batched pull/mutation sync endpoints for clients
@@ -83,7 +83,7 @@ Settings are bound from `appsettings.json`, with secrets overridden in `appsetti
 | `AI:ApiKey` / `AI:Model` / `AI:SubTaskModel` / `AI:BaseUrl` | OpenAI credentials and models (`BaseUrl` defaults to `https://api.openai.com/v1`) |
 | `Jwt:SecretKey` / `Issuer` / `Audience` | JWT signing and claims |
 | `Supabase:Url` / `AnonKey` / `SecretKey` / `Bucket` | Supabase auth tokens + object storage |
-| `Resend:ApiKey` / `FromEmail` | Transactional email |
+| `Ses:AccessKeyId` / `SecretAccessKey` / `FromEmail` | Transactional email |
 | `Vapid:PublicKey` / `PrivateKey` / `Subject` | Web Push (VAPID) |
 | `Encryption:Key` | At-rest field encryption |
 | `Google:ClientId` / `ClientSecret` | Google OAuth + Calendar |
@@ -171,7 +171,7 @@ Tests use xUnit with FluentAssertions. Unit tests only — there is no integrati
 | Database | [Supabase](https://supabase.com) PostgreSQL (session pooler) |
 | Domain | `api.useorbit.org` |
 | Push | Firebase project `orbit-11d4a` (FCM) |
-| Email | [Resend](https://resend.com) |
+| Email | [Amazon SES](https://aws.amazon.com/ses/) |
 | Payments | [Stripe](https://stripe.com) + Google Play Billing |
 | Monitoring | [Sentry](https://sentry.io) |
 
