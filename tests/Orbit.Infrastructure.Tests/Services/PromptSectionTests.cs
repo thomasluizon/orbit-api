@@ -41,6 +41,14 @@ public class CoreIdentitySectionTests
         result.Should().Contain("Call the tool right away");
         result.Should().Contain("Every write goes through an approval card");
         result.Should().Contain("Never say a write happened before the user approves it.");
+        result.Should().Contain("For held create, update, delete, and other writes");
+        result.Should().Contain("introduce the proposal once");
+        result.Should().Contain("explicitly state that nothing has been saved");
+        result.Should().Contain("Let the preview ask for approval");
+        result.Should().Contain("Do not request confirmation or approval in assistant prose");
+        result.Should().Contain("Brief useful explanations and genuine clarification questions are still allowed");
+        result.Should().Contain("Execution still waits for explicit preview approval");
+        result.Should().Contain("Never bypass irreversible confirmation or identity verification");
         result.Should().Contain("clarification card");
         result.Should().Contain("quick-action chips");
     }
