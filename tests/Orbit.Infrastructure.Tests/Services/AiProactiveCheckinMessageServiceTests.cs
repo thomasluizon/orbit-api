@@ -16,6 +16,23 @@ public class AiProactiveCheckinMessageServiceTests
     private static readonly BindingFlags PrivateStatic =
         BindingFlags.NonPublic | BindingFlags.Static;
 
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task GenerateMessageAsync_RequestsSentenceCaseTitle(string language)
+    {
+        var capture = new PromptCaptureHandler();
+        var service = new AiProactiveCheckinMessageService(
+            PromptCaptureHandler.CreateClient(capture),
+            NullLogger<AiProactiveCheckinMessageService>.Instance);
+
+        await service.GenerateMessageAsync("Alex", ["Read"], 5, language);
+
+        capture.FindPrompt("They have fallen behind").Should()
+            .Contain("Title must use sentence case")
+            .And.Contain("proper nouns and product names (Astra, Orbit)");
+    }
+
     [Fact]
     public async Task GenerateMessageAsync_InjectionValues_SanitizePromptFallbackAndListBoundaries()
     {

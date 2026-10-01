@@ -316,7 +316,7 @@ public class GetGamificationProfileQueryHandlerTests
         var retired = result.Value.Achievements.Single(a => a.Id == AchievementDefinitions.BattleBuddy);
         retired.IsEarned.Should().BeTrue();
         retired.EarnedAtUtc.Should().NotBeNull();
-        retired.Name.Should().Be("Battle Buddy");
+        retired.Name.Should().Be("Battle buddy");
         retired.Description.Should().NotBeNullOrWhiteSpace();
     }
 

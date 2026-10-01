@@ -5,6 +5,7 @@ using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Npgsql;
 using Orbit.Application.Common;
+using Orbit.Application.Tests.Notifications;
 using Orbit.Application.Gamification;
 using Orbit.Application.Gamification.Models;
 using Orbit.Application.Gamification.Services;
@@ -1025,10 +1026,13 @@ public class GamificationServiceTests
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task ProcessHabitCreated_NewAchievement_SendsNotification()
+    [Theory]
+    [InlineData("en", "New achievement: first Orbit")]
+    [InlineData("pt-BR", "Nova conquista: primeira órbita")]
+    public async Task ProcessHabitCreated_NewAchievement_SendsNotification(string language, string expectedTitle)
     {
         var user = CreateProUser();
+        user.SetLanguage(language);
         SetupUserLookup(user);
         SetupNoEarnedAchievements();
 
@@ -1037,7 +1041,7 @@ public class GamificationServiceTests
         await _sut.ProcessHabitCreated(UserId);
 
         await _notificationRepo.Received(1).AddAsync(
-            Arg.Is<Notification>(n => n.Title == "New achievement: First Orbit" && n.Url == NotificationUrls.Progress),
+            Arg.Is<Notification>(n => n.Title == expectedTitle && n.Url == NotificationUrls.Progress),
             Arg.Any<CancellationToken>());
     }
 
@@ -1053,8 +1057,45 @@ public class GamificationServiceTests
         await _sut.ProcessHabitCreated(UserId);
 
         await _notificationRepo.Received(1).AddAsync(
-            Arg.Is<Notification>(n => n.Title == "Nova conquista: Primeira Órbita" && n.Url == NotificationUrls.Progress),
+            Arg.Is<Notification>(n => n.Title == "Nova conquista: primeira órbita" && n.Url == NotificationUrls.Progress),
             Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task TryGrantAchievements_AllTitleResources_UseSentenceCaseInNotificationsAndPush(string language)
+    {
+        var user = CreateProUser();
+        user.SetLanguage(language);
+        SetupUserLookup(user);
+        SetupNoEarnedAchievements();
+        var notifications = new List<Notification>();
+        _notificationRepo.AddAsync(Arg.Do<Notification>(notifications.Add), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        var achievementIds = AchievementDefinitions.Active.Select(a => a.Id).ToList();
+
+        var granted = await _sut.TryGrantAchievementsAsync(UserId, achievementIds);
+
+        granted.Should().BeEquivalentTo(achievementIds);
+        notifications.Should().HaveCount(achievementIds.Count + 1);
+        notifications.Should().AllSatisfy(n =>
+        {
+            SentenceCaseAssertions.AssertTitle(n.Title);
+            n.Title.Should().NotEndWith("!");
+            n.Body.Should().NotEndWith("!");
+            n.Url.Should().Be(NotificationUrls.Progress);
+        });
+        notifications.Should().Contain(n => n.Title == (language == "pt-BR"
+            ? "Nova conquista: mês perfeito"
+            : "New achievement: perfect month"));
+        notifications.Should().Contain(n => n.Title == (language == "pt-BR"
+            ? $"Você chegou ao nível {user.Level}"
+            : $"You reached level {user.Level}"));
+        foreach (var notification in notifications)
+            await _pushService.Received(1).SendToUserAsync(
+                UserId, notification.Title, notification.Body,
+                NotificationUrls.Progress, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -1070,7 +1111,7 @@ public class GamificationServiceTests
 
         await _pushService.Received(1).SendToUserAsync(
             UserId,
-            "New achievement: First Orbit",
+            "New achievement: first Orbit",
             "Create your first habit (+25 XP)",
             NotificationUrls.Progress,
             Arg.Any<CancellationToken>());
