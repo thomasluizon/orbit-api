@@ -34,6 +34,7 @@ public sealed partial class AiProactiveCheckinMessageService(
 
             Format:
             - Return EXACTLY two lines. The first line is the notification title, the second line is the body.
+            - Title must use sentence case: capitalise only the first word, proper nouns and product names (Astra, Orbit); never use title case
             - Title: at most 8 words. Use their name only where it reads naturally.
             - Body: one or two sentences. Point at ONE of the open habits, never the whole list.
             - You may write the names Astra and Orbit. Use no other brand name.

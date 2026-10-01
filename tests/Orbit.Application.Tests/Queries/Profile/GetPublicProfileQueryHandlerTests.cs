@@ -143,7 +143,7 @@ public class GetPublicProfileQueryHandlerTests
 
         var result = await _handler.Handle(new GetPublicProfileQuery(Slug), CancellationToken.None);
 
-        result.Value.Achievements.Should().ContainSingle().Which.Name.Should().Be("Battle Buddy");
+        result.Value.Achievements.Should().ContainSingle().Which.Name.Should().Be("Battle buddy");
     }
 
     [Fact]
