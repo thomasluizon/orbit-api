@@ -65,7 +65,7 @@ locals {
     Stripe__MonthlyPriceIdBrl           = "price_1U59khGwWZvarDk3duqWRGu7"
     Stripe__MonthlyPriceIdUsd           = "price_1U59miGwWZvarDk3c7Jomocl"
     Stripe__ProProductId                = "prod_UBUPrTlZg8chuk"
-    Stripe__SuccessUrl                  = "https://app.useorbit.org/settings?subscription=success"
+    Stripe__SuccessUrl                  = "https://app.useorbit.org/profile?subscription=success"
     Stripe__YearlyPriceIdBrl            = "price_1U59lVGwWZvarDk3FBO8ci6L"
     Stripe__YearlyPriceIdUsd            = "price_1U59ncGwWZvarDk3Ydiw7jP7"
     Supabase__Url                       = "https://wdscxamegetmhqldqsdg.supabase.co"
@@ -87,6 +87,7 @@ locals {
     Cors__AllowedOrigins__0            = "https://app-staging.useorbit.org"
     Cors__AllowedOrigins__1            = "https://staging.useorbit.org"
     Frontend__BaseUrl                  = "https://app-staging.useorbit.org"
+    GooglePlay__PackageName            = "org.useorbit.app.staging"
     GooglePlay__RtdnAudience           = "https://api-staging.useorbit.org/api/subscriptions/play/rtdn"
     Google__AllowedRedirectUris__0     = "https://app-staging.useorbit.org/auth-callback"
     Google__AllowedRedirectUris__1     = "https://app.useorbit.org/auth-callback"
@@ -95,7 +96,7 @@ locals {
     Marketing__ApiBaseUrl              = "https://api-staging.useorbit.org"
     Sentry__Environment                = "staging"
     Stripe__CancelUrl                  = "https://app-staging.useorbit.org/upgrade"
-    Stripe__SuccessUrl                 = "https://app-staging.useorbit.org/settings?subscription=success"
+    Stripe__SuccessUrl                 = "https://app-staging.useorbit.org/upgrade?subscription=success"
     Supabase__Url                      = "https://staging-storage-disabled.invalid"
     Storage__Provider                  = var.staging_storage_provider
     Storage__S3__Bucket                = aws_s3_bucket.uploads["staging"].bucket

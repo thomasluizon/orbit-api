@@ -62,7 +62,7 @@ jobs:
             /o:"thomasluizon" \
             /d:sonar.token="${SONAR_TOKEN}" \
             /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml" \
-            /d:sonar.javascript.lcov.reportPaths="coverage/web-plan.lcov" \
+            /d:sonar.javascript.lcov.reportPaths="coverage/web-plan.lcov,coverage/staging-pinger.lcov" \
             /d:sonar.exclusions="tools/**,**/Migrations/**,**/bin/**,**/obj/**,**/OAuth/OAuthLoginPage.cs,**/.claude/**,**/Email/Templates/**,**/load-tests/**,**/bench/**" \
             /d:sonar.cpd.exclusions="**/Chat/Tools/Implementations/CreateHabitTool.cs,**/Chat/Tools/Implementations/UpdateHabitTool.cs,**/Services/AgentCatalogService.UserDataCatalog.cs,**/Services/SlipAlertSchedulerService.cs,**/Services/ProactiveCheckinSchedulerService.cs,**/Accountability/Commands/AcceptAccountabilityPairCommand.cs,**/Social/Commands/AcceptFriendRequestCommand.cs" \
             /d:sonar.coverage.exclusions="**/Program.cs,**/Extensions/ServiceCollectionExtensions*.cs,**/Extensions/WebApplicationExtensions.cs,**/Middleware/**,**/OpenApi/**,**/OAuth/**,**/Persistence/OrbitDbContext.cs,**/Persistence/OrbitDbContextFactory.cs,**/Persistence/GenericRepository.cs,**/Persistence/UnitOfWork.cs,**/Persistence/AccountResetRepository.cs,**/Configuration/**,**/Services/ReminderSchedulerService.cs,**/Services/SlipAlertSchedulerService.cs,**/Services/GoalDeadlineNotificationService.cs,**/Services/HabitDueDateAdvancementService.cs,**/Services/DataEncryptionMigrationService.cs,**/Services/PushNotificationService.cs,**/Services/AccountDeletionService.cs,**/Services/GoogleTokenService.cs,**/Services/BackgroundServiceHealthCheck.cs,**/Services/StripeCouponRewardService.cs,**/Services/StripeBillingService.cs,**/Services/GooglePlayBillingService.cs,**/Services/Calendar/**,**/AI/AiCompletionClient.cs,**/AI/AiBatchClient.cs,**/AI/AudioTranscriptionService.cs,**/Services/GeoLocationService.cs,**/BackgroundJobs/HangfireRecurringJobRegistrar.cs,**/Orbit.Analyzers/**,**/Orbit.Analyzers.CodeFixes/**,**/.github/**,**/bench/**"
@@ -76,10 +76,11 @@ jobs:
           dotnet test tests/Orbit.Application.Tests --no-build --collect:"XPlat Code Coverage" -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
           dotnet test tests/Orbit.Infrastructure.Tests --no-build --collect:"XPlat Code Coverage" -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
 
-      - name: Test web plan guard with coverage
+      - name: Test infra scripts with coverage
         run: |
           mkdir -p coverage
           node --experimental-test-coverage --test --test-coverage-include=infra/check-web-plan.mjs --test-reporter=lcov --test-reporter-destination=coverage/web-plan.lcov infra/check-web-plan.test.mjs
+          node --experimental-test-coverage --test --test-coverage-include=infra/workers/staging-pinger.mjs --test-reporter=lcov --test-reporter-destination=coverage/staging-pinger.lcov infra/staging-pinger.test.mjs
 
       - name: SonarScanner End
         env:
