@@ -26,7 +26,7 @@ export default {
     try {
       const response = await fetch(healthUrl, {
         cache: "no-store",
-        redirect: "error",
+        redirect: "manual",
         signal: abort.signal,
       })
       status = response.status
