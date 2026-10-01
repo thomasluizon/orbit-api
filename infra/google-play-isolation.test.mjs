@@ -46,7 +46,7 @@ test("production billing values remain byte-identical", () => {
     '    Stripe__MonthlyPriceIdBrl           = "price_1U59khGwWZvarDk3duqWRGu7"',
     '    Stripe__MonthlyPriceIdUsd           = "price_1U59miGwWZvarDk3c7Jomocl"',
     '    Stripe__ProProductId                = "prod_UBUPrTlZg8chuk"',
-    '    Stripe__SuccessUrl                  = "https://app.useorbit.org/settings?subscription=success"',
+    '    Stripe__SuccessUrl                  = "https://app.useorbit.org/profile?subscription=success"',
     '    Stripe__YearlyPriceIdBrl            = "price_1U59lVGwWZvarDk3FBO8ci6L"',
     '    Stripe__YearlyPriceIdUsd            = "price_1U59ncGwWZvarDk3Ydiw7jP7"',
   ])
@@ -54,6 +54,25 @@ test("production billing values remain byte-identical", () => {
   assert.match(group, /for key, value in local\.production_api_values\s*:\s*key => \{ value = value \}/)
   assert.doesNotMatch(group, /staging|GooglePlay__|Stripe__/)
 })
+
+for (const [environment, header, host, route] of [
+  ["production", "production_api_values = {", "app.useorbit.org", "profile"],
+  ["staging", "staging_api_values = merge(", "app-staging.useorbit.org", "upgrade"],
+]) {
+  test(`${environment} Stripe checkout success returns to the supported purchase route`, () => {
+    const values = block(header)
+    const urls = [...values.matchAll(/\bStripe__SuccessUrl\s*=\s*"([^"]*)"/g)].map(match => match[1])
+
+    assert.deepEqual(urls, [`https://${host}/${route}?subscription=success`])
+  })
+
+  test(`${environment} Stripe checkout cancellation stays on upgrade`, () => {
+    const values = block(header)
+    const urls = [...values.matchAll(/\bStripe__CancelUrl\s*=\s*"([^"]*)"/g)].map(match => match[1])
+
+    assert.deepEqual(urls, [`https://${host}/upgrade`])
+  })
+}
 
 test("staging Play notifications retain the staging endpoint audience", () => {
   const staging = block("staging_api_values = merge(")
