@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Domain.Enums;
@@ -75,7 +78,8 @@ public sealed partial class StripeBillingService(
                 options.AllowPromotionCodes = true;
             }
 
-            var idempotencyKey = $"orbit-checkout-{userId}-{priceId}-{referralCouponId ?? "std"}";
+            var idempotencyKey = CreateSessionIdempotencyKey($"orbit-checkout-{userId}",
+                customerId, priceId, successUrl, cancelUrl, referralCouponId ?? "");
             var session = await StripeRetryPolicy.ExecuteWithRetryAsync(
                 () => clients.CheckoutSessions.CreateAsync(
                     options, new RequestOptions { IdempotencyKey = idempotencyKey }, cancellationToken),
@@ -92,7 +96,7 @@ public sealed partial class StripeBillingService(
     {
         try
         {
-            var idempotencyKey = $"orbit-portal-{customerId}";
+            var idempotencyKey = CreateSessionIdempotencyKey("orbit-portal", customerId, returnUrl);
             var session = await StripeRetryPolicy.ExecuteWithRetryAsync(
                 () => clients.PortalSessions.CreateAsync(new Stripe.BillingPortal.SessionCreateOptions
                 {
@@ -106,6 +110,12 @@ public sealed partial class StripeBillingService(
         {
             throw new BillingProviderException("Failed to create portal session", ex);
         }
+    }
+
+    private static string CreateSessionIdempotencyKey(string prefix, params string[] parameters)
+    {
+        var digest = SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(parameters)));
+        return $"{prefix}-{Convert.ToHexStringLower(digest)[..16]}";
     }
 
     public async Task<BillingSubscriptionDetails?> GetSubscriptionDetailsAsync(string subscriptionId, CancellationToken cancellationToken)
