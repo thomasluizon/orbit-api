@@ -43,6 +43,7 @@ public static class PendingOperationActionKeys
             "reorder_habits" => "reorderHabits",
             "log_habit" => "logHabit",
             "skip_habit" => "skipHabit",
+            "undo_skip_habit" => "undoSkipHabit",
             "update_checklist" => "updateChecklist",
             "create_goal" => "createGoal",
             "update_goal" => "updateGoal",

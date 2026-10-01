@@ -207,9 +207,45 @@ public class HabitsControllerTests
     }
 
     [Fact]
+    public async Task SkipHabit_OptionalSkipId_IsPassedToCommand()
+    {
+        var habitId = Guid.NewGuid();
+        var skipId = Guid.NewGuid();
+        _mediator.Send(Arg.Any<SkipHabitCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new SkipHabitResponse(skipId)));
+
+        var result = await _controller.SkipHabit(habitId, new HabitsController.SkipHabitRequest(SkipId: skipId), CancellationToken.None);
+
+        result.Should().BeOfType<NoContentResult>();
+        await _mediator.Received(1).Send(new SkipHabitCommand(UserId, habitId, SkipId: skipId), CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task UndoSkipHabit_Success_UsesCallerAndReturnsNoContent()
+    {
+        var habitId = Guid.NewGuid();
+        var skipId = Guid.NewGuid();
+        _mediator.Send(Arg.Any<UndoSkipHabitCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+
+        var result = await _controller.UndoSkipHabit(habitId, skipId, CancellationToken.None);
+
+        result.Should().BeOfType<NoContentResult>();
+        await _mediator.Received(1).Send(new UndoSkipHabitCommand(UserId, habitId, skipId), CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task UndoSkipHabit_ChangedHabit_ReturnsConflict()
+    {
+        _mediator.Send(Arg.Any<UndoSkipHabitCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure(DomainErrors.SkipUndoConflict));
+        var result = await _controller.UndoSkipHabit(Guid.NewGuid(), Guid.NewGuid(), CancellationToken.None);
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(409);
+    }
+
+    [Fact]
     public async Task SkipHabit_Success_ReturnsNoContent()
     {
-        _mediator.Send(Arg.Any<SkipHabitCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _mediator.Send(Arg.Any<SkipHabitCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success(new SkipHabitResponse(Guid.NewGuid())));
         var result = await _controller.SkipHabit(Guid.NewGuid(), null, CancellationToken.None);
         result.Should().BeOfType<NoContentResult>();
     }
@@ -217,7 +253,7 @@ public class HabitsControllerTests
     [Fact]
     public async Task SkipHabit_Failure_ReturnsBadRequest()
     {
-        _mediator.Send(Arg.Any<SkipHabitCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Failure("Error"));
+        _mediator.Send(Arg.Any<SkipHabitCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Failure<SkipHabitResponse>("Error"));
         var result = await _controller.SkipHabit(Guid.NewGuid(), null, CancellationToken.None);
         result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }

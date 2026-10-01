@@ -583,6 +583,29 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         return Result.Success(log);
     }
 
+    public Result RestoreSkip(HabitSkipUndo skip)
+    {
+        if (skip.HabitId != Id || skip.UserId != UserId)
+            return Result.Failure(DomainErrors.SkipNotFound);
+        if (skip.IsUndone || IsDeleted
+            || UpdatedAtUtc.Ticks / 10 != skip.ExpectedUpdatedAtUtc.Ticks / 10)
+            return Result.Failure(DomainErrors.SkipUndoConflict);
+
+        if (skip.SkipLogId is { } logId)
+        {
+            var log = _logs.Find(l => l.Id == logId && l.Value == 0 && !l.IsDeleted);
+            if (log is null)
+                return Result.Failure(DomainErrors.SkipUndoConflict);
+            log.SoftDelete();
+        }
+
+        DueDate = skip.PreviousDueDate;
+        ScheduledStartDate = skip.PreviousScheduledStartDate;
+        IsCompleted = skip.PreviousIsCompleted;
+        UpdatedAtUtc = DateTime.UtcNow;
+        return Result.Success();
+    }
+
     public Result<HabitLog> Unlog(DateOnly date)
     {
         var log = _logs.Find(l => l.Date == date && l.Value > 0 && !l.IsDeleted);

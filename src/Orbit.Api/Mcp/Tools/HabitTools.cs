@@ -221,7 +221,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
                (m.LastCompletedDate is not null ? string.Create(CultureInfo.InvariantCulture, $"Last Completed: {m.LastCompletedDate}") : "Never completed");
     }
 
-    [McpServerTool(Name = "skip_habit"), Description("Skip a habit for today (or a specific date). Advances to next scheduled date without logging completion. Only works on recurring habits.")]
+    [McpServerTool(Name = "skip_habit"), Description("Skip a habit for today (or a specific date). Advances recurring habits or postpones one-time tasks. Returns skip_id for undo_skip_habit.")]
     public async Task<string> SkipHabit(
         ClaimsPrincipal user,
         [Description(HabitIdDescription)] string habitId,
@@ -234,7 +234,22 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
             date
         }, confirmationToken: null, cancellationToken);
 
-        return result.Succeeded ? $"Skipped habit {habitId}" : result.Message;
+        return result.Succeeded ? $"Skipped habit {habitId}: {JsonSerializer.Serialize(result.Payload)}" : result.Message;
+    }
+
+    [McpServerTool(Name = "undo_skip_habit"), Description("Undo a single skip using the skip_id returned by skip_habit. Refuses if the habit changed afterward.")]
+    public async Task<string> UndoSkipHabit(
+        ClaimsPrincipal user,
+        [Description(HabitIdDescription)] string habitId,
+        [Description("Skip ID returned by skip_habit")] string skipId,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await executorBridge.ExecuteAsync(user, "undo_skip_habit", new
+        {
+            habit_id = habitId,
+            skip_id = skipId
+        }, confirmationToken: null, cancellationToken);
+        return result.Succeeded ? $"Undid skip for habit {habitId}" : result.Message;
     }
 
     [McpServerTool(Name = "update_checklist"), Description("Update the checklist items for a habit. Pass the full list of items with their checked state.")]

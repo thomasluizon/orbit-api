@@ -272,9 +272,21 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         [FromBody] SkipHabitRequest? request,
         CancellationToken cancellationToken)
     {
-        var command = new SkipHabitCommand(HttpContext.GetUserId(), id, request?.Date);
+        var command = new SkipHabitCommand(HttpContext.GetUserId(), id, request?.Date, request?.SkipId);
         var result = await mediator.Send(command, cancellationToken);
 
+        return result.ToPayGateAwareResult(() => NoContent());
+    }
+
+    [HttpPost("{id:guid}/skip/{skipId:guid}/undo")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> UndoSkipHabit(Guid id, Guid skipId, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new UndoSkipHabitCommand(HttpContext.GetUserId(), id, skipId), cancellationToken);
         return result.ToPayGateAwareResult(() => NoContent());
     }
 

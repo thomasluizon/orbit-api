@@ -102,6 +102,8 @@ public static class ErrorCodes
     public const string InvalidChatHistory = "INVALID_CHAT_HISTORY";
     public const string InvalidClientContext = "INVALID_CLIENT_CONTEXT";
     public const string HabitAlreadyCompleted = "HABIT_ALREADY_COMPLETED";
+    public const string SkipNotFound = "SKIP_NOT_FOUND";
+    public const string SkipUndoConflict = "SKIP_UNDO_CONFLICT";
     public const string CannotSkipFutureDate = "CANNOT_SKIP_FUTURE_DATE";
     public const string HabitNotYetDue = "HABIT_NOT_YET_DUE";
     public const string NotScheduledOnDate = "NOT_SCHEDULED_ON_DATE";

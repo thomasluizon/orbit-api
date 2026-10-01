@@ -117,6 +117,7 @@ internal sealed class HeldWriteTestContext : IDisposable
         SetupWrite<BulkUpdateHabitsCommand, BulkHabitMutationResult>(new(1, 1, 0, false));
         SetupWrite<BulkLogHabitsCommand, BulkLogResult>(new([new(0, BulkItemStatus.Success, Habit.Id)]));
         SetupWrite<BulkSkipHabitsCommand, BulkSkipResult>(new([new(0, BulkItemStatus.Success, Habit.Id)]));
+        SetupWrite<SkipHabitCommand, SkipHabitResponse>(new(Guid.NewGuid()));
         SetupWrite<LogHabitCommand, LogHabitResponse>(new(Guid.NewGuid(), true, 1));
         SetupWrite<CreateCheckoutCommand, CheckoutResponse>(new("https://example.com/checkout"));
         SetupWrite<CreateApiKeyCommand, CreateApiKeyResponse>(new(Guid.NewGuid(), "Key", "secret", "prefix", [], false, null, DateTime.MinValue));

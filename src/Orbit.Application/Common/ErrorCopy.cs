@@ -26,6 +26,8 @@ public static class ErrorCopy
         (ErrorCodes.ValidationError, "Some of the details need a change before we can save this.", "Alguns dados precisam de ajuste antes de salvarmos isto."),
         (ErrorCodes.RateLimited, "You are doing that faster than we can keep up. Wait a moment and try again.", "Você está fazendo isso mais rápido do que conseguimos acompanhar. Espere um instante e tente de novo."),
         (ErrorCodes.InternalServerError, "We could not finish that. Try again, and write to support if it keeps happening.", "Não conseguimos concluir isso. Tente de novo, e escreva para o suporte se continuar."),
+        (ErrorCodes.SkipNotFound, "That skip is not available for this habit.", "Não encontramos esse registro de pular para este hábito."),
+        (ErrorCodes.SkipUndoConflict, "This habit changed after you skipped it. Undo is no longer available.", "Não é possível desfazer porque o hábito foi alterado depois de ser pulado."),
         (ErrorCodes.ConcurrentUpdateConflict, "Another change landed at the same time. Open this again and redo your edit.", "Outra alteração chegou ao mesmo tempo. Abra de novo e refaça sua edição."),
     ];
 
