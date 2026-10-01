@@ -29,6 +29,7 @@ public class SkipHabitCommandHandlerTests
 
     public SkipHabitCommandHandlerTests()
     {
+        _habitRepo.TryRefreshAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>()).Returns(true);
         _unitOfWork.PassThroughTransactions<Result<SkipHabitResponse>>();
         _handler = new SkipHabitCommandHandler(
             new SkipHabitRepositories(_habitRepo, _habitLogRepo, Substitute.For<IGenericRepository<HabitSkipUndo>>()), _userDateService,

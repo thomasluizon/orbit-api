@@ -33,6 +33,7 @@ public class SkipHabitToolTests
 
     public SkipHabitToolTests()
     {
+        _habitRepo.TryRefreshAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>()).Returns(true);
         _tool = new SkipHabitTool(_mediator, _habitRepo);
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
         var unitOfWork = Substitute.For<IUnitOfWork>();

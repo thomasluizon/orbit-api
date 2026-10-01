@@ -71,6 +71,9 @@ public class SkipHabitCommandHandler(
         if (habit.UserId != request.UserId)
             return Result.Failure<SkipHabitResponse>(ErrorMessages.HabitNotOwned);
 
+        if (!await repos.Habits.TryRefreshAsync(habit, cancellationToken))
+            return Result.Failure<SkipHabitResponse>(ErrorMessages.ConcurrentUpdateConflict);
+
         if (habit.IsCompleted)
             return Result.Failure<SkipHabitResponse>(ErrorMessages.CannotSkipCompletedHabit);
 
