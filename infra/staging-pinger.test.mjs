@@ -79,7 +79,7 @@ test("pings only staging without cache or redirect and records the completed req
   assert.equal(requests[0].url, "https://api-staging.useorbit.org/health")
   assert.equal(requests[0].method, "GET")
   assert.equal(requests[0].cache, "no-store")
-  assert.equal(requests[0].redirect, "error")
+  assert.equal(requests[0].redirect, "manual")
   assert.deepEqual(logs, [{
     event: "staging-health-ping",
     scheduledAt: "2026-09-30T11:00:00.000Z",
@@ -101,6 +101,19 @@ test("non-success health responses fail the invocation and retain the HTTP statu
   assert.equal(errors.length, 1)
   assert.equal(errors[0].outcome, "failed")
   assert.equal(errors[0].status, 503)
+})
+
+test("a redirect response fails the invocation instead of being followed", async t => {
+  const { requests, logs, errors } = setup(t)
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    requests.push(new Request(url, options))
+    return new Response(null, { status: 301, headers: { location: "https://example.com/health" } })
+  })
+  await assert.rejects(worker.scheduled({ scheduledTime: instant("11:00:00") }), /HTTP 301/)
+  assert.equal(requests.length, 1)
+  assert.deepEqual(logs, [])
+  assert.equal(errors.length, 1)
+  assert.equal(errors[0].status, 301)
 })
 
 test("network errors fail the invocation and remain visible in logs", async t => {
