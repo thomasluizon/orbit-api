@@ -10,7 +10,9 @@ The Render provider reads `RENDER_API_KEY` from the environment. The Cloudflare 
 
 The staging web app uses `https://app-staging.useorbit.org`. Keep `staging.useorbit.org` as a custom domain on `orbit-web-staging`; the web proxy redirects requests on that host permanently to the new host. The staging API CORS origins, its Google redirect URIs and the staging upload bucket CORS keep the old host beside the new one, so a tab still running the previous web build keeps working through the cutover. Add the new domain to the live Render service before applying the targeted Terraform changes, and confirm the plan has no update to `render_web_service.staging_web`. Update the `STAGING_NEXT_PUBLIC_SITE_URL` repository variable in `orbit-ui-mobile` to `https://app-staging.useorbit.org`, and add `https://app-staging.useorbit.org/auth-callback` to the Google OAuth web client's redirect URIs. Release the staging API and web from `redesign/main`, then verify the new health route, old-host redirect, email sign-in, and Google authorization.
 
-The staging keepalive workflow calls the API health endpoint every five minutes from 08:00 through 23:55 in Sao Paulo. The reseed workflow checks the Render Postgres creation time daily and replaces the staging database once it is at least 26 days old. A manual dispatch replaces it immediately. The replacement plan is restricted to `render_postgres.staging` and its staging database environment group, and the workflow rejects a plan that changes another resource. For migrations and the owner seed, the workflow temporarily adds the GitHub runner's public IPv4 `/32` to the staging database allow list. It restores and verifies the operator list after each command, including when a command fails. If the reseed job times out, `staging-postgres-access-reconcile.yml` runs independently after completion and on a recurring schedule to remove a tagged runner address. It preserves any other live addresses and fails when those differ from the configured operator list. Between the commands, the reseed workflow triggers an API deploy and waits for that deploy to become live.
+`staging-pinger.tf` and `workers/staging-pinger.mjs` define the Cloudflare Worker that calls the staging API health endpoint every five minutes from 08:00 through 23:55 in America/Sao_Paulo. See [Staging pinger](#staging-pinger) for deployment, run history, and cutover proof. Keep `.github/workflows/staging-keepalive.yml` until the Worker is deployed and the proof is recorded.
+
+The reseed workflow checks the Render Postgres creation time daily and replaces the staging database once it is at least 26 days old. A manual dispatch replaces it immediately. The replacement plan is restricted to `render_postgres.staging` and its staging database environment group, and the workflow rejects a plan that changes another resource. For migrations and the owner seed, the workflow temporarily adds the GitHub runner's public IPv4 `/32` to the staging database allow list. It restores and verifies the operator list after each command, including when a command fails. If the reseed job times out, `staging-postgres-access-reconcile.yml` runs independently after completion and on a recurring schedule to remove a tagged runner address. It preserves any other live addresses and fails when those differ from the configured operator list. Between the commands, the reseed workflow triggers an API deploy and waits for that deploy to become live.
 
 Create the GitHub OIDC provider and staging reseed role from `github_oidc.tf` with a reviewed targeted Terraform apply before enabling the workflow. If the GitHub OIDC provider already exists in the AWS account, import it into this state before applying. Set `RENDER_API_KEY` as a GitHub Actions environment secret in `render-operations` from Render Account Settings > API Keys, and restrict that environment to deployment branch `main`. Set `SEED_OWNER_EMAIL`, `STAGING_ENVIRONMENT_ID`, and `STAGING_API_SERVICE_ID` in GitHub Actions variables. The IDs come from the main Terraform state's `render_project.orbit.environments["Staging"].id` and `render_web_service.staging_api.id`. The role trust policy accepts only workflows on this repository's `main` branch.
 
@@ -50,6 +52,42 @@ dotnet run --project src/Orbit.Api/Orbit.Api.csproj --no-launch-profile -- seed-
 ```
 
 The command checks the environment, staging host, database name, and database user before opening a connection. It reuses the owner's account by email and adds missing sample records without duplicating existing ones.
+
+## Staging pinger
+
+The Worker `orbit-staging-pinger` belongs to Cloudflare account `29945c90bc934c629c8e5a11cbfd146b`. Its only target is `https://api-staging.useorbit.org/health`. It has a scheduled handler and needs no HTTP route, DNS change, or Render dependency. The two UTC schedules, `*/5 11-23 * * *` and `*/5 0-2 * * *`, produce 192 invocations per day. Both the scheduled time and execution time must be inside 11:00 to 02:59 UTC; delayed events outside the window are skipped. Requests bypass cache, reject redirects, and time out after 90 seconds to allow the first invocation to wake a sleeping service. A non-success HTTP response or network error fails the invocation. This timeout supports waking the service; the acceptance probes below still require responses under two seconds.
+
+After review, the orchestrator loads `CLOUDFLARE_API_TOKEN` from the Keychain entry `orbit-cloudflare-api-token` without printing it, initializes the existing `infra/` backend, and uses the existing ignored `infra/local.tfvars`. The token needs account-level Workers Scripts Write permission. Review a plan restricted to these two resources, then apply with the same targets:
+
+```sh
+terraform -chdir=infra init
+terraform -chdir=infra plan -var-file=local.tfvars \
+  -target=cloudflare_workers_script.staging_pinger \
+  -target=cloudflare_workers_cron_trigger.staging_pinger
+terraform -chdir=infra apply -var-file=local.tfvars \
+  -target=cloudflare_workers_script.staging_pinger \
+  -target=cloudflare_workers_cron_trigger.staging_pinger
+```
+
+The reviewed plan must change only `cloudflare_workers_script.staging_pinger` and `cloudflare_workers_cron_trigger.staging_pinger`. Stop if it includes a web service, production API, or any other resource. Neither pinger resource references the managed Cloudflare zone or Render services, so targeting them does not pull those resources into the apply.
+
+In the Cloudflare dashboard, open **Workers & Pages > orbit-staging-pinger > Settings > Triggers > Cron Triggers** and confirm both expressions. Allow up to 15 minutes for [Cron Trigger propagation](https://developers.cloudflare.com/workers/configuration/cron-triggers/). Open **Observability** on that Worker to see [persisted invocation and custom logs](https://developers.cloudflare.com/workers/observability/logs/workers-logs/). Sampling is set to 100 percent. Search for `staging-health-ping` and inspect `scheduledAt`, `startedAt`, `outcome`, `status`, and `durationMs`. Outcomes are `healthy`, `failed`, or `skipped-outside-window`. Failures include an `error` string. Compare consecutive scheduled and actual start times to check the five-minute cadence. Export or copy the evidence before the account's log retention expires.
+
+Once scheduled invocations are visible, choose an hour entirely inside the window and record seven independent probes, ten minutes apart, spanning at least one hour. Append each probe to a file outside the repository using this command:
+
+```sh
+{
+  date -u '+timestamp=%Y-%m-%dT%H:%M:%SZ'
+  curl --silent --show-error --fail --max-time 2 --output /dev/null \
+    --write-out 'http_status=%{http_code} duration_seconds=%{time_total}\n' \
+    https://api-staging.useorbit.org/health
+  printf 'curl_exit=%s\n' "$?"
+} >> /tmp/orbit-staging-pinger-probes.log 2>&1
+```
+
+Record all seven timestamp, HTTP status, duration, and exit-code observations in the owning ticket or pull request. Every probe must have a success HTTP status, `curl_exit=0`, and `duration_seconds` strictly below 2. Also record the Worker's intervening invocations at five-minute intervals; the independent probes and retained GitHub workflow can themselves keep the service awake, so probe timings alone do not prove the Worker is running. If any probe fails or the Worker misses an invocation, investigate and restart the full observation hour. Only after both proofs pass does the orchestrator delete `.github/workflows/staging-keepalive.yml` and commit its removal.
+
+Provider arguments were confirmed using the installed `cloudflare/cloudflare` 5.26.0 schema. The versioned [Worker script schema](https://github.com/cloudflare/terraform-provider-cloudflare/blob/v5.26.0/docs/resources/workers_script.md) documents `content`, `main_module`, and `observability`; the [Cron Trigger schema](https://github.com/cloudflare/terraform-provider-cloudflare/blob/v5.26.0/docs/resources/workers_cron_trigger.md) requires `schedules`, despite its example using `body`. The controller's `scheduledTime` is milliseconds since the UTC epoch per the [scheduled handler contract](https://developers.cloudflare.com/workers/runtime-apis/handlers/scheduled/). Health response status and success use the [Response contract](https://developers.cloudflare.com/workers/runtime-apis/response/); cache, redirect, and abort options use the [Request contract](https://developers.cloudflare.com/workers/runtime-apis/request/).
 
 ## SSM parameters
 
