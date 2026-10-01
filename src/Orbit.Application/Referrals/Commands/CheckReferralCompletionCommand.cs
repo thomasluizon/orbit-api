@@ -189,18 +189,18 @@ public partial class CheckReferralCompletionCommandHandler(
             var body = (isPt, isPro) switch
             {
                 (true, true) => "Seu amigo come\u00e7ou a usar o Orbit! 10% de desconto aplicado na sua pr\u00f3xima fatura.",
-                (true, false) => "Seu amigo come\u00e7ou a usar o Orbit e voc\u00ea ganhou um cupom de 10% de desconto no Pro!",
+                (true, false) => "Seu amigo come\u00e7ou a usar o Orbit e voc\u00ea ganhou um cupom de 10% de desconto no Pro.",
                 (false, true) => "Your friend joined Orbit! 10% discount applied to your next invoice.",
-                (false, false) => "Your friend joined Orbit and you earned a 10% discount coupon for Pro!"
+                (false, false) => "Your friend joined Orbit and you earned a 10% discount coupon for Pro."
             };
             return (title, body);
         }
         else
         {
-            var title = isPt ? "Voc\u00ea ganhou um cupom!" : "You earned a coupon!";
+            var title = isPt ? "Voc\u00ea ganhou um cupom" : "You earned a coupon";
             var body = isPt
-                ? "Boas-vindas ao Orbit! Voc\u00ea ganhou um cupom de 10% de desconto no Pro!"
-                : "Welcome to Orbit! You earned a 10% discount coupon for Pro!";
+                ? "Boas-vindas ao Orbit! Voc\u00ea ganhou um cupom de 10% de desconto no Pro."
+                : "Welcome to Orbit! You earned a 10% discount coupon for Pro.";
             return (title, body);
         }
     }

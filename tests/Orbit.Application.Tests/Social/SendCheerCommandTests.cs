@@ -57,9 +57,12 @@ public class SendCheerCommandTests
     private SendCheerCommand Command(string? note = "Keep it up!") =>
         new(_sender.Id, _recipient.Id, _habitId, note);
 
-    [Fact]
-    public async Task CleanNote_PersistsCheerAndPushesRecipient()
+    [Theory]
+    [InlineData("en", "New cheer", "Sender cheered you on.")]
+    [InlineData("pt-BR", "Novo incentivo", "Sender torceu por você.")]
+    public async Task CleanNote_PersistsCheerAndPushesRecipient(string language, string title, string body)
     {
+        _recipient.SetLanguage(language);
         var result = await _handler.Handle(Command(), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -67,10 +70,10 @@ public class SendCheerCommandTests
             Arg.Is<Cheer>(c => c.SenderId == _sender.Id && c.RecipientId == _recipient.Id && c.HabitId == _habitId),
             Arg.Any<CancellationToken>());
         await _notificationRepository.Received(1).AddAsync(
-            Arg.Is<Notification>(n => n.UserId == _recipient.Id && n.Url == null),
+            Arg.Is<Notification>(n => n.UserId == _recipient.Id && n.Url == null && n.Title == title && n.Body == body),
             Arg.Any<CancellationToken>());
         await _push.Received(1).SendToUserAsync(
-            _recipient.Id, Arg.Any<string>(), Arg.Any<string>(), null, Arg.Any<CancellationToken>());
+            _recipient.Id, title, body, null, Arg.Any<CancellationToken>());
     }
 
     [Fact]
