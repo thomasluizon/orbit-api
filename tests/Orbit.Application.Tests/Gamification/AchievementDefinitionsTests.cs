@@ -78,7 +78,7 @@ public class AchievementDefinitionsTests
     }
 
     [Theory]
-    [InlineData(AchievementDefinitions.FirstOrbit, "First orbit")]
+    [InlineData(AchievementDefinitions.FirstOrbit, "First Orbit")]
     [InlineData(AchievementDefinitions.Liftoff, "Liftoff")]
     [InlineData(AchievementDefinitions.WeekWarrior, "Week warrior")]
     [InlineData(AchievementDefinitions.MonthlyMaster, "Monthly master")]

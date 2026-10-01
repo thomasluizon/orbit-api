@@ -47,7 +47,7 @@ public static class AchievementDefinitions
 
     private static readonly List<AchievementDefinition> _all =
     [
-        new(FirstOrbit, "First orbit", "Create your first habit", AchievementCategory.GettingStarted, AchievementRarity.Common, 25, "first_orbit"),
+        new(FirstOrbit, "First Orbit", "Create your first habit", AchievementCategory.GettingStarted, AchievementRarity.Common, 25, "first_orbit"),
         new(Liftoff, "Liftoff", "Complete your first habit", AchievementCategory.GettingStarted, AchievementRarity.Common, 25, "liftoff"),
         new(MissionControl, "Mission control", "Create your first goal", AchievementCategory.GettingStarted, AchievementRarity.Common, 25, "mission_control"),
         new(OnboardingComplete, "All systems go", "Complete your setup checklist", AchievementCategory.GettingStarted, AchievementRarity.Common, 50, "onboarding_complete"),

@@ -1026,7 +1026,7 @@ public class GamificationServiceTests
     }
 
     [Theory]
-    [InlineData("en", "Achievement unlocked: first orbit")]
+    [InlineData("en", "Achievement unlocked: first Orbit")]
     [InlineData("pt-BR", "Conquista desbloqueada: primeira órbita")]
     public async Task ProcessHabitCreated_NewAchievement_SendsNotification(string language, string expectedTitle)
     {
