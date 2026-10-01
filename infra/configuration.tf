@@ -87,6 +87,7 @@ locals {
     Cors__AllowedOrigins__0            = "https://app-staging.useorbit.org"
     Cors__AllowedOrigins__1            = "https://staging.useorbit.org"
     Frontend__BaseUrl                  = "https://app-staging.useorbit.org"
+    GooglePlay__PackageName            = "org.useorbit.app.staging"
     GooglePlay__RtdnAudience           = "https://api-staging.useorbit.org/api/subscriptions/play/rtdn"
     Google__AllowedRedirectUris__0     = "https://app-staging.useorbit.org/auth-callback"
     Google__AllowedRedirectUris__1     = "https://app.useorbit.org/auth-callback"
