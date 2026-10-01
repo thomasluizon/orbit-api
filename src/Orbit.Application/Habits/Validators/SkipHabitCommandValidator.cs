@@ -13,6 +13,8 @@ public class SkipHabitCommandValidator : AbstractValidator<SkipHabitCommand>
         RuleFor(x => x.HabitId)
             .NotEmpty();
 
+        RuleFor(x => x.SkipId).NotEqual(Guid.Empty).When(x => x.SkipId.HasValue);
+
         RuleFor(x => x.Date)
             .NotEqual(default(DateOnly))
             .When(x => x.Date.HasValue)

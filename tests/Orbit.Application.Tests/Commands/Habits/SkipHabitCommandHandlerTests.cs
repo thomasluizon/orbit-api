@@ -31,7 +31,7 @@ public class SkipHabitCommandHandlerTests
     {
         _unitOfWork.PassThroughTransactions<Result>();
         _handler = new SkipHabitCommandHandler(
-            new SkipHabitRepositories(_habitRepo, _habitLogRepo), _userDateService,
+            new SkipHabitRepositories(_habitRepo, _habitLogRepo, Substitute.For<IGenericRepository<HabitSkipUndo>>()), _userDateService,
             _goalCompletionService, _unitOfWork, _cache);
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
@@ -52,7 +52,7 @@ public class SkipHabitCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         habit.DueDate.Should().Be(Today.AddDays(1));
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]

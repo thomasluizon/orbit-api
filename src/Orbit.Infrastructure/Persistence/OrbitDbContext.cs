@@ -29,6 +29,7 @@ public class OrbitDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<MarketingContact> MarketingContacts => Set<MarketingContact>();
     public DbSet<Habit> Habits => Set<Habit>();
+    public DbSet<HabitSkipUndo> HabitSkipUndos => Set<HabitSkipUndo>();
     public DbSet<HabitLog> HabitLogs => Set<HabitLog>();
     public DbSet<UserFact> UserFacts => Set<UserFact>();
     public DbSet<AppConfig> AppConfigs => Set<AppConfig>();
@@ -93,6 +94,14 @@ public class OrbitDbContext : DbContext
         if (isPostgres)
             ConfigureConcurrencyTokens(modelBuilder);
         ConfigureHabitLogEntity(modelBuilder, nullableEncConverter);
+        modelBuilder.Entity<HabitSkipUndo>(entity =>
+        {
+            entity.HasIndex(skip => new { skip.UserId, skip.HabitId });
+            entity.Property(skip => skip.ExpectedLogState).HasMaxLength(64);
+            entity.Property(skip => skip.IsUndone).IsConcurrencyToken();
+            entity.HasOne<Habit>().WithMany().HasForeignKey(skip => skip.HabitId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
         ConfigureUserFactEntity(modelBuilder, encConverter);
         ConfigureGoogleCalendarSyncSuggestionEntity(modelBuilder, encConverter, nullableEncConverter);
         ConfigureTagEntity(modelBuilder);
@@ -254,8 +263,13 @@ public class OrbitDbContext : DbContext
     {
         modelBuilder.Entity<ProcessedRequest>(entity =>
         {
-            entity.HasIndex(request => new { request.UserId, request.IdempotencyKey, request.RequestType,
-                request.RequestOrdinal }).IsUnique();
+            entity.HasIndex(request => new
+            {
+                request.UserId,
+                request.IdempotencyKey,
+                request.RequestType,
+                request.RequestOrdinal
+            }).IsUnique();
             entity.HasIndex(request => request.CreatedAtUtc);
             entity.Property(request => request.IdempotencyKey).IsRequired().HasMaxLength(200);
             entity.Property(request => request.RequestType).IsRequired().HasMaxLength(256);

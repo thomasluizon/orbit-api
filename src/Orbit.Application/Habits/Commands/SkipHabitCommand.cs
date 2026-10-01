@@ -15,12 +15,14 @@ namespace Orbit.Application.Habits.Commands;
 public record SkipHabitCommand(
     Guid UserId,
     Guid HabitId,
-    DateOnly? Date = null) : IRequest<Result>, IConcurrencyRetryable, IIdempotentCommand;
+    DateOnly? Date = null,
+    Guid? SkipId = null) : IRequest<Result>, IConcurrencyRetryable, IIdempotentCommand;
 
 /// <summary>Groups the repositories a habit skip touches to keep the handler constructor small.</summary>
 public record SkipHabitRepositories(
     IGenericRepository<Habit> Habits,
-    IGenericRepository<HabitLog> HabitLogs);
+    IGenericRepository<HabitLog> HabitLogs,
+    IGenericRepository<HabitSkipUndo> SkipUndos);
 
 public class SkipHabitCommandHandler(
     SkipHabitRepositories repos,
@@ -42,6 +44,15 @@ public class SkipHabitCommandHandler(
 
     private async Task<Result> SkipAsync(SkipHabitCommand request, CancellationToken cancellationToken)
     {
+        if (request.SkipId is { } skipId)
+        {
+            var existing = await repos.SkipUndos.GetByIdAsync(skipId, cancellationToken);
+            if (existing is not null)
+                return existing.UserId == request.UserId && existing.HabitId == request.HabitId && !existing.IsUndone
+                    ? Result.Success()
+                    : Result.Failure(DomainErrors.SkipUndoConflict);
+        }
+
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var loggableWindowStart = today.AddDays(-AppConstants.MaxRangeDays);
 
@@ -61,8 +72,18 @@ public class SkipHabitCommandHandler(
         if (habit.IsCompleted)
             return Result.Failure(ErrorMessages.CannotSkipCompletedHabit);
 
+        var receipt = HabitSkipUndo.Create(request.SkipId ?? Guid.NewGuid(), habit);
+        if (receipt.IsFailure)
+            return receipt.PropagateError();
+        var previousLogIds = habit.Logs.Select(log => log.Id).ToHashSet();
+
         if (habit.FrequencyUnit is null)
-            return await HandleOneTimeSkip(habit, today, cancellationToken);
+        {
+            habit.PostponeTo(today.AddDays(1));
+            await SaveUndoAsync(receipt.Value, habit, previousLogIds, cancellationToken);
+            CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId, today);
+            return Result.Success();
+        }
 
         var targetDate = request.Date ?? today;
 
@@ -96,17 +117,22 @@ public class SkipHabitCommandHandler(
             today,
             cancellationToken: cancellationToken);
 
+        await SaveUndoAsync(receipt.Value, habit, previousLogIds, cancellationToken);
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, userId, today);
 
         return Result.Success();
     }
 
-    private async Task<Result> HandleOneTimeSkip(Habit habit, DateOnly today, CancellationToken cancellationToken)
+    private async Task SaveUndoAsync(
+        HabitSkipUndo receipt, Habit habit, HashSet<Guid> previousLogIds, CancellationToken cancellationToken)
     {
-        habit.PostponeTo(today.AddDays(1));
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId, today);
-        return Result.Success();
+        var logState = await SkipUndoLogState.ReadAsync(repos.HabitLogs, habit.Id, cancellationToken);
+        var skipLogId = habit.Logs.Where(log => !previousLogIds.Contains(log.Id))
+            .Select(log => (Guid?)log.Id).SingleOrDefault();
+        receipt.Seal(habit, skipLogId, logState);
+        await repos.SkipUndos.AddAsync(receipt, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
     private static Result? ValidateSkipTarget(
@@ -157,7 +183,9 @@ public class SkipHabitCommandHandler(
         }
         else
         {
-            habit.AdvanceDueDate(targetDate, weekStartDay);
+            var advancement = habit.AdvanceDueDate(targetDate, weekStartDay);
+            if (advancement.IsFailure)
+                return advancement;
         }
 
         return null;

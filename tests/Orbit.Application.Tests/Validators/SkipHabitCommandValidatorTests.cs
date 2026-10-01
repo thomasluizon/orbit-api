@@ -20,6 +20,11 @@ public class SkipHabitCommandValidatorTests
     }
 
     [Fact]
+    public void Validate_EmptySkipId_HasError() =>
+        _validator.TestValidate(ValidCommand() with { SkipId = Guid.Empty })
+            .ShouldHaveValidationErrorFor(command => command.SkipId);
+
+    [Fact]
     public void Validate_EmptyUserId_HasError()
     {
         var result = _validator.TestValidate(ValidCommand() with { UserId = Guid.Empty });
