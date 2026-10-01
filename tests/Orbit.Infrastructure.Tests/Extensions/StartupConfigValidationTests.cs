@@ -58,7 +58,7 @@ public class StartupConfigValidationTests
     [InlineData("Supabase:SecretKey")]
     public void AddOrbitInfrastructure_MissingSupabaseKey_ThrowsWithKeyName(string omittedKey)
     {
-        var values = ValidSupabase();
+        var values = ValidInfrastructure();
         values.Remove(omittedKey);
         var builder = BuildWith(values);
 
@@ -74,7 +74,7 @@ public class StartupConfigValidationTests
     [InlineData("Supabase:SecretKey")]
     public void AddOrbitInfrastructure_WhitespaceSupabaseKey_ThrowsWithKeyName(string blankedKey)
     {
-        var values = ValidSupabase();
+        var values = ValidInfrastructure();
         values[blankedKey] = "   ";
         var builder = BuildWith(values);
 
@@ -87,7 +87,7 @@ public class StartupConfigValidationTests
     [Fact]
     public void AddOrbitInfrastructure_S3_RegistersS3StorageWithoutSupabaseStorageSecret()
     {
-        var values = ValidSupabase();
+        var values = ValidInfrastructure();
         values.Remove("Supabase:SecretKey");
         values["Storage:Provider"] = "S3";
         values["Storage:S3:Bucket"] = "orbit-uploads-staging-713285551626";
@@ -107,7 +107,7 @@ public class StartupConfigValidationTests
     [Fact]
     public async Task AddOrbitInfrastructure_SupabaseUploadProvider_StillRegistersS3Reader()
     {
-        var values = ValidSupabase();
+        var values = ValidInfrastructure();
         values["Storage:Provider"] = "Supabase";
         values["Storage:S3:Bucket"] = "orbit-uploads-staging-713285551626";
         values["Storage:S3:Region"] = "us-east-2";
@@ -157,10 +157,19 @@ public class StartupConfigValidationTests
         ["Jwt:Audience"] = "OrbitClient",
     };
 
-    private static Dictionary<string, string?> ValidSupabase() => new()
+    private static Dictionary<string, string?> ValidInfrastructure() => new()
     {
         ["Supabase:Url"] = "https://example.supabase.co",
         ["Supabase:AnonKey"] = "anon-key",
         ["Supabase:SecretKey"] = "secret-key",
+        ["Ses:AccessKeyId"] = "key",
+        ["Ses:SecretAccessKey"] = "secret",
+        ["Ses:Region"] = "us-east-2",
+        ["Ses:FromEmail"] = "Orbit <noreply@send.useorbit.org>",
+        ["Ses:SupportEmail"] = "contact@useorbit.org",
+        ["Ses:MarketingFromEmail"] = "Orbit <news@updates.useorbit.org>",
+        ["Ses:TransactionalConfigurationSet"] = "orbit-transactional",
+        ["Ses:MarketingConfigurationSet"] = "orbit-marketing",
+        ["Ses:TopicArn"] = "arn:aws:sns:us-east-2:713285551626:orbit-ses-events",
     };
 }
