@@ -347,12 +347,15 @@ public class CheckReferralCompletionCommandHandlerTests
         await _unitOfWork.Received().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task Handle_ThresholdMet_SendsNotificationToReferrer()
+    [Theory]
+    [InlineData("en", "Referral completed")]
+    [InlineData("pt-BR", "Indicação concluída")]
+    public async Task Handle_ThresholdMet_SendsNotificationToReferrer(string language, string expectedTitle)
     {
         var referral = CreatePendingReferral();
         var referredUser = CreateReferredUser();
         var referrer = CreateReferrer();
+        referrer.SetLanguage(language);
         SetupPendingReferral(referral);
         SetupReferredAndReferrerUsers(referredUser, referrer);
         SetupHabitsAndLogs(ReferredUserId, 1, AppConstants.ReferralCompletionThreshold);
@@ -362,7 +365,7 @@ public class CheckReferralCompletionCommandHandlerTests
         await _handler.Handle(command, CancellationToken.None);
 
         await _notificationRepo.Received(1).AddAsync(
-            Arg.Is<Notification>(n => n.UserId == ReferrerId),
+            Arg.Is<Notification>(n => n.UserId == ReferrerId && n.Title == expectedTitle),
             Arg.Any<CancellationToken>());
     }
 }

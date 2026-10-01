@@ -713,37 +713,37 @@ public partial class GamificationService(
 
     private static readonly Dictionary<string, (string Name, string Description)> AchievementTranslationsPt = new()
     {
-        ["first_orbit"] = ("Primeira Órbita", "Crie seu primeiro hábito"),
+        ["first_orbit"] = ("Primeira órbita", "Crie seu primeiro hábito"),
         ["liftoff"] = ("Decolagem", "Complete seu primeiro hábito"),
-        ["mission_control"] = ("Controle de Missão", "Crie sua primeira meta"),
-        ["onboarding_complete"] = ("Tudo Pronto", "Conclua sua lista de configuração"),
-        ["week_warrior"] = ("Guerreiro da Semana", "Alcance uma sequência de 7 dias"),
-        ["fortnight_focus"] = ("Foco Quinzenal", "Alcance uma sequência de 14 dias"),
-        ["monthly_master"] = ("Mestre Mensal", "Alcance uma sequência de 30 dias"),
-        ["quarter_champion"] = ("Campeão Trimestral", "Alcance uma sequência de 90 dias"),
+        ["mission_control"] = ("Controle de missão", "Crie sua primeira meta"),
+        ["onboarding_complete"] = ("Tudo pronto", "Conclua sua lista de configuração"),
+        ["week_warrior"] = ("Guerreiro da semana", "Alcance uma sequência de 7 dias"),
+        ["fortnight_focus"] = ("Foco quinzenal", "Alcance uma sequência de 14 dias"),
+        ["monthly_master"] = ("Mestre mensal", "Alcance uma sequência de 30 dias"),
+        ["quarter_champion"] = ("Campeão trimestral", "Alcance uma sequência de 90 dias"),
         ["centurion"] = ("Centurião", "Alcance uma sequência de 100 dias"),
-        ["year_of_discipline"] = ("Ano de Disciplina", "Alcance uma sequência de 365 dias"),
-        ["half_year_hero"] = ("Herói do Semestre", "Alcance uma sequência de 180 dias"),
-        ["streak_titan"] = ("Titã da Sequência", "Alcance uma sequência de 500 dias"),
-        ["getting_momentum"] = ("Ganhando Ritmo", "Complete 10 hábitos no total"),
-        ["building_habits"] = ("Construindo Hábitos", "Complete 50 hábitos no total"),
+        ["year_of_discipline"] = ("Ano de disciplina", "Alcance uma sequência de 365 dias"),
+        ["half_year_hero"] = ("Herói do semestre", "Alcance uma sequência de 180 dias"),
+        ["streak_titan"] = ("Titã da sequência", "Alcance uma sequência de 500 dias"),
+        ["getting_momentum"] = ("Ganhando ritmo", "Complete 10 hábitos no total"),
+        ["building_habits"] = ("Construindo hábitos", "Complete 50 hábitos no total"),
         ["dedicated"] = ("Dedicado", "Complete 100 hábitos no total"),
         ["relentless"] = ("Imparável", "Complete 500 hábitos no total"),
         ["legendary"] = ("Lendário", "Complete 1.000 hábitos no total"),
-        ["goal_setter"] = ("Definidor de Metas", "Crie 3 metas"),
-        ["goal_crusher"] = ("Destruidor de Metas", "Complete sua primeira meta"),
-        ["overachiever"] = ("Acima das Expectativas", "Complete 5 metas"),
-        ["dream_maker"] = ("Realizador de Sonhos", "Complete 10 metas"),
-        ["perfect_day"] = ("Dia Perfeito", "Complete todos os hábitos em um dia"),
-        ["perfect_week"] = ("Semana Perfeita", "Complete todos os hábitos por 7 dias consecutivos"),
-        ["perfect_month"] = ("Mês Perfeito", "Complete todos os hábitos por 30 dias consecutivos"),
+        ["goal_setter"] = ("Definidor de metas", "Crie 3 metas"),
+        ["goal_crusher"] = ("Destruidor de metas", "Complete sua primeira meta"),
+        ["overachiever"] = ("Acima das expectativas", "Complete 5 metas"),
+        ["dream_maker"] = ("Realizador de sonhos", "Complete 10 metas"),
+        ["perfect_day"] = ("Dia perfeito", "Complete todos os hábitos em um dia"),
+        ["perfect_week"] = ("Semana perfeita", "Complete todos os hábitos por 7 dias consecutivos"),
+        ["perfect_month"] = ("Mês perfeito", "Complete todos os hábitos por 30 dias consecutivos"),
         ["early_bird"] = ("Madrugador", "Complete um hábito antes das 7h (10 vezes)"),
-        ["night_owl"] = ("Coruja Noturna", "Complete um hábito após as 22h (10 vezes)"),
+        ["night_owl"] = ("Coruja noturna", "Complete um hábito após as 22h (10 vezes)"),
         ["comeback"] = ("Retorno", "Retome após 7+ dias de inatividade"),
-        ["bad_habit_breaker"] = ("Quebrador de Maus Hábitos", "Resista a um mau hábito por 30 dias consecutivos"),
+        ["bad_habit_breaker"] = ("Quebrador de maus hábitos", "Resista a um mau hábito por 30 dias consecutivos"),
         ["show_off"] = ("Exibido", "Compartilhe seu primeiro card"),
         ["year_in_review"] = ("Retrospectiva", "Veja sua primeira Retrospectiva"),
-        ["streak_immortal"] = ("Sequência Imortal", "Alcance uma sequência de 1000 dias"),
+        ["streak_immortal"] = ("Sequência imortal", "Alcance uma sequência de 1000 dias"),
         ["unstoppable"] = ("Imbatível", "Complete 2500 hábitos no total"),
     };
 
@@ -778,9 +778,10 @@ public partial class GamificationService(
             description = achievement.Description;
         }
 
+        var embeddedName = char.ToLowerInvariant(name[0]) + name[1..];
         var title = isPt
-            ? $"Conquista Desbloqueada: {name}"
-            : $"Achievement Unlocked: {name}";
+            ? $"Conquista desbloqueada: {embeddedName}"
+            : $"Achievement unlocked: {embeddedName}";
         var body = $"{description} (+{achievement.XpReward} XP)";
 
         var notification = Notification.Create(userId, title, body, null);
@@ -794,8 +795,8 @@ public partial class GamificationService(
     {
         var isPt = LocaleHelper.IsPortuguese(language);
         var title = isPt
-            ? $"Subiu de nível! Agora você está no nível {newLevel.Level}"
-            : $"Level Up! You're now Level {newLevel.Level}";
+            ? $"Você chegou ao nível {newLevel.Level}"
+            : $"You reached level {newLevel.Level}";
         var levelTitle = isPt && LevelTranslationsPt.TryGetValue(Math.Min(newLevel.Level, LevelDefinitions.TableMaxLevel), out var ptTitle)
             ? ptTitle : newLevel.Title;
         var body = isPt

@@ -19,6 +19,23 @@ public class AiSlipAlertMessageServiceTests
     private static readonly BindingFlags PrivateStatic =
         BindingFlags.NonPublic | BindingFlags.Static;
 
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task GenerateMessageAsync_RequestsSentenceCaseTitle(string language)
+    {
+        var capture = new PromptCaptureHandler();
+        var service = new AiSlipAlertMessageService(
+            PromptCaptureHandler.CreateClient(capture),
+            NullLogger<AiSlipAlertMessageService>.Instance);
+
+        await service.GenerateMessageAsync("Smoking", DayOfWeek.Friday, 14, language);
+
+        capture.FindPrompt("Bad habit:").Should()
+            .Contain("Title must use sentence case")
+            .And.Contain("proper nouns and product names (Astra, Orbit)");
+    }
+
     [Fact]
     public async Task GenerateMessageAsync_InjectionTitle_EscapesPromptAndSanitizesFallback()
     {
