@@ -16,7 +16,9 @@ public record SkipHabitCommand(
     Guid UserId,
     Guid HabitId,
     DateOnly? Date = null,
-    Guid? SkipId = null) : IRequest<Result>, IConcurrencyRetryable, IIdempotentCommand;
+    Guid? SkipId = null) : IRequest<Result<SkipHabitResponse>>, IConcurrencyRetryable, IIdempotentCommand;
+
+public sealed record SkipHabitResponse(Guid SkipId);
 
 /// <summary>Groups the repositories a habit skip touches to keep the handler constructor small.</summary>
 public record SkipHabitRepositories(
@@ -29,28 +31,28 @@ public class SkipHabitCommandHandler(
     IUserDateService userDateService,
     IGoalCompletionService goalCompletionService,
     IUnitOfWork unitOfWork,
-    IMemoryCache cache) : IRequestHandler<SkipHabitCommand, Result>
+    IMemoryCache cache) : IRequestHandler<SkipHabitCommand, Result<SkipHabitResponse>>
 {
     /**
      * A skip advances a due date or writes a skip log, both inputs a streak repair reads, so it
      * commits inside HabitCeilingLock like every other writer of that state.
      */
-    public Task<Result> Handle(SkipHabitCommand request, CancellationToken cancellationToken) =>
+    public Task<Result<SkipHabitResponse>> Handle(SkipHabitCommand request, CancellationToken cancellationToken) =>
         HabitCeilingLock.ExecuteAsync(
             unitOfWork,
             request.UserId,
             transactionToken => SkipAsync(request, transactionToken),
             cancellationToken);
 
-    private async Task<Result> SkipAsync(SkipHabitCommand request, CancellationToken cancellationToken)
+    private async Task<Result<SkipHabitResponse>> SkipAsync(SkipHabitCommand request, CancellationToken cancellationToken)
     {
         if (request.SkipId is { } skipId)
         {
             var existing = await repos.SkipUndos.GetByIdAsync(skipId, cancellationToken);
             if (existing is not null)
                 return existing.UserId == request.UserId && existing.HabitId == request.HabitId && !existing.IsUndone
-                    ? Result.Success()
-                    : Result.Failure(DomainErrors.SkipUndoConflict);
+                    ? Result.Success(new SkipHabitResponse(existing.Id))
+                    : Result.Failure<SkipHabitResponse>(DomainErrors.SkipUndoConflict);
         }
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
@@ -59,22 +61,22 @@ public class SkipHabitCommandHandler(
         var habit = await repos.Habits.FindOneTrackedAsync(
             h => h.Id == request.HabitId,
             q => q.Include(h => h.Logs.Where(l => l.Date >= loggableWindowStart))
-                  .Include(h => h.Goals)
+                  .Include(h => h.Goals).Include(h => h.Tags)
                   .AsSplitQuery(),
             cancellationToken);
 
         if (habit is null)
-            return Result.Failure(ErrorMessages.HabitNotFound);
+            return Result.Failure<SkipHabitResponse>(ErrorMessages.HabitNotFound);
 
         if (habit.UserId != request.UserId)
-            return Result.Failure(ErrorMessages.HabitNotOwned);
+            return Result.Failure<SkipHabitResponse>(ErrorMessages.HabitNotOwned);
 
         if (habit.IsCompleted)
-            return Result.Failure(ErrorMessages.CannotSkipCompletedHabit);
+            return Result.Failure<SkipHabitResponse>(ErrorMessages.CannotSkipCompletedHabit);
 
         var receipt = HabitSkipUndo.Create(request.SkipId ?? Guid.NewGuid(), habit);
         if (receipt.IsFailure)
-            return receipt.PropagateError();
+            return receipt.PropagateError<SkipHabitResponse>();
         var previousLogIds = habit.Logs.Select(log => log.Id).ToHashSet();
 
         if (habit.FrequencyUnit is null)
@@ -82,7 +84,7 @@ public class SkipHabitCommandHandler(
             habit.PostponeTo(today.AddDays(1));
             await SaveUndoAsync(receipt.Value, habit, previousLogIds, cancellationToken);
             CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId, today);
-            return Result.Success();
+            return Result.Success(new SkipHabitResponse(receipt.Value.Id));
         }
 
         var targetDate = request.Date ?? today;
@@ -93,18 +95,14 @@ public class SkipHabitCommandHandler(
             [habit],
             loggableWindowStart,
             cancellationToken);
-        var validationError = ValidateSkipTarget(
-            habit,
-            targetDate,
-            today,
-            weekStartDay,
-            dueDateResolution.Contains(habit.Id));
-        if (validationError is not null)
-            return validationError;
+        var validation = SkipHabitArgumentChecks.Check(habit, targetDate, today, weekStartDay,
+            allowOverdue: true, dueDateResolved: dueDateResolution.Contains(habit.Id), enforceWindow: true);
+        if (validation.IsFailure)
+            return validation.PropagateError<SkipHabitResponse>();
 
         var skipError = await ApplySkip(habit, targetDate, weekStartDay, cancellationToken);
         if (skipError is not null)
-            return skipError;
+            return skipError.PropagateError<SkipHabitResponse>();
 
         var userId = habit.UserId;
         var streakGoalIds = habit.Goals
@@ -120,14 +118,14 @@ public class SkipHabitCommandHandler(
         await SaveUndoAsync(receipt.Value, habit, previousLogIds, cancellationToken);
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, userId, today);
 
-        return Result.Success();
+        return Result.Success(new SkipHabitResponse(receipt.Value.Id));
     }
 
     private async Task SaveUndoAsync(
         HabitSkipUndo receipt, Habit habit, HashSet<Guid> previousLogIds, CancellationToken cancellationToken)
     {
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        var logState = await SkipUndoLogState.ReadAsync(repos.HabitLogs, habit.Id, cancellationToken);
+        var logState = await SkipUndoLogState.ReadAsync(repos.HabitLogs, habit, cancellationToken);
         var skipLogId = habit.Logs.Where(log => !previousLogIds.Contains(log.Id))
             .Select(log => (Guid?)log.Id).SingleOrDefault();
         receipt.Seal(habit, skipLogId, logState);
@@ -135,36 +133,29 @@ public class SkipHabitCommandHandler(
         await unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
-    private static Result? ValidateSkipTarget(
-        Habit habit,
-        DateOnly targetDate,
-        DateOnly today,
-        int weekStartDay,
-        bool dueDateResolved)
+    public static async Task<Result> CheckArgumentsAsync(
+        SkipHabitCommand request,
+        IGenericRepository<Habit> habits,
+        IGenericRepository<HabitLog> logs,
+        IUserDateService dates,
+        CancellationToken ct)
     {
-        if (targetDate > today)
-            return Result.Failure(ErrorMessages.CannotSkipFutureDate);
+        var matches = await habits.FindAsync(h => h.Id == request.HabitId && h.UserId == request.UserId,
+            query => query.Include(h => h.Logs), ct);
+        var habit = matches.FirstOrDefault();
+        if (habit is null)
+            return Result.Failure(ErrorMessages.HabitNotFound);
+        if (habit.IsCompleted)
+            return Result.Failure(ErrorMessages.CannotSkipCompletedHabit);
+        if (habit.FrequencyUnit is null)
+            return Result.Success();
 
-        if (targetDate < today.AddDays(-AppConstants.DefaultOverdueWindowDays))
-            return Result.Failure(ErrorMessages.BeyondOverdueWindow);
-
-        if (!habit.IsFlexible && habit.DueDate > targetDate)
-            return Result.Failure(ErrorMessages.HabitNotYetDue);
-
-        if (!HabitScheduleService.IsHabitDueOnDate(habit, targetDate, weekStartDay))
-        {
-            var isOverdue = !habit.IsFlexible
-                && targetDate == today
-                && HabitScheduleService.HasMissedPastOccurrence(
-                    habit,
-                    today,
-                    weekStartDay,
-                    dueDateResolved);
-            if (!isOverdue)
-                return Result.Failure(ErrorMessages.NotScheduledOnDate);
-        }
-
-        return null;
+        var today = await dates.GetUserTodayAsync(request.UserId, ct);
+        var weekStart = await dates.GetUserWeekStartDayAsync(request.UserId, ct);
+        var resolution = await HabitDueDateResolutionLoader.LoadAsync(logs, [habit],
+            today.AddDays(-AppConstants.MaxRangeDays), ct);
+        return SkipHabitArgumentChecks.Check(habit, request.Date ?? today, today, weekStart,
+            allowOverdue: true, dueDateResolved: resolution.Contains(habit.Id), enforceWindow: true);
     }
 
     private async Task<Result?> ApplySkip(Habit habit, DateOnly targetDate, int weekStartDay, CancellationToken cancellationToken)

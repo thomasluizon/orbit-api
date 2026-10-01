@@ -52,6 +52,7 @@ public static partial class ServiceCollectionExtensions
     {
         builder.Services.AddScoped<IAiTool, LogHabitTool>();
         builder.Services.AddScoped<IAiTool, SkipHabitTool>();
+        builder.Services.AddScoped<IAiTool, UndoSkipHabitTool>();
         builder.Services.AddScoped<IAiTool, CreateHabitTool>();
         builder.Services.AddScoped<IAiTool, UpdateHabitTool>();
         builder.Services.AddScoped<IAiTool, DeleteHabitTool>();

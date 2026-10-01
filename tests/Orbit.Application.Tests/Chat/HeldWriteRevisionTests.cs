@@ -29,7 +29,7 @@ public sealed class HeldWriteRevisionTests
         { "create_goal", """{"title":"Read","goal_type":"Standard"}""", "title", "\"Write\"", "Title" },
         { "create_sub_habit", """{"parent_habit_id":"$habit","title":"Read"}""", "title", "\"Write\"", "Title" },
         { "log_habit", """{"habit_id":"$habit","date":"2026-09-29"}""", "date", "\"2026-09-30\"", "Date" },
-        { "skip_habit", """{"habit_id":"$habit","date":"2026-09-29"}""", "date", "\"2026-09-30\"", "DueDate" },
+        { "skip_habit", """{"habit_id":"$habit","date":"2026-09-29"}""", "date", "\"2026-09-30\"", "Date" },
         { "update_profile_preferences", """{"action":"set_timezone","timezone":"UTC"}""", "timezone", "\"America/Sao_Paulo\"", "TimeZone" },
         { "update_profile_preferences", """{"action":"set_language","language":"en"}""", "language", "\"pt-BR\"", "Language" },
         { "update_profile_preferences", """{"action":"set_week_start_day","week_start_day":0}""", "week_start_day", "1", "WeekStartDay" },
@@ -77,7 +77,7 @@ public sealed class HeldWriteRevisionTests
         execution.Success.Should().BeTrue(execution.Error);
         object written = name switch
         {
-            "assign_tags" or "bulk_update_habit_emojis" or "skip_habit" or "update_habit" => context.Habit,
+            "assign_tags" or "bulk_update_habit_emojis" or "update_habit" => context.Habit,
             "create_habit" => context.Added.OfType<Habit>().Single(),
             "create_goal" => context.Added.OfType<Goal>().Single(),
             "update_goal" or "update_goal_progress" or "update_goal_status" => context.Goal,
@@ -90,7 +90,6 @@ public sealed class HeldWriteRevisionTests
             "create_checklist_template" or "update_checklist" => JsonSerializer.SerializeToElement("Write"),
             "assign_tags" => JsonSerializer.SerializeToElement("Work"),
             "reorder_habits" or "reorder_goals" => JsonSerializer.SerializeToElement(2),
-            "skip_habit" => JsonSerializer.SerializeToElement("2026-10-01"),
             "update_goal_status" => JsonSerializer.SerializeToElement((int)GoalStatus.Abandoned),
             _ => JsonSerializer.Deserialize<JsonElement>(context.Expand(value))
         };

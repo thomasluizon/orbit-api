@@ -29,7 +29,7 @@ public class SkipHabitCommandHandlerTests
 
     public SkipHabitCommandHandlerTests()
     {
-        _unitOfWork.PassThroughTransactions<Result>();
+        _unitOfWork.PassThroughTransactions<Result<SkipHabitResponse>>();
         _handler = new SkipHabitCommandHandler(
             new SkipHabitRepositories(_habitRepo, _habitLogRepo, Substitute.For<IGenericRepository<HabitSkipUndo>>()), _userDateService,
             _goalCompletionService, _unitOfWork, _cache);

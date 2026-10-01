@@ -28,6 +28,23 @@ public sealed class UndoSkipHabitCommandHandler(
         HabitCeilingLock.ExecuteAsync(unitOfWork, request.UserId,
             ct => UndoAsync(request, ct), cancellationToken);
 
+    public static async Task<Result> CheckArgumentsAsync(
+        UndoSkipHabitCommand request, SkipHabitRepositories repos, CancellationToken ct)
+    {
+        var receipts = await repos.SkipUndos.FindAsync(
+            skip => skip.Id == request.SkipId && skip.HabitId == request.HabitId && skip.UserId == request.UserId, ct);
+        var receipt = receipts.FirstOrDefault();
+        if (receipt is null)
+            return Result.Failure(DomainErrors.SkipNotFound);
+        if (receipt.IsUndone)
+            return Result.Success();
+        var habits = await repos.Habits.FindAsync(h => h.Id == request.HabitId && h.UserId == request.UserId,
+            query => query.Include(h => h.Tags).Include(h => h.Goals), ct);
+        var habit = habits.FirstOrDefault();
+        return habit is null ? Result.Failure(ErrorMessages.HabitNotFound)
+            : receipt.CheckUndo(habit, await SkipUndoLogState.ReadAsync(repos.HabitLogs, habit, ct));
+    }
+
     private async Task<Result> UndoAsync(UndoSkipHabitCommand request, CancellationToken ct)
     {
         var receipt = await repos.SkipUndos.FindOneTrackedAsync(
@@ -40,11 +57,11 @@ public sealed class UndoSkipHabitCommandHandler(
 
         var habit = await repos.Habits.FindOneTrackedAsync(
             h => h.Id == request.HabitId && h.UserId == request.UserId,
-            query => query.Include(h => h.Logs).Include(h => h.Goals).AsSplitQuery(), ct);
+            query => query.Include(h => h.Logs).Include(h => h.Goals).Include(h => h.Tags).AsSplitQuery(), ct);
         if (habit is null)
             return Result.Failure(ErrorMessages.HabitNotFound);
 
-        var logState = await SkipUndoLogState.ReadAsync(repos.HabitLogs, habit.Id, ct);
+        var logState = await SkipUndoLogState.ReadAsync(repos.HabitLogs, habit, ct);
         var guard = receipt.CheckUndo(habit, logState);
         if (guard.IsFailure)
             return guard;

@@ -1,6 +1,8 @@
 using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
+using MediatR;
+using Orbit.Application.Habits.Commands;
 using Microsoft.EntityFrameworkCore;
 using NSubstitute;
 using Orbit.Application.Chat.Tools;
@@ -10,6 +12,11 @@ using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Application.Common;
+using Orbit.Application.Goals.Services;
+using Orbit.Application.Tests.Common;
+using Orbit.Domain.Common;
+using Microsoft.Extensions.Caching.Memory;
+using Orbit.Infrastructure.Configuration;
 
 namespace Orbit.Application.Tests.Chat.Tools;
 
@@ -18,6 +25,7 @@ public class SkipHabitToolTests
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<HabitLog> _habitLogRepo = Substitute.For<IGenericRepository<HabitLog>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
+    private readonly IMediator _mediator = Substitute.For<IMediator>();
     private readonly SkipHabitTool _tool;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -25,8 +33,16 @@ public class SkipHabitToolTests
 
     public SkipHabitToolTests()
     {
-        _tool = new SkipHabitTool(_habitRepo, _habitLogRepo, _userDateService);
+        _tool = new SkipHabitTool(_mediator, _habitRepo);
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
+        var unitOfWork = Substitute.For<IUnitOfWork>();
+        unitOfWork.PassThroughTransactions<Result<SkipHabitResponse>>();
+        var handler = new SkipHabitCommandHandler(
+            new SkipHabitRepositories(_habitRepo, _habitLogRepo, Substitute.For<IGenericRepository<HabitSkipUndo>>()),
+            _userDateService, Substitute.For<IGoalCompletionService>(), unitOfWork,
+            new MemoryCache(new MemoryCacheOptions()));
+        _mediator.Send(Arg.Any<SkipHabitCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call => handler.Handle(call.Arg<SkipHabitCommand>(), call.Arg<CancellationToken>()));
     }
 
     [Fact]
@@ -40,6 +56,9 @@ public class SkipHabitToolTests
         result.Success.Should().BeTrue();
         result.EntityName.Should().Be("Water");
         habit.DueDate.Should().BeAfter(Today);
+        await _mediator.Received(1).Send(
+            Arg.Is<SkipHabitCommand>(command => command.UserId == UserId && command.HabitId == habit.Id),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -63,14 +82,14 @@ public class SkipHabitToolTests
         var result = await Execute($$$"""{"habit_id": "{{{id}}}"}""");
 
         result.Success.Should().BeFalse();
-        result.Error.Should().Contain("not found");
+        result.ErrorCode.Should().Be(ErrorCodes.HabitNotFound);
     }
 
     [Fact]
     public async Task CompletedHabit_ReturnsError()
     {
         var habit = Habit.Create(new HabitCreateParams(UserId, "Task", null, null, DueDate: Today)).Value;
-        habit.Log(Today);        SetupHabitFound(habit);
+        habit.Log(Today); SetupHabitFound(habit);
 
         var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}"}""");
 
@@ -135,10 +154,7 @@ public class SkipHabitToolTests
 
         result.Success.Should().BeTrue();
         await _habitLogRepo.Received(1).AddAsync(Arg.Any<HabitLog>(), Arg.Any<CancellationToken>());
-        await _habitLogRepo.Received(1).FindAsync(
-            Arg.Is<Expression<Func<HabitLog, bool>>>(predicate =>
-                predicate.Compile()(habit.Logs.Single())),
-            Arg.Any<CancellationToken>());
+        await _mediator.Received(1).Send(Arg.Any<SkipHabitCommand>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -157,17 +173,22 @@ public class SkipHabitToolTests
         await using var context = CreateContext(databaseName);
         var userDateService = Substitute.For<IUserDateService>();
         userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
-        var tool = new SkipHabitTool(
-            new GenericRepository<Habit>(context),
-            new GenericRepository<HabitLog>(context),
-            userDateService);
+        var mediator = Substitute.For<IMediator>();
+        using var unitOfWork = new UnitOfWork(context, new DatabaseConnectionSettings());
+        var handler = new SkipHabitCommandHandler(new SkipHabitRepositories(
+            new GenericRepository<Habit>(context), new GenericRepository<HabitLog>(context),
+            new GenericRepository<HabitSkipUndo>(context)), userDateService,
+            Substitute.For<IGoalCompletionService>(), unitOfWork, new MemoryCache(new MemoryCacheOptions()));
+        mediator.Send(Arg.Any<SkipHabitCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call => handler.Handle(call.Arg<SkipHabitCommand>(), call.Arg<CancellationToken>()));
+        var tool = new SkipHabitTool(mediator, new GenericRepository<Habit>(context));
 
         var attackerId = Guid.NewGuid();
         var attackerResult = await tool.ExecuteAsync(ArgsFor(habitId), attackerId, CancellationToken.None);
         await context.SaveChangesAsync();
 
         attackerResult.Success.Should().BeFalse();
-        attackerResult.Error.Should().Contain("not found");
+        attackerResult.ErrorCode.Should().Be(ErrorCodes.HabitNotOwned);
         await using (var afterAttack = CreateContext(databaseName))
             (await afterAttack.Habits.SingleAsync(h => h.Id == habitId)).DueDate
                 .Should().Be(Today, "a foreign user must not advance another user's schedule");
@@ -198,7 +219,7 @@ public class SkipHabitToolTests
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>()
-        ).Returns(habit);
+        ).Returns(call => call.Arg<Expression<Func<Habit, bool>>>().Compile()(habit) ? habit : null);
         _habitLogRepo.FindAsync(
             Arg.Any<Expression<Func<HabitLog, bool>>>(),
             Arg.Any<CancellationToken>()).Returns(call =>

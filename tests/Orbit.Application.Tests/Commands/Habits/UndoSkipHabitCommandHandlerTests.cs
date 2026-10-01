@@ -105,6 +105,7 @@ public sealed class UndoSkipHabitCommandHandlerTests
     [InlineData("log tombstone")]
     [InlineData("skip")]
     [InlineData("delete")]
+    [InlineData("tag")]
     public async Task Undo_AfterNewerChange_IsRefusedWithoutWriting(string change)
     {
         var habit = CreateHabit(flexible: change == "skip");
@@ -122,6 +123,11 @@ public sealed class UndoSkipHabitCommandHandlerTests
                 case "log tombstone": (await context.HabitLogs.SingleAsync(log => log.Id == priorLog.Id)).SoftDelete(); break;
                 case "skip": context.HabitLogs.Add(changed.SkipFlexible(Today).Value); break;
                 case "delete": changed.SoftDelete(); break;
+                case "tag":
+                    var tag = Tag.Create(UserId, "Study", "#7c3aed").Value;
+                    context.Tags.Add(tag);
+                    changed.AddTag(tag);
+                    break;
             }
             await context.SaveChangesAsync();
         }
