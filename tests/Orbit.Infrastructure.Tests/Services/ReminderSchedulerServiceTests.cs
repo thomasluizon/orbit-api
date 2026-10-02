@@ -22,7 +22,8 @@ public class ReminderSchedulerServiceTests : IDisposable
 
     public void Dispose() => _factory?.Dispose();
 
-    private static readonly DateOnly UtcToday = DateOnly.FromDateTime(DateTime.UtcNow);
+    private static readonly DateTimeOffset DefaultInstant = new(2027, 9, 26, 0, 0, 30, TimeSpan.Zero);
+    private static readonly DateOnly UtcToday = DateOnly.FromDateTime(DefaultInstant.UtcDateTime);
     private static readonly int[] ReminderTimes = new[] { 0 };
     private static string FormatReminderText(int minutesBefore, string lang)
     {
@@ -260,11 +261,19 @@ public class ReminderSchedulerServiceTests : IDisposable
         Pluralize("hour", 0).Should().Be("hour");
     }
 
-    [Fact]
-    public async Task CheckAndSendReminders_TwoSameDayScheduledReminders_PersistsBothWithoutUniqueViolation()
+    [Theory]
+    [InlineData(0, 0, 30, 0, 20)]
+    [InlineData(0, 1, 30, 1, 0)]
+    [InlineData(12, 0, 0, 1, 0)]
+    [InlineData(23, 59, 30, 1, 0)]
+    public async Task CheckAndSendReminders_TwoSameDayScheduledReminders_PersistsBothWithoutUniqueViolation(
+        int hour, int minute, int second, int secondReminderMinute, int secondReminderSecond)
     {
         await using var dbContext = CreateSqliteDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
+        var clock = new MutableTimeProvider(new DateTimeOffset(
+            UtcToday.ToDateTime(new TimeOnly(hour, minute, second)), TimeSpan.Zero));
+        var secondReminderTime = new TimeOnly(0, secondReminderMinute, secondReminderSecond);
 
         var user = User.Create("Alex", "alex@test.com").Value;
         var habit = Habit.Create(new HabitCreateParams(
@@ -274,20 +283,21 @@ public class ReminderSchedulerServiceTests : IDisposable
             ScheduledReminders: new List<ScheduledReminderTime>
             {
                 new(ScheduledReminderWhen.SameDay, new TimeOnly(0, 0)),
-                new(ScheduledReminderWhen.SameDay, new TimeOnly(0, 1))
+                new(ScheduledReminderWhen.SameDay, secondReminderTime)
             })).Value;
 
         dbContext.Users.Add(user);
         dbContext.Habits.Add(habit);
         await dbContext.SaveChangesAsync();
 
-        var service = CreateService(dbContext, pushService);
+        var service = CreateService(dbContext, pushService, clock);
         await service.CheckAndSendReminders(CancellationToken.None);
 
         var sent = await dbContext.SentReminders.Where(r => r.HabitId == habit.Id).ToListAsync();
         sent.Should().HaveCount(2);
+        sent.Should().OnlyContain(r => r.Date == UtcToday);
         sent.Select(r => r.ReminderTimeUtc).Should().BeEquivalentTo(
-            new TimeOnly?[] { new TimeOnly(0, 0), new TimeOnly(0, 1) });
+            new TimeOnly?[] { new TimeOnly(0, 0), secondReminderTime });
         await pushService.Received(2).SendToUserAsync(
             user.Id, habit.Title, Arg.Any<string>(), "/", Arg.Any<CancellationToken>());
     }
@@ -701,17 +711,18 @@ public class ReminderSchedulerServiceTests : IDisposable
             Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task CheckAndSendReminders_RelativeReminderAlreadySentOnUserLocalDate_DoesNotResendWhenLocalDiffersFromUtc()
+    [Theory]
+    [InlineData(0, "Etc/GMT+12", -1)]
+    [InlineData(23, "Etc/GMT-12", 1)]
+    public async Task CheckAndSendReminders_RelativeReminderAlreadySentOnUserLocalDate_DoesNotResendWhenLocalDiffersFromUtc(
+        int utcHour, string timeZoneId, int localDayOffset)
     {
         await using var dbContext = CreateSqliteDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
 
-        var nowUtc = DateTime.UtcNow;
-        var timeZoneId = nowUtc.TimeOfDay < TimeSpan.FromHours(12) ? "Etc/GMT+12" : "Etc/GMT-12";
-        var userToday = DateOnly.FromDateTime(
-            TimeZoneInfo.ConvertTimeFromUtc(nowUtc, TimeZoneInfo.FindSystemTimeZoneById(timeZoneId)));
-        userToday.Should().NotBe(UtcToday);
+        var clock = new MutableTimeProvider(new DateTimeOffset(
+            UtcToday.ToDateTime(new TimeOnly(utcHour, 0)), TimeSpan.Zero));
+        var userToday = UtcToday.AddDays(localDayOffset);
 
         var user = User.Create("Alex", "alex@test.com").Value;
         user.SetTimeZone(timeZoneId);
@@ -727,7 +738,7 @@ public class ReminderSchedulerServiceTests : IDisposable
         dbContext.SentReminders.Add(SentReminder.Create(habit.Id, userToday, 0));
         await dbContext.SaveChangesAsync();
 
-        var service = CreateService(dbContext, pushService);
+        var service = CreateService(dbContext, pushService, clock);
         await service.CheckAndSendReminders(CancellationToken.None);
 
         (await dbContext.SentReminders.CountAsync(r => r.HabitId == habit.Id)).Should().Be(1);
@@ -735,17 +746,18 @@ public class ReminderSchedulerServiceTests : IDisposable
             Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task CheckAndSendReminders_RelativeReminderHabitLoggedOnUserLocalDate_DoesNotSendWhenLocalDiffersFromUtc()
+    [Theory]
+    [InlineData(0, "Etc/GMT+12", -1)]
+    [InlineData(23, "Etc/GMT-12", 1)]
+    public async Task CheckAndSendReminders_RelativeReminderHabitLoggedOnUserLocalDate_DoesNotSendWhenLocalDiffersFromUtc(
+        int utcHour, string timeZoneId, int localDayOffset)
     {
         await using var dbContext = CreateSqliteDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
 
-        var nowUtc = DateTime.UtcNow;
-        var timeZoneId = nowUtc.TimeOfDay < TimeSpan.FromHours(12) ? "Etc/GMT+12" : "Etc/GMT-12";
-        var userToday = DateOnly.FromDateTime(
-            TimeZoneInfo.ConvertTimeFromUtc(nowUtc, TimeZoneInfo.FindSystemTimeZoneById(timeZoneId)));
-        userToday.Should().NotBe(UtcToday);
+        var clock = new MutableTimeProvider(new DateTimeOffset(
+            UtcToday.ToDateTime(new TimeOnly(utcHour, 0)), TimeSpan.Zero));
+        var userToday = UtcToday.AddDays(localDayOffset);
 
         var user = User.Create("Alex", "alex@test.com").Value;
         user.SetTimeZone(timeZoneId);
@@ -761,7 +773,7 @@ public class ReminderSchedulerServiceTests : IDisposable
         dbContext.Habits.Add(habit);
         await dbContext.SaveChangesAsync();
 
-        var service = CreateService(dbContext, pushService);
+        var service = CreateService(dbContext, pushService, clock);
         await service.CheckAndSendReminders(CancellationToken.None);
 
         (await dbContext.SentReminders.CountAsync(r => r.HabitId == habit.Id)).Should().Be(0);
@@ -945,7 +957,7 @@ public class ReminderSchedulerServiceTests : IDisposable
         var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
         return new ReminderSchedulerService(
             scopeFactory, NullLogger<ReminderSchedulerService>.Instance,
-            new ConfigurationBuilder().Build(), timeProvider);
+            new ConfigurationBuilder().Build(), timeProvider ?? new MutableTimeProvider(DefaultInstant));
     }
 
     private sealed class MutableTimeProvider(DateTimeOffset now) : TimeProvider
