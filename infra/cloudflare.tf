@@ -34,18 +34,6 @@ locals {
       content  = "smtp.google.com"
       priority = 1
     }
-    send_send_mx = {
-      name     = "send.send.useorbit.org"
-      type     = "MX"
-      content  = "feedback-smtp.sa-east-1.amazonses.com"
-      priority = 10
-    }
-    send_updates_mx = {
-      name     = "send.updates.useorbit.org"
-      type     = "MX"
-      content  = "feedback-smtp.sa-east-1.amazonses.com"
-      priority = 10
-    }
     dmarc_txt = {
       name    = "_dmarc.useorbit.org"
       type    = "TXT"
@@ -73,26 +61,6 @@ locals {
         "v=DKIM1;k=rsa;p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAiQAGTCL07xJPn7B3AaF+dC+1ilvTJe/kW+FrOJAsFDHE1ezAWg6gS+ez68849wT1FCUmXAvUGmsi7t3tzhQCAYsc5kbPoAsP8IkqXKaZ78Fp+jCBThtgjojaze6WWZj4u494eghlRRvWTvwV4D9nIXoQAwo3HQhDJ5lIAVvN+hAGyJXPUBOeTt+k+MQVQdBHYqL",
         "36wl9YL5AJEc+HqjjsgtsPUdmDdPCF9+dglUWY1dqZU6kJ22mvkEz7tw6LHYytMkHO2tj6rktdNRzDz0haVSMuxAOAZcYt8rGSCnbeO6GyVuOoVAj7MGFxTZvpMJmTnVCnsntR7SMw6fVqD+WkQIDAQAB",
       ])
-    }
-    resend_send_dkim_txt = {
-      name    = "resend._domainkey.send.useorbit.org"
-      type    = "TXT"
-      content = "p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCgDK6PYGdlcmhMzg2vDtBnjRL7YC2VN8STsl6TdZSDO3W4onhBlLUcUh6OJQf4HkKU4sPVisqhs8MdiOCsU4rVzUTxPOn9Whp3l2L68f/i2cU7A5rDta+7L6DKlH7DAvHACt7c8RRc3SsZC5PfeX6L/3DaAV6TqqnVKLOySNL+DwIDAQAB"
-    }
-    resend_updates_dkim_txt = {
-      name    = "resend._domainkey.updates.useorbit.org"
-      type    = "TXT"
-      content = "p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC4pbAsyQBaFbgnyKGOJZBCWeyyHuc2Dfdg0Xn4AkMWicTfuyaoLOnvvIsU5whfFgw07+9FRkIurtIdxvWw9Pov48D27AlWJF9aJeufVfnLI1Uox4ugsSDmTJFagc3MSFB6wGoaqYzLHsefoa3/+vU12yfxGsw0fQ5n+yKltWcVywIDAQAB"
-    }
-    resend_send_spf_txt = {
-      name    = "send.send.useorbit.org"
-      type    = "TXT"
-      content = "v=spf1 include:amazonses.com ~all"
-    }
-    resend_updates_spf_txt = {
-      name    = "send.updates.useorbit.org"
-      type    = "TXT"
-      content = "v=spf1 include:amazonses.com ~all"
     }
   }
 
