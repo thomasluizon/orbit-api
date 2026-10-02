@@ -76,41 +76,33 @@ public static partial class ServiceCollectionExtensions
             throw new InvalidOperationException($"Unsupported Storage:Provider '{storageProvider}'.");
         }
 
-        builder.Services.Configure<ResendSettings>(
-            builder.Configuration.GetSection(ResendSettings.SectionName));
-
-#pragma warning disable S1075 // Resend API base URL is a stable, well-known endpoint
-        builder.Services.AddHttpClient("Resend", client =>
+        if (!BuildTimeDocumentGeneration.IsActive)
         {
-            client.BaseAddress = new Uri("https://api.resend.com");
-#pragma warning restore S1075
-            client.DefaultRequestHeaders.Add("Authorization", $"Bearer {builder.Configuration["Resend:ApiKey"]}");
-            client.Timeout = httpTimeout;
-        });
+            foreach (var key in new[]
+            {
+                "Ses:AccessKeyId", "Ses:SecretAccessKey", "Ses:Region", "Ses:FromEmail",
+                "Ses:SupportEmail", "Ses:MarketingFromEmail", "Ses:TransactionalConfigurationSet",
+                "Ses:MarketingConfigurationSet", "Ses:TopicArn",
+            })
+            {
+                RequireConfigValue(builder, key);
+            }
+        }
 
+        var ses = builder.Configuration.GetSection(SesSettings.SectionName).Get<SesSettings>()
+            ?? new SesSettings();
         builder.Services.Configure<SesSettings>(builder.Configuration.GetSection(SesSettings.SectionName));
+        builder.Services.AddSingleton<Amazon.SimpleEmailV2.IAmazonSimpleEmailServiceV2>(_ =>
+            new Amazon.SimpleEmailV2.AmazonSimpleEmailServiceV2Client(
+                new BasicAWSCredentials(ses.AccessKeyId, ses.SecretAccessKey),
+                RegionEndpoint.GetBySystemName(ses.Region)));
+        builder.Services.AddScoped<IEmailService, SesEmailService>();
         builder.Services.AddHttpClient("SnsCertificate").ConfigurePrimaryHttpMessageHandler(() =>
             new HttpClientHandler { AllowAutoRedirect = false });
         builder.Services.AddHttpClient("SnsConfirmation").ConfigurePrimaryHttpMessageHandler(() =>
             new HttpClientHandler { AllowAutoRedirect = false });
         builder.Services.AddScoped<SnsMessageVerifier>();
         builder.Services.AddScoped<ISesEventProcessor, SesEventProcessor>();
-        var provider = builder.Configuration["Email:Provider"] ?? "Resend";
-        if (string.Equals(provider, "Ses", StringComparison.OrdinalIgnoreCase))
-        {
-            var ses = builder.Configuration.GetSection(SesSettings.SectionName).Get<SesSettings>() ?? new SesSettings();
-            if (string.IsNullOrWhiteSpace(ses.AccessKeyId) || string.IsNullOrWhiteSpace(ses.SecretAccessKey))
-                throw new InvalidOperationException("SES credentials are required when Email:Provider is Ses.");
-            builder.Services.AddSingleton<Amazon.SimpleEmailV2.IAmazonSimpleEmailServiceV2>(_ =>
-                new Amazon.SimpleEmailV2.AmazonSimpleEmailServiceV2Client(
-                    new Amazon.Runtime.BasicAWSCredentials(ses.AccessKeyId, ses.SecretAccessKey),
-                    Amazon.RegionEndpoint.GetBySystemName(ses.Region)));
-            builder.Services.AddScoped<IEmailService, SesEmailService>();
-        }
-        else if (string.Equals(provider, "Resend", StringComparison.OrdinalIgnoreCase))
-            builder.Services.AddScoped<IEmailService, ResendEmailService>();
-        else
-            throw new InvalidOperationException("Email:Provider must be Resend or Ses.");
 
         builder.Services.Configure<WaitlistSettings>(
             builder.Configuration.GetSection(WaitlistSettings.SectionName));

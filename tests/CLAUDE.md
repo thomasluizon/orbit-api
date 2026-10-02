@@ -19,7 +19,7 @@ Orbit.Infrastructure.Tests/ - services, prompt sections, controllers, MCP tools
 
 ## Test accounts (bypass email verification)
 
-The auth flow normally requires a code emailed via Resend. Env-controlled test accounts bypass this:
+The auth flow normally requires a code emailed via Amazon SES. Env-controlled test accounts bypass this:
 
 - `TEST_ACCOUNTS` — comma-separated `email:code` pairs (reviewer flows, e.g. Play review, and local runs).
 

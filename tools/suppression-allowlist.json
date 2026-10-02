@@ -125,12 +125,6 @@
         "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
       }
     },
-    "src/Orbit.Api/Extensions/ServiceCollectionExtensions.Infrastructure.cs": {
-      "S1075": {
-        "count": 1,
-        "reason": "the Resend API base URL is a stable, well-known endpoint."
-      }
-    },
     "src/Orbit.Api/OAuth/OAuthAuthorizationStore.cs": {
       "ORBIT0004": {
         "count": 3,
