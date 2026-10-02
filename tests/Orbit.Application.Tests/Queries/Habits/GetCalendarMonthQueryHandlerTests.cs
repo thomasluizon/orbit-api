@@ -349,6 +349,116 @@ public class GetCalendarMonthQueryHandlerTests
         }
     }
 
+    [Theory]
+    [InlineData(FrequencyUnit.Week, 0)]
+    [InlineData(FrequencyUnit.Week, 1)]
+    [InlineData(FrequencyUnit.Week, 2)]
+    [InlineData(FrequencyUnit.Month, 0)]
+    [InlineData(FrequencyUnit.Month, 1)]
+    [InlineData(FrequencyUnit.Month, 2)]
+    public async Task Handle_FlexibleTargetMet_ReturnsOnlyLoggedDatesInWindow(
+        FrequencyUnit frequencyUnit, int depth)
+    {
+        var windowStart = new DateOnly(2026, 4, 6);
+        var windowEnd = frequencyUnit == FrequencyUnit.Week ? windowStart.AddDays(6) : MonthEnd;
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(windowEnd.AddDays(1));
+        _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(1);
+        var habits = new List<Habit>();
+        for (var level = 0; level < depth; level++)
+        {
+            habits.Add(Habit.Create(new HabitCreateParams(
+                UserId, "Container", null, null, DueDate: windowEnd.AddDays(1),
+                ParentHabitId: habits.LastOrDefault()?.Id)).Value);
+        }
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Flexible", frequencyUnit, 3, DueDate: windowStart,
+            IsFlexible: true, ParentHabitId: habits.LastOrDefault()?.Id)).Value;
+        var loggedDates = Enumerable.Range(0, 3).Select(windowStart.AddDays).ToList();
+        foreach (var date in loggedDates)
+            habit.Log(date, weekStartDay: 1).IsSuccess.Should().BeTrue();
+        habits.Add(habit);
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(habits.AsReadOnly());
+
+        var result = await _handler.Handle(
+            new GetCalendarMonthQuery(UserId, MonthStart, windowEnd), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var item = result.Value.Habits.Should().ContainSingle().Subject;
+        IReadOnlyList<DateOnly> scheduledDates = item.ScheduledDates;
+        var children = item.Children;
+        for (var level = 0; level < depth; level++)
+        {
+            scheduledDates.Should().BeEmpty();
+            var child = children.Should().ContainSingle().Subject;
+            scheduledDates = child.ScheduledDates;
+            children = child.Children;
+            child.Instances.Should().BeEmpty();
+        }
+        scheduledDates.Should().Equal(loggedDates);
+        item.Instances.Should().BeEmpty();
+        result.Value.Logs[habit.Id].Select(log => log.Date).Should().Equal(loggedDates.AsEnumerable().Reverse());
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public async Task Handle_FlexiblePastWeekShortOfTarget_ReturnsDueDaysAndNextWindow(int weekStartDay)
+    {
+        var windowStart = new DateOnly(2026, 4, 5).AddDays(weekStartDay);
+        var rangeEnd = windowStart.AddDays(13);
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(rangeEnd.AddDays(1));
+        _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(weekStartDay);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Flexible", FrequencyUnit.Week, 3, DueDate: windowStart, IsFlexible: true)).Value;
+        habit.Log(windowStart, weekStartDay: weekStartDay).IsSuccess.Should().BeTrue();
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { habit }.AsReadOnly());
+
+        var result = await _handler.Handle(
+            new GetCalendarMonthQuery(UserId, MonthStart, rangeEnd), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Habits.Should().ContainSingle().Which.ScheduledDates.Should().Equal(
+            Enumerable.Range(0, 14).Select(windowStart.AddDays));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public async Task Handle_FlexibleTargetMetWithSkip_OnlyProjectsNextWindow(int weekStartDay)
+    {
+        var windowStart = new DateOnly(2026, 4, 5).AddDays(weekStartDay);
+        var rangeEnd = windowStart.AddDays(13);
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(rangeEnd.AddDays(1));
+        _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(weekStartDay);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Flexible", FrequencyUnit.Week, 3, DueDate: windowStart, IsFlexible: true)).Value;
+        habit.Log(windowStart, weekStartDay: weekStartDay).IsSuccess.Should().BeTrue();
+        habit.Log(windowStart.AddDays(1), weekStartDay: weekStartDay).IsSuccess.Should().BeTrue();
+        habit.SkipFlexible(windowStart.AddDays(2)).IsSuccess.Should().BeTrue();
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { habit }.AsReadOnly());
+
+        var result = await _handler.Handle(
+            new GetCalendarMonthQuery(UserId, MonthStart, rangeEnd), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Habits.Should().ContainSingle().Which.ScheduledDates.Should().Equal(
+            new[] { windowStart, windowStart.AddDays(1) }.Concat(
+                Enumerable.Range(7, 7).Select(windowStart.AddDays)));
+        result.Value.Logs[habit.Id].Should().Contain(log => log.Date == windowStart.AddDays(2) && log.Value == 0);
+    }
+
     [Fact]
     public async Task Handle_LoggedChild_KeepsFlexibleParentWithExhaustedTargetInMonth()
     {
