@@ -10,9 +10,9 @@ namespace Orbit.Application.Gamification.Services;
 public interface IAchievementProgressService
 {
     /// <summary>
-    /// Loads the user's current values for every quantifiable achievement metric in a fixed number of
-    /// queries (independent of the achievement count). <paramref name="earnedIds"/> lets the expensive
-    /// time-of-day log scan be skipped when both Early Bird and Night Owl are already earned.
+    /// Loads the user's current values for every quantifiable achievement metric in a bounded number
+    /// of queries independent of the achievement count, expanding the log window for long streaks.
+    /// <paramref name="earnedIds"/> skips streak and time-of-day reads when their achievements are earned.
     /// </summary>
     Task<AchievementProgressMetrics> LoadAsync(User user, IReadOnlySet<string> earnedIds, CancellationToken cancellationToken);
 }
@@ -24,7 +24,7 @@ public class AchievementProgressService(
     IUserDateService userDateService) : IAchievementProgressService
 {
     private const int TotalCompletionWindowDays = 2750;
-    private const int StreakLogWindowDays = 1100;
+    private const int InitialStreakWindowDays = 64;
     private const int TimeOfDayWindowDays = 90;
     private const int EarlyBeforeHour = 7;
     private const int NightFromHour = 22;
@@ -35,27 +35,14 @@ public class AchievementProgressService(
         var today = await userDateService.GetUserTodayAsync(user.Id, cancellationToken);
         var userTimeZone = TimeZoneHelper.FindTimeZone(user.TimeZone);
 
-        var streakLogCutoff = today.AddDays(-StreakLogWindowDays);
         var habits = (await habitRepository.ProjectAsync(
             h => h.UserId == user.Id, HabitScheduleProjection.Select, cancellationToken))
             .Select(snapshot => Habit.FromScheduleSnapshot(snapshot, user.Id))
             .ToList();
         var habitIds = habits.Select(h => h.Id).ToList();
         var goodHabits = habits.Where(h => !h.IsBadHabit).ToList();
-        var streakHabitIds = goodHabits.Select(h => h.Id).ToList();
-        IReadOnlyList<HabitMetricLog> streakLogs = streakHabitIds.Count == 0
-            ? []
-            : await habitLogRepository.ProjectAsync(
-                l => streakHabitIds.Contains(l.HabitId) && l.Date >= streakLogCutoff,
-                query => query.Select(log => new HabitMetricLog(log.HabitId, log.Date, log.Value, false)),
-                cancellationToken);
-        var logsByHabit = streakLogs.ToLookup(log => log.HabitId);
-
-        // Streak achievements are granted PER-HABIT and ONLY for good habits (GamificationService awards CheckConsistencyAchievements exclusively when !IsBadHabit; a bad-habit "streak" is consecutive ABSTINENCE days, opposite semantics), so progress is the MAX single-GOOD-habit streak (not the union user.CurrentStreak, not a bad habit's abstinence run); the 1100-day window mirrors GamificationService.StreakLogWindowDays so progress equals grant and stays within the calculator's 1100-day horizon, keeping the 1000-day StreakImmortal reachable. https://github.com/thomasluizon/orbit-api/pull/419
-        var maxCurrentStreak = goodHabits.Count == 0
-            ? 0
-            : goodHabits.Max(h => HabitMetricsCalculator.CalculateProjected(
-                h, logsByHabit[h.Id].ToList(), today, user.WeekStartDay, userTimeZone).CurrentStreak);
+        var maxCurrentStreak = await LoadMaxCurrentStreakAsync(
+            goodHabits, earnedIds, today, user.WeekStartDay, userTimeZone, cancellationToken);
 
         var totalCompletionCutoff = today.AddDays(-TotalCompletionWindowDays);
         var totalCompletions = habitIds.Count == 0
@@ -77,6 +64,52 @@ public class AchievementProgressService(
             goalsCompleted,
             earlyLogs,
             nightLogs);
+    }
+
+    private async Task<int> LoadMaxCurrentStreakAsync(
+        IReadOnlyList<Habit> goodHabits, IReadOnlySet<string> earnedIds, DateOnly today,
+        int weekStartDay, TimeZoneInfo userTimeZone, CancellationToken cancellationToken)
+    {
+        if (goodHabits.Count == 0 || AchievementDefinitions.All
+            .Where(definition => definition.Metric == ProgressMetric.CurrentStreak)
+            .All(definition => earnedIds.Contains(definition.Id)))
+            return 0;
+
+        var pendingHabits = goodHabits.ToList();
+        var logsByHabit = goodHabits.ToDictionary(habit => habit.Id, _ => new List<HabitMetricLog>());
+        var windowDays = InitialStreakWindowDays;
+        DateOnly? previousCutoff = null;
+        var maxCurrentStreak = 0;
+
+        while (pendingHabits.Count > 0)
+        {
+            var cutoff = today.AddDays(-windowDays);
+            var pendingIds = pendingHabits.Select(habit => habit.Id).ToList();
+            var logs = await habitLogRepository.ProjectAsync(
+                log => pendingIds.Contains(log.HabitId) && log.Date >= cutoff
+                    && (previousCutoff == null || log.Date < previousCutoff),
+                query => query.Select(log => new HabitMetricLog(log.HabitId, log.Date, log.Value, false)),
+                cancellationToken);
+            foreach (var log in logs)
+                logsByHabit[log.HabitId].Add(log);
+
+            var continuingHabits = new List<Habit>();
+            foreach (var habit in pendingHabits)
+            {
+                var metrics = HabitMetricsCalculator.CalculateProjected(
+                    habit, logsByHabit[habit.Id], today, weekStartDay, userTimeZone, out var logStart);
+                if (windowDays < GamificationService.StreakLogWindowDays && logStart < cutoff)
+                    continuingHabits.Add(habit);
+                else
+                    maxCurrentStreak = Math.Max(maxCurrentStreak, metrics.CurrentStreak);
+            }
+
+            pendingHabits = continuingHabits;
+            previousCutoff = cutoff;
+            windowDays = Math.Min(windowDays * 2, GamificationService.StreakLogWindowDays);
+        }
+
+        return maxCurrentStreak;
     }
 
     private async Task<(int Early, int Night)> CountTimeOfDayLogsAsync(
