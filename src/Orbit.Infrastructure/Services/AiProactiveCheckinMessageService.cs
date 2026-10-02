@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -37,6 +38,8 @@ public sealed partial class AiProactiveCheckinMessageService(
             - Title: 5-8 words max, personal and encouraging (use their name when it feels natural)
             - Title must use sentence case: capitalise only the first word, proper nouns and product names (Astra, Orbit); never use title case
             - Body: 1-2 sentences max, supportive and specific to what they fell behind on
+            - Body must be a complete sentence that stands on its own without the title
+            - Start the body with an uppercase letter in the requested language
             - Be creative and varied -- don't use the same structure every time
             - Tone: supportive friend, not preachy or judgmental
             - Do NOT use emojis
@@ -62,18 +65,32 @@ public sealed partial class AiProactiveCheckinMessageService(
 
             var lines = text.Trim().Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             if (lines.Length >= 2)
-                return Result.Success((lines[0], lines[1]));
+                return Result.Success((lines[0], NormalizeBody(lines[1], language)));
 
             var fallbackTitle = LocaleHelper.IsPortuguese(language)
                 ? $"Ainda dá tempo hoje, {sanitizedDisplayName}"
                 : $"Still time today, {sanitizedDisplayName}";
-            return Result.Success((fallbackTitle, lines[0]));
+            return Result.Success((fallbackTitle, NormalizeBody(lines[0], language)));
         }
         catch (Exception ex)
         {
             LogProactiveCheckinGenerationFailed(logger, ex);
             return GenerateFallback(displayName, language);
         }
+    }
+
+    private static string NormalizeBody(string body, string language)
+    {
+        var culture = CultureInfo.GetCultureInfo(LocaleHelper.IsPortuguese(language) ? "pt-BR" : "en");
+        for (var index = 0; index < body.Length; index++)
+        {
+            if (!char.IsLetter(body[index]))
+                continue;
+
+            return body[..index] + char.ToUpper(body[index], culture) + body[(index + 1)..];
+        }
+
+        return body;
     }
 
     private static Result<(string Title, string Body)> GenerateFallback(string displayName, string language)

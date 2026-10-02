@@ -19,7 +19,7 @@ public class AiProactiveCheckinMessageServiceTests
     [Theory]
     [InlineData("en")]
     [InlineData("pt-BR")]
-    public async Task GenerateMessageAsync_RequestsSentenceCaseTitle(string language)
+    public async Task GenerateMessageAsync_RequestsSentenceCaseTitleAndStandaloneBody(string language)
     {
         var capture = new PromptCaptureHandler();
         var service = new AiProactiveCheckinMessageService(
@@ -30,7 +30,9 @@ public class AiProactiveCheckinMessageServiceTests
 
         capture.FindPrompt("They have fallen behind").Should()
             .Contain("Title must use sentence case")
-            .And.Contain("proper nouns and product names (Astra, Orbit)");
+            .And.Contain("proper nouns and product names (Astra, Orbit)")
+            .And.Contain("Body must be a complete sentence that stands on its own without the title")
+            .And.Contain("Start the body with an uppercase letter");
     }
 
     [Fact]

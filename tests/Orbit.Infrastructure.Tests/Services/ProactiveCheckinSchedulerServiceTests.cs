@@ -43,6 +43,35 @@ public class ProactiveCheckinSchedulerServiceTests
         (await dbContext.Notifications.CountAsync(n => n.UserId == user.Id)).Should().Be(1);
     }
 
+    [Theory]
+    [InlineData("en", "take a moment to read with Astra.", "Take a moment to read with Astra.")]
+    [InlineData("pt-BR", "tome um copo d'água agora para continuar o dia com calma.", "Tome um copo d'água agora para continuar o dia com calma.")]
+    [InlineData("pt-BR", "água ajuda a retomar o dia com calma.", "Água ajuda a retomar o dia com calma.")]
+    public async Task CheckAndSendCheckins_LowercaseModelBody_RecordsAndPushesSentenceCase(
+        string language, string modelBody, string expectedBody)
+    {
+        await using var dbContext = CreateInMemoryDbContext();
+        var pushService = Substitute.For<IPushNotificationService>();
+        var messageService = AiProactiveCheckinMessageServiceGenerationTests.BuildService($"Title\n{modelBody}");
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var user = CreateOptedInProUser();
+        user.SetLanguage(language);
+        user.SetTimeZone("UTC");
+        dbContext.Users.Add(user);
+        dbContext.Habits.Add(CreateOffTrackHabit(user.Id, today));
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext, pushService, messageService, AlwaysInWindowHour, AlwaysInWindowInterval);
+        await service.CheckAndSendCheckins(CancellationToken.None);
+
+        var notification = await dbContext.Notifications.SingleAsync(n => n.UserId == user.Id);
+        notification.Title.Should().Be("Title");
+        notification.Body.Should().Be(expectedBody);
+        (await dbContext.SentProactiveCheckins.CountAsync(a => a.UserId == user.Id)).Should().Be(1);
+        await pushService.Received(1).SendToUserAsync(
+            user.Id, "Title", expectedBody, "/chat", Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task CheckAndSendCheckins_FreeUser_DoesNotSend()
     {
