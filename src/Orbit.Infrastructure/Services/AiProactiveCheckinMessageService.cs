@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -37,6 +38,8 @@ public sealed partial class AiProactiveCheckinMessageService(
             - Title must use sentence case: capitalise only the first word, proper nouns and product names (Astra, Orbit); never use title case
             - Title: at most 8 words. Use their name only where it reads naturally.
             - Body: one or two sentences. Point at ONE of the open habits, never the whole list.
+            - Body must be a complete sentence that stands on its own without the title
+            - Start the body with an uppercase letter in the requested language
             - You may write the names Astra and Orbit. Use no other brand name.
             - Write ONLY in {languageName}.
 
@@ -70,14 +73,28 @@ public sealed partial class AiProactiveCheckinMessageService(
 
             var lines = text.Trim().Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             return lines.Length >= 2
-                ? Result.Success((lines[0], lines[1]))
-                : Result.Success((FallbackTitle(displayName, language), lines[0]));
+                ? Result.Success((lines[0], NormalizeBody(lines[1], language)))
+                : Result.Success((FallbackTitle(displayName, language), NormalizeBody(lines[0], language)));
         }
         catch (Exception ex)
         {
             LogProactiveCheckinGenerationFailed(logger, ex);
             return GenerateFallback(displayName, offTrackHabitTitles.Count, language);
         }
+    }
+
+    private static string NormalizeBody(string body, string language)
+    {
+        var culture = CultureInfo.GetCultureInfo(LocaleHelper.IsPortuguese(language) ? "pt-BR" : "en");
+        for (var index = 0; index < body.Length; index++)
+        {
+            if (!char.IsLetter(body[index]))
+                continue;
+
+            return body[..index] + char.ToUpper(body[index], culture) + body[(index + 1)..];
+        }
+
+        return body;
     }
 
     /// <summary>
