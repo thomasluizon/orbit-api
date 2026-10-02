@@ -12,6 +12,8 @@ public sealed partial class AiProactiveCheckinMessageService(
     AiCompletionClient aiClient,
     ILogger<AiProactiveCheckinMessageService> logger) : IProactiveCheckinMessageService
 {
+    private const int MaxBodyTextElements = 60;
+
     internal const string SystemPrompt =
         "You are Astra. You write one check-in push notification for someone whose day still has open habits. "
         + "You make the next step small and obvious. You never sell, never perform enthusiasm, and never scold.";
@@ -37,7 +39,8 @@ public sealed partial class AiProactiveCheckinMessageService(
             - Return EXACTLY two lines. The first line is the notification title, the second line is the body.
             - Title must use sentence case: capitalise only the first word, proper nouns and product names (Astra, Orbit); never use title case
             - Title: at most 8 words. Use their name only where it reads naturally.
-            - Body: one or two sentences. Point at ONE of the open habits, never the whole list.
+            - Body: one sentence, at most {MaxBodyTextElements} characters. Point at one of the open habits, never the whole list.
+            - Count text elements after trimming; an emoji counts as one character
             - Body must be a complete sentence that stands on its own without the title
             - Start the body with an uppercase letter in the requested language
             - You may write the names Astra and Orbit. Use no other brand name.
@@ -72,9 +75,12 @@ public sealed partial class AiProactiveCheckinMessageService(
             }
 
             var lines = text.Trim().Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            return lines.Length >= 2
-                ? Result.Success((lines[0], NormalizeBody(lines[1], language)))
-                : Result.Success((FallbackTitle(displayName, language), NormalizeBody(lines[0], language)));
+            var title = lines.Length >= 2 ? lines[0] : FallbackTitle(displayName, language);
+            var body = NormalizeBody(lines.Length >= 2 ? lines[1] : lines[0], language);
+            if (new StringInfo(body).LengthInTextElements > MaxBodyTextElements)
+                body = GenerateFallback(displayName, offTrackHabitTitles.Count, language).Value.Body;
+
+            return Result.Success((title, body));
         }
         catch (Exception ex)
         {
@@ -107,12 +113,12 @@ public sealed partial class AiProactiveCheckinMessageService(
         string displayName, int openHabitCount, string language)
     {
         var isPtBr = LocaleHelper.IsPortuguese(language);
-        var body = (openHabitCount > 1, isPtBr) switch
+        var body = (openHabitCount == 1, isPtBr) switch
         {
-            (true, true) => "Ainda há hábitos abertos hoje. Escolha o mais fácil e conte à Astra quando fizer.",
-            (true, false) => "Some habits are still open today. Pick the easiest one and tell Astra when you do it.",
-            (false, true) => "Um hábito segue aberto hoje. Conte à Astra quando você fizer.",
-            _ => "One habit is still open today. Tell Astra when you do it."
+            (true, true) => "Você ainda tem 1 hábito pendente hoje.",
+            (true, false) => "You have 1 habit still open today.",
+            (false, true) => $"Você ainda tem {openHabitCount} hábitos pendentes hoje.",
+            _ => $"You have {openHabitCount} habits still open today."
         };
 
         return Result.Success((FallbackTitle(displayName, language), body));

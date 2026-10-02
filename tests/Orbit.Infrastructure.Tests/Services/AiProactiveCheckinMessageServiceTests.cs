@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Globalization;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Orbit.Domain.Common;
@@ -32,7 +33,27 @@ public class AiProactiveCheckinMessageServiceTests
             .Contain("Title must use sentence case")
             .And.Contain("proper nouns and product names (Astra, Orbit)")
             .And.Contain("Body must be a complete sentence that stands on its own without the title")
-            .And.Contain("Start the body with an uppercase letter");
+            .And.Contain("Start the body with an uppercase letter")
+            .And.Contain("Body: one sentence, at most 60 characters")
+            .And.Contain("Count text elements after trimming; an emoji counts as one character");
+    }
+
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public void GenerateFallback_AllCountWidths_StayWithinSixtyTextElements(string language)
+    {
+        foreach (var count in new[] { 0, 1, 2, 9, 10, 99, 100, 999, 1000, int.MaxValue })
+        {
+            var result = InvokeGenerateFallback("Alex", language, count);
+
+            result.IsSuccess.Should().BeTrue();
+            new StringInfo(result.Value.Body).LengthInTextElements.Should().BeLessThanOrEqualTo(60);
+            var expected = language == "pt-BR"
+                ? count == 1 ? "Você ainda tem 1 hábito pendente hoje." : $"Você ainda tem {count} hábitos pendentes hoje."
+                : count == 1 ? "You have 1 habit still open today." : $"You have {count} habits still open today.";
+            result.Value.Body.Should().Be(expected);
+        }
     }
 
     [Fact]
@@ -60,7 +81,7 @@ public class AiProactiveCheckinMessageServiceTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Still time today, Alex");
-        result.Value.Body.Should().Contain("tell Astra when you do it");
+        result.Value.Body.Should().Be("You have 2 habits still open today.");
     }
 
     [Fact]
@@ -70,7 +91,7 @@ public class AiProactiveCheckinMessageServiceTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Ainda dá tempo hoje, Alex");
-        result.Value.Body.Should().Contain("conte à Astra quando fizer");
+        result.Value.Body.Should().Be("Você ainda tem 2 hábitos pendentes hoje.");
     }
 
     [Fact]
