@@ -30,6 +30,21 @@ public class AiProactiveCheckinMessageServiceGenerationTests
         result.Value.Body.Should().Be("You fell behind on Meditate. Astra's got your back.");
     }
 
+    [Theory]
+    [InlineData("en", "take a moment to read with Astra.", "Take a moment to read with Astra.")]
+    [InlineData("pt-BR", "água ajuda a retomar o dia com calma.", "Água ajuda a retomar o dia com calma.")]
+    [InlineData("en", "\"take a moment to read with Astra.\"", "\"Take a moment to read with Astra.\"")]
+    public async Task GenerateMessageAsync_SingleLowercaseLine_ReturnsSentenceCaseBody(
+        string language, string modelBody, string expectedBody)
+    {
+        var service = BuildService(modelBody);
+
+        var result = await service.GenerateMessageAsync("Alex", OffTrackHabits, 5, language);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Body.Should().Be(expectedBody);
+    }
+
     [Fact]
     public async Task GenerateMessageAsync_NoActiveStreak_StillReturnsModelText()
     {
@@ -114,7 +129,7 @@ public class AiProactiveCheckinMessageServiceGenerationTests
         result.Value.Body.Should().Be("Você ficou para trás em alguns hábitos hoje. A Astra está aqui -- bora retomar?");
     }
 
-    private static AiProactiveCheckinMessageService BuildService(string content, HttpStatusCode status = HttpStatusCode.OK)
+    internal static AiProactiveCheckinMessageService BuildService(string content, HttpStatusCode status = HttpStatusCode.OK)
     {
         var chatClient = new ChatClient(
             model: "gpt-test",
