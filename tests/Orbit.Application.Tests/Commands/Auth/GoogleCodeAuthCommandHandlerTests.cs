@@ -7,10 +7,12 @@ using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Orbit.Application.Behaviors;
 using Orbit.Application.Auth.Commands;
+using Orbit.Application.Calendar.Queries;
 using Orbit.Application.Common;
 using Orbit.Application.Referrals.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
@@ -81,14 +83,25 @@ public class GoogleCodeAuthCommandHandlerTests
     }
 
     [Theory]
-    [InlineData(null, "old-refresh")]
-    [InlineData("new-refresh", "new-refresh")]
-    public async Task ExistingUser_PreservesOrReplacesRefreshToken(string? returnedRefresh, string expectedRefresh)
+    [InlineData(null, "old-refresh", false)]
+    [InlineData("new-refresh", "new-refresh", false)]
+    [InlineData(null, null, true)]
+    [InlineData("new-refresh", "new-refresh", true)]
+    public async Task ExistingUser_PreservesOrReplacesRefreshToken(string? returnedRefresh, string? expectedRefresh, bool reconnectRequired)
     {
         var user = User.Create("Existing", Email).Value;
         user.SetGoogleTokens("old-access", "old-refresh");
+        if (reconnectRequired)
+        {
+            user.EnableCalendarAutoSync().IsSuccess.Should().BeTrue();
+            user.MarkCalendarSyncReconnectRequired("invalid_grant");
+        }
         _users.FindOneTrackedIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(user);
+        _users.GetByIdAsync(user.Id, Arg.Any<CancellationToken>()).Returns(user);
+        var payGate = Substitute.For<IPayGateService>();
+        payGate.CanManageCalendar(user.Id, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        var stateHandler = new GetCalendarAutoSyncStateQueryHandler(_users, payGate);
         _exchange.ExchangeAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new GoogleCodeIdentity(Email, "New Name", "new-access", returnedRefresh)));
 
@@ -98,6 +111,15 @@ public class GoogleCodeAuthCommandHandlerTests
         result.Value.UserId.Should().Be(user.Id);
         user.GoogleAccessToken.Should().Be("new-access");
         user.GoogleRefreshToken.Should().Be(expectedRefresh);
+        await _work.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+
+        var state = await stateHandler.Handle(new GetCalendarAutoSyncStateQuery(user.Id), CancellationToken.None);
+
+        state.IsSuccess.Should().BeTrue();
+        state.Value.Status.Should().Be(GoogleCalendarAutoSyncStatus.Idle);
+        state.Value.HasGoogleConnection.Should().BeTrue();
+        state.Value.Enabled.Should().BeFalse();
+        user.GoogleCalendarLastSyncError.Should().BeNull();
         await _users.DidNotReceive().AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
         await _email.DidNotReceive().SendWelcomeEmailAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
