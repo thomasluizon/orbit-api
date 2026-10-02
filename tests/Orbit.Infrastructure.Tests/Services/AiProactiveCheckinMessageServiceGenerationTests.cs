@@ -1,5 +1,6 @@
 using System.ClientModel;
 using System.ClientModel.Primitives;
+using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -17,6 +18,82 @@ namespace Orbit.Infrastructure.Tests.Services;
 public class AiProactiveCheckinMessageServiceGenerationTests
 {
     private static readonly string[] OffTrackHabits = ["Meditate", "Read"];
+
+    [Theory]
+    [InlineData("en", "Pick a tiny step toward reading before the day ends at home.")]
+    [InlineData("pt-BR", "Escolha um passo leve para retomar a leitura hoje com calma.")]
+    public async Task GenerateMessageAsync_BodyAtSixtyTextElements_KeepsTrimmedBody(
+        string language, string body)
+    {
+        new StringInfo(body).LengthInTextElements.Should().Be(60);
+        var service = BuildService($"Title\n  {body}  ");
+
+        var result = await service.GenerateMessageAsync("Alex", OffTrackHabits, 5, language);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Title.Should().Be("Title");
+        result.Value.Body.Should().Be(body);
+    }
+
+    [Theory]
+    [InlineData("en", "Pick a small step toward reading before the day ends at home.", "You have 2 habits still open today.")]
+    [InlineData("pt-BR", "Escolha um passo curto para retomar a leitura hoje com calma.", "Você tem 2 hábitos abertos hoje.")]
+    public async Task GenerateMessageAsync_BodyAtSixtyOneTextElements_ReplacesWholeBody(
+        string language, string body, string expected)
+    {
+        new StringInfo(body).LengthInTextElements.Should().Be(61);
+        var service = BuildService($"Title\n  {body}  ");
+
+        var result = await service.GenerateMessageAsync("Alex", OffTrackHabits, 5, language);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Title.Should().Be("Title");
+        result.Value.Body.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("en", "You have 1 habit still open today.")]
+    [InlineData("pt-BR", "Você tem 1 hábito aberto hoje.")]
+    public async Task GenerateMessageAsync_LongSingleLineBody_UsesSingularFallbackWithoutHabitTitle(
+        string language, string expected)
+    {
+        var habitTitle = new string('a', 200);
+        var service = BuildService($"Read {habitTitle} today.");
+
+        var result = await service.GenerateMessageAsync("Alex", [habitTitle], 5, language);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Body.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("en", "You have 2 habits still open today.")]
+    [InlineData("pt-BR", "Você tem 2 hábitos abertos hoje.")]
+    public async Task GenerateMessageAsync_TextElements_CountsEmojiAndCombiningMarksOnce(
+        string language, string expectedFallback)
+    {
+        const string sentence = "Pick a tiny step toward reading before the day ends at home.";
+        foreach (var body in new[]
+                 {
+                     "🙂 Pick a tiny step with reading before the day ends at home.",
+                     "👩🏽‍💻 Pick a tiny step with reading before the day ends at home.",
+                     "P\u0301" + sentence[1..]
+                 })
+        {
+            new StringInfo(body).LengthInTextElements.Should().Be(60);
+            body.Length.Should().BeGreaterThan(60);
+            var service = BuildService($"Title\n{body}");
+            var overflowService = BuildService($"Title\n{body}x");
+
+            var kept = await service.GenerateMessageAsync("Alex", OffTrackHabits, 5, language);
+            var replaced = await overflowService.GenerateMessageAsync("Alex", OffTrackHabits, 5, language);
+
+            kept.IsSuccess.Should().BeTrue();
+            kept.Value.Body.Should().Be(body);
+            replaced.IsSuccess.Should().BeTrue();
+            replaced.Value.Body.Should().Be(expectedFallback);
+        }
+    }
 
     [Fact]
     public async Task GenerateMessageAsync_TwoLines_ReturnsTitleAndBody()
@@ -90,7 +167,7 @@ public class AiProactiveCheckinMessageServiceGenerationTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Still time today, Alex");
-        result.Value.Body.Should().Be("Some habits are still open today. Pick the easiest one and tell Astra when you do it.");
+        result.Value.Body.Should().Be("You have 2 habits still open today.");
     }
 
     [Fact]
@@ -102,7 +179,7 @@ public class AiProactiveCheckinMessageServiceGenerationTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Ainda dá tempo hoje, Alex");
-        result.Value.Body.Should().Be("Ainda há hábitos abertos hoje. Escolha o mais fácil e conte à Astra quando fizer.");
+        result.Value.Body.Should().Be("Você tem 2 hábitos abertos hoje.");
     }
 
     [Fact]
@@ -114,7 +191,7 @@ public class AiProactiveCheckinMessageServiceGenerationTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Still time today, Alex");
-        result.Value.Body.Should().Be("Some habits are still open today. Pick the easiest one and tell Astra when you do it.");
+        result.Value.Body.Should().Be("You have 2 habits still open today.");
     }
 
     [Fact]
@@ -126,7 +203,7 @@ public class AiProactiveCheckinMessageServiceGenerationTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Ainda dá tempo hoje, Alex");
-        result.Value.Body.Should().Be("Ainda há hábitos abertos hoje. Escolha o mais fácil e conte à Astra quando fizer.");
+        result.Value.Body.Should().Be("Você tem 2 hábitos abertos hoje.");
     }
 
     /// <summary>
@@ -136,8 +213,8 @@ public class AiProactiveCheckinMessageServiceGenerationTests
     /// the habit a person names.
     /// </summary>
     [Theory]
-    [InlineData("en", "One habit is still open today. Tell Astra when you do it.")]
-    [InlineData("pt-BR", "Um hábito segue aberto hoje. Conte à Astra quando você fizer.")]
+    [InlineData("en", "You have 1 habit still open today.")]
+    [InlineData("pt-BR", "Você tem 1 hábito aberto hoje.")]
     public async Task GenerateMessageAsync_OneOpenHabit_CountsItAsOne(string language, string expected)
     {
         var service = BuildService("   ");
