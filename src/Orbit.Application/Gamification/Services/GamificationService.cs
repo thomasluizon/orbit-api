@@ -39,7 +39,7 @@ public partial class GamificationService(
     HabitScheduleSnapshotStore scheduleSnapshots) : IGamificationService
 {
     // Streak window covers the 1000-day StreakImmortal target; volume window covers the 2500-completion Unstoppable target. Both must exceed their largest achievement target or those achievements can never be granted. https://github.com/thomasluizon/orbit-api/pull/419
-    private const int StreakLogWindowDays = 1100;
+    public const int StreakLogWindowDays = 1100;
     private const int TotalCompletionWindowDays = 2750;
     private const int MaxConcurrencyAttempts = 3;
 

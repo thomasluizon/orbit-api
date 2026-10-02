@@ -41,7 +41,20 @@ public static class HabitMetricsCalculator
         IReadOnlyCollection<HabitMetricLog> logs,
         DateOnly today,
         int weekStartDay,
-        TimeZoneInfo? userTimeZone = null)
+        TimeZoneInfo? userTimeZone = null) =>
+        CalculateProjected(habit, logs, today, weekStartDay, userTimeZone, out _);
+
+    /// <summary>
+    /// Also returns the earliest log date that can affect the current streak, including a partial
+    /// flexible window or the history needed to infer a legacy schedule anchor.
+    /// </summary>
+    public static HabitMetrics CalculateProjected(
+        Habit habit,
+        IReadOnlyCollection<HabitMetricLog> logs,
+        DateOnly today,
+        int weekStartDay,
+        TimeZoneInfo? userTimeZone,
+        out DateOnly? currentStreakLogStart)
     {
         var logDates = logs.Where(l => l.Value > 0).Select(l => l.Date).Distinct().ToHashSet();
         var habitStartDate = ResolveHabitStartDate(habit, logs, userTimeZone);
@@ -56,7 +69,24 @@ public static class HabitMetricsCalculator
                 weekStartDay)
             : logDates;
 
-        var currentStreak = CalculateCurrentStreak(habit, expectedDates, streakCompletionDates, today);
+        var currentStreak = CalculateCurrentStreak(
+            habit, expectedDates, streakCompletionDates, today, out currentStreakLogStart);
+        if (habit.IsFlexible && currentStreakLogStart is { } marker)
+        {
+            var windowStart = HabitScheduleService.GetWindowStart(habit, marker, weekStartDay);
+            currentStreakLogStart = windowStart > habitStartDate ? windowStart : habitStartDate;
+        }
+        if (habit.ScheduledStartDate is null && habit.FrequencyUnit is not null && !habit.IsBadHabit)
+        {
+            var createdDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(
+                habit.CreatedAtUtc, userTimeZone ?? TimeZoneInfo.Utc));
+            var legacyHistoryStart = habit.DueDate.AddDays(-MaxStreakHorizonDays);
+            if (legacyHistoryStart < createdDate)
+                legacyHistoryStart = createdDate;
+            if (legacyHistoryStart < habit.DueDate
+                && (currentStreakLogStart is null || legacyHistoryStart < currentStreakLogStart))
+                currentStreakLogStart = legacyHistoryStart;
+        }
         var longestStreak = CalculateLongestStreak(habit, expectedDates, streakCompletionDates);
         var weeklyCompletionRate = CalculateCompletionRate(habit, expectedDates, streakCompletionDates, today, 7);
         var monthlyCompletionRate = CalculateCompletionRate(habit, expectedDates, streakCompletionDates, today, 30);
@@ -308,8 +338,10 @@ public static class HabitMetricsCalculator
         Habit habit,
         List<DateOnly> expectedDates,
         HashSet<DateOnly> logDates,
-        DateOnly today)
+        DateOnly today,
+        out DateOnly? currentStreakLogStart)
     {
+        currentStreakLogStart = null;
         if (expectedDates.Count == 0)
             return 0;
 
@@ -317,6 +349,7 @@ public static class HabitMetricsCalculator
 
         foreach (var date in expectedDates)
         {
+            currentStreakLogStart = date;
             var isLogged = logDates.Contains(date);
 
             if (habit.IsBadHabit)
