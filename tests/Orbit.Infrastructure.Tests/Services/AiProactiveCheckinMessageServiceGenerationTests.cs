@@ -37,7 +37,7 @@ public class AiProactiveCheckinMessageServiceGenerationTests
 
     [Theory]
     [InlineData("en", "Pick a small step toward reading before the day ends at home.", "You have 2 habits still open today.")]
-    [InlineData("pt-BR", "Escolha um passo curto para retomar a leitura hoje com calma.", "Você tem 2 hábitos abertos hoje.")]
+    [InlineData("pt-BR", "Escolha um passo curto para retomar a leitura hoje com calma.", "Você ainda tem 2 hábitos pendentes hoje.")]
     public async Task GenerateMessageAsync_BodyAtSixtyOneTextElements_ReplacesWholeBody(
         string language, string body, string expected)
     {
@@ -53,7 +53,7 @@ public class AiProactiveCheckinMessageServiceGenerationTests
 
     [Theory]
     [InlineData("en", "You have 1 habit still open today.")]
-    [InlineData("pt-BR", "Você tem 1 hábito aberto hoje.")]
+    [InlineData("pt-BR", "Você ainda tem 1 hábito pendente hoje.")]
     public async Task GenerateMessageAsync_LongSingleLineBody_UsesSingularFallbackWithoutHabitTitle(
         string language, string expected)
     {
@@ -68,7 +68,7 @@ public class AiProactiveCheckinMessageServiceGenerationTests
 
     [Theory]
     [InlineData("en", "You have 2 habits still open today.")]
-    [InlineData("pt-BR", "Você tem 2 hábitos abertos hoje.")]
+    [InlineData("pt-BR", "Você ainda tem 2 hábitos pendentes hoje.")]
     public async Task GenerateMessageAsync_TextElements_CountsEmojiAndCombiningMarksOnce(
         string language, string expectedFallback)
     {
@@ -179,7 +179,7 @@ public class AiProactiveCheckinMessageServiceGenerationTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Ainda dá tempo hoje, Alex");
-        result.Value.Body.Should().Be("Você tem 2 hábitos abertos hoje.");
+        result.Value.Body.Should().Be("Você ainda tem 2 hábitos pendentes hoje.");
     }
 
     [Fact]
@@ -203,7 +203,7 @@ public class AiProactiveCheckinMessageServiceGenerationTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Ainda dá tempo hoje, Alex");
-        result.Value.Body.Should().Be("Você tem 2 hábitos abertos hoje.");
+        result.Value.Body.Should().Be("Você ainda tem 2 hábitos pendentes hoje.");
     }
 
     /// <summary>
@@ -214,7 +214,7 @@ public class AiProactiveCheckinMessageServiceGenerationTests
     /// </summary>
     [Theory]
     [InlineData("en", "You have 1 habit still open today.")]
-    [InlineData("pt-BR", "Você tem 1 hábito aberto hoje.")]
+    [InlineData("pt-BR", "Você ainda tem 1 hábito pendente hoje.")]
     public async Task GenerateMessageAsync_OneOpenHabit_CountsItAsOne(string language, string expected)
     {
         var service = BuildService("   ");

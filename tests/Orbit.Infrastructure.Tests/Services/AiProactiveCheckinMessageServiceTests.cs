@@ -50,7 +50,7 @@ public class AiProactiveCheckinMessageServiceTests
             result.IsSuccess.Should().BeTrue();
             new StringInfo(result.Value.Body).LengthInTextElements.Should().BeLessThanOrEqualTo(60);
             var expected = language == "pt-BR"
-                ? count == 1 ? "Você tem 1 hábito aberto hoje." : $"Você tem {count} hábitos abertos hoje."
+                ? count == 1 ? "Você ainda tem 1 hábito pendente hoje." : $"Você ainda tem {count} hábitos pendentes hoje."
                 : count == 1 ? "You have 1 habit still open today." : $"You have {count} habits still open today.";
             result.Value.Body.Should().Be(expected);
         }
@@ -91,7 +91,7 @@ public class AiProactiveCheckinMessageServiceTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Ainda dá tempo hoje, Alex");
-        result.Value.Body.Should().Be("Você tem 2 hábitos abertos hoje.");
+        result.Value.Body.Should().Be("Você ainda tem 2 hábitos pendentes hoje.");
     }
 
     [Fact]

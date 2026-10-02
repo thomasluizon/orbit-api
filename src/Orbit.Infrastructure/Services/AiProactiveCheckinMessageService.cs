@@ -115,9 +115,9 @@ public sealed partial class AiProactiveCheckinMessageService(
         var isPtBr = LocaleHelper.IsPortuguese(language);
         var body = (openHabitCount == 1, isPtBr) switch
         {
-            (true, true) => "Você tem 1 hábito aberto hoje.",
+            (true, true) => "Você ainda tem 1 hábito pendente hoje.",
             (true, false) => "You have 1 habit still open today.",
-            (false, true) => $"Você tem {openHabitCount} hábitos abertos hoje.",
+            (false, true) => $"Você ainda tem {openHabitCount} hábitos pendentes hoje.",
             _ => $"You have {openHabitCount} habits still open today."
         };
 
