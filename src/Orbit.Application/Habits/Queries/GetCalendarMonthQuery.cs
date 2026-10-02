@@ -82,22 +82,14 @@ public class GetCalendarMonthQueryHandler(
         var habitItems = new List<HabitScheduleItem>();
         foreach (var habit in topLevel)
         {
-            var projectedDates = HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo, ctx.WeekStartDay);
+            var projectedDates = GetProjectedDates(habit, dateFrom, dateTo, ctx.WeekStartDay);
             var loggedDates = GetPositiveLogDates(habit, dateFrom, dateTo);
             var scheduledDates = MergeDates(projectedDates, loggedDates);
             var hasDescendantDue = HasAnyDescendantDue(habit.Id, lookup, dateFrom, dateTo, ctx.WeekStartDay);
-            var flexibleTargetExhausted = habit.IsFlexible
-                && loggedDates.Count == 0
-                && !projectedDates.Any(date =>
-                    HabitScheduleService.IsFlexibleHabitDueOnDate(habit, date, habit.Logs, ctx.WeekStartDay));
-            if (flexibleTargetExhausted && !hasDescendantDue)
-                continue;
-
-            var occurrenceDates = flexibleTargetExhausted ? loggedDates : scheduledDates;
             var isOverdue = DetermineOverdueStatus(habit, dateFrom, projectedDates, ctx.WeekStartDay);
 
-            if (occurrenceDates.Count > 0 || isOverdue || hasDescendantDue)
-                habitItems.Add(MapToScheduleItem(habit, occurrenceDates, isOverdue, ctx));
+            if (scheduledDates.Count > 0 || isOverdue || hasDescendantDue)
+                habitItems.Add(MapToScheduleItem(habit, scheduledDates, isOverdue, ctx));
         }
         return habitItems;
     }
@@ -114,6 +106,14 @@ public class GetCalendarMonthQueryHandler(
     private static List<DateOnly> MergeDates(List<DateOnly> projectedDates, List<DateOnly> loggedDates)
     {
         return projectedDates.Union(loggedDates).OrderBy(date => date).ToList();
+    }
+
+    private static List<DateOnly> GetProjectedDates(Habit habit, DateOnly dateFrom, DateOnly dateTo, int weekStartDay)
+    {
+        var dates = HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo, weekStartDay);
+        return habit.IsFlexible
+            ? dates.Where(date => HabitScheduleService.IsFlexibleHabitDueOnDate(habit, date, habit.Logs, weekStartDay)).ToList()
+            : dates;
     }
 
     /// <summary>
@@ -240,7 +240,7 @@ public class GetCalendarMonthQueryHandler(
             .Select(c => MapChildItem(c, ctx))
             .ToList();
         var projectedDates = (ctx.DateFrom.HasValue && ctx.DateTo.HasValue)
-            ? HabitScheduleService.GetScheduledDates(child, ctx.DateFrom.Value, ctx.DateTo.Value, ctx.WeekStartDay)
+            ? GetProjectedDates(child, ctx.DateFrom.Value, ctx.DateTo.Value, ctx.WeekStartDay)
             : [];
         var scheduledDates = (ctx.DateFrom.HasValue && ctx.DateTo.HasValue)
             ? MergeDates(projectedDates, GetPositiveLogDates(child, ctx.DateFrom.Value, ctx.DateTo.Value))
@@ -291,7 +291,7 @@ public class GetCalendarMonthQueryHandler(
     {
         foreach (var child in lookup[parentId])
         {
-            var childDates = HabitScheduleService.GetScheduledDates(child, dateFrom, dateTo, weekStartDay);
+            var childDates = GetProjectedDates(child, dateFrom, dateTo, weekStartDay);
             var childIsOverdue = DetermineOverdueStatus(child, dateFrom, childDates, weekStartDay);
             if (childDates.Count > 0 || childIsOverdue || GetPositiveLogDates(child, dateFrom, dateTo).Count > 0)
                 return true;
