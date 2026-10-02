@@ -418,6 +418,12 @@ public partial class User : Entity
         GoogleAccessToken = accessToken;
         if (refreshToken is not null)
             GoogleRefreshToken = refreshToken;
+
+        if (GoogleCalendarAutoSyncStatus == Enums.GoogleCalendarAutoSyncStatus.ReconnectRequired)
+        {
+            GoogleCalendarAutoSyncStatus = Enums.GoogleCalendarAutoSyncStatus.Idle;
+            GoogleCalendarLastSyncError = null;
+        }
     }
 
     public void MarkCalendarImported() => HasImportedCalendar = true;
