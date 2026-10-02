@@ -1,6 +1,6 @@
 # Orbit.Infrastructure — persistence + external services
 
-EF Core + PostgreSQL + service integrations (OpenAI, Firebase, Stripe, Resend, VAPID, Supabase Auth).
+EF Core + PostgreSQL + service integrations (OpenAI, Firebase, Stripe, Amazon SES, VAPID, Supabase Auth).
 
 ## Layout
 
@@ -12,7 +12,7 @@ Persistence/
 Migrations/               - EF migrations (alphabetical timestamped)
 Services/                 - implementations of Orbit.Domain.Interfaces.* (AI, push, email, JWT, ...)
   Prompts/                - composable prompt sections (HabitCountSection, RoutinePatternsSection, ...)
-Configuration/            - strongly-typed options bound from appsettings (ResendSettings, VapidSettings, ...)
+Configuration/            - strongly-typed options bound from appsettings (SesSettings, VapidSettings, ...)
 AI/                       - top-level AI service entry points
 ```
 
@@ -48,14 +48,14 @@ AI/                       - top-level AI service entry points
 - `PushNotificationService` routes by subscription type: `p256dh == "fcm"` → Firebase Admin SDK (native); otherwise → VAPID Web Push (browser).
 - `ReminderSchedulerService` (BackgroundService) runs every 1 minute, finds habits with `ReminderEnabled && DueTime != null`, sends push + creates in-app notification. `SentReminder` table prevents duplicates.
 
-## Email (Resend)
+## Email (Amazon SES)
 
-- `ResendEmailService` sends transactional emails (login codes, reset, support).
-- Log success/failure with status codes — failures are observable in Render logs.
+- `SesEmailService` sends transactional emails (login codes, reset, support).
+- Per-delivery success uses debug logs; send failures are observable in Render logs.
 
 ## Configuration
 
-- Strongly-typed options pattern. `ResendSettings`, `VapidSettings`, `JwtSettings`, etc.
+- Strongly-typed options pattern. `SesSettings`, `VapidSettings`, `JwtSettings`, etc.
 - Bound from `appsettings.json` + env vars in `Orbit.Api/Extensions/ServiceCollectionExtensions.cs` via `services.Configure<X>(...)`.
 - Secrets MUST come from env vars in production. Never commit `appsettings.Development.json`.
 
@@ -68,4 +68,4 @@ AI/                       - top-level AI service entry points
 | New migration | run the dotnet ef CLI; example in EF Core section above |
 | New AI prompt | `Services/Prompts/Sections/*` |
 | New external service | `Services/` + interface in `Orbit.Domain/Interfaces/` |
-| New config block | `Configuration/ResendSettings.cs` + binding in `Orbit.Api/Extensions/ServiceCollectionExtensions.cs` |
+| New config block | `Configuration/SesSettings.cs` + binding in `Orbit.Api/Extensions/ServiceCollectionExtensions.cs` |

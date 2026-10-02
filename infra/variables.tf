@@ -46,28 +46,6 @@ variable "staging_storage_provider" {
   }
 }
 
-variable "production_email_provider" {
-  description = "Email provider for the production API."
-  type        = string
-  default     = "Resend"
-
-  validation {
-    condition     = contains(["Resend", "Ses"], var.production_email_provider)
-    error_message = "production_email_provider must be Resend or Ses."
-  }
-}
-
-variable "staging_email_provider" {
-  description = "Email provider for the staging API."
-  type        = string
-  default     = "Resend"
-
-  validation {
-    condition     = contains(["Resend", "Ses"], var.staging_email_provider)
-    error_message = "staging_email_provider must be Resend or Ses."
-  }
-}
-
 variable "production_ses_dlq_alert_email" {
   description = "Email recipient for production SES dead-letter queue alarms. An empty value leaves the operations topic unsubscribed."
   type        = string

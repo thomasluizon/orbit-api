@@ -8,7 +8,6 @@ locals {
     "Jwt__SecretKey",
     "Marketing__UnsubscribeSigningKey",
     "PostHog__ApiKey",
-    "Resend__ApiKey",
     "SMOKE_TEST_CODE",
     "SMOKE_TEST_EMAIL",
     "Sentry__Dsn",
@@ -50,7 +49,6 @@ locals {
     Jwt__ExpiryMinutes                  = "0"
     Jwt__Issuer                         = "OrbitApi"
     Jwt__RefreshExpiryDays              = "90"
-    Email__Provider                     = var.production_email_provider
     Ses__Region                         = "us-east-2"
     Ses__FromEmail                      = "Orbit <noreply@send.useorbit.org>"
     Ses__MarketingFromEmail             = "Orbit <news@updates.useorbit.org>"
@@ -58,8 +56,6 @@ locals {
     Ses__TransactionalConfigurationSet  = aws_sesv2_configuration_set.orbit["transactional"].configuration_set_name
     Ses__MarketingConfigurationSet      = aws_sesv2_configuration_set.orbit["marketing"].configuration_set_name
     Ses__TopicArn                       = aws_sns_topic.ses_events.arn
-    Resend__FromEmail                   = "Orbit <noreply@send.useorbit.org>"
-    Resend__SupportEmail                = "contact@useorbit.org"
     Sentry__Environment                 = "production"
     Stripe__CancelUrl                   = "https://app.useorbit.org/upgrade"
     Stripe__MonthlyPriceIdBrl           = "price_1U59khGwWZvarDk3duqWRGu7"
@@ -78,7 +74,6 @@ locals {
   }
 
   staging_api_values = merge(local.production_api_values, {
-    Email__Provider                    = var.staging_email_provider
     Ses__TransactionalConfigurationSet = aws_sesv2_configuration_set.staging["transactional"].configuration_set_name
     Ses__MarketingConfigurationSet     = aws_sesv2_configuration_set.staging["marketing"].configuration_set_name
     Ses__TopicArn                      = aws_sns_topic.ses_events_staging.arn
