@@ -19,6 +19,7 @@ public class AchievementProgressServiceTests
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly AchievementProgressService _service;
+    private readonly List<(Func<HabitLog, bool> Predicate, IReadOnlyList<HabitMetricLog> Rows)> _streakReads = [];
 
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly DateOnly Today = new(2026, 7, 17);
@@ -47,7 +48,7 @@ public class AchievementProgressServiceTests
     /// </summary>
     private static Habit CreateHabitWithStreak(int streakDays)
     {
-        var startDate = Today.AddDays(-400);
+        var startDate = Today.AddDays(-Math.Max(1200, streakDays));
         var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, startDate)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
             .SetValue(habit, startDate.ToDateTime(TimeOnly.MinValue));
@@ -86,8 +87,14 @@ public class AchievementProgressServiceTests
             Arg.Any<Expression<Func<HabitLog, bool>>>(),
             Arg.Any<Func<IQueryable<HabitLog>, IQueryable<HabitMetricLog>>>(),
             Arg.Any<CancellationToken>())
-            .Returns(call => call.ArgAt<Func<IQueryable<HabitLog>, IQueryable<HabitMetricLog>>>(1)(
-                logs.Where(call.ArgAt<Expression<Func<HabitLog, bool>>>(0).Compile()).AsQueryable()).ToList());
+            .Returns(call =>
+            {
+                var predicate = call.ArgAt<Expression<Func<HabitLog, bool>>>(0).Compile();
+                var rows = call.ArgAt<Func<IQueryable<HabitLog>, IQueryable<HabitMetricLog>>>(1)(
+                    logs.Where(predicate).AsQueryable()).ToList();
+                _streakReads.Add((predicate, rows));
+                return rows;
+            });
         _habitLogRepo.ProjectAsync(
             Arg.Any<Expression<Func<HabitLog, bool>>>(),
             Arg.Any<Func<IQueryable<HabitLog>, IQueryable<DateTime>>>(),
@@ -106,12 +113,16 @@ public class AchievementProgressServiceTests
     public async Task LoadAsync_WithHabits_MapsEveryCountToItsMetric()
     {
         var user = CreateUser(streak: 9);
-        StubHabits(CreateHabitWithStreak(5));
+        var habit = CreateHabitWithStreak(5);
+        var oldLog = habit.Log(Today.AddDays(-65), advanceDueDate: false).Value;
+        StubHabits(habit);
         StubCounts();
 
         var metrics = await _service.LoadAsync(user, new HashSet<string>(), CancellationToken.None);
 
         metrics.CurrentStreak.Should().Be(5);
+        _streakReads.Should().ContainSingle();
+        _streakReads[0].Predicate(oldLog).Should().BeFalse();
         metrics.TotalCompletions.Should().Be(42);
         metrics.GoalsCreated.Should().Be(7);
         metrics.GoalsCompleted.Should().Be(3);
@@ -239,4 +250,191 @@ public class AchievementProgressServiceTests
 
         metrics.CurrentStreak.Should().Be(3);
     }
+    [Theory]
+    [InlineData(63)]
+    [InlineData(64)]
+    [InlineData(65)]
+    [InlineData(127)]
+    [InlineData(128)]
+    [InlineData(129)]
+    [InlineData(255)]
+    [InlineData(256)]
+    [InlineData(257)]
+    [InlineData(511)]
+    [InlineData(512)]
+    [InlineData(513)]
+    [InlineData(999)]
+    [InlineData(1000)]
+    [InlineData(1023)]
+    [InlineData(1024)]
+    [InlineData(1025)]
+    [InlineData(1099)]
+    [InlineData(1100)]
+    [InlineData(1101)]
+    public async Task LoadAsync_StreakCrossesWindowBoundaries_MatchesFullWindow(int streakDays)
+    {
+        var habit = CreateHabitWithStreak(streakDays);
+        StubHabits(habit);
+        StubCounts();
+
+        var metrics = await _service.LoadAsync(CreateUser(), new HashSet<string>(), CancellationToken.None);
+
+        metrics.CurrentStreak.Should().Be(FullWindowStreak(habit));
+        metrics.CurrentStreak.Should().Be(Math.Min(streakDays, 1100));
+        _streakReads.Should().HaveCount(streakDays <= 64 ? 1
+            : streakDays <= 128 ? 2 : streakDays <= 256 ? 3
+            : streakDays <= 512 ? 4 : streakDays <= 1024 ? 5 : 6);
+        _streakReads.SelectMany(read => read.Rows).Select(log => log.Date).Should().OnlyHaveUniqueItems();
+        _streakReads.SelectMany(read => read.Rows).Should().OnlyContain(log => log.Date >= Today.AddDays(-1100));
+    }
+
+    [Fact]
+    public async Task LoadAsync_AllStreakAchievementsEarned_SkipsStreakRead()
+    {
+        var habit = CreateHabitWithStreak(1000);
+        StubHabits(habit);
+        StubCounts();
+        var earned = AchievementDefinitions.All
+            .Where(definition => definition.Metric == ProgressMetric.CurrentStreak)
+            .Select(definition => definition.Id).ToHashSet();
+
+        var metrics = await _service.LoadAsync(CreateUser(), earned, CancellationToken.None);
+
+        metrics.CurrentStreak.Should().Be(0);
+        _streakReads.Should().BeEmpty();
+        foreach (var definition in AchievementDefinitions.All.Where(definition => earned.Contains(definition.Id)))
+            AchievementProgressCalculator.Compute(definition, metrics, true)
+                .Should().Be((definition.ProgressTarget, definition.ProgressTarget));
+        metrics.TotalCompletions.Should().Be(42);
+    }
+
+    [Fact]
+    public async Task LoadAsync_OnlyImmortalUnEarned_StillReachesThreshold()
+    {
+        StubHabits(CreateHabitWithStreak(1000));
+        StubCounts();
+        var earned = AchievementDefinitions.All
+            .Where(definition => definition.Metric == ProgressMetric.CurrentStreak
+                && definition.Id != AchievementDefinitions.StreakImmortal)
+            .Select(definition => definition.Id).ToHashSet();
+
+        var metrics = await _service.LoadAsync(CreateUser(), earned, CancellationToken.None);
+
+        metrics.CurrentStreak.Should().Be(1000);
+    }
+
+    [Fact]
+    public async Task LoadAsync_WidensOnlyContinuingGoodHabits()
+    {
+        var shortHabit = CreateHabitWithStreak(2);
+        shortHabit.Log(Today.AddDays(-100), advanceDueDate: false);
+        var longHabit = CreateHabitWithStreak(300);
+        var badHabit = CreateBadHabitWithAbstinenceStreak();
+        badHabit.Log(Today, advanceDueDate: false);
+        StubHabits(shortHabit, longHabit, badHabit);
+        StubCounts();
+
+        var metrics = await _service.LoadAsync(CreateUser(), new HashSet<string>(), CancellationToken.None);
+
+        metrics.CurrentStreak.Should().Be(300);
+        _streakReads.Should().HaveCount(4);
+        _streakReads.Skip(1).SelectMany(read => read.Rows).Should().OnlyContain(log => log.HabitId == longHabit.Id);
+        _streakReads.SelectMany(read => read.Rows).Should().NotContain(log => log.HabitId == badHabit.Id);
+    }
+
+    [Fact]
+    public async Task LoadAsync_OnlyBadHabits_SkipsStreakRead()
+    {
+        StubHabits(CreateBadHabitWithAbstinenceStreak());
+        StubCounts();
+
+        var metrics = await _service.LoadAsync(CreateUser(), new HashSet<string>(), CancellationToken.None);
+
+        metrics.CurrentStreak.Should().Be(0);
+        _streakReads.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(FrequencyUnit.Day, false, 7)]
+    [InlineData(FrequencyUnit.Week, false, 1)]
+    [InlineData(FrequencyUnit.Month, false, 1)]
+    [InlineData(FrequencyUnit.Year, false, 1)]
+    [InlineData(FrequencyUnit.Week, true, 2)]
+    [InlineData(FrequencyUnit.Month, true, 2)]
+    [InlineData(FrequencyUnit.Year, true, 2)]
+    public async Task LoadAsync_SparseOrFlexibleSchedule_MatchesFullWindow(
+        FrequencyUnit unit, bool flexible, int quantity)
+    {
+        var start = Today.AddDays(-1200);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Scheduled", unit, quantity, start, IsFlexible: flexible)).Value;
+        if (flexible)
+        {
+            for (var date = start; date <= Today; date = date.AddDays(1))
+                habit.Log(date, advanceDueDate: false);
+        }
+        else
+        {
+            for (var date = Today; date >= start; date = unit switch
+            {
+                FrequencyUnit.Day => date.AddDays(-quantity),
+                FrequencyUnit.Week => date.AddDays(-7 * quantity),
+                FrequencyUnit.Month => date.AddMonths(-quantity),
+                _ => date.AddYears(-quantity)
+            })
+                habit.Log(date, advanceDueDate: false);
+        }
+        StubHabits(habit);
+        StubCounts();
+
+        var metrics = await _service.LoadAsync(CreateUser(), new HashSet<string>(), CancellationToken.None);
+
+        metrics.CurrentStreak.Should().Be(FullWindowStreak(habit));
+        _streakReads.Should().HaveCountGreaterThan(1);
+        _streakReads.SelectMany(read => read.Rows).Select(log => (log.Date, log.Value)).Should().OnlyHaveUniqueItems();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LoadAsync_LegacyAnchorNeedsOlderHistory_MatchesFullWindow(bool flexible)
+    {
+        var habit = CreateHabitWithStreak(300);
+        typeof(Habit).GetProperty(nameof(Habit.ScheduledStartDate))!.SetValue(habit, null);
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
+            .SetValue(habit, Today.AddDays(-299).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+        typeof(Habit).GetProperty(nameof(Habit.DueDate))!.SetValue(habit, Today.AddDays(1));
+        typeof(Habit).GetProperty(nameof(Habit.IsFlexible))!.SetValue(habit, flexible);
+        StubHabits(habit);
+        StubCounts();
+
+        var metrics = await _service.LoadAsync(CreateUser(), new HashSet<string>(), CancellationToken.None);
+
+        metrics.CurrentStreak.Should().Be(300);
+        metrics.CurrentStreak.Should().Be(FullWindowStreak(habit));
+    }
+
+    [Theory]
+    [InlineData("America/Sao_Paulo")]
+    [InlineData("Pacific/Kiritimati")]
+    public async Task LoadAsync_TodayNotCompleted_UsesUserTodayAcrossBoundary(string timeZone)
+    {
+        var habit = CreateHabitWithStreak(129);
+        habit.Unlog(Today);
+        var user = CreateUser();
+        user.SetTimeZone(timeZone).IsSuccess.Should().BeTrue();
+        StubHabits(habit);
+        StubCounts();
+
+        var metrics = await _service.LoadAsync(user, new HashSet<string>(), CancellationToken.None);
+
+        metrics.CurrentStreak.Should().Be(128);
+        await _userDateService.Received(1).GetUserTodayAsync(user.Id, CancellationToken.None);
+    }
+
+    private static int FullWindowStreak(Habit habit) => HabitMetricsCalculator.CalculateProjected(
+        habit, habit.Logs.Where(log => !log.IsDeleted && log.Date >= Today.AddDays(-1100))
+            .Select(log => new HabitMetricLog(log.HabitId, log.Date, log.Value, false)).ToList(),
+        Today, 1, TimeZoneInfo.Utc).CurrentStreak;
+
 }
