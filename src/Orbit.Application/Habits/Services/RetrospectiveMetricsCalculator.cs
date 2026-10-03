@@ -264,7 +264,8 @@ public static class RetrospectiveMetricsCalculator
             Percent(metCount, scheduledCount),
             completedCount,
             scheduledCount,
-            habit.FrequencyUnit is null);
+            habit.FrequencyUnit is null,
+            habit.Id);
 
     private static int[] BuildWeeklyConsistency(int[] weekdayScheduled, int[] weekdayCompleted)
     {
