@@ -18,6 +18,20 @@ permissions:
   pull-requests: read
 
 jobs:
+  workflows:
+    name: Workflow Syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check workflow files
+        shell: bash
+        # https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#concurrency documents queue, which actionlint does not recognize.
+        run: |
+          lint_dir="$(mktemp -d)"
+          curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash -o "$lint_dir/download-actionlint.bash"
+          bash "$lint_dir/download-actionlint.bash" 1.7.12 "$lint_dir"
+          "$lint_dir/actionlint" -color -ignore '^unexpected key "queue" for "concurrency" section\. expected one of "cancel-in-progress", "group"$'
+
   timeless:
     name: Timeless Text
     runs-on: ubuntu-latest
