@@ -115,6 +115,8 @@ public class AchievementProgressServiceTests
         var user = CreateUser(streak: 9);
         var habit = CreateHabitWithStreak(5);
         var oldLog = habit.Log(Today.AddDays(-65), advanceDueDate: false).Value;
+        typeof(HabitLog).GetProperty(nameof(HabitLog.CreatedAtUtc))!
+            .SetValue(oldLog, oldLog.Date.ToDateTime(new TimeOnly(12, 0), DateTimeKind.Utc));
         StubHabits(habit);
         StubCounts();
 
