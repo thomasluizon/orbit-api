@@ -8,7 +8,10 @@ using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using System.Linq.Expressions;
+using System.Text.Json;
 using Orbit.Application.Common;
+using Orbit.Application.Chat;
+using Orbit.Application.Habits.Services;
 
 namespace Orbit.Application.Tests.Queries.Habits;
 
@@ -173,6 +176,12 @@ public class GetRetrospectiveQueryHandlerTests
         top[0].CompletionRate.Should().Be(100);
         top[0].Emoji.Should().BeNull();
         top[1].Name.Should().Be("Weak");
+
+        var response = JsonSerializer.SerializeToElement(result.Value, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var serializedTop = response.GetProperty("metrics").GetProperty("topHabits");
+        serializedTop[0].TryGetProperty("habitId", out var strongId).Should().BeTrue();
+        strongId.GetGuid().Should().Be(strong.Id);
+        serializedTop[1].GetProperty("habitId").GetGuid().Should().Be(weak.Id);
     }
 
     [Fact]
@@ -196,6 +205,12 @@ public class GetRetrospectiveQueryHandlerTests
         needs.Should().NotContain(s => s.Name == "Perfect");
         needs[0].Name.Should().Be("Weak");
         needs[1].Name.Should().Be("Middling");
+
+        var response = JsonSerializer.SerializeToElement(result.Value, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var serializedNeeds = response.GetProperty("metrics").GetProperty("needsAttention");
+        serializedNeeds[0].TryGetProperty("habitId", out var weakId).Should().BeTrue();
+        weakId.GetGuid().Should().Be(weak.Id);
+        serializedNeeds[1].GetProperty("habitId").GetGuid().Should().Be(middling.Id);
     }
 
     [Fact]
@@ -240,6 +255,35 @@ public class GetRetrospectiveQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.FromCache.Should().BeTrue();
         result.Value.Narrative.Should().Be(SampleNarrative);
+    }
+
+    [Fact]
+    public async Task Handle_CachedStatWithoutHabitId_RemainsReadableByInsightCard()
+    {
+        var legacyStat = JsonSerializer.Deserialize<RetrospectiveHabitStat>(
+            """{"name":"Read","emoji":null,"completionRate":14,"completedCount":1,"scheduledCount":7,"isOneTime":false}""",
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        legacyStat.Should().NotBeNull();
+        legacyStat!.HabitId.Should().BeNull();
+        new RetrospectiveHabitStat("Read", null, 14, 1, 7).HabitId.Should().BeNull();
+        var metrics = RetrospectiveMetricsCalculator.Compute([CreateLoggedHabit()], DateFrom, DateTo, 4, 9)
+            with
+        { TopHabits = [legacyStat], NeedsAttention = [legacyStat] };
+        _cache.Set(RetrospectiveCacheKey.Build(UserId, "week", DateFrom, "en"),
+            new RetrospectiveResponse("week", metrics, SampleNarrative, false, DateFrom, DateTo));
+
+        var result = await HandleWeek();
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.FromCache.Should().BeTrue();
+        var card = PeriodInsightCardBuilder.Build(result.Value);
+        card.Should().NotBeNull();
+        card!.TopHabits.Should().ContainSingle().Which.HabitId.Should().BeNull();
+        card.NeedsAttention.Should().ContainSingle().Which.HabitId.Should().BeNull();
+        await _habitRepo.DidNotReceive().FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
