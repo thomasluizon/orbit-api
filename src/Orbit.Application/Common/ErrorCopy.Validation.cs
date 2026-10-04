@@ -95,7 +95,7 @@ public static partial class ErrorCopy
         (ValidationErrorCodes.ChecklistItemLimit, $"A checklist can have at most {AppConstants.MaxChecklistItems} items", $"Um checklist pode ter no máximo {AppConstants.MaxChecklistItems} itens"),
         (ValidationErrorCodes.WeekStartOnboarding, "Week start day must be 0 (Sunday) or 1 (Monday).", "O início da semana deve ser 0 (domingo) ou 1 (segunda-feira)."),
         (ValidationErrorCodes.HandleFormat, "Handle must be 3-20 characters using only letters, numbers, or underscores.", "O nome de usuário deve ter de 3 a 20 caracteres, usando apenas letras, números ou sublinhados."),
-        (ValidationErrorCodes.ProfileNameLength, $"Keep it under {AppConstants.MaxUserNameLength} characters.", $"Use no máximo {AppConstants.MaxUserNameLength} caracteres."),
+        (ValidationErrorCodes.ProfileNameLength, $"Use {AppConstants.MaxUserNameLength} characters or fewer.", $"Use no máximo {AppConstants.MaxUserNameLength} caracteres."),
         (ValidationErrorCodes.WeekStartDay, "WeekStartDay must be 0 (Sunday) or 1 (Monday).", "WeekStartDay deve ser 0 (domingo) ou 1 (segunda-feira)."),
         (ValidationErrorCodes.CheersDirection, "Direction must be 'received' or 'sent'.", "A direção deve ser 'received' ou 'sent'."),
         (ValidationErrorCodes.FeedCursorFormat, "Cursor is malformed.", "O cursor está malformado."),

@@ -119,7 +119,7 @@ public partial class ValidationLocalizationTests
             ["Referral", "ReferralCode", "NotEmptyValidator", "", "ABC123", "Enter the referral code", "Digite o código de indicação"],
             ["Referral", "ReferralCode", "MaximumLengthValidator", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "Shorten the referral code to 50 characters or fewer. You entered 51.", "Encurte o código de indicação para até 50 caracteres. Você digitou 51."],
             ["ProfileName", "Name", "NotEmptyValidator", "", "Reader", "Enter a name.", "Digite um nome."],
-            ["ProfileName", "Name", "VALIDATION_PROFILE_NAME_LENGTH", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "Keep it under 50 characters.", "Use no máximo 50 caracteres."],
+            ["ProfileName", "Name", "VALIDATION_PROFILE_NAME_LENGTH", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "Use 50 characters or fewer.", "Use no máximo 50 caracteres."],
             ["ApiKey", "Name", "VALIDATION_API_KEY_NAME_REQUIRED", "", "Key", "Give the API key a name", "Dê um nome à chave de API"],
             ["ApiKey", "Name", "VALIDATION_API_KEY_NAME_LENGTH", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "Shorten the API key name to 50 characters or fewer", "Encurte o nome da chave de API para até 50 caracteres"],
             ["Template", "Name", "NotEmptyValidator", "", "List", "Give the checklist template a name", "Dê um nome ao modelo de checklist"],
