@@ -13,7 +13,9 @@ public sealed class ConfirmApiKeyCreationChallengeCommandValidator : AbstractVal
 
         RuleFor(command => command.Code)
             .NotEmpty()
+            .WithFieldCopy(ValidationErrorCodes.VerificationCodeFormat)
             .Length(6)
+            .WithFieldCopy(ValidationErrorCodes.VerificationCodeFormat)
             .Matches(@"^\d{6}$")
             .WithCopy(ValidationErrorCodes.VerificationCodeFormat);
     }

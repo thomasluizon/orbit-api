@@ -19,14 +19,15 @@ public class CreateSubHabitCommandValidator : AbstractValidator<CreateSubHabitCo
             requiredCode: ValidationErrorCodes.SubHabitTitleRequired,
             maximumLengthCode: ValidationErrorCodes.SubHabitTitleLength);
 
-        SharedHabitRules.AddDescriptionRules(RuleFor(x => x.Description));
+        SharedHabitRules.AddDescriptionRules(RuleFor(x => x.Description), isChild: true);
 
-        SharedHabitRules.AddEmojiRules(RuleFor(x => x.Emoji));
+        SharedHabitRules.AddEmojiRules(RuleFor(x => x.Emoji), isChild: true);
 
         SharedHabitRules.AddChecklistItemRules(RuleFor(x => x.Options != null ? x.Options.ChecklistItems : null));
 
         RuleFor(x => x.FrequencyQuantity)
             .GreaterThan(0)
+            .WithFieldCopy(ValidationCopyKeys.FrequencyPositive)
             .When(x => x.FrequencyQuantity is not null);
 
         SharedHabitRules.AddIntervalWeeksRules(RuleFor(x => x.IntervalWeeks));

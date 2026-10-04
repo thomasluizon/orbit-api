@@ -13,6 +13,7 @@ public class SetNameCommandValidator : AbstractValidator<SetNameCommand>
 
         RuleFor(x => x.Name)
             .NotEmpty()
+            .WithFieldCopy(ValidationCopyKeys.NameRequired)
             .Must(name => name is null || name.Trim().Length <= AppConstants.MaxUserNameLength)
             .WithCopy(ValidationErrorCodes.ProfileNameLength);
     }

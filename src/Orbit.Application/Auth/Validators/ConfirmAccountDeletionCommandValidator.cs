@@ -13,7 +13,9 @@ public class ConfirmAccountDeletionCommandValidator : AbstractValidator<ConfirmA
 
         RuleFor(x => x.Code)
             .NotEmpty()
+            .WithFieldCopy(ValidationErrorCodes.VerificationCodeFormat)
             .Length(6)
+            .WithFieldCopy(ValidationErrorCodes.VerificationCodeFormat)
             .Matches(@"^\d{6}$")
             .WithCopy(ValidationErrorCodes.VerificationCodeFormat);
     }

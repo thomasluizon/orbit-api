@@ -16,10 +16,16 @@ public static class ValidationCopyExtensions
             .WithMessage(instance => Resolve(code, false, args(instance)))
             .WithState(instance => new ValidationCopyArguments(args(instance)));
 
+    public static IRuleBuilderOptions<T, TProperty> WithFieldCopy<T, TProperty>(
+        this IRuleBuilderOptions<T, TProperty> rule, string copyKey) =>
+        rule.WithMessage(_ => ErrorCopy.English(copyKey))
+            .WithState(_ => new ValidationCopyArguments([], copyKey));
+
     public static string LocalizedMessage(this ValidationFailure failure, bool isPtBr)
     {
         var args = failure.CustomState is ValidationCopyArguments copyArgs ? copyArgs.Values : [];
-        if (!ErrorCopy.TryResolve(failure.ErrorCode, isPtBr, args, out var template))
+        var copyKey = (failure.CustomState as ValidationCopyArguments)?.CopyKey ?? failure.ErrorCode;
+        if (!ErrorCopy.TryResolve(copyKey, isPtBr, args, out var template))
             return failure.ErrorMessage;
 
         var formatter = new MessageFormatter();
@@ -37,5 +43,5 @@ public static class ValidationCopyExtensions
             ? message
             : throw new InvalidOperationException($"Validation code has no user-facing copy: {code}");
 
-    private sealed record ValidationCopyArguments(IReadOnlyList<object?> Values);
+    private sealed record ValidationCopyArguments(IReadOnlyList<object?> Values, string? CopyKey = null);
 }

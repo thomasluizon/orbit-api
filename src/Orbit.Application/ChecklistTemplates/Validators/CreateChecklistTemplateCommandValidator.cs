@@ -9,7 +9,8 @@ public class CreateChecklistTemplateCommandValidator : AbstractValidator<CreateC
     public CreateChecklistTemplateCommandValidator()
     {
         RuleFor(x => x.UserId).NotEmpty();
-        RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
+        RuleFor(x => x.Name).NotEmpty().WithFieldCopy(ValidationCopyKeys.TemplateNameRequired)
+            .MaximumLength(100).WithFieldCopy(ValidationCopyKeys.TemplateNameLength);
         RuleFor(x => x.Items)
             .Must(items => items.Count <= AppConstants.MaxChecklistItems)
             .When(x => x.Items is not null)

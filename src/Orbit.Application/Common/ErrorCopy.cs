@@ -320,7 +320,7 @@ public static partial class ErrorCopy
 
     private static readonly Dictionary<string, (string En, string PtBr)> Catalog = BuildCatalog();
 
-    /// <summary>Every error code this API can return, paired with its copy in both languages.</summary>
+    /// <summary>Every error code and validation copy key, paired with its copy in both languages.</summary>
     public static IReadOnlyDictionary<string, (string En, string PtBr)> All => Catalog;
 
     public static string Resolve(string code, bool isPtBr)
@@ -393,7 +393,7 @@ public static partial class ErrorCopy
                  {
                      AccountAndAccess, StepUpAndApiKeys, Habits, Goals, TagsFactsAndTemplates,
                      Astra, Billing, Streaks, Social, Calendar, Notifications, Media,
-                     SyncAndSupport, Profile, Validation,
+                     SyncAndSupport, Profile, Validation, ValidationFields,
                  })
         {
             foreach (var (code, en, ptBr) in group)

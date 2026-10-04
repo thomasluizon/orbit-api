@@ -114,8 +114,8 @@ public class UpdateHabitCommandValidatorTests
     }
 
     [Theory]
-    [InlineData(false, "'Title' must not be empty.")]
-    [InlineData(true, "The length of 'Title' must be 200 characters or fewer. You entered 201 characters.")]
+    [InlineData(false, "Give the habit a title")]
+    [InlineData(true, "Shorten the habit title to 200 characters or fewer. You entered 201.")]
     public async Task Validate_TopLevelTitle_UsesHabitMessage(bool tooLong, string expectedMessage)
     {
         var previousCulture = CultureInfo.CurrentUICulture;

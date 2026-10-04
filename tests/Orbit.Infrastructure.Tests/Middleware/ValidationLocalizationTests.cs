@@ -61,7 +61,7 @@ using Orbit.Application.Waitlist.Validators;
 
 namespace Orbit.Infrastructure.Tests.Middleware;
 
-public class ValidationLocalizationTests(ITestOutputHelper output)
+public partial class ValidationLocalizationTests(ITestOutputHelper output)
 {
     [Theory]
     [InlineData("Accountability")]
@@ -147,7 +147,7 @@ public class ValidationLocalizationTests(ITestOutputHelper output)
         var code = new VerifyCodeCommandValidator().Validate(new VerifyCodeCommand("reader@example.com", "12345"));
         var codeBody = await HandleAsync(code, "pt-BR");
         codeBody.GetProperty("errors").GetProperty("Code")[0].GetString()
-            .Should().Be("Digite 6 caracteres em 'Code'. Você digitou 5 caracteres.");
+            .Should().Be("Digite os 6 dígitos");
     }
 
     [Fact]
@@ -204,24 +204,24 @@ public class ValidationLocalizationTests(ITestOutputHelper output)
         return family switch
         {
             "Accountability" => Case(new SetAccountabilityHabitsCommandValidator(), new SetAccountabilityHabitsCommand(id, id, [Guid.Empty]), "HabitIds", ValidationErrorCodes.HabitIdsRequired, "Os IDs dos hábitos não podem estar vazios."),
-            "ApiKeys" => Case(new CreateApiKeyValidator(), new CreateApiKeyCommand(id, ""), "Name", ValidationErrorCodes.ApiKeyNameRequired, "O nome da chave de API é obrigatório."),
+            "ApiKeys" => Case(new CreateApiKeyValidator(), new CreateApiKeyCommand(id, ""), "Name", ValidationErrorCodes.ApiKeyNameRequired, "Dê um nome à chave de API"),
             "Auth" => Case(new VerifyCodeCommandValidator(), new VerifyCodeCommand("reader@example.com", "12345"), "Code", ValidationErrorCodes.VerificationCodeFormat, "Digite os 6 dígitos"),
             "Calendar" => Case(new SetSelectedCalendarsCommandValidator(), new SetSelectedCalendarsCommand(id, [""]), "CalendarIds[0]", ValidationErrorCodes.CalendarIdsRequired, "Os IDs das agendas não podem estar vazios."),
             "Challenges" => Case(new SetChallengeHabitsCommandValidator(), new SetChallengeHabitsCommand(id, id, []), "HabitIds", ValidationErrorCodes.ChallengeHabitsRequired, "Vincule pelo menos um dos seus hábitos ao desafio."),
             "Chat" => Case(new TranscribeAudioCommandValidator(), new TranscribeAudioCommand(id, [1], "voice.xyz"), "FileName", ValidationErrorCodes.AudioFormat, "O formato de áudio '.xyz' não é suportado."),
-            "ChecklistTemplates" => Case(new CreateChecklistTemplateCommandValidator(), new CreateChecklistTemplateCommand(id, "List", [""]), "Items[0]", ValidationErrorCodes.TemplateItemRequired, "Os itens do modelo de checklist não podem estar vazios."),
-            "Email" => Case(new ProcessSesEventCommandValidator(), new ProcessSesEventCommand(""), "Payload", "NotEmptyValidator", "Preencha 'Payload'."),
+            "ChecklistTemplates" => Case(new CreateChecklistTemplateCommandValidator(), new CreateChecklistTemplateCommand(id, "List", [""]), "Items[0]", ValidationErrorCodes.TemplateItemRequired, "Escreva o item do checklist"),
+            "Email" => Case(new ProcessSesEventCommandValidator(), new ProcessSesEventCommand(""), "Payload", "NotEmptyValidator", "Preencha Payload."),
             "Gamification" => Case(new ReportEventCommandValidator(), new ReportEventCommand(id, "unknown"), "EventKey", ValidationErrorCodes.EventKeyKnown, "A chave do evento é desconhecida."),
             "Goals" => Case(new LinkHabitsToGoalCommandValidator(), new LinkHabitsToGoalCommand(id, id, Enumerable.Repeat(id, AppConstants.MaxHabitsPerGoal + 1).ToArray()), "HabitIds", ValidationErrorCodes.GoalHabitLimit, $"Vincule até {AppConstants.MaxHabitsPerGoal} hábitos a esta meta."),
             "Habits" => Case(new CreateHabitCommandValidator(), new CreateHabitCommand(id, "Read", null, null, null, IsBadHabit: true, IsGeneral: true), "IsBadHabit", ValidationErrorCodes.GeneralHabitNotBad, "Hábitos gerais não podem ser hábitos ruins"),
-            "Marketing" => Case(new SendMarketingBroadcastCommandValidator(), new SendMarketingBroadcastCommand("", "Subject", "Body", "Body", null), "SubjectEn", "NotEmptyValidator", "Preencha 'Subject En'."),
-            "Notifications" => Case(new UnsubscribePushCommandValidator(), new UnsubscribePushCommand(id, ""), "Endpoint", "NotEmptyValidator", "Preencha 'Endpoint'."),
+            "Marketing" => Case(new SendMarketingBroadcastCommandValidator(), new SendMarketingBroadcastCommand("", "Subject", "Body", "Body", null), "SubjectEn", "NotEmptyValidator", "Preencha Subject En."),
+            "Notifications" => Case(new UnsubscribePushCommandValidator(), new UnsubscribePushCommand(id, ""), "Endpoint", "NotEmptyValidator", "Preencha Endpoint."),
             "Profile" => Case(new SetLanguageCommandValidator(), new SetLanguageCommand(id, "fr"), "Language", ValidationErrorCodes.LanguageSupported, "O idioma deve ser um destes: en, pt-BR"),
-            "Referrals" => Case(new ProcessReferralCodeCommandValidator(), new ProcessReferralCodeCommand(id, ""), "ReferralCode", "NotEmptyValidator", "Preencha 'Referral Code'."),
+            "Referrals" => Case(new ProcessReferralCodeCommandValidator(), new ProcessReferralCodeCommand(id, ""), "ReferralCode", "NotEmptyValidator", "Digite o código de indicação"),
             "Social" => Case(new GetCheersQueryValidator(), new GetCheersQuery(id, "unknown"), "Direction", ValidationErrorCodes.CheersDirection, "A direção deve ser 'received' ou 'sent'."),
             "Subscriptions" => Case(new CreateCheckoutCommandValidator(), new CreateCheckoutCommand(id, "weekly", null, null), "Interval", ValidationErrorCodes.BillingIntervalSupported, "O intervalo de cobrança deve ser 'monthly' ou 'yearly'."),
-            "Support" => Case(new SendSupportCommandValidator(), new SendSupportCommand(id, "Reader", "reader@example.com", "", "Help"), "Subject", "NotEmptyValidator", "Preencha 'Subject'."),
-            "Tags" => Case(new CreateTagCommandValidator(), new CreateTagCommand(id, "Read", "invalid"), "Color", ValidationErrorCodes.TagColorFormat, "Escolha uma cor de tag válida"),
+            "Support" => Case(new SendSupportCommandValidator(), new SendSupportCommand(id, "Reader", "reader@example.com", "", "Help"), "Subject", "NotEmptyValidator", "Escolha um assunto para a gente encaminhar certo."),
+            "Tags" => Case(new CreateTagCommandValidator(), new CreateTagCommand(id, "Read", "invalid"), "Color", ValidationErrorCodes.TagColorFormat, "Escolha uma cor da paleta"),
             "Uploads" => Case(new SignUploadValidator(), new SignUploadCommand(id, "invalid", 1), "ContentType", ValidationErrorCodes.UploadContentTypeSupported, $"O tipo de conteúdo deve ser um destes: {string.Join(", ", UploadContentTypes.Allowed)}."),
             "UserFacts" => Case(new BulkDeleteUserFactsCommandValidator(), new BulkDeleteUserFactsCommand(id, []), "FactIds", ValidationErrorCodes.FactIdsRequired, "A lista de IDs dos fatos não pode estar vazia"),
             "Waitlist" => Case(new JoinWaitlistCommandValidator(), new JoinWaitlistCommand("reader@example.com", "fr"), "Language", ValidationErrorCodes.WaitlistLanguageSupported, "O idioma deve ser um destes: en, pt-BR."),
