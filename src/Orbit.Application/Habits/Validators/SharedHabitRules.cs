@@ -14,20 +14,26 @@ public static class SharedHabitRules
         var requiredRule = rule.NotEmpty();
         if (requiredCode is not null)
             requiredRule.WithCopy(requiredCode);
+        else
+            requiredRule.WithFieldCopy(ValidationCopyKeys.HabitTitleRequired);
 
         var lengthRule = requiredRule.MaximumLength(AppConstants.MaxHabitTitleLength);
         if (maximumLengthCode is not null)
             lengthRule.WithCopy(maximumLengthCode);
+        else
+            lengthRule.WithFieldCopy(ValidationCopyKeys.HabitTitleLength);
     }
 
-    public static void AddDescriptionRules<T>(IRuleBuilder<T, string?> rule)
+    public static void AddDescriptionRules<T>(IRuleBuilder<T, string?> rule, bool isChild = false)
     {
-        rule.MaximumLength(AppConstants.MaxHabitDescriptionLength);
+        rule.MaximumLength(AppConstants.MaxHabitDescriptionLength)
+            .WithFieldCopy(isChild ? ValidationCopyKeys.SubHabitDescriptionLength : ValidationCopyKeys.HabitDescriptionLength);
     }
 
-    public static void AddEmojiRules<T>(IRuleBuilder<T, string?> rule)
+    public static void AddEmojiRules<T>(IRuleBuilder<T, string?> rule, bool isChild = false)
     {
-        rule.MaximumLength(AppConstants.MaxHabitEmojiLength);
+        rule.MaximumLength(AppConstants.MaxHabitEmojiLength)
+            .WithFieldCopy(isChild ? ValidationCopyKeys.SubHabitEmojiLength : ValidationCopyKeys.HabitEmojiLength);
     }
 
     public static void AddChecklistItemRules<T>(IRuleBuilder<T, IReadOnlyList<ChecklistItem>?> rule)
@@ -38,7 +44,7 @@ public static class SharedHabitRules
 
     public static void AddFrequencyQuantityRules<T>(IRuleBuilderOptions<T, int?> rule)
     {
-        rule.GreaterThan(0);
+        rule.GreaterThan(0).WithFieldCopy(ValidationCopyKeys.FrequencyPositive);
     }
 
     public static void AddIntervalWeeksRules<T>(IRuleBuilder<T, int?> rule)

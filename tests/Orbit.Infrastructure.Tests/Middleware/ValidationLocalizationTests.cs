@@ -61,7 +61,7 @@ using Orbit.Application.Waitlist.Validators;
 
 namespace Orbit.Infrastructure.Tests.Middleware;
 
-public class ValidationLocalizationTests(ITestOutputHelper output)
+public partial class ValidationLocalizationTests(ITestOutputHelper output)
 {
     [Theory]
     [InlineData("Accountability")]
@@ -104,7 +104,7 @@ public class ValidationLocalizationTests(ITestOutputHelper output)
             var localized = portugueseBody.GetProperty("errors").GetProperty(group.Key);
             var details = portugueseBody.GetProperty("errorDetails").GetProperty(group.Key);
             var englishDetails = englishBody.GetProperty("errorDetails").GetProperty(group.Key);
-            english.EnumerateArray().Select(e => e.GetString()).Should().Equal(group.Select(f => f.ErrorMessage));
+            english.EnumerateArray().Select(e => e.GetString()).Should().Equal(group.Select(f => f.LocalizedMessage(false)));
             localized.GetArrayLength().Should().Be(group.Count());
             details.EnumerateArray().Select(e => e.GetProperty("code").GetString())
                 .Should().Equal(group.Select(f => f.ErrorCode));
@@ -121,11 +121,11 @@ public class ValidationLocalizationTests(ITestOutputHelper output)
     }
 
     [Theory]
-    [InlineData(null, "pt-BR", "O código deve ter 6 dígitos")]
-    [InlineData("en", "pt-BR", "O código deve ter 6 dígitos")]
-    [InlineData("pt-BR", "en", "Code must be a 6-digit number")]
-    [InlineData("pt-BR", null, "O código deve ter 6 dígitos")]
-    [InlineData(null, null, "Code must be a 6-digit number")]
+    [InlineData(null, "pt-BR", "Digite os 6 dígitos")]
+    [InlineData("en", "pt-BR", "Digite os 6 dígitos")]
+    [InlineData("pt-BR", "en", "Enter all 6 digits")]
+    [InlineData("pt-BR", null, "Digite os 6 dígitos")]
+    [InlineData(null, null, "Enter all 6 digits")]
     public async Task StoredLanguageAndHeader_UseTheDomainResolverPrecedence(
         string? header, string? storedLanguage, string expected)
     {
@@ -147,7 +147,7 @@ public class ValidationLocalizationTests(ITestOutputHelper output)
         var code = new VerifyCodeCommandValidator().Validate(new VerifyCodeCommand("reader@example.com", "12345"));
         var codeBody = await HandleAsync(code, "pt-BR");
         codeBody.GetProperty("errors").GetProperty("Code")[0].GetString()
-            .Should().Be("'Code' deve ter exatamente 6 caracteres. Você digitou 5 caracteres.");
+            .Should().Be("Digite os 6 dígitos");
     }
 
     [Fact]
@@ -164,6 +164,36 @@ public class ValidationLocalizationTests(ITestOutputHelper output)
             .Should().Be(ErrorMessages.ClarificationValueTooLong.Code);
     }
 
+    [Theory]
+    [InlineData("Login", "en", "Enter all 6 digits")]
+    [InlineData("Login", "pt-BR", "Digite os 6 dígitos")]
+    [InlineData("ApiKey", "en", "Enter all 6 digits")]
+    [InlineData("ApiKey", "pt-BR", "Digite os 6 dígitos")]
+    [InlineData("Deletion", "en", "Enter all 6 digits")]
+    [InlineData("Deletion", "pt-BR", "Digite os 6 dígitos")]
+    public async Task FiveDigitCode_ReturnsTheInstructionInEveryPersonFacingFlow(
+        string flow, string language, string expected)
+    {
+        var id = Guid.NewGuid();
+        ValidationResult Validate(string code) => flow switch
+        {
+            "Login" => new VerifyCodeCommandValidator().Validate(new VerifyCodeCommand("reader@example.com", code)),
+            "ApiKey" => new ConfirmApiKeyCreationChallengeCommandValidator().Validate(new ConfirmApiKeyCreationChallengeCommand(id, code)),
+            "Deletion" => new ConfirmAccountDeletionCommandValidator().Validate(new ConfirmAccountDeletionCommand(id, code)),
+            _ => throw new ArgumentOutOfRangeException(nameof(flow))
+        };
+
+        Validate("123456").IsValid.Should().BeTrue();
+        var result = Validate("12345");
+        var body = await HandleAsync(result, language);
+        var failure = body.GetProperty("errorDetails").GetProperty("Code").EnumerateArray()
+            .Single(detail => detail.GetProperty("code").GetString() == ValidationErrorCodes.VerificationCodeFormat);
+
+        failure.GetProperty("message").GetString().Should().Be(expected);
+        body.GetProperty("errors").GetProperty("Code").EnumerateArray()
+            .Select(message => message.GetString()).Should().Contain(expected);
+    }
+
     private static (ValidationResult Result, string Property, string Code, string Portuguese) Case<T>(
         IValidator<T> validator, T request, string property, string code, string portuguese) =>
         (validator.Validate(request), property, code, portuguese);
@@ -174,24 +204,24 @@ public class ValidationLocalizationTests(ITestOutputHelper output)
         return family switch
         {
             "Accountability" => Case(new SetAccountabilityHabitsCommandValidator(), new SetAccountabilityHabitsCommand(id, id, [Guid.Empty]), "HabitIds", ValidationErrorCodes.HabitIdsRequired, "Os IDs dos hábitos não podem estar vazios."),
-            "ApiKeys" => Case(new CreateApiKeyValidator(), new CreateApiKeyCommand(id, ""), "Name", ValidationErrorCodes.ApiKeyNameRequired, "O nome da chave de API é obrigatório."),
-            "Auth" => Case(new VerifyCodeCommandValidator(), new VerifyCodeCommand("reader@example.com", "12345"), "Code", ValidationErrorCodes.VerificationCodeFormat, "O código deve ter 6 dígitos"),
+            "ApiKeys" => Case(new CreateApiKeyValidator(), new CreateApiKeyCommand(id, ""), "Name", ValidationErrorCodes.ApiKeyNameRequired, "Dê um nome à chave de API"),
+            "Auth" => Case(new VerifyCodeCommandValidator(), new VerifyCodeCommand("reader@example.com", "12345"), "Code", ValidationErrorCodes.VerificationCodeFormat, "Digite os 6 dígitos"),
             "Calendar" => Case(new SetSelectedCalendarsCommandValidator(), new SetSelectedCalendarsCommand(id, [""]), "CalendarIds[0]", ValidationErrorCodes.CalendarIdsRequired, "Os IDs das agendas não podem estar vazios."),
             "Challenges" => Case(new SetChallengeHabitsCommandValidator(), new SetChallengeHabitsCommand(id, id, []), "HabitIds", ValidationErrorCodes.ChallengeHabitsRequired, "Vincule pelo menos um dos seus hábitos ao desafio."),
             "Chat" => Case(new TranscribeAudioCommandValidator(), new TranscribeAudioCommand(id, [1], "voice.xyz"), "FileName", ValidationErrorCodes.AudioFormat, "O formato de áudio '.xyz' não é suportado."),
-            "ChecklistTemplates" => Case(new CreateChecklistTemplateCommandValidator(), new CreateChecklistTemplateCommand(id, "List", [""]), "Items[0]", ValidationErrorCodes.TemplateItemRequired, "Os itens do modelo de checklist não podem estar vazios."),
-            "Email" => Case(new ProcessSesEventCommandValidator(), new ProcessSesEventCommand(""), "Payload", "NotEmptyValidator", "'Payload' deve ser informado."),
+            "ChecklistTemplates" => Case(new CreateChecklistTemplateCommandValidator(), new CreateChecklistTemplateCommand(id, "List", [""]), "Items[0]", ValidationErrorCodes.TemplateItemRequired, "Escreva o item do checklist"),
+            "Email" => Case(new ProcessSesEventCommandValidator(), new ProcessSesEventCommand(""), "Payload", "NotEmptyValidator", "Preencha Payload."),
             "Gamification" => Case(new ReportEventCommandValidator(), new ReportEventCommand(id, "unknown"), "EventKey", ValidationErrorCodes.EventKeyKnown, "A chave do evento é desconhecida."),
-            "Goals" => Case(new LinkHabitsToGoalCommandValidator(), new LinkHabitsToGoalCommand(id, id, Enumerable.Repeat(id, AppConstants.MaxHabitsPerGoal + 1).ToArray()), "HabitIds", ValidationErrorCodes.GoalHabitLimit, $"Uma meta pode ter no máximo {AppConstants.MaxHabitsPerGoal} hábitos vinculados."),
+            "Goals" => Case(new LinkHabitsToGoalCommandValidator(), new LinkHabitsToGoalCommand(id, id, Enumerable.Repeat(id, AppConstants.MaxHabitsPerGoal + 1).ToArray()), "HabitIds", ValidationErrorCodes.GoalHabitLimit, $"Vincule até {AppConstants.MaxHabitsPerGoal} hábitos a esta meta."),
             "Habits" => Case(new CreateHabitCommandValidator(), new CreateHabitCommand(id, "Read", null, null, null, IsBadHabit: true, IsGeneral: true), "IsBadHabit", ValidationErrorCodes.GeneralHabitNotBad, "Hábitos gerais não podem ser hábitos ruins"),
-            "Marketing" => Case(new SendMarketingBroadcastCommandValidator(), new SendMarketingBroadcastCommand("", "Subject", "Body", "Body", null), "SubjectEn", "NotEmptyValidator", "'Subject En' deve ser informado."),
-            "Notifications" => Case(new UnsubscribePushCommandValidator(), new UnsubscribePushCommand(id, ""), "Endpoint", "NotEmptyValidator", "'Endpoint' deve ser informado."),
+            "Marketing" => Case(new SendMarketingBroadcastCommandValidator(), new SendMarketingBroadcastCommand("", "Subject", "Body", "Body", null), "SubjectEn", "NotEmptyValidator", "Preencha Subject En."),
+            "Notifications" => Case(new UnsubscribePushCommandValidator(), new UnsubscribePushCommand(id, ""), "Endpoint", "NotEmptyValidator", "Preencha Endpoint."),
             "Profile" => Case(new SetLanguageCommandValidator(), new SetLanguageCommand(id, "fr"), "Language", ValidationErrorCodes.LanguageSupported, "O idioma deve ser um destes: en, pt-BR"),
-            "Referrals" => Case(new ProcessReferralCodeCommandValidator(), new ProcessReferralCodeCommand(id, ""), "ReferralCode", "NotEmptyValidator", "'Referral Code' deve ser informado."),
+            "Referrals" => Case(new ProcessReferralCodeCommandValidator(), new ProcessReferralCodeCommand(id, ""), "ReferralCode", "NotEmptyValidator", "Digite o código de indicação"),
             "Social" => Case(new GetCheersQueryValidator(), new GetCheersQuery(id, "unknown"), "Direction", ValidationErrorCodes.CheersDirection, "A direção deve ser 'received' ou 'sent'."),
             "Subscriptions" => Case(new CreateCheckoutCommandValidator(), new CreateCheckoutCommand(id, "weekly", null, null), "Interval", ValidationErrorCodes.BillingIntervalSupported, "O intervalo de cobrança deve ser 'monthly' ou 'yearly'."),
-            "Support" => Case(new SendSupportCommandValidator(), new SendSupportCommand(id, "Reader", "reader@example.com", "", "Help"), "Subject", "NotEmptyValidator", "'Subject' deve ser informado."),
-            "Tags" => Case(new CreateTagCommandValidator(), new CreateTagCommand(id, "Read", "invalid"), "Color", ValidationErrorCodes.TagColorFormat, "A cor deve ser um código hexadecimal válido (por exemplo, #FF5733)"),
+            "Support" => Case(new SendSupportCommandValidator(), new SendSupportCommand(id, "Reader", "reader@example.com", "", "Help"), "Subject", "NotEmptyValidator", "Escolha um assunto para a gente encaminhar certo."),
+            "Tags" => Case(new CreateTagCommandValidator(), new CreateTagCommand(id, "Read", "invalid"), "Color", ValidationErrorCodes.TagColorFormat, "Escolha uma cor da paleta"),
             "Uploads" => Case(new SignUploadValidator(), new SignUploadCommand(id, "invalid", 1), "ContentType", ValidationErrorCodes.UploadContentTypeSupported, $"O tipo de conteúdo deve ser um destes: {string.Join(", ", UploadContentTypes.Allowed)}."),
             "UserFacts" => Case(new BulkDeleteUserFactsCommandValidator(), new BulkDeleteUserFactsCommand(id, []), "FactIds", ValidationErrorCodes.FactIdsRequired, "A lista de IDs dos fatos não pode estar vazia"),
             "Waitlist" => Case(new JoinWaitlistCommandValidator(), new JoinWaitlistCommand("reader@example.com", "fr"), "Language", ValidationErrorCodes.WaitlistLanguageSupported, "O idioma deve ser um destes: en, pt-BR."),

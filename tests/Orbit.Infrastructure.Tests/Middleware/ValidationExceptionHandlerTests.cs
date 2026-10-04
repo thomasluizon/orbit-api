@@ -80,7 +80,7 @@ public class ValidationExceptionHandlerTests
 
         var root = await ReadJsonAsync(context);
         root.GetProperty("errors").GetProperty("Code")[1].GetString()
-            .Should().Be("O código deve ter 6 dígitos");
+            .Should().Be("Digite os 6 dígitos");
     }
 
     [Fact]

@@ -21,6 +21,7 @@ public class CreateHabitCommandValidator : AbstractValidator<CreateHabitCommand>
 
         RuleFor(x => x.FrequencyQuantity)
             .GreaterThan(0)
+            .WithFieldCopy(ValidationCopyKeys.FrequencyPositive)
             .When(x => x.FrequencyQuantity is not null);
 
         RuleFor(x => x.FrequencyQuantity)

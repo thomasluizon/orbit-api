@@ -233,6 +233,17 @@ public class ErrorCopyTests
         message.Should().BeEmpty();
     }
 
+    [Theory]
+    [InlineData(false, "Enter all 6 digits")]
+    [InlineData(true, "Digite os 6 dígitos")]
+    public void VerificationCodeFormatMatchesTheClientInstruction(bool isPtBr, string expected)
+    {
+        ErrorCopy.TryResolve(ValidationErrorCodes.VerificationCodeFormat, isPtBr, [], out var message)
+            .Should().BeTrue();
+
+        message.Should().Be(expected);
+    }
+
     [Fact]
     public void AFormattedErrorCarriesItsArgumentsOntoTheResult()
     {

@@ -1,5 +1,6 @@
 using FluentValidation;
 using Orbit.Application.Common;
+using Orbit.Application.Habits.Validators;
 using Orbit.Application.Tags.Queries;
 
 namespace Orbit.Application.Tags.Validators;
@@ -11,12 +12,9 @@ public class SuggestTagsQueryValidator : AbstractValidator<SuggestTagsQuery>
         RuleFor(x => x.UserId)
             .NotEmpty();
 
-        RuleFor(x => x.Title)
-            .NotEmpty()
-            .MaximumLength(AppConstants.MaxHabitTitleLength);
+        SharedHabitRules.AddTitleRules(RuleFor(x => x.Title));
 
-        RuleFor(x => x.Description)
-            .MaximumLength(AppConstants.MaxHabitDescriptionLength);
+        SharedHabitRules.AddDescriptionRules(RuleFor(x => x.Description));
 
         RuleFor(x => x.Language)
             .NotEmpty()

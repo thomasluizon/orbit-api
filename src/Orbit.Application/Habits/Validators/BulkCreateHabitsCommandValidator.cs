@@ -25,6 +25,7 @@ public class BulkCreateHabitsCommandValidator : AbstractValidator<BulkCreateHabi
 
             habit.RuleFor(h => h.FrequencyQuantity)
                 .GreaterThan(0)
+                .WithFieldCopy(ValidationCopyKeys.FrequencyPositive)
                 .When(h => h.FrequencyQuantity is not null);
 
             habit.RuleFor(h => h.FrequencyQuantity)
@@ -42,6 +43,7 @@ public class BulkCreateHabitsCommandValidator : AbstractValidator<BulkCreateHabi
 
             habit.RuleForEach(h => h.Tags)
                 .MaximumLength(50)
+                .WithFieldCopy(ValidationCopyKeys.TagNameLength)
                 .When(h => h.Tags is not null);
         });
     }
