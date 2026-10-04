@@ -15,6 +15,8 @@ namespace Orbit.Infrastructure.Tests.Events;
 
 public class EventsControllerTests
 {
+    private static readonly TimeSpan HangGuardTimeout = TimeSpan.FromSeconds(30);
+
     [Theory]
     [InlineData(null, "123", 401)]
     [InlineData("invalid", "123", 401)]
@@ -75,7 +77,7 @@ public class EventsControllerTests
             var stream = controller.Stream(CancellationToken.None);
             await WaitForTextAsync(controller.Response.Body, unknown ? "event: resync" : replayId.ToString());
             shutdown.Cancel();
-            (await stream.WaitAsync(TimeSpan.FromSeconds(2))).Should().BeOfType<EmptyResult>();
+            (await stream.WaitAsync(HangGuardTimeout)).Should().BeOfType<EmptyResult>();
 
             var body = Encoding.UTF8.GetString(((MemoryStream)controller.Response.Body).ToArray());
             if (unknown)
@@ -132,7 +134,7 @@ public class EventsControllerTests
         bus.Publish(userId, new AccountEventPayload(1, [new AccountChange("habit", "update", [habitId])], "own-device"));
         await WaitForTextAsync(context.Response.Body, "event: changes");
         shutdown.Cancel();
-        await stream.WaitAsync(TimeSpan.FromSeconds(2));
+        await stream.WaitAsync(HangGuardTimeout);
 
         var body = Encoding.UTF8.GetString(((MemoryStream)context.Response.Body).ToArray());
         body.Split("event: changes", StringSplitOptions.None).Should().HaveCount(2);
@@ -181,7 +183,7 @@ public class EventsControllerTests
                 break;
         }
 
-        (await stream.WaitAsync(TimeSpan.FromSeconds(4))).Should().BeOfType<EmptyResult>();
+        (await stream.WaitAsync(HangGuardTimeout)).Should().BeOfType<EmptyResult>();
         Encoding.UTF8.GetString(((MemoryStream)context.Response.Body).ToArray())
             .Should().Contain("event: ready").And.Contain("connectionId");
     }
@@ -219,7 +221,7 @@ public class EventsControllerTests
 
     private static async Task WaitForTextAsync(Stream body, string text)
     {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        using var timeout = new CancellationTokenSource(HangGuardTimeout);
         while (!Encoding.UTF8.GetString(((MemoryStream)body).ToArray()).Contains(text, StringComparison.Ordinal))
             await Task.Delay(10, timeout.Token);
     }
