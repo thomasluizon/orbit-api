@@ -7,7 +7,7 @@ public class BulkLogHabitsCommandValidator
     : BulkHabitCommandValidatorBase<BulkLogHabitsCommand, BulkLogItem>
 {
     public BulkLogHabitsCommandValidator()
-        : base($"Bulk log cannot exceed {AppConstants.MaxBulkOperationSize} items")
+        : base(ValidationErrorCodes.BulkLogLimit)
     {
     }
 }

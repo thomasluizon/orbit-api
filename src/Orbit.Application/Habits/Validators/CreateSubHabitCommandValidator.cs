@@ -16,8 +16,8 @@ public class CreateSubHabitCommandValidator : AbstractValidator<CreateSubHabitCo
 
         SharedHabitRules.AddTitleRules(
             RuleFor(x => x.Title),
-            requiredMessage: "Sub-habit title must not be empty",
-            maximumLengthMessage: $"Sub-habit title must not exceed {AppConstants.MaxHabitTitleLength} characters");
+            requiredCode: ValidationErrorCodes.SubHabitTitleRequired,
+            maximumLengthCode: ValidationErrorCodes.SubHabitTitleLength);
 
         SharedHabitRules.AddDescriptionRules(RuleFor(x => x.Description));
 
@@ -44,6 +44,6 @@ public class CreateSubHabitCommandValidator : AbstractValidator<CreateSubHabitCo
 
         RuleFor(x => x.TagIds)
             .Must(tags => tags is null || tags.Count <= AppConstants.MaxTagsPerHabit)
-            .WithMessage($"A habit can have at most {AppConstants.MaxTagsPerHabit} tags");
+            .WithCopy(ValidationErrorCodes.HabitTagLimit);
     }
 }

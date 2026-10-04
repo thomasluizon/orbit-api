@@ -1,3 +1,4 @@
+using Orbit.Application.Common;
 using FluentValidation;
 using Orbit.Application.Auth.Commands;
 
@@ -14,6 +15,6 @@ public class ConfirmAccountDeletionCommandValidator : AbstractValidator<ConfirmA
             .NotEmpty()
             .Length(6)
             .Matches(@"^\d{6}$")
-            .WithMessage("Code must be a 6-digit number");
+            .WithCopy(ValidationErrorCodes.VerificationCodeFormat);
     }
 }

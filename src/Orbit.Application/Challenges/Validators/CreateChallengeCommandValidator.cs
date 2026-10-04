@@ -18,17 +18,17 @@ public class CreateChallengeCommandValidator : AbstractValidator<CreateChallenge
         RuleFor(x => x.TargetCount)
             .NotNull().GreaterThan(0)
             .When(x => x.Type == ChallengeType.CoopGoal)
-            .WithMessage("A goal challenge requires a target count greater than 0.");
+            .WithCopy(ValidationErrorCodes.ChallengeTargetPositive);
 
         RuleFor(x => x.TargetCount)
             .Null()
             .When(x => x.Type == ChallengeType.StreakTogether)
-            .WithMessage("A streak challenge cannot have a target count.");
+            .WithCopy(ValidationErrorCodes.StreakChallengeTargetAbsent);
 
         RuleFor(x => x.PeriodEndUtc)
             .NotNull()
             .When(x => x.Type == ChallengeType.CoopGoal)
-            .WithMessage("A goal challenge requires an end date.");
+            .WithCopy(ValidationErrorCodes.ChallengeEndDateRequired);
 
         RuleFor(x => x.PeriodEndUtc)
             .GreaterThanOrEqualTo(x => x.PeriodStartUtc)
@@ -36,16 +36,16 @@ public class CreateChallengeCommandValidator : AbstractValidator<CreateChallenge
 
         RuleFor(x => x.LinkedHabitIds)
             .NotEmpty()
-            .WithMessage("Link at least one of your habits to the challenge.");
+            .WithCopy(ValidationErrorCodes.ChallengeHabitsRequired);
 
         RuleFor(x => x.LinkedHabitIds)
             .Must(ids => ids.Count <= AppConstants.MaxHabitsPerChallengeParticipant)
-            .WithMessage($"You can link at most {AppConstants.MaxHabitsPerChallengeParticipant} habits.");
+            .WithCopy(ValidationErrorCodes.ChallengeHabitLimit);
 
         RuleForEach(x => x.LinkedHabitIds).NotEmpty();
 
         RuleFor(x => x.InvitedFriendUserIds)
             .Must(ids => ids.Count <= AppConstants.MaxChallengeParticipants - 1)
-            .WithMessage($"You can invite at most {AppConstants.MaxChallengeParticipants - 1} friends.");
+            .WithCopy(ValidationErrorCodes.ChallengeInviteLimit);
     }
 }

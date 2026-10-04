@@ -22,6 +22,6 @@ public class SuggestTagsQueryValidator : AbstractValidator<SuggestTagsQuery>
             .NotEmpty()
             .MaximumLength(AppConstants.MaxLanguageLength)
             .Must(lang => AppConstants.SupportedLanguages.Contains(lang))
-            .WithMessage($"Language must be one of: {string.Join(", ", AppConstants.SupportedLanguages)}");
+            .WithCopy(ValidationErrorCodes.LanguageSupported);
     }
 }

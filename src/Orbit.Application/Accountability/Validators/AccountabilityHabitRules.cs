@@ -10,10 +10,10 @@ public static class AccountabilityHabitRules
         rule
             .NotEmpty()
             .Must(ids => ids is null || ids.Count <= AppConstants.MaxAccountabilityHabitsPerUser)
-            .WithMessage($"You can link at most {AppConstants.MaxAccountabilityHabitsPerUser} habits per pair.")
+            .WithCopy(ValidationErrorCodes.AccountabilityHabitLimit)
             .Must(ids => ids is null || ids.All(id => id != Guid.Empty))
-            .WithMessage("Habit ids must not be empty.")
+            .WithCopy(ValidationErrorCodes.HabitIdsRequired)
             .Must(ids => ids is null || ids.Distinct().Count() == ids.Count)
-            .WithMessage("Habit ids must not contain duplicates.");
+            .WithCopy(ValidationErrorCodes.HabitIdsUnique);
     }
 }

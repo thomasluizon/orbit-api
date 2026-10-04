@@ -16,6 +16,6 @@ public class CreateGoalCommandValidator : AbstractValidator<CreateGoalCommand>
         RuleFor(x => x.Type).IsInEnum();
         RuleFor(x => x.HabitIds)
             .Must(ids => ids is null || ids.Count <= AppConstants.MaxHabitsPerGoal)
-            .WithMessage(ErrorMessages.MaxHabitsPerGoal.Format(AppConstants.MaxHabitsPerGoal).Message);
+            .WithCopy(ErrorMessages.MaxHabitsPerGoal.Code, AppConstants.MaxHabitsPerGoal);
     }
 }

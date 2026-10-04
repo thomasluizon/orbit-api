@@ -10,12 +10,12 @@ public class GoogleAuthCommandValidator : AbstractValidator<GoogleAuthCommand>
     {
         RuleFor(x => x.AccessToken)
             .NotEmpty()
-            .WithMessage("Access token is required.");
+            .WithCopy(ValidationErrorCodes.AccessTokenRequired);
 
         RuleFor(x => x.Language)
             .NotEmpty()
             .MaximumLength(AppConstants.MaxLanguageLength)
             .Must(lang => AppConstants.SupportedLanguages.Contains(lang))
-            .WithMessage($"Language must be one of: {string.Join(", ", AppConstants.SupportedLanguages)}");
+            .WithCopy(ValidationErrorCodes.LanguageSupported);
     }
 }

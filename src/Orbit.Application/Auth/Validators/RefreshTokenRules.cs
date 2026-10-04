@@ -1,3 +1,4 @@
+using Orbit.Application.Common;
 using FluentValidation;
 
 namespace Orbit.Application.Auth.Validators;
@@ -15,6 +16,6 @@ public static class RefreshTokenRules
         rule
             .NotEmpty()
             .Must(token => IsWellFormed(token))
-            .WithMessage("Refresh token format is invalid.");
+            .WithCopy(ValidationErrorCodes.RefreshTokenFormat);
     }
 }

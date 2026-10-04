@@ -1,3 +1,4 @@
+using Orbit.Application.Common;
 using FluentValidation;
 using Orbit.Application.Social.Queries;
 
@@ -12,6 +13,6 @@ public class GetCheersQueryValidator : AbstractValidator<GetCheersQuery>
         RuleFor(x => x.UserId).NotEmpty();
         RuleFor(x => x.Direction)
             .Must(direction => AllowedDirections.Contains(direction))
-            .WithMessage("Direction must be 'received' or 'sent'.");
+            .WithCopy(ValidationErrorCodes.CheersDirection);
     }
 }

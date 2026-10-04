@@ -1,3 +1,4 @@
+using Orbit.Application.Common;
 using FluentValidation;
 using Orbit.Application.Tags.Commands;
 
@@ -17,6 +18,6 @@ public class CreateTagCommandValidator : AbstractValidator<CreateTagCommand>
         RuleFor(x => x.Color)
             .NotEmpty()
             .Matches(@"^#[0-9A-Fa-f]{6}$")
-            .WithMessage("Color must be a valid hex color (e.g. #FF5733)");
+            .WithCopy(ValidationErrorCodes.TagColorFormat);
     }
 }

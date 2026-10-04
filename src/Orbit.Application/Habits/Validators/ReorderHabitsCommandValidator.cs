@@ -1,3 +1,4 @@
+using Orbit.Application.Common;
 using FluentValidation;
 using Orbit.Application.Habits.Commands;
 
@@ -12,11 +13,11 @@ public class ReorderHabitsCommandValidator : AbstractValidator<ReorderHabitsComm
 
         RuleFor(x => x.Positions)
             .NotEmpty()
-            .WithMessage("Positions list must not be empty");
+            .WithCopy(ValidationErrorCodes.PositionsRequired);
 
         RuleFor(x => x.Positions)
             .Must(positions => positions is null || positions.Select(p => p.HabitId).Distinct().Count() == positions.Count)
-            .WithMessage("Positions list must not contain duplicate habit IDs");
+            .WithCopy(ValidationErrorCodes.PositionsUnique);
 
         RuleForEach(x => x.Positions)
             .ChildRules(position =>

@@ -1,3 +1,4 @@
+using Orbit.Application.Common;
 using FluentValidation;
 using Orbit.Application.Gamification.Commands;
 
@@ -11,6 +12,6 @@ public class ReportEventCommandValidator : AbstractValidator<ReportEventCommand>
         RuleFor(x => x.EventKey)
             .NotEmpty()
             .Must(eventKey => AchievementEventMap.IsKnown(eventKey))
-            .WithMessage("Unknown event key.");
+            .WithCopy(ValidationErrorCodes.EventKeyKnown);
     }
 }

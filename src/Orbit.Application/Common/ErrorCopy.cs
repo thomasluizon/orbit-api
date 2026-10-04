@@ -2,7 +2,7 @@ using Orbit.Domain.Common;
 
 namespace Orbit.Application.Common;
 
-public static class ErrorCopy
+public static partial class ErrorCopy
 {
     /// <summary>Accounts, sessions, sign-in and the emailed confirmation codes.</summary>
     private static readonly (string Code, string En, string PtBr)[] AccountAndAccess =
@@ -393,7 +393,7 @@ public static class ErrorCopy
                  {
                      AccountAndAccess, StepUpAndApiKeys, Habits, Goals, TagsFactsAndTemplates,
                      Astra, Billing, Streaks, Social, Calendar, Notifications, Media,
-                     SyncAndSupport, Profile,
+                     SyncAndSupport, Profile, Validation,
                  })
         {
             foreach (var (code, en, ptBr) in group)

@@ -25,7 +25,7 @@ public class ErrorCopyTests
     private static readonly string EnDash = ((char)0x2013).ToString();
 
     private static readonly Regex BareCodePattern = new("[A-Z]{2,}_[A-Z_]+", RegexOptions.None, TimeSpan.FromSeconds(1));
-    private static readonly Regex PlaceholderPattern = new(@"\{\d+\}", RegexOptions.None, TimeSpan.FromSeconds(1));
+    private static readonly Regex PlaceholderPattern = new(@"\{[A-Za-z0-9]+\}", RegexOptions.None, TimeSpan.FromSeconds(1));
 
     private static IEnumerable<string> DeclaredErrorCodes() =>
         typeof(ErrorCodes)

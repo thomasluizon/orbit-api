@@ -20,7 +20,7 @@ public class ApplyHabitInputValidator : AbstractValidator<ApplyHabitInput>
 
         RuleFor(x => x.FrequencyQuantity)
             .NotNull()
-            .WithMessage("Frequency quantity is required when frequency unit is set")
+            .WithCopy(ValidationErrorCodes.FrequencyQuantityRequired)
             .When(x => x.FrequencyUnit is not null);
 
         SharedHabitRules.AddIntervalWeeksRules(RuleFor(x => x.IntervalWeeks));
@@ -57,6 +57,6 @@ public class ApplyOnboardingCommandValidator : AbstractValidator<ApplyOnboarding
 
         When(x => x.WeekStartDay is not null, () =>
             RuleFor(x => x.WeekStartDay!.Value).Must(day => day is 0 or 1)
-                .WithMessage("Week start day must be 0 (Sunday) or 1 (Monday)."));
+                .WithCopy(ValidationErrorCodes.WeekStartOnboarding));
     }
 }

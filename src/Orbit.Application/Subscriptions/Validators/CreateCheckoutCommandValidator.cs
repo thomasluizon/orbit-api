@@ -1,3 +1,4 @@
+using Orbit.Application.Common;
 using FluentValidation;
 using Orbit.Application.Subscriptions.Commands;
 
@@ -14,8 +15,8 @@ public class CreateCheckoutCommandValidator : AbstractValidator<CreateCheckoutCo
 
         RuleFor(x => x.Interval)
             .NotEmpty()
-            .WithMessage("Billing interval is required.")
+            .WithCopy(ValidationErrorCodes.BillingIntervalRequired)
             .Must(interval => AllowedIntervals.Contains(interval?.ToLower()))
-            .WithMessage("Billing interval must be 'monthly' or 'yearly'.");
+            .WithCopy(ValidationErrorCodes.BillingIntervalSupported);
     }
 }

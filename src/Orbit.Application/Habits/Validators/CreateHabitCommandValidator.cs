@@ -25,7 +25,7 @@ public class CreateHabitCommandValidator : AbstractValidator<CreateHabitCommand>
 
         RuleFor(x => x.FrequencyQuantity)
             .NotNull()
-            .WithMessage("Frequency quantity is required when frequency unit is set")
+            .WithCopy(ValidationErrorCodes.FrequencyQuantityRequired)
             .When(x => x.FrequencyUnit is not null);
 
         SharedHabitRules.AddIntervalWeeksRules(RuleFor(x => x.IntervalWeeks));
@@ -42,13 +42,13 @@ public class CreateHabitCommandValidator : AbstractValidator<CreateHabitCommand>
 
         RuleFor(x => x.SubHabits)
             .Must(subs => subs is null || subs.Count <= AppConstants.MaxSubHabits)
-            .WithMessage($"A habit can have at most {AppConstants.MaxSubHabits} sub-habits");
+            .WithCopy(ValidationErrorCodes.SubHabitLimit);
 
         RuleForEach(x => x.SubHabits)
             .NotEmpty()
-            .WithMessage("Sub-habit title must not be empty")
+            .WithCopy(ValidationErrorCodes.SubHabitTitleRequired)
             .MaximumLength(AppConstants.MaxHabitTitleLength)
-            .WithMessage($"Sub-habit title must not exceed {AppConstants.MaxHabitTitleLength} characters");
+            .WithCopy(ValidationErrorCodes.SubHabitTitleLength);
 
         SharedHabitRules.AddGeneralHabitRules(this,
             x => x.IsGeneral,
@@ -59,7 +59,7 @@ public class CreateHabitCommandValidator : AbstractValidator<CreateHabitCommand>
         RuleFor(x => x.IsBadHabit)
             .Equal(false)
             .When(x => x.IsGeneral)
-            .WithMessage("General habits cannot be bad habits");
+            .WithCopy(ValidationErrorCodes.GeneralHabitNotBad);
 
         SharedHabitRules.AddScheduledReminderRules(RuleFor(x => x.Options != null ? x.Options.ScheduledReminders : null));
 

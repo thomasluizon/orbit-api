@@ -1,3 +1,4 @@
+using Orbit.Application.Common;
 using FluentValidation;
 using Orbit.Application.Profile.Commands;
 
@@ -10,6 +11,6 @@ public class SetWeekStartDayCommandValidator : AbstractValidator<SetWeekStartDay
         RuleFor(x => x.UserId).NotEmpty();
         RuleFor(x => x.WeekStartDay)
             .InclusiveBetween(0, 1)
-            .WithMessage("WeekStartDay must be 0 (Sunday) or 1 (Monday).");
+            .WithCopy(ValidationErrorCodes.WeekStartDay);
     }
 }

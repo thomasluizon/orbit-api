@@ -4,8 +4,14 @@ using FluentValidation;
 using FluentValidation.Results;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.DependencyInjection;
+using NSubstitute;
+using Orbit.Domain.Entities;
+using Orbit.Domain.Interfaces;
 using Orbit.Api.Extensions;
 using Orbit.Api.Middleware;
+using Orbit.Application.Auth.Commands;
+using Orbit.Application.Auth.Validators;
 
 namespace Orbit.Infrastructure.Tests.Middleware;
 
@@ -23,6 +29,10 @@ public class ValidationExceptionHandlerTests
     {
         var context = new DefaultHttpContext { TraceIdentifier = requestId };
         context.Response.Body = new MemoryStream();
+        context.RequestServices = new ServiceCollection()
+            .AddSingleton<IRequestLanguageResolver>(
+                new RequestLanguageResolver(Substitute.For<IGenericRepository<User>>()))
+            .BuildServiceProvider();
         return context;
     }
 
@@ -55,6 +65,22 @@ public class ValidationExceptionHandlerTests
             .Should().BeEquivalentTo("Email is required", "Email is invalid");
         errors.GetProperty("Name").EnumerateArray().Select(m => m.GetString())
             .Should().ContainSingle().Which.Should().Be("Name is required");
+    }
+
+    [Fact]
+    public async Task PortugueseRequest_LocalizesTheRealFiveDigitCodeFailure()
+    {
+        var context = CreateContext("trace-pt-br");
+        context.Request.Headers.AcceptLanguage = "pt-BR";
+        var result = await new VerifyCodeCommandValidator()
+            .ValidateAsync(new VerifyCodeCommand("reader@example.com", "12345"));
+
+        await CreateHandler().TryHandleAsync(
+            context, new ValidationException(result.Errors), CancellationToken.None);
+
+        var root = await ReadJsonAsync(context);
+        root.GetProperty("errors").GetProperty("Code")[1].GetString()
+            .Should().Be("O código deve ter 6 dígitos");
     }
 
     [Fact]

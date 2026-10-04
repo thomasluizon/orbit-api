@@ -16,6 +16,6 @@ public class GetFriendFeedQueryValidator : AbstractValidator<GetFriendFeedQuery>
         When(x => !string.IsNullOrEmpty(x.Cursor), () =>
             RuleFor(x => x.Cursor!)
                 .Must(cursor => FeedCursor.TryDecode(cursor, out _, out _))
-                .WithMessage("Cursor is malformed."));
+                .WithCopy(ValidationErrorCodes.FeedCursorFormat));
     }
 }

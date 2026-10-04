@@ -10,11 +10,11 @@ public class GetCalendarMonthQueryValidator : AbstractValidator<GetCalendarMonth
     {
         RuleFor(q => q.DateTo)
             .GreaterThanOrEqualTo(q => q.DateFrom)
-            .WithMessage("dateTo must be >= dateFrom");
+            .WithCopy(ValidationErrorCodes.DateRangeOrderLower);
 
         RuleFor(q => q)
             .Must(q => q.DateTo.DayNumber - q.DateFrom.DayNumber <= AppConstants.MaxCalendarRangeDays)
-            .WithMessage($"Date range must not exceed {AppConstants.MaxCalendarRangeDays} days")
+            .WithCopy(ValidationErrorCodes.CalendarDateRangeLimit)
             .When(q => q.DateTo >= q.DateFrom);
     }
 }

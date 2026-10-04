@@ -13,14 +13,11 @@ public class ResolveClarificationRequestValidator : AbstractValidator<ResolveCla
         RuleFor(x => x.Value)
             .Cascade(CascadeMode.Stop)
             .NotEmpty()
-            .WithMessage(ErrorMessages.ClarificationValueEmpty.Message)
-            .WithErrorCode(ErrorMessages.ClarificationValueEmpty.Code)
+            .WithCopy(ErrorMessages.ClarificationValueEmpty.Code)
             .MaximumLength(AppConstants.MaxClarificationValueLength)
-            .WithMessage(ErrorMessages.ClarificationValueTooLong.Format(AppConstants.MaxClarificationValueLength).Message)
-            .WithErrorCode(ErrorMessages.ClarificationValueTooLong.Code)
+            .WithCopy(ErrorMessages.ClarificationValueTooLong.Code, AppConstants.MaxClarificationValueLength)
             .Must(BeJsonObject)
-            .WithMessage(ErrorMessages.ClarificationValueNotJsonObject.Message)
-            .WithErrorCode(ErrorMessages.ClarificationValueNotJsonObject.Code);
+            .WithCopy(ErrorMessages.ClarificationValueNotJsonObject.Code);
     }
 
     private static bool BeJsonObject(string value)

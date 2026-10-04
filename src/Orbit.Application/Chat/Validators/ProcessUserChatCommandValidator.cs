@@ -14,21 +14,21 @@ public class ProcessUserChatCommandValidator : AbstractValidator<ProcessUserChat
 
         RuleFor(x => x.Message)
             .NotEmpty()
-            .WithMessage("Message cannot be empty.")
+            .WithCopy(ValidationErrorCodes.ChatMessageRequired)
             .MaximumLength(AppConstants.MaxChatMessageLength)
-            .WithMessage($"Message cannot exceed {AppConstants.MaxChatMessageLength} characters.");
+            .WithCopy(ValidationErrorCodes.ChatMessageLength);
 
         RuleFor(x => x.History)
             .Must(history => history is null || history.Count <= AppConstants.MaxChatHistoryMessages)
-            .WithMessage($"Chat history cannot exceed {AppConstants.MaxChatHistoryMessages} messages.");
+            .WithCopy(ValidationErrorCodes.ChatHistoryLimit);
 
         RuleForEach(x => x.History)
             .Must(message => ChatHistoryMessage.IsSupportedRole(message.Role))
-            .WithMessage("Chat history contains an invalid role.");
+            .WithCopy(ValidationErrorCodes.ChatHistoryRole);
 
         RuleForEach(x => x.History)
             .Must(message => !string.IsNullOrWhiteSpace(message.Content) &&
                              message.Content.Length <= AppConstants.MaxChatHistoryMessageLength)
-            .WithMessage($"Chat history messages must be between 1 and {AppConstants.MaxChatHistoryMessageLength} characters.");
+            .WithCopy(ValidationErrorCodes.ChatHistoryMessageLength);
     }
 }
