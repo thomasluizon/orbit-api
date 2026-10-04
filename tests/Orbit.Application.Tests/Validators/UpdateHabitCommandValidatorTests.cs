@@ -85,8 +85,8 @@ public class UpdateHabitCommandValidatorTests
     }
 
     [Theory]
-    [InlineData(false, "Sub-habit title must not be empty")]
-    [InlineData(true, "Sub-habit title must not exceed 200 characters")]
+    [InlineData(false, "Give the sub-habit a title")]
+    [InlineData(true, "Shorten the sub-habit title to 200 characters or fewer")]
     public async Task Validate_ChildTitle_UsesSubHabitMessage(bool tooLong, string expectedMessage)
     {
         var command = ValidCommand();

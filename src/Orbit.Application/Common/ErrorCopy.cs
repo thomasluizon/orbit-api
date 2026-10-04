@@ -96,7 +96,7 @@ public static partial class ErrorCopy
     private static readonly (string Code, string En, string PtBr)[] Goals =
     [
         (ErrorCodes.GoalNotFound, "That goal is not here any more.", "Essa meta não está mais aqui."),
-        (ErrorCodes.MaxHabitsPerGoal, "A goal links {0} habits. Unlink one to add another.", "Uma meta liga {0} hábitos. Desligue um para adicionar outro."),
+        (ErrorCodes.MaxHabitsPerGoal, "Link up to {0} habits to this goal.", "Vincule até {0} hábitos a esta meta."),
         (ErrorCodes.InvalidGoalStatus, "Pick a status from the list.", "Escolha um status da lista."),
         (ErrorCodes.DeadlineInPast, "Pick a deadline from today onward.", "Escolha um prazo de hoje em diante."),
         (ErrorCodes.NoActiveGoals, "You have no active goals right now.", "Você não tem metas ativas agora."),
@@ -119,7 +119,7 @@ public static partial class ErrorCopy
     [
         (ErrorCodes.TagNotFound, "That tag is not here any more.", "Essa etiqueta não está mais aqui."),
         (ErrorCodes.DuplicateTagName, "A tag already uses that name. Pick another one.", "Já existe uma etiqueta com esse nome. Escolha outro."),
-        (ErrorCodes.MaxTagsPerHabit, "A habit carries {0} tags. Remove one to add another.", "Um hábito carrega {0} etiquetas. Remova uma para adicionar outra."),
+        (ErrorCodes.MaxTagsPerHabit, "Select up to {0} tags for this habit.", "Escolha até {0} tags para este hábito."),
         (ErrorCodes.FactNotFound, "Astra no longer has that saved note.", "A Astra não tem mais essa anotação salva."),
         (ErrorCodes.UserFactsLimitReached, "Astra holds {0} saved notes. Delete one to add another.", "A Astra guarda {0} anotações. Exclua uma para adicionar outra."),
         (ErrorCodes.DuplicateFact, "Astra already remembers something like that.", "A Astra já lembra de algo assim."),
