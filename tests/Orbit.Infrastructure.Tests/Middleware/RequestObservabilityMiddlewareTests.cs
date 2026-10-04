@@ -2,6 +2,10 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.DependencyInjection;
+using NSubstitute;
+using Orbit.Domain.Entities;
+using Orbit.Domain.Interfaces;
 using Orbit.Api.Extensions;
 using Orbit.Api.Middleware;
 using Orbit.Application.Common;
@@ -17,6 +21,10 @@ public class RequestObservabilityMiddlewareTests
         var context = new DefaultHttpContext();
         context.Request.Headers[HttpContextExtensions.RequestIdHeaderName] = IncomingRequestId;
         context.Response.Body = new MemoryStream();
+        context.RequestServices = new ServiceCollection()
+            .AddSingleton<IRequestLanguageResolver>(
+                new RequestLanguageResolver(Substitute.For<IGenericRepository<User>>()))
+            .BuildServiceProvider();
 
         var correlation = new RequestCorrelationMiddleware(_ => Task.CompletedTask);
         await correlation.InvokeAsync(context);

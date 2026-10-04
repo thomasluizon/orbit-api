@@ -1,3 +1,4 @@
+using Orbit.Application.Common;
 using FluentValidation;
 using Orbit.Application.Habits.Queries;
 
@@ -10,47 +11,47 @@ public class GetRecapQueryValidator : AbstractValidator<GetRecapQuery>
         RuleFor(x => x.Period)
             .NotEmpty()
             .Must(period => RetrospectivePeriodRange.IsKnownPeriod(period))
-            .WithMessage("Period must be one of: week, month, quarter, semester, year.");
+            .WithCopy(ValidationErrorCodes.PeriodSupported);
 
         RuleFor(x => x.DateFrom)
             .LessThanOrEqualTo(x => x.DateTo)
-            .WithMessage("DateFrom must be on or before DateTo.");
+            .WithCopy(ValidationErrorCodes.DateRangeOrder);
 
         RuleFor(x => x)
             .Must(HasValidClosedParameters)
-            .WithMessage("Closed period parameters must match the requested period.");
+            .WithCopy(ValidationErrorCodes.ClosedPeriodMatch);
 
         When(x => x.ClosedYear.HasValue && x.ClosedMonth.HasValue, () =>
         {
             RuleFor(x => x.Period)
                 .Equal("month", StringComparer.OrdinalIgnoreCase)
-                .WithMessage("Closed calendar parameters can only be used with the month period.");
+                .WithCopy(ValidationErrorCodes.ClosedCalendarMonthOnly);
 
             RuleFor(x => x.ClosedYear)
                 .InclusiveBetween(1, 9999)
-                .WithMessage("ClosedYear must be between 1 and 9999.");
+                .WithCopy(ValidationErrorCodes.ClosedYearRange);
 
             RuleFor(x => x.ClosedMonth)
                 .InclusiveBetween(1, 12)
-                .WithMessage("ClosedMonth must be between 1 and 12.");
+                .WithCopy(ValidationErrorCodes.ClosedMonthRange);
 
             RuleFor(x => x)
                 .Must(x => MatchesClosedMonth(x.DateFrom, x.DateTo, x.ClosedYear!.Value, x.ClosedMonth!.Value))
                 .When(x => x.ClosedYear is >= 1 and <= 9999 && x.ClosedMonth is >= 1 and <= 12)
-                .WithMessage("DateFrom and DateTo must match the complete closed calendar month.");
+                .WithCopy(ValidationErrorCodes.ClosedMonthDates);
         });
 
         When(x => x.ClosedYear.HasValue && !x.ClosedMonth.HasValue, () =>
         {
             RuleFor(x => x.ClosedYear)
                 .InclusiveBetween(1, 9999)
-                .WithMessage("ClosedYear must be between 1 and 9999.");
+                .WithCopy(ValidationErrorCodes.ClosedYearRange);
 
             RuleFor(x => x)
                 .Must(x => x.ClosedYear is >= 1 and <= 9999
                     && x.DateFrom == new DateOnly(x.ClosedYear.Value, 1, 1)
                     && x.DateTo == new DateOnly(x.ClosedYear.Value, 12, 31))
-                .WithMessage("DateFrom and DateTo must match the complete closed calendar year.");
+                .WithCopy(ValidationErrorCodes.ClosedYearDates);
         });
 
         When(x => x.ClosedWeekStart.HasValue, () =>
@@ -60,7 +61,7 @@ public class GetRecapQueryValidator : AbstractValidator<GetRecapQuery>
                     && weekStart.DayNumber <= DateOnly.MaxValue.DayNumber - 6
                     && x.DateFrom == weekStart
                     && x.DateTo == weekStart.AddDays(6))
-                .WithMessage("DateFrom and DateTo must match the complete closed calendar week.");
+                .WithCopy(ValidationErrorCodes.ClosedWeekDates);
         });
     }
 

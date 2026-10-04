@@ -19,6 +19,6 @@ public class AssignTagsCommandValidator : AbstractValidator<AssignTagsCommand>
 
         RuleFor(x => x.TagIds)
             .Must(tags => tags is null || tags.Count <= AppConstants.MaxTagsPerHabit)
-            .WithMessage($"A habit can have at most {AppConstants.MaxTagsPerHabit} tags");
+            .WithCopy(ValidationErrorCodes.HabitTagLimit);
     }
 }

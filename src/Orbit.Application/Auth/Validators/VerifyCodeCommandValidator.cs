@@ -16,12 +16,12 @@ public class VerifyCodeCommandValidator : AbstractValidator<VerifyCodeCommand>
             .NotEmpty()
             .Length(6)
             .Matches(@"^\d{6}$")
-            .WithMessage("Code must be a 6-digit number");
+            .WithCopy(ValidationErrorCodes.VerificationCodeFormat);
 
         RuleFor(x => x.Language)
             .NotEmpty()
             .MaximumLength(AppConstants.MaxLanguageLength)
             .Must(lang => AppConstants.SupportedLanguages.Contains(lang))
-            .WithMessage($"Language must be one of: {string.Join(", ", AppConstants.SupportedLanguages)}");
+            .WithCopy(ValidationErrorCodes.LanguageSupported);
     }
 }

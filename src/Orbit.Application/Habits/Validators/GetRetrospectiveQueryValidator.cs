@@ -13,20 +13,20 @@ public class GetRetrospectiveQueryValidator : AbstractValidator<GetRetrospective
         RuleFor(x => x.Period)
             .NotEmpty()
             .Must(period => RetrospectivePeriodRange.IsKnownPeriod(period))
-            .WithMessage("Period must be one of: week, month, quarter, semester, year.");
+            .WithCopy(ValidationErrorCodes.PeriodSupported);
 
         RuleFor(x => x.DateFrom)
             .LessThanOrEqualTo(x => x.DateTo)
-            .WithMessage("DateFrom must be on or before DateTo.");
+            .WithCopy(ValidationErrorCodes.DateRangeOrder);
 
         RuleFor(x => x)
             .Must(x => x.DateTo.DayNumber - x.DateFrom.DayNumber <= AppConstants.MaxRangeDays)
-            .WithMessage($"Date range must not exceed {AppConstants.MaxRangeDays} days.")
+            .WithCopy(ValidationErrorCodes.DateRangeLimit)
             .When(x => x.DateFrom <= x.DateTo);
 
         RuleFor(x => x.Language)
             .MaximumLength(AppConstants.MaxLanguageLength)
             .Must(lang => string.IsNullOrEmpty(lang) || AppConstants.SupportedLanguages.Contains(lang))
-            .WithMessage($"Language must be one of: {string.Join(", ", AppConstants.SupportedLanguages)}");
+            .WithCopy(ValidationErrorCodes.LanguageSupported);
     }
 }

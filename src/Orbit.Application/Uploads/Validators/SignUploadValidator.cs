@@ -1,3 +1,4 @@
+using Orbit.Application.Common;
 using FluentValidation;
 using Orbit.Application.Uploads.Commands;
 using Orbit.Application.Uploads.Common;
@@ -13,14 +14,14 @@ public class SignUploadValidator : AbstractValidator<SignUploadCommand>
 
         RuleFor(x => x.ContentType)
             .NotEmpty()
-            .WithMessage("Content type is required.")
+            .WithCopy(ValidationErrorCodes.UploadContentTypeRequired)
             .Must(UploadContentTypes.IsAllowed)
-            .WithMessage($"Content type must be one of: {string.Join(", ", UploadContentTypes.Allowed)}.");
+            .WithCopy(ValidationErrorCodes.UploadContentTypeSupported);
 
         RuleFor(x => x.SizeBytes)
             .GreaterThan(0)
-            .WithMessage("File size must be greater than zero.")
+            .WithCopy(ValidationErrorCodes.UploadSizePositive)
             .LessThanOrEqualTo(UploadContentTypes.MaxSizeBytes)
-            .WithMessage($"File size must be {UploadContentTypes.MaxSizeBytes} bytes or less.");
+            .WithCopy(ValidationErrorCodes.UploadSizeLimit);
     }
 }

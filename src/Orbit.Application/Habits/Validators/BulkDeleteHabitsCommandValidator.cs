@@ -13,12 +13,12 @@ public class BulkDeleteHabitsCommandValidator : AbstractValidator<BulkDeleteHabi
 
         RuleFor(x => x.HabitIds)
             .NotEmpty()
-            .WithMessage("HabitIds list must not be empty")
+            .WithCopy(ValidationErrorCodes.BulkHabitIdsRequired)
             .Must(ids => ids.Count <= AppConstants.MaxBulkOperationSize)
-            .WithMessage($"Cannot delete more than {AppConstants.MaxBulkOperationSize} habits at once");
+            .WithCopy(ValidationErrorCodes.BulkDeleteHabitLimit);
 
         RuleForEach(x => x.HabitIds)
             .NotEmpty()
-            .WithMessage("Habit ID must not be empty");
+            .WithCopy(ValidationErrorCodes.HabitIdRequired);
     }
 }

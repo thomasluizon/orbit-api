@@ -14,6 +14,6 @@ public class SetNameCommandValidator : AbstractValidator<SetNameCommand>
         RuleFor(x => x.Name)
             .NotEmpty()
             .Must(name => name is null || name.Trim().Length <= AppConstants.MaxUserNameLength)
-            .WithMessage($"Name must be at most {AppConstants.MaxUserNameLength} characters");
+            .WithCopy(ValidationErrorCodes.ProfileNameLength);
     }
 }

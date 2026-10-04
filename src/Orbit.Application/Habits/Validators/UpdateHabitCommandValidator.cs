@@ -51,7 +51,7 @@ public class UpdateHabitCommandValidator : AbstractValidator<UpdateHabitCommand>
 
         RuleFor(x => x.FrequencyQuantity)
             .NotNull()
-            .WithMessage("Frequency quantity is required when frequency unit is set")
+            .WithCopy(ValidationErrorCodes.FrequencyQuantityRequired)
             .When(x => x.FrequencyUnit is not null);
 
         SharedHabitRules.AddIntervalWeeksRules(RuleFor(x => x.IntervalWeeks));
@@ -75,7 +75,7 @@ public class UpdateHabitCommandValidator : AbstractValidator<UpdateHabitCommand>
         RuleFor(x => x.IsBadHabit)
             .Equal(false)
             .When(x => x.IsGeneral == true)
-            .WithMessage("General habits cannot be bad habits");
+            .WithCopy(ValidationErrorCodes.GeneralHabitNotBad);
 
         When(x => x.Options is not null, () =>
         {
@@ -94,9 +94,9 @@ public class UpdateHabitCommandValidator : AbstractValidator<UpdateHabitCommand>
         {
             SharedHabitRules.AddTitleRules(
                 RuleFor(x => x.Title),
-                requiredMessage: isChild ? "Sub-habit title must not be empty" : null,
-                maximumLengthMessage: isChild
-                    ? $"Sub-habit title must not exceed {AppConstants.MaxHabitTitleLength} characters"
+                requiredCode: isChild ? ValidationErrorCodes.SubHabitTitleRequired : null,
+                maximumLengthCode: isChild
+                    ? ValidationErrorCodes.SubHabitTitleLength
                     : null);
         }
     }

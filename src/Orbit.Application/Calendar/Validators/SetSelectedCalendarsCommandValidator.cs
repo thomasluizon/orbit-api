@@ -13,10 +13,10 @@ public class SetSelectedCalendarsCommandValidator : AbstractValidator<SetSelecte
         RuleFor(x => x.CalendarIds)
             .NotNull()
             .Must(ids => ids.Count <= AppConstants.MaxSelectedCalendars)
-            .WithMessage($"You can select at most {AppConstants.MaxSelectedCalendars} calendars.");
+            .WithCopy(ValidationErrorCodes.CalendarSelectionLimit);
 
         RuleForEach(x => x.CalendarIds)
             .NotEmpty()
-            .WithMessage("Calendar ids must be non-empty.");
+            .WithCopy(ValidationErrorCodes.CalendarIdsRequired);
     }
 }
