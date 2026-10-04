@@ -129,5 +129,6 @@ public static partial class ErrorCopy
         ("InclusiveBetweenValidator", "'{PropertyName}' must be between {From} and {To}. You entered {PropertyValue}.", "'{PropertyName}' deve estar entre {From} e {To}. Você digitou {PropertyValue}."),
         ("EnumValidator", "'{PropertyName}' has a range of values which does not include '{PropertyValue}'.", "'{PropertyName}' possui um intervalo de valores que não inclui '{PropertyValue}'."),
         ("ExactLengthValidator", "'{PropertyName}' must be {MaxLength} characters in length. You entered {TotalLength} characters.", "'{PropertyName}' deve ter exatamente {MaxLength} caracteres. Você digitou {TotalLength} caracteres."),
+        ("AsyncPredicateValidator", "The specified condition was not met for '{PropertyName}'.", "'{PropertyName}' não atende a condição definida."),
     ];
 }
