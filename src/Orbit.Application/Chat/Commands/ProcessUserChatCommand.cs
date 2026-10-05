@@ -660,7 +660,8 @@ public partial class ProcessUserChatCommandHandler(
         var streak = request.ClientContext?.SupportsStreakCard == true
             && aiMessage?.Contains(StatusCardBuilder.StreakDirective, StringComparison.OrdinalIgnoreCase) == true
             ? StatusCardBuilder.BuildStreak(
-                executionResults.LastSuccessfulPayload<GamificationOverviewPayload>("get_gamification_overview"))
+                executionResults.LastSuccessfulPayload<GamificationOverviewPayload>("get_gamification_overview",
+                    payload => payload.Profile is not null && payload.Streak is not null))
             : null;
         var calendar = request.ClientContext?.SupportsCalendarCard == true
             && aiMessage?.Contains(StatusCardBuilder.CalendarDirective, StringComparison.OrdinalIgnoreCase) == true

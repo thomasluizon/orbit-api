@@ -33,7 +33,7 @@ public class GetGamificationOverviewTool(IMediator mediator) : IAiTool
             include_streak = new
             {
                 type = JsonSchemaTypes.Boolean,
-                description = "Include current and longest streaks, freezes, and repair availability. Defaults to true. For streak-only questions, use include_streak=true, include_profile=false, and include_achievements=false."
+                description = "Include current and longest streaks, freezes, and repair availability. Defaults to true. For streak-only questions, use include_streak=true, include_profile=true, and include_achievements=false so streak cards retain level and XP data."
             }
         }
     };

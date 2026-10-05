@@ -10,6 +10,8 @@ using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
+using Orbit.Application.Chat.Tools.Implementations;
+using System.Text.RegularExpressions;
 using Orbit.Application.ApiKeys.Queries;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification.Queries;
@@ -1213,6 +1215,59 @@ public class ProcessUserChatCommandHandlerTests
         result.Value.MetricsCard.Should().BeNull();
         result.Value.AiMessage.Should().Be("Your week");
         await _mediator.DidNotReceive().Send(Arg.Any<GetRecapQuery>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task Handle_RecommendedStreakRead_ReturnsValueInCard(
+        bool recoverAfterDefaultRead, bool followWithAchievementsOnly)
+    {
+        SetupUserAndPayGate();
+        var profile = new GamificationProfileResponse(
+            120, 3, "Level", "level", 100, 200, 80, 0, 0, [], [],
+            7, 9, Today, true, false, new NextRewardCarrot(4, "Next", 80, null));
+        var streak = new StreakInfoResponse(
+            7, 9, Today, 1, 2, 3, false, [], 0, 3, 0, 2, true, false, null, 0);
+        _mediator.Send(Arg.Any<GetGamificationProfileQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(profile));
+        _mediator.Send(Arg.Any<GetAchievementsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AchievementsResponse([])));
+        _mediator.Send(Arg.Any<GetStreakInfoQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(streak));
+        var tool = new GetGamificationOverviewTool(_mediator);
+        var schema = JsonSerializer.SerializeToElement(tool.GetParameterSchema());
+        var description = schema.GetProperty("properties").GetProperty("include_streak")
+            .GetProperty("description").GetString()!;
+        var recommendedArguments = JsonSerializer.Serialize(
+            Regex.Matches(description, @"(include_(?:profile|achievements|streak))=(true|false)")
+                .ToDictionary(match => match.Groups[1].Value, match => bool.Parse(match.Groups[2].Value)));
+        var recovery = ToolResponse(tool.Name, "call_recovery", recommendedArguments);
+        SetupAiResponse(recoverAfterDefaultRead ? ToolResponse(tool.Name, "call_default", "{}") : recovery);
+        var reply = Result.Success(new AiResponse { TextMessage = "Your streak:\n[[orbit:streak]]" });
+        var continuations = new List<Result<AiResponse>>();
+        if (recoverAfterDefaultRead)
+            continuations.Add(Result.Success(recovery));
+        if (followWithAchievementsOnly)
+            continuations.Add(Result.Success(ToolResponse(tool.Name, "call_achievements",
+                """{"include_profile":false,"include_achievements":true,"include_streak":false}""")));
+        continuations.Add(reply);
+        _aiIntentService.ContinueWithToolResultsAsync(
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(continuations[0], continuations.Skip(1).ToArray());
+
+        var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
+            UserId, "What is my current streak?",
+            ClientContext: new AgentClientContext(SupportsStreakCard: true)), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Streak.Should().NotBeNull();
+        result.Value.Streak!.CurrentStreak.Should().Be(7);
+        result.Value.Streak.Level.Should().Be(3);
+        result.Value.Streak.TotalXp.Should().Be(120);
+        result.Value.AiMessage.Should().Be("Your streak:");
     }
 
     [Fact]

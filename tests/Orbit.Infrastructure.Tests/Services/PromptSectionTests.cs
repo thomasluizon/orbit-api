@@ -307,7 +307,7 @@ public class ToolFailureSectionTests
 
         result.Should().ContainAll("payload.dropped=true", "even when success=true",
             "call the tool again with narrower arguments", "Do not repeat the same arguments",
-            "include_profile=false", "include_achievements=false", "include_streak=true",
+            "include_profile=true", "include_achievements=false", "include_streak=true",
             "Never mention payload size, limits, or processing", "in any language",
             "If the data still cannot be read", "what you could not read");
     }

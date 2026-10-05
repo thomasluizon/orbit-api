@@ -405,7 +405,7 @@ public class ChecklistUserFactPlatformToolTests
             description.GetString().Should().NotBeNullOrWhiteSpace();
         }
         properties.GetProperty("include_streak").GetProperty("description").GetString()
-            .Should().ContainAll("include_profile=false", "include_achievements=false");
+            .Should().ContainAll("include_profile=true", "include_achievements=false");
     }
 
     [Fact]

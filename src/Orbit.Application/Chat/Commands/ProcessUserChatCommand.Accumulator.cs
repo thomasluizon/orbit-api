@@ -47,11 +47,12 @@ public partial class ProcessUserChatCommandHandler
         /// </summary>
         public IReadOnlyList<string> RelatedSurfaces => _relatedSurfaces;
 
-        public T? LastSuccessfulPayload<T>(string toolName) where T : class =>
+        public T? LastSuccessfulPayload<T>(string toolName, Func<T, bool>? predicate = null) where T : class =>
             OperationResults
                 .LastOrDefault(operation => operation.OperationId == toolName
                     && operation.Status == AgentOperationStatus.Succeeded
-                    && operation.Payload is T)?.Payload as T;
+                    && operation.Payload is T payload
+                    && (predicate is null || predicate(payload)))?.Payload as T;
 
         public AgentOperationResult? LastSuccessfulOperation(string toolName) =>
             OperationResults.LastOrDefault(operation => operation.OperationId == toolName
