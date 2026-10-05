@@ -46,6 +46,7 @@ public sealed class PendingOperationChangePreviewerTests
 
         preview.Should().NotBeNull();
         preview!.ChangeTargetCount.Should().Be(2);
+        AssertRemovesData(preview, true);
     }
 
     [Fact]
@@ -115,6 +116,52 @@ public sealed class PendingOperationChangePreviewerTests
             .Should().OnlyContain(field => field == "title");
         preview.Items[0].Fields[0].IsEditable.Should().BeTrue();
         preview.Items[0].Fields[0].ProposedValue!.Value.GetString().Should().Be("One");
+        AssertRemovesData(preview, false);
+    }
+
+    [Theory]
+    [InlineData("bulk_log_habits", """{"filter":{"all":true}}""")]
+    [InlineData("bulk_skip_habits", """{"filter":{"all":true}}""")]
+    [InlineData("bulk_update_habits", """{"filter":{"all":true},"updates":{"emoji":"✅"}}""")]
+    [InlineData("bulk_reschedule_habits", """{"filter":{"all":true},"due_date":"2026-10-01"}""")]
+    public async Task PreviewAsync_ReversibleBulkWrite_ReportsNoDataRemoval(string operation, string arguments)
+    {
+        Setup([CreateHabit("One", null), CreateHabit("Two", null)]);
+
+        var preview = await Preview(operation, arguments);
+
+        preview!.Items.Should().HaveCount(2);
+        AssertRemovesData(preview, false);
+    }
+
+    [Fact]
+    public async Task PreviewAsync_MixedBatch_MarksExactlyTheDeleteItems()
+    {
+        var habit = CreateHabit("Existing", null);
+        Setup([habit]);
+        var create = await Preview("bulk_create_habits", """{"habits":[{"title":"New"}]}""");
+        var log = await Preview("bulk_log_habits", """{"filter":{"all":true}}""");
+        var skip = await Preview("bulk_skip_habits", """{"filter":{"all":true}}""");
+        var delete = await Preview("delete_habit", $$"""{"habit_id":"{{habit.Id}}"}""");
+        var bulkDelete = await Preview("bulk_delete_habits", """{"filter":{"all":true}}""");
+
+        var items = new[] { create, log, skip, delete, bulkDelete }.SelectMany(preview => preview!.Items!);
+        var json = JsonSerializer.SerializeToElement(items, JsonSerializerOptions.Web);
+
+        json.EnumerateArray().Select(item => item.GetProperty("removesData").GetBoolean())
+            .Should().Equal(false, false, false, true, true);
+    }
+
+    private static void AssertRemovesData(Orbit.Domain.Models.PendingOperationChangePreview preview, bool expected)
+    {
+        var json = JsonSerializer.SerializeToElement(preview, JsonSerializerOptions.Web);
+        var items = json.GetProperty("items").EnumerateArray().ToList();
+        items.Should().NotBeEmpty();
+        foreach (var item in items)
+        {
+            item.TryGetProperty("removesData", out var removesData).Should().BeTrue();
+            removesData.GetBoolean().Should().Be(expected);
+        }
     }
 
     [Fact]

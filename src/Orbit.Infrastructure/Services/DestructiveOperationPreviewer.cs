@@ -23,21 +23,21 @@ public sealed class DestructiveOperationPreviewer(OrbitDbContext dbContext) : ID
         arguments.ValueKind != JsonValueKind.Object
             ? Task.FromResult<PendingOperationChangePreview?>(null)
             : operationId switch
-    {
-        "delete_goal" => LoadAsync(dbContext.Goals, userId, operationId,
-            ReadIds(arguments, "goal_id"), goal => goal.Title,
-            goal => new { goal.Title, goal.Description, goal.UpdatedAtUtc, goal.IsDeleted }, cancellationToken),
-        "delete_tag" => LoadAsync(dbContext.Tags, userId, operationId,
-            ReadIds(arguments, "tag_id"), tag => tag.Name,
-            tag => new { tag.Name, tag.Color, tag.UpdatedAtUtc, tag.IsDeleted }, cancellationToken),
-        "delete_checklist_template" => LoadAsync(dbContext.ChecklistTemplates, userId, operationId,
-            ReadIds(arguments, "template_id"), template => template.Name,
-            template => new { template.Name, template.UpdatedAtUtc, template.IsDeleted }, cancellationToken),
-        "delete_user_facts" => LoadFactsAsync(userId, operationId, arguments, cancellationToken),
-        "delete_notifications" => LoadNotificationsAsync(userId, operationId, arguments, cancellationToken),
-        "manage_calendar_sync" => LoadCalendarAsync(userId, operationId, arguments, cancellationToken),
-        _ => Task.FromResult<PendingOperationChangePreview?>(null)
-    };
+            {
+                "delete_goal" => LoadAsync(dbContext.Goals, userId, operationId,
+                    ReadIds(arguments, "goal_id"), goal => goal.Title,
+                    goal => new { goal.Title, goal.Description, goal.UpdatedAtUtc, goal.IsDeleted }, cancellationToken),
+                "delete_tag" => LoadAsync(dbContext.Tags, userId, operationId,
+                    ReadIds(arguments, "tag_id"), tag => tag.Name,
+                    tag => new { tag.Name, tag.Color, tag.UpdatedAtUtc, tag.IsDeleted }, cancellationToken),
+                "delete_checklist_template" => LoadAsync(dbContext.ChecklistTemplates, userId, operationId,
+                    ReadIds(arguments, "template_id"), template => template.Name,
+                    template => new { template.Name, template.UpdatedAtUtc, template.IsDeleted }, cancellationToken),
+                "delete_user_facts" => LoadFactsAsync(userId, operationId, arguments, cancellationToken),
+                "delete_notifications" => LoadNotificationsAsync(userId, operationId, arguments, cancellationToken),
+                "manage_calendar_sync" => LoadCalendarAsync(userId, operationId, arguments, cancellationToken),
+                _ => Task.FromResult<PendingOperationChangePreview?>(null)
+            };
 
     private Task<PendingOperationChangePreview?> LoadFactsAsync(Guid userId, string operationId,
         JsonElement arguments, CancellationToken cancellationToken)
@@ -46,7 +46,10 @@ public sealed class DestructiveOperationPreviewer(OrbitDbContext dbContext) : ID
         return LoadAsync(dbContext.UserFacts, userId, operationId, ids,
             fact => fact.FactText, fact => new
             {
-                fact.FactText, fact.Category, fact.UpdatedAtUtc, fact.IsDeleted
+                fact.FactText,
+                fact.Category,
+                fact.UpdatedAtUtc,
+                fact.IsDeleted
             }, cancellationToken);
     }
 
@@ -64,8 +67,11 @@ public sealed class DestructiveOperationPreviewer(OrbitDbContext dbContext) : ID
         return LoadAsync(dbContext.Notifications, userId, operationId, ids,
             notification => notification.Title, notification => new
             {
-                notification.Title, notification.Body, notification.IsRead,
-                notification.UpdatedAtUtc, notification.IsDeleted
+                notification.Title,
+                notification.Body,
+                notification.IsRead,
+                notification.UpdatedAtUtc,
+                notification.IsDeleted
             }, cancellationToken);
     }
 
@@ -77,7 +83,9 @@ public sealed class DestructiveOperationPreviewer(OrbitDbContext dbContext) : ID
                 ReadIds(arguments, "suggestion_id"), suggestion => suggestion.Title,
                 suggestion => new
                 {
-                    suggestion.Title, suggestion.StartDateUtc, suggestion.DismissedAtUtc,
+                    suggestion.Title,
+                    suggestion.StartDateUtc,
+                    suggestion.DismissedAtUtc,
                     suggestion.ImportedAtUtc
                 }, cancellationToken);
         return LoadCalendarUserAsync(userId, operationId, arguments, cancellationToken);
@@ -109,9 +117,11 @@ public sealed class DestructiveOperationPreviewer(OrbitDbContext dbContext) : ID
         var item = new PendingOperationItem(userId.ToString(), userId, "Calendar sync", [change],
             AgentOperationFingerprint.Compute(operationId, JsonSerializer.Serialize(new
             {
-                user.GoogleCalendarAutoSyncEnabled, user.HasImportedCalendar,
-                user.GoogleCalendarLastSyncedAt, user.GoogleCalendarAutoSyncStatus
-            })));
+                user.GoogleCalendarAutoSyncEnabled,
+                user.HasImportedCalendar,
+                user.GoogleCalendarLastSyncedAt,
+                user.GoogleCalendarAutoSyncStatus
+            })), RemovesData: false);
         var fingerprint = AgentOperationFingerprint.Compute(operationId, JsonSerializer.Serialize(item));
         return new PendingOperationChangePreview([change], 1, [item], fingerprint);
     }
@@ -132,7 +142,8 @@ public sealed class DestructiveOperationPreviewer(OrbitDbContext dbContext) : ID
             var displayName = name(entity);
             return new PendingOperationItem(entity.Id.ToString(), entity.Id, displayName,
                 [new PendingOperationChange(entity.Id, displayName, "delete", null, null, "action")],
-                AgentOperationFingerprint.Compute(entity.Id.ToString(), JsonSerializer.Serialize(state(entity))));
+                AgentOperationFingerprint.Compute(entity.Id.ToString(), JsonSerializer.Serialize(state(entity))),
+                RemovesData: true);
         }).ToList();
         var fingerprint = AgentOperationFingerprint.Compute(operationId, JsonSerializer.Serialize(items));
         return new PendingOperationChangePreview(items.Take(10).SelectMany(item => item.Fields).ToList(),

@@ -31,6 +31,7 @@ public sealed class DestructiveOperationPreviewerTests
 
         before!.ChangeTargetCount.Should().Be(2);
         before.Items!.Select(item => item.EntityId).Should().BeEquivalentTo([first.Id, second.Id]);
+        before.Items.Should().OnlyContain(item => item.RemovesData == true);
         before.Items!.SelectMany(item => item.Fields).Select(field => field.Field)
             .Should().OnlyContain(field => field == "delete");
         after!.PreviewFingerprint.Should().NotBe(before.PreviewFingerprint);
@@ -54,6 +55,7 @@ public sealed class DestructiveOperationPreviewerTests
             .PreviewAsync(userId, "delete_user_facts", args);
 
         preview!.Items.Should().HaveCount(2);
+        preview.Items.Should().OnlyContain(item => item.RemovesData == true);
         preview.ChangeTargetCount.Should().Be(2);
     }
 }

@@ -142,7 +142,8 @@ public record PendingOperationItem(
     Guid? EntityId,
     string EntityName,
     IReadOnlyList<PendingOperationChange> Fields,
-    string StateFingerprint);
+    string StateFingerprint,
+    bool? RemovesData = null);
 
 public record PendingOperationChange(
     Guid EntityId,

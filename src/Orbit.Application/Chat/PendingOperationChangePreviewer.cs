@@ -98,7 +98,7 @@ public sealed class PendingOperationChangePreviewer(
             }
 
             items.Add(new PendingOperationItem(habit.Id.ToString(), habit.Id, habit.Title,
-                fields, FingerprintHabit(habit)));
+                fields, FingerprintHabit(habit), RemovesData: operationId == "bulk_delete_habits"));
             if (items.Count <= 10)
                 rows.AddRange(fields.Take(actualChangeCount));
         }
@@ -368,7 +368,7 @@ public sealed class PendingOperationChangePreviewer(
         return BuildPreview("delete_habit", [], habits.Select(habit =>
             new PendingOperationItem(habit.Id.ToString(), habit.Id, habit.Title,
                 [new PendingOperationChange(habit.Id, habit.Title, "delete", null, null, "action")],
-                FingerprintHabit(habit))).ToList());
+                FingerprintHabit(habit), RemovesData: true)).ToList());
     }
 
     private static PendingOperationChangePreview? PreviewCreate(JsonElement arguments)
@@ -389,7 +389,8 @@ public sealed class PendingOperationChangePreviewer(
                 && habit.TryGetProperty("preview_item_id", out var storedId)
                 ? storedId.ToString() : index.ToString(CultureInfo.InvariantCulture);
             return new PendingOperationItem(itemId, null,
-                name, fields, AgentOperationFingerprint.Compute("bulk_create_habits", habit.GetRawText()));
+                name, fields, AgentOperationFingerprint.Compute("bulk_create_habits", habit.GetRawText()),
+                RemovesData: false);
         }).ToList();
         return BuildPreview("bulk_create_habits", [], items);
     }
