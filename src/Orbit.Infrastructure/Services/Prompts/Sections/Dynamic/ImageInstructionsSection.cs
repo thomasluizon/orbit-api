@@ -25,7 +25,7 @@ public class ImageInstructionsSection : IPromptSection
                - Top-level groups/categories -> separate CreateHabit actions (parents)
                - Nested/indented items under a group -> subHabits array on that parent
                - Deeply nested items (sub-sub-items) -> flatten into the nearest parent's subHabits
-            3. Preserve exact titles/names as shown in the image -- do not rename, summarize, or merge items
+            3. Preserve exact titles/names as shown in the image. Do not rename, summarize, or merge items
             4. If an item appears multiple times (e.g., "Water - 710ml" x4), create each one individually
             5. Items with no children that are not nested under anything -> standalone CreateHabit (no subHabits)
             6. Infer frequency from visual cues:
@@ -45,7 +45,7 @@ public class ImageInstructionsSection : IPromptSection
 
             ### Example: Task app screenshot with groups (user says "create these habits")
             {
-              "aiMessage": "Created 5 habit groups with all their sub-habits from your screenshot!",
+              "aiMessage": "Created 5 habit groups with all their sub-habits from your screenshot.",
               "actions": [
                 {
                   "type": "CreateHabit",
