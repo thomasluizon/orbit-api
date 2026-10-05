@@ -37,6 +37,7 @@ public class NotificationVoiceTests
         { "daily summary, system", AiSummaryService.SystemPrompt },
         { "daily summary, en", DailySummaryPrompt("en") },
         { "daily summary, pt-BR", DailySummaryPrompt("pt-BR") },
+        { "chat, system with image", ChatSystemPrompt() },
     };
 
     public static TheoryData<string, string> EveryGeneratedUserPrompt() => new()
@@ -66,6 +67,35 @@ public class NotificationVoiceTests
         return AiSummaryService.BuildSummaryPrompt(
             [habit],
             new DailySummaryContext(today, today, today, language, null, 0, 0, new Dictionary<Guid, DateOnly>()));
+    }
+
+    private static string ChatSystemPrompt()
+    {
+        var builder = new SystemPromptBuilder();
+        var request = new PromptBuildRequest(
+            [], [], HasImage: true, UserToday: new DateOnly(2026, 9, 18));
+
+        return builder.BuildStatic(request) + builder.BuildDynamic(request);
+    }
+
+    [Theory]
+    [InlineData("no exclamation mark")]
+    [InlineData("no emoji")]
+    [InlineData("no em dash")]
+    [InlineData("no en dash")]
+    [InlineData("no doubled hyphen")]
+    public void ChatPromptBansCharactersInEveryLanguageAndPreservesFormattingAndHabitEmojiTools(string ban)
+    {
+        var prompt = ChatSystemPrompt();
+
+        prompt.Should().Contain(ban);
+        prompt.Should().Contain("absolute in every language");
+        prompt.Should().Contain("reply's own words");
+        prompt.Should().Contain("habit emoji fields through tools");
+        prompt.Should().Contain("Use bullet points with newlines");
+        prompt.Should().Contain("bulk_update_habit_emojis");
+        prompt.Should().NotContain("no markdown");
+        prompt.Should().NotContain("no bullet");
     }
 
     [Theory]
