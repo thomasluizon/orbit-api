@@ -6,6 +6,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using ModelContextProtocol.Server;
 using Orbit.Application.Chat.Tools;
+using Orbit.Domain.Models;
 using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Services;
@@ -13,6 +14,32 @@ namespace Orbit.Infrastructure.Tests.Services;
 public class AgentCatalogServiceTests
 {
     private readonly AgentCatalogService _catalogService = new();
+
+    [Theory]
+    [InlineData("bulk_create_habits", AgentRiskClass.Low, AgentConfirmationRequirement.None)]
+    [InlineData("bulk_log_habits", AgentRiskClass.Low, AgentConfirmationRequirement.None)]
+    [InlineData("bulk_skip_habits", AgentRiskClass.Low, AgentConfirmationRequirement.None)]
+    [InlineData("bulk_update_habits", AgentRiskClass.Low, AgentConfirmationRequirement.None)]
+    [InlineData("bulk_reschedule_habits", AgentRiskClass.Low, AgentConfirmationRequirement.None)]
+    [InlineData("bulk_delete_habits", AgentRiskClass.Destructive, AgentConfirmationRequirement.FreshConfirmation)]
+    [InlineData("delete_habit", AgentRiskClass.Destructive, AgentConfirmationRequirement.FreshConfirmation)]
+    public void HabitOperations_ClassifyReversibility(string operationId, AgentRiskClass risk,
+        AgentConfirmationRequirement confirmation)
+    {
+        var tool = typeof(IAiTool).Assembly.GetTypes()
+            .Where(type => type.IsClass && !type.IsAbstract && typeof(IAiTool).IsAssignableFrom(type))
+            .Select(type => (IAiTool)RuntimeHelpers.GetUninitializedObject(type))
+            .Single(tool => tool.Name == operationId);
+        var catalog = new AgentCatalogService([tool]);
+
+        var capability = catalog.GetCapabilityByChatTool(operationId)!;
+        capability.RiskClass.Should().Be(risk);
+        capability.ConfirmationRequirement.Should().Be(confirmation);
+        catalog.GetCapabilityByMcpTool(operationId).Should().Be(capability);
+        var operation = catalog.GetOperation(operationId)!;
+        operation.RiskClass.Should().Be(risk);
+        operation.ConfirmationRequirement.Should().Be(confirmation);
+    }
 
     [Fact]
     public void SetColorScheme_IsAvailableOnlyThroughTheHttpCompatibilityEndpoint()
