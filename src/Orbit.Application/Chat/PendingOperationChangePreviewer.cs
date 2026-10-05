@@ -401,6 +401,10 @@ public sealed class PendingOperationChangePreviewer(
                     Guid.Empty, name, property.Name, null, property.Value.ToString(), "text",
                     property.Value.Clone(), true)).ToList()
                 : [];
+            foreach (var error in errors.Where(error => CreateFields.Contains(error.Field)))
+                if (fields.All(field => field.Field != error.Field))
+                    fields.Add(new PendingOperationChange(Guid.Empty, name, error.Field,
+                        null, null, "text", JsonSerializer.SerializeToElement<string?>(null), true));
             var itemId = habit.ValueKind == JsonValueKind.Object
                 && habit.TryGetProperty("preview_item_id", out var storedId)
                 ? storedId.ToString() : index.ToString(CultureInfo.InvariantCulture);

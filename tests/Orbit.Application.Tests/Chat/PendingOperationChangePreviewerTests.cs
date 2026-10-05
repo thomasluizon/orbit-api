@@ -156,6 +156,7 @@ public sealed class PendingOperationChangePreviewerTests
 
         preview!.Items.Should().ContainSingle().Which.ValidationErrors.Should()
             .Contain(error => error.Field == field);
+        preview.Items![0].Fields.Should().Contain(change => change.Field == field && change.IsEditable);
     }
 
     [Fact]
