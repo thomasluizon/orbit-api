@@ -87,7 +87,7 @@ public sealed class DestructiveOperationPreviewer(OrbitDbContext dbContext) : ID
                     suggestion.StartDateUtc,
                     suggestion.DismissedAtUtc,
                     suggestion.ImportedAtUtc
-                }, cancellationToken);
+                }, cancellationToken, removesData: false);
         return LoadCalendarUserAsync(userId, operationId, arguments, cancellationToken);
     }
 
@@ -129,7 +129,7 @@ public sealed class DestructiveOperationPreviewer(OrbitDbContext dbContext) : ID
     private static async Task<PendingOperationChangePreview?> LoadAsync<TEntity>(
         IQueryable<TEntity> source, Guid userId, string operationId, IReadOnlyList<Guid>? ids,
         Func<TEntity, string> name, Func<TEntity, object> state,
-        CancellationToken cancellationToken) where TEntity : Entity
+        CancellationToken cancellationToken, bool removesData = true) where TEntity : Entity
     {
         if (ids is { Count: 0 })
             return null;
@@ -143,7 +143,7 @@ public sealed class DestructiveOperationPreviewer(OrbitDbContext dbContext) : ID
             return new PendingOperationItem(entity.Id.ToString(), entity.Id, displayName,
                 [new PendingOperationChange(entity.Id, displayName, "delete", null, null, "action")],
                 AgentOperationFingerprint.Compute(entity.Id.ToString(), JsonSerializer.Serialize(state(entity))),
-                RemovesData: true);
+                RemovesData: removesData);
         }).ToList();
         var fingerprint = AgentOperationFingerprint.Compute(operationId, JsonSerializer.Serialize(items));
         return new PendingOperationChangePreview(items.Take(10).SelectMany(item => item.Fields).ToList(),
