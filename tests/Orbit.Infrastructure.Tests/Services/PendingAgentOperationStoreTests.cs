@@ -17,11 +17,6 @@ public class PendingAgentOperationStoreTests : IDisposable
     private static readonly IReadOnlyDictionary<string, string> GatedOperationKeys = new Dictionary<string, string>
     {
         ["delete_habit"] = "deleteHabit",
-        ["bulk_update_habits"] = "updateHabits",
-        ["bulk_reschedule_habits"] = "rescheduleHabits",
-        ["bulk_log_habits"] = "logHabits",
-        ["bulk_skip_habits"] = "skipHabits",
-        ["bulk_create_habits"] = "createHabits",
         ["bulk_delete_habits"] = "deleteHabits",
         ["delete_goal"] = "deleteGoal",
         ["delete_tag"] = "deleteTag",
@@ -54,6 +49,27 @@ public class PendingAgentOperationStoreTests : IDisposable
         _store = new PendingAgentOperationStore(
             _dbContext,
             Options.Create(new AgentPlatformSettings()));
+    }
+
+    [Theory]
+    [InlineData("bulk_update_habits", "updateHabits")]
+    [InlineData("bulk_reschedule_habits", "rescheduleHabits")]
+    [InlineData("bulk_log_habits", "logHabits")]
+    [InlineData("bulk_skip_habits", "skipHabits")]
+    [InlineData("bulk_create_habits", "createHabits")]
+    public void Create_ChatHeldBulkOperationPreservesItsActionKey(string operationId, string expectedKey)
+    {
+        var declared = _catalogService.GetCapabilityByChatTool(operationId)!;
+        declared.RiskClass.Should().Be(AgentRiskClass.Low);
+        declared.ConfirmationRequirement.Should().Be(AgentConfirmationRequirement.None);
+        var held = declared with { ConfirmationRequirement = AgentConfirmationRequirement.FreshConfirmation };
+
+        var pending = _store.Create(_userId, held, operationId, "{}", operationId,
+            $"{operationId}:{Guid.NewGuid()}", AgentExecutionSurface.Chat);
+
+        pending.ActionKey.Should().Be(expectedKey);
+        pending.RiskClass.Should().Be(AgentRiskClass.Low);
+        pending.ConfirmationRequirement.Should().Be(AgentConfirmationRequirement.FreshConfirmation);
     }
 
     public void Dispose()

@@ -61,7 +61,9 @@ public static class AgentArgumentPreview
             .ToList();
 
         var item = new PendingOperationItem(itemId, target?.EntityId, entityName, fields,
-            target?.StateFingerprint ?? AgentOperationFingerprint.Compute(operationId, itemId));
+            target?.StateFingerprint ?? AgentOperationFingerprint.Compute(operationId, itemId),
+            RemovesData: operationId is "create_habit" or "log_habit" or "skip_habit" or "update_habit"
+                ? false : null);
         var fingerprint = AgentOperationFingerprint.Compute(
             operationId, JsonSerializer.Serialize<IReadOnlyList<PendingOperationItem>>([item]));
 

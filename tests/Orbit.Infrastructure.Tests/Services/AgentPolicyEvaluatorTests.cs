@@ -424,9 +424,6 @@ public class AgentPolicyEvaluatorTests : IDisposable
 
     [Theory]
     [InlineData(AgentCapabilityIds.HabitsDelete, "delete_habit")]
-    [InlineData(AgentCapabilityIds.HabitsBulkWrite, "bulk_create_habits")]
-    [InlineData(AgentCapabilityIds.HabitsBulkWrite, "bulk_log_habits")]
-    [InlineData(AgentCapabilityIds.HabitsBulkWrite, "bulk_skip_habits")]
     [InlineData(AgentCapabilityIds.HabitsBulkDelete, "bulk_delete_habits")]
     [InlineData(AgentCapabilityIds.TagsDelete, "delete_tag")]
     public void Evaluate_DestructiveChatCapability_OnChatSurface_RequiresConfirmation(
@@ -447,6 +444,33 @@ public class AgentPolicyEvaluatorTests : IDisposable
         decision.Reason.Should().Be("confirmation_required");
         decision.PendingOperation.Should().NotBeNull();
         decision.PendingOperation!.CapabilityId.Should().Be(capabilityId);
+    }
+
+    [Theory]
+    [InlineData("bulk_create_habits")]
+    [InlineData("bulk_log_habits")]
+    [InlineData("bulk_skip_habits")]
+    [InlineData("bulk_update_habits")]
+    [InlineData("bulk_reschedule_habits")]
+    public void Evaluate_ReversibleBulkCapability_RequiresConfirmationWhenChatHoldIsApplied(string sourceName)
+    {
+        var context = new AgentPolicyEvaluationContext(
+            AgentCapabilityIds.HabitsBulkWrite, _userId, AgentExecutionSurface.Chat,
+            AgentAuthMethod.Jwt, [], sourceName, $"{sourceName} via chat",
+            OperationFingerprint: $"{sourceName}:{{}}");
+
+        var declared = _policyEvaluator.Evaluate(context);
+        var held = _policyEvaluator.Evaluate(context with
+        {
+            ConfirmationRequirementOverride = AgentConfirmationRequirement.FreshConfirmation
+        });
+
+        declared.Status.Should().Be(AgentPolicyDecisionStatus.Allowed);
+        declared.Capability!.RiskClass.Should().Be(AgentRiskClass.Low);
+        declared.PendingOperation.Should().BeNull();
+        held.Status.Should().Be(AgentPolicyDecisionStatus.ConfirmationRequired);
+        held.PendingOperation!.RiskClass.Should().Be(AgentRiskClass.Low);
+        held.PendingOperation.ConfirmationRequirement.Should().Be(AgentConfirmationRequirement.FreshConfirmation);
     }
 
     [Fact]

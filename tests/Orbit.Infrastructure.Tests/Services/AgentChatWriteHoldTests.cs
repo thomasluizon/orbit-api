@@ -5,12 +5,15 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
+using Orbit.Application.Chat;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
+using Orbit.Domain.ValueObjects;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
@@ -103,6 +106,12 @@ public class AgentChatWriteHoldTests : IDisposable
         response.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation, operationId);
         response.PendingOperation.Should().NotBeNull(operationId);
         response.PendingOperation!.ActionKey.Should().NotBeNullOrWhiteSpace(operationId);
+        if (operationId is "bulk_create_habits" or "bulk_log_habits" or "bulk_skip_habits"
+            or "bulk_update_habits" or "bulk_reschedule_habits")
+        {
+            response.Operation.RiskClass.Should().Be(AgentRiskClass.Low);
+            response.PendingOperation.RiskClass.Should().Be(AgentRiskClass.Low);
+        }
     }
 
     [Fact]
@@ -122,6 +131,42 @@ public class AgentChatWriteHoldTests : IDisposable
         response.PendingOperation.Should().BeNull();
         tool.Calls.Should().Be(1);
         AgentChatWriteHold.ExemptOperationIds.Should().BeEquivalentTo(["suggest_breakdown"]);
+    }
+
+    [Theory]
+    [InlineData("bulk_create_habits", """{"habits":[{"title":"New"},{"title":"Another"}]}""", false)]
+    [InlineData("bulk_log_habits", """{"filter":{"all":true}}""", false)]
+    [InlineData("bulk_skip_habits", """{"filter":{"all":true}}""", false)]
+    [InlineData("bulk_update_habits", """{"filter":{"all":true},"updates":{"emoji":"✅"}}""", false)]
+    [InlineData("bulk_reschedule_habits", """{"filter":{"all":true},"due_date":"2026-10-01"}""", false)]
+    [InlineData("bulk_delete_habits", """{"filter":{"all":true}}""", true)]
+    public async Task ExecuteAsync_BulkChatWrite_ReturnsApprovalPreviewWithRemovalFlags(
+        string operationId, string arguments, bool removesData)
+    {
+        var today = new DateOnly(2026, 9, 25);
+        _dbContext.Habits.AddRange(
+            Habit.Create(new HabitCreateParams(_userId, "One", FrequencyUnit.Day, 1, today)).Value,
+            Habit.Create(new HabitCreateParams(_userId, "Two", FrequencyUnit.Day, 1, today)).Value);
+        await _dbContext.SaveChangesAsync();
+        var dates = Substitute.For<IUserDateService>();
+        dates.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(today);
+        var tool = new StubTool(operationId);
+        var tools = new AiToolRegistry([tool]);
+        var previewer = new PendingOperationChangePreviewer(
+            new GenericRepository<Habit>(_dbContext), new GenericRepository<Goal>(_dbContext),
+            new GenericRepository<Tag>(_dbContext), dates, tools);
+        var executor = CreateExecutor(tools, previewer);
+
+        var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
+            _userId, operationId, Parse(arguments), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt,
+            IncludeChangePreview: true));
+
+        response.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation);
+        response.Operation.RiskClass.Should().Be(removesData ? AgentRiskClass.Destructive : AgentRiskClass.Low);
+        response.PendingOperation!.RiskClass.Should().Be(response.Operation.RiskClass);
+        response.PendingOperation.Items.Should().HaveCount(2);
+        response.PendingOperation.Items.Should().OnlyContain(item => item.RemovesData == removesData);
+        tool.Calls.Should().Be(0);
     }
 
     [Fact]
@@ -239,7 +284,8 @@ public class AgentChatWriteHoldTests : IDisposable
         tool.Calls.Should().Be(0);
     }
 
-    private AgentOperationExecutor CreateExecutor(AiToolRegistry toolRegistry)
+    private AgentOperationExecutor CreateExecutor(AiToolRegistry toolRegistry,
+        IPendingOperationChangePreviewer? previewer = null)
     {
         var ownership = Substitute.For<IAgentTargetOwnershipService>();
         ownership.GetDenialReasonAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<JsonElement>(),
@@ -255,7 +301,7 @@ public class AgentChatWriteHoldTests : IDisposable
             ownership,
             stepUpBridge,
             toolRegistry,
-            Substitute.For<IPendingOperationChangePreviewer>(),
+            previewer ?? Substitute.For<IPendingOperationChangePreviewer>(),
             Substitute.For<IUnitOfWork>(),
             NullLogger<AgentOperationExecutor>.Instance);
     }

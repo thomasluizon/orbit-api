@@ -51,6 +51,7 @@ public sealed class AgentArgumentPreviewTests
         var item = preview.Items.Should().ContainSingle().Subject;
         item.EntityName.Should().Be("Beber agua");
         item.EntityId.Should().BeNull();
+        item.RemovesData.Should().BeFalse();
         item.Fields.Should().HaveCount(4);
         item.Fields.Should().OnlyContain(field => field.IsEditable);
         item.Fields.Should().Contain(field => field.Field == "title" && field.NewValue == "Beber agua"
@@ -71,6 +72,7 @@ public sealed class AgentArgumentPreviewTests
         var item = preview!.Items.Should().ContainSingle().Subject;
         item.EntityId.Should().Be(habit.Id);
         item.EntityName.Should().Be("Beber agua");
+        item.RemovesData.Should().BeFalse();
         var title = item.Fields.Single(field => field.Field == "title");
         title.OldValue.Should().Be("Beber agua");
         title.NewValue.Should().Be("Beber mais agua");
