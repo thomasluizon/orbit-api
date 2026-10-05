@@ -91,6 +91,18 @@ public class EncouragingToneSectionTests
     }
 
     [Fact]
+    public void Build_KeepsAcknowledgementCalmAndSpecific()
+    {
+        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var result = new EncouragingToneSection().Build(ctx);
+
+        result.Should().Contain("calmly");
+        result.Should().Contain("specific acknowledgement");
+        result.Should().NotContain("Celebrate");
+        result.Should().NotContain("exclamation spam");
+    }
+
+    [Fact]
     public void Build_ContainsNoEmOrEnDashes()
     {
         var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
