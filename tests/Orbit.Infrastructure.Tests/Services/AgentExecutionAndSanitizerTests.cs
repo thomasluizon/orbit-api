@@ -463,6 +463,45 @@ public class AgentExecutionAndSanitizerTests
         unitOfWork.Received(1).ResetTracking();
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task AgentOperationExecutor_FailureAuditRecordsOnlyCompletedPolicyEvaluation(
+        bool transactional, bool policyThrows)
+    {
+        var catalog = Substitute.For<IAgentCatalogService>();
+        var capability = CreateCapability(AgentCapabilityIds.HabitsWrite, AgentScopes.WriteHabits, AgentRiskClass.Low, AgentConfirmationRequirement.None, isMutation: true);
+        var operation = CreateOperation("create_habit", capability.Id, isMutation: true, isAgentExecutable: true, AgentConfirmationRequirement.None, AgentRiskClass.Low);
+        catalog.GetOperation(operation.Id).Returns(operation);
+        catalog.GetCapability(capability.Id).Returns(capability);
+        var policy = Substitute.For<IAgentPolicyEvaluator>();
+        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>()).Returns(_ => policyThrows
+            ? throw new InvalidOperationException("policy_failed")
+            : new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability,
+                ShadowStatus: AgentPolicyDecisionStatus.Denied, ShadowReason: "missing_scope:write_habits"));
+        var audit = Substitute.For<IAgentAuditService>();
+        var unitOfWork = Substitute.For<IUnitOfWork>();
+        unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<AgentExecuteOperationResponse>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<AgentExecuteOperationResponse>>>()(call.Arg<CancellationToken>()));
+        IAiTool tool = transactional
+            ? new TransactionalStubTool(operation.Id, (_, _, _) => throw new InvalidOperationException("tool_failed"))
+            : new StubTool(operation.Id, (_, _, _) => throw new InvalidOperationException("tool_failed"));
+        var executor = CreateExecutor(catalog, policyEvaluator: policy, auditService: audit,
+            toolRegistry: new AiToolRegistry([tool]), unitOfWork: unitOfWork);
+
+        var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
+            UserId, operation.Id, Parse("{}"), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt));
+
+        response.Operation.Status.Should().Be(AgentOperationStatus.Failed);
+        await audit.Received(1).RecordAsync(Arg.Is<AgentAuditEntry>(entry =>
+            entry.OutcomeStatus == AgentOperationStatus.Failed &&
+            entry.Error == (policyThrows ? "policy_failed" : "tool_failed") &&
+            entry.ShadowPolicyDecision == (policyThrows ? null : AgentPolicyDecisionStatus.Denied) &&
+            entry.ShadowReason == (policyThrows ? null : "missing_scope:write_habits")), Arg.Any<CancellationToken>());
+    }
+
     private static AgentOperationExecutor CreateExecutor(
         IAgentCatalogService catalogService,
         IAgentPolicyEvaluator? policyEvaluator = null,
@@ -553,6 +592,16 @@ public class AgentExecutionAndSanitizerTests
 
     private sealed class RetryableStubTool(string name, Func<JsonElement, Guid, CancellationToken, Task<ToolResult>> executeAsync)
         : IAiTool, IConcurrencyRetryableTool
+    {
+        public string Name => name;
+        public string Description => name;
+        public bool IsReadOnly => false;
+        public object GetParameterSchema() => new { };
+        public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) => executeAsync(args, userId, ct);
+    }
+
+    private sealed class TransactionalStubTool(string name, Func<JsonElement, Guid, CancellationToken, Task<ToolResult>> executeAsync)
+        : IAiTool, ITransactionalAiTool
     {
         public string Name => name;
         public string Description => name;

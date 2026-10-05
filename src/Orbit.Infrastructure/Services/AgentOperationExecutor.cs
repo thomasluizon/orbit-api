@@ -204,29 +204,35 @@ public partial class AgentOperationExecutor(
         CancellationToken cancellationToken)
     {
         var tool = toolRegistry.GetTool(execution.Operation.Id);
-        AgentPolicyDecision? policyDecision = null;
 
         async Task<AgentExecuteOperationResponse> ExecuteAsync(CancellationToken ct)
         {
-            policyDecision = EvaluatePolicy(execution);
-            if (policyDecision.Status == AgentPolicyDecisionStatus.Denied)
-                return await DenyByPolicyAsync(execution, policyDecision, ct);
+            var policyDecision = EvaluatePolicy(execution);
+            try
+            {
+                if (policyDecision.Status == AgentPolicyDecisionStatus.Denied)
+                    return await DenyByPolicyAsync(execution, policyDecision, ct);
 
-            if (policyDecision.Status == AgentPolicyDecisionStatus.ConfirmationRequired)
-                return await RequireConfirmationAsync(execution, policyDecision, ct);
+                if (policyDecision.Status == AgentPolicyDecisionStatus.ConfirmationRequired)
+                    return await RequireConfirmationAsync(execution, policyDecision, ct);
 
-            if (tool is null)
-                return AgentOperationResponseFactory.MissingTool(
-                    execution.Operation.Id,
-                    execution.Capability.RiskClass,
-                    execution.Capability.ConfirmationRequirement,
-                    execution.Summary);
+                if (tool is null)
+                    return AgentOperationResponseFactory.MissingTool(
+                        execution.Operation.Id,
+                        execution.Capability.RiskClass,
+                        execution.Capability.ConfirmationRequirement,
+                        execution.Summary);
 
-            var result = await ExecuteToolWithConcurrencyRetryAsync(tool, execution, ct);
-            if (tool is ITransactionalAiTool && !result.Success)
-                throw new ToolOutcomeRollbackException(policyDecision, result);
+                var result = await ExecuteToolWithConcurrencyRetryAsync(tool, execution, ct);
+                if (tool is ITransactionalAiTool && !result.Success)
+                    throw new ToolOutcomeRollbackException(policyDecision, result);
 
-            return await BuildToolOutcomeResponseAsync(execution, policyDecision, result, ct);
+                return await BuildToolOutcomeResponseAsync(execution, policyDecision, result, ct);
+            }
+            catch (Exception ex) when (ex is not ToolOutcomeRollbackException)
+            {
+                throw new AgentPolicyExecutionException(policyDecision, ex);
+            }
         }
 
         try
@@ -239,32 +245,45 @@ public partial class AgentOperationExecutor(
         {
             return await BuildToolOutcomeResponseAsync(execution, ex.Decision, ex.Result, cancellationToken);
         }
+        catch (AgentPolicyExecutionException ex)
+        {
+            return await FailOperationAsync(execution, ex.Failure, ex.Decision, cancellationToken);
+        }
         catch (Exception ex)
         {
-            LogOperationFailed(logger,
-                new RedactedOperationException(ex.GetType().FullName ?? ex.GetType().Name, ex.StackTrace),
-                execution.Operation.Id, execution.Request.CorrelationId);
-
-            await TryAuditAsync(
-                new AuditContext(
-                    execution.Request,
-                    execution.Capability.Id,
-                    execution.Capability.RiskClass,
-                    AgentPolicyDecisionStatus.Allowed,
-                    AgentOperationStatus.Failed,
-                    execution.Summary,
-                    RedactArguments(execution.Arguments),
-                    Error: ex.Message,
-                    ShadowPolicyDecision: policyDecision?.ShadowStatus,
-                    ShadowReason: policyDecision?.ShadowReason),
-                cancellationToken);
-
-            return AgentOperationResponseFactory.Failed(
-                execution.Operation.Id,
-                execution.Capability.RiskClass,
-                execution.Capability.ConfirmationRequirement,
-                execution.Summary);
+            return await FailOperationAsync(execution, ex, null, cancellationToken);
         }
+    }
+
+    private async Task<AgentExecuteOperationResponse> FailOperationAsync(
+        OperationExecutionContext execution,
+        Exception failure,
+        AgentPolicyDecision? policyDecision,
+        CancellationToken cancellationToken)
+    {
+        LogOperationFailed(logger,
+            new RedactedOperationException(failure.GetType().FullName ?? failure.GetType().Name, failure.StackTrace),
+            execution.Operation.Id, execution.Request.CorrelationId);
+
+        await TryAuditAsync(
+            new AuditContext(
+                execution.Request,
+                execution.Capability.Id,
+                execution.Capability.RiskClass,
+                AgentPolicyDecisionStatus.Allowed,
+                AgentOperationStatus.Failed,
+                execution.Summary,
+                RedactArguments(execution.Arguments),
+                Error: failure.Message,
+                ShadowPolicyDecision: policyDecision?.ShadowStatus,
+                ShadowReason: policyDecision?.ShadowReason),
+            cancellationToken);
+
+        return AgentOperationResponseFactory.Failed(
+            execution.Operation.Id,
+            execution.Capability.RiskClass,
+            execution.Capability.ConfirmationRequirement,
+            execution.Summary);
     }
 
     private async Task<ToolResult> ExecuteToolWithConcurrencyRetryAsync(
@@ -397,20 +416,6 @@ public partial class AgentOperationExecutor(
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Agent operation {OperationId} failed (correlation {CorrelationId})")]
     private static partial void LogOperationFailed(ILogger logger, Exception ex, string operationId, string? correlationId);
-
-    private sealed class ToolOutcomeRollbackException(AgentPolicyDecision decision, ToolResult result)
-        : Exception("Transactional tool returned a failed outcome.")
-    {
-        public AgentPolicyDecision Decision { get; } = decision;
-        public ToolResult Result { get; } = result;
-    }
-
-    private sealed class RedactedOperationException(string exceptionType, string? stackTrace)
-        : Exception("Agent operation failed.")
-    {
-        public override string? StackTrace => stackTrace;
-        public override string ToString() => $"{exceptionType}: {Message}{Environment.NewLine}{StackTrace}";
-    }
 
     private sealed record OperationExecutionContext(
         AgentExecuteOperationRequest Request,
