@@ -5,7 +5,7 @@ using Orbit.Application.Habits.Commands;
 namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class BulkCreateHabitsTool(
-    IMediator mediator) : IAiTool
+    IMediator mediator) : IAiTool, ITransactionalAiTool
 {
     private const string TitleProperty = "title";
 
@@ -73,11 +73,15 @@ public class BulkCreateHabitsTool(
             }
         }
 
+        var frequencyUnit = JsonArgumentParser.ParseFrequencyUnit(el);
+        var frequencyQuantity = JsonArgumentParser.GetOptionalInt(el, "frequency_quantity")
+            ?? (frequencyUnit is not null ? 1 : (int?)null);
+
         return new BulkHabitItem(
             title,
             JsonArgumentParser.GetOptionalString(el, "description"),
-            JsonArgumentParser.ParseFrequencyUnit(el),
-            JsonArgumentParser.GetOptionalInt(el, "frequency_quantity"),
+            frequencyUnit,
+            frequencyQuantity,
             Days: JsonArgumentParser.ParseDays(el),
             IsBadHabit: JsonArgumentParser.GetOptionalBool(el, "is_bad_habit") ?? false,
             DueDate: JsonArgumentParser.ParseDateOnly(el, "due_date"),

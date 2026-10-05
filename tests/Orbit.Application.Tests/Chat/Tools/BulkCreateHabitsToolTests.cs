@@ -106,6 +106,45 @@ public class BulkCreateHabitsToolTests
         result.Error.Should().Be("Habit limit reached.");
     }
 
+    [Theory]
+    [InlineData("""{"title":"Read","frequency_unit":"day"}""", 1)]
+    [InlineData("""{"title":"Read","frequency_unit":"week"}""", 1)]
+    [InlineData("""{"title":"Read","frequency_unit":"day","frequency_quantity":3}""", 3)]
+    [InlineData("""{"title":"Read","frequency_unit":"day","frequency_quantity":0}""", 0)]
+    [InlineData("""{"title":"Read"}""", null)]
+    public async Task FrequencyQuantity_DefaultsOnlyForRecurringItems(string itemJson, int? expected)
+    {
+        BulkCreateHabitsCommand? captured = null;
+        _mediator.Send(Arg.Any<BulkCreateHabitsCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                captured = call.Arg<BulkCreateHabitsCommand>();
+                return Result.Success(new BulkCreateResult([]));
+            });
+
+        await Execute($"{{\"habits\":[{itemJson}]}}");
+
+        captured.Should().NotBeNull();
+        captured!.Habits.Should().ContainSingle().Which.FrequencyQuantity.Should().Be(expected);
+    }
+
+    [Fact]
+    public async Task RecurringSubHabitWithoutQuantity_DefaultsToOne()
+    {
+        BulkCreateHabitsCommand? captured = null;
+        _mediator.Send(Arg.Any<BulkCreateHabitsCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                captured = call.Arg<BulkCreateHabitsCommand>();
+                return Result.Success(new BulkCreateResult([]));
+            });
+
+        await Execute("""{"habits":[{"title":"Routine","frequency_unit":"day","sub_habits":[{"title":"Read","frequency_unit":"week"}]}]}""");
+
+        captured.Should().NotBeNull();
+        captured!.Habits[0].SubHabits.Should().ContainSingle().Which.FrequencyQuantity.Should().Be(1);
+    }
+
     private async Task<ToolResult> Execute(string json) =>
         await _tool.ExecuteAsync(JsonDocument.Parse(json).RootElement, UserId, CancellationToken.None);
 }
