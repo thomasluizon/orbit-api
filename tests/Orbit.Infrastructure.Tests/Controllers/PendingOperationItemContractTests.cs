@@ -41,6 +41,7 @@ public sealed class PendingOperationItemContractTests
 
         item.Should().BeEquivalentTo(new PendingOperationItem("0", null, "Habit", [], "state"));
         item!.RemovesData.Should().BeNull();
+        item.ValidationErrors.Should().BeNull();
     }
 
     [Fact]
@@ -56,7 +57,11 @@ public sealed class PendingOperationItemContractTests
             .Should().BeEquivalentTo("itemId", "entityId", "entityName", "fields", "stateFingerprint");
         var properties = schema.GetProperty("properties");
         properties.EnumerateObject().Select(property => property.Name).Should().Equal(
-            "itemId", "entityId", "entityName", "fields", "stateFingerprint", "removesData");
+            "itemId", "entityId", "entityName", "fields", "stateFingerprint", "removesData", "validationErrors");
+        properties.GetProperty("validationErrors").GetProperty("type").EnumerateArray()
+            .Select(type => type.GetString()).Should().BeEquivalentTo("array", "null");
+        properties.GetProperty("validationErrors").GetProperty("items").GetProperty("$ref").GetString()
+            .Should().Be("#/components/schemas/PendingOperationValidationError");
         properties.GetProperty("removesData").GetProperty("type").EnumerateArray()
             .Select(type => type.GetString()).Should().BeEquivalentTo("boolean", "null");
         properties.GetProperty("itemId").GetProperty("type").GetString().Should().Be("string");

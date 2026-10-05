@@ -16495,6 +16495,15 @@
               "null",
               "boolean"
             ]
+          },
+          "validationErrors": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PendingOperationValidationError"
+            }
           }
         }
       },
@@ -16536,6 +16545,25 @@
           "cancelled": {
             "type": "boolean",
             "default": false
+          }
+        }
+      },
+      "PendingOperationValidationError": {
+        "required": [
+          "field",
+          "errorCode",
+          "error"
+        ],
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "errorCode": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
           }
         }
       },

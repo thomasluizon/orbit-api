@@ -4,6 +4,7 @@ using Orbit.Domain.Common;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Habits.Commands;
+using Orbit.Application.Habits.Validators;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -36,7 +37,7 @@ public sealed class PendingOperationChangePreviewer(
         CancellationToken cancellationToken = default)
     {
         if (operationId == "bulk_create_habits")
-            return PreviewCreate(arguments);
+            return await PreviewCreateAsync(userId, arguments, cancellationToken);
 
         if (operationId is not ("bulk_update_habits" or "bulk_reschedule_habits"
             or "bulk_delete_habits" or "bulk_log_habits" or "bulk_skip_habits"
@@ -371,12 +372,27 @@ public sealed class PendingOperationChangePreviewer(
                 FingerprintHabit(habit), RemovesData: true)).ToList());
     }
 
-    private static PendingOperationChangePreview? PreviewCreate(JsonElement arguments)
+    private static async Task<PendingOperationChangePreview?> PreviewCreateAsync(
+        Guid userId, JsonElement arguments, CancellationToken cancellationToken)
     {
         if (!arguments.TryGetProperty("habits", out var habits) || habits.ValueKind != JsonValueKind.Array)
             return null;
+        var command = new BulkCreateHabitsCommand(userId, habits.EnumerateArray()
+            .Select(habit => habit.ValueKind == JsonValueKind.Object
+                ? BulkCreateHabitsTool.ParseBulkHabitItem(habit, allowEmptyTitle: true)
+                : null)
+            .Select(item => item ?? new BulkHabitItem(string.Empty, null, null, null)).ToList());
+        var validation = await new BulkCreateHabitsCommandValidator().ValidateAsync(command, cancellationToken);
         var items = habits.EnumerateArray().Select((habit, index) =>
         {
+            var prefix = $"Habits[{index}].";
+            var errors = validation.Errors
+                .Where(error => error.PropertyName.StartsWith(prefix, StringComparison.Ordinal)
+                    || !error.PropertyName.StartsWith("Habits[", StringComparison.Ordinal))
+                .Select(error => new PendingOperationValidationError(
+                    JsonNamingPolicy.SnakeCaseLower.ConvertName(error.PropertyName.StartsWith(prefix, StringComparison.Ordinal)
+                        ? error.PropertyName[prefix.Length..] : error.PropertyName),
+                    error.ErrorCode, error.ErrorMessage)).ToList();
             var name = habit.ValueKind == JsonValueKind.Object
                 && habit.TryGetProperty("title", out var title) ? title.ToString() : string.Empty;
             var fields = habit.ValueKind == JsonValueKind.Object
@@ -390,7 +406,7 @@ public sealed class PendingOperationChangePreviewer(
                 ? storedId.ToString() : index.ToString(CultureInfo.InvariantCulture);
             return new PendingOperationItem(itemId, null,
                 name, fields, AgentOperationFingerprint.Compute("bulk_create_habits", habit.GetRawText()),
-                RemovesData: false);
+                RemovesData: false, ValidationErrors: errors.Count > 0 ? errors : null);
         }).ToList();
         return BuildPreview("bulk_create_habits", [], items);
     }

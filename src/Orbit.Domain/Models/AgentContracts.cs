@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Orbit.Domain.Models;
 
@@ -143,7 +144,11 @@ public record PendingOperationItem(
     string EntityName,
     IReadOnlyList<PendingOperationChange> Fields,
     string StateFingerprint,
-    bool? RemovesData = null);
+    bool? RemovesData = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<PendingOperationValidationError>? ValidationErrors = null);
+
+public record PendingOperationValidationError(string Field, string ErrorCode, string Error);
 
 public record PendingOperationChange(
     Guid EntityId,
