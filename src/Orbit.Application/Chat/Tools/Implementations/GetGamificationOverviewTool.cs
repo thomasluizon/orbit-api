@@ -20,9 +20,21 @@ public class GetGamificationOverviewTool(IMediator mediator) : IAiTool
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            include_profile = new { type = JsonSchemaTypes.Boolean },
-            include_achievements = new { type = JsonSchemaTypes.Boolean },
-            include_streak = new { type = JsonSchemaTypes.Boolean }
+            include_profile = new
+            {
+                type = JsonSchemaTypes.Boolean,
+                description = "Include XP, level, earned achievement IDs, and profile streak totals. Defaults to true. The achievement catalogue is included here only when include_achievements=false. Set false when these details are not needed."
+            },
+            include_achievements = new
+            {
+                type = JsonSchemaTypes.Boolean,
+                description = "Include the achievement catalogue with earned status and progress. Defaults to true. Set false unless achievement details are needed."
+            },
+            include_streak = new
+            {
+                type = JsonSchemaTypes.Boolean,
+                description = "Include current and longest streaks, freezes, and repair availability. Defaults to true. For streak-only questions, use include_streak=true, include_profile=false, and include_achievements=false."
+            }
         }
     };
 
@@ -40,7 +52,9 @@ public class GetGamificationOverviewTool(IMediator mediator) : IAiTool
         {
             var profileResult = await mediator.Send(new GetGamificationProfileQuery(userId), ct);
             if (profileResult.IsFailure) return ToolResult.FromFailure(profileResult);
-            profile = profileResult.Value;
+            profile = includeAchievements
+                ? profileResult.Value with { Achievements = [] }
+                : profileResult.Value;
         }
 
         if (includeAchievements)
