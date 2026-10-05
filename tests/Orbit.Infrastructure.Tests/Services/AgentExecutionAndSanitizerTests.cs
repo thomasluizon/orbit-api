@@ -502,6 +502,111 @@ public class AgentExecutionAndSanitizerTests
             entry.ShadowReason == (policyThrows ? null : "missing_scope:write_habits")), Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AgentOperationExecutor_TransactionDelegatePreservesOriginalException(bool cancellation)
+    {
+        var catalog = Substitute.For<IAgentCatalogService>();
+        var capability = CreateCapability(AgentCapabilityIds.HabitsWrite, AgentScopes.WriteHabits, AgentRiskClass.Low, AgentConfirmationRequirement.None, isMutation: true);
+        var operation = CreateOperation("create_habit", capability.Id, isMutation: true, isAgentExecutable: true, AgentConfirmationRequirement.None, AgentRiskClass.Low);
+        catalog.GetOperation(operation.Id).Returns(operation);
+        catalog.GetCapability(capability.Id).Returns(capability);
+        var policy = Substitute.For<IAgentPolicyEvaluator>();
+        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+            .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability));
+        Exception failure = cancellation
+            ? new OperationCanceledException("transaction_canceled")
+            : new TimeoutException("transient_database_timeout");
+        var observedFailures = new List<Exception>();
+        var unitOfWork = Substitute.For<IUnitOfWork>();
+        unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<AgentExecuteOperationResponse>>>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                try
+                {
+                    return await call.Arg<Func<CancellationToken, Task<AgentExecuteOperationResponse>>>()(call.Arg<CancellationToken>());
+                }
+                catch (Exception ex)
+                {
+                    observedFailures.Add(ex);
+                    throw;
+                }
+            });
+        var tool = new TransactionalStubTool(operation.Id, (_, _, _) => throw failure);
+        var executor = CreateExecutor(catalog, policyEvaluator: policy,
+            toolRegistry: new AiToolRegistry([tool]), unitOfWork: unitOfWork);
+
+        var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
+            UserId, operation.Id, Parse("{}"), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt));
+
+        response.Operation.Status.Should().Be(AgentOperationStatus.Failed);
+        observedFailures.Should().ContainSingle().Which.Should().BeSameAs(failure);
+        observedFailures[0].GetType().Should().Be(failure.GetType());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AgentOperationExecutor_RetryFailureAuditRecordsCurrentPolicyEvaluation(bool policyThrowsOnRetry)
+    {
+        var catalog = Substitute.For<IAgentCatalogService>();
+        var capability = CreateCapability(AgentCapabilityIds.HabitsWrite, AgentScopes.WriteHabits, AgentRiskClass.Low, AgentConfirmationRequirement.None, isMutation: true);
+        var operation = CreateOperation("create_habit", capability.Id, isMutation: true, isAgentExecutable: true, AgentConfirmationRequirement.None, AgentRiskClass.Low);
+        catalog.GetOperation(operation.Id).Returns(operation);
+        catalog.GetCapability(capability.Id).Returns(capability);
+        var policy = Substitute.For<IAgentPolicyEvaluator>();
+        var evaluations = 0;
+        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>()).Returns(_ =>
+        {
+            evaluations++;
+            if (evaluations == 2 && policyThrowsOnRetry)
+                throw new InvalidOperationException("policy_failed_on_retry");
+
+            return new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability,
+                ShadowStatus: evaluations == 1 ? AgentPolicyDecisionStatus.Denied : AgentPolicyDecisionStatus.Allowed,
+                ShadowReason: evaluations == 1 ? "first_evaluation" : "retry_evaluation");
+        });
+        var audit = Substitute.For<IAgentAuditService>();
+        var unitOfWork = Substitute.For<IUnitOfWork>();
+        unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<AgentExecuteOperationResponse>>>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                var execute = call.Arg<Func<CancellationToken, Task<AgentExecuteOperationResponse>>>();
+                var token = call.Arg<CancellationToken>();
+                try
+                {
+                    return await execute(token);
+                }
+                catch (TimeoutException)
+                {
+                    return await execute(token);
+                }
+            });
+        var attempts = 0;
+        var tool = new TransactionalStubTool(operation.Id, (_, _, _) =>
+        {
+            attempts++;
+            return attempts == 1
+                ? throw new TimeoutException("transient_database_timeout")
+                : throw new InvalidOperationException("tool_failed_on_retry");
+        });
+        var executor = CreateExecutor(catalog, policyEvaluator: policy, auditService: audit,
+            toolRegistry: new AiToolRegistry([tool]), unitOfWork: unitOfWork);
+
+        var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
+            UserId, operation.Id, Parse("{}"), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt));
+
+        response.Operation.Status.Should().Be(AgentOperationStatus.Failed);
+        evaluations.Should().Be(2);
+        attempts.Should().Be(policyThrowsOnRetry ? 1 : 2);
+        await audit.Received(1).RecordAsync(Arg.Is<AgentAuditEntry>(entry =>
+            entry.OutcomeStatus == AgentOperationStatus.Failed &&
+            entry.Error == (policyThrowsOnRetry ? "policy_failed_on_retry" : "tool_failed_on_retry") &&
+            entry.ShadowPolicyDecision == (policyThrowsOnRetry ? null : AgentPolicyDecisionStatus.Allowed) &&
+            entry.ShadowReason == (policyThrowsOnRetry ? null : "retry_evaluation")), Arg.Any<CancellationToken>());
+    }
+
     private static AgentOperationExecutor CreateExecutor(
         IAgentCatalogService catalogService,
         IAgentPolicyEvaluator? policyEvaluator = null,

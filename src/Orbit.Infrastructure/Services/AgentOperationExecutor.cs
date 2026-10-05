@@ -204,55 +204,53 @@ public partial class AgentOperationExecutor(
         CancellationToken cancellationToken)
     {
         var tool = toolRegistry.GetTool(execution.Operation.Id);
-
-        async Task<AgentExecuteOperationResponse> ExecuteAsync(CancellationToken ct)
-        {
-            var policyDecision = EvaluatePolicy(execution);
-            try
-            {
-                if (policyDecision.Status == AgentPolicyDecisionStatus.Denied)
-                    return await DenyByPolicyAsync(execution, policyDecision, ct);
-
-                if (policyDecision.Status == AgentPolicyDecisionStatus.ConfirmationRequired)
-                    return await RequireConfirmationAsync(execution, policyDecision, ct);
-
-                if (tool is null)
-                    return AgentOperationResponseFactory.MissingTool(
-                        execution.Operation.Id,
-                        execution.Capability.RiskClass,
-                        execution.Capability.ConfirmationRequirement,
-                        execution.Summary);
-
-                var result = await ExecuteToolWithConcurrencyRetryAsync(tool, execution, ct);
-                if (tool is ITransactionalAiTool && !result.Success)
-                    throw new ToolOutcomeRollbackException(policyDecision, result);
-
-                return await BuildToolOutcomeResponseAsync(execution, policyDecision, result, ct);
-            }
-            catch (Exception ex) when (ex is not ToolOutcomeRollbackException)
-            {
-                throw new AgentPolicyExecutionException(policyDecision, ex);
-            }
-        }
+        var policyState = new OperationPolicyState();
 
         try
         {
             return tool is ITransactionalAiTool
-                ? await unitOfWork.ExecuteInTransactionAsync(ExecuteAsync, cancellationToken)
-                : await ExecuteAsync(cancellationToken);
+                ? await unitOfWork.ExecuteInTransactionAsync(
+                    ct => ExecutePolicyAndToolAsync(execution, tool, policyState, ct), cancellationToken)
+                : await ExecutePolicyAndToolAsync(execution, tool, policyState, cancellationToken);
         }
         catch (ToolOutcomeRollbackException ex)
         {
             return await BuildToolOutcomeResponseAsync(execution, ex.Decision, ex.Result, cancellationToken);
         }
-        catch (AgentPolicyExecutionException ex)
-        {
-            return await FailOperationAsync(execution, ex.Failure, ex.Decision, cancellationToken);
-        }
         catch (Exception ex)
         {
-            return await FailOperationAsync(execution, ex, null, cancellationToken);
+            return await FailOperationAsync(execution, ex, policyState.Decision, cancellationToken);
         }
+    }
+
+    private async Task<AgentExecuteOperationResponse> ExecutePolicyAndToolAsync(
+        OperationExecutionContext execution,
+        IAiTool? tool,
+        OperationPolicyState policyState,
+        CancellationToken cancellationToken)
+    {
+        policyState.Decision = null;
+        var policyDecision = EvaluatePolicy(execution);
+        policyState.Decision = policyDecision;
+
+        if (policyDecision.Status == AgentPolicyDecisionStatus.Denied)
+            return await DenyByPolicyAsync(execution, policyDecision, cancellationToken);
+
+        if (policyDecision.Status == AgentPolicyDecisionStatus.ConfirmationRequired)
+            return await RequireConfirmationAsync(execution, policyDecision, cancellationToken);
+
+        if (tool is null)
+            return AgentOperationResponseFactory.MissingTool(
+                execution.Operation.Id,
+                execution.Capability.RiskClass,
+                execution.Capability.ConfirmationRequirement,
+                execution.Summary);
+
+        var result = await ExecuteToolWithConcurrencyRetryAsync(tool, execution, cancellationToken);
+        if (tool is ITransactionalAiTool && !result.Success)
+            throw new ToolOutcomeRollbackException(policyDecision, result);
+
+        return await BuildToolOutcomeResponseAsync(execution, policyDecision, result, cancellationToken);
     }
 
     private async Task<AgentExecuteOperationResponse> FailOperationAsync(
@@ -416,6 +414,11 @@ public partial class AgentOperationExecutor(
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Agent operation {OperationId} failed (correlation {CorrelationId})")]
     private static partial void LogOperationFailed(ILogger logger, Exception ex, string operationId, string? correlationId);
+
+    private sealed class OperationPolicyState
+    {
+        public AgentPolicyDecision? Decision { get; set; }
+    }
 
     private sealed record OperationExecutionContext(
         AgentExecuteOperationRequest Request,
