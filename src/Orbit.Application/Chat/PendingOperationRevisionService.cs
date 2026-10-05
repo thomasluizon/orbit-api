@@ -126,6 +126,18 @@ public sealed class PendingOperationRevisionService(
         return current?.PreviewFingerprint == execution.PreviewFingerprint;
     }
 
+    public async Task<bool> CanApproveAsync(Guid userId, PendingAgentOperationExecution execution,
+        CancellationToken cancellationToken)
+    {
+        if (execution.OperationId != "bulk_create_habits")
+            return true;
+
+        var preview = await previewer.PreviewAsync(userId, execution.OperationId,
+            execution.Arguments, cancellationToken);
+        return preview?.Items is { Count: > 0 } items
+            && items.All(item => item.ValidationErrors is null or { Count: 0 });
+    }
+
     /// <summary>
     /// Holds every edit to the rules of its tool before the revised preview is accepted: the
     /// parameter schema (the item schema for a bulk create), then the tool's own check. A tool

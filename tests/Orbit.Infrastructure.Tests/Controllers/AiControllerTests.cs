@@ -10,6 +10,7 @@ using Orbit.Application.Chat;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Models;
 using Orbit.Domain.Common;
+using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
@@ -276,6 +277,74 @@ public class AiControllerTests
         var response = ok.Value.Should().BeOfType<AiController.ConfirmPendingOperationResponse>().Subject;
         response.PendingOperationId.Should().Be(pendingOperationId);
         response.ConfirmationToken.Should().Be("agc_token");
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    public async Task PendingOperation_InvalidBulkCreateCannotConfirmOrExecute(bool confirm, bool hasFingerprint)
+    {
+        var (controller, id) = await SetupBulkCreateAsync(
+            """{"habits":[{"title":"Valid"},{"title":"Invalid","frequency_unit":"Day","frequency_quantity":0}]}""",
+            hasFingerprint);
+
+        var result = confirm
+            ? await controller.ConfirmPendingOperation(id, CancellationToken.None)
+            : await controller.ExecutePendingOperation(id,
+                new AiController.ExecutePendingOperationRequest("agc_token"), CancellationToken.None);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+        _pendingOperationStore.DidNotReceiveWithAnyArgs().Confirm(default, default);
+        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PendingOperation_ValidBulkCreateCanConfirmAndExecute(bool hasFingerprint)
+    {
+        var (controller, id) = await SetupBulkCreateAsync(
+            """{"habits":[{"title":"Valid","frequency_unit":"Day","frequency_quantity":1}]}""",
+            hasFingerprint);
+
+        var confirmation = await controller.ConfirmPendingOperation(id, CancellationToken.None);
+        var execution = await controller.ExecutePendingOperation(id,
+            new AiController.ExecutePendingOperationRequest("agc_token"), CancellationToken.None);
+
+        confirmation.Should().BeOfType<OkObjectResult>();
+        execution.Should().BeOfType<OkObjectResult>();
+        _pendingOperationStore.Received(1).Confirm(UserId, id);
+        await _operationExecutor.Received(1).ExecuteAsync(
+            Arg.Is<AgentExecuteOperationRequest>(request => request.OperationId == "bulk_create_habits"),
+            Arg.Any<CancellationToken>());
+    }
+
+    private async Task<(AiController Controller, Guid Id)> SetupBulkCreateAsync(string json, bool hasFingerprint)
+    {
+        var id = Guid.NewGuid();
+        var arguments = Parse(json);
+        var previewer = new PendingOperationChangePreviewer(Substitute.For<IGenericRepository<Habit>>(),
+            Substitute.For<IGenericRepository<Goal>>(), Substitute.For<IGenericRepository<Tag>>(),
+            Substitute.For<IUserDateService>(), new AiToolRegistry([]));
+        var preview = await previewer.PreviewAsync(UserId, "bulk_create_habits", arguments);
+        _pendingOperationStore.GetExecution(UserId, id).Returns(new PendingAgentOperationExecution(id,
+            AgentCapabilityIds.HabitsBulkWrite, "bulk_create_habits", arguments,
+            AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation,
+            PreviewFingerprint: hasFingerprint ? preview!.PreviewFingerprint : null));
+        _pendingOperationStore.Confirm(UserId, id).Returns(new PendingAgentOperationConfirmation(
+            id, "agc_token", DateTime.UtcNow.AddMinutes(5)));
+        var controller = new AiController(_catalogService, _policyEvaluator,
+            new AgentPendingStores(_pendingOperationStore, _pendingClarificationStore),
+            _stepUpService, _auditService, _operationExecutor,
+            new PendingOperationRevisionService(_pendingOperationStore, previewer,
+                Substitute.For<IValidator<RevisePendingOperationRequest>>(), new AiToolRegistry([])),
+            _resolveClarificationValidator)
+        {
+            ControllerContext = _controller.ControllerContext
+        };
+        return (controller, id);
     }
 
     [Fact]

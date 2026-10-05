@@ -73,10 +73,10 @@ public class BulkCreateHabitsTool(
         return new ToolResult(true, EntityName: $"{successCount}/{items.Count} habits created", Payload: result.Value);
     }
 
-    internal static BulkHabitItem? ParseBulkHabitItem(JsonElement el)
+    internal static BulkHabitItem? ParseBulkHabitItem(JsonElement el, bool allowEmptyTitle = false)
     {
         var title = JsonArgumentParser.GetOptionalString(el, TitleProperty);
-        if (string.IsNullOrWhiteSpace(title))
+        if (!allowEmptyTitle && string.IsNullOrWhiteSpace(title))
             return null;
 
         List<BulkHabitItem>? subHabits = null;
@@ -92,7 +92,7 @@ public class BulkCreateHabitsTool(
         }
 
         return new BulkHabitItem(
-            title,
+            title ?? string.Empty,
             JsonArgumentParser.GetOptionalString(el, "description"),
             JsonArgumentParser.ParseFrequencyUnit(el),
             JsonArgumentParser.GetOptionalInt(el, "frequency_quantity"),

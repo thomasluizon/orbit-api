@@ -1,13 +1,17 @@
 using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
+using FluentValidation;
 using MediatR;
+using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Chat.Validators;
 using Orbit.Application.Common;
+using Orbit.Application.Habits.Commands;
+using Orbit.Application.Habits.Validators;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -317,6 +321,74 @@ public sealed class PendingOperationRevisionServiceTests
             .Should().Be("Final");
         current.Arguments.GetProperty("habits")[0].GetProperty("preview_item_id").GetString()
             .Should().Be("1");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReviseAsync_InvalidCreateCanBeApprovedAfterEditingOrRemovingItem(bool remove)
+    {
+        SetupHabits([]);
+        using var services = new ServiceCollection()
+            .AddSingleton<IValidator<BulkCreateHabitsCommand>>(new BulkCreateHabitsCommandValidator())
+            .AddSingleton(_dateService).BuildServiceProvider();
+        var mediator = Substitute.For<IMediator>();
+        mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>())
+            .Returns(call => new CheckChatCommandQueryHandler(services).Handle(
+                call.Arg<CheckChatCommandQuery>(), call.Arg<CancellationToken>()));
+        var tools = new AiToolRegistry([new BulkCreateHabitsTool(mediator)]);
+        var previewer = new PendingOperationChangePreviewer(_habits, _goals, _tags, _dateService, tools);
+        var service = new PendingOperationRevisionService(_store, previewer,
+            new RevisePendingOperationRequestValidator(), tools);
+        var pendingId = Guid.NewGuid();
+        var arguments = JsonDocument.Parse("""{"habits":[{"title":"Valid"},{"title":"Invalid","frequency_unit":"Day","frequency_quantity":0}]}""")
+            .RootElement.Clone();
+        var original = await previewer.PreviewAsync(_userId, "bulk_create_habits", arguments);
+        var current = new PendingAgentOperationExecution(pendingId, AgentCapabilityIds.HabitsBulkWrite,
+            "bulk_create_habits", arguments, AgentExecutionSurface.Chat,
+            AgentConfirmationRequirement.FreshConfirmation, original!.PreviewFingerprint);
+        _store.GetExecution(_userId, pendingId).Returns(_ => current);
+        _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<string>(), Arg.Any<string>()).Returns(call =>
+            {
+                current = current with
+                {
+                    Arguments = JsonDocument.Parse(call.ArgAt<string>(3)).RootElement.Clone(),
+                    PreviewFingerprint = call.ArgAt<string>(5)
+                };
+                return true;
+            });
+        (await service.CanApproveAsync(_userId, current, CancellationToken.None)).Should().BeFalse();
+        using var edits = JsonDocument.Parse("""{"frequency_quantity":1}""");
+        IReadOnlyList<RevisedPendingOperationItem> items = remove
+            ? [new("0")]
+            : [new("0"), new("1", edits.RootElement.Clone())];
+
+        var result = await service.ReviseAsync(_userId, pendingId,
+            new RevisePendingOperationRequest(original.PreviewFingerprint!, items), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Preview!.Items.Should().HaveCount(remove ? 1 : 2);
+        result.Preview.Items.Should().OnlyContain(item => item.ValidationErrors == null);
+        (await service.CanApproveAsync(_userId, current, CancellationToken.None)).Should().BeTrue();
+        (await service.IsCurrentAsync(_userId, current, CancellationToken.None)).Should().BeTrue();
+        await mediator.DidNotReceive().Send(Arg.Any<BulkCreateHabitsCommand>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("""{"habits":[]}""")]
+    [InlineData("""{"habits":[{}]}""")]
+    [InlineData("""{"habits":[{"title":"Invalid","frequency_unit":"Day","frequency_quantity":-1}]}""")]
+    public async Task CanApproveAsync_InvalidCreateIsBlockedWithoutStoredFingerprint(string json)
+    {
+        var previewer = new PendingOperationChangePreviewer(_habits, _goals, _tags, _dateService, _tools);
+        var service = new PendingOperationRevisionService(_store, previewer,
+            new RevisePendingOperationRequestValidator(), _tools);
+        var execution = new PendingAgentOperationExecution(Guid.NewGuid(), AgentCapabilityIds.HabitsBulkWrite,
+            "bulk_create_habits", JsonDocument.Parse(json).RootElement.Clone(), AgentExecutionSurface.Chat,
+            AgentConfirmationRequirement.FreshConfirmation);
+
+        (await service.CanApproveAsync(_userId, execution, CancellationToken.None)).Should().BeFalse();
     }
 
     [Fact]

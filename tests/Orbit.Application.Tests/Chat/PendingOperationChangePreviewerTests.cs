@@ -4,6 +4,10 @@ using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Tools;
+using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Habits.Commands;
+using Orbit.Application.Habits.Validators;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -117,6 +121,60 @@ public sealed class PendingOperationChangePreviewerTests
         preview.Items[0].Fields[0].IsEditable.Should().BeTrue();
         preview.Items[0].Fields[0].ProposedValue!.Value.GetString().Should().Be("One");
         AssertRemovesData(preview, false);
+    }
+
+    [Fact]
+    public async Task PreviewAsync_Create_InvalidItemCarriesValidatorFieldError()
+    {
+        using var arguments = JsonDocument.Parse("""{"habits":[{"title":"Valid","frequency_unit":"Day","frequency_quantity":1},{"title":"Invalid","frequency_unit":"Day","frequency_quantity":0,"preview_item_id":"retained"}]}""");
+        var command = new BulkCreateHabitsCommand(UserId, arguments.RootElement.GetProperty("habits")
+            .EnumerateArray().Select(item => BulkCreateHabitsTool.ParseBulkHabitItem(item)!).ToList());
+        var validation = await new BulkCreateHabitsCommandValidator().ValidateAsync(command);
+        var failure = validation.Errors.Should().ContainSingle().Subject;
+        failure.PropertyName.Should().Be("Habits[1].FrequencyQuantity");
+        failure.ErrorCode.Should().Be("GreaterThanValidator");
+
+        var preview = await Preview("bulk_create_habits", arguments.RootElement.GetRawText());
+
+        preview!.Items!.Select(item => item.ItemId).Should().Equal("0", "retained");
+        var items = JsonSerializer.SerializeToElement(preview, JsonSerializerOptions.Web).GetProperty("items");
+        items[0].TryGetProperty("validationErrors", out _).Should().BeFalse();
+        items[1].TryGetProperty("validationErrors", out var errors).Should().BeTrue();
+        errors.GetArrayLength().Should().Be(1);
+        errors[0].GetProperty("field").GetString().Should().Be("frequency_quantity");
+        errors[0].GetProperty("errorCode").GetString().Should().Be(failure.ErrorCode);
+        errors[0].GetProperty("error").GetString().Should().Be(failure.ErrorMessage);
+    }
+
+    [Theory]
+    [InlineData("""{"title":""}""", "title")]
+    [InlineData("""{}""", "title")]
+    [InlineData("""{"title":"Invalid","frequency_unit":"Day","frequency_quantity":-1}""", "frequency_quantity")]
+    public async Task PreviewAsync_Create_InvalidFieldsRemainVisible(string itemJson, string field)
+    {
+        var preview = await Preview("bulk_create_habits", $$"""{"habits":[{{itemJson}}]}""");
+
+        preview!.Items.Should().ContainSingle().Which.ValidationErrors.Should()
+            .Contain(error => error.Field == field);
+        preview.Items![0].Fields.Should().Contain(change => change.Field == field && change.IsEditable);
+    }
+
+    [Fact]
+    public async Task PreviewAsync_Create_ValidBatchPreservesPreviewAndFingerprint()
+    {
+        const string json = """{"habits":[{"title":"Valid","frequency_unit":"Day","frequency_quantity":1}]}""";
+        var preview = await Preview("bulk_create_habits", json);
+        var item = preview!.Items.Should().ContainSingle().Subject;
+
+        item.ValidationErrors.Should().BeNull();
+        preview.Changes.Should().BeEmpty();
+        preview.ChangeTargetCount.Should().Be(1);
+        item.Fields.Select(field => field.Field).Should().Equal("title", "frequency_unit", "frequency_quantity");
+        var legacyItemJson = JsonSerializer.SerializeToElement(item);
+        legacyItemJson.EnumerateObject().Select(property => property.Name).Should().Equal(
+            "ItemId", "EntityId", "EntityName", "Fields", "StateFingerprint", "RemovesData");
+        preview.PreviewFingerprint.Should().Be(AgentOperationFingerprint.Compute(
+            "bulk_create_habits", JsonSerializer.Serialize(preview.Items)));
     }
 
     [Theory]

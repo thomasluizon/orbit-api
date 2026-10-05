@@ -174,7 +174,10 @@ public class AiController(
             return Forbid();
 
         var userId = HttpContext.GetUserId();
-        var confirmation = pendingStores.OperationStore.Confirm(HttpContext.GetUserId(), id);
+        var execution = pendingStores.OperationStore.GetExecution(userId, id);
+        var invalid = execution is not null
+            && !await revisionService.CanApproveAsync(userId, execution, cancellationToken);
+        var confirmation = invalid ? null : pendingStores.OperationStore.Confirm(userId, id);
         await auditService.RecordAsync(new AgentAuditEntry(
             userId,
             AgentCapabilityIds.ChatInteract,
@@ -187,7 +190,10 @@ public class AiController(
             HttpContext.TraceIdentifier,
             "Confirm pending agent operation",
             TargetId: id.ToString(),
-            Error: confirmation is null ? "pending_operation_not_found" : null), cancellationToken);
+            Error: invalid ? "validation_error" : confirmation is null ? "pending_operation_not_found" : null), cancellationToken);
+
+        if (invalid)
+            return BadRequest(ErrorMessages.ValidationError.ToErrorBody());
 
         return confirmation is null
             ? NotFound(ErrorMessages.PendingOperationNotFound.ToErrorBody())
@@ -296,6 +302,9 @@ public class AiController(
 
             return NotFound(ErrorMessages.PendingOperationNotFound.ToErrorBody());
         }
+
+        if (!await revisionService.CanApproveAsync(userId, pendingExecution, cancellationToken))
+            return BadRequest(ErrorMessages.ValidationError.ToErrorBody());
 
         if (!await revisionService.IsCurrentAsync(userId, pendingExecution, cancellationToken))
             return Conflict(new { error = "stale_preview" });
