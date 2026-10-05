@@ -15,6 +15,12 @@ public interface IAiTool
 
 public interface IConcurrencyRetryableTool;
 
+/// <summary>
+/// A tool whose writes share the executor's unit of work and have no external side effects.
+/// Confirmation consumption and tool writes commit together; failed outcomes roll both back.
+/// </summary>
+public interface ITransactionalAiTool;
+
 public record ToolResult(
     bool Success,
     string? EntityId = null,

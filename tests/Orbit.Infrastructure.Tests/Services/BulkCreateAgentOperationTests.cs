@@ -3,7 +3,7 @@ using FluentAssertions;
 using FluentValidation;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Application.Behaviors;
@@ -33,6 +33,8 @@ public sealed class BulkCreateAgentOperationTests : IDisposable
     private readonly ServiceProvider _provider;
     private readonly Guid _userId;
     private AgentAuditEntry? _lastAudit;
+    private readonly RecordingLogger _logger = new();
+    private readonly AfterWriteFailureBehavior _afterWriteFailure = new();
 
     public BulkCreateAgentOperationTests()
     {
@@ -65,6 +67,7 @@ public sealed class BulkCreateAgentOperationTests : IDisposable
                 cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));
             })
             .AddSingleton<IValidator<BulkCreateHabitsCommand>, BulkCreateHabitsCommandValidator>()
+            .AddSingleton<IPipelineBehavior<BulkCreateHabitsCommand, Result<BulkCreateResult>>>(_afterWriteFailure)
             .AddSingleton(new BulkCreateHabitsRepositories(
                 new GenericRepository<Habit>(context),
                 new GenericRepository<GoogleCalendarSyncSuggestion>(context),
@@ -89,7 +92,7 @@ public sealed class BulkCreateAgentOperationTests : IDisposable
         _executor = new AgentOperationExecutor(
             catalog, policy, _audit, ownership, bridge,
             new AiToolRegistry([tool]),
-            work, NullLogger<AgentOperationExecutor>.Instance);
+            work, _logger);
     }
 
     [Fact]
@@ -119,6 +122,104 @@ public sealed class BulkCreateAgentOperationTests : IDisposable
         verify.PendingAgentOperations.Single().ConsumedAtUtc.Should().NotBeNull();
     }
 
+    [Fact]
+    public async Task ValidationFailure_LeavesPendingOperationApprovable()
+    {
+        var request = await ConfirmAsync(JsonSerializer.SerializeToElement(new
+        {
+            habits = new[] { new { title = "Read", frequency_unit = "day", frequency_quantity = 0 } }
+        }));
+
+        var response = await _executor.ExecuteAsync(request);
+
+        response.Operation.Status.Should().Be(AgentOperationStatus.Failed);
+        _lastAudit!.Error.Should().Contain("FrequencyQuantity");
+        AssertApprovable();
+        var pendingId = _factory.Context.PendingAgentOperations.Single().Id;
+        _pending.Confirm(_userId, pendingId).Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task FailureBeforeWrite_LogsSafeExceptionAndAllowsSuccessfulRetry()
+    {
+        var request = await ConfirmAsync(JsonSerializer.SerializeToElement(new
+        {
+            habits = new[] { new { title = "Private habit text", frequency_unit = "day" } }
+        }));
+        _payGate.CanCreateHabits(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<Result>(new InvalidOperationException("Private habit text")));
+
+        var response = await _executor.ExecuteAsync(request);
+
+        response.Operation.Status.Should().Be(AgentOperationStatus.Failed);
+        _lastAudit!.Error.Should().Be("Private habit text");
+        var entry = _logger.Entries.Should().ContainSingle().Subject;
+        entry.Level.Should().Be(LogLevel.Error);
+        entry.Message.Should().Contain(request.OperationId).And.Contain(request.CorrelationId);
+        entry.Exception.Should().NotBeNull();
+        entry.Exception!.ToString().Should().Contain(nameof(InvalidOperationException)).And.NotContain("Private habit text");
+        entry.Message.Should().NotContain("Private habit text").And.NotContain(_userId.ToString());
+        AssertApprovable();
+
+        _payGate.CanCreateHabits(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success());
+        var retry = await _executor.ExecuteAsync(request);
+
+        retry.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
+        using var verify = _factory.CreateContext();
+        verify.Habits.Should().ContainSingle().Which.FrequencyQuantity.Should().Be(1);
+        verify.PendingAgentOperations.Single().ConsumedAtUtc.Should().NotBeNull();
+        var replay = await _executor.ExecuteAsync(request);
+        replay.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation);
+        verify.Habits.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task PayGateFailure_LeavesPendingOperationApprovable()
+    {
+        var request = await ConfirmAsync(JsonSerializer.SerializeToElement(new
+        {
+            habits = new[] { new { title = "Read", frequency_unit = "day" } }
+        }));
+        _payGate.CanCreateHabits(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Result.PayGateFailure("Habit limit reached"));
+
+        var response = await _executor.ExecuteAsync(request);
+
+        response.Operation.Status.Should().Be(AgentOperationStatus.Denied);
+        AssertApprovable();
+    }
+
+    [Fact]
+    public async Task FailureAfterWrite_RollsBackHabitsAndConfirmationBeforeRetry()
+    {
+        var request = await ConfirmAsync(JsonSerializer.SerializeToElement(new
+        {
+            habits = new[] { new { title = "Read", frequency_unit = "day" } }
+        }));
+        _afterWriteFailure.Enabled = true;
+
+        var response = await _executor.ExecuteAsync(request);
+
+        response.Operation.Status.Should().Be(AgentOperationStatus.Failed);
+        AssertApprovable();
+        _afterWriteFailure.Enabled = false;
+        var retry = await _executor.ExecuteAsync(request);
+        retry.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
+        using var verify = _factory.CreateContext();
+        verify.Habits.Should().ContainSingle();
+        verify.PendingAgentOperations.Single().ConsumedAtUtc.Should().NotBeNull();
+    }
+
+    private void AssertApprovable()
+    {
+        using var verify = _factory.CreateContext();
+        verify.Habits.Should().BeEmpty();
+        var pending = verify.PendingAgentOperations.Single();
+        pending.ConsumedAtUtc.Should().BeNull();
+        _pending.GetExecution(_userId, pending.Id).Should().NotBeNull();
+    }
+
     private async Task<AgentExecuteOperationRequest> ConfirmAsync(JsonElement arguments)
     {
         var request = new AgentExecuteOperationRequest(
@@ -137,5 +238,28 @@ public sealed class BulkCreateAgentOperationTests : IDisposable
     {
         _provider.Dispose();
         _factory.Dispose();
+    }
+
+    private sealed class RecordingLogger : ILogger<AgentOperationExecutor>
+    {
+        public List<(LogLevel Level, string Message, Exception? Exception)> Entries { get; } = [];
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter) => Entries.Add((logLevel, formatter(state, exception), exception));
+    }
+
+    private sealed class AfterWriteFailureBehavior : IPipelineBehavior<BulkCreateHabitsCommand, Result<BulkCreateResult>>
+    {
+        public bool Enabled { get; set; }
+
+        public async Task<Result<BulkCreateResult>> Handle(BulkCreateHabitsCommand request,
+            RequestHandlerDelegate<Result<BulkCreateResult>> next, CancellationToken cancellationToken)
+        {
+            var result = await next(cancellationToken);
+            if (Enabled)
+                throw new InvalidOperationException("Failure after saving habits");
+            return result;
+        }
     }
 }

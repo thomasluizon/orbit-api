@@ -5,7 +5,7 @@ using Orbit.Application.Habits.Commands;
 namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class BulkCreateHabitsTool(
-    IMediator mediator) : IAiTool
+    IMediator mediator) : IAiTool, ITransactionalAiTool
 {
     private const string TitleProperty = "title";
 
