@@ -6,14 +6,14 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="AWSSDK.S3" Version="4.0.103.4" />
-    <PackageReference Include="AWSSDK.SimpleEmailV2" Version="4.0.105.1" />
+    <PackageReference Include="AWSSDK.S3" Version="4.0.104.1" />
+    <PackageReference Include="AWSSDK.SimpleEmailV2" Version="4.0.106.1" />
     <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
     <PackageReference Include="FileSignatures" Version="7.3.0" />
     <PackageReference Include="FirebaseAdmin" Version="3.7.0" />
     <PackageReference Include="Hangfire.Core" Version="1.8.25" />
-    <PackageReference Include="Google.Apis.AndroidPublisher.v3" Version="1.76.0.4277" />
-    <PackageReference Include="Google.Apis.Calendar.v3" Version="1.75.0.4206" />
+    <PackageReference Include="Google.Apis.AndroidPublisher.v3" Version="1.77.0.4284" />
+    <PackageReference Include="Google.Apis.Calendar.v3" Version="1.77.0.4285" />
     <PackageReference Include="MediatR" Version="14.2.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.12" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
