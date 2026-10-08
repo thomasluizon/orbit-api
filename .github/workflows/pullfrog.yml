@@ -62,7 +62,7 @@ jobs:
       # because a moving tag is an unpinned dependency.
       - name: Run agent
         id: codex
-        uses: pullfrog/pullfrog@99c5e781dd54463197d1109998386d37c84f6853 # v0, release 0.1.84
+        uses: pullfrog/pullfrog@ed800018463e1b84e8e3377f662173aed1da98b0 # v0, release 0.1.95
         continue-on-error: true
         with:
           prompt: ${{ inputs.prompt }}
@@ -71,7 +71,7 @@ jobs:
       # exhausted OpenAI allowance looks like. Green runs never reach this.
       - name: Run agent (Claude fallback)
         if: steps.codex.outcome == 'failure'
-        uses: pullfrog/pullfrog@99c5e781dd54463197d1109998386d37c84f6853 # v0, release 0.1.84
+        uses: pullfrog/pullfrog@ed800018463e1b84e8e3377f662173aed1da98b0 # v0, release 0.1.95
         with:
           prompt: ${{ inputs.prompt }}
           model: anthropic/claude-opus-5-5
