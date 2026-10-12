@@ -90,7 +90,7 @@ public class AiProactiveCheckinMessageServiceGenerationTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Still time today, Alex");
-        result.Value.Body.Should().Be("You've fallen behind on a few habits today. Astra's got your back -- let's get back on track.");
+        result.Value.Body.Should().Be("You still have a few habits left today. Astra can help you get back on track.");
     }
 
     [Fact]
@@ -102,7 +102,7 @@ public class AiProactiveCheckinMessageServiceGenerationTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Ainda dá tempo hoje, Alex");
-        result.Value.Body.Should().Be("Você ficou para trás em alguns hábitos hoje. A Astra está aqui -- bora retomar?");
+        result.Value.Body.Should().Be("Ainda faltam alguns hábitos hoje. A Astra ajuda você a retomar o ritmo.");
     }
 
     [Fact]
@@ -114,7 +114,7 @@ public class AiProactiveCheckinMessageServiceGenerationTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Still time today, Alex");
-        result.Value.Body.Should().Be("You've fallen behind on a few habits today. Astra's got your back -- let's get back on track.");
+        result.Value.Body.Should().Be("You still have a few habits left today. Astra can help you get back on track.");
     }
 
     [Fact]
@@ -126,7 +126,7 @@ public class AiProactiveCheckinMessageServiceGenerationTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Ainda dá tempo hoje, Alex");
-        result.Value.Body.Should().Be("Você ficou para trás em alguns hábitos hoje. A Astra está aqui -- bora retomar?");
+        result.Value.Body.Should().Be("Ainda faltam alguns hábitos hoje. A Astra ajuda você a retomar o ritmo.");
     }
 
     internal static AiProactiveCheckinMessageService BuildService(string content, HttpStatusCode status = HttpStatusCode.OK)

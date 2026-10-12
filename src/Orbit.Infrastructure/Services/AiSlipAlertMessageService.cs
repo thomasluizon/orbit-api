@@ -33,7 +33,7 @@ public sealed partial class AiSlipAlertMessageService(
 
             Rules:
             - Return EXACTLY two lines: first line is the notification title, second line is the body
-            - Title: 5-8 words max, personal and warm (e.g., "Stay strong today!" or "You've got this!")
+            - Title: 5-8 words max, personal and warm (e.g., "Stay strong today" or "You've got this")
             - Title must use sentence case: capitalise only the first word, proper nouns and product names (Astra, Orbit); never use title case
             - Body: 1-2 sentences max, motivational and specific to their habit
             - Be creative and varied -- don't use the same structure every time
@@ -80,9 +80,9 @@ public sealed partial class AiSlipAlertMessageService(
         var sanitizedHabitTitle = SanitizeHeadingTitle(habitTitle);
         return LocaleHelper.IsPortuguese(language)
             ? Result.Success(($"Fique atento: {sanitizedHabitTitle}",
-                "Você costuma deslizar por volta desse horário. Força -- você consegue!"))
+                "Seus deslizes costumam acontecer por volta deste horário. Força, você consegue."))
             : Result.Success(($"Heads up: {sanitizedHabitTitle}",
-                "You tend to slip around this time. Stay strong -- you've got this!"));
+                "You tend to slip around this time. Stay strong, you've got this."));
     }
 
     private static string SanitizeHeadingTitle(string habitTitle) =>

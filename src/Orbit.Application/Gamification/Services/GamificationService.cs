@@ -730,8 +730,8 @@ public partial class GamificationService(
         ["dedicated"] = ("Dedicado", "Complete 100 hábitos no total"),
         ["relentless"] = ("Imparável", "Complete 500 hábitos no total"),
         ["legendary"] = ("Lendário", "Complete 1.000 hábitos no total"),
-        ["goal_setter"] = ("Definidor de metas", "Crie 3 metas"),
-        ["goal_crusher"] = ("Destruidor de metas", "Complete sua primeira meta"),
+        ["goal_setter"] = ("Metas traçadas", "Crie 3 metas"),
+        ["goal_crusher"] = ("Meta batida", "Complete sua primeira meta"),
         ["overachiever"] = ("Acima das expectativas", "Complete 5 metas"),
         ["dream_maker"] = ("Realizador de sonhos", "Complete 10 metas"),
         ["perfect_day"] = ("Dia perfeito", "Complete todos os hábitos em um dia"),
@@ -739,10 +739,10 @@ public partial class GamificationService(
         ["perfect_month"] = ("Mês perfeito", "Complete todos os hábitos por 30 dias consecutivos"),
         ["early_bird"] = ("Madrugador", "Complete um hábito antes das 7h (10 vezes)"),
         ["night_owl"] = ("Coruja noturna", "Complete um hábito após as 22h (10 vezes)"),
-        ["comeback"] = ("Retorno", "Retome após 7+ dias de inatividade"),
-        ["bad_habit_breaker"] = ("Quebrador de maus hábitos", "Resista a um mau hábito por 30 dias consecutivos"),
+        ["comeback"] = ("Retorno", "Volte depois de 7 dias ou mais sem atividade"),
+        ["bad_habit_breaker"] = ("Livre do mau hábito", "Resista a um mau hábito por 30 dias consecutivos"),
         ["show_off"] = ("Exibido", "Compartilhe seu primeiro card"),
-        ["year_in_review"] = ("Retrospectiva", "Veja sua primeira Retrospectiva"),
+        ["year_in_review"] = ("Retrospectiva", "Veja seu primeiro Wrapped"),
         ["streak_immortal"] = ("Sequência imortal", "Alcance uma sequência de 1000 dias"),
         ["unstoppable"] = ("Imbatível", "Complete 2500 hábitos no total"),
     };
@@ -800,8 +800,8 @@ public partial class GamificationService(
         var levelTitle = isPt && LevelTranslationsPt.TryGetValue(Math.Min(newLevel.Level, LevelDefinitions.TableMaxLevel), out var ptTitle)
             ? ptTitle : newLevel.Title;
         var body = isPt
-            ? $"Você alcançou {levelTitle}! Continue assim!"
-            : $"You've reached {newLevel.Title}! Keep going!";
+            ? $"Novo título: {levelTitle}. Continue assim."
+            : $"New title: {newLevel.Title}. Keep going.";
 
         var notification = Notification.Create(userId, title, body, null);
         await repos.NotificationRepository.AddAsync(notification, ct);

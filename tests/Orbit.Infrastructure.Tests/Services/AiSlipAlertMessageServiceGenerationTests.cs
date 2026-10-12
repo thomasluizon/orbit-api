@@ -73,7 +73,7 @@ public class AiSlipAlertMessageServiceGenerationTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Heads up: Smoking");
-        result.Value.Body.Should().Be("You tend to slip around this time. Stay strong -- you've got this!");
+        result.Value.Body.Should().Be("You tend to slip around this time. Stay strong, you've got this.");
     }
 
     [Fact]
@@ -85,7 +85,7 @@ public class AiSlipAlertMessageServiceGenerationTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Fique atento: Smoking");
-        result.Value.Body.Should().Be("Você costuma deslizar por volta desse horário. Força -- você consegue!");
+        result.Value.Body.Should().Be("Seus deslizes costumam acontecer por volta deste horário. Força, você consegue.");
     }
 
     [Fact]
@@ -97,7 +97,7 @@ public class AiSlipAlertMessageServiceGenerationTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Heads up: Smoking");
-        result.Value.Body.Should().Be("You tend to slip around this time. Stay strong -- you've got this!");
+        result.Value.Body.Should().Be("You tend to slip around this time. Stay strong, you've got this.");
     }
 
     [Fact]
@@ -109,7 +109,7 @@ public class AiSlipAlertMessageServiceGenerationTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Fique atento: Smoking");
-        result.Value.Body.Should().Be("Você costuma deslizar por volta desse horário. Força -- você consegue!");
+        result.Value.Body.Should().Be("Seus deslizes costumam acontecer por volta deste horário. Força, você consegue.");
     }
 
     private static AiSlipAlertMessageService BuildService(string content, HttpStatusCode status = HttpStatusCode.OK)

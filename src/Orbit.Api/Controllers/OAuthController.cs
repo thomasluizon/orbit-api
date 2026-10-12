@@ -132,13 +132,13 @@ public partial class OAuthController(
         var errorMessage = google_error switch
         {
             "cancelled" => language == "pt-BR"
-                ? "O acesso com Google foi cancelado. Tente novamente ou use seu email."
+                ? "O acesso com o Google foi cancelado. Tente novamente ou use seu e-mail."
                 : "Google sign-in was cancelled. Try again or use email.",
             "failed" => language == "pt-BR"
-                ? "Não foi possível entrar com Google. Tente novamente ou use seu email."
+                ? "Não foi possível entrar com o Google. Tente novamente ou use seu e-mail."
                 : "Google sign-in failed. Try again or use email.",
             "unavailable" => language == "pt-BR"
-                ? "O acesso com Google está indisponível. Use seu email."
+                ? "O acesso com o Google está indisponível. Use seu e-mail."
                 : "Google sign-in is unavailable. Use email instead.",
             _ => null
         };

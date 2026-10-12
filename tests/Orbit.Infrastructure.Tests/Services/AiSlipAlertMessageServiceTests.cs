@@ -128,7 +128,7 @@ public class AiSlipAlertMessageServiceTests
     {
         var result = InvokeGenerateFallback("Besteira", "pt-br");
 
-        result.Value.Body.Should().Contain("deslizar");
+        result.Value.Body.Should().Contain("deslizes");
     }
 
     [Fact]

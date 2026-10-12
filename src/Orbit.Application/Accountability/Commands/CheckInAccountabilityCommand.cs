@@ -99,7 +99,7 @@ public partial class CheckInAccountabilityCommandHandler(
         var isPortuguese = LocaleHelper.IsPortuguese(buddy.Language);
         var title = isPortuguese ? "Novo check-in" : "New check-in";
         var body = isPortuguese
-            ? $"{checker.Name} fez check-in com você."
+            ? $"{checker.Name} fez o check-in de hoje."
             : $"{checker.Name} checked in with you.";
 
         return Notification.Create(buddy.Id, title, body, null);

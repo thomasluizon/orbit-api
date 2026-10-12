@@ -44,12 +44,12 @@ public static class EmailCopy
     public static WelcomeCopy Welcome(bool isPtBr, string userName)
     {
         var intro = isPtBr
-            ? "Estamos animados em ter você no Orbit. Agora você pode construir hábitos melhores, acompanhar seu progresso e manter suas metas em dia."
+            ? "Que bom ter você no Orbit. Agora você pode construir hábitos melhores, acompanhar seu progresso e manter suas metas em dia."
             : "We're excited to have you on Orbit. You're now ready to build better habits, track your progress, and stay on top of your goals.";
 
         return new WelcomeCopy(
-            Subject: isPtBr ? "Boas-vindas ao Orbit!" : "Welcome to Orbit!",
-            Heading: isPtBr ? $"Boas-vindas, {userName}!" : $"Welcome aboard, {userName}!",
+            Subject: isPtBr ? "Boas-vindas ao Orbit" : "Welcome to Orbit",
+            Heading: isPtBr ? $"Boas-vindas, {userName}" : $"Welcome aboard, {userName}",
             Intro: intro,
             FeaturesTitle: isPtBr ? "O que você pode fazer:" : "Here's what you can do:",
             Feature1: isPtBr ? "Crie hábitos diários, semanais ou personalizados" : "Create daily, weekly, or custom habits",
@@ -72,7 +72,7 @@ public static class EmailCopy
             Intro: intro,
             CodeLabel: isPtBr ? "Use o código abaixo para confirmar:" : "Use the code below to confirm:",
             Warning: isPtBr
-                ? "Se você não solicitou isso, ignore este e-mail. Sua conta permanecerá segura."
+                ? "Se você não solicitou isso, ignore este e-mail. Sua conta continua segura."
                 : "If you didn't request this, ignore this email. Your account will remain safe.",
             Footer: TeamFooter(isPtBr),
             Preheader: intro);
@@ -81,7 +81,7 @@ public static class EmailCopy
     public static ApiKeyCreationCopy ApiKeyCreation(bool isPtBr)
     {
         var intro = isPtBr
-            ? "Você solicitou a criação de uma chave de API do Orbit. Essa chave pode acessar sua conta por meio de ferramentas de agentes conectadas. Este código expira em 10 minutos."
+            ? "Você pediu para criar uma chave de API do Orbit. Com ela, agentes de IA conectados podem acessar sua conta. Este código expira em 10 minutos."
             : "You requested to create an Orbit API key. This key can access your account through connected agent tools. This code expires in 10 minutes.";
 
         return new ApiKeyCreationCopy(
@@ -99,8 +99,8 @@ public static class EmailCopy
     public static WaitlistConfirmationCopy WaitlistConfirmation(bool isPtBr)
     {
         var intro = isPtBr
-            ? "Você está quase na lista. Toque no botão abaixo para confirmar sua vaga no Orbit para iPhone. Avisaremos assim que estiver pronto."
-            : "You're almost on the list. Tap the button below to confirm your spot for Orbit on iPhone. We'll email you the moment it's ready.";
+            ? "Falta pouco para entrar na lista. Confirme sua vaga no Orbit para iPhone pelo botão abaixo. Avisamos por e-mail assim que ele estiver pronto."
+            : "You're almost on the list. Use the button below to confirm your spot for Orbit on iPhone. We'll email you the moment it's ready.";
 
         return new WaitlistConfirmationCopy(
             Subject: isPtBr ? "Confirme sua vaga na lista de espera do Orbit para iOS" : "Confirm your spot on the Orbit iOS waitlist",
