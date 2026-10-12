@@ -12,7 +12,7 @@ variable "staging_api_service_id" {
 }
 
 variable "staging_postgres_ip_allow_list" {
-  description = "Operator addresses allowed to connect to staging Postgres. Copy the live Render list into a local variable before planning."
+  description = "Initial staging Postgres addresses at creation. Later allow list changes are managed through the Render API outside Terraform."
   type = list(object({
     cidr_block  = string
     description = string

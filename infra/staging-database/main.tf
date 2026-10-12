@@ -10,7 +10,7 @@ resource "render_postgres" "staging" {
   high_availability_enabled = false
 
   lifecycle {
-    ignore_changes = [database_name, database_user]
+    ignore_changes = [database_name, database_user, ip_allow_list]
   }
 }
 
