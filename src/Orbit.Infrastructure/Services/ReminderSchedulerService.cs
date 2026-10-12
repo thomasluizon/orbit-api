@@ -34,18 +34,28 @@ public partial class ReminderSchedulerService(
 
     private static readonly Expression<Func<Habit, SchedulerHabit>> HabitProjection = h => new SchedulerHabit
     {
-        Id = h.Id, UserId = h.UserId, Title = h.Title,
-        DueDate = h.DueDate, EndDate = h.EndDate, ScheduledStartDate = h.ScheduledStartDate,
-        FrequencyUnit = h.FrequencyUnit, FrequencyQuantity = h.FrequencyQuantity,
-        IntervalWeeks = h.IntervalWeeks, IsFlexible = h.IsFlexible, Days = h.Days,
-        DueTime = h.DueTime, ReminderTimes = h.ReminderTimes,
+        Id = h.Id,
+        UserId = h.UserId,
+        Title = h.Title,
+        DueDate = h.DueDate,
+        EndDate = h.EndDate,
+        ScheduledStartDate = h.ScheduledStartDate,
+        FrequencyUnit = h.FrequencyUnit,
+        FrequencyQuantity = h.FrequencyQuantity,
+        IntervalWeeks = h.IntervalWeeks,
+        IsFlexible = h.IsFlexible,
+        Days = h.Days,
+        DueTime = h.DueTime,
+        ReminderTimes = h.ReminderTimes,
         ScheduledReminders = h.ScheduledReminders,
         RelativeReminders = h.RelativeReminders
     };
 
     private static readonly Expression<Func<User, SchedulerUser>> UserProjection = u => new SchedulerUser
     {
-        Id = u.Id, TimeZone = u.TimeZone, Language = u.Language,
+        Id = u.Id,
+        TimeZone = u.TimeZone,
+        Language = u.Language,
         WeekStartDay = u.WeekStartDay
     };
 
@@ -461,7 +471,7 @@ public partial class ReminderSchedulerService(
             0 => isPt ? "Agora" : "Due now",
             < 60 => isPt
                 ? $"Em {minutesBefore} {Pluralize("minuto", minutesBefore)}"
-                : $"Due in {minutesBefore} minutes",
+                : $"Due in {minutesBefore} {Pluralize("minute", minutesBefore)}",
             < 1440 => isPt
                 ? $"Em {minutesBefore / 60} {Pluralize("hora", minutesBefore / 60)}"
                 : $"Due in {minutesBefore / 60} {Pluralize("hour", minutesBefore / 60)}",

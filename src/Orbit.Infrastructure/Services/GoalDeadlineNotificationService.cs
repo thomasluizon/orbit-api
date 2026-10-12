@@ -236,10 +236,10 @@ public partial class GoalDeadlineNotificationService(
         return daysBefore switch
         {
             1 => isPt
-                ? $"Sua meta termina amanhã - você está em {progressText}"
+                ? $"Sua meta termina amanhã. Progresso: {progressText}"
                 : $"Your goal is due tomorrow - you're at {progressText}",
             _ => isPt
-                ? $"Sua meta termina em {daysBefore} dias - você está em {progressText}"
+                ? $"Sua meta termina em {daysBefore} dias. Progresso: {progressText}"
                 : $"Your goal is due in {daysBefore} days - you're at {progressText}"
         };
     }

@@ -109,7 +109,7 @@ public partial class ProcessUserChatCommandHandler(
     private const string EnglishToolFailureMessage = "I couldn't complete that. Please try again.";
     private const string PortugueseToolFailureMessage = "Não consegui concluir isso. Tente novamente.";
     private const string EnglishTruncationMessage = "This response was cut off before completion, so the result is partial.";
-    private const string PortugueseTruncationMessage = "Esta resposta foi interrompida antes da conclusão, então o resultado é parcial.";
+    private const string PortugueseTruncationMessage = "Esta resposta foi interrompida antes do fim e pode estar incompleta.";
 
     private const int MaxSupportMessageLength = 5000;
 

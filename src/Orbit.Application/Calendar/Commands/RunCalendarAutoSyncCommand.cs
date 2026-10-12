@@ -289,7 +289,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
         var isPortuguese = LocaleHelper.IsPortuguese(user.Language);
         var notification = Notification.Create(
             user.Id,
-            isPortuguese ? "Google Calendar desconectado" : "Google Calendar disconnected",
+            isPortuguese ? "Google Agenda desconectado" : "Google Calendar disconnected",
             isPortuguese
                 ? "A sincronização automática está pausada. Reconecte para retomar."
                 : "Auto-sync paused. Reconnect to resume.",
@@ -318,8 +318,8 @@ public partial class RunCalendarAutoSyncCommandHandler(
         else
             title = count == 1 ? "1 new calendar event" : $"{count} new calendar events";
         var body = isPortuguese
-            ? "Toque para revisar e importar"
-            : "Tap to review and import";
+            ? "Revise antes de importar"
+            : "Review before importing";
         var notification = Notification.Create(
             user.Id,
             title,

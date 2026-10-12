@@ -98,9 +98,9 @@ public sealed partial class AiProactiveCheckinMessageService(
         var sanitizedDisplayName = PromptDataSanitizer.SanitizeInline(displayName, AppConstants.MaxUserNameLength);
         return LocaleHelper.IsPortuguese(language)
             ? Result.Success(($"Ainda dá tempo hoje, {sanitizedDisplayName}",
-                "Você ficou para trás em alguns hábitos hoje. A Astra está aqui -- bora retomar?"))
+                "Ainda faltam alguns hábitos hoje. A Astra ajuda você a retomar o ritmo."))
             : Result.Success(($"Still time today, {sanitizedDisplayName}",
-                "You've fallen behind on a few habits today. Astra's got your back -- let's get back on track."));
+                "You still have a few habits left today. Astra can help you get back on track."));
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "AI returned empty response for proactive check-in message")]

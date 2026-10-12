@@ -22,12 +22,12 @@ public sealed class EmailMessageComposerTests
 
     [Theory]
     [InlineData("en", "Welcome to Orbit")]
-    [InlineData("pt-BR", "Boas-vindas")]
-    public void WelcomeEncodesHtmlAndKeepsTextReadable(string language, string subjectFragment)
+    [InlineData("pt-BR", "Boas-vindas ao Orbit")]
+    public void WelcomeEncodesHtmlAndKeepsTextReadable(string language, string subject)
     {
         var message = _composer.ComposeWelcome("Ana & Co", language);
 
-        message.Subject.Should().Contain(subjectFragment);
+        message.Subject.Should().Be(subject);
         message.Html.Should().Contain("Ana &amp; Co").And.Contain("#22094F");
         message.Text.Should().Contain("Ana & Co");
     }
