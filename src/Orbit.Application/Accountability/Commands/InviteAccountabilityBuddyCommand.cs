@@ -77,7 +77,7 @@ public class InviteAccountabilityBuddyCommandHandler(
         var isPortuguese = LocaleHelper.IsPortuguese(buddy.Language);
         var title = isPortuguese ? "Novo convite de parceria" : "New accountability invite";
         var body = isPortuguese
-            ? $"{requester.Name} quer ser seu parceiro de responsabilidade."
+            ? $"{requester.Name} quer ser seu parceiro de hábitos."
             : $"{requester.Name} wants to be your accountability buddy.";
 
         return Notification.Create(buddy.Id, title, body, null);

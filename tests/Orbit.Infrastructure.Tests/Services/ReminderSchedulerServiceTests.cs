@@ -68,11 +68,13 @@ public class ReminderSchedulerServiceTests : IDisposable
         result.Should().Be("Agora");
     }
 
-    [Fact]
-    public void FormatReminderText_Minutes_English()
+    [Theory]
+    [InlineData(1, "Due in 1 minute")]
+    [InlineData(15, "Due in 15 minutes")]
+    public void FormatReminderText_Minutes_English(int minutesBefore, string expected)
     {
-        var result = FormatReminderText(15, "en");
-        result.Should().Be("Due in 15 minutes");
+        var result = FormatReminderText(minutesBefore, "en");
+        result.Should().Be(expected);
     }
 
     [Fact]

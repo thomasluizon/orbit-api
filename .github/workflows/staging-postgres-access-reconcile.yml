@@ -27,7 +27,6 @@ jobs:
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
       TF_VAR_staging_environment_id: ${{ vars.STAGING_ENVIRONMENT_ID }}
       TF_VAR_staging_api_service_id: ${{ vars.STAGING_API_SERVICE_ID }}
-      TF_VAR_staging_postgres_ip_allow_list: ${{ vars.STAGING_POSTGRES_IP_ALLOW_LIST }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
@@ -38,7 +37,7 @@ jobs:
         with:
           terraform_version: 1.16.4
           terraform_wrapper: false
-      - name: Remove stale runner access and verify operator addresses
+      - name: Remove stale runner access and preserve live operator entries
         run: |
           terraform -chdir=infra/staging-database init -input=false
           STAGING_POSTGRES_ID="$(terraform -chdir=infra/staging-database output -raw staging_postgres_id)" \

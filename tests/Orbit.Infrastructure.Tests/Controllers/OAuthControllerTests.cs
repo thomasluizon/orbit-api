@@ -282,7 +282,7 @@ public class OAuthControllerTests : IDisposable
         var page = _controller.Authorize("client-123", "https://claude.ai/callback", "code",
             "client-state", "mcp-challenge", "S256", google_error: "cancelled")
             .Should().BeOfType<ContentResult>().Subject;
-        ReadRenderedError(page.Content!).Should().StartWith("O acesso com Google foi cancelado");
+        ReadRenderedError(page.Content!).Should().StartWith("O acesso com o Google foi cancelado");
         page.Content.Should().Contain("/oauth/send-code");
         page.Content.Should().Contain("if (request.error) setAlert(request.error)");
     }
@@ -324,9 +324,9 @@ public class OAuthControllerTests : IDisposable
 
     [Theory]
     [InlineData("en", "failed", "Google sign-in failed")]
-    [InlineData("pt-BR", "failed", "Não foi possível entrar com Google")]
+    [InlineData("pt-BR", "failed", "Não foi possível entrar com o Google")]
     [InlineData("en", "unavailable", "Google sign-in is unavailable")]
-    [InlineData("pt-BR", "unavailable", "O acesso com Google está indisponível")]
+    [InlineData("pt-BR", "unavailable", "O acesso com o Google está indisponível")]
     public void Authorize_GoogleErrorRendersLocalizedMessageAndEmailPath(
         string language, string error, string message)
     {

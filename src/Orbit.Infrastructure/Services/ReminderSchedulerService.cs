@@ -440,7 +440,7 @@ public partial class ReminderSchedulerService(
             0 => isPt ? "Agora" : "Due now",
             < 60 => isPt
                 ? $"Em {minutesBefore} {Pluralize("minuto", minutesBefore)}"
-                : $"Due in {minutesBefore} minutes",
+                : $"Due in {minutesBefore} {Pluralize("minute", minutesBefore)}",
             < 1440 => isPt
                 ? $"Em {minutesBefore / 60} {Pluralize("hora", minutesBefore / 60)}"
                 : $"Due in {minutesBefore / 60} {Pluralize("hour", minutesBefore / 60)}",

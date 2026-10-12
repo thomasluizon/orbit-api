@@ -59,7 +59,7 @@ public class SendCheerCommandTests
 
     [Theory]
     [InlineData("en", "New cheer", "Sender cheered you on.")]
-    [InlineData("pt-BR", "Novo incentivo", "Sender torceu por você.")]
+    [InlineData("pt-BR", "Novo incentivo", "Sender está torcendo por você.")]
     public async Task CleanNote_PersistsCheerAndPushesRecipient(string language, string title, string body)
     {
         _recipient.SetLanguage(language);

@@ -729,7 +729,7 @@ public class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.AiMessage.Should().Be(
-            "Sinto muito que você esteja passando por isso. Você merece apoio agora.\n\n"
+            "Sinto muito que você esteja passando por isso. Você merece apoio neste momento.\n\n"
             + CrisisSupportGuard.PortugueseResource);
         await _aiIntentService.DidNotReceive().SendWithToolsAsync(
             Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());

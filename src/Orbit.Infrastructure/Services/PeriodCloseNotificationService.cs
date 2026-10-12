@@ -226,8 +226,8 @@ public partial class PeriodCloseNotificationService(
         var monthName = culture.TextInfo.ToTitleCase(culture.DateTimeFormat.GetMonthName(month));
 
         return isPortuguese
-            ? ("Seu Wrapped está pronto", $"{monthName} fechou - veja como foi o seu mês.")
-            : ("Your Wrapped is ready", $"{monthName} is closed - see how your month went.");
+            ? ("Seu Wrapped está pronto", $"{monthName} terminou. Veja como foi o seu mês.")
+            : ("Your Wrapped is ready", $"{monthName} is over. See how your month went.");
     }
 
     private sealed record SubscribedUser(Guid Id, string? TimeZone, string? Language);

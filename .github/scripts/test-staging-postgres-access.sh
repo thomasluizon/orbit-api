@@ -12,7 +12,7 @@ set -euo pipefail
 
 url="${@: -1}"
 if [[ "$url" == 'https://api.ipify.org' ]]; then
-  echo '203.0.113.10'
+  echo "${MOCK_PUBLIC_IP:-203.0.113.10}"
   exit 0
 fi
 
@@ -74,18 +74,26 @@ assert_list() {
 }
 
 operator='[{"cidrBlock":"192.0.2.5/32","description":"operator"}]'
-drift='[{"cidrBlock":"192.0.2.5/32","description":"operator"},{"cidrBlock":"198.51.100.8/32","description":"other operator"}]'
+drift='[{"cidrBlock":"198.51.100.7/32","description":"operator mac"},{"cidrBlock":"198.51.100.8/32","description":"other operator"}]'
 temporary='[{"cidrBlock":"192.0.2.5/32","description":"operator"},{"cidrBlock":"203.0.113.10/32","description":"github-actions-staging-reseed"}]'
 
 set_state "$drift"
-if bash "$script" open > /dev/null 2>&1; then
-  echo 'Drifted open unexpectedly succeeded' >&2
-  exit 1
-fi
-bash "$script" restore > /dev/null
+bash "$script" reconcile
 assert_list "$drift"
 [[ ! -s "$MOCK_PATCHES" ]]
+bash "$script" open > /dev/null
+assert_list "$(jq -cn --argjson operators "$drift" --argjson runner "$(jq -c '.[1]' <<< "$temporary")" '$operators + [$runner]')"
+[[ -e "$STAGING_ACCESS_MARKER" ]]
+bash "$script" restore > /dev/null
+assert_list "$drift"
 [[ ! -e "$STAGING_ACCESS_MARKER" ]]
+
+set_state "$operator"
+bash "$script" open > /dev/null
+jq -cn --argjson list "$(jq -cn --argjson operators "$drift" --argjson runner "$(jq -c '.[1]' <<< "$temporary")" '$operators + [$runner]')" \
+  '{id: "dpg-test", ipAllowList: $list}' > "$MOCK_STATE"
+bash "$script" restore > /dev/null
+assert_list "$drift"
 
 set_state "$operator"
 touch "$MOCK_FAIL_AFTER_PATCH"
@@ -106,14 +114,64 @@ assert_list "$temporary"
 bash "$script" reconcile > /dev/null
 assert_list "$operator"
 
-set_state "$temporary"
-jq -cn --argjson list "$(jq -cn --argjson first "$temporary" --argjson extra "$drift" '$first + [$extra[1]]')" \
-  '{id: "dpg-test", ipAllowList: $list}' > "$MOCK_STATE"
-if bash "$script" reconcile > /dev/null 2>&1; then
-  echo 'Reconciliation unexpectedly accepted operator drift' >&2
-  exit 1
-fi
+set_state "$(jq -cn --argjson operators "$drift" --argjson runner "$(jq -c '.[1]' <<< "$temporary")" '$operators + [$runner]')"
+bash "$script" reconcile > /dev/null
 assert_list "$drift"
+[[ "$(wc -l < "$MOCK_PATCHES" | tr -d ' ')" == 1 ]]
+bash "$script" reconcile > /dev/null
+[[ "$(wc -l < "$MOCK_PATCHES" | tr -d ' ')" == 1 ]]
+
+unset TF_VAR_staging_postgres_ip_allow_list
+set_state '[]'
+bash "$script" open > /dev/null
+assert_list '[{"cidrBlock":"203.0.113.10/32","description":"github-actions-staging-reseed"}]'
+bash "$script" restore > /dev/null
+assert_list '[]'
+
+set_state '[{"cidrBlock":"203.0.113.10/32","description":"operator mac"}]'
+bash "$script" open > /dev/null
+assert_list '[{"cidrBlock":"203.0.113.10/32","description":"operator mac"}]'
+bash "$script" restore > /dev/null
+assert_list '[{"cidrBlock":"203.0.113.10/32","description":"operator mac"}]'
+[[ ! -s "$MOCK_PATCHES" ]]
+
+set_state "$(jq -cn --argjson operators "$drift" '$operators + [
+  {cidrBlock:"203.0.113.11/32",description:"github-actions-staging-reseed"},
+  {cidrBlock:"203.0.113.12/32",description:"github-actions-staging-reseed"}]')"
+bash "$script" open > /dev/null
+assert_list "$(jq -cn --argjson operators "$drift" --argjson runner "$(jq -c '.[1]' <<< "$temporary")" '$operators + [$runner]')"
+bash "$script" restore > /dev/null
+assert_list "$drift"
+
+set_state "$temporary"
+bash "$script" restore > /dev/null
+assert_list "$operator"
+
+set_state "$(jq -cn --argjson operators "$drift" --argjson runner "$(jq -c '.[1]' <<< "$temporary")" '$operators + [$runner]')"
+bash "$script" operator-mac > /dev/null
+assert_list '[{"cidrBlock":"203.0.113.10/32","description":"operator mac"},
+  {"cidrBlock":"198.51.100.8/32","description":"other operator"},
+  {"cidrBlock":"203.0.113.10/32","description":"github-actions-staging-reseed"}]'
+bash "$script" operator-mac > /dev/null
+[[ "$(wc -l < "$MOCK_PATCHES" | tr -d ' ')" == 1 ]]
+bash "$script" reconcile > /dev/null
+assert_list '[{"cidrBlock":"203.0.113.10/32","description":"operator mac"},
+  {"cidrBlock":"198.51.100.8/32","description":"other operator"}]'
+
+set_state '[]'
+bash "$script" operator-mac > /dev/null
+assert_list '[{"cidrBlock":"203.0.113.10/32","description":"operator mac"}]'
+
+for action in open operator-mac; do
+  set_state "$drift"
+  if MOCK_PUBLIC_IP='invalid address' bash "$script" "$action" > /dev/null 2>&1; then
+    echo "$action unexpectedly accepted an invalid public IPv4 address" >&2
+    exit 1
+  fi
+  assert_list "$drift"
+  [[ ! -s "$MOCK_PATCHES" ]]
+  [[ ! -e "$STAGING_ACCESS_MARKER" ]]
+done
 
 assert_staging_queue() {
   local workflow="$1"
@@ -144,4 +202,4 @@ if ! grep -Fq 'environment: staging' <<< "$staging_release" ||
   exit 1
 fi
 
-echo 'Staging access drift, partial open, restoration, and timeout reconciliation passed'
+echo 'Staging live operator access, runner cleanup, partial open, and operator refresh passed'

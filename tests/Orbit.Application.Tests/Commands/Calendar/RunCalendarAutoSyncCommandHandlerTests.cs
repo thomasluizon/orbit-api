@@ -782,7 +782,7 @@ public class RunCalendarAutoSyncCommandHandlerTests
         captured.Should().NotBeNull();
         captured!.Url.Should().Be("/calendar-sync?mode=review");
         captured.Title.Should().Be("2 new calendar events");
-        captured.Body.Should().Be("Tap to review and import");
+        captured.Body.Should().Be("Review before importing");
     }
 
     [Fact]
@@ -807,7 +807,7 @@ public class RunCalendarAutoSyncCommandHandlerTests
 
         captured.Should().NotBeNull();
         captured!.Title.Should().Be("2 novos eventos do calendário");
-        captured.Body.Should().Be("Toque para revisar e importar");
+        captured.Body.Should().Be("Revise antes de importar");
     }
 
     [Fact]
@@ -866,7 +866,7 @@ public class RunCalendarAutoSyncCommandHandlerTests
         await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id), default);
 
         captured.Should().NotBeNull();
-        captured!.Title.Should().Be("Google Calendar desconectado");
+        captured!.Title.Should().Be("Google Agenda desconectado");
         captured.Body.Should().Be("A sincronização automática está pausada. Reconecte para retomar.");
     }
 

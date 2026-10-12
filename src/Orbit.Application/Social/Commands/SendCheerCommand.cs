@@ -97,7 +97,7 @@ public partial class SendCheerCommandHandler(
         var isPortuguese = LocaleHelper.IsPortuguese(recipient.Language);
         var title = isPortuguese ? "Novo incentivo" : "New cheer";
         var body = isPortuguese
-            ? $"{sender.Name} torceu por você."
+            ? $"{sender.Name} está torcendo por você."
             : $"{sender.Name} cheered you on.";
 
         return Notification.Create(recipient.Id, title, body, null);
