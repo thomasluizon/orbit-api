@@ -34,7 +34,7 @@ public class PeriodCloseNotificationServiceTests
         var notification = await dbContext.Notifications.SingleAsync();
         notification.UserId.Should().Be(user.Id);
         notification.Title.Should().Be("Your Wrapped is ready");
-        notification.Body.Should().Be("January is closed - see how your month went.");
+        notification.Body.Should().Be("January is over. See how your month went.");
         notification.Url.Should().Be(expectedUrl);
         notification.DedupeKey.Should().Be(PeriodCloseNotificationService.BuildDedupeKey(user.Id, 2026, 1));
         await pushService.Received(1).TrySendToUserAsync(
@@ -277,7 +277,7 @@ public class PeriodCloseNotificationServiceTests
         var notification = PeriodCloseNotificationService.BuildNotification(3, "pt-BR");
 
         notification.Title.Should().Be("Seu Wrapped está pronto");
-        notification.Body.Should().Be("Março fechou - veja como foi o seu mês.");
+        notification.Body.Should().Be("Março terminou. Veja como foi o seu mês.");
     }
 
     [Fact]

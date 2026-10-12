@@ -27,8 +27,8 @@ public class TestPushNotificationCommandHandler(
         {
             await pushService.SendToUserAsync(
                 request.UserId,
-                "Orbit test",
-                "Push notifications are working.",
+                "Teste do Orbit",
+                "As notificações push estão funcionando.",
                 NotificationUrls.Home,
                 cancellationToken);
             return Result.Success(new TestPushNotificationResponse(subscriptionCount, "sent"));

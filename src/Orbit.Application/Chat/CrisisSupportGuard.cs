@@ -15,9 +15,9 @@ public enum CrisisLocales
 public static class CrisisSupportGuard
 {
     public const string EnglishResource = "Call or text 988 (Suicide and Crisis Lifeline)";
-    public const string PortugueseResource = "CVV, Ligue 188 (Centro de Valorizacao da Vida)";
+    public const string PortugueseResource = "Ligue 188 para o CVV (Centro de Valorização da Vida)";
     public const string EnglishSupport = "I'm sorry you're going through this. You deserve support right now.";
-    public const string PortugueseSupport = "Sinto muito que você esteja passando por isso. Você merece apoio agora.";
+    public const string PortugueseSupport = "Sinto muito que você esteja passando por isso. Você merece apoio neste momento.";
 
     private static readonly string[] EnglishPhrases =
     [
