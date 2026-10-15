@@ -19,14 +19,19 @@ permissions:
 
 jobs:
   mutation:
-    name: Mutation (${{ matrix.project }})
+    name: Mutation (${{ matrix.shard || matrix.project }})
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
     strategy:
       fail-fast: false
       matrix:
-        project: [domain, application, infrastructure]
+        include: >-
+          ${{ fromJSON(github.event_name == 'pull_request' &&
+          '[{"project":"domain"},{"project":"application"},{"project":"infrastructure"}]' ||
+          '[{"project":"domain","shard":"domain-habit-freeze","mutate":["**/Entities/Habit.cs","**/Entities/StreakFreeze.cs"]},
+          {"project":"domain","shard":"domain-user-invariants","mutate":["**/Entities/User.cs","**/Entities/HabitInvariants.cs"]},
+          {"project":"application"},{"project":"infrastructure"}]') }}
 
     steps:
       - uses: actions/checkout@v7
@@ -52,16 +57,23 @@ jobs:
 
       - name: Run Stryker (nightly full in-scope)
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        env:
+          MUTATE_FILES: ${{ matrix.mutate && join(matrix.mutate, ' ') || '' }}
         run: |
           concurrency=$(nproc)
           echo "Stryker concurrency: $concurrency"
-          dotnet stryker -f stryker-config.${{ matrix.project }}.json --concurrency "$concurrency"
+          read -r -a files <<< "$MUTATE_FILES"
+          args=()
+          for file in "${files[@]}"; do
+            args+=(--mutate "$file")
+          done
+          dotnet stryker -f stryker-config.${{ matrix.project }}.json --concurrency "$concurrency" "${args[@]}"
 
       - name: Upload mutation report
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: mutation-report-${{ github.event_name }}-${{ matrix.project }}
+          name: mutation-report-${{ github.event_name }}-${{ matrix.shard || matrix.project }}
           path: |
             StrykerOutput/**/reports/*.html
             StrykerOutput/**/reports/*.json
