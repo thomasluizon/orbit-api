@@ -25,6 +25,7 @@ public class RunCalendarAutoSyncCommandHandlerTests
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IGoogleTokenService _tokenService = Substitute.For<IGoogleTokenService>();
     private readonly ICalendarEventFetcher _fetcher = Substitute.For<ICalendarEventFetcher>();
+    private readonly ICalendarSyncLock _syncLock = Substitute.For<ICalendarSyncLock>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly FakeTimeProvider _timeProvider = new();
     private readonly ILogger<RunCalendarAutoSyncCommandHandler> _logger = Substitute.For<ILogger<RunCalendarAutoSyncCommandHandler>>();
@@ -34,10 +35,12 @@ public class RunCalendarAutoSyncCommandHandlerTests
     {
         var deps = new CalendarAutoSyncDependencies(
             _userRepo, _habitRepo, _suggestionRepo, _notificationRepo,
-            _tokenService, _fetcher, _unitOfWork);
+            _tokenService, _fetcher, _unitOfWork, _syncLock);
         _payGate.CanManageCalendar(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result.Success()));
         _handler = new RunCalendarAutoSyncCommandHandler(deps, _payGate, _timeProvider, _logger);
+
+        _syncLock.TryAcquireAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(true);
 
         _timeProvider.SetUtcNow(new DateTime(2026, 4, 9, 14, 0, 0, DateTimeKind.Utc));
 
@@ -76,6 +79,124 @@ public class RunCalendarAutoSyncCommandHandlerTests
             Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(user);
+
+    [Fact]
+    public async Task Handle_AlreadySyncing_ReturnsWithoutLoadingOrRefreshingUser()
+    {
+        _syncLock.TryAcquireAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(false);
+
+        var result = await _handler.Handle(new RunCalendarAutoSyncCommand(Guid.NewGuid(), IsOpportunistic: true), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AlreadySyncing.Should().BeTrue();
+        await _payGate.DidNotReceive().CanManageCalendar(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        await _userRepo.DidNotReceive().FindOneTrackedAsync(
+            Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>());
+        await _tokenService.DidNotReceive().TryRefreshAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Handle_ManualAndAutomaticSyncOverlap_SecondReturnsAlreadySyncing(bool manualFirst)
+    {
+        var user = CreateEnabledProUser();
+        StubUser(user);
+        var held = false;
+        var fetched = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var finishFetch = new TaskCompletionSource<List<CalendarEventItem>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _syncLock.TryAcquireAsync(user.Id, Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            if (held)
+                return false;
+            held = true;
+            return true;
+        });
+        _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                var ownsLock = !held;
+                try
+                {
+                    await call.ArgAt<Func<CancellationToken, Task>>(0)(call.ArgAt<CancellationToken>(1));
+                }
+                finally
+                {
+                    if (ownsLock)
+                        held = false;
+                }
+            });
+        _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
+            .Returns(new GoogleTokenRefreshOutcome("refreshed", GoogleTokenRefreshResult.Success, null));
+        _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                fetched.TrySetResult();
+                return finishFetch.Task;
+            });
+
+        var first = _handler.Handle(new RunCalendarAutoSyncCommand(user.Id, IsOpportunistic: manualFirst), default);
+        await fetched.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        try
+        {
+            var second = await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id, IsOpportunistic: !manualFirst), default);
+            second.IsSuccess.Should().BeTrue();
+            second.Value.AlreadySyncing.Should().BeTrue();
+            first.IsCompleted.Should().BeFalse();
+            await _tokenService.Received(1).TryRefreshAsync(user, Arg.Any<CancellationToken>());
+        }
+        finally
+        {
+            finishFetch.TrySetResult([]);
+        }
+
+        var completed = await first;
+        completed.Value.AlreadySyncing.Should().BeFalse();
+        held.Should().BeFalse();
+        var subsequent = await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id, IsOpportunistic: true), default);
+        subsequent.IsSuccess.Should().BeTrue();
+        subsequent.Value.AlreadySyncing.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_Success_SavesChangesBeforeMarkingCompletionAndReturnsAfterCommit()
+    {
+        var user = CreateEnabledProUser();
+        StubUser(user);
+        _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
+            .Returns(new GoogleTokenRefreshOutcome("refreshed", GoogleTokenRefreshResult.Success, null));
+        _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CalendarEventItem>());
+        var saves = 0;
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            if (++saves == 1)
+                user.GoogleCalendarLastSyncedAt.Should().BeNull();
+            else
+                user.GoogleCalendarLastSyncedAt.Should().Be(_timeProvider.GetUtcNow().UtcDateTime);
+            return 1;
+        });
+        var readyToCommit = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var commit = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                await call.ArgAt<Func<CancellationToken, Task>>(0)(call.ArgAt<CancellationToken>(1));
+                readyToCommit.TrySetResult();
+                await commit.Task;
+            });
+
+        var pending = _handler.Handle(new RunCalendarAutoSyncCommand(user.Id), default);
+        await readyToCommit.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        pending.IsCompleted.Should().BeFalse();
+        commit.SetResult();
+        var result = await pending;
+
+        result.IsSuccess.Should().BeTrue();
+        saves.Should().Be(2);
+    }
 
     [Fact]
     public async Task Handle_UserNotFound_ReturnsFailure()
@@ -670,7 +791,7 @@ public class RunCalendarAutoSyncCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_UniqueViolationOnSave_SwallowedAsNoOpAndUserStillMarkedSynced()
+    public async Task Handle_UniqueViolationOnSave_ReturnsTransientErrorWithoutMarkingSynced()
     {
         var user = CreateEnabledProUser();
         StubUser(user);
@@ -688,7 +809,9 @@ public class RunCalendarAutoSyncCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.NewSuggestions.Should().Be(0);
-        user.GoogleCalendarLastSyncedAt.Should().NotBeNull();
+        result.Value.Status.Should().Be(GoogleCalendarAutoSyncStatus.TransientError);
+        user.GoogleCalendarLastSyncedAt.Should().BeNull();
+        _unitOfWork.Received(1).ResetTracking();
     }
 
     [Fact]
@@ -757,7 +880,7 @@ public class RunCalendarAutoSyncCommandHandlerTests
         var result = await behavior.Handle(command, ct => _handler.Handle(command, ct), default);
 
         result.IsSuccess.Should().BeTrue();
-        await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(3).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]

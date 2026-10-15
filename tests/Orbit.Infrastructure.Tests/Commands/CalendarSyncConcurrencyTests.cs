@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Orbit.Api.Middleware;
@@ -12,13 +13,66 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Persistence;
+using Orbit.Infrastructure.Configuration;
+using Orbit.Infrastructure.Tests.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Commands;
 
 public class CalendarSyncConcurrencyTests
 {
     [Fact]
-    public async Task RunSync_ConcurrentUserWriteAtTransactionBoundary_CommitsWithoutHttp409()
+    public async Task RunSync_CompletionSaveFails_RollsBackSuggestionsTokensAndTimestamp()
+    {
+        var failCompletion = new FailCompletionSave();
+        using var database = new SqliteOrbitDbContextFactory(failCompletion);
+        var user = User.Create("Calendar user", "calendar@example.com").Value;
+        user.SetStripeSubscription("sub_calendar", DateTime.UtcNow.AddDays(30));
+        user.SetGoogleTokens("access", "refresh");
+        user.EnableCalendarAutoSync();
+        database.Context.Users.Add(user);
+        await database.Context.SaveChangesAsync();
+        failCompletion.Enabled = true;
+        await using var context = database.CreateContext();
+        var unitOfWork = new UnitOfWork(context, new DatabaseConnectionSettings());
+        var gate = Substitute.For<IPayGateService>();
+        gate.CanManageCalendar(user.Id, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        var tokens = Substitute.For<IGoogleTokenService>();
+        tokens.TryRefreshAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(call =>
+        {
+            call.Arg<User>().SetGoogleTokens("refreshed", null);
+            return new GoogleTokenRefreshOutcome("refreshed", GoogleTokenRefreshResult.Success, null);
+        });
+        var fetcher = Substitute.For<ICalendarEventFetcher>();
+        fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CalendarEventItem>
+            {
+                new("event", "Calendar event", null, "2026-04-10", null, null, false, null, [])
+            });
+        var syncLock = Substitute.For<ICalendarSyncLock>();
+        syncLock.TryAcquireAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(true);
+        var handler = new RunCalendarAutoSyncCommandHandler(
+            new CalendarAutoSyncDependencies(
+                new GenericRepository<User>(context), new GenericRepository<Habit>(context),
+                new GenericRepository<GoogleCalendarSyncSuggestion>(context), new GenericRepository<Notification>(context),
+                tokens, fetcher, unitOfWork, syncLock), gate, TimeProvider.System,
+            NullLogger<RunCalendarAutoSyncCommandHandler>.Instance);
+
+        var sync = () => handler.Handle(new RunCalendarAutoSyncCommand(user.Id, IsOpportunistic: true), CancellationToken.None);
+
+        await sync.Should().ThrowAsync<DbUpdateException>().WithMessage("completion save failed");
+        failCompletion.SaveAttempts.Should().Be(2);
+        context.ChangeTracker.Entries().Should().BeEmpty();
+        await using var verify = database.CreateContext();
+        var saved = await verify.Users.SingleAsync(u => u.Id == user.Id);
+        saved.GoogleAccessToken.Should().Be("access");
+        saved.GoogleCalendarLastSyncedAt.Should().BeNull();
+        (await verify.GoogleCalendarSyncSuggestions.CountAsync()).Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RunSync_ConcurrentUserWriteAtTransactionBoundary_CommitsWithoutHttp409(bool userAlreadyTracked)
     {
         var options = new DbContextOptionsBuilder<OrbitDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
@@ -34,6 +88,8 @@ public class CalendarSyncConcurrencyTests
         }
 
         await using var context = new ConcurrencyContext(options);
+        if (userAlreadyTracked)
+            await context.Users.SingleAsync(u => u.Id == user.Id);
         var unitOfWork = Substitute.For<IUnitOfWork>();
         var writes = 0;
         unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
@@ -58,11 +114,13 @@ public class CalendarSyncConcurrencyTests
         var fetcher = Substitute.For<ICalendarEventFetcher>();
         fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
             .Returns(new List<CalendarEventItem>());
+        var syncLock = Substitute.For<ICalendarSyncLock>();
+        syncLock.TryAcquireAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(true);
         var handler = new RunCalendarAutoSyncCommandHandler(
             new CalendarAutoSyncDependencies(
                 new GenericRepository<User>(context), new GenericRepository<Habit>(context),
                 new GenericRepository<GoogleCalendarSyncSuggestion>(context), new GenericRepository<Notification>(context),
-                tokens, fetcher, unitOfWork), gate, TimeProvider.System,
+                tokens, fetcher, unitOfWork, syncLock), gate, TimeProvider.System,
             NullLogger<RunCalendarAutoSyncCommandHandler>.Instance);
         var retry = new ConcurrencyRetryBehavior<RunCalendarAutoSyncCommand, Result<CalendarAutoSyncResult>>(unitOfWork);
         var command = new RunCalendarAutoSyncCommand(user.Id, IsOpportunistic: true);
@@ -94,6 +152,20 @@ public class CalendarSyncConcurrencyTests
         {
             base.OnModelCreating(modelBuilder);
             modelBuilder.Entity<User>().Property<uint>("xmin").IsConcurrencyToken().ValueGeneratedNever();
+        }
+    }
+
+    private sealed class FailCompletionSave : SaveChangesInterceptor
+    {
+        public bool Enabled { get; set; }
+        public int SaveAttempts { get; private set; }
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (Enabled && ++SaveAttempts == 2)
+                throw new DbUpdateException("completion save failed");
+            return ValueTask.FromResult(result);
         }
     }
 }
