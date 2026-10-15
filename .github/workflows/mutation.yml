@@ -5,6 +5,7 @@ on:
     branches: [main]
   schedule:
     - cron: "0 6 * * *"
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
@@ -43,15 +44,18 @@ jobs:
       - name: Restore local tools
         run: dotnet tool restore
 
-      - name: Run Stryker (PR — changed in-scope files only)
+      - name: Run Stryker (PR changed in-scope files only)
         if: github.event_name == 'pull_request'
         run: |
           git fetch origin main
           dotnet stryker -f stryker-config.${{ matrix.project }}.json --since:origin/main
 
-      - name: Run Stryker (nightly — full in-scope)
-        if: github.event_name == 'schedule'
-        run: dotnet stryker -f stryker-config.${{ matrix.project }}.json --concurrency 2
+      - name: Run Stryker (nightly full in-scope)
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: |
+          concurrency=$(nproc)
+          echo "Stryker concurrency: $concurrency"
+          dotnet stryker -f stryker-config.${{ matrix.project }}.json --concurrency "$concurrency"
 
       - name: Upload mutation report
         if: always()
