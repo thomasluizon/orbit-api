@@ -58,14 +58,15 @@ jobs:
       - name: Run Stryker (nightly full in-scope)
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         env:
-          MUTATE: ${{ matrix.mutate && toJSON(matrix.mutate) || '' }}
+          MUTATE_FILES: ${{ matrix.mutate && join(matrix.mutate, ' ') || '' }}
         run: |
           concurrency=$(nproc)
           echo "Stryker concurrency: $concurrency"
+          read -r -a files <<< "$MUTATE_FILES"
           args=()
-          if [[ -n "$MUTATE" ]]; then
-            args+=(--mutate "$MUTATE")
-          fi
+          for file in "${files[@]}"; do
+            args+=(--mutate "$file")
+          done
           dotnet stryker -f stryker-config.${{ matrix.project }}.json --concurrency "$concurrency" "${args[@]}"
 
       - name: Upload mutation report
