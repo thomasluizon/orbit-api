@@ -20,7 +20,8 @@ public record RunCalendarAutoSyncCommand(Guid UserId, bool IsOpportunistic = fal
 public record CalendarAutoSyncResult(
     int NewSuggestions,
     int ReconciledHabits,
-    GoogleCalendarAutoSyncStatus Status);
+    GoogleCalendarAutoSyncStatus Status,
+    bool AlreadySyncing = false);
 
 public record CalendarAutoSyncDependencies(
     IGenericRepository<User> UserRepository,
@@ -29,7 +30,8 @@ public record CalendarAutoSyncDependencies(
     IGenericRepository<Notification> NotificationRepository,
     IGoogleTokenService GoogleTokenService,
     ICalendarEventFetcher EventFetcher,
-    IUnitOfWork UnitOfWork);
+    IUnitOfWork UnitOfWork,
+    ICalendarSyncLock SyncLock);
 
 public partial class RunCalendarAutoSyncCommandHandler(
     CalendarAutoSyncDependencies deps,
@@ -46,6 +48,17 @@ public partial class RunCalendarAutoSyncCommandHandler(
 
     public async Task<Result<CalendarAutoSyncResult>> Handle(RunCalendarAutoSyncCommand request, CancellationToken cancellationToken)
     {
+        var outcome = Result.Success(new CalendarAutoSyncResult(0, 0, GoogleCalendarAutoSyncStatus.Idle, AlreadySyncing: true));
+        await deps.UnitOfWork.ExecuteInTransactionAsync(async transactionToken =>
+        {
+            if (await deps.SyncLock.TryAcquireAsync(request.UserId, transactionToken))
+                outcome = await HandleLocked(request, transactionToken);
+        }, cancellationToken);
+        return outcome;
+    }
+
+    private async Task<Result<CalendarAutoSyncResult>> HandleLocked(RunCalendarAutoSyncCommand request, CancellationToken cancellationToken)
+    {
         var gateCheck = await payGate.CanManageCalendar(request.UserId, cancellationToken);
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<CalendarAutoSyncResult>();
@@ -56,6 +69,8 @@ public partial class RunCalendarAutoSyncCommandHandler(
 
         if (user is null)
             return Result.Failure<CalendarAutoSyncResult>(ErrorMessages.UserNotFound);
+
+        await deps.UserRepository.ReloadAsync(user, cancellationToken);
 
         var utcNow = timeProvider.GetUtcNow().UtcDateTime;
 
@@ -97,20 +112,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
             return Result.Success(new CalendarAutoSyncResult(0, 0, GoogleCalendarAutoSyncStatus.TransientError));
         }
 
-        return await FetchAndProcess(user, accessToken, utcNow, cancellationToken);
-    }
-
-    private async Task<Result<CalendarAutoSyncResult>> FetchAndProcess(
-        User user, string accessToken, DateTime utcNow, CancellationToken ct)
-    {
-        Result<CalendarAutoSyncResult> outcome = default!;
-        await deps.UnitOfWork.ExecuteInTransactionAsync(async transactionToken =>
-        {
-            await deps.UnitOfWork.AcquireAdvisoryLockAsync($"calendar-sync:{user.Id}", transactionToken);
-            outcome = await FetchAndProcessLocked(user, accessToken, utcNow, transactionToken);
-        }, ct);
-
-        return outcome;
+        return await FetchAndProcessLocked(user, accessToken, utcNow, cancellationToken);
     }
 
     private async Task<Result<CalendarAutoSyncResult>> FetchAndProcessLocked(
@@ -148,16 +150,18 @@ public partial class RunCalendarAutoSyncCommandHandler(
             await CreateSuggestionNotification(user, newSuggestions, ct);
         }
 
-        user.MarkCalendarSyncSuccess(utcNow);
-
         try
         {
             await deps.UnitOfWork.SaveChangesAsync(ct);
         }
         catch (DbUpdateException ex) when (newSuggestions > 0 && DbUniqueViolation.IsUniqueViolation(ex))
         {
-            return Result.Success(new CalendarAutoSyncResult(0, 0, GoogleCalendarAutoSyncStatus.Idle));
+            deps.UnitOfWork.ResetTracking();
+            return Result.Success(new CalendarAutoSyncResult(0, 0, GoogleCalendarAutoSyncStatus.TransientError));
         }
+
+        user.MarkCalendarSyncSuccess(utcNow);
+        await deps.UnitOfWork.SaveChangesAsync(ct);
 
         return Result.Success(new CalendarAutoSyncResult(newSuggestions, reconciled, GoogleCalendarAutoSyncStatus.Idle));
     }
