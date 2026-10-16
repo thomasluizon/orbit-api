@@ -513,6 +513,9 @@ public class GoalCompletionServiceTests
         public Task AcquireAdvisoryLockAsync(string key, CancellationToken cancellationToken = default) =>
             inner.AcquireAdvisoryLockAsync(key, cancellationToken);
 
+        public Task AcquireUserRowLockAsync(Guid userId, CancellationToken cancellationToken = default) =>
+            inner.AcquireUserRowLockAsync(userId, cancellationToken);
+
         public void DiscardChanges() => inner.DiscardChanges();
 
         public void ResetTracking() => inner.ResetTracking();
@@ -542,6 +545,9 @@ public class GoalCompletionServiceTests
 
         public Task AcquireAdvisoryLockAsync(string key, CancellationToken cancellationToken = default) =>
             inner.AcquireAdvisoryLockAsync(key, cancellationToken);
+
+        public Task AcquireUserRowLockAsync(Guid userId, CancellationToken cancellationToken = default) =>
+            inner.AcquireUserRowLockAsync(userId, cancellationToken);
 
         public void DiscardChanges() => inner.DiscardChanges();
 
@@ -591,6 +597,9 @@ public class GoalCompletionServiceTests
 
         public Task AcquireAdvisoryLockAsync(string key, CancellationToken cancellationToken = default) =>
             inner.AcquireAdvisoryLockAsync(key, cancellationToken);
+
+        public Task AcquireUserRowLockAsync(Guid userId, CancellationToken cancellationToken = default) =>
+            inner.AcquireUserRowLockAsync(userId, cancellationToken);
 
         public void DiscardChanges() => inner.DiscardChanges();
 

@@ -48,10 +48,12 @@ public class CalendarFeedAgreementTests
         _payGate.CanAccessCalendar(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result.Success()));
 
+        var syncLock = Substitute.For<ICalendarSyncLock>();
+        syncLock.TryAcquireAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(true);
         _autoSync = new RunCalendarAutoSyncCommandHandler(
             new CalendarAutoSyncDependencies(
                 _userRepo, _habitRepo, _suggestionRepo, _notificationRepo,
-                _tokenService, _fetcher, _unitOfWork),
+                _tokenService, _fetcher, _unitOfWork, syncLock),
             _payGate,
             _timeProvider,
             Substitute.For<ILogger<RunCalendarAutoSyncCommandHandler>>());

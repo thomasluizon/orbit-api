@@ -175,6 +175,9 @@ public class FoundingAchievementResetRaceTests
             transaction.HeldLock = accountLock;
         }
 
+        public Task AcquireUserRowLockAsync(Guid userId, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
         public void DiscardChanges()
         {
         }

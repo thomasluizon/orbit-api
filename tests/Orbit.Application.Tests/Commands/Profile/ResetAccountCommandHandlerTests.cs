@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Application.Profile.Commands;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
@@ -26,11 +27,11 @@ public class ResetAccountCommandHandlerTests
         _handler = new ResetAccountCommandHandler(_userRepo, _accountResetRepo, _unitOfWork, _userDateService, _cache);
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
         _unitOfWork.ExecuteInTransactionAsync(
-                Arg.Any<Func<CancellationToken, Task>>(),
+                Arg.Any<Func<CancellationToken, Task<Result>>>(),
                 Arg.Any<CancellationToken>())
             .Returns(call =>
             {
-                var operation = call.ArgAt<Func<CancellationToken, Task>>(0);
+                var operation = call.ArgAt<Func<CancellationToken, Task<Result>>>(0);
                 var ct = call.ArgAt<CancellationToken>(1);
                 return operation(ct);
             });
@@ -70,7 +71,7 @@ public class ResetAccountCommandHandlerTests
         user.Level.Should().Be(1);
         await _accountResetRepo.Received(1).DeleteAllUserDataAsync(UserId, Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).ExecuteInTransactionAsync(
-            Arg.Any<Func<CancellationToken, Task>>(),
+            Arg.Any<Func<CancellationToken, Task<Result>>>(),
             Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).AcquireAdvisoryLockAsync(
             $"closed-month-recap:{UserId}",
@@ -80,6 +81,11 @@ public class ResetAccountCommandHandlerTests
         {
             _unitOfWork.AcquireAdvisoryLockAsync(
                 $"closed-month-recap:{UserId}",
+                Arg.Any<CancellationToken>());
+            _unitOfWork.AcquireUserRowLockAsync(UserId, Arg.Any<CancellationToken>());
+            _userRepo.FindOneTrackedAsync(
+                Arg.Any<Expression<Func<User, bool>>>(),
+                Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
                 Arg.Any<CancellationToken>());
             _accountResetRepo.DeleteAllUserDataAsync(UserId, Arg.Any<CancellationToken>());
         });
@@ -96,5 +102,8 @@ public class ResetAccountCommandHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
+        await _accountResetRepo.DidNotReceive().DeleteAllUserDataAsync(UserId, Arg.Any<CancellationToken>());
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _userDateService.DidNotReceive().GetUserTodayAsync(UserId, Arg.Any<CancellationToken>());
     }
 }
