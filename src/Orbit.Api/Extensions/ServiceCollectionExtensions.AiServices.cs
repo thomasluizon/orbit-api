@@ -154,7 +154,8 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Notification>>(),
                 sp.GetRequiredService<IGoogleTokenService>(),
                 sp.GetRequiredService<Orbit.Application.Calendar.Services.ICalendarEventFetcher>(),
-                sp.GetRequiredService<IUnitOfWork>()));
+                sp.GetRequiredService<IUnitOfWork>(),
+                sp.GetRequiredService<Orbit.Application.Calendar.Services.ICalendarSyncLock>()));
     }
 
     private static void AddChatCommandDependencies(WebApplicationBuilder builder)

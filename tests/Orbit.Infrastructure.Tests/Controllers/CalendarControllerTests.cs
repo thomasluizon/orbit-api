@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using FluentAssertions;
 using MediatR;
 using Microsoft.AspNetCore.Http;
@@ -177,6 +178,24 @@ public class CalendarControllerTests
         var result = await _controller.RunSyncNow(CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task RunSyncNow_AlreadySyncing_ReturnsOkWithClientVisibleFlag()
+    {
+        var syncResult = new CalendarAutoSyncResult(0, 0, Domain.Enums.GoogleCalendarAutoSyncStatus.Idle, AlreadySyncing: true);
+        _mediator.Send(Arg.Any<RunCalendarAutoSyncCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(syncResult));
+
+        var result = await _controller.RunSyncNow(CancellationToken.None);
+
+        var response = result.Should().BeOfType<OkObjectResult>().Subject;
+        response.StatusCode.Should().Be(StatusCodes.Status200OK);
+        var body = JsonSerializer.SerializeToElement(response.Value, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        body.GetProperty("alreadySyncing").GetBoolean().Should().BeTrue();
+        body.GetProperty("newSuggestions").GetInt32().Should().Be(0);
+        body.GetProperty("reconciledHabits").GetInt32().Should().Be(0);
+        body.GetProperty("status").GetInt32().Should().Be((int)Domain.Enums.GoogleCalendarAutoSyncStatus.Idle);
     }
 
     [Fact]

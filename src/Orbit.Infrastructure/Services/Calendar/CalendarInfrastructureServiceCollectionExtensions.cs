@@ -14,6 +14,7 @@ public static class CalendarInfrastructureServiceCollectionExtensions
     {
         services.AddScoped<IGoogleCalendarApi>(_ => new GoogleCalendarApi(httpTimeout));
         services.AddScoped<ICalendarEventFetcher, GoogleCalendarEventFetcher>();
+        services.AddScoped<ICalendarSyncLock, CalendarSyncLock>();
         return services;
     }
 }
