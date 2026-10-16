@@ -182,6 +182,26 @@ public class SystemPromptBuilderTests
         result.Should().Contain("non-judgmental");
     }
 
+    [Theory]
+    [InlineData("English", "If the user writes in English, respond in English.")]
+    [InlineData("Portuguese", "If they write in Portuguese, respond in Portuguese.")]
+    public void BuildStatic_CopyableContentRules_ApplyToBothReplyLanguages(string language, string languageRule)
+    {
+        var prompt = new SystemPromptBuilder().BuildStatic(
+            new PromptBuildRequest(Array.Empty<Habit>(), Array.Empty<UserFact>()));
+        var rule = prompt.Split('\n').Should()
+            .ContainSingle(line => line.Contains("COPYABLE CONTENT:", StringComparison.Ordinal)).Subject;
+
+        prompt.Should().Contain(languageRule);
+        rule.Should().Contain(language);
+        rule.Should().Contain("In English and Portuguese replies");
+        rule.Should().Contain("one fenced block (three backticks: ```, no language tag needed)");
+        rule.Should().Contain("only for code, a command, or ready-to-paste text (a message, list, or template)");
+        rule.Should().Contain("the user will copy and use elsewhere");
+        rule.Should().Contain("Keep everything else in normal prose");
+        rule.Should().Contain("never wrap your whole reply, a single word, or an explanation in a block");
+    }
+
     [Fact]
     public void BuildStatic_IncludesToolFailuresAfterClarificationGuidance()
     {
