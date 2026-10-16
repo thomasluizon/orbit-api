@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
+using Orbit.Application.Tests.Common;
 using Orbit.Application.Profile.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -28,6 +29,7 @@ public class ProfileCommandHandlerTests
 
     public ProfileCommandHandlerTests()
     {
+        _unitOfWork.PassThroughTransactions<Result>();
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
         _payGate.CanManageAiMemory(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result.Success()));
@@ -329,7 +331,7 @@ public class ProfileCommandHandlerTests
         await accountResetRepo.Received(1).DeleteAllUserDataAsync(UserId, Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).ExecuteInTransactionAsync(
-            Arg.Any<Func<CancellationToken, Task>>(),
+            Arg.Any<Func<CancellationToken, Task<Result>>>(),
             Arg.Any<CancellationToken>());
     }
 

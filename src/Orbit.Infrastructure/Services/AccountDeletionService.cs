@@ -93,25 +93,26 @@ public partial class AccountDeletionService(
             using var scope = scopeFactory.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
 
-            var userToDelete = await dbContext.Users
-                .IgnoreQueryFilters()
-                .FirstOrDefaultAsync(u => u.Id == userId, ct);
-            if (userToDelete is not null)
+            var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            var resetRepository = scope.ServiceProvider.GetRequiredService<IAccountResetRepository>();
+            var contactRepository = scope.ServiceProvider.GetRequiredService<IGenericRepository<MarketingContact>>();
+            await unitOfWork.ExecuteInTransactionAsync(async transactionToken =>
             {
-                var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-                var resetRepository = scope.ServiceProvider.GetRequiredService<IAccountResetRepository>();
-                var contactRepository = scope.ServiceProvider.GetRequiredService<IGenericRepository<MarketingContact>>();
-                await unitOfWork.ExecuteInTransactionAsync(async transactionToken =>
+                var userToDelete = await dbContext.Users
+                    .IgnoreQueryFilters()
+                    .FirstOrDefaultAsync(u => u.Id == userId, transactionToken);
+                if (userToDelete is not null)
                 {
                     await MarketingContactOptOut.RecordAsync(userToDelete.Email, contactRepository, unitOfWork, transactionToken);
+                    await unitOfWork.AcquireUserRowLockAsync(userId, transactionToken);
                     await dbContext.AiUsageDaily
                         .Where(u => u.UserId == userId)
                         .ExecuteDeleteAsync(transactionToken);
                     await resetRepository.DeleteAllUserDataAsync(userId, transactionToken);
                     dbContext.Users.Remove(userToDelete);
                     await unitOfWork.SaveChangesAsync(transactionToken);
-                }, ct);
-            }
+                }
+            }, ct);
 
             if (logger.IsEnabled(LogLevel.Information))
                 LogAccountDeleted(logger, userId);

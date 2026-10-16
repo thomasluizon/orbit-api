@@ -20,21 +20,27 @@ public class ResetAccountCommandHandler(
 {
     public async Task<Result> Handle(ResetAccountCommand request, CancellationToken cancellationToken)
     {
-        var user = await userRepository.FindOneTrackedAsync(
-            u => u.Id == request.UserId,
-            cancellationToken: cancellationToken);
-
-        if (user is null)
-            return Result.Failure(ErrorMessages.UserNotFound);
-
-        await unitOfWork.ExecuteInTransactionAsync(async ct =>
+        var result = await unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
             await unitOfWork.AcquireAdvisoryLockAsync(ClosedMonthRecapLock.ForUser(request.UserId), ct);
+            await unitOfWork.AcquireUserRowLockAsync(request.UserId, ct);
+
+            var user = await userRepository.FindOneTrackedAsync(
+                u => u.Id == request.UserId,
+                cancellationToken: ct);
+
+            if (user is null)
+                return Result.Failure(ErrorMessages.UserNotFound);
+
             await accountResetRepository.DeleteAllUserDataAsync(request.UserId, ct);
 
             user.ResetAccount();
             await unitOfWork.SaveChangesAsync(ct);
+            return Result.Success();
         }, cancellationToken);
+
+        if (result.IsFailure)
+            return result;
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);

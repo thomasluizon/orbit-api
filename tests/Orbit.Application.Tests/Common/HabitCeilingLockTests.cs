@@ -12,6 +12,34 @@ namespace Orbit.Application.Tests.Common;
 public class HabitCeilingLockTests
 {
     [Fact]
+    public async Task ExecuteAsync_LocksUserRowBeforeHabitMutation()
+    {
+        var unitOfWork = Substitute.For<IUnitOfWork>().PassThroughTransactions();
+        var userId = Guid.NewGuid();
+        var order = new List<string>();
+        unitOfWork.AcquireAdvisoryLockAsync(HabitCeilingLock.ForUser(userId), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                order.Add("ceiling");
+                return Task.CompletedTask;
+            });
+        unitOfWork.AcquireUserRowLockAsync(userId, Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                order.Add("user");
+                return Task.CompletedTask;
+            });
+
+        await HabitCeilingLock.ExecuteAsync(unitOfWork, userId, _ =>
+        {
+            order.Add("habit");
+            return Task.CompletedTask;
+        }, CancellationToken.None);
+
+        order.Should().Equal("ceiling", "user", "habit");
+    }
+
+    [Fact]
     public async Task ConcurrentCreateAttempts_CommitNoMoreThanConfiguredCeiling()
     {
         const int ceiling = 1000;

@@ -8,11 +8,14 @@ public static class HabitCeilingLock
 {
     public static string ForUser(Guid userId) => $"habit-ceiling:{userId}";
 
-    public static Task AcquireAsync(
+    public static async Task AcquireAsync(
         IUnitOfWork unitOfWork,
         Guid userId,
-        CancellationToken cancellationToken) =>
-        unitOfWork.AcquireAdvisoryLockAsync(ForUser(userId), cancellationToken);
+        CancellationToken cancellationToken)
+    {
+        await unitOfWork.AcquireAdvisoryLockAsync(ForUser(userId), cancellationToken);
+        await unitOfWork.AcquireUserRowLockAsync(userId, cancellationToken);
+    }
 
     public static Task<T> ExecuteAsync<T>(
         IUnitOfWork unitOfWork,

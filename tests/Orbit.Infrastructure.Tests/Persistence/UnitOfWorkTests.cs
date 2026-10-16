@@ -11,6 +11,29 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 public class UnitOfWorkTests
 {
     [Fact]
+    public async Task AcquireUserRowLockAsync_WithoutPostgres_DoesNotIssueProviderSql()
+    {
+        await using var context = CreateInMemoryContext(NewInMemoryDatabaseName());
+        var unitOfWork = new UnitOfWork(context, new DatabaseConnectionSettings());
+
+        await unitOfWork.AcquireUserRowLockAsync(Guid.NewGuid());
+    }
+
+    [Fact]
+    public async Task AcquireUserRowLockAsync_PostgresWithoutTransaction_RejectsUnprotectedLock()
+    {
+        var options = new DbContextOptionsBuilder<OrbitDbContext>()
+            .UseNpgsql("Host=localhost;Database=unused;Username=unused;Password=unused").Options;
+        await using var context = new OrbitDbContext(options);
+        var unitOfWork = new UnitOfWork(context, new DatabaseConnectionSettings());
+
+        var acquire = () => unitOfWork.AcquireUserRowLockAsync(Guid.NewGuid());
+
+        await acquire.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("A user row lock requires an active transaction.");
+    }
+
+    [Fact]
     public async Task ExecuteInTransactionAsync_WhenOperationThrows_ClearsTrackedEntitiesAndSurfacesOriginalException()
     {
         using var connection = new SqliteConnection("Data Source=:memory:");
