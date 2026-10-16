@@ -21,8 +21,7 @@ internal sealed class CalendarSyncLock(OrbitDbContext context) : ICalendarSyncLo
         if (!acquired)
             return false;
 
-        await context.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT \"Id\" FROM \"Users\" WHERE \"Id\" = {userId} FOR NO KEY UPDATE", cancellationToken);
+        await UserRowLock.AcquireAsync(context, userId, cancellationToken);
         return true;
     }
 }

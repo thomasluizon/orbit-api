@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Storage;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Persistence;
@@ -11,12 +12,23 @@ internal sealed class SqliteOrbitDbContextFactory : IDisposable
     private readonly DbContextOptions<OrbitDbContext> _options;
 
     internal SqliteOrbitDbContextFactory(params IInterceptor[] interceptors)
+        : this(null, interceptors)
+    {
+    }
+
+    internal SqliteOrbitDbContextFactory(
+        Func<ExecutionStrategyDependencies, IExecutionStrategy>? executionStrategyFactory,
+        params IInterceptor[] interceptors)
     {
         _connection = new SqliteConnection("Data Source=:memory:");
         _connection.Open();
 
         _options = new DbContextOptionsBuilder<OrbitDbContext>()
-            .UseSqlite(_connection)
+            .UseSqlite(_connection, sqlite =>
+            {
+                if (executionStrategyFactory is not null)
+                    sqlite.ExecutionStrategy(executionStrategyFactory);
+            })
             .AddInterceptors(interceptors)
             .Options;
 

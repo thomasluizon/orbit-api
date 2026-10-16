@@ -72,6 +72,9 @@ internal sealed class SerializingUnitOfWork : IUnitOfWork
         Record($"lock:{key}");
     }
 
+    public Task AcquireUserRowLockAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
+
     public void DiscardChanges()
     {
     }
