@@ -22,7 +22,7 @@ internal sealed class CalendarSyncLock(OrbitDbContext context) : ICalendarSyncLo
             return false;
 
         await context.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT \"Id\" FROM \"Users\" WHERE \"Id\" = {userId} FOR UPDATE", cancellationToken);
+            $"SELECT \"Id\" FROM \"Users\" WHERE \"Id\" = {userId} FOR NO KEY UPDATE", cancellationToken);
         return true;
     }
 }
