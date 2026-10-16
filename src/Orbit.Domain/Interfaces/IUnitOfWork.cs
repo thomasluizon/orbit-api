@@ -14,6 +14,12 @@ public interface IUnitOfWork : IDisposable
     Task AcquireAdvisoryLockAsync(string key, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Locks the user row with FOR NO KEY UPDATE until the current transaction ends.
+    /// Acquire before writing owned habits to match calendar sync's lock order.
+    /// </summary>
+    Task AcquireUserRowLockAsync(Guid userId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Drops every pending change: detaches added entities and reverts modified/deleted ones to
     /// Unchanged. Used after a concurrency conflict to clear stale side-rows (e.g. an audit log)
     /// before reloading and replaying, so a retry doesn't double-insert them.

@@ -90,6 +90,9 @@ public sealed class UnitOfWork(
             cancellationToken);
     }
 
+    public Task AcquireUserRowLockAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        UserRowLock.AcquireAsync(context, userId, cancellationToken);
+
     public void DiscardChanges()
     {
         foreach (var entry in context.ChangeTracker.Entries().ToList())
