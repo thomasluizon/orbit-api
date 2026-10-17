@@ -420,19 +420,23 @@ public class ProcessUserChatCommandHandlerTests
         result.ErrorCode.Should().Be("PAY_GATE");
     }
 
-    [Fact]
-    public async Task Handle_FaqCacheHit_ReturnsCachedAnswerWithoutReservingQuota()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_FaqCacheHit_ReturnsCachedAnswerWithoutReservingQuota(bool supportsParts)
     {
         SetupUserAndPayGate();
         ChatFaqCache.StoreAnswer("bad_habits", "pt", "Resposta em cache");
         var handler = CreateHandler();
 
         var result = await handler.Handle(
-            new ProcessUserChatCommand(UserId, "O que e um mau habito?"),
+            new ProcessUserChatCommand(UserId, "O que e um mau habito?",
+                ClientContext: new AgentClientContext(SupportsParts: supportsParts)),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.AiMessage.Should().Be("Resposta em cache");
+        result.Value.Parts.Should().BeNull();
         await _payGate.DidNotReceive()
             .TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>());
         await _aiIntentService.DidNotReceive().SendWithToolsAsync(
@@ -1060,6 +1064,176 @@ public class ProcessUserChatCommandHandlerTests
         result.Value.HabitList.Should().BeNull();
     }
 
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public async Task Handle_LegacyMixedDirectives_MatchesSerializedGolden(bool? supportsParts, bool disabled)
+    {
+        SetupUserAndPayGate();
+        if (disabled)
+            _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
+                .Returns([FeatureFlagKeys.AstraPartsDisabled]);
+        SetupAiResponse(new AiResponse { TextMessage = "A\n[[orbit:habits:today]]\nB\n[[orbit:metrics]]" });
+        SetupRecap(Metrics(totalScheduled: 1));
+
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(
+            UserId, "Show today and my week",
+            ClientContext: new AgentClientContext(SupportsHabitListCard: true, SupportsMetricsCard: true,
+                SupportsParts: supportsParts, PartKinds: ["habitList", "metrics"])),
+            CancellationToken.None);
+
+        result.Value.Parts.Should().BeNull();
+        ChatStreamEvent.Final(result.Value).ToJson().Should().Be("""
+            {"type":"final","response":{"aiMessage":"A\n\nB","actions":[],"operations":[],"pendingOperations":[],"policyDenials":[],"correlationId":null,"relatedSurfaces":null,"habitList":{"scope":"today","items":[]},"goalList":null,"metricsCard":{"period":"week","completionRate":0,"totalCompletions":0,"totalScheduled":1,"activeDays":0,"currentStreak":0,"bestStreak":0,"hasData":true,"surfaceId":"progress","series":null,"topHabitName":null,"topHabitEmoji":null,"habitId":null,"habitTitle":null,"weeklyCompletionRate":null,"monthlyCompletionRate":null,"lastCompletedDate":null},"periodInsight":null,"daySummary":null,"streak":null,"calendar":null,"recordLists":null,"accountRows":null,"followUps":null}}
+            """);
+    }
+
+    [Fact]
+    public async Task Handle_PartsClient_PreservesModelOrderAndTracksParts()
+    {
+        SetupUserAndPayGate();
+        const string responseText = "A\n[[orbit:habits:today]]\nB\n[[orbit:metrics]]";
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                var sink = call.ArgAt<Func<AiStreamEvent, Task>>(1);
+                foreach (var character in responseText)
+                    await sink(AiStreamEvent.Delta(character.ToString()));
+                return Result.Success(new AiResponse { TextMessage = responseText });
+            });
+        SetupRecap(Metrics(totalScheduled: 1));
+        var events = new List<ChatStreamEvent>();
+
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(UserId, "Show today and my week",
+            ClientContext: new AgentClientContext(SupportsParts: true, PartKinds: ["habitList", "metrics"],
+                SupportsHabitListCard: true, SupportsMetricsCard: true),
+            StreamSink: item => { events.Add(item); return Task.CompletedTask; }), CancellationToken.None);
+
+        result.Value.AiMessage.Should().Be("A\n\nB");
+        result.Value.Parts.Should().HaveCount(4);
+        result.Value.Parts![0].Should().Be(new ChatTextPart("A"));
+        result.Value.Parts[1].Should().BeOfType<ChatBlockPart>().Which.Kind.Should().Be("habitList");
+        result.Value.Parts[2].Should().Be(new ChatTextPart("B"));
+        result.Value.Parts[3].Should().BeOfType<ChatBlockPart>().Which.Kind.Should().Be("metrics");
+        result.Value.HabitList.Should().BeNull();
+        result.Value.MetricsCard.Should().BeNull();
+        events.Where(item => item.Type == "delta").Should().OnlyContain(item => !item.Text!.Contains("[[orbit:"));
+        string.Concat(events.Where(item => item.Type == "delta").Select(item => item.Text))
+            .Should().Be("A\n\nB\n");
+        ChatStreamEvent.Final(result.Value).ToJson().Should().Contain("\"parts\":[{\"type\":\"text\",\"text\":\"A\"}");
+        _productAnalytics.Received(1).CaptureUserEvent(UserId, "chat_metrics_card_emitted", "Free",
+            Arg.Is<IReadOnlyDictionary<string, object>>(properties =>
+                properties["part_count"].Equals(4)
+                && ((string[])properties["block_kinds"]).SequenceEqual(new[] { "habitList", "metrics" })));
+    }
+
+    [Theory]
+    [InlineData(false, true, false)]
+    [InlineData(true, false, false)]
+    [InlineData(true, true, true)]
+    public async Task Handle_PartsClient_DropsUnavailableBlocksKeepsText(
+        bool declaresKind, bool capable, bool disabled)
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "A\n[[orbit:metrics]]\nB" });
+        if (disabled)
+            _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
+                .Returns([FeatureFlagKeys.AstraPeriodBlocksDisabled]);
+
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(UserId, "Show my week",
+            ClientContext: new AgentClientContext(SupportsParts: true,
+                PartKinds: declaresKind ? ["metrics"] : [], SupportsMetricsCard: capable)), CancellationToken.None);
+
+        result.Value.Parts.Should().Equal(new ChatTextPart("A"), new ChatTextPart("B"));
+        result.Value.AiMessage.Should().Be("A\n\nB");
+        result.Value.MetricsCard.Should().BeNull();
+        await _mediator.DidNotReceive().Send(Arg.Any<GetRecapQuery>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_PartsClient_DropsBlockWithoutSuccessfulTool(bool failedTool)
+    {
+        SetupUserAndPayGate();
+        var tool = ReadTool("get_daily_summary", new ToolResult(false, Error: "Read failed"));
+        if (failedTool)
+            SetupReadToolReply("get_daily_summary", "A[[orbit:day]]B");
+        else
+            SetupAiResponse(new AiResponse { TextMessage = "A[[orbit:day]]B" });
+
+        var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(UserId, "Show today",
+            ClientContext: new AgentClientContext(SupportsParts: true, PartKinds: ["daySummary"],
+                SupportsDaySummaryCard: true)), CancellationToken.None);
+
+        if (failedTool)
+            result.Value.Parts.Should().Equal(new ChatTextPart(EnglishToolFailureMessage));
+        else
+            result.Value.Parts.Should().Equal(new ChatTextPart("A"), new ChatTextPart("B"));
+        result.Value.DaySummary.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_PartsClient_LimitsBlocksAndDeduplicatesAtFirstPosition()
+    {
+        SetupUserAndPayGate();
+        SetupRecap(Metrics(totalScheduled: 1));
+        SetupAiResponse(new AiResponse
+        {
+            TextMessage =
+            "A[[orbit:metrics]]B[[ORBIT:METRICS]]C[[orbit:habits:today]]D[[orbit:goals]]E[[orbit:habits:all]]F"
+        });
+
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(UserId, "Show habits and goals and progress",
+            ClientContext: new AgentClientContext(SupportsParts: true, PartKinds: ["habitList", "goalList", "metrics"],
+                SupportsHabitListCard: true, SupportsGoalListCard: true, SupportsMetricsCard: true)), CancellationToken.None);
+
+        var parts = result.Value.Parts!;
+        parts.OfType<ChatBlockPart>().Select(part => part.Kind).Should().Equal("metrics", "habitList", "goalList");
+        parts[1].Should().BeOfType<ChatBlockPart>().Which.Kind.Should().Be("metrics");
+        result.Value.AiMessage.Should().Be("A\n\nB\n\nC\n\nD\n\nE\n\nF");
+        await _mediator.Received(1).Send(Arg.Any<GetRecapQuery>(), Arg.Any<CancellationToken>());
+        _productAnalytics.Received(1).CaptureUserEvent(UserId, "chat_metrics_card_emitted", "Free",
+            Arg.Any<IReadOnlyDictionary<string, object>>());
+    }
+
+    [Fact]
+    public async Task Handle_PartsClient_FollowUpTailBlocksPrecedeFinalTruncationNotice()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse
+        {
+            TextMessage = "A[[orbit:followups]]\nNext?\nThen?\n[[orbit:habits:today]]",
+            IsTruncated = true
+        });
+
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(UserId, "Show today",
+            ClientContext: new AgentClientContext(SupportsParts: true, PartKinds: ["habitList"],
+                SupportsHabitListCard: true, SupportsFollowUps: true)), CancellationToken.None);
+
+        result.Value.Parts.Should().HaveCount(3);
+        result.Value.Parts![0].Should().Be(new ChatTextPart("A"));
+        result.Value.Parts[1].Should().BeOfType<ChatBlockPart>();
+        result.Value.Parts[2].Should().Be(new ChatTextPart(
+            "This response was cut off before completion, so the result is partial."));
+        result.Value.AiMessage.Should().Be("A\n\nThis response was cut off before completion, so the result is partial.");
+        result.Value.FollowUps.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_PartsClient_PlainReplyGivesOneTextPart()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "A plain answer." });
+
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(UserId, "Hello",
+            ClientContext: new AgentClientContext(SupportsParts: true)), CancellationToken.None);
+
+        result.Value.Parts.Should().Equal(new ChatTextPart("A plain answer."));
+    }
+
     [Fact]
     public async Task Handle_MetricsCapableClientWithDirective_BuildsCurrentWeekCardAndTracksEmission()
     {
@@ -1412,8 +1586,10 @@ public class ProcessUserChatCommandHandlerTests
         result.Value.RecordLists[0].Items.Single().Title.Should().Be("Reminder");
     }
 
-    [Fact]
-    public async Task Handle_TwoRecordDirectives_BuildsTwoLists()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_TwoRecordDirectives_BuildsTwoLists(bool supportsParts)
     {
         SetupUserAndPayGate();
         var notifications = ReadTool("get_notifications", new ToolResult(true,
@@ -1436,10 +1612,19 @@ public class ProcessUserChatCommandHandlerTests
 
         var result = await CreateHandler(notifications, tags).Handle(new ProcessUserChatCommand(
             UserId, "Show notifications and tags",
-            ClientContext: new AgentClientContext(SupportsRecordListCard: true)), CancellationToken.None);
+            ClientContext: new AgentClientContext(SupportsRecordListCard: true,
+                SupportsParts: supportsParts, PartKinds: ["recordList"])), CancellationToken.None);
 
-        result.Value.RecordLists.Should().HaveCount(2);
-        result.Value.RecordLists!.Select(card => card.Kind).Should().ContainInOrder("notifications", "tags");
+        var lists = supportsParts
+            ? result.Value.Parts!.OfType<ChatBlockPart>().Select(part => (RecordListCard)part.Block).ToList()
+            : result.Value.RecordLists;
+        lists.Should().HaveCount(2);
+        lists!.Select(card => card.Kind).Should().Equal("notifications", "tags");
+        if (supportsParts)
+        {
+            result.Value.RecordLists.Should().BeNull();
+            result.Value.Parts!.OfType<ChatBlockPart>().Select(part => part.Kind).Should().Equal("recordList", "recordList");
+        }
     }
 
     [Fact]

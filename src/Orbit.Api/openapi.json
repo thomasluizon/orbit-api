@@ -14914,6 +14914,70 @@
             "items": {
               "type": "string"
             }
+          },
+          "parts": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ChatResponsePart"
+            }
+          }
+        }
+      },
+      "ChatResponsePart": {
+        "required": [
+          "type"
+        ],
+        "type": "object",
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/ChatResponsePartChatTextPart"
+          },
+          {
+            "$ref": "#/components/schemas/ChatResponsePartChatBlockPart"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "text": "#/components/schemas/ChatResponsePartChatTextPart",
+            "block": "#/components/schemas/ChatResponsePartChatBlockPart"
+          }
+        }
+      },
+      "ChatResponsePartChatBlockPart": {
+        "required": [
+          "kind",
+          "block"
+        ],
+        "properties": {
+          "type": {
+            "enum": [
+              "block"
+            ],
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "block": { }
+        }
+      },
+      "ChatResponsePartChatTextPart": {
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "type": {
+            "enum": [
+              "text"
+            ],
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
           }
         }
       },
