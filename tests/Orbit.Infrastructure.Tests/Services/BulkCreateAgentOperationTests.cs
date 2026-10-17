@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Caching.Memory;
 using System.Text.Json;
 using FluentAssertions;
 using FluentValidation;
@@ -79,7 +80,7 @@ public sealed class BulkCreateAgentOperationTests : IDisposable
 
         var tool = new BulkCreateHabitsTool(_provider.GetRequiredService<IMediator>());
         var catalog = new AgentCatalogService([tool]);
-        var policy = new AgentPolicyEvaluator(context, catalog, _pending, bridge, settings);
+        var policy = new AgentPolicyEvaluator(context, catalog, _pending, bridge, settings, new FeatureFlagService(context, new MemoryCache(new MemoryCacheOptions())));
         _audit.RecordAsync(Arg.Any<AgentAuditEntry>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {

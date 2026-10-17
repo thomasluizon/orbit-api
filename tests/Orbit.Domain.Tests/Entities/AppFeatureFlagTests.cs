@@ -5,6 +5,35 @@ namespace Orbit.Domain.Tests.Entities;
 
 public class AppFeatureFlagTests
 {
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData(" flag")]
+    public void Create_InvalidKey_Rejects(string key)
+    {
+        Action create = () => AppFeatureFlag.Create(key, false);
+        create.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void AccountTarget_GuardsIdentityAndSetsTimestamp()
+    {
+        var userId = Guid.NewGuid();
+        var account = AppFeatureFlagAccount.Create("redesign", userId);
+        account.FlagKey.Should().Be("redesign");
+        account.UserId.Should().Be(userId);
+        account.CreatedAtUtc.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+        Action create = () => AppFeatureFlagAccount.Create("redesign", Guid.Empty);
+        create.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void Create_MultilineDescription_Rejects()
+    {
+        Action create = () => AppFeatureFlag.Create("flag", false, description: "first\nsecond");
+        create.Should().Throw<ArgumentException>();
+    }
+
     [Fact]
     public void Create_AllParameters_SetsProperties()
     {
