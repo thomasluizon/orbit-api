@@ -93,6 +93,7 @@ public sealed class BulkCreateAgentOperationTests : IDisposable
             catalog, policy, _audit, ownership, bridge,
             new AiToolRegistry([tool]),
             Substitute.For<IPendingOperationChangePreviewer>(),
+            _pending,
             work, _logger);
     }
 

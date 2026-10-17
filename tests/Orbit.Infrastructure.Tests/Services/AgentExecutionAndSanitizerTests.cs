@@ -843,6 +843,7 @@ public class AgentExecutionAndSanitizerTests
             stepUpAuthorizationBridge,
             toolRegistry ?? new AiToolRegistry([]),
             changePreviewer ?? Substitute.For<IPendingOperationChangePreviewer>(),
+            Substitute.For<IPendingAgentOperationStore>(),
             unitOfWork ?? Substitute.For<IUnitOfWork>(),
             NullLogger<AgentOperationExecutor>.Instance);
     }
