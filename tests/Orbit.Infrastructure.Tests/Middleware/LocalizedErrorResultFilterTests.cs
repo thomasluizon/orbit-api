@@ -181,6 +181,28 @@ public class LocalizedErrorResultFilterTests
         body.Error.Should().MatchRegex(@"[Rr]emaining attempts:\s*2\s*$");
     }
 
+    /// <summary>
+    /// Both clients at b84bdc9e classify these failures with the English substring checks in
+    /// https://github.com/thomasluizon/orbit-ui-mobile/blob/b84bdc9e/packages/shared/src/utils/calendar-sync.ts.
+    /// </summary>
+    [Theory]
+    [InlineData(ErrorCodes.CalendarNotConnected, "en")]
+    [InlineData(ErrorCodes.CalendarNotConnected, "pt-BR")]
+    [InlineData(ErrorCodes.CalendarReconnectRequired, "en")]
+    [InlineData(ErrorCodes.CalendarReconnectRequired, "pt-BR")]
+    public async Task CalendarConnectionFailures_StayRecognizableByShippedClients(string code, string language)
+    {
+        var body = await Run(
+            Result.Failure(new AppError(code, "unused fallback")).ToErrorResult(),
+            acceptLanguage: "en",
+            userId: Guid.NewGuid(),
+            storedLanguage: language);
+
+        body.ErrorCode.Should().Be(code);
+        body.Error.ToLowerInvariant().Should().MatchRegex(
+            "not connected|unauthorized|invalid authentication credentials|google calendar|calendar connection|reconnect.*calendar|calendar.*reconnect");
+    }
+
     [Fact]
     public async Task TheStatusCodeIsUntouched()
     {
