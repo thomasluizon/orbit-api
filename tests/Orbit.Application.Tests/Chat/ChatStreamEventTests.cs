@@ -26,6 +26,13 @@ public class ChatStreamEventTests
     }
 
     [Fact]
+    public void Step_SerializesOnlyTypeDomainAndAccess()
+    {
+        ChatStreamEvent.Step("habits", "read").ToJson()
+            .Should().Be("""{"type":"step","domain":"habits","access":"read"}""");
+    }
+
+    [Fact]
     public void Failure_SerializesStatusErrorAndCode()
     {
         ChatStreamEvent.Failure(403, "Upgrade required", "paygate").ToJson()

@@ -1,5 +1,6 @@
 using Orbit.Application.FeatureFlags;
 using Microsoft.AspNetCore.Mvc;
+using Orbit.Api.Middleware;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 
@@ -16,6 +17,7 @@ public static class ResultActionResultExtensions
         [ErrorCodes.HabitNotOwned] = StatusCodes.Status403Forbidden,
 
         [ErrorCodes.UserNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.SkipNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.HabitNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.ParentHabitNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.TargetParentNotFound] = StatusCodes.Status404NotFound,
@@ -35,6 +37,7 @@ public static class ResultActionResultExtensions
         [ErrorCodes.DuplicateTagName] = StatusCodes.Status409Conflict,
         [ErrorCodes.DuplicateFact] = StatusCodes.Status409Conflict,
         [ErrorCodes.AlreadyReferred] = StatusCodes.Status409Conflict,
+        [ErrorCodes.SkipUndoConflict] = StatusCodes.Status409Conflict,
         [ErrorCodes.ConcurrentUpdateConflict] = StatusCodes.Status409Conflict,
         [ErrorCodes.HandleTaken] = StatusCodes.Status409Conflict,
         [ErrorCodes.AlreadyFriends] = StatusCodes.Status409Conflict,
@@ -92,7 +95,7 @@ public static class ResultActionResultExtensions
         this Result result,
         int failureStatusCode = StatusCodes.Status400BadRequest)
     {
-        return new ObjectResult(new { error = result.Error, errorCode = result.ErrorCode })
+        return new ObjectResult(new ErrorResponse(result.Error, result.ErrorCode) { Args = result.ErrorArgs })
         {
             StatusCode = result.ResolveErrorStatus(failureStatusCode)
         };
@@ -111,6 +114,6 @@ public static class ResultActionResultExtensions
             : failureStatusCode;
 
     /// <summary>Uniform error body for controller-authored failures that bypass Result.</summary>
-    public static object ToErrorBody(this AppError error) =>
-        new { error = error.Message, errorCode = error.Code };
+    public static ErrorResponse ToErrorBody(this AppError error) =>
+        new(error.Message, error.Code) { Args = error.Args };
 }

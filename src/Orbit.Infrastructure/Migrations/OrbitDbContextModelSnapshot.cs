@@ -1394,6 +1394,51 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("HabitLogs");
                 });
 
+            modelBuilder.Entity("Orbit.Domain.Entities.HabitSkipUndo", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ExpectedLogState")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("ExpectedUpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("HabitId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsUndone")
+                        .IsConcurrencyToken()
+                        .HasColumnType("boolean");
+
+                    b.Property<DateOnly>("PreviousDueDate")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("PreviousIsCompleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateOnly?>("PreviousScheduledStartDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid?>("SkipLogId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HabitId");
+
+                    b.HasIndex("UserId", "HabitId");
+
+                    b.ToTable("HabitSkipUndos");
+                });
+
             modelBuilder.Entity("Orbit.Domain.Entities.MarketingContact", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1545,6 +1590,14 @@ namespace Orbit.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<string>("PreviewFingerprint")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int>("RevisionNumber")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
 
                     b.Property<string>("RiskClass")
                         .IsRequired()
@@ -2212,6 +2265,9 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<DateTime?>("TrialEndsAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool?>("Uses24HourClockPreference")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("WeekStartDay")
                         .HasColumnType("integer");
 
@@ -2659,6 +2715,15 @@ namespace Orbit.Infrastructure.Migrations
                 {
                     b.HasOne("Orbit.Domain.Entities.Habit", null)
                         .WithMany("Logs")
+                        .HasForeignKey("HabitId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Orbit.Domain.Entities.HabitSkipUndo", b =>
+                {
+                    b.HasOne("Orbit.Domain.Entities.Habit", null)
+                        .WithMany()
                         .HasForeignKey("HabitId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();

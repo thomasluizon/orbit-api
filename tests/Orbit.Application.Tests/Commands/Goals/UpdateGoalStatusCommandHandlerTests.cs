@@ -72,7 +72,7 @@ public class UpdateGoalStatusCommandHandlerTests
     public async Task Handle_Reactivate_SetsStatusToActive()
     {
         var goal = Goal.Create(UserId, "Goal", 100, "km").Value;
-        goal.MarkCompleted();        SetupGoalFound(goal);
+        goal.MarkCompleted(); SetupGoalFound(goal);
 
         var command = new UpdateGoalStatusCommand(UserId, GoalId, GoalStatus.Active);
 
@@ -172,7 +172,7 @@ public class UpdateGoalStatusCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Invalid status");
+        result.Error.Should().Be(ErrorMessages.InvalidGoalStatus.Message);
     }
 
     private void SetupGoalFound(Goal goal)

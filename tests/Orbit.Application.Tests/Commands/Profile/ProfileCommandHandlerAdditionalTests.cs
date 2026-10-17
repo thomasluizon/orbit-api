@@ -5,6 +5,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Commands.Profile;
 
@@ -60,7 +61,7 @@ public class CompleteOnboardingCommandHandlerTests
         var result = await _handler.Handle(new CompleteOnboardingCommand(UserId), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("User not found");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
     }
 }
 

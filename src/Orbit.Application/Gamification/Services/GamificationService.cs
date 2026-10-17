@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification.Models;
 using Orbit.Application.Habits.Services;
+using Orbit.Application.Notifications;
 using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -52,7 +53,7 @@ public partial class GamificationService(
         AchievementDefinitions.OnboardingComplete
     ];
 
-    private sealed record PendingPush(Guid UserId, string Title, string Body);
+    private sealed record PendingPush(Guid UserId, string Title, string Body, string Url);
 
     private sealed record HabitsLoggedOutcome(IReadOnlyList<HabitLogGamificationResult> Results, bool ShouldSave);
 
@@ -780,14 +781,14 @@ public partial class GamificationService(
 
         var embeddedName = char.ToLowerInvariant(name[0]) + name[1..];
         var title = isPt
-            ? $"Conquista desbloqueada: {embeddedName}"
-            : $"Achievement unlocked: {embeddedName}";
+            ? $"Nova conquista: {embeddedName}"
+            : $"New achievement: {embeddedName}";
         var body = $"{description} (+{achievement.XpReward} XP)";
 
-        var notification = Notification.Create(userId, title, body, null);
+        var notification = Notification.Create(userId, title, body, NotificationUrls.Progress);
         await repos.NotificationRepository.AddAsync(notification, ct);
 
-        pushes.Add(new PendingPush(userId, title, body));
+        pushes.Add(new PendingPush(userId, title, body, NotificationUrls.Progress));
     }
 
     private async Task QueueLevelUpNotification(
@@ -800,13 +801,13 @@ public partial class GamificationService(
         var levelTitle = isPt && LevelTranslationsPt.TryGetValue(Math.Min(newLevel.Level, LevelDefinitions.TableMaxLevel), out var ptTitle)
             ? ptTitle : newLevel.Title;
         var body = isPt
-            ? $"Novo título: {levelTitle}. Continue assim."
-            : $"New title: {newLevel.Title}. Keep going.";
+            ? $"O nível {newLevel.Level} se chama {levelTitle}."
+            : $"Level {newLevel.Level} is called {levelTitle}.";
 
-        var notification = Notification.Create(userId, title, body, null);
+        var notification = Notification.Create(userId, title, body, NotificationUrls.Progress);
         await repos.NotificationRepository.AddAsync(notification, ct);
 
-        pushes.Add(new PendingPush(userId, title, body));
+        pushes.Add(new PendingPush(userId, title, body, NotificationUrls.Progress));
     }
 
     private async Task FlushPushesAsync(IReadOnlyList<PendingPush> pushes, CancellationToken ct)
@@ -815,7 +816,7 @@ public partial class GamificationService(
         {
             try
             {
-                await notifiers.PushService.SendToUserAsync(push.UserId, push.Title, push.Body, cancellationToken: ct);
+                await notifiers.PushService.SendToUserAsync(push.UserId, push.Title, push.Body, push.Url, ct);
             }
             catch (Exception ex)
             {

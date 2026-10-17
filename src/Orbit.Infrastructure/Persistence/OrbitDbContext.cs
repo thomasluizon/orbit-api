@@ -29,6 +29,7 @@ public class OrbitDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<MarketingContact> MarketingContacts => Set<MarketingContact>();
     public DbSet<Habit> Habits => Set<Habit>();
+    public DbSet<HabitSkipUndo> HabitSkipUndos => Set<HabitSkipUndo>();
     public DbSet<HabitLog> HabitLogs => Set<HabitLog>();
     public DbSet<UserFact> UserFacts => Set<UserFact>();
     public DbSet<AppConfig> AppConfigs => Set<AppConfig>();
@@ -94,6 +95,14 @@ public class OrbitDbContext : DbContext
         if (isPostgres)
             ConfigureConcurrencyTokens(modelBuilder);
         ConfigureHabitLogEntity(modelBuilder, nullableEncConverter);
+        modelBuilder.Entity<HabitSkipUndo>(entity =>
+        {
+            entity.HasIndex(skip => new { skip.UserId, skip.HabitId });
+            entity.Property(skip => skip.ExpectedLogState).HasMaxLength(64);
+            entity.Property(skip => skip.IsUndone).IsConcurrencyToken();
+            entity.HasOne<Habit>().WithMany().HasForeignKey(skip => skip.HabitId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
         ConfigureUserFactEntity(modelBuilder, encConverter);
         ConfigureGoogleCalendarSyncSuggestionEntity(modelBuilder, encConverter, nullableEncConverter);
         ConfigureTagEntity(modelBuilder);
@@ -409,6 +418,8 @@ public class OrbitDbContext : DbContext
             entity.Property(item => item.DisplayName).HasMaxLength(200);
             entity.Property(item => item.Summary).HasMaxLength(500);
             entity.Property(item => item.OperationFingerprint).HasMaxLength(256);
+            entity.Property(item => item.PreviewFingerprint).HasMaxLength(256);
+            entity.Property(item => item.RevisionNumber).IsConcurrencyToken();
             entity.Property(item => item.ConfirmationTokenHash).HasMaxLength(64);
             entity.Property(item => item.ConsumedAtUtc).IsConcurrencyToken();
             entity.Property(item => item.Surface).HasConversion<string>().HasMaxLength(32);

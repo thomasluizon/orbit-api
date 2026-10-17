@@ -8,6 +8,7 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Commands.Habits;
 
@@ -85,7 +86,7 @@ public class CreateSubHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("Parent habit not found.");
+        result.Error.Should().Be(ErrorMessages.ParentHabitNotFound.Message);
     }
 
     [Fact]
@@ -267,6 +268,6 @@ public class CreateSubHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Maximum nesting depth");
+        result.Error.Should().Be(ErrorMessages.MaxDepthReached.Format(2).Message);
     }
 }

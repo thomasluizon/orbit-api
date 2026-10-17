@@ -42,7 +42,8 @@ public sealed record ExportedSettings(
     string? ColorScheme,
     bool AiMemoryEnabled,
     bool AiSummaryEnabled,
-    bool ProactiveAstraEnabled);
+    bool ProactiveAstraEnabled,
+    bool? Uses24HourClock);
 
 public sealed record ExportedHabit(
     Guid Id,

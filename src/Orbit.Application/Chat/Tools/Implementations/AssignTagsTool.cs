@@ -8,7 +8,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 public class AssignTagsTool(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<Tag> tagRepository,
-    IUnitOfWork unitOfWork) : IAiTool
+    IUnitOfWork unitOfWork) : IAiTool, IArgumentCheckTool
 {
     public string Name => "assign_tags";
 
@@ -38,6 +38,46 @@ public class AssignTagsTool(
         },
         required = new[] { "habit_id" }
     };
+
+    public async Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
+        if (!HabitToolHelpers.TryParseHabitId(args, out var habitId))
+            return Orbit.Domain.Common.Result.Failure("Invalid habit_id.");
+        var habits = await habitRepository.FindAsync(h => h.Id == habitId && h.UserId == userId, ct);
+        if (habits.Count == 0)
+            return Orbit.Domain.Common.Result.Failure("Habit not found.");
+        var hasIds = args.TryGetProperty("tag_ids", out var ids);
+        var hasNames = args.TryGetProperty("tag_names", out var names);
+        if (hasIds == hasNames)
+            return Orbit.Domain.Common.Result.Failure("Provide either tag_ids or tag_names.");
+        var values = hasIds ? ids : names;
+        if (values.ValueKind != JsonValueKind.Array || values.GetArrayLength() > Orbit.Application.Common.AppConstants.MaxTagsPerHabit)
+            return Orbit.Domain.Common.Result.Failure("Invalid tag list.");
+        if (!hasIds)
+        {
+            if (values.GetArrayLength() == 0)
+                return Orbit.Domain.Common.Result.Failure("At least one tag name is required.");
+            foreach (var value in values.EnumerateArray())
+            {
+                if (value.ValueKind != JsonValueKind.String)
+                    return Orbit.Domain.Common.Result.Failure("Invalid tag name.");
+                var tag = Tag.Create(userId, value.GetString()!, "#7c3aed");
+                if (tag.IsFailure)
+                    return tag;
+            }
+            return Orbit.Domain.Common.Result.Success();
+        }
+        var tagIds = new List<Guid>();
+        foreach (var value in values.EnumerateArray())
+        {
+            if (value.ValueKind != JsonValueKind.String || !Guid.TryParse(value.GetString(), out var id))
+                return Orbit.Domain.Common.Result.Failure("Invalid tag ID.");
+            tagIds.Add(id);
+        }
+        var tags = await tagRepository.FindAsync(t => tagIds.Contains(t.Id) && t.UserId == userId, ct);
+        return Orbit.Application.Common.OwnershipValidation.AllResolved(tagIds, tags, t => t.Id,
+            Orbit.Application.Common.ErrorMessages.TagNotFound);
+    }
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
@@ -93,8 +133,15 @@ public class AssignTagsTool(
     private Task<Habit?> LoadHabitAsync(Guid habitId, Guid userId, CancellationToken ct) =>
         habitRepository.FindOneTrackedAsync(
             h => h.Id == habitId && h.UserId == userId,
-            q => q.Include(h => h.Tags),
+            IncludeTags,
             ct);
+
+    /// <summary>
+    /// The tags this tool replaces. The approval preview reads the habit through the same
+    /// include, so the old value it shows is the set of tags that the replacement removes.
+    /// </summary>
+    internal static IQueryable<Habit> IncludeTags(IQueryable<Habit> query) =>
+        query.Include(h => h.Tags);
 
     private async Task<ToolResult> ReplaceTagsAsync(Habit habit, List<Tag> resolvedTags, CancellationToken ct)
     {

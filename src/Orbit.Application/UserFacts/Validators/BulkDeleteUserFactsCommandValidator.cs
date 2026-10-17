@@ -13,12 +13,12 @@ public class BulkDeleteUserFactsCommandValidator : AbstractValidator<BulkDeleteU
 
         RuleFor(x => x.FactIds)
             .NotEmpty()
-            .WithMessage("FactIds list must not be empty")
+            .WithCopy(ValidationErrorCodes.FactIdsRequired)
             .Must(ids => ids.Count <= AppConstants.MaxBulkOperationSize)
-            .WithMessage($"Cannot delete more than {AppConstants.MaxBulkOperationSize} facts at once");
+            .WithCopy(ValidationErrorCodes.BulkDeleteFactLimit);
 
         RuleForEach(x => x.FactIds)
             .NotEmpty()
-            .WithMessage("Fact ID must not be empty");
+            .WithCopy(ValidationErrorCodes.FactIdRequired);
     }
 }

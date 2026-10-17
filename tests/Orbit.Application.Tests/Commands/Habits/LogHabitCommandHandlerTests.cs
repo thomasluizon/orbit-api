@@ -383,7 +383,7 @@ public class LogHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("Habit not found.");
+        result.Error.Should().Be(ErrorMessages.HabitNotFound.Message);
     }
 
     [Fact]
@@ -402,7 +402,7 @@ public class LogHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("Habit does not belong to this user.");
+        result.Error.Should().Be(ErrorMessages.HabitNotOwned.Message);
     }
 
     [Fact]
@@ -493,7 +493,7 @@ public class LogHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("Cannot log a future date.");
+        result.Error.Should().Be(ErrorMessages.CannotLogFutureDate.Message);
     }
 
     [Fact]
@@ -512,7 +512,7 @@ public class LogHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("Cannot log a date beyond the overdue window.");
+        result.Error.Should().Be(ErrorMessages.BeyondOverdueWindow.Message);
     }
 
     [Fact]
@@ -557,7 +557,7 @@ public class LogHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("Habit is not scheduled on this date.");
+        result.Error.Should().Be(ErrorMessages.NotScheduledOnDate.Message);
     }
 
     [Fact]

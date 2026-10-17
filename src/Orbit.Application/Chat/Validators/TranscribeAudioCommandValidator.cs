@@ -15,13 +15,13 @@ public class TranscribeAudioCommandValidator : AbstractValidator<TranscribeAudio
     {
         RuleFor(x => x.Audio)
             .Must(audio => audio.Length > 0)
-            .WithMessage("Audio file is required.")
+            .WithCopy(ValidationErrorCodes.AudioRequired)
             .Must(audio => audio.Length <= AppConstants.MaxAudioBytes)
-            .WithMessage($"Audio exceeds the maximum size of {AppConstants.MaxAudioBytes / (1024 * 1024)}MB.");
+            .WithCopy(ValidationErrorCodes.AudioSizeLimit);
 
         RuleFor(x => x.FileName)
             .Must(HasAllowedExtension)
-            .WithMessage(x => $"Audio format '{Path.GetExtension(x.FileName)}' is not supported.");
+            .WithCopy(ValidationErrorCodes.AudioFormat, x => [Path.GetExtension(x.FileName)]);
     }
 
     private static bool HasAllowedExtension(string fileName)

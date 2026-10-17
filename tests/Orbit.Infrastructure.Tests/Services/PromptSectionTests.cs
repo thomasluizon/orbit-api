@@ -33,13 +33,22 @@ public class CoreIdentitySectionTests
     }
 
     [Fact]
-    public void Build_SoftenedGuidance_RoutesDestructiveAndAmbiguousThroughCards()
+    public void Build_SoftenedGuidance_RoutesEveryWriteAndAmbiguityThroughCards()
     {
         var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
         var result = new CoreIdentitySection().Build(ctx);
 
-        result.Should().Contain("Act directly");
-        result.Should().Contain("confirmation card");
+        result.Should().Contain("Call the tool right away");
+        result.Should().Contain("Every write goes through an approval card");
+        result.Should().Contain("Never say a write happened before the user approves it.");
+        result.Should().Contain("For held create, update, delete, and other writes");
+        result.Should().Contain("introduce the proposal once");
+        result.Should().Contain("explicitly state that nothing has been saved");
+        result.Should().Contain("Let the preview ask for approval");
+        result.Should().Contain("Do not request confirmation or approval in assistant prose");
+        result.Should().Contain("Brief useful explanations and genuine clarification questions are still allowed");
+        result.Should().Contain("Execution still waits for explicit preview approval");
+        result.Should().Contain("Never bypass irreversible confirmation or identity verification");
         result.Should().Contain("clarification card");
         result.Should().Contain("quick-action chips");
     }
@@ -79,6 +88,18 @@ public class EncouragingToneSectionTests
         result.Should().Contain("streaks");
         result.Should().Contain("non-judgmental");
         result.Should().Contain("saccharine");
+    }
+
+    [Fact]
+    public void Build_KeepsAcknowledgementCalmAndSpecific()
+    {
+        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var result = new EncouragingToneSection().Build(ctx);
+
+        result.Should().Contain("calmly");
+        result.Should().Contain("specific acknowledgement");
+        result.Should().NotContain("Celebrate");
+        result.Should().NotContain("exclamation spam");
     }
 
     [Fact]
@@ -275,6 +296,20 @@ public class ToolFailureSectionTests
         result.Should().Contain("user's own words and language");
         result.Should().Contain("ask the user to resolve it");
         result.Should().ContainAll("frequency_unit", "frequency_quantity", "days", "is_flexible");
+    }
+
+    [Fact]
+    public void Build_RetriesDroppedPayloadWithoutExposingInternalLimits()
+    {
+        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+
+        var result = new ToolFailureSection().Build(ctx);
+
+        result.Should().ContainAll("payload.dropped=true", "even when success=true",
+            "call the tool again with narrower arguments", "Do not repeat the same arguments",
+            "include_profile=true", "include_achievements=false", "include_streak=true",
+            "Never mention payload size, limits, or processing", "in any language",
+            "If the data still cannot be read", "what you could not read");
     }
 
     [Fact]

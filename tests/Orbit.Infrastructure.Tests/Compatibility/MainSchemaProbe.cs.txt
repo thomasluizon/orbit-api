@@ -1,0 +1,78 @@
+using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Orbit.Domain.Entities;
+using Orbit.Domain.Models;
+
+namespace Orbit.Infrastructure.Tests.Persistence;
+
+public sealed class RedesignSchemaProbeTests
+{
+    [Fact]
+    public async Task MainCode_ReadsInsertsUpdatesAndDeletesOnTheRedesignSchema()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var original = User.Create("Original", "original@orbit.test").Value;
+        factory.Context.Users.Add(original);
+        await factory.Context.SaveChangesAsync();
+        await factory.Context.Database.ExecuteSqlRawAsync(
+            """
+            ALTER TABLE "PendingAgentOperations" ADD "PreviewFingerprint" character varying(256) NULL;
+
+            ALTER TABLE "PendingAgentOperations" ADD "RevisionNumber" integer NOT NULL DEFAULT 0;
+
+            ALTER TABLE "Users" ADD "Uses24HourClockPreference" boolean NULL;
+
+            CREATE TABLE "HabitSkipUndos" (
+                "Id" uuid NOT NULL CONSTRAINT "PK_HabitSkipUndos" PRIMARY KEY,
+                "UserId" uuid NOT NULL,
+                "HabitId" uuid NOT NULL,
+                "PreviousDueDate" date NOT NULL,
+                "PreviousScheduledStartDate" date NULL,
+                "PreviousIsCompleted" boolean NOT NULL,
+                "SkipLogId" uuid NULL,
+                "ExpectedUpdatedAtUtc" timestamp with time zone NOT NULL,
+                "ExpectedLogState" character varying(64) NOT NULL,
+                "IsUndone" boolean NOT NULL,
+                CONSTRAINT "FK_HabitSkipUndos_Habits_HabitId" FOREIGN KEY ("HabitId") REFERENCES "Habits" ("Id") ON DELETE CASCADE
+            );
+
+            CREATE INDEX "IX_HabitSkipUndos_HabitId" ON "HabitSkipUndos" ("HabitId");
+
+            CREATE INDEX "IX_HabitSkipUndos_UserId_HabitId" ON "HabitSkipUndos" ("UserId", "HabitId");
+            """);
+
+        await using var context = factory.CreateContext();
+        (await context.Users.SingleAsync()).SetName("Updated").IsSuccess.Should().BeTrue();
+        var added = User.Create("Added", "added@orbit.test").Value;
+        var habit = Habit.Create(new HabitCreateParams(added.Id, "Read", null, null, new DateOnly(2026, 10, 1))).Value;
+        var capability = new AgentCapability("test", "Test", "Test", "habits", "habits:write",
+            AgentRiskClass.Destructive, true, false, AgentConfirmationRequirement.FreshConfirmation);
+        var pending = PendingAgentOperationState.Create(new PendingAgentOperationStateCreateRequest
+        {
+            UserId = added.Id, Capability = capability, OperationId = "delete_habit", ArgumentsJson = "{}",
+            Summary = "Test", OperationFingerprint = "fingerprint", Surface = AgentExecutionSurface.Chat,
+            ExpiresAtUtc = new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+        });
+        context.Users.Add(added);
+        context.Habits.Add(habit);
+        context.PendingAgentOperations.Add(pending);
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+
+        (await context.Users.SingleAsync(user => user.Id == original.Id)).Name.Should().Be("Updated");
+        var loaded = await context.PendingAgentOperations.SingleAsync();
+        loaded.SetConfirmationTokenHash("confirmed");
+        await context.SaveChangesAsync();
+        (await context.Database.SqlQueryRaw<int>("SELECT \"RevisionNumber\" AS \"Value\" FROM \"PendingAgentOperations\"").SingleAsync()).Should().Be(0);
+        (await context.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS \"Value\" FROM \"Users\" WHERE \"Uses24HourClockPreference\" IS NULL").SingleAsync()).Should().Be(2);
+
+        var skipId = Guid.NewGuid();
+        await context.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "HabitSkipUndos" ("Id", "UserId", "HabitId", "PreviousDueDate", "PreviousIsCompleted", "ExpectedUpdatedAtUtc", "ExpectedLogState", "IsUndone")
+            VALUES ({skipId}, {added.Id}, {habit.Id}, {habit.DueDate}, {false}, {pending.CreatedAtUtc}, {"state"}, {false})
+            """);
+        context.Habits.Remove(await context.Habits.SingleAsync());
+        await context.SaveChangesAsync();
+        (await context.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS \"Value\" FROM \"HabitSkipUndos\"").SingleAsync()).Should().Be(0);
+    }
+}

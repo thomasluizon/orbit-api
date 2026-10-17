@@ -1,3 +1,4 @@
+using Orbit.Application.Common;
 using FluentValidation;
 using Orbit.Application.ApiKeys.Commands;
 
@@ -12,8 +13,10 @@ public sealed class ConfirmApiKeyCreationChallengeCommandValidator : AbstractVal
 
         RuleFor(command => command.Code)
             .NotEmpty()
+            .WithFieldCopy(ValidationErrorCodes.VerificationCodeFormat)
             .Length(6)
+            .WithFieldCopy(ValidationErrorCodes.VerificationCodeFormat)
             .Matches(@"^\d{6}$")
-            .WithMessage("Code must be a 6-digit number");
+            .WithCopy(ValidationErrorCodes.VerificationCodeFormat);
     }
 }

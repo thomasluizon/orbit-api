@@ -13,11 +13,11 @@ public class SetChallengeHabitsCommandValidator : AbstractValidator<SetChallenge
 
         RuleFor(x => x.HabitIds)
             .NotEmpty()
-            .WithMessage("Link at least one of your habits to the challenge.");
+            .WithCopy(ValidationErrorCodes.ChallengeHabitsRequired);
 
         RuleFor(x => x.HabitIds)
             .Must(ids => ids.Count <= AppConstants.MaxHabitsPerChallengeParticipant)
-            .WithMessage($"You can link at most {AppConstants.MaxHabitsPerChallengeParticipant} habits.");
+            .WithCopy(ValidationErrorCodes.ChallengeHabitLimit);
 
         RuleForEach(x => x.HabitIds).NotEmpty();
     }

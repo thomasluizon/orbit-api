@@ -64,6 +64,8 @@ public partial class AgentCatalogService
                     "ChatController.ProcessChatStream",
                     "ChatController.Transcribe",
                     "AiController.ConfirmPendingOperation",
+                    "AiController.RefreshPendingOperationPreview",
+                    "AiController.RevisePendingOperation",
                     "AiController.MarkPendingOperationStepUp",
                     "AiController.VerifyPendingOperationStepUp",
                     "AiController.ExecutePendingOperation",
@@ -187,13 +189,13 @@ public partial class AgentCatalogService
                 isMutation: true,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                chatTools: ["create_habit", "update_habit", "bulk_update_habit_emojis", "create_sub_habit", "duplicate_habit", "move_habit", "move_habit_parent", "log_habit", "skip_habit", "suggest_breakdown", "update_checklist", "reorder_habits", "link_goals_to_habit"],
+                chatTools: ["create_habit", "update_habit", "bulk_update_habit_emojis", "create_sub_habit", "duplicate_habit", "move_habit", "move_habit_parent", "log_habit", "skip_habit", "undo_skip_habit", "suggest_breakdown", "update_checklist", "reorder_habits", "link_goals_to_habit"],
                 mcpTools:
                 [
                     "create_habit",
                     "update_habit",
                     "log_habit",
-                    "skip_habit",
+                    "skip_habit", "undo_skip_habit",
                     "update_checklist",
                     "create_sub_habit",
                     "duplicate_habit",
@@ -207,6 +209,7 @@ public partial class AgentCatalogService
                     "HabitsController.SuggestSetup",
                     "HabitsController.LogHabit",
                     "HabitsController.SkipHabit",
+                    "HabitsController.UndoSkipHabit",
                     "HabitsController.UpdateHabit",
                     "HabitsController.UpdateChecklist",
                     "HabitsController.ReorderHabits",
@@ -240,13 +243,13 @@ public partial class AgentCatalogService
             CreateCapability(
                 AgentCapabilityIds.HabitsBulkWrite,
                 "Bulk Habit Updates",
-                "Runs bulk create, log, and skip habit operations.",
+                "Runs reversible bulk create, log, skip, update, and reschedule habit operations.",
                 "habits",
                 AgentScopes.WriteHabits,
-                AgentRiskClass.Destructive,
+                AgentRiskClass.Low,
                 isMutation: true,
                 isPhaseOneReadOnly: false,
-                AgentConfirmationRequirement.FreshConfirmation,
+                AgentConfirmationRequirement.None,
                 chatTools: ["bulk_update_habits", "bulk_reschedule_habits", "bulk_log_habits", "bulk_skip_habits", "bulk_create_habits"],
                 mcpTools: ["bulk_update_habits", "bulk_reschedule_habits", "bulk_create_habits", "bulk_log_habits", "bulk_skip_habits"],
                 controllerActions: ["HabitsController.BulkCreate", "HabitsController.BulkLog", "HabitsController.BulkSkip"]),
@@ -393,8 +396,8 @@ public partial class AgentCatalogService
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
                 chatTools: ["list_tags"],
-                mcpTools: ["list_tags"],
-                controllerActions: ["TagsController.GetTags"]),
+                mcpTools: ["list_tags", "get_tag_page"],
+                controllerActions: ["TagsController.GetTags", "ChatController.GetRecordListPage"]),
 
             CreateCapability(
                 AgentCapabilityIds.TagsWrite,
@@ -447,7 +450,7 @@ public partial class AgentCatalogService
             CreateCapability(
                 AgentCapabilityIds.ProfilePreferencesWrite,
                 "Write Preferences",
-                "Writes display name, timezone, language, theme, onboarding, and week-start preferences.",
+                "Writes display name, timezone, language, clock format, light or dark mode, onboarding, and week-start preferences. Orbit uses one accent.",
                 "profile",
                 AgentScopes.WriteProfilePreferences,
                 AgentRiskClass.Low,
@@ -455,13 +458,14 @@ public partial class AgentCatalogService
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
                 chatTools: ["update_profile_preferences"],
-                mcpTools: ["set_timezone", "set_language", "set_week_start_day"],
+                mcpTools: ["set_timezone", "set_language", "set_week_start_day", "set_clock_format"],
                 controllerActions:
                 [
                     "ProfileController.SetName",
                     "ProfileController.SetTimezone",
                     "ProfileController.SetLanguage",
                     "ProfileController.SetWeekStartDay",
+                    "ProfileController.SetClockFormat",
                     "ProfileController.SetThemePreference",
                     "ProfileController.CompleteOnboarding",
                     "ProfileController.ApplyOnboarding",
@@ -473,17 +477,14 @@ public partial class AgentCatalogService
 
             CreateCapability(
                 AgentCapabilityIds.ProfilePremiumAppearanceWrite,
-                "Write Premium Appearance",
-                "Updates premium color-scheme preferences.",
+                "Legacy Color Scheme Write",
+                "Accepts legacy HTTP color scheme writes. Orbit uses one accent and offers light or dark mode.",
                 "profile",
                 AgentScopes.WriteProfilePreferences,
                 AgentRiskClass.Low,
                 isMutation: true,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                planRequirement: "Pro",
-                chatTools: ["set_color_scheme"],
-                mcpTools: ["set_color_scheme"],
                 controllerActions: ["ProfileController.SetColorScheme"]),
 
             CreateCapability(
@@ -547,8 +548,8 @@ public partial class AgentCatalogService
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
                 chatTools: ["get_notifications"],
-                mcpTools: ["get_notifications"],
-                controllerActions: ["NotificationController.GetNotifications"]),
+                mcpTools: ["get_notifications", "get_notification_page"],
+                controllerActions: ["NotificationController.GetNotifications", "NotificationController.GetSubscriptions", "ChatController.GetRecordListPage"]),
 
             CreateCapability(
                 AgentCapabilityIds.NotificationsWrite,
@@ -708,8 +709,8 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.None,
                 featureFlagKeys: ["checklist_templates"],
                 chatTools: ["get_checklist_templates"],
-                mcpTools: ["get_checklist_templates"],
-                controllerActions: ["ChecklistTemplatesController.GetTemplates"]),
+                mcpTools: ["get_checklist_templates", "get_template_page"],
+                controllerActions: ["ChecklistTemplatesController.GetTemplates", "ChatController.GetRecordListPage"]),
 
             CreateCapability(
                 AgentCapabilityIds.ChecklistTemplatesWrite,
@@ -866,8 +867,8 @@ public partial class AgentCatalogService
                 planRequirement: "Pro",
                 featureFlagKeys: ["api_keys"],
                 chatTools: ["get_api_keys"],
-                mcpTools: ["get_api_keys"],
-                controllerActions: ["ApiKeysController.GetApiKeys"]),
+                mcpTools: ["get_api_keys", "get_api_key_page"],
+                controllerActions: ["ApiKeysController.GetApiKeys", "ChatController.GetRecordListPage"]),
 
             CreateCapability(
                 AgentCapabilityIds.ApiKeysManage,
@@ -1045,6 +1046,7 @@ public partial class AgentCatalogService
                     "OAuthController.Register",
                     "OAuthController.GetProtectedResourceMetadata",
                     "OAuthController.Authorize",
+                    "OAuthController.Asset",
                     "OAuthController.SendCode",
                     "OAuthController.VerifyCode",
                     "OAuthController.GoogleStart",

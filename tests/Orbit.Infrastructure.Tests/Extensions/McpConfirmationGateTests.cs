@@ -62,7 +62,7 @@ public class McpConfirmationGateTests : IDisposable
             .Options;
         _dbContext = new OrbitDbContext(options);
 
-        var user = User.Create("Alex", "alex@test.com").Value;
+        var user = User.Create("Alex", "thomas@test.com").Value;
         user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddDays(30), SubscriptionInterval.Monthly);
         _userId = user.Id;
         _dbContext.Users.Add(user);
@@ -125,6 +125,8 @@ public class McpConfirmationGateTests : IDisposable
             ownershipService,
             _authorization,
             new AiToolRegistry([getApiKeysTool, manageApiKeysTool]),
+            Substitute.For<IPendingOperationChangePreviewer>(),
+            _pendingOperationStore,
             _unitOfWork,
             NullLogger<AgentOperationExecutor>.Instance);
 

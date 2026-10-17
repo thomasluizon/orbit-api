@@ -8,8 +8,8 @@ namespace Orbit.Application.Habits.Validators;
 
 public class UpdateHabitCommandValidator : AbstractValidator<UpdateHabitCommand>
 {
-    private static readonly TitleValidator HabitTitleValidator = new(false);
-    private static readonly TitleValidator SubHabitTitleValidator = new(true);
+    private static readonly FieldsValidator HabitFieldsValidator = new(false);
+    private static readonly FieldsValidator SubHabitFieldsValidator = new(true);
 
     public UpdateHabitCommandValidator(IGenericRepository<Habit> habitRepository)
     {
@@ -23,22 +23,20 @@ public class UpdateHabitCommandValidator : AbstractValidator<UpdateHabitCommand>
         {
             var title = command.Title;
             var isEmpty = string.IsNullOrWhiteSpace(title);
-            if (!isEmpty && title.Length <= AppConstants.MaxHabitTitleLength)
+            if (!isEmpty && title.Length <= AppConstants.MaxHabitTitleLength
+                && (command.Description?.Length ?? 0) <= AppConstants.MaxHabitDescriptionLength
+                && (command.Emoji?.Length ?? 0) <= AppConstants.MaxHabitEmojiLength)
                 return;
 
             var habit = await habitRepository.FindOneTrackedAsync(
                 h => h.Id == command.HabitId && h.UserId == command.UserId,
                 cancellationToken: cancellationToken);
-            var titleValidator = habit?.ParentHabitId is not null
-                ? SubHabitTitleValidator
-                : HabitTitleValidator;
-            foreach (var failure in titleValidator.Validate(command).Errors)
+            var fieldsValidator = habit?.ParentHabitId is not null
+                ? SubHabitFieldsValidator
+                : HabitFieldsValidator;
+            foreach (var failure in fieldsValidator.Validate(command).Errors)
                 context.AddFailure(failure);
         });
-
-        SharedHabitRules.AddDescriptionRules(RuleFor(x => x.Description));
-
-        SharedHabitRules.AddEmojiRules(RuleFor(x => x.Emoji));
 
         When(x => x.Options is not null, () =>
         {
@@ -47,11 +45,12 @@ public class UpdateHabitCommandValidator : AbstractValidator<UpdateHabitCommand>
 
         RuleFor(x => x.FrequencyQuantity)
             .GreaterThan(0)
+            .WithFieldCopy(ValidationCopyKeys.FrequencyPositive)
             .When(x => x.FrequencyQuantity is not null);
 
         RuleFor(x => x.FrequencyQuantity)
             .NotNull()
-            .WithMessage("Frequency quantity is required when frequency unit is set")
+            .WithCopy(ValidationErrorCodes.FrequencyQuantityRequired)
             .When(x => x.FrequencyUnit is not null);
 
         SharedHabitRules.AddIntervalWeeksRules(RuleFor(x => x.IntervalWeeks));
@@ -75,7 +74,7 @@ public class UpdateHabitCommandValidator : AbstractValidator<UpdateHabitCommand>
         RuleFor(x => x.IsBadHabit)
             .Equal(false)
             .When(x => x.IsGeneral == true)
-            .WithMessage("General habits cannot be bad habits");
+            .WithCopy(ValidationErrorCodes.GeneralHabitNotBad);
 
         When(x => x.Options is not null, () =>
         {
@@ -88,16 +87,18 @@ public class UpdateHabitCommandValidator : AbstractValidator<UpdateHabitCommand>
         SharedHabitRules.AddGoalIdsRules(this, x => x.GoalIds);
     }
 
-    private sealed class TitleValidator : AbstractValidator<UpdateHabitCommand>
+    private sealed class FieldsValidator : AbstractValidator<UpdateHabitCommand>
     {
-        public TitleValidator(bool isChild)
+        public FieldsValidator(bool isChild)
         {
             SharedHabitRules.AddTitleRules(
                 RuleFor(x => x.Title),
-                requiredMessage: isChild ? "Sub-habit title must not be empty" : null,
-                maximumLengthMessage: isChild
-                    ? $"Sub-habit title must not exceed {AppConstants.MaxHabitTitleLength} characters"
+                requiredCode: isChild ? ValidationErrorCodes.SubHabitTitleRequired : null,
+                maximumLengthCode: isChild
+                    ? ValidationErrorCodes.SubHabitTitleLength
                     : null);
+            SharedHabitRules.AddDescriptionRules(RuleFor(x => x.Description), isChild);
+            SharedHabitRules.AddEmojiRules(RuleFor(x => x.Emoji), isChild);
         }
     }
 }

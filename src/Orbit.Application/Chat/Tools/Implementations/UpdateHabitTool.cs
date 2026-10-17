@@ -14,7 +14,7 @@ public class UpdateHabitTool(
     IGenericRepository<Habit> habitRepository,
     IUserDateService userDateService,
     IUnitOfWork unitOfWork,
-    IPayGateService payGate) : IAiTool
+    IPayGateService payGate) : IAiTool, IArgumentCheckTool
 {
     public string Name => "update_habit";
 
@@ -109,6 +109,26 @@ public class UpdateHabitTool(
             return ToolResult.FromFailure(result);
 
         return result.Value;
+    }
+
+    public async Task<Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
+        if (!HabitToolHelpers.TryParseHabitId(args, out var habitId))
+            return Result.Failure("habit_id is required and must be a valid GUID.");
+
+        var fieldError = BulkHabitToolArguments.CheckHabitFields(args);
+        if (fieldError is not null)
+            return Result.Failure(fieldError);
+
+        var habits = await habitRepository.FindAsync(
+            habit => habit.Id == habitId && habit.UserId == userId, ct);
+        var habit = habits.FirstOrDefault();
+        if (habit is null)
+            return Result.Failure($"Habit {habitId} not found.");
+
+        var today = await userDateService.GetUserTodayAsync(userId, ct);
+        var preview = habit.PreviewUpdate(ResolveUpdateParams(args, habit, today));
+        return preview.IsFailure ? preview : Result.Success();
     }
 
     private async Task<Result<UpdateToolState>> PrepareUpdateAsync(

@@ -2,7 +2,7 @@ name: Mutation Testing
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, redesign/main]
   schedule:
     - cron: "0 6 * * *"
   workflow_dispatch:
@@ -26,12 +26,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: >-
-          ${{ fromJSON(github.event_name == 'pull_request' &&
-          '[{"project":"domain"},{"project":"application"},{"project":"infrastructure"}]' ||
-          '[{"project":"domain","shard":"domain-habit-freeze","mutate":["**/Entities/Habit.cs","**/Entities/StreakFreeze.cs"]},
-          {"project":"domain","shard":"domain-user-invariants","mutate":["**/Entities/User.cs","**/Entities/HabitInvariants.cs"]},
-          {"project":"application"},{"project":"infrastructure"}]') }}
+        include:
+          - project: domain
+            shard: domain-habit-freeze
+            mutate: ["**/Entities/Habit.cs", "**/Entities/StreakFreeze.cs"]
+          - project: domain
+            shard: domain-user-invariants
+            mutate: ["**/Entities/User.cs", "**/Entities/HabitInvariants.cs"]
+          - project: application
+          - project: infrastructure
 
     steps:
       - uses: actions/checkout@v7
@@ -51,9 +54,18 @@ jobs:
 
       - name: Run Stryker (PR changed in-scope files only)
         if: github.event_name == 'pull_request'
+        env:
+          MUTATE_FILES: ${{ matrix.mutate && join(matrix.mutate, ' ') || '' }}
         run: |
-          git fetch origin main
-          dotnet stryker -f stryker-config.${{ matrix.project }}.json --since:origin/main
+          git fetch origin ${{ github.base_ref }}
+          concurrency=$(nproc)
+          echo "Stryker concurrency: $concurrency"
+          read -r -a files <<< "$MUTATE_FILES"
+          args=()
+          for file in "${files[@]}"; do
+            args+=(--mutate "$file")
+          done
+          dotnet stryker -f stryker-config.${{ matrix.project }}.json --since:origin/${{ github.base_ref }} --concurrency "$concurrency" "${args[@]}"
 
       - name: Run Stryker (nightly full in-scope)
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

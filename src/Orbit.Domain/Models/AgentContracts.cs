@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Orbit.Domain.Models;
 
@@ -120,7 +121,8 @@ public record AgentPolicyDecision(
     string? Reason = null,
     PendingAgentOperation? PendingOperation = null,
     AgentPolicyDecisionStatus? ShadowStatus = null,
-    string? ShadowReason = null);
+    string? ShadowReason = null,
+    bool ConsumedConfirmation = false);
 
 public record PendingAgentOperation(
     Guid Id,
@@ -129,7 +131,40 @@ public record PendingAgentOperation(
     string Summary,
     AgentRiskClass RiskClass,
     AgentConfirmationRequirement ConfirmationRequirement,
-    DateTime ExpiresAtUtc);
+    DateTime ExpiresAtUtc,
+    IReadOnlyList<PendingOperationChange>? Changes = null,
+    int? ChangeTargetCount = null,
+    IReadOnlyList<PendingOperationItem>? Items = null,
+    string? PreviewFingerprint = null,
+    string? ActionKey = null);
+
+public record PendingOperationItem(
+    string ItemId,
+    Guid? EntityId,
+    string EntityName,
+    IReadOnlyList<PendingOperationChange> Fields,
+    string StateFingerprint,
+    bool? RemovesData = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<PendingOperationValidationError>? ValidationErrors = null);
+
+public record PendingOperationValidationError(string Field, string ErrorCode, string Error);
+
+public record PendingOperationChange(
+    Guid EntityId,
+    string EntityName,
+    string Field,
+    string? OldValue,
+    string? NewValue,
+    string ValueType,
+    JsonElement? ProposedValue = null,
+    bool IsEditable = false);
+
+public record PendingOperationChangePreview(
+    IReadOnlyList<PendingOperationChange> Changes,
+    int ChangeTargetCount,
+    IReadOnlyList<PendingOperationItem>? Items = null,
+    string? PreviewFingerprint = null);
 
 public record PendingAgentOperationConfirmation(
     Guid PendingOperationId,
@@ -142,7 +177,8 @@ public record PendingAgentOperationExecution(
     string OperationId,
     JsonElement Arguments,
     AgentExecutionSurface Surface,
-    AgentConfirmationRequirement ConfirmationRequirement);
+    AgentConfirmationRequirement ConfirmationRequirement,
+    string? PreviewFingerprint = null);
 
 public record AgentStepUpChallenge(
     Guid ChallengeId,
@@ -158,7 +194,9 @@ public record AgentExecuteOperationRequest(
     IReadOnlyList<string>? GrantedScopes = null,
     bool IsReadOnlyCredential = false,
     string? ConfirmationToken = null,
-    string? CorrelationId = null);
+    string? CorrelationId = null,
+    bool IncludeChangePreview = false,
+    Func<Task>? OnExecutionStarted = null);
 
 public record AgentOperationResult(
     string OperationId,
@@ -196,6 +234,16 @@ public record AgentClientContext(
     bool? SupportsGoalListCard = null,
     bool? SupportsMetricsCard = null,
     string? EntryPointIntent = null,
+    bool? SupportsPendingOperationChanges = null,
+    bool? SupportsToolSteps = null,
+    bool? SupportsFollowUps = null,
+    string? MessageOrigin = null,
+    bool? SupportsPeriodInsightCard = null,
+    bool? SupportsDaySummaryCard = null,
+    bool? SupportsStreakCard = null,
+    bool? SupportsCalendarCard = null,
+    bool? SupportsRecordListCard = null,
+    bool? SupportsAccountRowsCard = null,
     bool? SupportsHabitListDoneStatus = null);
 
 public record AgentContextSnapshot(
@@ -206,7 +254,6 @@ public record AgentContextSnapshot(
     bool AiSummaryEnabled,
     int WeekStartDay,
     string? ThemePreference,
-    string? ColorScheme,
     bool HasGoogleConnection,
     bool GoogleCalendarAutoSyncEnabled,
     string GoogleCalendarAutoSyncStatus,
@@ -215,7 +262,8 @@ public record AgentContextSnapshot(
     IReadOnlyList<string>? ChecklistTemplateNames = null,
     IReadOnlyList<string>? RecentHabitTitles = null,
     IReadOnlyList<string>? RecentGoalTitles = null,
-    AgentClientContext? ClientContext = null);
+    AgentClientContext? ClientContext = null,
+    bool Uses24HourClock = true);
 
 public record AgentAuditEntry(
     Guid UserId,

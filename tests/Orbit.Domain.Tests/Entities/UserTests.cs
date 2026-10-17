@@ -31,6 +31,32 @@ public class UserTests
     }
 
     [Fact]
+    public void SetClockFormat_StoresChoiceWithoutChangingReminderPreferencesVersion()
+    {
+        var user = CreateValidUser();
+        var version = user.ReminderPreferencesVersion;
+
+        user.Uses24HourClockPreference.Should().BeNull();
+        user.SetClockFormat(false);
+        user.Uses24HourClockPreference.Should().BeFalse();
+        user.SetClockFormat(true);
+        user.Uses24HourClockPreference.Should().BeTrue();
+        user.ReminderPreferencesVersion.Should().Be(version);
+    }
+
+    [Fact]
+    public void SetClockFormat_SurvivesLaterTimeZoneChange()
+    {
+        var user = CreateValidUser();
+        user.SetClockFormat(false);
+
+        user.SetTimeZone("America/New_York").IsSuccess.Should().BeTrue();
+        user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
+
+        user.Uses24HourClockPreference.Should().BeFalse();
+    }
+
+    [Fact]
     public void Create_ValidInput_ReturnsSuccess()
     {
         var result = User.Create("Alex", "alex@example.com");

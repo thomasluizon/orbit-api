@@ -8,6 +8,7 @@ using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using System.Linq.Expressions;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Queries.Habits;
 
@@ -97,7 +98,7 @@ public class GetRescheduleSuggestionQueryHandlerTests
     public async Task Handle_PayGateFails_ReturnsFailure()
     {
         _payGate.CanUseSmartReschedule(UserId, Arg.Any<CancellationToken>())
-            .Returns(Result.PayGateFailure("Smart reschedule is a Pro feature. Upgrade to unlock!"));
+            .Returns(Result.PayGateFailure(ErrorMessages.ProFeature.Message));
 
         var result = await _handler.Handle(new GetRescheduleSuggestionQuery(UserId, HabitId, "en"), CancellationToken.None);
 
@@ -161,12 +162,12 @@ public class GetRescheduleSuggestionQueryHandlerTests
         StubHabit(CreateOverdueHabit());
         _rescheduleService.GenerateAsync(
             Arg.Any<Habit>(), Arg.Any<DateOnly>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<RescheduleSuggestion>("AI reschedule temporarily unavailable"));
+            .Returns(Result.Failure<RescheduleSuggestion>(ErrorMessages.AiRescheduleUnavailable));
 
         var result = await _handler.Handle(new GetRescheduleSuggestionQuery(UserId, HabitId, "en"), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("AI reschedule temporarily unavailable");
+        result.Error.Should().Contain(ErrorMessages.AiRescheduleUnavailable.Message);
     }
 
     [Fact]

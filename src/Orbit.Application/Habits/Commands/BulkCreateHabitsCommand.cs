@@ -135,13 +135,27 @@ public partial class BulkCreateHabitsCommandHandler(
         return Result.Success(new BulkCreateResult(results));
     }
 
-    private async Task<BulkCreateItemResult> CreateSingleHabit(
-        Guid userId, BulkHabitItem item, int index, DateOnly userToday, int rootPosition,
-        Dictionary<string, Tag> tagsByName, CancellationToken cancellationToken)
+    internal static async Task<Result> CheckArgumentsAsync(BulkCreateHabitsCommand request, IUserDateService dates, CancellationToken ct)
     {
-        try
+        var today = await dates.GetUserTodayAsync(request.UserId, ct);
+        foreach (var item in request.Habits)
         {
-            var habitResult = Habit.Create(new HabitCreateParams(
+            var parent = BuildParent(request.UserId, item, today, 0);
+            if (parent.IsFailure)
+                return parent;
+            foreach (var child in item.SubHabits ?? [])
+            {
+                var result = BuildChild(request.UserId, item, child, parent.Value, today, 0);
+                if (result.IsFailure)
+                    return result;
+            }
+        }
+        return Result.Success();
+    }
+
+    private static Result<Habit> BuildParent(Guid userId, BulkHabitItem item, DateOnly userToday, int rootPosition)
+    {
+        return Habit.Create(new HabitCreateParams(
                 userId,
                 item.Title,
                 item.FrequencyUnit,
@@ -157,12 +171,60 @@ public partial class BulkCreateHabitsCommandHandler(
                 ReminderTimes: item.ReminderTimes,
                 IsGeneral: item.IsGeneral,
                 IsFlexible: item.IsFlexible,
+                EndDate: item.EndDate,
                 ScheduledReminders: item.ScheduledReminders,
                 RelativeReminders: item.RelativeReminders,
                 ChecklistItems: item.ChecklistItems,
                 Position: rootPosition,
                 GoogleEventId: item.GoogleEventId,
                 IntervalWeeks: item.IntervalWeeks));
+    }
+
+    private static Result<Habit> BuildChild(Guid userId, BulkHabitItem parentItem, BulkHabitItem subItem,
+        Habit parent, DateOnly userToday, int position)
+    {
+        var hasExplicitCadence = subItem.FrequencyUnit is not null
+            || subItem.FrequencyQuantity is not null
+            || subItem.IntervalWeeks is not null
+            || subItem.Days is not null;
+        var childFrequencyUnit = subItem.FrequencyUnit ?? parentItem.FrequencyUnit;
+        var childFrequencyQuantity = subItem.FrequencyQuantity ?? parentItem.FrequencyQuantity;
+        var childDays = subItem.Days;
+        if (childDays is null
+            && childFrequencyUnit == FrequencyUnit.Day
+            && childFrequencyQuantity == 1)
+        {
+            childDays = parentItem.Days;
+        }
+
+        return Habit.Create(new HabitCreateParams(
+            userId,
+            subItem.Title,
+            childFrequencyUnit,
+            childFrequencyQuantity,
+            subItem.DueDate ?? parentItem.DueDate ?? userToday,
+            subItem.Description,
+            Emoji: subItem.Emoji,
+            Days: childDays,
+            IsBadHabit: subItem.IsBadHabit,
+            DueTime: subItem.DueTime,
+            EndDate: subItem.EndDate,
+            ChecklistItems: subItem.ChecklistItems,
+            ParentHabitId: parent.Id,
+            IsGeneral: parentItem.IsGeneral,
+            IsFlexible: subItem.IsFlexible,
+            Position: position,
+            IntervalWeeks: subItem.IntervalWeeks
+                ?? (hasExplicitCadence ? null : parentItem.IntervalWeeks)));
+    }
+
+    private async Task<BulkCreateItemResult> CreateSingleHabit(
+        Guid userId, BulkHabitItem item, int index, DateOnly userToday, int rootPosition,
+        Dictionary<string, Tag> tagsByName, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var habitResult = BuildParent(userId, item, userToday, rootPosition);
 
             if (habitResult.IsFailure)
             {
@@ -182,36 +244,7 @@ public partial class BulkCreateHabitsCommandHandler(
                 var subPositionCursor = 0;
                 foreach (var subItem in item.SubHabits)
                 {
-                    var hasExplicitCadence = subItem.FrequencyUnit is not null
-                        || subItem.FrequencyQuantity is not null
-                        || subItem.IntervalWeeks is not null
-                        || subItem.Days is not null;
-                    var childFrequencyUnit = subItem.FrequencyUnit ?? item.FrequencyUnit;
-                    var childFrequencyQuantity = subItem.FrequencyQuantity ?? item.FrequencyQuantity;
-                    var childDays = subItem.Days;
-                    if (childDays is null
-                        && childFrequencyUnit == FrequencyUnit.Day
-                        && childFrequencyQuantity == 1)
-                    {
-                        childDays = item.Days;
-                    }
-
-                    var childResult = Habit.Create(new HabitCreateParams(
-                        userId,
-                        subItem.Title,
-                        childFrequencyUnit,
-                        childFrequencyQuantity,
-                        subItem.DueDate ?? item.DueDate ?? userToday,
-                        subItem.Description,
-                        Emoji: subItem.Emoji,
-                        Days: childDays,
-                        IsBadHabit: subItem.IsBadHabit,
-                        ParentHabitId: parentHabit.Id,
-                        IsGeneral: item.IsGeneral,
-                        IsFlexible: subItem.IsFlexible,
-                        Position: subPositionCursor++,
-                        IntervalWeeks: subItem.IntervalWeeks
-                            ?? (hasExplicitCadence ? null : item.IntervalWeeks)));
+                    var childResult = BuildChild(userId, item, subItem, parentHabit, userToday, subPositionCursor++);
 
                     if (childResult.IsFailure)
                     {

@@ -131,7 +131,9 @@ public class AgentStepUpService(
             pendingOperation.Summary,
             pendingOperation.RiskClass,
             pendingOperation.ConfirmationRequirement,
-            pendingOperation.ExpiresAtUtc));
+            pendingOperation.ExpiresAtUtc,
+            ActionKey: PendingOperationActionKeys.GetRequired(
+                pendingOperation.OperationId, pendingOperation.ArgumentsJson)));
     }
 
     private static string HashToken(string value)
