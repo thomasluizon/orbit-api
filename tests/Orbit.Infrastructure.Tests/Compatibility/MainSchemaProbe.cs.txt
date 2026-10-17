@@ -17,11 +17,11 @@ public sealed class RedesignSchemaProbeTests
         await factory.Context.Database.ExecuteSqlRawAsync(
             """
             ALTER TABLE "PendingAgentOperations" ADD "PreviewFingerprint" character varying(256) NULL;
-            
+
             ALTER TABLE "PendingAgentOperations" ADD "RevisionNumber" integer NOT NULL DEFAULT 0;
-            
+
             ALTER TABLE "Users" ADD "Uses24HourClockPreference" boolean NULL;
-            
+
             CREATE TABLE "HabitSkipUndos" (
                 "Id" uuid NOT NULL CONSTRAINT "PK_HabitSkipUndos" PRIMARY KEY,
                 "UserId" uuid NOT NULL,
@@ -35,9 +35,9 @@ public sealed class RedesignSchemaProbeTests
                 "IsUndone" boolean NOT NULL,
                 CONSTRAINT "FK_HabitSkipUndos_Habits_HabitId" FOREIGN KEY ("HabitId") REFERENCES "Habits" ("Id") ON DELETE CASCADE
             );
-            
+
             CREATE INDEX "IX_HabitSkipUndos_HabitId" ON "HabitSkipUndos" ("HabitId");
-            
+
             CREATE INDEX "IX_HabitSkipUndos_UserId_HabitId" ON "HabitSkipUndos" ("UserId", "HabitId");
             """);
 
