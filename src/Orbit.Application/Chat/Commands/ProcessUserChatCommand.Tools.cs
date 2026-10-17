@@ -98,10 +98,14 @@ public partial class ProcessUserChatCommandHandler
     {
         LogToolCallingIteration(logger, iteration, aiResponse.ToolCalls!.Count);
 
+        var askCall = aiResponse.ToolCalls!.FirstOrDefault(call => call.Name == "ask");
         var orderedCalls = aiResponse.ToolCalls!
+            .TakeWhile(call => call.Name != "ask")
             .OrderBy(c => ai.ToolRegistry.GetTool(c.Name)?.Order ?? int.MaxValue)
             .ToList();
 
+        if (askCall is not null)
+            orderedCalls.Add(askCall);
         var outcomesByCallId = await ExecuteToolCallsAsync(orderedCalls, request, executionResults, cancellationToken);
 
         var toolResults = new List<AiToolCallResult>(orderedCalls.Count);
@@ -121,9 +125,15 @@ public partial class ProcessUserChatCommandHandler
                 hadToolFailure = true;
         }
 
+        if (executionResults.AskBlock is not null)
+            return new ToolRoundResult(aiResponse with { ToolCalls = null });
+
         if (hadToolFailure)
             return new ToolRoundResult(MessageResponse(language), HadToolFailure: true);
 
+        foreach (var skipped in aiResponse.ToolCalls!.Where(call => toolResults.All(result => result.Id != call.Id)))
+            toolResults.Add(new AiToolCallResult(skipped.Name, skipped.Id, false, null, null,
+                "The ask call ended this turn. Ask in plain text and make no further tool calls."));
         var continueResult = await ai.IntentService.ContinueWithToolResultsAsync(aiResponse.ConversationContext!, toolResults, aiStreamSink, cancellationToken);
         if (continueResult.IsFailure)
         {
@@ -131,7 +141,7 @@ public partial class ProcessUserChatCommandHandler
             return null;
         }
 
-        return new ToolRoundResult(continueResult.Value);
+        return new ToolRoundResult(askCall is not null ? continueResult.Value with { ToolCalls = null } : continueResult.Value);
     }
 
     private sealed record ToolRoundResult(
@@ -161,10 +171,10 @@ public partial class ProcessUserChatCommandHandler
         CancellationToken cancellationToken)
     {
         var readOnlyCalls = orderedCalls
-            .Where(call => ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly == true)
+            .Where(call => call.Name != "ask" && ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly == true)
             .ToList();
         var writeCalls = orderedCalls
-            .Where(call => ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly != true)
+            .Where(call => call.Name != "ask" && ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly != true)
             .ToList();
         var bulkRedirects = BulkToolRepeatGuard.FindRedirects(writeCalls);
 
@@ -188,6 +198,8 @@ public partial class ProcessUserChatCommandHandler
                 call, request, executionResults, execution.OperationExecutor, execution.PendingClarificationStore, cancellationToken);
         }
 
+        if (orderedCalls.FirstOrDefault(call => call.Name == "ask") is { } askCall)
+            outcomesByCallId[askCall.Id] = await ExecuteAskCallAsync(askCall, request, executionResults, cancellationToken);
         return outcomesByCallId;
     }
 

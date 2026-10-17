@@ -2,6 +2,7 @@ namespace Orbit.Application.Common;
 
 public static class FeatureFlagKeys
 {
+    public const string AstraAskBlocksDisabled = "astra_ask_blocks_disabled";
     public const string AstraProactiveEngineDisabled = "astra_proactive_engine_disabled";
     public const string CalendarIntegration = "calendar_integration";
     public const string GamificationFreeTier = "gamification_free_tier";

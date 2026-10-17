@@ -31,7 +31,7 @@ using Orbit.Application.Tests.Common;
 
 namespace Orbit.Application.Tests.Commands.Chat;
 
-public class ProcessUserChatCommandHandlerTests
+public partial class ProcessUserChatCommandHandlerTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
@@ -50,6 +50,7 @@ public class ProcessUserChatCommandHandlerTests
     private readonly IServiceScopeFactory _scopeFactory = Substitute.For<IServiceScopeFactory>();
     private readonly IAgentCatalogService _catalogService = Substitute.For<IAgentCatalogService>();
     private readonly IAgentOperationExecutor _operationExecutor = Substitute.For<IAgentOperationExecutor>();
+    private readonly IIssuedAstraBlockStore _blockStore = Substitute.For<IIssuedAstraBlockStore>();
     private readonly IPendingClarificationStore _pendingClarificationStore = Substitute.For<IPendingClarificationStore>();
     private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
     private readonly IMediator _mediator = Substitute.For<IMediator>();
@@ -118,7 +119,7 @@ public class ProcessUserChatCommandHandlerTests
         var executionDeps = new ChatExecutionDependencies(
             _userDateService, _userStreakService, payGate, unitOfWork, _scopeFactory, _operationExecutor,
             _pendingClarificationStore, _goalProgressReadSyncer, _gamificationService, _mediator, _productAnalytics,
-            _scheduleLogReader);
+            _scheduleLogReader, _blockStore);
 
         return new ProcessUserChatCommandHandler(
             dataDeps, aiDeps, executionDeps, _logger);

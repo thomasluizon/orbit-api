@@ -43,7 +43,8 @@ public record ProcessUserChatCommand(
     IReadOnlyList<string>? GrantedScopes = null,
     bool IsReadOnlyCredential = false,
     string? CorrelationId = null,
-    Func<ChatStreamEvent, Task>? StreamSink = null) : IRequest<Result<ChatResponse>>;
+    Func<ChatStreamEvent, Task>? StreamSink = null,
+    AstraBlockAnswer? BlockAnswer = null) : IRequest<Result<ChatResponse>>;
 
 public record ChatResponse(
     string? AiMessage,
@@ -141,7 +142,8 @@ public record ChatExecutionDependencies(
     IGamificationService GamificationService,
     IMediator Mediator,
     IProductAnalytics ProductAnalytics,
-    IHabitScheduleLogReader ScheduleLogReader);
+    IHabitScheduleLogReader ScheduleLogReader,
+    IIssuedAstraBlockStore BlockStore);
 
 public partial class ProcessUserChatCommandHandler(
     ChatDataDependencies data,
@@ -178,6 +180,26 @@ public partial class ProcessUserChatCommandHandler(
     {
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
         LogProcessingChatMessage(logger, request.Message);
+        if (request.BlockAnswer is not null)
+        {
+            var answerService = new AstraBlockAnswerService(execution.BlockStore, execution.UnitOfWork,
+                execution.PayGateService, execution.OperationExecutor, data.UserRepository, execution.ProductAnalytics, logger);
+            var prepared = await answerService.PrepareAsync(request, cancellationToken);
+            if (prepared.IsFailure)
+                return prepared.PropagateError<ChatResponse>();
+            await answerService.CaptureAnsweredAsync(request, cancellationToken);
+            if (prepared.Value.Response is { } preview)
+                return Result.Success(preview);
+            request = request with { Message = prepared.Value.Message };
+        }
+        else
+        {
+            await execution.UnitOfWork.ExecuteInTransactionAsync(async token =>
+            {
+                await execution.UnitOfWork.AcquireAdvisoryLockAsync($"astra-blocks:{request.UserId}", token);
+                await execution.BlockStore.InvalidateOpenAsync(request.UserId, token);
+            }, cancellationToken);
+        }
         var detectedCrisisLocales = CrisisSupportGuard.Detect(request.Message);
 
         var contextResult = await LoadChatContextAsync(request, cancellationToken);
@@ -199,7 +221,7 @@ public partial class ProcessUserChatCommandHandler(
             : aiStreamFilter.HandleAsync;
 
         var faqMatch = ChatFaqCache.TryMatchFaqKey(request.Message);
-        var cachedFaqAnswer = TryGetCachedFaqAnswer(faqMatch);
+        var cachedFaqAnswer = request.BlockAnswer is null ? TryGetCachedFaqAnswer(faqMatch) : null;
         if (cachedFaqAnswer is not null)
             return Result.Success(new ChatResponse(cachedFaqAnswer, [], CorrelationId: request.CorrelationId));
 
@@ -257,6 +279,8 @@ public partial class ProcessUserChatCommandHandler(
                 request, context, executionResults, cancellationToken)
             : await TryBuildResponseCardsAsync(
                 responseText, request, context, executionResults, cancellationToken);
+        if (executionResults.AskBlock is { } askBlock)
+            cards = cards with { Parts = (cards.Parts ?? []).Concat(new[] { askBlock }).ToArray() };
         var aiMessage = cards.AiMessage;
 
         if (GetShareableFaqAnswer(faqMatch, aiMessage, executionResults, cards) is { } faqToCache)
@@ -338,6 +362,7 @@ public partial class ProcessUserChatCommandHandler(
         && !aiResponse.IsTruncated
         && !toolLoopResult.TokenBudgetExceeded
         && !toolLoopResult.HadToolFailure
+        && results.AskBlock is null
         && results.PendingOperations.Count == 0
         && !results.ActionResults.Any(action => action.Status == ActionStatus.NeedsClarification);
 
@@ -889,6 +914,7 @@ public partial class ProcessUserChatCommandHandler(
         ToolExecutionAccumulator results,
         ResponseCards? cards = null) =>
         (cards is null || !cards.HasAnyCard)
+        && results.AskBlock is null
         && results.PendingOperations.Count == 0
         && results.CalledToolNames.All(name => name == DescribeFeatureToolName)
         && results.OperationResults.All(operation => operation.Status == AgentOperationStatus.Succeeded);

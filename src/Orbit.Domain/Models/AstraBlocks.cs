@@ -2,12 +2,6 @@ using System.Text.Json;
 
 namespace Orbit.Domain.Models;
 
-public static class AstraBlockKinds
-{
-    public const string Choice = "choice";
-    public const string PickList = "pickList";
-}
-
 public sealed record AstraBlockOption(string Id, string Label, string? Description = null);
 public sealed record AstraBlockItem(string Id, string Label, JsonElement Arguments, string? Detail = null);
 public sealed record AstraBlockDefinition(

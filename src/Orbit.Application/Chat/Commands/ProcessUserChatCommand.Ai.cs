@@ -52,6 +52,15 @@ public partial class ProcessUserChatCommandHandler
             BuildConversationText(request),
             GetEntryPointIntent(request));
 
+        var askEnabled = request.AuthMethod == AgentAuthMethod.Jwt
+            && request.ClientContext?.SupportsParts == true
+            && request.ClientContext.PartKinds?.Any(kind => kind is AstraBlockKinds.Choice or AstraBlockKinds.PickList) == true
+            && !context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraAskBlocksDisabled);
+        if (askEnabled)
+            systemPrompt = string.Join(Environment.NewLine, systemPrompt,
+                "Use ask when one short answer decides the next step, or several suggested items can be acted on together. Never use ask for a yes/no question the write preview already asks. At most one ask block per reply. An ask call ends the tool round: put it last and make no further tool calls. Supported ask forms: "
+                + string.Join(", ", request.ClientContext!.PartKinds!.Where(kind => kind is AstraBlockKinds.Choice or AstraBlockKinds.PickList)));
+
         systemPrompt = AppendCardPromptInstructions(systemPrompt, request, context, activeToolNames);
         if (request.ClientContext?.SupportsFollowUps == true)
             systemPrompt = string.Join(Environment.NewLine, systemPrompt,
@@ -62,7 +71,7 @@ public partial class ProcessUserChatCommandHandler
         var toolDeclarations = skipTools
             ? new List<object>()
             : ai.ToolRegistry.GetAll()
-                .Where(t => activeToolNames.Contains(t.Name))
+                .Where(t => activeToolNames.Contains(t.Name) && (t.Name != "ask" || askEnabled))
                 .OrderBy(t => t.Name, StringComparer.Ordinal)
                 .Select(t => (object)new
                 {
@@ -74,7 +83,7 @@ public partial class ProcessUserChatCommandHandler
 
         LogCallingAiIntentService(logger, toolDeclarations.Count);
 
-        var reservation = await execution.PayGateService.TryConsumeAiMessage(
+        var reservation = request.BlockAnswer is not null ? Result.Success() : await execution.PayGateService.TryConsumeAiMessage(
             request.UserId,
             execution.UnitOfWork,
             cancellationToken);

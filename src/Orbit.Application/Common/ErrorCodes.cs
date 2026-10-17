@@ -4,6 +4,10 @@ namespace Orbit.Application.Common;
 
 public static class ErrorCodes
 {
+    public const string AstraBlockNotFound = "ASTRA_BLOCK_NOT_FOUND";
+    public const string AstraBlockInvalidated = "ASTRA_BLOCK_INVALIDATED";
+    public const string AstraBlockExpired = "ASTRA_BLOCK_EXPIRED";
+    public const string AstraBlockAnswered = "ASTRA_BLOCK_ANSWERED";
     public const string ProactiveItemNotFound = "PROACTIVE_ITEM_NOT_FOUND";
     public const string UserNotFound = "USER_NOT_FOUND";
     public const string HabitNotFound = "HABIT_NOT_FOUND";

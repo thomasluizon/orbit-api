@@ -16,6 +16,8 @@ public partial class ProcessUserChatCommandHandler
         private readonly HashSet<(string Domain, string Access)> _seenToolSteps = [];
         private readonly SemaphoreSlim _toolStepGate = new(1, 1);
 
+        public ChatBlockPart? AskBlock { get; set; }
+
         public List<ActionResult> ActionResults { get; } = [];
         public List<AgentOperationResult> OperationResults { get; } = [];
         public List<PendingAgentOperation> PendingOperations { get; } = [];

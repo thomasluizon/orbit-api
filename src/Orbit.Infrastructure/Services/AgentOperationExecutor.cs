@@ -160,7 +160,8 @@ public partial class AgentOperationExecutor(
             execution.Arguments.GetRawText(),
             execution.Request.ConfirmationToken,
             IsReadOnlyCredential: execution.Request.IsReadOnlyCredential,
-            ConfirmationRequirementOverride: execution.EscalatedRequirement));
+            ConfirmationRequirementOverride: execution.EscalatedRequirement,
+            PreviewOnly: execution.Request.PreviewOnly));
     }
 
     private async Task<AgentExecuteOperationResponse> DenyByPolicyAsync(
@@ -275,6 +276,10 @@ public partial class AgentOperationExecutor(
 
         if (policyDecision.Status == AgentPolicyDecisionStatus.ConfirmationRequired)
             return await RequireConfirmationAsync(execution, policyDecision, cancellationToken);
+
+        if (execution.Request.PreviewOnly)
+            return await DenyByPolicyAsync(execution, new AgentPolicyDecision(
+                AgentPolicyDecisionStatus.Denied, execution.Capability, "preview_required"), cancellationToken);
 
         if (tool is null)
             return AgentOperationResponseFactory.MissingTool(

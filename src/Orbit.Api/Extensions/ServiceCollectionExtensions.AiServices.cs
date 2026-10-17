@@ -36,6 +36,8 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAgentCatalogService, AgentCatalogService>();
         builder.Services.AddScoped<IPendingAgentOperationStore, PendingAgentOperationStore>();
         builder.Services.AddScoped<IPendingClarificationStore, PendingClarificationStore>();
+        builder.Services.AddScoped<IIssuedAstraBlockStore, IssuedAstraBlockStore>();
+        builder.Services.AddScoped<IAiTool, AskTool>();
         builder.Services.AddScoped<Orbit.Api.Controllers.AgentPendingStores>();
         builder.Services.AddScoped<IAgentStepUpService, AgentStepUpService>();
         builder.Services.AddScoped<IAgentPolicyEvaluator, AgentPolicyEvaluator>();
@@ -65,8 +67,10 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAiTool, BulkRescheduleHabitsTool>();
         builder.Services.AddScoped<IAiTool, BulkUpdateHabitEmojisTool>();
         builder.Services.AddScoped<BulkHabitReplayPlanner>();
-        builder.Services.AddScoped<IAiTool, BulkLogHabitsTool>();
-        builder.Services.AddScoped<IAiTool, BulkSkipHabitsTool>();
+        builder.Services.AddScoped<BulkLogHabitsTool>();
+        builder.Services.AddScoped<IAiTool>(sp => sp.GetRequiredService<BulkLogHabitsTool>());
+        builder.Services.AddScoped<BulkSkipHabitsTool>();
+        builder.Services.AddScoped<IAiTool>(sp => sp.GetRequiredService<BulkSkipHabitsTool>());
         builder.Services.AddScoped<IAiTool, QueryHabitsTool>();
         builder.Services.AddScoped<IAiTool, CreateGoalTool>();
         builder.Services.AddScoped<IAiTool, QueryGoalsTool>();
@@ -102,7 +106,8 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAiTool, ReorderHabitsTool>();
         builder.Services.AddScoped<IAiTool, MoveHabitParentTool>();
         builder.Services.AddScoped<IAiTool, LinkGoalsToHabitTool>();
-        builder.Services.AddScoped<IAiTool, BulkCreateHabitsTool>();
+        builder.Services.AddScoped<BulkCreateHabitsTool>();
+        builder.Services.AddScoped<IAiTool>(sp => sp.GetRequiredService<BulkCreateHabitsTool>());
         builder.Services.AddScoped<IAiTool, BulkDeleteHabitsTool>();
         builder.Services.AddScoped<IAiTool, GetDailySummaryTool>();
         builder.Services.AddScoped<IAiTool, GetRetrospectiveTool>();
@@ -192,6 +197,7 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IGamificationService>(),
                 sp.GetRequiredService<MediatR.IMediator>(),
                 sp.GetRequiredService<IProductAnalytics>(),
-                sp.GetRequiredService<IHabitScheduleLogReader>()));
+                sp.GetRequiredService<IHabitScheduleLogReader>(),
+                sp.GetRequiredService<IIssuedAstraBlockStore>()));
     }
 }
