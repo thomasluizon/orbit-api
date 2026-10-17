@@ -194,16 +194,16 @@ public sealed partial class ProactiveEngineService(
     {
         var result = new List<ProactiveFacts>();
         var allHabits = batch.Habits.Where(h => h.UserId == user.Id && !h.IsGeneral).ToList();
-        var habits = allHabits.Where(h => !h.IsDeleted && !h.IsCompleted).ToList();
-        var due = habits.Where(h => HabitScheduleService.IsHabitDueOnDate(h, today, user.WeekStartDay)).ToList();
-        var open = habits.Where(h => (HabitScheduleService.IsHabitDueOnDate(h, today, user.WeekStartDay)
-            || HabitScheduleService.IsOverdueOnDate(h, today, user.WeekStartDay))
+        var habits = allHabits.Where(h => !h.IsBadHabit && !h.IsDeleted && !h.IsCompleted).ToList();
+        var due = habits.Where(h => IsDueForAction(h, today, user.WeekStartDay)).ToList();
+        var open = habits.Where(h => (due.Contains(h) || HabitScheduleService.IsOverdueOnDate(h, today, user.WeekStartDay))
             && !h.Logs.Any(l => l.Date == today && l.Value > 0)).ToList();
         var yesterday = today.AddDays(-1);
         var timeZone = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
-        var hadScheduled = allHabits.Any(h => HabitScheduleService.GetHistoricalScheduledDates(
+        var hadScheduled = allHabits.Where(h => !h.IsBadHabit).Any(h => HabitScheduleService.GetHistoricalScheduledDates(
             h, yesterday, yesterday, timeZone, user.WeekStartDay).Count > 0);
-        var allLogs = batch.Habits.Where(h => h.UserId == user.Id).SelectMany(h => h.Logs).ToList();
+        var allLogs = batch.Habits.Where(h => h.UserId == user.Id && !h.IsBadHabit)
+            .SelectMany(h => h.Logs).Where(l => l.IsSlip != true).ToList();
         var hadPositiveLogsYesterday = allLogs.Any(l => l.Date == yesterday && l.Value > 0);
         var hadRecentActivity = allLogs.Any(l => l.Value > 0 && l.Date < yesterday
             && l.Date >= yesterday.AddDays(-ProactiveRules.RestartLookbackDays));
@@ -231,6 +231,10 @@ public sealed partial class ProactiveEngineService(
             result.Add(new(ProactiveTrigger.MorningPlan, due.Select(h => h.Title).ToList(), due.Count));
         return result;
     }
+
+    private static bool IsDueForAction(Habit habit, DateOnly date, int weekStartDay) =>
+        HabitScheduleService.IsHabitDueOnDate(habit, date, weekStartDay)
+        && (!habit.IsFlexible || HabitScheduleService.IsFlexibleHabitDueOnDate(habit, date, habit.Logs, weekStartDay));
 
     private static ProactiveFacts? WeeklyFacts(List<Habit> allHabits, User user, DateOnly today, TimeZoneInfo timeZone)
     {

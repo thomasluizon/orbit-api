@@ -139,7 +139,98 @@ public sealed class ProactiveEngineServiceTests
         h.Db.Habits.Add(habit);
         await h.Run();
         h.Db.ProactiveItems.Any(i => i.Trigger == ProactiveTrigger.WeeklyReview).Should().BeTrue();
-        h.Db.ProactiveItems.Any(i => i.Trigger == ProactiveTrigger.MorningPlan).Should().BeTrue();
+        h.Db.ProactiveItems.Any(i => i.Trigger == ProactiveTrigger.MorningPlan).Should().Be(!badHabit);
+    }
+
+    [Theory]
+    [InlineData(8)]
+    [InlineData(19)]
+    public async Task BadHabitOnly_WithRecentSlipAndAbstinenceYesterday_NeverPromptsStartingOrResuming(int hour)
+    {
+        using var h = new Harness(hour);
+        var habit = Habit.Create(new HabitCreateParams(h.User.Id, "Smoke", FrequencyUnit.Day, 1,
+            Today.AddDays(-20), IsBadHabit: true,
+            CreatedAtUtc: new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc))).Value;
+        var slip = habit.Log(Today.AddDays(-2), advanceDueDate: false);
+        slip.IsSuccess.Should().BeTrue();
+        slip.Value.IsSlip.Should().BeTrue();
+        h.Db.Habits.Add(habit);
+
+        await h.Run();
+
+        h.Db.ProactiveItems.Should().BeEmpty();
+        (await h.Engine.GetCurrentAsync(h.User.Id, default)).Should().BeNull();
+        await h.Push.DidNotReceiveWithAnyArgs().SendToUserAsync(default, default!, default!, default!, default);
+    }
+
+    [Theory]
+    [InlineData(2, false, false)]
+    [InlineData(1, true, true)]
+    public async Task RestartAfterMiss_OnlyCountsSuccessfulActivity(int slipDaysAgo, bool positiveActivity, bool restartExpected)
+    {
+        using var h = new Harness(8);
+        var good = HabitFor(h.User.Id);
+        if (positiveActivity) good.Log(Today.AddDays(-3), advanceDueDate: false).IsSuccess.Should().BeTrue();
+        var bad = Habit.Create(new HabitCreateParams(h.User.Id, "Smoke", FrequencyUnit.Day, 1,
+            Today.AddDays(-20), IsBadHabit: true,
+            CreatedAtUtc: new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc))).Value;
+        bad.Log(Today.AddDays(-slipDaysAgo), advanceDueDate: false).IsSuccess.Should().BeTrue();
+        h.Db.Habits.AddRange(good, bad);
+
+        await h.Run();
+
+        h.Db.ProactiveItems.Any(i => i.Trigger == ProactiveTrigger.RestartAfterMiss).Should().Be(restartExpected);
+        var morning = await h.Db.ProactiveItems.SingleAsync(i => i.Trigger == ProactiveTrigger.MorningPlan);
+        JsonSerializer.Deserialize<ProactiveFacts>(morning.FactsJson)!.HabitTitles.Should().Equal(good.Title);
+    }
+
+    [Theory]
+    [InlineData(8, 0, false)]
+    [InlineData(19, 0, false)]
+    [InlineData(8, 1, true)]
+    [InlineData(19, 1, true)]
+    public async Task FlexibleQuota_UsesTheOwnersWeekStartBeforePrompting(int hour, int weekStartDay, bool expected)
+    {
+        using var h = new Harness(hour);
+        h.User.SetWeekStartDay(weekStartDay);
+        var habit = Habit.Create(new HabitCreateParams(h.User.Id, "Read", FrequencyUnit.Week, 1,
+            Today.AddDays(-20), IsFlexible: true,
+            CreatedAtUtc: new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc))).Value;
+        habit.Log(Today.AddDays(-1), advanceDueDate: false, weekStartDay: weekStartDay).IsSuccess.Should().BeTrue();
+        h.Db.Habits.Add(habit);
+
+        await h.Run();
+
+        var trigger = hour == 8 ? ProactiveTrigger.MorningPlan : ProactiveTrigger.EveningCheckin;
+        h.Db.ProactiveItems.Any(i => i.Trigger == trigger).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(8)]
+    [InlineData(19)]
+    public async Task Current_ResolvesFlexibleItemWhenQuotaIsMetOnAnotherDay(int hour)
+    {
+        using var h = new Harness(hour);
+        var habit = Habit.Create(new HabitCreateParams(h.User.Id, "Read", FrequencyUnit.Week, 1,
+            Today.AddDays(-20), IsFlexible: true,
+            CreatedAtUtc: new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc))).Value;
+        h.Db.Habits.Add(habit);
+        await h.Run();
+        var current = await h.Engine.GetCurrentAsync(h.User.Id, default);
+        current.Should().NotBeNull();
+        current!.Trigger.Should().Be(hour == 8 ? ProactiveTrigger.MorningPlan : ProactiveTrigger.EveningCheckin);
+        habit = await h.Db.Habits.SingleAsync();
+        var log = habit.Log(Today.AddDays(-1), advanceDueDate: false, weekStartDay: 0);
+        log.IsSuccess.Should().BeTrue();
+        h.Db.HabitLogs.Add(log.Value);
+        await h.Db.SaveChangesAsync();
+        h.Db.ChangeTracker.Clear();
+
+        (await h.Engine.GetCurrentAsync(h.User.Id, default)).Should().BeNull();
+
+        var ended = await h.Db.ProactiveItems.SingleAsync(i => i.Id == current.Id);
+        ended.EndReason.Should().Be(ProactiveEndReason.ConditionResolved);
+        ended.ActedAtUtc.Should().NotBeNull();
     }
 
     [Fact]

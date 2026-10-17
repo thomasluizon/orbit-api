@@ -9,7 +9,7 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 public sealed class ProactiveMigrationTests
 {
     [Fact]
-    public void Migration_OnlyRelaxesStoredSettingAndReplacesTheLedger()
+    public void Migration_OnlyRelaxesStoredSettingAndExpandsTheLedger()
     {
         var operations = new ReplaceProactiveCheckinsWithItems().UpOperations;
         var setting = operations.OfType<AlterColumnOperation>().Single(o => o.Name == "ProactiveAstraEnabled");
@@ -18,8 +18,38 @@ public sealed class ProactiveMigrationTests
         setting.OldColumn.DefaultValue.Should().Be(false, "the original migration installed a database default that must be removed");
         setting.DefaultValue.Should().BeNull();
         operations.OfType<SqlOperation>().Should().BeEmpty();
-        operations.OfType<DropTableOperation>().Select(o => o.Name).Should().Contain("SentProactiveCheckins");
+        operations.OfType<DropTableOperation>().Select(o => o.Name).Should().NotContain("SentProactiveCheckins",
+            "the previous API still reads, writes and resets this ledger during a rolling deploy");
         operations.OfType<CreateTableOperation>().Select(o => o.Name).Should().Contain("ProactiveItems");
+    }
+
+    [Fact]
+    public void Migration_DownLeavesTheRetainedLedgerUntouched()
+    {
+        var operations = new ReplaceProactiveCheckinsWithItems().DownOperations;
+        operations.OfType<CreateTableOperation>().Select(o => o.Name).Should().NotContain("SentProactiveCheckins");
+        operations.OfType<DropTableOperation>().Select(o => o.Name).Should().NotContain("SentProactiveCheckins");
+    }
+
+    [Fact]
+    public void Models_RetainTheLegacyLedgerUntilTheContractMigration()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var models = new[]
+        {
+            factory.Context.Model,
+            new ReplaceProactiveCheckinsWithItems().TargetModel,
+            new OrbitDbContextModelSnapshot().Model
+        };
+        foreach (var model in models)
+        {
+            var ledger = model.GetEntityTypes().Should().ContainSingle(e => e.GetTableName() == "SentProactiveCheckins").Subject;
+            ledger.GetProperties().Select(p => p.Name).Should().BeEquivalentTo("Id", "UserId", "Date", "SentAtUtc");
+            ledger.GetIndexes().Should().ContainSingle(i => i.IsUnique
+                && i.Properties.Select(p => p.Name).SequenceEqual(new[] { "UserId", "Date" }));
+            ledger.GetForeignKeys().Should().ContainSingle(f => f.DeleteBehavior == DeleteBehavior.Cascade
+                && f.PrincipalEntityType.GetTableName() == "Users");
+        }
     }
 
     [Fact]

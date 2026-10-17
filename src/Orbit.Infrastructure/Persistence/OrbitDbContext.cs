@@ -235,6 +235,17 @@ public class OrbitDbContext : DbContext
 
     private static void ConfigureProactiveEntities(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity("Orbit.Domain.Entities.SentProactiveCheckin", entity =>
+        {
+            entity.Property<Guid>("Id").ValueGeneratedOnAdd();
+            entity.Property<Guid>("UserId");
+            entity.Property<DateOnly>("Date");
+            entity.Property<DateTime>("SentAtUtc");
+            entity.HasKey("Id");
+            entity.HasIndex("UserId", "Date").IsUnique();
+            entity.ToTable("SentProactiveCheckins");
+            entity.HasOne(typeof(User)).WithMany().HasForeignKey("UserId").OnDelete(DeleteBehavior.Cascade);
+        });
         modelBuilder.Entity<User>().Ignore(u => u.EffectiveProactivePushEnabled);
         modelBuilder.Entity<ProactiveItem>(entity =>
         {
