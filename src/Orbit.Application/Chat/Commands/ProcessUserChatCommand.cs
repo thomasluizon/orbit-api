@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -61,7 +62,17 @@ public record ChatResponse(
     CalendarCard? Calendar = null,
     IReadOnlyList<RecordListCard>? RecordLists = null,
     AccountRowsCard? AccountRows = null,
-    IReadOnlyList<string>? FollowUps = null);
+    IReadOnlyList<string>? FollowUps = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ChatResponsePart>? Parts = null);
+
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
+[JsonDerivedType(typeof(ChatTextPart), "text")]
+[JsonDerivedType(typeof(ChatBlockPart), "block")]
+public abstract record ChatResponsePart;
+
+public sealed record ChatTextPart(string Text) : ChatResponsePart;
+
+public sealed record ChatBlockPart(string Kind, object Block) : ChatResponsePart;
 
 public record ResponseCards(
     string? AiMessage,
@@ -73,12 +84,13 @@ public record ResponseCards(
     StreakCard? Streak = null,
     CalendarCard? Calendar = null,
     IReadOnlyList<RecordListCard>? RecordLists = null,
-    AccountRowsCard? AccountRows = null)
+    AccountRowsCard? AccountRows = null,
+    IReadOnlyList<ChatResponsePart>? Parts = null)
 {
     public bool HasAnyCard => HabitList is not null || GoalList is not null
         || MetricsCard is not null || PeriodInsight is not null || DaySummary is not null
         || Streak is not null || Calendar is not null || RecordLists is { Count: > 0 }
-        || AccountRows is not null;
+        || AccountRows is not null || Parts?.OfType<ChatBlockPart>().Any() == true;
 }
 
 public record ActionResult(
@@ -137,6 +149,19 @@ public partial class ProcessUserChatCommandHandler(
     ChatExecutionDependencies execution,
     ILogger<ProcessUserChatCommandHandler> logger) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
 {
+    private static class PartKinds
+    {
+        public const string HabitList = "habitList";
+        public const string GoalList = "goalList";
+        public const string Metrics = "metrics";
+        public const string PeriodInsight = "periodInsight";
+        public const string DaySummary = "daySummary";
+        public const string Streak = "streak";
+        public const string Calendar = "calendar";
+        public const string RecordList = "recordList";
+        public const string AccountRows = "accountRows";
+    }
+
     private const int MaxToolIterations = 5;
     private const string UnsupportedByPolicyReason = "unsupported_by_policy";
     private const string DescribeFeatureToolName = "describe_feature";
@@ -227,8 +252,11 @@ public partial class ProcessUserChatCommandHandler(
         var responseText = parsedResponse.CardText;
         if (aiResponse.IsTruncated)
             responseText = AppendTruncationNotice(responseText, userLanguage);
-        var cards = await TryBuildResponseCardsAsync(
-            responseText, request, context, executionResults, cancellationToken);
+        var cards = request.ClientContext?.SupportsParts == true
+            ? await BuildResponsePartsAsync(parsedResponse, aiResponse.IsTruncated, userLanguage,
+                request, context, executionResults, cancellationToken)
+            : await TryBuildResponseCardsAsync(
+                responseText, request, context, executionResults, cancellationToken);
         var aiMessage = cards.AiMessage;
 
         if (GetShareableFaqAnswer(faqMatch, aiMessage, executionResults, cards) is { } faqToCache)
@@ -272,7 +300,8 @@ public partial class ProcessUserChatCommandHandler(
             cards.Calendar,
             cards.RecordLists,
             cards.AccountRows,
-            followUps));
+            followUps,
+            cards.Parts));
     }
 
     private static string? GetUserLanguage(User? user) => user?.Language;
@@ -292,6 +321,8 @@ public partial class ProcessUserChatCommandHandler(
                     && !enabledFlags.Contains(FeatureFlagKeys.AstraChangePreviewDisabled, StringComparer.OrdinalIgnoreCase),
                 SupportsToolSteps = clientContext.SupportsToolSteps == true
                     && !enabledFlags.Contains(FeatureFlagKeys.AstraToolStepsDisabled, StringComparer.OrdinalIgnoreCase),
+                SupportsParts = clientContext.SupportsParts == true
+                    && !enabledFlags.Contains(FeatureFlagKeys.AstraPartsDisabled, StringComparer.OrdinalIgnoreCase),
                 SupportsFollowUps = clientContext.SupportsFollowUps == true
                     && !enabledFlags.Contains(FeatureFlagKeys.AstraFollowUpsDisabled, StringComparer.OrdinalIgnoreCase)
             }
@@ -395,7 +426,8 @@ public partial class ProcessUserChatCommandHandler(
         context.AiMemoryEnabled && context.User is { HasProAccess: true };
 
     private void CaptureCardEvent(
-        ProcessUserChatCommand request, ChatContext context, string eventName, string kind)
+        ProcessUserChatCommand request, ChatContext context, string eventName, string kind,
+        IReadOnlyList<ChatResponsePart>? parts)
     {
         if (context.User is null)
             return;
@@ -405,27 +437,53 @@ public partial class ProcessUserChatCommandHandler(
             eventName, new Dictionary<string, object>
             {
                 ["platform"] = request.ClientContext?.Platform ?? "unknown",
-                ["kind"] = kind
+                ["kind"] = kind,
+                ["part_count"] = parts?.Count ?? 0,
+                ["block_kinds"] = parts?.OfType<ChatBlockPart>().Select(part => part.Kind).ToArray() ?? []
             });
     }
 
     private void CaptureResponseCardEvents(
         ProcessUserChatCommand request, ChatContext context, ResponseCards cards)
     {
+        void Capture(string eventName, string kind) =>
+            CaptureCardEvent(request, context, eventName, kind, cards.Parts);
+
+        if (cards.Parts is not null)
+        {
+            var events = cards.Parts.OfType<ChatBlockPart>().Select(part => part.Block switch
+            {
+                MetricsCard => ("chat_metrics_card_emitted", PartKinds.Metrics),
+                PeriodInsightCard => ("chat_period_insight_card_emitted", "period"),
+                DaySummaryCard => ("chat_day_summary_card_emitted", "day"),
+                StreakCard => ("chat_streak_card_emitted", PartKinds.Streak),
+                CalendarCard => ("chat_calendar_card_emitted", PartKinds.Calendar),
+                RecordListCard recordList => ("chat_record_list_card_emitted", recordList.Kind),
+                AccountRowsCard accountRows => ("chat_account_rows_card_emitted", accountRows.Kind),
+                _ => (string.Empty, string.Empty)
+            }).Distinct();
+            foreach (var (eventName, kind) in events)
+            {
+                if (eventName.Length > 0)
+                    Capture(eventName, kind);
+            }
+            return;
+        }
+
         if (cards.MetricsCard is not null)
-            CaptureCardEvent(request, context, "chat_metrics_card_emitted", "metrics");
+            Capture("chat_metrics_card_emitted", PartKinds.Metrics);
         if (cards.PeriodInsight is not null)
-            CaptureCardEvent(request, context, "chat_period_insight_card_emitted", "period");
+            Capture("chat_period_insight_card_emitted", "period");
         if (cards.DaySummary is not null)
-            CaptureCardEvent(request, context, "chat_day_summary_card_emitted", "day");
+            Capture("chat_day_summary_card_emitted", "day");
         if (cards.Streak is not null)
-            CaptureCardEvent(request, context, "chat_streak_card_emitted", "streak");
+            Capture("chat_streak_card_emitted", PartKinds.Streak);
         if (cards.Calendar is not null)
-            CaptureCardEvent(request, context, "chat_calendar_card_emitted", "calendar");
+            Capture("chat_calendar_card_emitted", PartKinds.Calendar);
         foreach (var recordList in cards.RecordLists ?? [])
-            CaptureCardEvent(request, context, "chat_record_list_card_emitted", recordList.Kind);
+            Capture("chat_record_list_card_emitted", recordList.Kind);
         if (cards.AccountRows is not null)
-            CaptureCardEvent(request, context, "chat_account_rows_card_emitted", cards.AccountRows.Kind);
+            Capture("chat_account_rows_card_emitted", cards.AccountRows.Kind);
     }
 
     private async Task<Result<ChatResponse>> HandleCrisisTurnAsync(
@@ -476,6 +534,72 @@ public partial class ProcessUserChatCommandHandler(
             : EnglishTruncationMessage;
         return string.IsNullOrWhiteSpace(text) ? notice : $"{text}\n\n{notice}";
     }
+
+    private async Task<ResponseCards> BuildResponsePartsAsync(
+        ParsedResponseDirectives parsed, bool isTruncated, string? language,
+        ProcessUserChatCommand request, ChatContext context,
+        ToolExecutionAccumulator results, CancellationToken cancellationToken)
+    {
+        var parts = new List<ChatResponsePart>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var blockCount = 0;
+        foreach (var segment in parsed.Segments)
+        {
+            if (segment.Text is { } text)
+            {
+                parts.Add(new ChatTextPart(text));
+                continue;
+            }
+
+            if (segment.Directive is not { } directive || blockCount >= 3 || !seen.Add(directive))
+                continue;
+
+            var kind = DirectivePartKind(directive);
+            if (kind is null || request.ClientContext?.PartKinds?.Contains(kind, StringComparer.Ordinal) != true)
+                continue;
+
+            var cards = await TryBuildResponseCardsAsync(directive, request, context, results, cancellationToken);
+            object? block = kind switch
+            {
+                PartKinds.HabitList => cards.HabitList,
+                PartKinds.GoalList => cards.GoalList,
+                PartKinds.Metrics => cards.MetricsCard,
+                PartKinds.PeriodInsight => cards.PeriodInsight,
+                PartKinds.DaySummary => cards.DaySummary,
+                PartKinds.Streak => cards.Streak,
+                PartKinds.Calendar => cards.Calendar,
+                PartKinds.RecordList => cards.RecordLists is { Count: > 0 } lists ? lists[0] : null,
+                PartKinds.AccountRows => cards.AccountRows,
+                _ => null
+            };
+            if (block is null)
+                continue;
+
+            parts.Add(new ChatBlockPart(kind, block));
+            blockCount++;
+        }
+
+        if (isTruncated)
+            parts.Add(new ChatTextPart(AppendTruncationNotice(null, language)));
+
+        return new ResponseCards(string.Join("\n\n", parts.OfType<ChatTextPart>().Select(part => part.Text)),
+            Parts: parts);
+    }
+
+    private static string? DirectivePartKind(string directive) => directive.ToLowerInvariant() switch
+    {
+        "[[orbit:habits:today]]" or "[[orbit:habits:remaining]]" or "[[orbit:habits:all]]" => PartKinds.HabitList,
+        "[[orbit:goals]]" => PartKinds.GoalList,
+        "[[orbit:metrics]]" => PartKinds.Metrics,
+        "[[orbit:insight]]" => PartKinds.PeriodInsight,
+        "[[orbit:day]]" => PartKinds.DaySummary,
+        "[[orbit:streak]]" => PartKinds.Streak,
+        "[[orbit:calendar]]" => PartKinds.Calendar,
+        "[[orbit:records:notifications]]" or "[[orbit:records:tags]]"
+            or "[[orbit:records:templates]]" or "[[orbit:records:keys]]" => PartKinds.RecordList,
+        "[[orbit:account:profile]]" or "[[orbit:account:plan]]" or "[[orbit:account:referral]]" => PartKinds.AccountRows,
+        _ => null
+    };
 
     private async Task<ResponseCards> TryBuildResponseCardsAsync(
         string? aiMessage, ProcessUserChatCommand request, ChatContext context,

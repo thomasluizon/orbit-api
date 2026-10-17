@@ -21,6 +21,8 @@ public record GoalListCardItem(
 
 public static partial class GoalListCardBuilder
 {
+    public const string PartsPromptInstruction = "After review_goals succeeds, or when the user asks to list goals, place [[orbit:goals]] on its own line where the goals block belongs. Never repeat its figures in text.";
+
     public const string PromptInstruction = """
         ## Goal list rendering (this client)
         This app can display active goals and their projections. After review_goals succeeds, or when the user asks to list goals, write one short intro without repeating figures, then emit [[orbit:goals]] before optional follow-ups. Emit at most one directive. For other questions, answer normally.

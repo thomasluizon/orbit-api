@@ -28,6 +28,9 @@ public static partial class MetricsCardBuilder
     public const string Directive = "[[orbit:metrics]]";
     public const string ProgressSurfaceId = "progress";
 
+    public const string PartsPromptInstruction = "When the user asks about their current week, place [[orbit:metrics]] on its own line where the progress block belongs. Never repeat its figures in text.";
+    public const string HabitPartsPromptInstruction = "After get_habit_metrics succeeds, place [[orbit:metrics]] on its own line where that habit's metrics block belongs. Never repeat its figures in text.";
+
     public const string PromptInstruction = """
         ## Metrics rendering (this client)
         This app can display one card for current week progress. When the user asks about their current week, write one short intro without repeating figures, then emit [[orbit:metrics]] before optional follow-ups. Emit at most one directive. For other questions, answer normally.

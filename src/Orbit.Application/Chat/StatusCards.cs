@@ -38,6 +38,9 @@ public static class StatusCardBuilder
     public const string DayDirective = "[[orbit:day]]";
     public const string StreakDirective = "[[orbit:streak]]";
     public const string CalendarDirective = "[[orbit:calendar]]";
+    public const string DayPartsPrompt = "For today's habit summary, place [[orbit:day]] on its own line where the day summary block belongs. Never repeat its figures in text.";
+    public const string StreakPartsPrompt = "After get_gamification_overview succeeds, place [[orbit:streak]] on its own line where the streak block belongs. Never repeat its figures in text.";
+    public const string CalendarPartsPrompt = "After get_calendar_overview succeeds, place [[orbit:calendar]] on its own line where the calendar block belongs. Never repeat its events or figures in text.";
     public const string DayPrompt = "For today's habit summary, write one short line without figures, then emit [[orbit:day]] last.";
     public const string StreakPrompt = "After get_gamification_overview succeeds, write one short line without figures, then emit [[orbit:streak]] last.";
     public const string CalendarPrompt = "After get_calendar_overview succeeds, write one short line without listing events, then emit [[orbit:calendar]] last.";
