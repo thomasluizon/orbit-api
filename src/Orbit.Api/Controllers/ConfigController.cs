@@ -1,8 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using Orbit.Api.Extensions;
 using Orbit.Domain.Interfaces;
-using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Api.Controllers;
 
@@ -11,21 +10,16 @@ namespace Orbit.Api.Controllers;
 [Route("api/[controller]")]
 public partial class ConfigController(
     IAppConfigService configService,
-    OrbitDbContext dbContext,
+    IFeatureFlagService featureFlagService,
     ILogger<ConfigController> logger) : ControllerBase
 {
-    public record FeatureFlagDto(string Key, bool Enabled, string? PlanRequirement);
-
     [HttpGet]
-    [ResponseCache(Duration = 300, Location = ResponseCacheLocation.Client)]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     public async Task<IActionResult> GetConfig(CancellationToken cancellationToken)
     {
         var limits = await configService.GetAllAsync(cancellationToken);
 
-        var featureFlags = await dbContext.AppFeatureFlags
-            .AsNoTracking()
-            .Select(f => new FeatureFlagDto(f.Key, f.Enabled, f.PlanRequirement))
-            .ToListAsync(cancellationToken);
+        var featureFlags = await featureFlagService.ResolveForUserAsync(HttpContext.GetUserId(), cancellationToken);
 
         var features = featureFlags.ToDictionary(f => f.Key, f => new { f.Enabled, f.PlanRequirement });
 
@@ -42,6 +36,6 @@ public partial class ConfigController(
         });
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Config fetched")]
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Config fetched")]
     private static partial void LogConfigFetched(ILogger logger);
 }

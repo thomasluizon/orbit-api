@@ -1,3 +1,4 @@
+using Orbit.Application.FeatureFlags;
 using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Middleware;
 using Orbit.Application.Common;
@@ -13,6 +14,8 @@ public static class ResultActionResultExtensions
         [ErrorCodes.AstraBlockInvalidated] = StatusCodes.Status410Gone,
         [ErrorCodes.AstraBlockExpired] = StatusCodes.Status410Gone,
         [ErrorCodes.AstraBlockAnswered] = StatusCodes.Status409Conflict,
+        [FeatureFlagActions.NotFound] = StatusCodes.Status404NotFound,
+        [FeatureFlagActions.AlreadyExists] = StatusCodes.Status409Conflict,
         [Result.PayGateErrorCode] = StatusCodes.Status403Forbidden,
         [ErrorCodes.NoPermission] = StatusCodes.Status403Forbidden,
         [ErrorCodes.HabitNotOwned] = StatusCodes.Status403Forbidden,

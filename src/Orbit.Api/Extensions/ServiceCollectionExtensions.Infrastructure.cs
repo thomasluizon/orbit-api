@@ -1,3 +1,4 @@
+using Orbit.Api.Mcp;
 using System.IO.Compression;
 using Amazon;
 using Amazon.Runtime;
@@ -297,7 +298,9 @@ public static partial class ServiceCollectionExtensions
             .WithTools<ApiKeyTools>()
             .WithTools<SupportTools>()
             .WithTools<ChecklistTemplateTools>()
-            .WithTools<FeatureTools>();
+            .WithTools<FeatureTools>()
+            .WithTools<FeatureFlagTools>()
+            .WithFeatureFlagAccess();
     }
 
     private static void AddApiPipeline(WebApplicationBuilder builder)

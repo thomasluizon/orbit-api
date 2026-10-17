@@ -86,7 +86,8 @@ public class AstraPickListPreviewTests
         var settings = Options.Create(new AgentPlatformSettings { ShadowModeEnabled = shadowMode });
         var bridge = Substitute.For<IAgentStepUpAuthorizationBridge>();
         var pending = new PendingAgentOperationStore(db, settings);
-        var policy = new AgentPolicyEvaluator(db, catalog, pending, bridge, settings);
+        using var flagCache = new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
+        var policy = new AgentPolicyEvaluator(db, catalog, pending, bridge, settings, new FeatureFlagService(db, flagCache));
         var previewer = new PendingOperationChangePreviewer(repo, new GenericRepository<Goal>(db),
             new GenericRepository<Tag>(db), dates, tools);
         var ownership = Substitute.For<IAgentTargetOwnershipService>();

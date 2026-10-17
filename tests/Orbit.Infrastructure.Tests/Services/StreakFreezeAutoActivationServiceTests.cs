@@ -28,6 +28,29 @@ public class StreakFreezeAutoActivationServiceTests
     private static readonly DateTimeOffset Instant = new(2026, 6, 4, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
+    public async Task ActivateMissedDayFreezes_FreeTierFlagOnlyCoversTargetedAccount()
+    {
+        await using var dbContext = CreateDbContext();
+        var pushService = Substitute.For<IPushNotificationService>();
+        var userDateService = Substitute.For<IUserDateService>();
+        ConfigureToday(userDateService, Today);
+        var targeted = await SeedEligibleUserAsync(dbContext, Today);
+        var other = CreateEligibleProUser();
+        typeof(User).GetProperty(nameof(User.Id))!.SetValue(other, Guid.NewGuid());
+        await SeedEligibleUserAsync(dbContext, Today, other);
+        targeted.StartTrial(DateTime.UtcNow.AddDays(-1));
+        other.StartTrial(DateTime.UtcNow.AddDays(-1));
+        dbContext.AppFeatureFlags.Add(AppFeatureFlag.Create(Orbit.Application.Common.FeatureFlagKeys.GamificationFreeTier, false));
+        dbContext.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create(Orbit.Application.Common.FeatureFlagKeys.GamificationFreeTier, targeted.Id));
+        await dbContext.SaveChangesAsync();
+
+        await CreateService(dbContext, pushService, userDateService).ActivateMissedDayFreezes(CancellationToken.None);
+
+        (await dbContext.StreakFreezes.SingleAsync()).UserId.Should().Be(targeted.Id);
+        other.StreakFreezesAccumulated.Should().Be(1);
+    }
+
+    [Fact]
     public void BuildNotification_English_MentionsStreakLengthAndFreeze()
     {
         var (title, body) = StreakFreezeAutoActivationService.BuildNotification(14, "en");
@@ -474,6 +497,8 @@ public class StreakFreezeAutoActivationServiceTests
         IUserDateService userDateService)
     {
         var serviceProvider = new ServiceCollection()
+            .AddMemoryCache()
+            .AddScoped<IFeatureFlagService, FeatureFlagService>()
             .AddSingleton(dbContext)
             .AddSingleton(pushService)
             .AddSingleton(userDateService)

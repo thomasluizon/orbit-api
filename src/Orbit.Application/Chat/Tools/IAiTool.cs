@@ -15,6 +15,8 @@ public interface IAiTool
 
 public interface IChatOnlyAiTool : IAiTool;
 
+public interface IMcpOnlyAiTool;
+
 public interface IConcurrencyRetryableTool;
 
 /// <summary>

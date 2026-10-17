@@ -5,6 +5,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -28,6 +29,7 @@ namespace Orbit.Infrastructure.Tests.Services;
 public class AgentChatWriteHoldTests : IDisposable
 {
     private readonly OrbitDbContext _dbContext;
+    private readonly MemoryCache _flagCache = new(new MemoryCacheOptions());
     private readonly AgentCatalogService _catalogService = BuildCatalog();
     private readonly PendingAgentOperationStore _pendingOperationStore;
     private readonly AgentPolicyEvaluator _policyEvaluator;
@@ -60,11 +62,13 @@ public class AgentChatWriteHoldTests : IDisposable
         stepUpBridge.GetRequiredConfirmationAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns((AgentConfirmationRequirement?)null);
         _policyEvaluator = new AgentPolicyEvaluator(
-            _dbContext, _catalogService, _pendingOperationStore, stepUpBridge, settings);
+            _dbContext, _catalogService, _pendingOperationStore, stepUpBridge, settings,
+            new FeatureFlagService(_dbContext, _flagCache));
     }
 
     public void Dispose()
     {
+        _flagCache.Dispose();
         _dbContext.Dispose();
         GC.SuppressFinalize(this);
     }

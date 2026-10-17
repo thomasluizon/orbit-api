@@ -3,6 +3,7 @@ using System.Text.Json;
 using FluentAssertions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -34,6 +35,7 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
     private static readonly DateOnly Today = new(2026, 4, 3);
 
     private readonly OrbitDbContext _dbContext;
+    private readonly MemoryCache _flagCache = new(new MemoryCacheOptions());
     private readonly Guid _userId;
     private readonly User _user;
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
@@ -90,7 +92,8 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
             Arg.Any<CancellationToken>()).Returns((string?)null);
         _executor = new AgentOperationExecutor(
             _catalogService,
-            new AgentPolicyEvaluator(_dbContext, _catalogService, _pendingOperationStore, stepUpBridge, settings),
+            new AgentPolicyEvaluator(_dbContext, _catalogService, _pendingOperationStore, stepUpBridge, settings,
+                new FeatureFlagService(_dbContext, _flagCache)),
             Substitute.For<IAgentAuditService>(),
             ownership,
             stepUpBridge,
@@ -105,6 +108,7 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
 
     public void Dispose()
     {
+        _flagCache.Dispose();
         _dbContext.Dispose();
         GC.SuppressFinalize(this);
     }

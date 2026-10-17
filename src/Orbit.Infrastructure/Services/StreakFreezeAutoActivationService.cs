@@ -60,11 +60,10 @@ public partial class StreakFreezeAutoActivationService(
         if (candidates.Count == 0)
             return;
 
-        var gamificationFreeTierEnabled = await dbContext.AppFeatureFlags
-            .AsNoTracking()
-            .AnyAsync(
-                flag => flag.Key == FeatureFlagKeys.GamificationFreeTier && flag.Enabled,
-                cancellationToken);
+        var featureFlagService = scope.ServiceProvider.GetRequiredService<IFeatureFlagService>();
+        var enabledKeys = await featureFlagService.GetEnabledKeysForUsersAsync(candidates, cancellationToken);
+        var freeTierAccounts = enabledKeys.Where(account => account.Value.Contains(FeatureFlagKeys.GamificationFreeTier))
+            .Select(account => account.Key).ToHashSet();
 
         var repairBatch = await LoadRepairBatchAsync(
             candidates,
@@ -76,7 +75,7 @@ public partial class StreakFreezeAutoActivationService(
         {
             var stagedFreeze = StageFreeze(
                 user,
-                gamificationFreeTierEnabled,
+                freeTierAccounts.Contains(user.Id),
                 dbContext,
                 repairBatch);
             if (stagedFreeze is not null)
@@ -95,7 +94,7 @@ public partial class StreakFreezeAutoActivationService(
         dbContext.ChangeTracker.Clear();
         await ActivatePerUserFallbackAsync(
             staged.Select(freeze => freeze.User.Id).ToList(),
-            gamificationFreeTierEnabled,
+            freeTierAccounts,
             pushService,
             dbContext,
             userDateService,
@@ -260,7 +259,7 @@ public partial class StreakFreezeAutoActivationService(
 
     private async Task ActivatePerUserFallbackAsync(
         List<Guid> candidateIds,
-        bool gamificationFreeTierEnabled,
+        HashSet<Guid> freeTierAccounts,
         IPushNotificationService pushService,
         OrbitDbContext dbContext,
         IUserDateService userDateService,
@@ -279,7 +278,7 @@ public partial class StreakFreezeAutoActivationService(
         {
             var staged = StageFreeze(
                 user,
-                gamificationFreeTierEnabled,
+                freeTierAccounts.Contains(user.Id),
                 dbContext,
                 repairBatch);
             if (staged is null)

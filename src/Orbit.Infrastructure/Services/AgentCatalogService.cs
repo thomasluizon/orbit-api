@@ -1,3 +1,4 @@
+using Orbit.Application.FeatureFlags;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
@@ -42,9 +43,9 @@ public partial class AgentCatalogService : IAgentCatalogService
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
-    public IReadOnlyList<AgentCapability> GetCapabilities() => _capabilities;
+    public IReadOnlyList<AgentCapability> GetCapabilities() => _capabilities.Where(capability => capability.Id != FeatureFlagActions.CapabilityId).ToList();
 
-    public IReadOnlyList<AgentOperation> GetOperations() => _operations;
+    public IReadOnlyList<AgentOperation> GetOperations() => _operations.Where(operation => operation.Id != FeatureFlagActions.ToolName).ToList();
 
     public IReadOnlyList<AppSurface> GetSurfaces() => _surfaces;
 

@@ -42,6 +42,32 @@ public class FeatureFlagAndAgentSupportTests : IDisposable
     }
 
     [Fact]
+    public async Task FeatureFlagService_ResolvesTargetsAndPlansAndInvalidatesWrites()
+    {
+        var accountA = User.Create("A", "a@example.com").Value;
+        var accountB = User.Create("B", "b@example.com").Value;
+        accountA.StartTrial(DateTime.UtcNow.AddDays(-1));
+        _dbContext.Users.AddRange(accountA, accountB);
+        _dbContext.AppFeatureFlags.AddRange(AppFeatureFlag.Create("targeted", false), AppFeatureFlag.Create("paid", false, "Pro"));
+        _dbContext.AppFeatureFlagAccounts.AddRange(AppFeatureFlagAccount.Create("targeted", accountA.Id), AppFeatureFlagAccount.Create("paid", accountA.Id));
+        await _dbContext.SaveChangesAsync();
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var service = new FeatureFlagService(_dbContext, cache);
+
+        (await service.GetEnabledKeysForUserAsync(accountA.Id)).Should().Equal("targeted");
+        (await service.GetEnabledKeysForUserAsync(accountB.Id)).Should().BeEmpty();
+        service.ResolveForUser(accountA.Id).Should().Equal(await service.ResolveForUserAsync(accountA.Id));
+        accountA.SetStripeSubscription("sub_paid", DateTime.UtcNow.AddDays(30), SubscriptionInterval.Monthly);
+        await _dbContext.SaveChangesAsync();
+        (await service.GetEnabledKeysForUserAsync(accountA.Id)).Should().Equal("paid", "targeted");
+
+        _dbContext.AppFeatureFlagAccounts.RemoveRange(_dbContext.AppFeatureFlagAccounts);
+        await _dbContext.SaveChangesAsync();
+        service.Invalidate();
+        (await service.GetEnabledKeysForUserAsync(accountA.Id)).Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task FeatureFlagService_ReturnsEnabledFlagsForMatchingPlan()
     {
         var user = User.Create("Alex", "alex@example.com").Value;

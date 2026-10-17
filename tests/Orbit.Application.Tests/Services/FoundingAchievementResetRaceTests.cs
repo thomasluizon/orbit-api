@@ -111,6 +111,20 @@ public class FoundingAchievementResetRaceTests
     {
         private int _readCount;
 
+        public IReadOnlyList<ResolvedFeatureFlag> ResolveForUser(Guid userId) =>
+            [new(FeatureFlagKeys.GamificationFreeTier, true, null)];
+
+        public async Task<IReadOnlyList<ResolvedFeatureFlag>> ResolveForUserAsync(Guid userId, CancellationToken cancellationToken = default) =>
+            (await GetEnabledKeysForUserAsync(userId, cancellationToken)).Select(key => new ResolvedFeatureFlag(key, true, null)).ToList();
+
+        public Task<IReadOnlyDictionary<Guid, IReadOnlyList<string>>> GetEnabledKeysForUsersAsync(
+            IReadOnlyCollection<User> users, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyDictionary<Guid, IReadOnlyList<string>>>(users.ToDictionary(user => user.Id,
+                _ => (IReadOnlyList<string>)[FeatureFlagKeys.GamificationFreeTier]));
+
+        public void Invalidate() { }
+
+
         public async Task<IReadOnlyList<string>> GetEnabledKeysForUserAsync(
             Guid userId,
             CancellationToken cancellationToken = default,

@@ -1,3 +1,4 @@
+using Orbit.Application.FeatureFlags;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Orbit.Domain.Entities;
@@ -13,7 +14,8 @@ public class AgentPolicyEvaluator(
     IAgentCatalogService catalogService,
     IPendingAgentOperationStore pendingOperationStore,
     IAgentStepUpAuthorizationBridge stepUpAuthorizationBridge,
-    IOptions<AgentPlatformSettings> settings) : IAgentPolicyEvaluator
+    IOptions<AgentPlatformSettings> settings,
+    IFeatureFlagService featureFlagService) : IAgentPolicyEvaluator
 {
     private readonly AgentPlatformSettings _settings = settings.Value;
 
@@ -48,6 +50,9 @@ public class AgentPolicyEvaluator(
         var user = GetUser(context.UserId);
         if (user is null)
             return new AgentPolicyDecision(AgentPolicyDecisionStatus.Denied, capability, "user_not_found");
+
+        if (capability.Id == FeatureFlagActions.CapabilityId && !user.IsAdmin)
+            return new AgentPolicyDecision(AgentPolicyDecisionStatus.Denied, capability, "tool_not_found");
 
         var accessDecision = EvaluateAccessRequirements(context, capability, user);
         if (accessDecision is not null)
@@ -164,28 +169,17 @@ public class AgentPolicyEvaluator(
         if (capability.FeatureFlagKeys is not { Count: > 0 })
             return null;
 
-        var flags = dbContext.AppFeatureFlags
-            .AsNoTracking()
-            .Where(item => capability.FeatureFlagKeys.Contains(item.Key))
-            .ToList();
+        var flags = featureFlagService.ResolveForUser(user.Id);
 
         foreach (var featureFlagKey in capability.FeatureFlagKeys)
         {
             var flag = flags.FirstOrDefault(item => string.Equals(item.Key, featureFlagKey, StringComparison.OrdinalIgnoreCase));
             if (flag is null || !flag.Enabled)
             {
-                return new AgentPolicyDecision(
-                    AgentPolicyDecisionStatus.Denied,
-                    capability,
-                    $"feature_disabled:{featureFlagKey}");
-            }
-
-            if (!UserMeetsPlanRequirement(user, flag.PlanRequirement))
-            {
-                return new AgentPolicyDecision(
-                    AgentPolicyDecisionStatus.Denied,
-                    capability,
-                    $"feature_plan_required:{featureFlagKey}:{flag.PlanRequirement}");
+                var reason = flag is not null && !UserMeetsPlanRequirement(user, flag.PlanRequirement)
+                    ? $"feature_plan_required:{featureFlagKey}:{flag.PlanRequirement}"
+                    : $"feature_disabled:{featureFlagKey}";
+                return new AgentPolicyDecision(AgentPolicyDecisionStatus.Denied, capability, reason);
             }
         }
 
