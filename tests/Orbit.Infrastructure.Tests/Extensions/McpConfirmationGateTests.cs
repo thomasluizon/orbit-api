@@ -126,6 +126,7 @@ public class McpConfirmationGateTests : IDisposable
             _authorization,
             new AiToolRegistry([getApiKeysTool, manageApiKeysTool]),
             Substitute.For<IPendingOperationChangePreviewer>(),
+            _pendingOperationStore,
             _unitOfWork,
             NullLogger<AgentOperationExecutor>.Instance);
 

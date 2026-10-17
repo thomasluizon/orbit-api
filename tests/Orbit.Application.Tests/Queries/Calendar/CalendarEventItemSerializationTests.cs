@@ -25,10 +25,19 @@ public class CalendarEventItemSerializationTests
         var actual = JsonSerializer.Serialize(item, ResponseOptions);
         var expected = JsonSerializer.Serialize(new
         {
-            id = "evt", title = "Event", description = (string?)null, startDate = "2026-05-01",
-            startTime = (string?)null, endTime = (string?)null, isRecurring = false,
-            recurrenceRule = (string?)null, reminders = Array.Empty<int>(), startUtc = (DateTime?)null,
-            calendarId = "", calendarName = "", endUtc = (DateTime?)null,
+            id = "evt",
+            title = "Event",
+            description = (string?)null,
+            startDate = "2026-05-01",
+            startTime = (string?)null,
+            endTime = (string?)null,
+            isRecurring = false,
+            recurrenceRule = (string?)null,
+            reminders = Array.Empty<int>(),
+            startUtc = (DateTime?)null,
+            calendarId = "",
+            calendarName = "",
+            endUtc = (DateTime?)null,
             recurrenceTimeZone = (string?)null
         }, ResponseOptions);
 

@@ -401,7 +401,7 @@ public class GetDailySummaryQueryHandlerTests
     [Fact]
     public async Task Handle_FallsBackToRequestLanguage_WhenUserLanguageEmpty()
     {
-        var user = CreateTestUser();        _payGate.CanUseDailySummary(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        var user = CreateTestUser(); _payGate.CanUseDailySummary(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
         _habitRepo.FindAsync(

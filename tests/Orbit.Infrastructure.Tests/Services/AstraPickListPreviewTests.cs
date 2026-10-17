@@ -93,7 +93,7 @@ public class AstraPickListPreviewTests
         ownership.GetDenialReasonAsync(Arg.Any<string>(), user.Id, Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
         var executor = new AgentOperationExecutor(catalog, policy, Substitute.For<IAgentAuditService>(),
-            ownership, bridge, tools, previewer, work, NullLogger<AgentOperationExecutor>.Instance);
+            ownership, bridge, tools, previewer, pending, work, NullLogger<AgentOperationExecutor>.Instance);
         AgentExecuteOperationResponse? executionResponse = null;
         var recordingExecutor = Substitute.For<IAgentOperationExecutor>();
         recordingExecutor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())

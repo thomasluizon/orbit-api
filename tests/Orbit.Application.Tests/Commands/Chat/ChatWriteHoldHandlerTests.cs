@@ -96,6 +96,7 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
             stepUpBridge,
             _toolRegistry,
             _previewer,
+            _pendingOperationStore,
             _unitOfWork,
             NullLogger<AgentOperationExecutor>.Instance);
 
