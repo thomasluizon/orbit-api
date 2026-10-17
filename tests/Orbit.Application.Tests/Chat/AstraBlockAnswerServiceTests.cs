@@ -19,6 +19,7 @@ public class AstraBlockAnswerServiceTests
     private readonly IAgentOperationExecutor _executor = Substitute.For<IAgentOperationExecutor>();
     private readonly IGenericRepository<User> _users = Substitute.For<IGenericRepository<User>>();
     private readonly IProductAnalytics _analytics = Substitute.For<IProductAnalytics>();
+    private readonly IFeatureFlagService _featureFlags = Substitute.For<IFeatureFlagService>();
     private static readonly Guid UserId = Guid.NewGuid();
 
     public AstraBlockAnswerServiceTests()
@@ -30,7 +31,7 @@ public class AstraBlockAnswerServiceTests
         _store.MarkAnsweredAsync(Arg.Any<Guid>(), UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
     }
 
-    private AstraBlockAnswerService Service => new(_store, _work, _quota, _executor, _users, _analytics);
+    private AstraBlockAnswerService Service => new(_store, _work, _quota, _executor, _users, _analytics, _featureFlags);
     private IssuedAstraBlock Choice(bool multi = false, bool free = false)
     {
         var block = IssuedAstraBlock.Create(UserId, new("choice", "Which time?", [new("a", "Morning"), new("b", "Evening")], [], multi, free));
@@ -140,5 +141,38 @@ public class AstraBlockAnswerServiceTests
         results.Should().ContainSingle(result => result.IsSuccess);
         results.Should().ContainSingle(result => result.ErrorCode == ErrorCodes.AstraBlockAnswered);
         await _quota.Received(1).TryConsumeAiMessage(UserId, _work, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ConcurrentCrisisAnswers_ExactlyOneSucceedsWithoutQuota()
+    {
+        var block = Choice(free: true);
+        _quota.CanSendAiMessage(UserId, Arg.Any<CancellationToken>()).Returns(Result.PayGateFailure("Daily limit"));
+        var claims = 0;
+        _store.MarkAnsweredAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Interlocked.Increment(ref claims) == 1);
+
+        var results = await Task.WhenAll(Enumerable.Range(0, 2).Select(_ => Task.Run(() =>
+            Service.PrepareAsync(Request(block.Id, [], "I want to hurt myself"), default))));
+
+        results.Should().ContainSingle(result => result.IsSuccess).Which.Value.Crisis.Should().Be(CrisisLocales.English);
+        results.Should().ContainSingle(result => result.ErrorCode == ErrorCodes.AstraBlockAnswered);
+        await _quota.DidNotReceiveWithAnyArgs().CanSendAiMessage(default, default);
+        await _quota.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
+    }
+
+    [Theory]
+    [InlineData(false, "a", ErrorCodes.AstraBlockFreeTextDisabled)]
+    [InlineData(true, "unknown", ErrorCodes.AstraBlockUnknownSelection)]
+    public async Task InvalidCrisisAnswer_IsRejectedBeforeClaimOrQuota(bool allowFreeText, string selectedId, string code)
+    {
+        var block = Choice(free: allowFreeText);
+
+        var result = await Service.PrepareAsync(Request(block.Id, [selectedId], "I want to hurt myself"), default);
+
+        result.ErrorCode.Should().Be(code);
+        await _store.DidNotReceiveWithAnyArgs().MarkAnsweredAsync(default, default, default, default);
+        await _quota.DidNotReceiveWithAnyArgs().CanSendAiMessage(default, default);
+        await _quota.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
     }
 }
