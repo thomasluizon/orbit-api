@@ -47,6 +47,8 @@ public interface IPayGateService
     /// </summary>
     Task<Result> CanAccessCalendar(Guid userId, CancellationToken ct = default);
 
+    Task<Result> CanAccessNotion(Guid userId, CancellationToken ct = default);
+
     /// <summary>
     /// Checks if the user can manage calendar integration state (Pro-only feature).
     /// </summary>

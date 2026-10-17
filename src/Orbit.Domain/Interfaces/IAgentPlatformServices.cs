@@ -178,5 +178,6 @@ public interface IFeatureFlagService
 {
     Task<IReadOnlyList<string>> GetEnabledKeysForUserAsync(
         Guid userId,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        bool forceRefresh = false);
 }

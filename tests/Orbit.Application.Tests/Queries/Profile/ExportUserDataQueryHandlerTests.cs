@@ -35,6 +35,8 @@ public class ExportUserDataQueryHandlerTests
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IGoalProgressReadSyncer _goalProgressReadSyncer = Substitute.For<IGoalProgressReadSyncer>();
     private readonly IGenericRepository<ProactiveItem> _proactiveRepo = Substitute.For<IGenericRepository<ProactiveItem>>();
+    private readonly IGenericRepository<NotionConnection> _notionConnections = Substitute.For<IGenericRepository<NotionConnection>>();
+    private readonly IGenericRepository<NotionTask> _notionTasks = Substitute.For<IGenericRepository<NotionTask>>();
     private readonly ExportUserDataQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -46,7 +48,7 @@ public class ExportUserDataQueryHandlerTests
             new ExportUserDataRepositories(
                 _userRepo, _habitRepo, _habitLogRepo, _goalRepo, _goalProgressLogRepo, _tagRepo, _userFactRepo,
                 _notificationRepo, _checklistTemplateRepo, _userAchievementRepo, _streakFreezeRepo, _referralRepo, _apiKeyRepo,
-                _friendshipRepo, _cheerRepo, _blockedUserRepo, _reportRepo, _friendFeedEventRepo, _proactiveRepo),
+                _friendshipRepo, _cheerRepo, _blockedUserRepo, _reportRepo, _friendFeedEventRepo, _proactiveRepo, _notionConnections, _notionTasks),
             _userDateService, _goalProgressReadSyncer);
 
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
@@ -54,6 +56,8 @@ public class ExportUserDataQueryHandlerTests
             .Returns(new Dictionary<Guid, int>());
 
         ReturnsEmpty(_proactiveRepo);
+        ReturnsEmpty(_notionConnections);
+        ReturnsEmpty(_notionTasks);
         ReturnsEmpty(_habitRepo);
         ReturnsEmpty(_habitLogRepo);
         ReturnsEmpty(_goalRepo);
@@ -71,6 +75,23 @@ public class ExportUserDataQueryHandlerTests
         ReturnsEmpty(_blockedUserRepo);
         ReturnsEmpty(_reportRepo);
         ReturnsEmpty(_friendFeedEventRepo);
+    }
+
+    [Fact]
+    public async Task ExportIncludesNotionWorkspaceAndTasksButNeverTokens()
+    {
+        var user = User.Create("Person", "person@example.com").Value;
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _notionConnections.FindAsync(Arg.Any<Expression<Func<NotionConnection, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { NotionConnection.Create(UserId, "secret-access", "secret-refresh", Guid.NewGuid(), "Workspace", Guid.NewGuid()) });
+        _notionTasks.FindAsync(Arg.Any<Expression<Func<NotionTask, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { NotionTask.Create(UserId, Guid.NewGuid(), Guid.NewGuid(), "Notion task", Today, "Open", "https://notion.so/page", DateTime.UtcNow, DateTime.UtcNow) });
+        var result = await _handler.Handle(new ExportUserDataQuery(UserId), CancellationToken.None);
+        result.Value.NotionConnection!.WorkspaceName.Should().Be("Workspace");
+        result.Value.NotionConnection.Status.Should().Be("Idle");
+        result.Value.NotionTasks!.Single().Title.Should().Be("Notion task");
+        var json = System.Text.Json.JsonSerializer.Serialize(result.Value);
+        json.Should().NotContain("secret-access").And.NotContain("secret-refresh").And.NotContain("AccessToken").And.NotContain("RefreshToken");
     }
 
     private static void ReturnsEmpty<T>(IGenericRepository<T> repository) where T : Orbit.Domain.Common.Entity

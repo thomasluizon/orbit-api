@@ -330,6 +330,8 @@ public static class AgentCapabilityIds
     public const string NotificationsWrite = "notifications.write";
     public const string NotificationsDelete = "notifications.delete";
     public const string CalendarRead = "calendar.read";
+    public const string NotionRead = "notion.read";
+    public const string NotionManage = "notion.manage";
     public const string CalendarSyncManage = "calendar.sync.manage";
     public const string GamificationRead = "gamification.read";
     public const string GamificationRepair = "gamification.repair";
@@ -376,6 +378,8 @@ public static class AgentScopes
     public const string WriteNotifications = "write_notifications";
     public const string DeleteNotifications = "delete_notifications";
     public const string ReadCalendar = "read_calendar";
+    public const string ReadNotion = "read_notion";
+    public const string ManageNotion = "manage_notion";
     public const string ManageCalendarSync = "manage_calendar_sync";
     public const string ReadGamification = "read_gamification";
     public const string WriteGamification = "write_gamification";
@@ -421,6 +425,8 @@ public static class AgentScopes
         DeleteNotifications,
         ReadCalendar,
         ManageCalendarSync,
+        ReadNotion,
+        ManageNotion,
         ReadGamification,
         WriteGamification,
         ReadChecklistTemplates,

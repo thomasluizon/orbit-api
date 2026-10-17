@@ -292,6 +292,7 @@ public static partial class ServiceCollectionExtensions
             .WithTools<SubscriptionTools>()
             .WithTools<UserFactTools>()
             .WithTools<CalendarTools>()
+            .WithTools<NotionTools>()
             .WithTools<AccountTools>()
             .WithTools<ApiKeyTools>()
             .WithTools<SupportTools>()

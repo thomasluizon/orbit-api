@@ -14,6 +14,7 @@ public static class ChatToolGroups
     [
         new("calendar", ["get_calendar_overview", "manage_calendar_sync"],
             ["calendar", "agenda", "google cal", "calendario", "event", "evento"]),
+        new("notion", ["get_notion_tasks"], ["notion"]),
         new("api_keys", ["get_api_keys", "manage_api_keys"],
             ["api key", "apikey", "api-key", "developer key", "mcp", "personal token"]),
         new("referrals", ["get_referral_overview", "get_referral_code"],

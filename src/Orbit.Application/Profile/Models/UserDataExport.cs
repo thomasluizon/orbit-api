@@ -27,7 +27,11 @@ public sealed record UserDataExport(
     IReadOnlyList<ExportedBlockedUser> BlockedUsers,
     IReadOnlyList<ExportedReport> Reports,
     IReadOnlyList<ExportedFriendFeedEvent> FriendFeedEvents,
-    IReadOnlyList<ExportedProactiveItem>? ProactiveItems = null);
+    IReadOnlyList<ExportedProactiveItem>? ProactiveItems = null,
+    ExportedNotionConnection? NotionConnection = null,
+    IReadOnlyList<Orbit.Application.Connections.NotionTaskResponse>? NotionTasks = null);
+
+public sealed record ExportedNotionConnection(string? WorkspaceName, string Status, DateTime CreatedAtUtc, DateTime? LastPollAtUtc);
 
 public sealed record ExportedAccount(
     string Name,

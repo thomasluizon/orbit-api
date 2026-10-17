@@ -59,6 +59,9 @@ public class OrbitDbContext : DbContext
     public DbSet<AppFeatureFlag> AppFeatureFlags => Set<AppFeatureFlag>();
     public DbSet<ContentBlock> ContentBlocks => Set<ContentBlock>();
     public DbSet<GoogleCalendarSyncSuggestion> GoogleCalendarSyncSuggestions => Set<GoogleCalendarSyncSuggestion>();
+    public DbSet<NotionConnection> NotionConnections => Set<NotionConnection>();
+    public DbSet<NotionTask> NotionTasks => Set<NotionTask>();
+    public DbSet<NotionOAuthState> NotionOAuthStates => Set<NotionOAuthState>();
     public DbSet<ProcessedPlayNotification> ProcessedPlayNotifications => Set<ProcessedPlayNotification>();
     public DbSet<ProcessedStripeEvent> ProcessedStripeEvents => Set<ProcessedStripeEvent>();
     public DbSet<ProcessedRequest> ProcessedRequests => Set<ProcessedRequest>();
@@ -106,6 +109,7 @@ public class OrbitDbContext : DbContext
         });
         ConfigureUserFactEntity(modelBuilder, encConverter);
         ConfigureGoogleCalendarSyncSuggestionEntity(modelBuilder, encConverter, nullableEncConverter);
+        ConfigureNotionEntities(modelBuilder, encConverter, nullableEncConverter);
         ConfigureTagEntity(modelBuilder);
         ConfigurePushSubscriptionEntity(modelBuilder);
         ConfigureSentReminderEntity(modelBuilder);
@@ -537,6 +541,33 @@ public class OrbitDbContext : DbContext
         });
     }
 
+    private static void ConfigureNotionEntities(ModelBuilder modelBuilder,
+        EncryptionValueConverter? encConverter, NullableEncryptionValueConverter? nullableEncConverter)
+    {
+        modelBuilder.Entity<NotionConnection>(entity =>
+        {
+            entity.HasIndex(c => c.UserId).IsUnique();
+            entity.HasOne<User>().WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(c => c.Status).HasConversion<string>().HasMaxLength(32);
+            if (encConverter is not null) entity.Property(c => c.AccessToken).HasConversion(encConverter);
+            if (nullableEncConverter is not null) entity.Property(c => c.RefreshToken).HasConversion(nullableEncConverter);
+        });
+        modelBuilder.Entity<NotionTask>(entity =>
+        {
+            entity.HasIndex(t => new { t.UserId, t.PageId }).IsUnique();
+            entity.HasOne<User>().WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(t => t.Title).HasMaxLength(NotionTask.MaxTitleLength);
+        });
+        modelBuilder.Entity<NotionOAuthState>(entity =>
+        {
+            entity.HasIndex(s => s.StateHash).IsUnique();
+            entity.HasIndex(s => s.ExpiresAtUtc);
+            entity.Property(s => s.StateHash).HasMaxLength(64);
+            entity.Property(s => s.RedirectUri).HasMaxLength(2048);
+            entity.HasOne<User>().WithMany().HasForeignKey(s => s.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+    }
+
     private static void ConfigureChecklistTemplateEntity(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<ChecklistTemplate>(entity =>
@@ -584,6 +615,7 @@ public class OrbitDbContext : DbContext
                 new { Key = "habit_duplication", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Duplicate habits", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "bulk_operations", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Bulk create/delete/log habits", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "calendar_integration", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"Google Calendar integration", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { Key = "notion_integration", Enabled = false, PlanRequirement = (string?)"Pro", Description = (string?)"Notion task integration", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "api_keys", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"Personal API keys", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) });
         });
     }

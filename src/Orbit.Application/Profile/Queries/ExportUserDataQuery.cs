@@ -1,5 +1,6 @@
 using MediatR;
 using Orbit.Application.Common;
+using Orbit.Application.Connections;
 using Orbit.Application.Goals.Services;
 using Orbit.Application.Profile.Models;
 using Orbit.Domain.Common;
@@ -30,7 +31,9 @@ public record ExportUserDataRepositories(
     IGenericRepository<BlockedUser> BlockedUsers,
     IGenericRepository<Report> Reports,
     IGenericRepository<FriendFeedEvent> FriendFeedEvents,
-    IGenericRepository<ProactiveItem> ProactiveItems);
+    IGenericRepository<ProactiveItem> ProactiveItems,
+    IGenericRepository<NotionConnection> NotionConnections,
+    IGenericRepository<NotionTask> NotionTasks);
 
 public class ExportUserDataQueryHandler(
     ExportUserDataRepositories repos,
@@ -82,6 +85,9 @@ public class ExportUserDataQueryHandler(
             e => e.ActorUserId == request.UserId, cancellationToken);
 
         var proactiveItems = await repos.ProactiveItems.FindAsync(i => i.UserId == request.UserId, cancellationToken);
+        var notionConnections = await repos.NotionConnections.FindAsync(c => c.UserId == request.UserId, cancellationToken);
+        var notionTasks = await repos.NotionTasks.FindAsync(t => t.UserId == request.UserId, cancellationToken);
+        var notion = notionConnections.SingleOrDefault();
 
         var exportedAtUtc = DateTime.UtcNow;
         var export = new UserDataExport(
@@ -156,7 +162,9 @@ public class ExportUserDataQueryHandler(
             proactiveItems.OrderBy(i => i.CreatedAtUtc).Select(i => new ExportedProactiveItem(
                 i.Id, i.Trigger.ToString(), i.LocalDate, i.Text, i.ActionLabel, i.ActionPrompt,
                 i.CreatedAtUtc, i.ShownAtUtc, i.PushedAtUtc, i.OpenedAtUtc, i.ActedAtUtc,
-                i.EndedAtUtc, i.EndReason?.ToString())).ToList());
+                i.EndedAtUtc, i.EndReason?.ToString())).ToList(),
+            notion is null ? null : new ExportedNotionConnection(notion.WorkspaceName, notion.Status.ToString(), notion.CreatedAtUtc, notion.LastPollAtUtc),
+            notionTasks.Select(NotionTaskResponse.FromEntity).ToArray());
 
         return Result.Success(export);
     }
