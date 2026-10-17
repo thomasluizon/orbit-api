@@ -176,9 +176,9 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         }
         catch (JsonException)
         {
-            return (null, BadRequest(new { error = "Invalid block answer JSON.", errorCode = "ASTRA_BLOCK_INVALID_JSON" }));
+            return (null, BadRequest(new AppError(ErrorCodes.AstraBlockInvalidJson, ErrorCopy.English(ErrorCodes.AstraBlockInvalidJson)).ToErrorBody()));
         }
-        return (null, BadRequest(new { error = "Invalid block answer JSON.", errorCode = "ASTRA_BLOCK_INVALID_JSON" }));
+        return (null, BadRequest(new AppError(ErrorCodes.AstraBlockInvalidJson, ErrorCopy.English(ErrorCodes.AstraBlockInvalidJson)).ToErrorBody()));
     }
 
     private async Task StartEventStreamAsync(CancellationToken cancellationToken)

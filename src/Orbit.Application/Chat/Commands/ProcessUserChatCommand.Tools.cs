@@ -126,7 +126,7 @@ public partial class ProcessUserChatCommandHandler
         }
 
         if (executionResults.AskBlock is not null)
-            return new ToolRoundResult(aiResponse with { ToolCalls = null });
+            return new ToolRoundResult(aiResponse with { ToolCalls = null, ReportedTokenCount = 0 });
 
         if (hadToolFailure)
             return new ToolRoundResult(MessageResponse(language), HadToolFailure: true);

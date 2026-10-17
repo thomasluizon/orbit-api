@@ -2,6 +2,7 @@ using FluentValidation;
 using Orbit.Application.Chat.Models;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Models;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Chat.Validators;
 
@@ -9,17 +10,20 @@ public sealed class AskToolArgumentsValidator : AbstractValidator<AskToolArgumen
 {
     public AskToolArgumentsValidator()
     {
-        RuleFor(value => value).Custom((value, context) =>
+        RuleFor(value => value).Must(HasValidDefinition).WithCopy(ErrorCodes.AstraBlockInvalidDefinition);
+    }
+
+    private static bool HasValidDefinition(AskToolArguments value)
+    {
+        try
         {
-            try
-            {
-                IssuedAstraBlock.Create(Guid.NewGuid(), ToDefinition(value));
-            }
-            catch (ArgumentException)
-            {
-                context.AddFailure("Invalid ask form, question, options, items, or action.");
-            }
-        });
+            IssuedAstraBlock.Create(Guid.NewGuid(), ToDefinition(value));
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
     }
 
     internal static AstraBlockDefinition ToDefinition(AskToolArguments value) => new(

@@ -1,5 +1,6 @@
 using FluentValidation;
 using Orbit.Domain.Models;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Chat.Validators;
 
@@ -7,12 +8,12 @@ public sealed class AstraBlockAnswerValidator : AbstractValidator<AstraBlockAnsw
 {
     public AstraBlockAnswerValidator()
     {
-        RuleFor(answer => answer.BlockId).NotEmpty().WithErrorCode("ASTRA_BLOCK_ID_REQUIRED");
-        RuleFor(answer => answer.SelectedIds).NotNull().WithErrorCode("ASTRA_BLOCK_SELECTION_REQUIRED");
+        RuleFor(answer => answer.BlockId).NotEmpty().WithCopy(ErrorCodes.AstraBlockIdRequired);
+        RuleFor(answer => answer.SelectedIds).NotNull().WithCopy(ErrorCodes.AstraBlockSelectionRequired);
         RuleFor(answer => answer.SelectedIds)
             .Must(ids => ids is null || ids.All(id => !string.IsNullOrWhiteSpace(id))
                 && ids.Distinct(StringComparer.Ordinal).Count() == ids.Count)
-            .WithErrorCode("ASTRA_BLOCK_INVALID_SELECTION");
-        RuleFor(answer => answer.FreeText).MaximumLength(500).WithErrorCode("ASTRA_BLOCK_FREE_TEXT_TOO_LONG");
+            .WithCopy(ErrorCodes.AstraBlockInvalidSelection);
+        RuleFor(answer => answer.FreeText).MaximumLength(500).WithCopy(ErrorCodes.AstraBlockFreeTextTooLong);
     }
 }

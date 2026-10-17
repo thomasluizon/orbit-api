@@ -29,7 +29,7 @@ public sealed class AstraBlockAnswerService(
         if (!validation.IsValid)
             return Result.Failure<PreparedAstraBlockAnswer>(validation.Errors[0].ErrorMessage, validation.Errors[0].ErrorCode);
         if (request.AuthMethod != AgentAuthMethod.Jwt)
-            return Failure(ErrorCodes.AstraBlockNotFound, "Block not found.");
+            return Failure(ErrorCodes.AstraBlockNotFound);
         try
         {
             return await unitOfWork.ExecuteInTransactionAsync(async token =>
@@ -52,7 +52,7 @@ public sealed class AstraBlockAnswerService(
                 var answeredAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
                 if (!await store.MarkAnsweredAsync(block.Id, request.UserId, answeredAtUtc, token))
                     return CheckState(await store.GetAsync(block.Id, request.UserId, token))
-                        ?? Failure(ErrorCodes.AstraBlockAnswered, "Block already answered.");
+                        ?? Failure(ErrorCodes.AstraBlockAnswered);
 
                 var user = await users.GetByIdAsync(request.UserId, token);
                 var labels = definition.Form == AstraBlockKinds.Choice
@@ -70,8 +70,7 @@ public sealed class AstraBlockAnswerService(
                         CorrelationId: request.CorrelationId, IncludeChangePreview: true, PreviewOnly: true), token);
                     if (preview.Operation.Status != AgentOperationStatus.PendingConfirmation
                         || preview.PendingOperation?.Items?.Count != chosen.Length)
-                        throw new AnswerRejectedException(Result.Failure<PreparedAstraBlockAnswer>(
-                            "The selected items could not be previewed.", "ASTRA_BLOCK_PREVIEW_UNAVAILABLE"));
+                        throw new AnswerRejectedException(Failure(ErrorCodes.AstraBlockPreviewUnavailable));
                     var line = LocaleHelper.IsPortuguese(user?.Language) ? "Nada foi salvo." : "Nothing has been saved.";
                     response = new ChatResponse(line, [], PendingOperations: [preview.PendingOperation],
                         CorrelationId: request.CorrelationId,
@@ -114,13 +113,13 @@ public sealed class AstraBlockAnswerService(
     private static Result<PreparedAstraBlockAnswer>? CheckState(IssuedAstraBlock? block)
     {
         if (block is null)
-            return Failure(ErrorCodes.AstraBlockNotFound, "Block not found.");
+            return Failure(ErrorCodes.AstraBlockNotFound);
         if (block.AnsweredAtUtc.HasValue)
-            return Failure(ErrorCodes.AstraBlockAnswered, "Block already answered.");
+            return Failure(ErrorCodes.AstraBlockAnswered);
         if (block.InvalidatedAtUtc.HasValue)
-            return Failure(ErrorCodes.AstraBlockInvalidated, "Block was invalidated by a later message.");
+            return Failure(ErrorCodes.AstraBlockInvalidated);
         if (block.ExpiresAtUtc <= TimeProvider.System.GetUtcNow().UtcDateTime)
-            return Failure(ErrorCodes.AstraBlockExpired, "Block expired.");
+            return Failure(ErrorCodes.AstraBlockExpired);
         return null;
     }
 
@@ -128,20 +127,20 @@ public sealed class AstraBlockAnswerService(
     {
         var ids = block.Form == AstraBlockKinds.Choice ? block.Options.Select(option => option.Id) : block.Items.Select(item => item.Id);
         if (answer.SelectedIds.Except(ids, StringComparer.Ordinal).Any())
-            return Failure("ASTRA_BLOCK_UNKNOWN_SELECTION", "Selection is not in this block.");
+            return Failure(ErrorCodes.AstraBlockUnknownSelection);
         if (!block.MultiSelect && answer.SelectedIds.Count > 1)
-            return Failure("ASTRA_BLOCK_SINGLE_SELECTION", "Choose one option.");
+            return Failure(ErrorCodes.AstraBlockSingleSelection);
         if (block.MultiSelect && answer.SelectedIds.Count == 0)
-            return Failure("ASTRA_BLOCK_EMPTY_SELECTION", "Choose at least one item.");
+            return Failure(ErrorCodes.AstraBlockEmptySelection);
         if (answer.FreeText is not null && !block.AllowFreeText)
-            return Failure("ASTRA_BLOCK_FREE_TEXT_DISABLED", "Free text is not allowed for this block.");
+            return Failure(ErrorCodes.AstraBlockFreeTextDisabled);
         if (answer.SelectedIds.Count == 0 && string.IsNullOrWhiteSpace(answer.FreeText))
-            return Failure("ASTRA_BLOCK_EMPTY_ANSWER", "An answer is required.");
+            return Failure(ErrorCodes.AstraBlockEmptyAnswer);
         return null;
     }
 
-    private static Result<PreparedAstraBlockAnswer> Failure(string code, string message) =>
-        Result.Failure<PreparedAstraBlockAnswer>(message, code);
+    private static Result<PreparedAstraBlockAnswer> Failure(string code) =>
+        Result.Failure<PreparedAstraBlockAnswer>(ErrorCopy.English(code), code);
 
     private sealed class AnswerRejectedException(Result<PreparedAstraBlockAnswer> result) : Exception
     {

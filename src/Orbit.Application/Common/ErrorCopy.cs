@@ -401,6 +401,29 @@ public static partial class ErrorCopy
                 catalog[code] = (en, ptBr);
         }
 
+        foreach (var (code, sourceCode) in new[]
+        {
+            (ErrorCodes.AstraBlockNotFound, ErrorCodes.ClarificationNotFound),
+            (ErrorCodes.AstraBlockInvalidated, ErrorCodes.ClarificationNotFound),
+            (ErrorCodes.AstraBlockExpired, ErrorCodes.ClarificationNotFound),
+            (ErrorCodes.AstraBlockAnswered, ErrorCodes.ClarificationAlreadyResolved),
+            (ErrorCodes.AstraBlockIdRequired, ErrorCodes.ClarificationValueNotJsonObject),
+            (ErrorCodes.AstraBlockSelectionRequired, ErrorCodes.ClarificationValueEmpty),
+            (ErrorCodes.AstraBlockInvalidSelection, ErrorCodes.ClarificationValueNotOffered),
+            (ErrorCodes.AstraBlockUnknownSelection, ErrorCodes.ClarificationValueNotOffered),
+            (ErrorCodes.AstraBlockSingleSelection, ErrorCodes.ClarificationValueNotOffered),
+            (ErrorCodes.AstraBlockEmptySelection, ErrorCodes.ClarificationValueNotOffered),
+            (ErrorCodes.AstraBlockFreeTextDisabled, ErrorCodes.ClarificationValueNotOffered),
+            (ErrorCodes.AstraBlockEmptyAnswer, ErrorCodes.ClarificationValueEmpty),
+            (ErrorCodes.AstraBlockPreviewUnavailable, ErrorCodes.InternalServerError),
+            (ErrorCodes.AstraBlockInvalidJson, ErrorCodes.ClarificationValueNotJsonObject),
+            (ErrorCodes.AstraBlockInvalidDefinition, ErrorCodes.ValidationError),
+        })
+            catalog[code] = catalog[sourceCode];
+        var answerLengthCopy = catalog[ErrorCodes.ClarificationValueTooLong];
+        catalog[ErrorCodes.AstraBlockFreeTextTooLong] = (
+            string.Format(System.Globalization.CultureInfo.InvariantCulture, answerLengthCopy.En, 500),
+            string.Format(System.Globalization.CultureInfo.InvariantCulture, answerLengthCopy.PtBr, 500));
         return catalog;
     }
 }

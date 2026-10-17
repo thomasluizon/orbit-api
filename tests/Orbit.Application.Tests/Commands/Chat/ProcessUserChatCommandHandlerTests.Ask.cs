@@ -23,14 +23,17 @@ public partial class ProcessUserChatCommandHandlerTests
             new BulkSkipHabitsTool(_mediator, _habitRepo, _userDateService, planner), _userDateService);
     }
 
-    [Fact]
-    public async Task Ask_EmitsNegotiatedPartAndStopsBeforeLaterTools()
+    [Theory]
+    [InlineData(0, "Choose a time.")]
+    [InlineData(AppConstants.MaxAiRequestTotalTokens / 2 + 1, null)]
+    public async Task Ask_EmitsNegotiatedPartAndStopsBeforeLaterTools(int tokenCount, string? text)
     {
         SetupUserAndPayGate();
         var laterTool = ReadTool("query_habits", new ToolResult(true));
         SetupAiResponse(new AiResponse
         {
-            TextMessage = "Choose a time.",
+            TextMessage = text,
+            ReportedTokenCount = tokenCount,
             ConversationContext = TestConversationContext,
             ToolCalls = [new("ask", "ask1", ParseArguments(ChoiceArguments)), new("query_habits", "later", ParseArguments("{}")),
                 new("ask", "ask2", ParseArguments(ChoiceArguments))]

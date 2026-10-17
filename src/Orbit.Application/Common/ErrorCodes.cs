@@ -4,6 +4,19 @@ namespace Orbit.Application.Common;
 
 public static class ErrorCodes
 {
+    public const string AstraBlockIdRequired = "ASTRA_BLOCK_ID_REQUIRED";
+    public const string AstraBlockSelectionRequired = "ASTRA_BLOCK_SELECTION_REQUIRED";
+    public const string AstraBlockInvalidSelection = "ASTRA_BLOCK_INVALID_SELECTION";
+    public const string AstraBlockFreeTextTooLong = "ASTRA_BLOCK_FREE_TEXT_TOO_LONG";
+    public const string AstraBlockUnknownSelection = "ASTRA_BLOCK_UNKNOWN_SELECTION";
+    public const string AstraBlockSingleSelection = "ASTRA_BLOCK_SINGLE_SELECTION";
+    public const string AstraBlockEmptySelection = "ASTRA_BLOCK_EMPTY_SELECTION";
+    public const string AstraBlockFreeTextDisabled = "ASTRA_BLOCK_FREE_TEXT_DISABLED";
+    public const string AstraBlockEmptyAnswer = "ASTRA_BLOCK_EMPTY_ANSWER";
+    public const string AstraBlockPreviewUnavailable = "ASTRA_BLOCK_PREVIEW_UNAVAILABLE";
+    public const string AstraBlockInvalidJson = "ASTRA_BLOCK_INVALID_JSON";
+    public const string AstraBlockInvalidDefinition = "ASTRA_BLOCK_INVALID_DEFINITION";
+
     public const string AstraBlockNotFound = "ASTRA_BLOCK_NOT_FOUND";
     public const string AstraBlockInvalidated = "ASTRA_BLOCK_INVALIDATED";
     public const string AstraBlockExpired = "ASTRA_BLOCK_EXPIRED";
