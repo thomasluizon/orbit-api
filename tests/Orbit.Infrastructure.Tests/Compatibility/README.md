@@ -2,7 +2,8 @@
 
 The baseline is `main` at `8356d4debec5b48105734eb7d5dfd28559332da8`.
 The promoted tree is `redesign/main` at `0a32fab3e366d0029c8ea3d478841215ee1d8b88`.
-The delivery branch adds the calendar error compatibility fix and these proofs.
+The delivery branch adds the calendar error compatibility fix, a production health
+commit check and these proofs. The commit hook also formats imported C# files.
 
 ## OpenAPI comparison
 
@@ -109,9 +110,11 @@ dotnet test tests/Orbit.Infrastructure.Tests --filter FullyQualifiedName~Redesig
 
 Production release remains a manual dispatch of `.github/workflows/release.yml`
 from `main`, with `environment=production` and `branch=main`, after squash merge.
-The workflow must verify `/health` against the merged commit before reporting success.
+The workflow now verifies `/health` against the merged commit before reporting success,
+as the staging release already does.
 This pull request does not deploy or raise the supported client floor.
 
 After merge, record in `thomasluizon/orbit-tickets#746` that the redesign payload
 already exists on `redesign/main`, so the sync must not replay it. Only the delivery
-branch's calendar compatibility fix and proof artifacts are new to that branch.
+branch's calendar compatibility fix, production release check, proof artifacts and
+hook formatting are new to that branch.
