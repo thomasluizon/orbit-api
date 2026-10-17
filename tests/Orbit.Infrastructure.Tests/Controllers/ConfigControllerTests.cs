@@ -4,6 +4,10 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Caching.Memory;
+using Orbit.Domain.Entities;
+using Orbit.Infrastructure.Services;
+using System.Text.Json;
 using NSubstitute;
 using Orbit.Api.Controllers;
 using Orbit.Application.Common;
@@ -28,7 +32,7 @@ public class ConfigControllerTests : IDisposable
         _dbContext = new OrbitDbContext(options);
         _dbContext.Database.EnsureCreated();
 
-        _controller = new ConfigController(_configService, _dbContext, _logger);
+        _controller = new ConfigController(_configService, new FeatureFlagService(_dbContext, new MemoryCache(new MemoryCacheOptions())), _logger);
         var claims = new[] { new Claim(ClaimTypes.NameIdentifier, UserId.ToString()) };
         var identity = new ClaimsIdentity(claims, "Test");
         var principal = new ClaimsPrincipal(identity);
@@ -42,6 +46,37 @@ public class ConfigControllerTests : IDisposable
     {
         _dbContext.Dispose();
         GC.SuppressFinalize(this);
+    }
+
+    [Fact]
+    public async Task GetConfig_ResolvesForCallerAndPreservesFeatureContract()
+    {
+        var accountA = User.Create("Account A", "a@example.com").Value;
+        var accountB = User.Create("Account B", "b@example.com").Value;
+        _dbContext.Users.AddRange(accountA, accountB);
+        _dbContext.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create("redesign", accountA.Id));
+        await _dbContext.SaveChangesAsync();
+
+        foreach (var account in new[] { accountA, accountB })
+        {
+            _controller.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity(
+                [new Claim(ClaimTypes.NameIdentifier, account.Id.ToString())], "Test"));
+            var result = (OkObjectResult)await _controller.GetConfig(CancellationToken.None);
+            var json = JsonSerializer.SerializeToElement(result.Value, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            var flag = json.GetProperty("features").GetProperty("redesign");
+            flag.EnumerateObject().Select(property => property.Name).Should().BeEquivalentTo("enabled", "planRequirement");
+            flag.GetProperty("enabled").GetBoolean().Should().Be(account.Id == accountA.Id);
+            flag.GetProperty("planRequirement").ValueKind.Should().Be(JsonValueKind.Null);
+        }
+    }
+
+    [Fact]
+    public void GetConfig_DisablesResponseCaching()
+    {
+        var cache = typeof(ConfigController).GetMethod(nameof(ConfigController.GetConfig))!
+            .GetCustomAttributes(typeof(ResponseCacheAttribute), false).Cast<ResponseCacheAttribute>().Single();
+        cache.NoStore.Should().BeTrue();
+        cache.Location.Should().Be(ResponseCacheLocation.None);
     }
 
     [Fact]

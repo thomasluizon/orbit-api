@@ -1,4 +1,5 @@
-﻿using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
+using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -44,13 +45,31 @@ public class AgentPolicyEvaluatorTests : IDisposable
             _catalogService,
             _pendingOperationStore,
             _stepUpAuthorizationBridge,
-            _settings);
+            _settings,
+            new FeatureFlagService(_dbContext, new MemoryCache(new MemoryCacheOptions())));
     }
 
     public void Dispose()
     {
         _dbContext.Dispose();
         GC.SuppressFinalize(this);
+    }
+
+    [Fact]
+    public void Evaluate_TargetedFlag_AllowsOnlyTargetedAccount()
+    {
+        var other = User.Create("Other", "other@example.com").Value;
+        _dbContext.Users.Add(other);
+        _dbContext.AppFeatureFlags.Add(AppFeatureFlag.Create("ai_retrospective", false));
+        _dbContext.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create("ai_retrospective", _userId));
+        _dbContext.SaveChanges();
+
+        AgentPolicyDecision EvaluateFor(Guid userId) => _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+            AgentCapabilityIds.RetrospectiveRead, userId, AgentExecutionSurface.Mcp, AgentAuthMethod.Jwt, [],
+            "get_retrospective", "Get retrospective"));
+
+        EvaluateFor(_userId).Status.Should().Be(AgentPolicyDecisionStatus.Allowed);
+        EvaluateFor(other.Id).Reason.Should().Be("feature_disabled:ai_retrospective");
     }
 
     [Fact]
@@ -345,7 +364,8 @@ public class AgentPolicyEvaluatorTests : IDisposable
             _catalogService,
             _pendingOperationStore,
             _stepUpAuthorizationBridge,
-            Options.Create(new AgentPlatformSettings { ShadowModeEnabled = true }));
+            Options.Create(new AgentPlatformSettings { ShadowModeEnabled = true }),
+            new FeatureFlagService(_dbContext, new MemoryCache(new MemoryCacheOptions())));
 
         var decision = shadowEvaluator.Evaluate(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.ApiKeysManage,

@@ -99,7 +99,7 @@ public class McpConfirmationGateTests : IDisposable
         var manageApiKeysTool = new ManageApiKeysTool(mediator);
         _catalogService = new AgentCatalogService([getApiKeysTool, manageApiKeysTool]);
         _pendingOperationStore = new PendingAgentOperationStore(_dbContext, settings);
-        _policyEvaluator = new AgentPolicyEvaluator(_dbContext, _catalogService, _pendingOperationStore, _authorization, settings);
+        _policyEvaluator = new AgentPolicyEvaluator(_dbContext, _catalogService, _pendingOperationStore, _authorization, settings, new FeatureFlagService(_dbContext, new MemoryCache(new MemoryCacheOptions())));
 
         var emailService = Substitute.For<IEmailService>();
         emailService.SendVerificationCodeAsync(

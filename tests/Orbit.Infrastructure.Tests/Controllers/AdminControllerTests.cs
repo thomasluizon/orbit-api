@@ -7,6 +7,11 @@ using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Api.Controllers;
 using Orbit.Application.Marketing.Commands;
+using Orbit.Application.FeatureFlags;
+using Orbit.Application.FeatureFlags.Commands;
+using Orbit.Application.FeatureFlags.Queries;
+using Orbit.Application.Common;
+using Microsoft.AspNetCore.Authorization;
 using Orbit.Domain.Common;
 
 namespace Orbit.Infrastructure.Tests.Controllers;
@@ -28,6 +33,53 @@ public class AdminControllerTests
         {
             HttpContext = new DefaultHttpContext { User = principal }
         };
+    }
+
+    [Theory]
+    [InlineData(FeatureFlagActions.Create)]
+    [InlineData(FeatureFlagActions.EnableForAccounts)]
+    [InlineData(FeatureFlagActions.DisableForAccounts)]
+    [InlineData(FeatureFlagActions.EnableForEveryone)]
+    [InlineData(FeatureFlagActions.DisableForEveryone)]
+    public async Task ManageFeatureFlags_ForwardsActionAndIdentity(string action)
+    {
+        _mediator.Send(Arg.Any<ManageFeatureFlagsCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AdminFeatureFlag("flag", "Description", false, null, [])));
+
+        var result = await _controller.ManageFeatureFlags(new(action, "flag", ["account@example.com"], "Description"), CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+        await _mediator.Received(1).Send(Arg.Is<ManageFeatureFlagsCommand>(command => command.AdminId == UserId && command.Action == action && command.Key == "flag"), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ListFeatureFlags_UsesSameQueryForGetAndPost()
+    {
+        _mediator.Send(Arg.Any<ListFeatureFlagsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success<IReadOnlyList<AdminFeatureFlag>>([]));
+        (await _controller.ListFeatureFlags(CancellationToken.None)).Should().BeOfType<OkObjectResult>();
+        (await _controller.ManageFeatureFlags(new("list"), CancellationToken.None)).Should().BeOfType<OkObjectResult>();
+        await _mediator.Received(2).Send(Arg.Is<ListFeatureFlagsQuery>(query => query.AdminId == UserId), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public void FeatureFlags_RequireLiveAdminPolicyOnController()
+    {
+        typeof(AdminController).GetCustomAttributes(typeof(AuthorizeAttribute), true)
+            .Cast<AuthorizeAttribute>().Should().Contain(attribute => attribute.Policy == AdminPolicy.Name);
+    }
+
+    [Theory]
+    [InlineData(FeatureFlagActions.NotFound, 404)]
+    [InlineData(FeatureFlagActions.AlreadyExists, 409)]
+    [InlineData(FeatureFlagActions.UnknownAccounts, 400)]
+    [InlineData(ErrorCodes.NoPermission, 403)]
+    public async Task ManageFeatureFlags_MapsFailures(string code, int status)
+    {
+        _mediator.Send(Arg.Any<ManageFeatureFlagsCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure<AdminFeatureFlag>(error: "Failure", errorCode: code));
+        var result = (ObjectResult)await _controller.ManageFeatureFlags(new("create", "flag"), CancellationToken.None);
+        result.StatusCode.Should().Be(status);
     }
 
     private static AdminController.BroadcastRequest NewRequest() =>

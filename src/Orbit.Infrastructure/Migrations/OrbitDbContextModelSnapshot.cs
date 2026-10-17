@@ -17,7 +17,7 @@ namespace Orbit.Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.12")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -515,6 +515,13 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasData(
                         new
                         {
+                            Key = "redesign",
+                            Description = "Serve the redesigned web and Android builds to this account",
+                            Enabled = false,
+                            UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
                             Key = "offline_mode",
                             Description = "Enable offline mode with background sync",
                             Enabled = true,
@@ -618,6 +625,25 @@ namespace Orbit.Infrastructure.Migrations
                             PlanRequirement = "Pro",
                             UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         });
+                });
+
+            modelBuilder.Entity("Orbit.Domain.Entities.AppFeatureFlagAccount", b =>
+                {
+                    b.Property<string>("FlagKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("FlagKey", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("AppFeatureFlagAccounts");
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.BlockedUser", b =>
@@ -2459,6 +2485,21 @@ namespace Orbit.Infrastructure.Migrations
 
             modelBuilder.Entity("Orbit.Domain.Entities.ApiKey", b =>
                 {
+                    b.HasOne("Orbit.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Orbit.Domain.Entities.AppFeatureFlagAccount", b =>
+                {
+                    b.HasOne("Orbit.Domain.Entities.AppFeatureFlag", null)
+                        .WithMany()
+                        .HasForeignKey("FlagKey")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")

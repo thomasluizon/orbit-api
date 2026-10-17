@@ -1,3 +1,4 @@
+using Orbit.Application.FeatureFlags;
 using System.Text;
 using System.Security.Claims;
 using FluentValidation;
@@ -116,6 +117,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IGoalCompletionService, GoalCompletionService>();
         builder.Services.AddScoped<IPayGateService, PayGateService>();
         builder.Services.AddScoped<IFeatureFlagService, FeatureFlagService>();
+        builder.Services.AddScoped<IFeatureFlagManagementService, FeatureFlagManagementService>();
         builder.Services.AddScoped<GamificationRepositories>(sp =>
             new GamificationRepositories(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
