@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
@@ -40,6 +41,14 @@ public sealed class ProactiveEngineServiceTests
             if (condition) h.SeedTrigger(trigger);
             await h.Run();
             h.Db.ProactiveItems.Any(i => i.Trigger == trigger).Should().Be(expected, $"{trigger} at {hour} with condition {condition}");
+            if (expected && trigger == ProactiveTrigger.RestartAfterMiss)
+            {
+                var item = h.Db.ProactiveItems.Single(i => i.Trigger == trigger);
+                using var facts = JsonDocument.Parse(item.FactsJson);
+                facts.RootElement.GetProperty("HadScheduledHabitsYesterday").GetBoolean().Should().BeTrue();
+                facts.RootElement.GetProperty("HadPositiveLogsYesterday").GetBoolean().Should().BeFalse();
+                facts.RootElement.GetProperty("HadRecentActivity").GetBoolean().Should().BeTrue();
+            }
             if (!ProactiveRules.MayPush(trigger))
                 h.Db.ProactiveItems.Any(i => i.Trigger == trigger && i.PushedAtUtc.HasValue).Should().BeFalse();
         }

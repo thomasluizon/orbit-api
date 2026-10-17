@@ -204,10 +204,12 @@ public sealed partial class ProactiveEngineService(
         var hadScheduled = allHabits.Any(h => HabitScheduleService.GetHistoricalScheduledDates(
             h, yesterday, yesterday, timeZone, user.WeekStartDay).Count > 0);
         var allLogs = batch.Habits.Where(h => h.UserId == user.Id).SelectMany(h => h.Logs).ToList();
-        if (hadScheduled && !allLogs.Any(l => l.Date == yesterday && l.Value > 0)
-            && allLogs.Any(l => l.Value > 0 && l.Date < yesterday
-                && l.Date >= yesterday.AddDays(-ProactiveRules.RestartLookbackDays)))
-            result.Add(new(ProactiveTrigger.RestartAfterMiss, []));
+        var hadPositiveLogsYesterday = allLogs.Any(l => l.Date == yesterday && l.Value > 0);
+        var hadRecentActivity = allLogs.Any(l => l.Value > 0 && l.Date < yesterday
+            && l.Date >= yesterday.AddDays(-ProactiveRules.RestartLookbackDays));
+        if (hadScheduled && !hadPositiveLogsYesterday && hadRecentActivity)
+            result.Add(new(ProactiveTrigger.RestartAfterMiss, [], HadScheduledHabitsYesterday: hadScheduled,
+                HadPositiveLogsYesterday: hadPositiveLogsYesterday, HadRecentActivity: hadRecentActivity));
         if (open.Count > 0)
             result.Add(new(ProactiveTrigger.EveningCheckin, open.Select(h => h.Title).ToList(), open.Count,
                 user.CurrentStreak, user.CurrentStreak >= ProactiveRules.StreakMentionMinimum));

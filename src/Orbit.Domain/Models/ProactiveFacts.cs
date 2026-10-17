@@ -17,6 +17,9 @@ public sealed record ProactiveFacts(
     DateOnly? PeriodTo = null,
     int? TotalCompletions = null,
     int? TotalScheduled = null,
-    int? BadHabitSlips = null);
+    int? BadHabitSlips = null,
+    bool? HadScheduledHabitsYesterday = null,
+    bool? HadPositiveLogsYesterday = null,
+    bool? HadRecentActivity = null);
 
 public sealed record ProactiveMessage(string Text, string ActionLabel, string ActionPrompt);

@@ -16977,6 +16977,24 @@
               "string"
             ],
             "format": "int32"
+          },
+          "hadScheduledHabitsYesterday": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "hadPositiveLogsYesterday": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "hadRecentActivity": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         }
       },
