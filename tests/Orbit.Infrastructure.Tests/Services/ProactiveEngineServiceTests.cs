@@ -24,6 +24,176 @@ public sealed class ProactiveEngineServiceTests
     private static readonly DateOnly Today = new(2030, 10, 14);
 
     [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task Status_ActiveReadPreservesExposureAndEngagement(bool shown, bool opened)
+    {
+        using var h = new Harness(19);
+        h.SeedTrigger(ProactiveTrigger.EveningCheckin);
+        await h.Run();
+        var item = await h.Db.ProactiveItems.SingleAsync();
+        if (shown) await h.Engine.GetCurrentAsync(h.User.Id, default);
+        if (opened) await h.Engine.RecordOutcomeAsync(h.User.Id, item.Id, false, default);
+
+        await AssertStatusReadOnly(h, item.Id, true);
+    }
+
+    [Fact]
+    public async Task Status_ShownGoalStaysActiveWhenEveningCheckinTakesPriority()
+    {
+        using var h = new Harness(17);
+        h.SeedTrigger(ProactiveTrigger.GoalBehind);
+        await h.Run();
+        var goalItem = await h.Engine.GetCurrentAsync(h.User.Id, default);
+        goalItem!.Trigger.Should().Be(ProactiveTrigger.GoalBehind);
+        h.AtHour(19);
+        h.Db.Habits.Add(HabitFor(h.User.Id));
+        await h.Run();
+        var current = await h.Engine.GetCurrentAsync(h.User.Id, default);
+        current!.Trigger.Should().Be(ProactiveTrigger.EveningCheckin);
+        current.Id.Should().NotBe(goalItem.Id);
+
+        await AssertStatusReadOnly(h, goalItem.Id, true);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Status_ResolvedConditionEndsShownItemWithoutCreditingAnAction(bool goalItem)
+    {
+        using var h = new Harness(19);
+        h.SeedTrigger(goalItem ? ProactiveTrigger.GoalBehind : ProactiveTrigger.EveningCheckin);
+        await h.Run();
+        var item = await h.Engine.GetCurrentAsync(h.User.Id, default);
+        item.Should().NotBeNull();
+        if (goalItem)
+        {
+            var goal = await h.Db.Goals.SingleAsync();
+            goal.UpdateProgress(goal.TargetValue).IsSuccess.Should().BeTrue();
+        }
+        else
+        {
+            var habit = await h.Db.Habits.SingleAsync();
+            var logged = habit.Log(Today, advanceDueDate: false);
+            logged.IsSuccess.Should().BeTrue();
+            h.Db.HabitLogs.Add(logged.Value);
+        }
+        await h.Db.SaveChangesAsync();
+        h.Db.ChangeTracker.Clear();
+
+        await AssertStatusReadOnly(h, item!.Id, false);
+    }
+
+    [Theory]
+    [InlineData(22)]
+    [InlineData(43)]
+    public async Task Status_WindowClosedAndDayEndedAreReadWithoutSavingAnOutcome(int hours)
+    {
+        using var h = new Harness(19);
+        h.SeedTrigger(ProactiveTrigger.EveningCheckin);
+        await h.Run();
+        var item = await h.Engine.GetCurrentAsync(h.User.Id, default);
+        h.Clock.Now = Today.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc).AddHours(hours);
+
+        await AssertStatusReadOnly(h, item!.Id, false);
+    }
+
+    [Fact]
+    public async Task Status_ActedItemStaysEndedWhileItsConditionIsTrue()
+    {
+        using var h = new Harness(19);
+        h.SeedTrigger(ProactiveTrigger.EveningCheckin);
+        await h.Run();
+        var item = await h.Engine.GetCurrentAsync(h.User.Id, default);
+        await h.Engine.RecordOutcomeAsync(h.User.Id, item!.Id, true, default);
+        h.AtHour(20);
+
+        await AssertStatusReadOnly(h, item.Id, false);
+    }
+
+    [Fact]
+    public async Task Status_PersistedEndIsFinalEvenIfTheConditionReturns()
+    {
+        using var h = new Harness(19);
+        h.SeedTrigger(ProactiveTrigger.EveningCheckin);
+        await h.Run();
+        var item = await h.Db.ProactiveItems.SingleAsync();
+        item.End(ProactiveEndReason.ConditionResolved, h.Clock.Now);
+        await h.Db.SaveChangesAsync();
+
+        await AssertStatusReadOnly(h, item.Id, false);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Status_MissingAndForeignItemsAreUnavailable(bool foreignItem)
+    {
+        using var h = new Harness(19);
+        h.SeedTrigger(ProactiveTrigger.EveningCheckin);
+        await h.Run();
+        var item = await h.Db.ProactiveItems.SingleAsync();
+
+        await AssertStatusReadOnly(h, foreignItem ? item.Id : Guid.NewGuid(), null,
+            foreignItem ? Guid.NewGuid() : h.User.Id);
+    }
+
+    [Theory]
+    [InlineData("2030-10-15T00:30:00Z", true)]
+    [InlineData("2030-10-15T01:00:00Z", false)]
+    [InlineData("2030-10-15T22:00:00Z", false)]
+    public async Task Status_UsesOwnersLocalWindowAndDayAcrossUtcMidnight(string utc, bool active)
+    {
+        using var h = new Harness(22);
+        h.User.SetTimeZone("America/Sao_Paulo");
+        h.SeedTrigger(ProactiveTrigger.EveningCheckin);
+        await h.Run();
+        var item = await h.Engine.GetCurrentAsync(h.User.Id, default);
+        item.Should().NotBeNull();
+        h.Clock.Now = DateTime.Parse(utc, null,
+            System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal);
+
+        await AssertStatusReadOnly(h, item!.Id, active);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Status_IneligibleOwnerOrKillSwitchEndsActionability(bool disabled)
+    {
+        using var h = new Harness(19, lifetime: disabled);
+        if (!disabled) h.User.StartTrial(h.Clock.Now.AddMinutes(1));
+        h.SeedTrigger(ProactiveTrigger.EveningCheckin);
+        await h.Run();
+        var item = await h.Engine.GetCurrentAsync(h.User.Id, default);
+        item.Should().NotBeNull();
+        if (disabled)
+        {
+            h.Db.AppFeatureFlags.Add(AppFeatureFlag.Create(FeatureFlagKeys.AstraProactiveEngineDisabled, true));
+            await h.Db.SaveChangesAsync();
+        }
+        h.Clock.Now = h.Clock.Now.AddMinutes(2);
+
+        await AssertStatusReadOnly(h, item!.Id, false);
+    }
+
+    private static async Task AssertStatusReadOnly(Harness h, Guid itemId, bool? expected, Guid? userId = null)
+    {
+        var before = await h.Db.ProactiveItems.AsNoTracking().ToListAsync();
+        h.Analytics.ClearReceivedCalls();
+        h.Push.ClearReceivedCalls();
+
+        (await h.Engine.IsItemActiveAsync(userId ?? h.User.Id, itemId, default)).Should().Be(expected);
+
+        var after = await h.Db.ProactiveItems.AsNoTracking().ToListAsync();
+        after.Should().BeEquivalentTo(before);
+        h.Db.ChangeTracker.HasChanges().Should().BeFalse();
+        h.Analytics.ReceivedCalls().Should().BeEmpty();
+        h.Push.ReceivedCalls().Should().BeEmpty();
+    }
+
+    [Theory]
     [InlineData(ProactiveTrigger.RestartAfterMiss, 8, 7, 12)]
     [InlineData(ProactiveTrigger.EveningCheckin, 19, 17, 22)]
     [InlineData(ProactiveTrigger.BusyCalendarDay, 8, 7, 11)]
@@ -457,7 +627,7 @@ public sealed class ProactiveEngineServiceTests
         public override DateTimeOffset GetUtcNow() => new(Now);
     }
 
-    private sealed class Harness : IDisposable
+    internal sealed class Harness : IDisposable
     {
         private readonly SqliteOrbitDbContextFactory _factory;
         public OrbitDbContext Db => _factory.Context;

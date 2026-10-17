@@ -23,6 +23,18 @@ public sealed class ProactiveAstraController(ISender sender) : ControllerBase
         return result.ToPayGateAwareResult(value => value is null ? NoContent() : Ok(value));
     }
 
+    [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(ProactiveItemStatusResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(void), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await sender.Send(new GetProactiveItemStatusQuery(HttpContext.GetUserId(), id), cancellationToken);
+        return result.ToPayGateAwareResult(value => value is null
+            ? new ContentResult { StatusCode = StatusCodes.Status404NotFound }
+            : Ok(value));
+    }
+
     [HttpPost("{id:guid}/opened")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

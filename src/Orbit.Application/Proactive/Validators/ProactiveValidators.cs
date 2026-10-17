@@ -17,3 +17,12 @@ public sealed class RecordProactiveOutcomeCommandValidator : AbstractValidator<R
         RuleFor(x => x.ItemId).NotEmpty();
     }
 }
+
+public sealed class GetProactiveItemStatusQueryValidator : AbstractValidator<GetProactiveItemStatusQuery>
+{
+    public GetProactiveItemStatusQueryValidator()
+    {
+        RuleFor(x => x.UserId).NotEmpty();
+        RuleFor(x => x.ItemId).NotEmpty();
+    }
+}

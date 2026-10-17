@@ -106,10 +106,7 @@ public sealed partial class ProactiveEngineService(
 
         foreach (var item in items.Where(i => !i.EndedAtUtc.HasValue))
         {
-            var reason = item.LocalDate != today ? ProactiveEndReason.DayEnded
-                : !ProactiveRules.InWindow(item.Trigger, localNow.Hour) ? ProactiveEndReason.WindowClosed
-                : !ConditionStillTrue(item, facts) ? ProactiveEndReason.ConditionResolved
-                : (ProactiveEndReason?)null;
+            var reason = item.EvaluateEndReason(today, localNow.Hour, ConditionStillTrue(item, facts));
             if (reason.HasValue && item.End(reason.Value, nowUtc))
             {
                 await SaveStateAsync(item, ct);
@@ -336,6 +333,22 @@ public sealed partial class ProactiveEngineService(
             await SaveStateAsync(current, cancellationToken);
         }
         return current;
+    }
+
+    public async Task<bool?> IsItemActiveAsync(Guid userId, Guid itemId, CancellationToken cancellationToken)
+    {
+        var item = await db.ProactiveItems.AsNoTracking()
+            .SingleOrDefaultAsync(i => i.Id == itemId && i.UserId == userId, cancellationToken);
+        if (item is null) return null;
+        if (item.EndedAtUtc.HasValue || item.ActedAtUtc.HasValue) return false;
+        var nowUtc = clock.GetUtcNow().UtcDateTime;
+        var batch = await LoadAsync(userId, nowUtc, cancellationToken);
+        var user = batch.Users.SingleOrDefault();
+        if (user is null) return false;
+        var today = batch.LocalDates[user.Id];
+        var calendarDay = batch.CalendarDays.FirstOrDefault(d => d.UserId == user.Id && d.LocalDate == today);
+        var facts = BuildFacts(batch, user, today, calendarDay);
+        return item.EvaluateEndReason(today, LocalNow(user, nowUtc).Hour, ConditionStillTrue(item, facts)) is null;
     }
 
     public async Task<Result> RecordOutcomeAsync(Guid userId, Guid itemId, bool acted, CancellationToken cancellationToken)
