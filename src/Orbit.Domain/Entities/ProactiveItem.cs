@@ -59,6 +59,17 @@ public sealed class ProactiveItem : Entity
     public bool Ignored => (ShownAtUtc.HasValue || PushedAtUtc.HasValue)
         && EndedAtUtc.HasValue && !OpenedAtUtc.HasValue && !ActedAtUtc.HasValue;
 
+    public ProactiveEndReason? EvaluateEndReason(DateOnly localDate, int localHour, bool conditionStillTrue)
+    {
+        if (localDate == default) throw new ArgumentException("Local date is required.", nameof(localDate));
+        if (localHour is < 0 or > 23) throw new ArgumentOutOfRangeException(nameof(localHour));
+        if (EndedAtUtc.HasValue) return EndReason;
+        if (ActedAtUtc.HasValue) return ProactiveEndReason.Acted;
+        if (LocalDate != localDate) return ProactiveEndReason.DayEnded;
+        if (!ProactiveRules.InWindow(Trigger, localHour)) return ProactiveEndReason.WindowClosed;
+        return conditionStillTrue ? null : ProactiveEndReason.ConditionResolved;
+    }
+
     public void Show(DateTime nowUtc)
     {
         RequireUtc(nowUtc);

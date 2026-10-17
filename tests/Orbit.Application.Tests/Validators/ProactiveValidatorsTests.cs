@@ -7,6 +7,18 @@ namespace Orbit.Application.Tests.Validators;
 
 public sealed class ProactiveValidatorsTests
 {
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, false, false)]
+    [InlineData(true, true, true)]
+    public void Status_RequiresOwnerAndItem(bool ownerPresent, bool itemPresent, bool valid)
+    {
+        var query = new GetProactiveItemStatusQuery(ownerPresent ? Guid.NewGuid() : Guid.Empty,
+            itemPresent ? Guid.NewGuid() : Guid.Empty);
+        new GetProactiveItemStatusQueryValidator().Validate(query).IsValid.Should().Be(valid);
+    }
+
     [Fact]
     public void Validators_RequireOwnerAndItem()
     {
