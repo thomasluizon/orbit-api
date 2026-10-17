@@ -85,8 +85,8 @@ public class ApiKeysControllerTests
         objectResult.StatusCode.Should().Be(StatusCodes.Status428PreconditionRequired);
         objectResult.Value.Should().BeEquivalentTo(new
         {
-            error = ErrorMessages.ApiKeyCreationChallengeRequired.Message,
-            errorCode = ErrorCodes.ApiKeyCreationChallengeRequired,
+            Error = ErrorMessages.ApiKeyCreationChallengeRequired.Message,
+            ErrorCode = ErrorCodes.ApiKeyCreationChallengeRequired,
         });
     }
 

@@ -89,8 +89,8 @@ public class AuthControllerTests
         objectResult.StatusCode.Should().Be(401);
         objectResult.Value.Should().BeEquivalentTo(new
         {
-            error = ErrorMessages.InvalidVerificationCode.Message,
-            errorCode = ErrorMessages.InvalidVerificationCode.Code
+            Error = ErrorMessages.InvalidVerificationCode.Message,
+            ErrorCode = ErrorMessages.InvalidVerificationCode.Code
         });
     }
 
@@ -124,8 +124,8 @@ public class AuthControllerTests
         objectResult.StatusCode.Should().Be(401);
         objectResult.Value.Should().BeEquivalentTo(new
         {
-            error = ErrorMessages.InvalidGoogleToken.Message,
-            errorCode = ErrorMessages.InvalidGoogleToken.Code
+            Error = ErrorMessages.InvalidGoogleToken.Message,
+            ErrorCode = ErrorMessages.InvalidGoogleToken.Code
         });
     }
 
@@ -156,10 +156,12 @@ public class AuthControllerTests
         var result = await _controller.GoogleCodeAuth(
             new AuthController.GoogleCodeAuthRequest("code", "verifier", "https://evil.test"), CancellationToken.None);
 
-        result.Should().BeOfType<ObjectResult>().Which.Value.Should().BeEquivalentTo(new
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(401);
+        objectResult.Value.Should().BeEquivalentTo(new
         {
-            error = ErrorMessages.GoogleRedirectUriNotAllowed.Message,
-            errorCode = ErrorCodes.GoogleRedirectUriNotAllowed
+            Error = ErrorMessages.GoogleRedirectUriNotAllowed.Message,
+            ErrorCode = ErrorCodes.GoogleRedirectUriNotAllowed
         });
     }
 

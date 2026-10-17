@@ -15,7 +15,7 @@ public class SendFriendRequestCommandValidator : AbstractValidator<SendFriendReq
 
         RuleFor(x => x)
             .Must(HaveExactlyOneIdentifier)
-            .WithMessage("Provide exactly one of handle or referralCode.");
+            .WithCopy(ValidationErrorCodes.FriendIdentifierExclusive);
     }
 
     private static bool HaveExactlyOneIdentifier(SendFriendRequestCommand command) =>

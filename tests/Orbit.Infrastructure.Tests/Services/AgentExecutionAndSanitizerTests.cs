@@ -2,11 +2,15 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Application.Chat.Tools;
 using Orbit.Domain.Common;
+using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
+using Orbit.Infrastructure.Configuration;
+using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
 using Orbit.Infrastructure.Services.Prompts;
 
@@ -153,6 +157,140 @@ public class AgentExecutionAndSanitizerTests
         response.PolicyDenial!.Reason.Should().Be("missing_scope:write_habits");
     }
 
+    [Theory]
+    [InlineData(AgentPolicyDecisionStatus.Allowed, true)]
+    [InlineData(AgentPolicyDecisionStatus.Denied, false)]
+    [InlineData(AgentPolicyDecisionStatus.ConfirmationRequired, false)]
+    public async Task AgentOperationExecutor_NotifiesOnlyWhenToolStarts(
+        AgentPolicyDecisionStatus decisionStatus, bool expectedStart)
+    {
+        var catalog = Substitute.For<IAgentCatalogService>();
+        var capability = CreateCapability(AgentCapabilityIds.HabitsWrite, AgentScopes.WriteHabits,
+            AgentRiskClass.Low, AgentConfirmationRequirement.None, isMutation: true);
+        var operation = CreateOperation("create_habit", capability.Id, isMutation: true,
+            isAgentExecutable: true, AgentConfirmationRequirement.None, AgentRiskClass.Low);
+        catalog.GetOperation(operation.Id).Returns(operation);
+        catalog.GetCapability(capability.Id).Returns(capability);
+        var policy = Substitute.For<IAgentPolicyEvaluator>();
+        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+            .Returns(new AgentPolicyDecision(decisionStatus, capability));
+        var events = new List<string>();
+        var tool = new StubTool(operation.Id, (_, _, _) =>
+        {
+            events.Add("tool");
+            return Task.FromResult(new ToolResult(true));
+        });
+        var executor = CreateExecutor(catalog, policyEvaluator: policy,
+            toolRegistry: new AiToolRegistry([tool]));
+
+        await executor.ExecuteAsync(new AgentExecuteOperationRequest(
+            UserId, operation.Id, Parse("{}"), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt,
+            OnExecutionStarted: () =>
+            {
+                events.Add("step");
+                return Task.CompletedTask;
+            }));
+
+        events.Should().Equal(expectedStart ? ["step", "tool"] : []);
+    }
+
+    [Fact]
+    public async Task AgentOperationExecutor_ExecutesConfirmedToolWhenStepWriteFails()
+    {
+        var options = new DbContextOptionsBuilder<OrbitDbContext>()
+            .UseInMemoryDatabase($"AgentOperationExecutor_{Guid.NewGuid()}")
+            .Options;
+        using var dbContext = new OrbitDbContext(options);
+        var user = User.Create("Alex", "alex@test.com").Value;
+        dbContext.Users.Add(user);
+        dbContext.SaveChanges();
+
+        var capability = CreateCapability(AgentCapabilityIds.HabitsDelete, AgentScopes.DeleteHabits,
+            AgentRiskClass.Destructive, AgentConfirmationRequirement.FreshConfirmation, isMutation: true);
+        var operation = CreateOperation("delete_habit", capability.Id, isMutation: true,
+            isAgentExecutable: true, AgentConfirmationRequirement.FreshConfirmation, AgentRiskClass.Destructive);
+        var catalog = Substitute.For<IAgentCatalogService>();
+        catalog.GetOperation(operation.Id).Returns(operation);
+        catalog.GetCapability(capability.Id).Returns(capability);
+        var stepUpBridge = Substitute.For<IAgentStepUpAuthorizationBridge>();
+        stepUpBridge.GetRequiredConfirmationAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns((AgentConfirmationRequirement?)null);
+        var settings = Options.Create(new AgentPlatformSettings());
+        var pendingStore = new PendingAgentOperationStore(dbContext, settings);
+        var policy = new AgentPolicyEvaluator(dbContext, catalog, pendingStore, stepUpBridge, settings);
+        var arguments = Parse("""{"habit_id":"123"}""");
+        var pending = pendingStore.Create(user.Id, capability, operation.Id, arguments.GetRawText(),
+            "Delete habit", AgentOperationFingerprint.Compute(operation.Id, arguments.GetRawText()),
+            AgentExecutionSurface.Chat);
+        var confirmation = pendingStore.Confirm(user.Id, pending.Id);
+        confirmation.Should().NotBeNull();
+
+        using var cancellation = new CancellationTokenSource();
+        var toolExecutions = 0;
+        var tool = new StubTool(operation.Id, (_, _, token) =>
+        {
+            token.ThrowIfCancellationRequested();
+            toolExecutions++;
+            return Task.FromResult(new ToolResult(true));
+        });
+        var executor = CreateExecutor(catalog, policyEvaluator: policy,
+            toolRegistry: new AiToolRegistry([tool]), stepUpAuthorizationBridge: stepUpBridge);
+
+        var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
+            user.Id, operation.Id, arguments, AgentExecutionSurface.Chat, AgentAuthMethod.Jwt,
+            GrantedScopes: [capability.Scope], ConfirmationToken: confirmation!.ConfirmationToken,
+            OnExecutionStarted: () =>
+            {
+                dbContext.PendingAgentOperations.Single(item => item.Id == pending.Id)
+                    .ConsumedAtUtc.Should().NotBeNull();
+                cancellation.Cancel();
+                throw new IOException("Stream disconnected");
+            }), cancellation.Token);
+
+        response.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
+        toolExecutions.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task AgentOperationExecutor_CancelsUnconfirmedMutationWhenStepWriteFails()
+    {
+        var catalog = Substitute.For<IAgentCatalogService>();
+        var capability = CreateCapability(AgentCapabilityIds.HabitsWrite, AgentScopes.WriteHabits,
+            AgentRiskClass.Low, AgentConfirmationRequirement.None, isMutation: true);
+        var operation = CreateOperation("create_habit", capability.Id, isMutation: true,
+            isAgentExecutable: true, AgentConfirmationRequirement.None, AgentRiskClass.Low);
+        catalog.GetOperation(operation.Id).Returns(operation);
+        catalog.GetCapability(capability.Id).Returns(capability);
+        var policy = Substitute.For<IAgentPolicyEvaluator>();
+        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+            .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability));
+
+        using var cancellation = new CancellationTokenSource();
+        var tokenWasCancelled = false;
+        var mutationCompleted = false;
+        var tool = new StubTool(operation.Id, (_, _, token) =>
+        {
+            tokenWasCancelled = token.IsCancellationRequested;
+            token.ThrowIfCancellationRequested();
+            mutationCompleted = true;
+            return Task.FromResult(new ToolResult(true));
+        });
+        var executor = CreateExecutor(catalog, policyEvaluator: policy,
+            toolRegistry: new AiToolRegistry([tool]));
+
+        var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
+            UserId, operation.Id, Parse("{}"), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt,
+            OnExecutionStarted: () =>
+            {
+                cancellation.Cancel();
+                throw new IOException("Stream disconnected");
+            }), cancellation.Token);
+
+        tokenWasCancelled.Should().BeTrue();
+        mutationCompleted.Should().BeFalse();
+        response.Operation.Status.Should().Be(AgentOperationStatus.Failed);
+    }
+
     [Fact]
     public async Task AgentOperationExecutor_ReturnsPendingConfirmation()
     {
@@ -176,6 +314,72 @@ public class AgentExecutionAndSanitizerTests
 
         response.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation);
         response.PendingOperation.Should().Be(pending);
+    }
+
+    [Theory]
+    [InlineData(AgentExecutionSurface.Chat, true, true)]
+    [InlineData(AgentExecutionSurface.Chat, false, false)]
+    [InlineData(AgentExecutionSurface.Mcp, true, false)]
+    public async Task AgentOperationExecutor_PreviewsOnlyCapableChatConfirmations(
+        AgentExecutionSurface surface, bool includePreview, bool expectedPreview)
+    {
+        var catalog = Substitute.For<IAgentCatalogService>();
+        var capability = CreateCapability(AgentCapabilityIds.HabitsBulkWrite, AgentScopes.WriteHabits,
+            AgentRiskClass.High, AgentConfirmationRequirement.StepUp, isMutation: true);
+        var operation = CreateOperation("bulk_update_habits", capability.Id, true, true,
+            AgentConfirmationRequirement.StepUp, AgentRiskClass.High);
+        catalog.GetOperation(operation.Id).Returns(operation);
+        catalog.GetCapability(capability.Id).Returns(capability);
+        var pending = new PendingAgentOperation(Guid.NewGuid(), capability.Id, capability.DisplayName,
+            "Bulk update", capability.RiskClass, capability.ConfirmationRequirement, DateTime.UtcNow.AddMinutes(5));
+        var policy = Substitute.For<IAgentPolicyEvaluator>();
+        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+            .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.ConfirmationRequired, capability,
+                "step_up_required", pending));
+        var previewer = Substitute.For<IPendingOperationChangePreviewer>();
+        previewer.PreviewAsync(UserId, operation.Id, Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
+            .Returns(new PendingOperationChangePreview(
+                [new PendingOperationChange(Guid.NewGuid(), "Habit", "emoji", "🔴", "✅", "emoji")], 1));
+        var executor = CreateExecutor(catalog, policyEvaluator: policy, changePreviewer: previewer);
+
+        var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
+            UserId, operation.Id, Parse("""{"filter":{"all":true},"updates":{"emoji":"✅"}}"""),
+            surface, AgentAuthMethod.Jwt, IncludeChangePreview: includePreview));
+
+        if (expectedPreview)
+            response.PendingOperation!.Changes.Should().ContainSingle();
+        else
+            response.PendingOperation!.Changes.Should().BeNull();
+        response.PendingOperation.ChangeTargetCount.Should().Be(expectedPreview ? 1 : null);
+    }
+
+    [Fact]
+    public async Task AgentOperationExecutor_PreviewFailure_KeepsPendingConfirmation()
+    {
+        var catalog = Substitute.For<IAgentCatalogService>();
+        var capability = CreateCapability(AgentCapabilityIds.HabitsBulkWrite, AgentScopes.WriteHabits,
+            AgentRiskClass.High, AgentConfirmationRequirement.FreshConfirmation, isMutation: true);
+        var operation = CreateOperation("bulk_update_habits", capability.Id, true, true,
+            AgentConfirmationRequirement.FreshConfirmation, AgentRiskClass.High);
+        catalog.GetOperation(operation.Id).Returns(operation);
+        catalog.GetCapability(capability.Id).Returns(capability);
+        var pending = new PendingAgentOperation(Guid.NewGuid(), capability.Id, capability.DisplayName,
+            "Bulk update", capability.RiskClass, capability.ConfirmationRequirement, DateTime.UtcNow.AddMinutes(5));
+        var policy = Substitute.For<IAgentPolicyEvaluator>();
+        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+            .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.ConfirmationRequired, capability,
+                "confirmation_required", pending));
+        var previewer = Substitute.For<IPendingOperationChangePreviewer>();
+        previewer.PreviewAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
+            .Returns<PendingOperationChangePreview?>(_ => throw new InvalidOperationException("Preview failed"));
+        var executor = CreateExecutor(catalog, policyEvaluator: policy, changePreviewer: previewer);
+
+        var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
+            UserId, operation.Id, Parse("{}"), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt,
+            IncludeChangePreview: true));
+
+        response.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation);
+        response.PendingOperation!.Changes.Should().BeNull();
     }
 
     [Fact]
@@ -614,7 +818,8 @@ public class AgentExecutionAndSanitizerTests
         IAgentTargetOwnershipService? ownershipService = null,
         AiToolRegistry? toolRegistry = null,
         IUnitOfWork? unitOfWork = null,
-        IAgentStepUpAuthorizationBridge? stepUpAuthorizationBridge = null)
+        IAgentStepUpAuthorizationBridge? stepUpAuthorizationBridge = null,
+        IPendingOperationChangePreviewer? changePreviewer = null)
     {
         if (stepUpAuthorizationBridge is null)
         {
@@ -637,6 +842,8 @@ public class AgentExecutionAndSanitizerTests
             ownershipService,
             stepUpAuthorizationBridge,
             toolRegistry ?? new AiToolRegistry([]),
+            changePreviewer ?? Substitute.For<IPendingOperationChangePreviewer>(),
+            Substitute.For<IPendingAgentOperationStore>(),
             unitOfWork ?? Substitute.For<IUnitOfWork>(),
             NullLogger<AgentOperationExecutor>.Instance);
     }

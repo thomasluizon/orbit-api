@@ -8,8 +8,8 @@ public sealed class EmailMessageComposerTests
     private readonly EmailMessageComposer _composer = new("https://app.useorbit.org");
 
     [Theory]
-    [InlineData("en", "Your Orbit verification code", "It expires in 5 minutes.")]
-    [InlineData("pt-BR", "Seu código de verificação do Orbit", "Ele expira em 5 minutos.")]
+    [InlineData("en", "Your Orbit sign-in code", "It works for the next 5 minutes.")]
+    [InlineData("pt-BR", "Seu código de acesso do Orbit", "Ele vale pelos próximos 5 minutos.")]
     public void VerificationCodeRendersLocalizedSubjectAndBothParts(string language, string subject, string preheader)
     {
         var message = _composer.ComposeVerificationCode("a+b@example.com", "123456", language);
@@ -28,7 +28,7 @@ public sealed class EmailMessageComposerTests
         var message = _composer.ComposeWelcome("Ana & Co", language);
 
         message.Subject.Should().Be(subject);
-        message.Html.Should().Contain("Ana &amp; Co").And.Contain("#22094F");
+        message.Html.Should().Contain("Ana &amp; Co").And.NotContain("#22094F");
         message.Text.Should().Contain("Ana & Co");
     }
 
@@ -39,7 +39,7 @@ public sealed class EmailMessageComposerTests
     }
 
     [Theory]
-    [InlineData("en", "Confirm your Orbit account deletion", "Confirm your Orbit API key creation")]
+    [InlineData("en", "Confirm that you want to delete your Orbit account", "Confirm your new Orbit API key")]
     [InlineData("pt-BR", "Confirme a exclusão", "chave de API do Orbit")]
     public void SecurityCodesKeepTheirDistinctCopy(string language, string deletionSubject, string apiKeySubject)
     {
@@ -54,8 +54,8 @@ public sealed class EmailMessageComposerTests
     }
 
     [Theory]
-    [InlineData("en", "Confirm your spot on the Orbit iOS waitlist")]
-    [InlineData("pt-BR", "Confirme sua vaga na lista de espera")]
+    [InlineData("en", "Confirm your place on the Orbit iOS list")]
+    [InlineData("pt-BR", "Confirme sua vaga na lista do Orbit para iOS")]
     public void WaitlistIncludesConfirmationUrlAndText(string language, string subject)
     {
         const string url = "https://api.useorbit.org/api/waitlist/confirm?token=abc.def";
@@ -73,7 +73,7 @@ public sealed class EmailMessageComposerTests
 
         message.Subject.Should().Be("[Orbit Support] Bug");
         message.Html.Should().Contain("&lt;b&gt;John&lt;/b&gt;").And.Contain("line1<br>line2")
-            .And.Contain("Reply directly to respond to the user.");
+            .And.Contain("Reply to this email to answer them.");
         message.Text.Should().Contain("<b>John</b>").And.Contain("line1\nline2");
     }
 

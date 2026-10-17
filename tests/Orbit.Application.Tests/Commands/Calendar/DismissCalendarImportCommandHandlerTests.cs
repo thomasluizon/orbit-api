@@ -4,6 +4,7 @@ using NSubstitute;
 using Orbit.Application.Calendar.Commands;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Commands.Calendar;
 
@@ -47,7 +48,7 @@ public class DismissCalendarImportCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("not found");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 }

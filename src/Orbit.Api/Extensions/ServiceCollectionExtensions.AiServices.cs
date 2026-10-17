@@ -1,3 +1,4 @@
+using Orbit.Application.Chat;
 using Orbit.Application.Chat.FeatureExplanations;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
@@ -41,6 +42,9 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAgentAuditService, AgentAuditService>();
         builder.Services.AddScoped<IAgentTargetOwnershipService, AgentTargetOwnershipService>();
         builder.Services.AddScoped<IAgentOperationExecutor, AgentOperationExecutor>();
+        builder.Services.AddScoped<IPendingOperationChangePreviewer, PendingOperationChangePreviewer>();
+        builder.Services.AddScoped<IDestructiveOperationPreviewer, DestructiveOperationPreviewer>();
+        builder.Services.AddScoped<PendingOperationRevisionService>();
         builder.Services.AddScoped<Orbit.Api.Mcp.McpExecutorBridge>();
     }
 
@@ -48,6 +52,7 @@ public static partial class ServiceCollectionExtensions
     {
         builder.Services.AddScoped<IAiTool, LogHabitTool>();
         builder.Services.AddScoped<IAiTool, SkipHabitTool>();
+        builder.Services.AddScoped<IAiTool, UndoSkipHabitTool>();
         builder.Services.AddScoped<IAiTool, CreateHabitTool>();
         builder.Services.AddScoped<IAiTool, UpdateHabitTool>();
         builder.Services.AddScoped<IAiTool, DeleteHabitTool>();
@@ -73,7 +78,6 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAiTool, GoalReviewTool>();
         builder.Services.AddScoped<IAiTool, GetProfileTool>();
         builder.Services.AddScoped<IAiTool, UpdateProfilePreferencesTool>();
-        builder.Services.AddScoped<IAiTool, SetColorSchemeTool>();
         builder.Services.AddScoped<IAiTool, SetAiMemoryTool>();
         builder.Services.AddScoped<IAiTool, SetAiSummaryTool>();
         builder.Services.AddScoped<IAiTool, GetNotificationsTool>();

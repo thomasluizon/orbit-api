@@ -10,7 +10,7 @@ public class UpdateGoalProgressTool(
     IGenericRepository<Goal> goalRepository,
     IGenericRepository<GoalProgressLog> progressLogRepository,
     IGoalCompletionService goalCompletionService,
-    IUnitOfWork unitOfWork) : IAiTool, IConcurrencyRetryableTool
+    IUnitOfWork unitOfWork) : IAiTool, IConcurrencyRetryableTool, IArgumentCheckTool
 {
     public string Name => "update_goal_progress";
     public string Description => "Update progress on an existing goal. Identify the goal by goal_id, or by fuzzy goal_name match, then set the new current value.";
@@ -27,6 +27,19 @@ public class UpdateGoalProgressTool(
         },
         required = new[] { "current_value" }
     };
+
+    public async Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
+        if (!args.TryGetProperty("current_value", out var value) || !value.TryGetDecimal(out var currentValue))
+            return Orbit.Domain.Common.Result.Failure("current_value is required.");
+        var (goal, error) = await ResolveGoalAsync(args, userId, ct);
+        if (goal is null)
+            return Orbit.Domain.Common.Result.Failure(error!);
+        var command = new Orbit.Application.Goals.Commands.UpdateGoalProgressCommand(userId, goal.Id,
+            currentValue, JsonArgumentParser.GetOptionalString(args, "note"));
+        var validation = new Orbit.Application.Goals.Validators.UpdateGoalProgressCommandValidator().Validate(command);
+        return validation.IsValid ? goal.CheckProgress(currentValue) : Orbit.Domain.Common.Result.Failure(validation.ToString());
+    }
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {

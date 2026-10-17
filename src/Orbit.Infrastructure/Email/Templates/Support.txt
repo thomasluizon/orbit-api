@@ -1,8 +1,10 @@
-Orbit Support Request
+Orbit
 
-From: {{fromName}} <{{fromEmail}}>
-Subject: {{subject}}
+{{heading}}
+
+{{fromLabel}}: {{fromName}} <{{fromEmail}}>
+{{subjectLabel}}: {{subject}}
 
 {{message}}
 
-Reply directly to respond to the user.
+{{footer}}

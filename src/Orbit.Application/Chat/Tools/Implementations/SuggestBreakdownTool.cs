@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
-public class SuggestBreakdownTool : IAiTool
+public class SuggestBreakdownTool : IAiTool, IArgumentCheckTool
 {
     public string Name => "suggest_breakdown";
 
@@ -40,6 +40,9 @@ public class SuggestBreakdownTool : IAiTool
         },
         required = new[] { "title", "suggested_sub_habits" }
     };
+
+    public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ChatToolArgumentCheck.CheckAsync(this, args, () => ExecuteAsync(args, userId, ct));
 
     public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {

@@ -50,7 +50,7 @@ public class ChatToolMetadataTests
         var moveHabitTool = new MoveHabitTool(mediator, Repo<Habit>());
         var queryGoalsTool = new QueryGoalsTool(Repo<Goal>(), userDateService, goalProgressReadSyncer);
         var queryHabitsTool = new QueryHabitsTool(Repo<Habit>(), Repo<User>());
-        var skipHabitTool = new SkipHabitTool(Repo<Habit>(), Repo<HabitLog>(), userDateService);
+        var skipHabitTool = new SkipHabitTool(mediator, Repo<Habit>());
         var suggestBreakdownTool = new SuggestBreakdownTool();
         var updateGoalProgressTool = new UpdateGoalProgressTool(
             Repo<Goal>(), Repo<GoalProgressLog>(), goalCompletionService, unitOfWork);
@@ -103,6 +103,8 @@ public class ChatToolMetadataTests
 
     private static void AssertTool(Orbit.Application.Chat.Tools.IAiTool tool, string expectedName, string descriptionFragment, string schemaFragment, bool expectReadOnly = false)
     {
+        if (!expectReadOnly)
+            tool.Should().BeAssignableTo<Orbit.Application.Chat.Tools.IArgumentCheckTool>();
         tool.Name.Should().Be(expectedName);
         tool.Description.Should().NotBeNullOrWhiteSpace();
         tool.Description.ToLowerInvariant().Should().Contain(descriptionFragment.ToLowerInvariant(),

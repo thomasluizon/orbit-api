@@ -37,4 +37,23 @@ public class LocaleHelperTests
     {
         LocaleHelper.IsPortuguese(input).Should().Be(expected);
     }
+
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("", false)]
+    [InlineData("  ", false)]
+    [InlineData("pt-BR", true)]
+    [InlineData("en, pt-BR", false)]
+    [InlineData("pt-BR, en", true)]
+    [InlineData("pt;q=0.1,en;q=0.9", false)]
+    [InlineData("en;q=0.1,pt;q=0.9", true)]
+    [InlineData("pt;q=0,en;q=0.5", false)]
+    [InlineData("en;q=0,pt;q=0.5", true)]
+    [InlineData("pt;q=invalid,en;q=0.5", true)]
+    [InlineData("pt;level=1;q=0.2,en;q=0.8", false)]
+    public void IsPortugueseAcceptLanguage_UsesHighestQualityThenHeaderOrder(
+        string? input, bool expected)
+    {
+        LocaleHelper.IsPortugueseAcceptLanguage(input).Should().Be(expected);
+    }
 }

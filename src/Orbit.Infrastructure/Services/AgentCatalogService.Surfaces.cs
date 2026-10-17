@@ -55,7 +55,7 @@ public partial class AgentCatalogService
                 "chat",
                 "AI Chat",
                 "Lets the assistant explain the app and execute safe Orbit operations.",
-                ["Send a prompt to the chat endpoint.", "The backend resolves tool calls.", "Review pending confirmations before destructive actions."],
+                ["Send a prompt to the chat endpoint.", "The backend resolves tool calls.", "Approve the pending confirmation of every write before it runs."],
                 ["Chat may use clientContext as UI hints only.", "Authorization is always backend-enforced."],
                 [AgentCapabilityIds.ChatInteract],
                 ["ChatController.ProcessChat", "ChatController.ProcessChatStream", "ChatController.Transcribe"])
@@ -69,9 +69,9 @@ public partial class AgentCatalogService
             new AppSurface(
                 "profile-preferences",
                 "Profile And Preferences",
-                "Stores identity, timezone, language, theme, color scheme, and week-start preferences.",
-                ["Open Profile.", "Review identity, plan, and settings.", "Update timezone, language, theme, or week-start preferences."],
-                ["Theme and color are user preferences, not authorization signals.", "Preference changes are low-risk writes."],
+                "Stores identity, timezone, language, light or dark mode, and week-start preferences. Orbit uses one accent.",
+                ["Open Profile.", "Review identity, plan, and settings.", "Update timezone, language, light or dark mode, or week-start preferences."],
+                ["Orbit uses one accent with light or dark mode.", "Preference changes are low-risk writes."],
                 [AgentCapabilityIds.ProfileReadBasic, AgentCapabilityIds.ProfilePreferencesWrite, AgentCapabilityIds.ProfilePremiumAppearanceWrite],
                 ["ProfileController.GetProfile", "ProfileController.SetTimezone"]),
 
@@ -91,7 +91,7 @@ public partial class AgentCatalogService
                 ["Open Notifications.", "Mark items read or manage subscriptions.", "Delete individual items only after confirmation."],
                 ["Push subscription cryptographic material is never AI-readable.", "Deletion requires confirmation."],
                 [AgentCapabilityIds.NotificationsRead, AgentCapabilityIds.NotificationsWrite, AgentCapabilityIds.NotificationsDelete],
-                ["NotificationController.GetNotifications", "NotificationController.Subscribe"])
+                ["NotificationController.GetNotifications", "NotificationController.GetSubscriptions", "NotificationController.Subscribe"])
         ];
     }
 

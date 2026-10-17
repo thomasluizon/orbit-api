@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
 using Orbit.Api.RateLimiting;
+using Orbit.Application.Chat;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -29,6 +30,7 @@ public class AiController(
     IAgentStepUpService stepUpService,
     IAgentAuditService auditService,
     IAgentOperationExecutor operationExecutor,
+    PendingOperationRevisionService revisionService,
     IValidator<ResolveClarificationRequest> resolveClarificationValidator) : ControllerBase
 {
     [HttpGet("capabilities")]
@@ -108,6 +110,62 @@ public class AiController(
     public record VerifyStepUpRequest([property: JsonRequired] Guid ChallengeId, string Code);
     public record ExecutePendingOperationRequest(string ConfirmationToken);
 
+    [HttpPost("pending-operations/{id:guid}/preview/refresh")]
+    [DistributedRateLimit("ai-operations")]
+    [ProducesResponseType(typeof(PendingOperationRevisionResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(PendingOperationRevisionResult), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(PendingOperationRevisionResult), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RefreshPendingOperationPreview(Guid id, CancellationToken cancellationToken)
+    {
+        if (HttpContext.User.GetAgentAuthMethod() == AgentAuthMethod.ApiKey)
+            return Forbid();
+
+        var userId = HttpContext.GetUserId();
+        var result = await revisionService.RefreshAsync(userId, id, cancellationToken);
+        await auditService.RecordAsync(new AgentAuditEntry(
+            userId, AgentCapabilityIds.ChatInteract, nameof(RefreshPendingOperationPreview),
+            AgentExecutionSurface.Metadata, HttpContext.User.GetAgentAuthMethod(),
+            AgentRiskClass.Destructive,
+            result.IsSuccess ? AgentPolicyDecisionStatus.Allowed : AgentPolicyDecisionStatus.Denied,
+            result.IsSuccess ? AgentOperationStatus.Succeeded : AgentOperationStatus.Failed,
+            HttpContext.TraceIdentifier, "Refresh pending agent operation preview",
+            TargetId: id.ToString(), Error: result.Error), cancellationToken);
+
+        if (result.IsSuccess)
+            return Ok(result);
+        if (result.Error == "pending_operation_not_found")
+            return NotFound(result);
+        return Conflict(result);
+    }
+
+    [HttpPost("pending-operations/{id:guid}/revise")]
+    [DistributedRateLimit("ai-operations")]
+    public async Task<IActionResult> RevisePendingOperation(
+        Guid id, [FromBody] RevisePendingOperationRequest request, CancellationToken cancellationToken)
+    {
+        if (HttpContext.User.GetAgentAuthMethod() == AgentAuthMethod.ApiKey)
+            return Forbid();
+
+        var userId = HttpContext.GetUserId();
+        var result = await revisionService.ReviseAsync(userId, id, request, cancellationToken);
+        await auditService.RecordAsync(new AgentAuditEntry(
+            userId, AgentCapabilityIds.ChatInteract, nameof(RevisePendingOperation),
+            AgentExecutionSurface.Metadata, HttpContext.User.GetAgentAuthMethod(),
+            AgentRiskClass.Destructive,
+            result.IsSuccess ? AgentPolicyDecisionStatus.Allowed : AgentPolicyDecisionStatus.Denied,
+            result.IsSuccess ? AgentOperationStatus.Succeeded : AgentOperationStatus.Failed,
+            HttpContext.TraceIdentifier, "Revise pending agent operation",
+            TargetId: id.ToString(), Error: result.Error), cancellationToken);
+
+        if (result.IsSuccess)
+            return Ok(result);
+        if (result.Error == "pending_operation_not_found")
+            return NotFound(result);
+        if (result.Error is "stale_preview" or "revision_conflict")
+            return Conflict(result);
+        return BadRequest(result);
+    }
+
     [HttpPost("pending-operations/{id:guid}/confirm")]
     [DistributedRateLimit("ai-operations")]
     public async Task<IActionResult> ConfirmPendingOperation(Guid id, CancellationToken cancellationToken)
@@ -116,7 +174,10 @@ public class AiController(
             return Forbid();
 
         var userId = HttpContext.GetUserId();
-        var confirmation = pendingStores.OperationStore.Confirm(HttpContext.GetUserId(), id);
+        var execution = pendingStores.OperationStore.GetExecution(userId, id);
+        var invalid = execution is not null
+            && !await revisionService.CanApproveAsync(userId, execution, cancellationToken);
+        var confirmation = invalid ? null : pendingStores.OperationStore.Confirm(userId, id);
         await auditService.RecordAsync(new AgentAuditEntry(
             userId,
             AgentCapabilityIds.ChatInteract,
@@ -129,7 +190,10 @@ public class AiController(
             HttpContext.TraceIdentifier,
             "Confirm pending agent operation",
             TargetId: id.ToString(),
-            Error: confirmation is null ? "pending_operation_not_found" : null), cancellationToken);
+            Error: invalid ? "validation_error" : confirmation is null ? "pending_operation_not_found" : null), cancellationToken);
+
+        if (invalid)
+            return BadRequest(ErrorMessages.ValidationError.ToErrorBody());
 
         return confirmation is null
             ? NotFound(ErrorMessages.PendingOperationNotFound.ToErrorBody())
@@ -238,6 +302,12 @@ public class AiController(
 
             return NotFound(ErrorMessages.PendingOperationNotFound.ToErrorBody());
         }
+
+        if (!await revisionService.CanApproveAsync(userId, pendingExecution, cancellationToken))
+            return BadRequest(ErrorMessages.ValidationError.ToErrorBody());
+
+        if (!await revisionService.IsCurrentAsync(userId, pendingExecution, cancellationToken))
+            return Conflict(new { error = "stale_preview" });
 
         var result = await operationExecutor.ExecuteAsync(new AgentExecuteOperationRequest(
             userId,
@@ -371,7 +441,8 @@ public class AiController(
             HttpContext.User.GetGrantedAgentScopes(),
             HttpContext.User.IsReadOnlyCredential(),
             ConfirmationToken: null,
-            HttpContext.TraceIdentifier), cancellationToken);
+            HttpContext.TraceIdentifier,
+            IncludeChangePreview: true), cancellationToken);
 
         await RecordResolveAuditAsync(
             userId,

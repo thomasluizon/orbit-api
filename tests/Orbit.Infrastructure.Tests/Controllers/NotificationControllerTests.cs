@@ -44,6 +44,21 @@ public class NotificationControllerTests
     }
 
     [Fact]
+    public async Task GetSubscriptions_UsesAuthenticatedUserId()
+    {
+        var response = new GetPushSubscriptionsResponse([], 5);
+        _mediator.Send(Arg.Any<GetPushSubscriptionsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(response));
+
+        var result = await _controller.GetSubscriptions(CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeSameAs(response);
+        await _mediator.Received(1).Send(
+            Arg.Is<GetPushSubscriptionsQuery>(query => query.UserId == UserId),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task GetNotifications_Failure_ReturnsBadRequest()
     {
         _mediator.Send(Arg.Any<GetNotificationsQuery>(), Arg.Any<CancellationToken>())

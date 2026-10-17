@@ -7,6 +7,11 @@ using Orbit.Domain.Common;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
+public record CalendarOverviewPayload(
+    IReadOnlyList<CalendarEventItem> Events,
+    CalendarAutoSyncStateResponse? AutoSyncState,
+    IReadOnlyList<CalendarSyncSuggestionItem> Suggestions);
+
 public class GetCalendarOverviewTool(IMediator mediator) : IAiTool
 {
     public string Name => "get_calendar_overview";
@@ -40,28 +45,25 @@ public class GetCalendarOverviewTool(IMediator mediator) : IAiTool
         if (includeAutoSyncState)
         {
             var autoSyncStateResult = await mediator.Send(new GetCalendarAutoSyncStateQuery(userId), ct);
-            if (autoSyncStateResult.IsFailure)
+            if (autoSyncStateResult.IsFailure && autoSyncStateResult.ErrorCode != "PAY_GATE")
                 return ToolResult.FromFailure(autoSyncStateResult);
-
-            autoSyncState = autoSyncStateResult.Value;
+            if (autoSyncStateResult.IsSuccess)
+                autoSyncState = autoSyncStateResult.Value;
         }
 
         var suggestions = includeSuggestions
             ? await mediator.Send(new GetCalendarSyncSuggestionsQuery(userId), ct)
             : Result.Success(new List<CalendarSyncSuggestionItem>());
-        if (suggestions.IsFailure)
+        if (suggestions.IsFailure && suggestions.ErrorCode != Result.PayGateErrorCode)
             return ToolResult.FromFailure(suggestions);
 
-        return new ToolResult(true, Payload: new
-        {
-            events = events.Value,
-            autoSyncState,
-            suggestions = suggestions.Value
-        });
+        return new ToolResult(true, Payload: new CalendarOverviewPayload(
+            events.Value, autoSyncState,
+            suggestions.IsSuccess ? suggestions.Value : []));
     }
 }
 
-public class ManageCalendarSyncTool(IMediator mediator) : IAiTool
+public class ManageCalendarSyncTool(IMediator mediator) : IAiTool, IArgumentCheckTool
 {
     public string Name => "manage_calendar_sync";
     public string Description => "Enable or disable calendar auto-sync, dismiss imports or suggestions, or trigger a sync run.";
@@ -82,7 +84,13 @@ public class ManageCalendarSyncTool(IMediator mediator) : IAiTool
         required = new[] { "action" }
     };
 
-    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
+    public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ExecuteCoreAsync(args, userId, ct, checkOnly: false);
+
+    public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ChatToolArgumentCheck.CheckAsync(this, args, () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+
+    private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         var action = JsonArgumentParser.GetOptionalString(args, "action");
         if (string.IsNullOrWhiteSpace(action))
@@ -90,15 +98,15 @@ public class ManageCalendarSyncTool(IMediator mediator) : IAiTool
 
         return action switch
         {
-            "set_auto_sync" => await SetAutoSyncAsync(args, userId, ct),
-            "dismiss_import" => await ChatToolMediator.RunAsync(mediator, new DismissCalendarImportCommand(userId), userId, "Dismissed calendar import prompt", new { action }, ct),
-            "dismiss_suggestion" => await DismissSuggestionAsync(args, userId, ct),
-            "run_sync" => await RunSyncAsync(userId, ct),
+            "set_auto_sync" => await SetAutoSyncAsync(args, userId, ct, checkOnly),
+            "dismiss_import" => await ChatToolMediator.RunAsync(mediator, new DismissCalendarImportCommand(userId), userId, "Dismissed calendar import prompt", new { action }, ct, checkOnly),
+            "dismiss_suggestion" => await DismissSuggestionAsync(args, userId, ct, checkOnly),
+            "run_sync" => await RunSyncAsync(userId, ct, checkOnly),
             _ => new ToolResult(false, Error: $"Unsupported action '{action}'.")
         };
     }
 
-    private async Task<ToolResult> SetAutoSyncAsync(JsonElement args, Guid userId, CancellationToken ct)
+    private async Task<ToolResult> SetAutoSyncAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         var enabled = JsonArgumentParser.GetOptionalBool(args, "enabled");
         if (!enabled.HasValue)
@@ -110,10 +118,10 @@ public class ManageCalendarSyncTool(IMediator mediator) : IAiTool
             userId,
             enabled.Value ? "Calendar auto-sync enabled" : "Calendar auto-sync disabled",
             new { action = "set_auto_sync", enabled },
-            ct);
+            ct, checkOnly);
     }
 
-    private async Task<ToolResult> DismissSuggestionAsync(JsonElement args, Guid userId, CancellationToken ct)
+    private async Task<ToolResult> DismissSuggestionAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         var suggestionId = JsonArgumentParser.GetOptionalString(args, "suggestion_id");
         if (!Guid.TryParse(suggestionId, out var parsedId))
@@ -125,12 +133,16 @@ public class ManageCalendarSyncTool(IMediator mediator) : IAiTool
             parsedId,
             "Dismissed calendar sync suggestion",
             new { action = "dismiss_suggestion", suggestionId },
-            ct);
+            ct, checkOnly);
     }
 
-    private async Task<ToolResult> RunSyncAsync(Guid userId, CancellationToken ct)
+    private async Task<ToolResult> RunSyncAsync(Guid userId, CancellationToken ct, bool checkOnly)
     {
-        var result = await mediator.Send(new RunCalendarAutoSyncCommand(userId, IsOpportunistic: false), ct);
+        var command = new RunCalendarAutoSyncCommand(userId, IsOpportunistic: false);
+        if (checkOnly)
+            return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
+
+        var result = await mediator.Send(command, ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: userId.ToString(), EntityName: "Calendar sync requested", Payload: result.Value)
             : ToolResult.FromFailure(result, userId.ToString());

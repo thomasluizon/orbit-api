@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -31,33 +30,6 @@ public partial class ReminderSchedulerService(
                (SELECT CAST(COALESCE(SUM("ReminderPreferencesVersion"), 0) AS bigint) FROM "Users") AS "UserPreferencesVersionSum"
         FROM "Habits" AS h
         """;
-
-    private static readonly Expression<Func<Habit, SchedulerHabit>> HabitProjection = h => new SchedulerHabit
-    {
-        Id = h.Id,
-        UserId = h.UserId,
-        Title = h.Title,
-        DueDate = h.DueDate,
-        EndDate = h.EndDate,
-        ScheduledStartDate = h.ScheduledStartDate,
-        FrequencyUnit = h.FrequencyUnit,
-        FrequencyQuantity = h.FrequencyQuantity,
-        IntervalWeeks = h.IntervalWeeks,
-        IsFlexible = h.IsFlexible,
-        Days = h.Days,
-        DueTime = h.DueTime,
-        ReminderTimes = h.ReminderTimes,
-        ScheduledReminders = h.ScheduledReminders,
-        RelativeReminders = h.RelativeReminders
-    };
-
-    private static readonly Expression<Func<User, SchedulerUser>> UserProjection = u => new SchedulerUser
-    {
-        Id = u.Id,
-        TimeZone = u.TimeZone,
-        Language = u.Language,
-        WeekStartDay = u.WeekStartDay
-    };
 
     private readonly TimeSpan _interval = TimeSpan.FromMinutes(
         configuration.GetValue("BackgroundServices:ReminderIntervalMinutes", 1));
@@ -131,14 +103,12 @@ public partial class ReminderSchedulerService(
             .Where(h => !h.IsCompleted && !h.IsGeneral && h.ReminderEnabled && h.DueTime != null
                 && h.DueDate <= maxLocalDate
                 && (!h.EndDate.HasValue || h.EndDate.Value >= minLocalDate))
-            .Select(HabitProjection)
             .ToListAsync(ct);
         var scheduledHabits = await dbContext.Habits
             .AsNoTracking()
             .Where(h => !h.IsCompleted && !h.IsGeneral && h.ReminderEnabled && h.DueTime == null
                 && h.DueDate <= DateOnly.FromDateTime(nowUtc.AddDays(2))
                 && (!h.EndDate.HasValue || h.EndDate.Value >= minLocalDate))
-            .Select(HabitProjection)
             .ToListAsync(ct);
         scheduledHabits = scheduledHabits.Where(h => h.ScheduledReminders.Count > 0).ToList();
 
@@ -146,7 +116,6 @@ public partial class ReminderSchedulerService(
         var users = await dbContext.Users
             .AsNoTracking()
             .Where(u => userIds.Contains(u.Id))
-            .Select(UserProjection)
             .ToDictionaryAsync(u => u.Id, ct);
 
         var habitIds = relativeHabits.Select(h => h.Id).ToList();
@@ -232,7 +201,7 @@ public partial class ReminderSchedulerService(
     }
 
     private async Task ProcessSingleRelativeReminderAsync(
-        SchedulerHabit habit, Dictionary<Guid, SchedulerUser> users,
+        Habit habit, Dictionary<Guid, User> users,
         HashSet<(Guid HabitId, DateOnly Date)> loggedHabitDates,
         HashSet<(Guid HabitId, DateOnly Date, int MinutesBefore)> sentReminderSet,
         HashSet<(Guid HabitId, DateOnly Date, TimeOnly Time, ScheduledReminderWhen? When)> sentClockSet,
@@ -324,7 +293,7 @@ public partial class ReminderSchedulerService(
     }
 
     private async Task ProcessSingleScheduledReminderAsync(
-        SchedulerHabit habit, Dictionary<Guid, SchedulerUser> users,
+        Habit habit, Dictionary<Guid, User> users,
         HashSet<(Guid HabitId, DateOnly Date, TimeOnly ReminderTimeUtc, ScheduledReminderWhen? When)> sentScheduledSet,
         List<PendingReminderPush> pending, OrbitDbContext dbContext, DateTime nowUtc, CancellationToken ct)
     {
@@ -376,7 +345,7 @@ public partial class ReminderSchedulerService(
     }
 
     private async Task<bool> TryRecordReminderAsync(
-        SchedulerHabit habit, SentReminder sentReminder, Notification notification,
+        Habit habit, SentReminder sentReminder, Notification notification,
         OrbitDbContext dbContext, CancellationToken ct)
     {
         await dbContext.SentReminders.AddAsync(sentReminder, ct);
@@ -453,9 +422,9 @@ public partial class ReminderSchedulerService(
     private sealed record ReminderSnapshot(
         DateTime LoadedAtUtc,
         ReminderProbe Probe,
-        List<SchedulerHabit> RelativeHabits,
-        List<SchedulerHabit> ScheduledHabits,
-        Dictionary<Guid, SchedulerUser> Users,
+        List<Habit> RelativeHabits,
+        List<Habit> ScheduledHabits,
+        Dictionary<Guid, User> Users,
         HashSet<(Guid HabitId, DateOnly Date)> LoggedHabitDates,
         HashSet<(Guid HabitId, DateOnly Date, int MinutesBefore)> SentReminderSet,
         HashSet<(Guid HabitId, DateOnly Date, TimeOnly Time, ScheduledReminderWhen? When)> SentClockSet,

@@ -27,7 +27,8 @@ public class AgentPolicyEvaluator(
             AgentPolicyDecisionStatus.Allowed,
             evaluated.Capability,
             ShadowStatus: evaluated.Status,
-            ShadowReason: evaluated.Reason);
+            ShadowReason: evaluated.Reason,
+            ConsumedConfirmation: evaluated.ConsumedConfirmation);
     }
 
     private AgentPolicyDecision EvaluateInternal(
@@ -118,7 +119,8 @@ public class AgentPolicyEvaluator(
             if (requireStepUp)
                 stepUpAuthorizationBridge.OnStepUpVerified(capability.Id, context.UserId);
 
-            return new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability);
+            return new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability,
+                ConsumedConfirmation: true);
         }
 
         var reason = requireStepUp ? "step_up_required" : "confirmation_required";

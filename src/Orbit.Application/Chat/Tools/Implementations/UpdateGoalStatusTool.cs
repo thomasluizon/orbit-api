@@ -10,7 +10,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 public class UpdateGoalStatusTool(
     IGenericRepository<Goal> goalRepository,
     IGoalCompletionService goalCompletionService,
-    IUnitOfWork unitOfWork) : IAiTool, IConcurrencyRetryableTool
+    IUnitOfWork unitOfWork) : IAiTool, IConcurrencyRetryableTool, IArgumentCheckTool
 {
     public string Name => "update_goal_status";
 
@@ -32,6 +32,17 @@ public class UpdateGoalStatusTool(
         },
         required = new[] { "goal_id", "status" }
     };
+
+    public async Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
+        if (!GoalToolHelpers.TryParseGoalId(args, out var goalId)
+            || !Enum.TryParse<GoalStatus>(JsonArgumentParser.GetOptionalString(args, "status"), out var status)
+            || !Enum.IsDefined(status))
+            return Orbit.Domain.Common.Result.Failure("Invalid goal or status.");
+        var goals = await goalRepository.FindAsync(g => g.Id == goalId && g.UserId == userId && !g.IsDeleted, ct);
+        var goal = goals.FirstOrDefault();
+        return goal is null ? Orbit.Domain.Common.Result.Failure("Goal not found.") : goal.CheckStatusChange(status);
+    }
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {

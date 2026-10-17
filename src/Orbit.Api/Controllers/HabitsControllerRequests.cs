@@ -58,7 +58,7 @@ public partial class HabitsController
 
     public record LogHabitRequest(DateOnly? Date = null);
 
-    public record SkipHabitRequest(DateOnly? Date = null);
+    public record SkipHabitRequest(DateOnly? Date = null, Guid? SkipId = null);
 
     public record BulkCreateHabitsRequest(
         IReadOnlyList<BulkHabitItemRequest> Habits,

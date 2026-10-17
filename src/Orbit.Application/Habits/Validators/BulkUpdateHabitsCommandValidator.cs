@@ -11,10 +11,10 @@ public sealed class BulkUpdateHabitsCommandValidator : AbstractValidator<BulkUpd
         RuleFor(command => command.UserId).NotEmpty();
         RuleFor(command => command.Filter)
             .Must(filter => filter.HasSelector)
-            .WithMessage("A bulk habit filter is required.");
+            .WithCopy(ValidationErrorCodes.BulkFilterRequired);
         RuleFor(command => command.Changes)
             .Must(changes => changes.HasAnyChange)
-            .WithMessage("At least one habit change is required.");
+            .WithCopy(ValidationErrorCodes.BulkChangesRequired);
         RuleFor(command => command.Changes.Title)
             .NotEmpty()
             .MaximumLength(AppConstants.MaxHabitTitleLength)
@@ -30,7 +30,7 @@ public sealed class BulkUpdateHabitsCommandValidator : AbstractValidator<BulkUpd
             .When(command => command.Changes.HasFrequencyQuantity && command.Changes.FrequencyQuantity.HasValue);
         RuleFor(command => command.Changes)
             .Must(HaveValidCadenceChange)
-            .WithMessage("A recurring frequency requires a positive frequency quantity.");
+            .WithCopy(ValidationErrorCodes.RecurringQuantityPositive);
         RuleFor(command => command.Changes.IntervalWeeks)
             .InclusiveBetween(1, AppConstants.MaxIntervalWeeks)
             .When(command => command.Changes.HasIntervalWeeks && command.Changes.IntervalWeeks.HasValue);

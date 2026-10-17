@@ -92,6 +92,8 @@ public sealed class BulkCreateAgentOperationTests : IDisposable
         _executor = new AgentOperationExecutor(
             catalog, policy, _audit, ownership, bridge,
             new AiToolRegistry([tool]),
+            Substitute.For<IPendingOperationChangePreviewer>(),
+            _pending,
             work, _logger);
     }
 

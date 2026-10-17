@@ -188,6 +188,7 @@ test("moving an existing violating comment passes the staged diff", () => {
     git(root, "add", name)
     const result = run(root, ["--staged"])
     assert.equal(result.status, 0, result.stderr)
+
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
 
@@ -203,5 +204,54 @@ test("a directory entry may exempt comment-length but never machine-path", () =>
     const refused = run(root, ["--all"])
     assert.equal(refused.status, 2)
     assert.match(refused.stderr, /valid exact or directory-scoped entries/)
+
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test("a comment after an escaped backslash in a YAML string fails", () => {
+  const root = make("sample.yml", "value: clean\n")
+  try {
+    writeFileSync(join(root, "sample.yml"), `value: "foo\\\\" # ${date}\n`)
+    git(root, "add", "sample.yml")
+    const all = run(root, ["--all"])
+    assert.equal(all.status, 1)
+    assert.ok(all.stderr.includes("sample.yml:1: dated-anecdote"))
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test("--staged checks a staged file whose working copy is gone", () => {
+  const root = make("sample.md")
+  try {
+    writeFileSync(join(root, "sample.md"), `Ask ${owner}.\n`)
+    git(root, "add", "sample.md")
+    rmSync(join(root, "sample.md"))
+    const staged = run(root, ["--staged"])
+    assert.equal(staged.status, 1)
+    assert.ok(staged.stderr.includes("sample.md:1: owner-name"))
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test("a comment inside an empty call is checked", () => {
+  const root = make("sample.mjs")
+  try {
+    writeFileSync(join(root, "sample.mjs"), `run(/* ${date} */)\n`)
+    git(root, "add", "sample.mjs")
+    const all = run(root, ["--all"])
+    assert.equal(all.status, 1)
+    assert.ok(all.stderr.includes("sample.mjs:1: dated-anecdote"))
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+test("the hook reports findings an edit introduces, not lines it keeps", () => {
+  const line = `const value = new Date("${date}T12:00:00.000Z")`
+  const root = make("sample.mjs", `${line}\n`)
+  try {
+    const wrapped = hook(root, "sample.mjs", `/*\n${line}\n*/\n`)
+    assert.equal(wrapped.status, 2)
+    writeFileSync(join(root, "sample.mjs"), `// ${date}\nconst other = 1\n`)
+    git(root, "add", "sample.mjs")
+    git(root, "commit", "-qm", "existing comment")
+    const moved = hook(root, "sample.mjs", `const other = 1\n// ${date}\n`)
+    assert.equal(moved.status, 0)
   } finally { rmSync(root, { recursive: true, force: true }) }
 })

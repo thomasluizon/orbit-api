@@ -1,5 +1,6 @@
 using System.ClientModel;
 using System.ClientModel.Primitives;
+using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -18,16 +19,92 @@ public class AiProactiveCheckinMessageServiceGenerationTests
 {
     private static readonly string[] OffTrackHabits = ["Meditate", "Read"];
 
+    [Theory]
+    [InlineData("en", "Pick a tiny step toward reading before the day ends at home.")]
+    [InlineData("pt-BR", "Escolha um passo leve para retomar a leitura hoje com calma.")]
+    public async Task GenerateMessageAsync_BodyAtSixtyTextElements_KeepsTrimmedBody(
+        string language, string body)
+    {
+        new StringInfo(body).LengthInTextElements.Should().Be(60);
+        var service = BuildService($"Title\n  {body}  ");
+
+        var result = await service.GenerateMessageAsync("Alex", OffTrackHabits, 5, language);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Title.Should().Be("Title");
+        result.Value.Body.Should().Be(body);
+    }
+
+    [Theory]
+    [InlineData("en", "Pick a small step toward reading before the day ends at home.", "You have 2 habits still open today.")]
+    [InlineData("pt-BR", "Escolha um passo curto para retomar a leitura hoje com calma.", "Você ainda tem 2 hábitos pendentes hoje.")]
+    public async Task GenerateMessageAsync_BodyAtSixtyOneTextElements_ReplacesWholeBody(
+        string language, string body, string expected)
+    {
+        new StringInfo(body).LengthInTextElements.Should().Be(61);
+        var service = BuildService($"Title\n  {body}  ");
+
+        var result = await service.GenerateMessageAsync("Alex", OffTrackHabits, 5, language);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Title.Should().Be("Title");
+        result.Value.Body.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("en", "You have 1 habit still open today.")]
+    [InlineData("pt-BR", "Você ainda tem 1 hábito pendente hoje.")]
+    public async Task GenerateMessageAsync_LongSingleLineBody_UsesSingularFallbackWithoutHabitTitle(
+        string language, string expected)
+    {
+        var habitTitle = new string('a', 200);
+        var service = BuildService($"Read {habitTitle} today.");
+
+        var result = await service.GenerateMessageAsync("Alex", [habitTitle], 5, language);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Body.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("en", "You have 2 habits still open today.")]
+    [InlineData("pt-BR", "Você ainda tem 2 hábitos pendentes hoje.")]
+    public async Task GenerateMessageAsync_TextElements_CountsEmojiAndCombiningMarksOnce(
+        string language, string expectedFallback)
+    {
+        const string sentence = "Pick a tiny step toward reading before the day ends at home.";
+        foreach (var body in new[]
+                 {
+                     "🙂 Pick a tiny step with reading before the day ends at home.",
+                     "👩🏽‍💻 Pick a tiny step with reading before the day ends at home.",
+                     "P\u0301" + sentence[1..]
+                 })
+        {
+            new StringInfo(body).LengthInTextElements.Should().Be(60);
+            body.Length.Should().BeGreaterThan(60);
+            var service = BuildService($"Title\n{body}");
+            var overflowService = BuildService($"Title\n{body}x");
+
+            var kept = await service.GenerateMessageAsync("Alex", OffTrackHabits, 5, language);
+            var replaced = await overflowService.GenerateMessageAsync("Alex", OffTrackHabits, 5, language);
+
+            kept.IsSuccess.Should().BeTrue();
+            kept.Value.Body.Should().Be(body);
+            replaced.IsSuccess.Should().BeTrue();
+            replaced.Value.Body.Should().Be(expectedFallback);
+        }
+    }
+
     [Fact]
     public async Task GenerateMessageAsync_TwoLines_ReturnsTitleAndBody()
     {
-        var service = BuildService("Still time today, Alex\nYou fell behind on Meditate. Astra's got your back.");
+        var service = BuildService("Still time today, Alex\nMeditate is still open. Astra records it when you do it.");
 
         var result = await service.GenerateMessageAsync("Alex", OffTrackHabits, 5, "en");
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Still time today, Alex");
-        result.Value.Body.Should().Be("You fell behind on Meditate. Astra's got your back.");
+        result.Value.Body.Should().Be("Meditate is still open. Astra records it when you do it.");
     }
 
     [Theory]
@@ -90,7 +167,7 @@ public class AiProactiveCheckinMessageServiceGenerationTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Still time today, Alex");
-        result.Value.Body.Should().Be("You still have a few habits left today. Astra can help you get back on track.");
+        result.Value.Body.Should().Be("You have 2 habits still open today.");
     }
 
     [Fact]
@@ -102,7 +179,7 @@ public class AiProactiveCheckinMessageServiceGenerationTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Ainda dá tempo hoje, Alex");
-        result.Value.Body.Should().Be("Ainda faltam alguns hábitos hoje. A Astra ajuda você a retomar o ritmo.");
+        result.Value.Body.Should().Be("Você ainda tem 2 hábitos pendentes hoje.");
     }
 
     [Fact]
@@ -114,7 +191,7 @@ public class AiProactiveCheckinMessageServiceGenerationTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Still time today, Alex");
-        result.Value.Body.Should().Be("You still have a few habits left today. Astra can help you get back on track.");
+        result.Value.Body.Should().Be("You have 2 habits still open today.");
     }
 
     [Fact]
@@ -126,7 +203,43 @@ public class AiProactiveCheckinMessageServiceGenerationTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Ainda dá tempo hoje, Alex");
-        result.Value.Body.Should().Be("Ainda faltam alguns hábitos hoje. A Astra ajuda você a retomar o ritmo.");
+        result.Value.Body.Should().Be("Você ainda tem 2 hábitos pendentes hoje.");
+    }
+
+    /// <summary>
+    /// <c>ProactiveCheckinSchedulerService</c> sends as soon as one habit is off track, so a single
+    /// open habit is the ordinary case and the copy must not call it a few. The old fallback also
+    /// promised that Astra recorded the rest, which <c>LogHabitTool</c> never does: it records only
+    /// the habit a person names.
+    /// </summary>
+    [Theory]
+    [InlineData("en", "You have 1 habit still open today.")]
+    [InlineData("pt-BR", "Você ainda tem 1 hábito pendente hoje.")]
+    public async Task GenerateMessageAsync_OneOpenHabit_CountsItAsOne(string language, string expected)
+    {
+        var service = BuildService("   ");
+
+        var result = await service.GenerateMessageAsync("Alex", ["Meditate"], 5, language);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Body.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task GenerateMessageAsync_TheFallbackNeverPromisesAutomaticLogging(string language)
+    {
+        var service = BuildService("   ");
+
+        var oneOpen = await service.GenerateMessageAsync("Alex", ["Meditate"], 5, language);
+        var manyOpen = await service.GenerateMessageAsync("Alex", OffTrackHabits, 5, language);
+
+        foreach (var body in new[] { oneOpen.Value.Body, manyOpen.Value.Body })
+        {
+            body.Should().NotContainEquivalentOf("records the rest");
+            body.Should().NotContainEquivalentOf("cuida do resto");
+        }
     }
 
     internal static AiProactiveCheckinMessageService BuildService(string content, HttpStatusCode status = HttpStatusCode.OK)

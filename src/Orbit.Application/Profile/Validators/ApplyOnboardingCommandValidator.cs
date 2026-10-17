@@ -16,11 +16,12 @@ public class ApplyHabitInputValidator : AbstractValidator<ApplyHabitInput>
 
         RuleFor(x => x.FrequencyQuantity)
             .GreaterThan(0)
+            .WithFieldCopy(ValidationCopyKeys.FrequencyPositive)
             .When(x => x.FrequencyQuantity is not null);
 
         RuleFor(x => x.FrequencyQuantity)
             .NotNull()
-            .WithMessage("Frequency quantity is required when frequency unit is set")
+            .WithCopy(ValidationErrorCodes.FrequencyQuantityRequired)
             .When(x => x.FrequencyUnit is not null);
 
         SharedHabitRules.AddIntervalWeeksRules(RuleFor(x => x.IntervalWeeks));
@@ -35,10 +36,13 @@ public class ApplyGoalInputValidator : AbstractValidator<ApplyGoalInput>
 {
     public ApplyGoalInputValidator()
     {
-        RuleFor(x => x.Title).NotEmpty().MaximumLength(200);
-        RuleFor(x => x.Description).MaximumLength(AppConstants.MaxGoalDescriptionLength);
-        RuleFor(x => x.TargetValue).GreaterThan(0);
-        RuleFor(x => x.Unit).NotEmpty().MaximumLength(50);
+        RuleFor(x => x.Title).NotEmpty().WithFieldCopy(ValidationCopyKeys.GoalTitleRequired)
+            .MaximumLength(200).WithFieldCopy(ValidationCopyKeys.GoalTitleLength);
+        RuleFor(x => x.Description).MaximumLength(AppConstants.MaxGoalDescriptionLength)
+            .WithFieldCopy(ValidationCopyKeys.GoalDescriptionLength);
+        RuleFor(x => x.TargetValue).GreaterThan(0).WithFieldCopy(ValidationCopyKeys.GoalTargetPositive);
+        RuleFor(x => x.Unit).NotEmpty().WithFieldCopy(ValidationCopyKeys.GoalUnitRequired)
+            .MaximumLength(50).WithFieldCopy(ValidationCopyKeys.GoalUnitLength);
         RuleFor(x => x.Type).IsInEnum();
     }
 }
@@ -57,6 +61,6 @@ public class ApplyOnboardingCommandValidator : AbstractValidator<ApplyOnboarding
 
         When(x => x.WeekStartDay is not null, () =>
             RuleFor(x => x.WeekStartDay!.Value).Must(day => day is 0 or 1)
-                .WithMessage("Week start day must be 0 (Sunday) or 1 (Monday)."));
+                .WithCopy(ValidationErrorCodes.WeekStartOnboarding));
     }
 }

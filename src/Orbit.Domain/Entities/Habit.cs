@@ -1,6 +1,5 @@
 using Orbit.Domain.Common;
 using Orbit.Domain.Enums;
-using Orbit.Domain.Interfaces;
 using Orbit.Domain.ValueObjects;
 using Orbit.Domain.Models;
 
@@ -59,7 +58,7 @@ public record HabitUpdateParams(
     int? IntervalWeeks = null,
     IReadOnlyList<RelativeReminderTime>? RelativeReminders = null);
 
-public class Habit : Entity, ITimestamped, ISoftDeletable, IHabitSchedule
+public class Habit : Entity, ITimestamped, ISoftDeletable
 {
     private const int DaysInWeek = 7;
     private const int YearsInGregorianCycle = 400;
@@ -283,14 +282,9 @@ public class Habit : Entity, ITimestamped, ISoftDeletable, IHabitSchedule
         bool advanceDueDate = true,
         int weekStartDay = 1)
     {
-        if (IsCompleted && !IsGeneral)
-            return Result.Failure<HabitLog>(DomainErrors.CannotLogCompletedHabit);
-
-        if (!IsBadHabit && !IsFlexible && _logs.Exists(l => l.Date == date && !l.IsDeleted))
-            return Result.Failure<HabitLog>(DomainErrors.AlreadyLoggedForDate);
-
-        if (IsFlexible && GetRemainingCompletions(date, _logs, weekStartDay) <= 0)
-            return Result.Failure<HabitLog>(DomainErrors.AllInstancesDone);
+        var validation = CheckLog(date, weekStartDay);
+        if (validation.IsFailure)
+            return new Result<HabitLog>(default, false, validation.Error, validation.ErrorCode, validation.ErrorArgs);
 
         var restoresDeletedDueDate = RestoresDeletedDueDate(date, advanceDueDate);
         var completionOrdinal = IsFlexible
@@ -324,6 +318,17 @@ public class Habit : Entity, ITimestamped, ISoftDeletable, IHabitSchedule
 
         UpdatedAtUtc = DateTime.UtcNow;
         return Result.Success(log);
+    }
+
+    public Result CheckLog(DateOnly date, int weekStartDay)
+    {
+        if (IsCompleted && !IsGeneral)
+            return Result.Failure(DomainErrors.CannotLogCompletedHabit);
+        if (!IsBadHabit && !IsFlexible && _logs.Exists(l => l.Date == date && !l.IsDeleted))
+            return Result.Failure(DomainErrors.AlreadyLoggedForDate);
+        if (IsFlexible && GetRemainingCompletions(date, _logs, weekStartDay) <= 0)
+            return Result.Failure(DomainErrors.AllInstancesDone);
+        return Result.Success();
     }
 
     private bool RestoresDeletedDueDate(DateOnly date, bool advanceDueDate) =>
@@ -578,6 +583,29 @@ public class Habit : Entity, ITimestamped, ISoftDeletable, IHabitSchedule
         return Result.Success(log);
     }
 
+    public Result RestoreSkip(HabitSkipUndo skip)
+    {
+        if (skip.HabitId != Id || skip.UserId != UserId)
+            return Result.Failure(DomainErrors.SkipNotFound);
+        if (skip.IsUndone || IsDeleted
+            || UpdatedAtUtc.Ticks / 10 != skip.ExpectedUpdatedAtUtc.Ticks / 10)
+            return Result.Failure(DomainErrors.SkipUndoConflict);
+
+        if (skip.SkipLogId is { } logId)
+        {
+            var log = _logs.Find(l => l.Id == logId && l.Value == 0 && !l.IsDeleted);
+            if (log is null)
+                return Result.Failure(DomainErrors.SkipUndoConflict);
+            log.SoftDelete();
+        }
+
+        DueDate = skip.PreviousDueDate;
+        ScheduledStartDate = skip.PreviousScheduledStartDate;
+        IsCompleted = skip.PreviousIsCompleted;
+        UpdatedAtUtc = DateTime.UtcNow;
+        return Result.Success();
+    }
+
     public Result<HabitLog> Unlog(DateOnly date)
     {
         var log = _logs.Find(l => l.Date == date && l.Value > 0 && !l.IsDeleted);
@@ -626,6 +654,15 @@ public class Habit : Entity, ITimestamped, ISoftDeletable, IHabitSchedule
 
         UpdatedAtUtc = DateTime.UtcNow;
         return Result.Success();
+    }
+
+    public Result<Habit> PreviewUpdate(HabitUpdateParams p)
+    {
+        var preview = (Habit)MemberwiseClone();
+        var update = preview.Update(p);
+        return update.IsSuccess
+            ? Result.Success(preview)
+            : Result.Failure<Habit>(update.Error);
     }
 
     private static AppError? ValidateCreateRelativeReminders(HabitCreateParams p)

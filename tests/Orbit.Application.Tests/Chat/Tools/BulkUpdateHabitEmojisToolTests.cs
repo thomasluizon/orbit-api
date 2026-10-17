@@ -79,6 +79,31 @@ public class BulkUpdateHabitEmojisToolTests
     }
 
     [Fact]
+    public async Task RevisedItems_OverrideOneEmojiAndInferOnlyRemainingItem()
+    {
+        var gym = CreateHabit("Gym");
+        var read = CreateHabit("Read");
+        var excluded = CreateHabit("Excluded");
+        SetupHabits(gym, read, excluded);
+
+        var result = await Execute($$$"""
+            {"infer_from_title":true,"revised_items":[
+              {"habit_id":"{{{gym.Id}}}","emoji":"✅"},
+              {"habit_id":"{{{read.Id}}}"}
+            ]}
+            """);
+
+        result.Success.Should().BeTrue();
+        gym.Emoji.Should().Be("✅");
+        read.Emoji.Should().Be("📚");
+        excluded.Emoji.Should().BeNull();
+        await _inferenceService.Received(1).InferAsync(UserId,
+            Arg.Is<IReadOnlyList<HabitEmojiInferenceInput>>(items =>
+                items.Count == 1 && items[0].HabitId == read.Id),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task SpecificEmoji_CommitsUpdatedHabitsBeforeReportingSuccess()
     {
         var gym = CreateHabit("Gym");

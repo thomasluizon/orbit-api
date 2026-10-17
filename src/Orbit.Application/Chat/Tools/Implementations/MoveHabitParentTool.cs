@@ -8,7 +8,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class MoveHabitParentTool(
     IMediator mediator,
-    IGenericRepository<Habit> habitRepository) : IAiTool
+    IGenericRepository<Habit> habitRepository) : IAiTool, IArgumentCheckTool
 {
     public string Name => "move_habit_parent";
 
@@ -26,7 +26,13 @@ public class MoveHabitParentTool(
         required = new[] { "habit_id" }
     };
 
-    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
+    public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ExecuteCoreAsync(args, userId, ct, checkOnly: false);
+
+    public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ChatToolArgumentCheck.CheckAsync(this, args, () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+
+    private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         if (!args.TryGetProperty("habit_id", out var habitIdEl) ||
             !Guid.TryParse(habitIdEl.GetString(), out var habitId))
@@ -40,7 +46,10 @@ public class MoveHabitParentTool(
             parentId = parsedParentId;
         }
 
-        var result = await mediator.Send(new MoveHabitParentCommand(userId, habitId, parentId), ct);
+        var command = new MoveHabitParentCommand(userId, habitId, parentId);
+        if (checkOnly)
+            return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
+        var result = await mediator.Send(command, ct);
 
         if (result.IsFailure)
             return ToolResult.FromFailure(result);

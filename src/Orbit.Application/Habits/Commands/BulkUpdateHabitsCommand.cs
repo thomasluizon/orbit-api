@@ -134,6 +134,25 @@ public sealed partial class BulkUpdateHabitsCommandHandler(
             stopped || skippedCount > 0));
     }
 
+    internal static async Task<Result> CheckArgumentsAsync(BulkUpdateHabitsCommand request,
+        IGenericRepository<Habit> repository, IUserDateService dates, CancellationToken ct)
+    {
+        var habits = await BulkHabitSelection.LoadAsync(repository, request.UserId, request.Filter, ct);
+        var ownership = OwnershipValidation.AllResolved(request.Filter.HabitIds, habits, h => h.Id, ErrorMessages.HabitNotFound);
+        if (ownership.IsFailure)
+            return ownership;
+        if (habits.Count == 0)
+            return Result.Failure("No matching habits found.");
+        var today = await dates.GetUserTodayAsync(request.UserId, ct);
+        foreach (var habit in habits)
+        {
+            var result = habit.ValidateUpdate(ResolveUpdate(habit, request.Changes, today));
+            if (result.IsFailure)
+                return result;
+        }
+        return Result.Success();
+    }
+
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Bulk habit update chunk failed after {AppliedCount} of {TotalMatched} matches")]
     private static partial void LogChunkFailed(ILogger logger, int appliedCount, int totalMatched, Exception ex);
 
@@ -176,7 +195,7 @@ public sealed partial class BulkUpdateHabitsCommandHandler(
         return Result.Success(updates.Count);
     }
 
-    private static HabitUpdateParams ResolveUpdate(Habit habit, BulkHabitChanges changes, DateOnly today)
+    internal static HabitUpdateParams ResolveUpdate(Habit habit, BulkHabitChanges changes, DateOnly today)
     {
         var dueTime = changes.HasDueTime ? changes.DueTime : habit.DueTime;
         var (reminderTimes, scheduledReminders) = ReminderStoreNormalizer.NormalizeForUpdate(
@@ -192,7 +211,7 @@ public sealed partial class BulkUpdateHabitsCommandHandler(
             changes.HasDescription ? changes.Description : habit.Description,
             changes.HasFrequencyUnit ? changes.FrequencyUnit : habit.FrequencyUnit,
             changes.HasFrequencyQuantity ? changes.FrequencyQuantity : habit.FrequencyQuantity,
-            changes.HasDays ? changes.Days : habit.Days.ToList(),
+            changes.HasIsFlexible && changes.IsFlexible ? [] : changes.HasDays ? changes.Days : habit.Days.ToList(),
             changes.HasIsBadHabit ? changes.IsBadHabit : habit.IsBadHabit,
             changes.HasDueDate ? changes.DueDate : habit.DueDate,
             DueTime: dueTime,

@@ -9,16 +9,17 @@ public class CreateChecklistTemplateCommandValidator : AbstractValidator<CreateC
     public CreateChecklistTemplateCommandValidator()
     {
         RuleFor(x => x.UserId).NotEmpty();
-        RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
+        RuleFor(x => x.Name).NotEmpty().WithFieldCopy(ValidationCopyKeys.TemplateNameRequired)
+            .MaximumLength(100).WithFieldCopy(ValidationCopyKeys.TemplateNameLength);
         RuleFor(x => x.Items)
             .Must(items => items.Count <= AppConstants.MaxChecklistItems)
             .When(x => x.Items is not null)
-            .WithMessage($"A checklist template can have at most {AppConstants.MaxChecklistItems} items.");
+            .WithCopy(ValidationErrorCodes.TemplateItemLimit);
 
         RuleForEach(x => x.Items)
             .NotEmpty()
-            .WithMessage("Checklist template items must not be empty.")
+            .WithCopy(ValidationErrorCodes.TemplateItemRequired)
             .MaximumLength(AppConstants.MaxChecklistItemTextLength)
-            .WithMessage($"Checklist template item text must not exceed {AppConstants.MaxChecklistItemTextLength} characters.");
+            .WithCopy(ValidationErrorCodes.TemplateItemLength);
     }
 }

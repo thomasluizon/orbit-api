@@ -30,8 +30,8 @@ public class ResultActionResultExtensionsTests
         objectResult.StatusCode.Should().Be(404);
         objectResult.Value.Should().BeEquivalentTo(new
         {
-            error = ErrorMessages.HabitNotFound.Message,
-            errorCode = ErrorMessages.HabitNotFound.Code
+            Error = ErrorMessages.HabitNotFound.Message,
+            ErrorCode = ErrorMessages.HabitNotFound.Code
         });
     }
 
@@ -46,8 +46,8 @@ public class ResultActionResultExtensionsTests
         objectResult.StatusCode.Should().Be(403);
         objectResult.Value.Should().BeEquivalentTo(new
         {
-            error = "Upgrade required",
-            errorCode = Result.PayGateErrorCode
+            Error = "Upgrade required",
+            ErrorCode = Result.PayGateErrorCode
         });
     }
 
@@ -58,8 +58,8 @@ public class ResultActionResultExtensionsTests
 
         body.Should().BeEquivalentTo(new
         {
-            error = ErrorMessages.InvalidChatHistory.Message,
-            errorCode = ErrorMessages.InvalidChatHistory.Code
+            Error = ErrorMessages.InvalidChatHistory.Message,
+            ErrorCode = ErrorMessages.InvalidChatHistory.Code
         });
     }
 

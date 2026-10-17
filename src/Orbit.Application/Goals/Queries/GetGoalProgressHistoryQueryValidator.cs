@@ -9,10 +9,10 @@ public class GetGoalProgressHistoryQueryValidator : AbstractValidator<GetGoalPro
     {
         RuleFor(x => x.DateFrom)
             .LessThanOrEqualTo(x => x.DateTo)
-            .WithMessage("DateFrom must be on or before DateTo.");
+            .WithCopy(ValidationErrorCodes.DateRangeOrder);
 
         RuleFor(x => x)
             .Must(x => x.DateTo.DayNumber - x.DateFrom.DayNumber <= AppConstants.MaxRangeDays)
-            .WithMessage($"Date range must not exceed {AppConstants.MaxRangeDays} days.");
+            .WithCopy(ValidationErrorCodes.DateRangeLimit);
     }
 }

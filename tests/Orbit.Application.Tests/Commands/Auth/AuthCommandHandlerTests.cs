@@ -11,6 +11,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Commands.Auth;
 
@@ -61,7 +62,7 @@ public class AuthCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("wait");
+        result.Error.Should().Be(ErrorMessages.CodeRequestCooldown.Message);
         _backgroundJobClient.DidNotReceive().Create(Arg.Any<Job>(), Arg.Any<IState>());
     }
 
@@ -96,7 +97,7 @@ public class AuthCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Invalid");
+        result.Error.Should().Be(ErrorMessages.InvalidVerificationCode.Message);
         _cache.TryGetValue($"verify-attempts:{TestEmail}", out int attempts).Should().BeTrue();
         attempts.Should().Be(1);
     }
@@ -114,7 +115,7 @@ public class AuthCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("Too many attempts. Try again in 15 minutes");
+        result.Error.Should().Be(ErrorMessages.TooManyCodeAttempts.Message);
     }
 
     [Fact]

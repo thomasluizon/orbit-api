@@ -2,7 +2,7 @@ name: Mutation Testing
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, redesign/main]
   schedule:
     - cron: "0 6 * * *"
   workflow_dispatch:
@@ -57,7 +57,7 @@ jobs:
         env:
           MUTATE_FILES: ${{ matrix.mutate && join(matrix.mutate, ' ') || '' }}
         run: |
-          git fetch origin main
+          git fetch origin ${{ github.base_ref }}
           concurrency=$(nproc)
           echo "Stryker concurrency: $concurrency"
           read -r -a files <<< "$MUTATE_FILES"
@@ -65,7 +65,7 @@ jobs:
           for file in "${files[@]}"; do
             args+=(--mutate "$file")
           done
-          dotnet stryker -f stryker-config.${{ matrix.project }}.json --since:origin/main --concurrency "$concurrency" "${args[@]}"
+          dotnet stryker -f stryker-config.${{ matrix.project }}.json --since:origin/${{ github.base_ref }} --concurrency "$concurrency" "${args[@]}"
 
       - name: Run Stryker (nightly full in-scope)
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

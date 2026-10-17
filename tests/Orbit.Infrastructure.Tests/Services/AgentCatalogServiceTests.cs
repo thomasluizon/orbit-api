@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Globalization;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -5,6 +6,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using ModelContextProtocol.Server;
 using Orbit.Application.Chat.Tools;
+using Orbit.Domain.Models;
 using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Services;
@@ -12,6 +14,57 @@ namespace Orbit.Infrastructure.Tests.Services;
 public class AgentCatalogServiceTests
 {
     private readonly AgentCatalogService _catalogService = new();
+
+    [Theory]
+    [InlineData("bulk_create_habits", AgentRiskClass.Low, AgentConfirmationRequirement.None)]
+    [InlineData("bulk_log_habits", AgentRiskClass.Low, AgentConfirmationRequirement.None)]
+    [InlineData("bulk_skip_habits", AgentRiskClass.Low, AgentConfirmationRequirement.None)]
+    [InlineData("bulk_update_habits", AgentRiskClass.Low, AgentConfirmationRequirement.None)]
+    [InlineData("bulk_reschedule_habits", AgentRiskClass.Low, AgentConfirmationRequirement.None)]
+    [InlineData("bulk_delete_habits", AgentRiskClass.Destructive, AgentConfirmationRequirement.FreshConfirmation)]
+    [InlineData("delete_habit", AgentRiskClass.Destructive, AgentConfirmationRequirement.FreshConfirmation)]
+    public void HabitOperations_ClassifyReversibility(string operationId, AgentRiskClass risk,
+        AgentConfirmationRequirement confirmation)
+    {
+        var tool = typeof(IAiTool).Assembly.GetTypes()
+            .Where(type => type.IsClass && !type.IsAbstract && typeof(IAiTool).IsAssignableFrom(type))
+            .Select(type => (IAiTool)RuntimeHelpers.GetUninitializedObject(type))
+            .Single(tool => tool.Name == operationId);
+        var catalog = new AgentCatalogService([tool]);
+
+        var capability = catalog.GetCapabilityByChatTool(operationId)!;
+        capability.RiskClass.Should().Be(risk);
+        capability.ConfirmationRequirement.Should().Be(confirmation);
+        catalog.GetCapabilityByMcpTool(operationId).Should().Be(capability);
+        var operation = catalog.GetOperation(operationId)!;
+        operation.RiskClass.Should().Be(risk);
+        operation.ConfirmationRequirement.Should().Be(confirmation);
+    }
+
+    [Fact]
+    public void SetColorScheme_IsAvailableOnlyThroughTheHttpCompatibilityEndpoint()
+    {
+        var chatToolNames = typeof(AiToolRegistry).Assembly
+            .GetTypes()
+            .Where(type => type.IsClass && !type.IsAbstract && typeof(IAiTool).IsAssignableFrom(type))
+            .Select(type => ((IAiTool)RuntimeHelpers.GetUninitializedObject(type)).Name);
+        var mcpToolNames = typeof(Orbit.Api.Mcp.Tools.HabitTools).Assembly
+            .GetTypes()
+            .Where(type => type.GetCustomAttribute<McpServerToolTypeAttribute>() is not null)
+            .SelectMany(type => type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly))
+            .Select(method => method.GetCustomAttribute<McpServerToolAttribute>()?.Name);
+
+        chatToolNames.Should().NotContain("set_color_scheme");
+        mcpToolNames.Should().NotContain("set_color_scheme");
+        _catalogService.GetCapabilityByChatTool("set_color_scheme").Should().BeNull();
+        _catalogService.GetCapabilityByMcpTool("set_color_scheme").Should().BeNull();
+        _catalogService.IsMappedControllerAction("ProfileController.SetColorScheme").Should().BeTrue();
+        var legacyWrite = _catalogService.GetCapability(Orbit.Domain.Models.AgentCapabilityIds.ProfilePremiumAppearanceWrite);
+        legacyWrite.Should().NotBeNull();
+        legacyWrite!.ChatToolNames.Should().BeNullOrEmpty();
+        legacyWrite.McpToolNames.Should().BeNullOrEmpty();
+        legacyWrite.Description.Should().Contain("one accent").And.Contain("light or dark mode");
+    }
 
     [Fact]
     public void EveryControllerAction_IsMappedToTheCatalog()
@@ -93,7 +146,7 @@ public class AgentCatalogServiceTests
     public void BuildDynamicSupplement_ExcludesStaticPolicyAndSurfaces()
     {
         var prompt = _catalogService.BuildDynamicSupplement(new Orbit.Domain.Models.AgentContextSnapshot(
-            "pro", "en", "America/Sao_Paulo", true, true, 1, "dark", "blue", true, true, "Idle",
+            "pro", "en", "America/Sao_Paulo", true, true, 1, "dark", true, true, "Idle",
             TagNames: ["focus"]));
 
         prompt.Should().Contain("Safe User Context");
@@ -106,7 +159,7 @@ public class AgentCatalogServiceTests
     public void BuildDynamicSupplement_PreservesSafeContextTextUnderForeignCulture()
     {
         var snapshot = new Orbit.Domain.Models.AgentContextSnapshot(
-            "pro", "en", "America/Sao_Paulo", true, false, 0, "dark", "blue", true, false, "Idle",
+            "pro", "en", "America/Sao_Paulo", true, false, 0, "dark", true, false, "Idle",
             FeatureFlags: ["api_keys"], TagNames: ["focus"], ChecklistTemplateNames: ["Morning Reset"],
             RecentHabitTitles: ["Morning Run"], RecentGoalTitles: ["Read books"],
             ClientContext: new Orbit.Domain.Models.AgentClientContext(
@@ -119,8 +172,8 @@ public class AgentCatalogServiceTests
             var prompt = _catalogService.BuildDynamicSupplement(snapshot);
 
             prompt.Should().Contain("Plan: pro\nLanguage: en\nTimezone: America/Sao_Paulo\n");
-            prompt.Should().Contain("AI memory: enabled\nAI summary: disabled\nWeek starts on: Sunday\n");
-            prompt.Should().Contain("Theme: dark\nColor scheme: blue\nGoogle Calendar connected: yes\n");
+            prompt.Should().Contain("AI memory: enabled\nAI summary: disabled\nWeek starts on: Sunday\nClock: 24-hour\n");
+            prompt.Should().Contain("Theme: dark\nGoogle Calendar connected: yes\n");
             prompt.Should().Contain("Calendar auto-sync: disabled (Idle)\n");
             prompt.Should().Contain("Feature flags: api_keys\nTags: focus\nChecklist templates: Morning Reset\n");
             prompt.Should().Contain("Recent habits: Morning Run\nRecent goals: Read books\n");
@@ -230,7 +283,6 @@ public class AgentCatalogServiceTests
             true,
             1,
             "dark",
-            "blue",
             true,
             true,
             "Idle",
@@ -248,6 +300,67 @@ public class AgentCatalogServiceTests
         prompt.Should().Contain("Recent goals: Read 12 books");
         prompt.Should().Contain("Support");
         prompt.Should().Contain("Account Lifecycle");
+    }
+
+    /// <summary>
+    /// One field, several surfaces. The data export returns the raw ColorScheme column, so a row
+    /// written before the colour collapse still reports its own key. Any agent-facing sentence that
+    /// promises one value for every account contradicts that export, and fixing one surface while its
+    /// twin keeps the claim is exactly the defect this sweep closes.
+    /// </summary>
+    [Fact]
+    public void NoAgentFacingColorSchemeText_PromisesOneStoredValueForEveryAccount()
+    {
+        var described = new List<(string Source, string Text)>();
+
+        foreach (var entry in _catalogService.GetUserDataCatalog())
+        {
+            described.Add(($"data catalog {entry.Id}", entry.Description));
+            described.AddRange(entry.Fields.Select(field => ($"data catalog {entry.Id}.{field.Name}", field.Meaning)));
+        }
+
+        described.AddRange(_catalogService.GetCapabilities()
+            .Select(capability => ($"capability {capability.Id}", capability.Description)));
+        described.AddRange(_catalogService.GetSurfaces()
+            .Select(surface => ($"surface {surface.Id}", surface.Description)));
+        described.AddRange(ChatToolDescriptions());
+        described.AddRange(McpToolDescriptions());
+
+        var aboutTheColorScheme = described
+            .Where(pair => pair.Text.Contains("color scheme", StringComparison.OrdinalIgnoreCase)
+                || pair.Text.Contains("color-scheme", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        aboutTheColorScheme.Should().NotBeEmpty("the sweep is vacuous if no surface mentions the field");
+
+        var contradictingTheExport = aboutTheColorScheme
+            .Where(pair => pair.Text.Contains("the same value", StringComparison.OrdinalIgnoreCase)
+                || pair.Text.Contains("same for every", StringComparison.OrdinalIgnoreCase))
+            .Select(pair => pair.Source)
+            .ToList();
+
+        contradictingTheExport.Should().BeEmpty();
+    }
+
+    private static IEnumerable<(string Source, string Text)> ChatToolDescriptions()
+    {
+        return typeof(AiToolRegistry).Assembly
+            .GetTypes()
+            .Where(type => type.IsClass && !type.IsAbstract && typeof(IAiTool).IsAssignableFrom(type))
+            .Select(type => (IAiTool)RuntimeHelpers.GetUninitializedObject(type))
+            .Select(tool => ($"chat tool {tool.Name}", tool.Description));
+    }
+
+    private static IEnumerable<(string Source, string Text)> McpToolDescriptions()
+    {
+        return typeof(Orbit.Api.Mcp.Tools.HabitTools).Assembly
+            .GetTypes()
+            .Where(type => type.GetCustomAttribute<McpServerToolTypeAttribute>() is not null)
+            .SelectMany(type => type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly))
+            .Where(method => method.GetCustomAttribute<McpServerToolAttribute>() is not null)
+            .Select(method => (
+                $"mcp tool {method.GetCustomAttribute<McpServerToolAttribute>()!.Name}",
+                method.GetCustomAttribute<DescriptionAttribute>()?.Description ?? string.Empty));
     }
 
     private static bool IsControllerAction(MethodInfo methodInfo)

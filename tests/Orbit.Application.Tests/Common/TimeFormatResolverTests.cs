@@ -38,4 +38,15 @@ public class TimeFormatResolverTests
     {
         TimeFormatResolver.Uses24HourClock(timeZone).Should().BeTrue();
     }
+
+    [Theory]
+    [InlineData(true, "America/New_York", true)]
+    [InlineData(false, "America/Sao_Paulo", false)]
+    [InlineData(null, "America/New_York", false)]
+    [InlineData(null, "America/Sao_Paulo", true)]
+    [InlineData(null, null, true)]
+    public void Uses24HourClock_StoredChoiceWinsOtherwiseUsesTimeZone(bool? preference, string? timeZone, bool expected)
+    {
+        TimeFormatResolver.Uses24HourClock(preference, timeZone).Should().Be(expected);
+    }
 }

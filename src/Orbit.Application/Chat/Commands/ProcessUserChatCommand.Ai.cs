@@ -47,19 +47,15 @@ public partial class ProcessUserChatCommandHandler
             ai.PromptBuilder.BuildDynamic(promptRequest),
             ai.CatalogService.BuildDynamicSupplement(agentSnapshot));
 
-        if (request.ClientContext?.SupportsHabitListCard == true)
-            systemPrompt = string.Join(Environment.NewLine, systemPrompt, HabitListCardBuilder.PromptInstruction);
-
-        if (request.ClientContext?.SupportsGoalListCard == true)
-            systemPrompt = string.Join(Environment.NewLine, systemPrompt, GoalListCardBuilder.PromptInstruction);
-
-        if (request.ClientContext?.SupportsMetricsCard == true)
-            systemPrompt = string.Join(Environment.NewLine, systemPrompt, MetricsCardBuilder.PromptInstruction);
-
         var activeToolNames = ChatToolGroups.ResolveActiveToolNames(
             ai.ToolRegistry.GetAll().Select(t => t.Name),
             BuildConversationText(request),
-            request.ClientContext?.EntryPointIntent);
+            GetEntryPointIntent(request));
+
+        systemPrompt = AppendCardPromptInstructions(systemPrompt, request, context, activeToolNames);
+        if (request.ClientContext?.SupportsFollowUps == true)
+            systemPrompt = string.Join(Environment.NewLine, systemPrompt,
+                "After any card directive, end your reply with [[orbit:followups]] followed by two or three short next questions, one per line. Do not add other text after them.");
 
         var toolDeclarations = skipTools
             ? new List<object>()
@@ -96,6 +92,62 @@ public partial class ProcessUserChatCommandHandler
             cancellationToken);
     }
 
+    private static string AppendCardPromptInstructions(
+        string prompt, ProcessUserChatCommand request, ChatContext context,
+        IReadOnlyCollection<string> activeToolNames)
+    {
+        var client = request.ClientContext;
+        if (client?.SupportsHabitListCard == true)
+            prompt = string.Join(Environment.NewLine, prompt, HabitListCardBuilder.PromptInstruction);
+        if (client?.SupportsGoalListCard == true && activeToolNames.Contains("review_goals"))
+            prompt = string.Join(Environment.NewLine, prompt, GoalListCardBuilder.PromptInstruction);
+
+        if (!context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraPeriodBlocksDisabled))
+        {
+            if (client?.SupportsMetricsCard == true)
+            {
+                prompt = string.Join(Environment.NewLine, prompt, MetricsCardBuilder.PromptInstruction);
+                if (activeToolNames.Contains("get_habit_metrics"))
+                    prompt = string.Join(Environment.NewLine, prompt, MetricsCardBuilder.HabitPromptInstruction);
+            }
+            if (client?.SupportsPeriodInsightCard == true && activeToolNames.Contains("get_retrospective"))
+                prompt = string.Join(Environment.NewLine, prompt, PeriodInsightCardBuilder.PromptInstruction);
+        }
+
+        if (!context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraStatusBlocksDisabled))
+        {
+            if (client?.SupportsDaySummaryCard == true && activeToolNames.Contains("get_daily_summary"))
+                prompt = string.Join(Environment.NewLine, prompt, StatusCardBuilder.DayPrompt);
+            if (client?.SupportsStreakCard == true && activeToolNames.Contains("get_gamification_overview"))
+                prompt = string.Join(Environment.NewLine, prompt, StatusCardBuilder.StreakPrompt);
+            if (client?.SupportsCalendarCard == true && activeToolNames.Contains("get_calendar_overview"))
+                prompt = string.Join(Environment.NewLine, prompt, StatusCardBuilder.CalendarPrompt);
+        }
+
+        return AppendListAndAccountPrompts(prompt, client, context.EnabledFeatureFlags, activeToolNames);
+    }
+
+    private static string AppendListAndAccountPrompts(
+        string prompt, AgentClientContext? client, IReadOnlyList<string> enabledFlags,
+        IReadOnlyCollection<string> activeToolNames)
+    {
+        if (client?.SupportsRecordListCard == true
+            && !enabledFlags.Contains(FeatureFlagKeys.AstraRecordListsDisabled)
+            && activeToolNames.Any(name => name is "get_notifications" or "list_tags" or "get_checklist_templates" or "get_api_keys"))
+        {
+            prompt = string.Join(Environment.NewLine, prompt, RecordListCardBuilder.PromptInstruction);
+        }
+
+        if (client?.SupportsAccountRowsCard == true
+            && !enabledFlags.Contains(FeatureFlagKeys.AstraAccountRowsDisabled)
+            && activeToolNames.Any(name => name is "get_profile" or "get_subscription_overview" or "get_referral_overview"))
+        {
+            prompt = string.Join(Environment.NewLine, prompt, AccountRowsCardBuilder.PromptInstruction);
+        }
+
+        return prompt;
+    }
+
     private static string BuildConversationText(ProcessUserChatCommand request)
     {
         if (request.History is not { Count: > 0 })
@@ -103,6 +155,9 @@ public partial class ProcessUserChatCommandHandler
 
         return request.Message + " " + string.Join(" ", request.History.Select(message => message.Content));
     }
+
+    private static string? GetEntryPointIntent(ProcessUserChatCommand request) =>
+        request.ClientContext?.EntryPointIntent;
 
     private sealed record AgentSnapshotInputs(
         IReadOnlyList<string> FeatureFlags,
@@ -126,7 +181,6 @@ public partial class ProcessUserChatCommandHandler
             hasProAccess && (user?.AiSummaryEnabled ?? true),
             user?.WeekStartDay ?? 1,
             user?.ThemePreference,
-            hasProAccess ? user?.ColorScheme : null,
             hasProAccess && user?.GoogleAccessToken is not null,
             hasProAccess && (user?.GoogleCalendarAutoSyncEnabled ?? false),
             hasProAccess
@@ -155,7 +209,8 @@ public partial class ProcessUserChatCommandHandler
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Take(8)
                 .ToList(),
-            ClientContext: clientContext);
+            ClientContext: clientContext,
+            Uses24HourClock: TimeFormatResolver.Uses24HourClock(user?.Uses24HourClockPreference, user?.TimeZone));
     }
 
     private static ResponseDirectiveStreamFilter? BuildAiStreamFilter(Func<ChatStreamEvent, Task>? streamSink)
@@ -168,95 +223,26 @@ public partial class ProcessUserChatCommandHandler
 
     private sealed class ResponseDirectiveStreamFilter(Func<ChatStreamEvent, Task> streamSink)
     {
-        private static readonly string[] Directives =
-        [
-            "[[orbit:habits:today]]",
-            "[[orbit:habits:all]]",
-            "[[orbit:goals]]",
-            MetricsCardBuilder.Directive
-        ];
-
-        private string _pending = string.Empty;
+        private ResponseDirectiveParser _parser = new();
 
         public async Task HandleAsync(AiStreamEvent aiEvent)
         {
             if (aiEvent.Kind == AiStreamEventKind.Reset)
             {
-                _pending = string.Empty;
+                _parser = new ResponseDirectiveParser();
                 await streamSink(ChatStreamEvent.Reset());
                 return;
             }
 
-            _pending += aiEvent.Text ?? string.Empty;
-            await DrainAsync(flush: false);
+            await EmitAsync(_parser.Process(aiEvent.Text));
         }
 
-        public Task FlushAsync() => DrainAsync(flush: true);
-
-        private async Task DrainAsync(bool flush)
-        {
-            while (_pending.Length > 0)
-            {
-                var (directiveIndex, directiveLength) = FindDirective(_pending);
-                if (directiveIndex >= 0)
-                {
-                    await EmitAsync(_pending[..directiveIndex]);
-                    _pending = _pending[(directiveIndex + directiveLength)..];
-                    continue;
-                }
-
-                var retainedCharacters = flush ? 0 : DirectivePrefixSuffixLength(_pending);
-                var emittedLength = _pending.Length - retainedCharacters;
-                if (emittedLength == 0)
-                    return;
-
-                await EmitAsync(_pending[..emittedLength]);
-                _pending = _pending[emittedLength..];
-            }
-        }
+        public Task FlushAsync() => EmitAsync(_parser.Process(null, flush: true));
 
         private async Task EmitAsync(string text)
         {
             if (text.Length > 0)
                 await streamSink(ChatStreamEvent.Delta(text));
-        }
-
-        private static int DirectivePrefixSuffixLength(string text)
-        {
-            var retainedCharacters = 0;
-
-            foreach (var directive in Directives)
-            {
-                var maximumLength = Math.Min(text.Length, directive.Length - 1);
-                for (var length = maximumLength; length > retainedCharacters; length--)
-                {
-                    if (!text.EndsWith(directive[..length], StringComparison.OrdinalIgnoreCase))
-                        continue;
-
-                    retainedCharacters = length;
-                    break;
-                }
-            }
-
-            return retainedCharacters;
-        }
-
-        private static (int Index, int Length) FindDirective(string text)
-        {
-            var earliestIndex = -1;
-            var matchedLength = 0;
-
-            foreach (var directive in Directives)
-            {
-                var index = text.IndexOf(directive, StringComparison.OrdinalIgnoreCase);
-                if (index < 0 || earliestIndex >= 0 && index >= earliestIndex)
-                    continue;
-
-                earliestIndex = index;
-                matchedLength = directive.Length;
-            }
-
-            return (earliestIndex, matchedLength);
         }
     }
 
