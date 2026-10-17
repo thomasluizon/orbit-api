@@ -11,6 +11,29 @@ namespace Orbit.Application.Tests.Queries;
 
 public sealed class ProactiveHandlersTests
 {
+    [Theory]
+    [InlineData(true, "active")]
+    [InlineData(false, "ended")]
+    [InlineData(null, null)]
+    public async Task Status_MapsLifecycleAndUnavailable(bool? active, string? status)
+    {
+        var engine = Substitute.For<IProactiveEngine>();
+        var userId = Guid.NewGuid();
+        var itemId = Guid.NewGuid();
+        using var cancellation = new CancellationTokenSource();
+        engine.IsItemActiveAsync(userId, itemId, cancellation.Token).Returns(active);
+
+        var result = await new GetProactiveItemStatusQueryHandler(engine)
+            .Handle(new(userId, itemId), cancellation.Token);
+
+        result.IsSuccess.Should().BeTrue();
+        if (status is null) result.Value.Should().BeNull();
+        else result.Value.Should().Be(new ProactiveItemStatusResponse(itemId, status));
+        await engine.Received(1).IsItemActiveAsync(userId, itemId, cancellation.Token);
+        await engine.DidNotReceiveWithAnyArgs().GetCurrentAsync(default, default);
+        await engine.DidNotReceiveWithAnyArgs().RecordOutcomeAsync(default, default, default, default);
+    }
+
     [Fact]
     public async Task Current_MapsItemAndEmptyState()
     {

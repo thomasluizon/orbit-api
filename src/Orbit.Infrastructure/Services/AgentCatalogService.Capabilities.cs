@@ -533,7 +533,7 @@ public partial class AgentCatalogService
             CreateCapability(
                 AgentCapabilityIds.ProactiveItemsRead,
                 "Read Proactive Astra Item",
-                "Returns the highest-priority active item for the person's local day and records its first display.",
+                "Returns the current item and records its first display, or reads an owned item's lifecycle status without recording outcomes.",
                 "proactive",
                 AgentScopes.ReadNotifications,
                 AgentRiskClass.Low,
@@ -541,7 +541,7 @@ public partial class AgentCatalogService
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
                 planRequirement: "Pro",
-                controllerActions: ["ProactiveAstraController.Current"]),
+                controllerActions: ["ProactiveAstraController.Current", "ProactiveAstraController.GetById"]),
 
             CreateCapability(
                 AgentCapabilityIds.ProactiveItemsWrite,

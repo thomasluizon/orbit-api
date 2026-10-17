@@ -233,6 +233,7 @@ public class AgentCatalogServiceTests
 
     [Theory]
     [InlineData(AgentCapabilityIds.ProactiveItemsRead, AgentScopes.ReadNotifications, false, "ProactiveAstraController.Current")]
+    [InlineData(AgentCapabilityIds.ProactiveItemsRead, AgentScopes.ReadNotifications, false, "ProactiveAstraController.GetById")]
     [InlineData(AgentCapabilityIds.ProactiveItemsWrite, AgentScopes.WriteNotifications, true, "ProactiveAstraController.Opened")]
     [InlineData(AgentCapabilityIds.ProactiveItemsWrite, AgentScopes.WriteNotifications, true, "ProactiveAstraController.Acted")]
     public void ProactiveItems_AreCatalogedAsProClientCapabilities(string capabilityId, string scope, bool isMutation, string action)

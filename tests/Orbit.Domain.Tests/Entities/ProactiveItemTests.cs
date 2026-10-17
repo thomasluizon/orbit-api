@@ -12,6 +12,40 @@ public sealed class ProactiveItemTests
         ProactiveTrigger.EveningCheckin, new(2030, 10, 14), "{}", text, "Action", "Prompt", Now);
 
     [Fact]
+    public void LifecycleEvaluation_DoesNotChangeTimestamps()
+    {
+        var item = Create();
+        item.Show(Now);
+        item.EvaluateEndReason(new(2030, 10, 14), 19, true).Should().BeNull();
+        item.EvaluateEndReason(new(2030, 10, 14), 19, false).Should().Be(ProactiveEndReason.ConditionResolved);
+        item.EvaluateEndReason(new(2030, 10, 14), 22, true).Should().Be(ProactiveEndReason.WindowClosed);
+        item.EvaluateEndReason(new(2030, 10, 15), 19, true).Should().Be(ProactiveEndReason.DayEnded);
+        item.ShownAtUtc.Should().Be(Now);
+        item.OpenedAtUtc.Should().BeNull();
+        item.ActedAtUtc.Should().BeNull();
+        item.EndedAtUtc.Should().BeNull();
+        item.EndReason.Should().BeNull();
+        item.Act(Now);
+        item.EvaluateEndReason(new(2030, 10, 14), 19, true).Should().Be(ProactiveEndReason.Acted);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(24)]
+    public void LifecycleEvaluation_RejectsInvalidLocalHour(int hour)
+    {
+        Action evaluate = () => Create().EvaluateEndReason(new(2030, 10, 14), hour, true);
+        evaluate.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
+    public void LifecycleEvaluation_RejectsMissingLocalDate()
+    {
+        Action evaluate = () => Create().EvaluateEndReason(default, 19, true);
+        evaluate.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
     public void FirstTimes_AreIdempotentAndConditionResolutionCountsAsActedOnlyAfterExposure()
     {
         var item = Create();

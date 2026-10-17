@@ -3,12 +3,16 @@ using FluentAssertions;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
+using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Orbit.Api.Controllers;
 using Orbit.Application.Common;
 using Orbit.Application.Proactive.Commands;
 using Orbit.Application.Proactive.Queries;
 using Orbit.Domain.Common;
+using Orbit.Domain.Enums;
+using Orbit.Infrastructure.Tests.Services;
 
 namespace Orbit.Infrastructure.Tests.Controllers;
 
@@ -31,6 +35,63 @@ public sealed class ProactiveAstraControllerTests
                 }
             }
         };
+    }
+
+    [Fact]
+    public void Status_RequiresAuthentication()
+    {
+        typeof(ProactiveAstraController).Should()
+            .BeDecoratedWith<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>();
+    }
+
+    [Theory]
+    [InlineData("active")]
+    [InlineData("ended")]
+    public async Task Status_ReturnsOnlyIdAndLifecycleForAuthenticatedOwner(string status)
+    {
+        var id = Guid.NewGuid();
+        var response = new ProactiveItemStatusResponse(id, status);
+        using var cancellation = new CancellationTokenSource();
+        _sender.Send(Arg.Any<GetProactiveItemStatusQuery>(), cancellation.Token)
+            .Returns(Result.Success<ProactiveItemStatusResponse?>(response));
+
+        (await _controller.GetById(id, cancellation.Token)).Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().Be(response);
+        await _sender.Received(1).Send(
+            Arg.Is<GetProactiveItemStatusQuery>(q => q.UserId == _userId && q.ItemId == id), cancellation.Token);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Status_MissingAndForeignItemsAre404WithoutContent(bool foreignItem)
+    {
+        using var h = new ProactiveEngineServiceTests.Harness(19);
+        h.SeedTrigger(ProactiveTrigger.EveningCheckin);
+        await h.Run();
+        var id = foreignItem ? h.Db.ProactiveItems.Single().Id : Guid.NewGuid();
+        var handler = new GetProactiveItemStatusQueryHandler(h.Engine);
+        _sender.Send(Arg.Any<GetProactiveItemStatusQuery>(), Arg.Any<CancellationToken>())
+            .Returns(call => handler.Handle(call.Arg<GetProactiveItemStatusQuery>(), call.Arg<CancellationToken>()));
+
+        var result = await _controller.GetById(id, default);
+
+        result.Should().NotBeAssignableTo<IClientErrorActionResult>();
+        var content = result.Should().BeOfType<ContentResult>().Subject;
+        content.StatusCode.Should().Be(404);
+        content.Content.Should().BeNullOrEmpty();
+        await _sender.Received(1).Send(
+            Arg.Is<GetProactiveItemStatusQuery>(q => q.UserId == _userId && q.ItemId == id), Arg.Any<CancellationToken>());
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddControllers();
+        await using var provider = services.BuildServiceProvider();
+        _controller.HttpContext.RequestServices = provider;
+        _controller.HttpContext.Response.Body = new MemoryStream();
+        await result.ExecuteResultAsync(_controller.ControllerContext);
+        _controller.Response.StatusCode.Should().Be(404);
+        _controller.Response.Body.Length.Should().Be(0);
     }
 
     [Fact]
