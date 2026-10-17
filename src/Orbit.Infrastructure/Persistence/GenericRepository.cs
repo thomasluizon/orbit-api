@@ -72,6 +72,27 @@ public class GenericRepository<T>(OrbitDbContext context) : IGenericRepository<T
         await context.Entry(entity).ReloadAsync(cancellationToken);
     }
 
+    public async Task<bool> TryRefreshAsync(T entity, CancellationToken cancellationToken = default)
+    {
+        context.ChangeTracker.DetectChanges();
+        var entry = context.Entry(entity);
+        if (entry.State is not (EntityState.Unchanged or EntityState.Modified))
+            return false;
+
+        var databaseValues = await entry.GetDatabaseValuesAsync(cancellationToken);
+        if (databaseValues is null)
+            return false;
+
+        if (entry.State == EntityState.Modified)
+            return entity is ITimestamped
+                && entry.OriginalValues.GetValue<DateTime>(nameof(ITimestamped.UpdatedAtUtc)).Ticks / 10
+                    == databaseValues.GetValue<DateTime>(nameof(ITimestamped.UpdatedAtUtc)).Ticks / 10;
+
+        entry.CurrentValues.SetValues(databaseValues);
+        entry.OriginalValues.SetValues(databaseValues);
+        return true;
+    }
+
     public async Task<IReadOnlyList<T>> FindTrackedAsync(
         Expression<Func<T, bool>> predicate,
         CancellationToken cancellationToken = default)

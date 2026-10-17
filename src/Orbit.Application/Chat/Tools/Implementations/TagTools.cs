@@ -26,7 +26,7 @@ public class ListTagsTool(IMediator mediator) : IAiTool
     }
 }
 
-public class CreateTagTool(IMediator mediator) : IAiTool
+public class CreateTagTool(IMediator mediator) : IAiTool, IArgumentCheckTool
 {
     public string Name => "create_tag";
     public string Description => "Create a new tag with a name and hex color.";
@@ -42,21 +42,31 @@ public class CreateTagTool(IMediator mediator) : IAiTool
         required = new[] { "name", "color" }
     };
 
-    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
+    public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ExecuteCoreAsync(args, userId, ct, checkOnly: false);
+
+    public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ChatToolArgumentCheck.CheckAsync(this, args, () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+
+    private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         var name = JsonArgumentParser.GetOptionalString(args, "name");
         var color = JsonArgumentParser.GetOptionalString(args, "color");
         if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(color))
             return new ToolResult(false, Error: "name and color are required.");
 
-        var result = await mediator.Send(new CreateTagCommand(userId, name, color), ct);
+        var command = new CreateTagCommand(userId, name, color);
+        if (checkOnly)
+            return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
+
+        var result = await mediator.Send(command, ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: result.Value.ToString(), EntityName: name)
             : ToolResult.FromFailure(result);
     }
 }
 
-public class UpdateTagTool(IMediator mediator) : IAiTool
+public class UpdateTagTool(IMediator mediator) : IAiTool, IArgumentCheckTool
 {
     public string Name => "update_tag";
     public string Description => "Update a tag's name and color.";
@@ -73,7 +83,13 @@ public class UpdateTagTool(IMediator mediator) : IAiTool
         required = new[] { "tag_id", "name", "color" }
     };
 
-    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
+    public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ExecuteCoreAsync(args, userId, ct, checkOnly: false);
+
+    public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ChatToolArgumentCheck.CheckAsync(this, args, () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+
+    private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         var tagIdValue = JsonArgumentParser.GetOptionalString(args, "tag_id");
         if (!Guid.TryParse(tagIdValue, out var tagId))
@@ -84,14 +100,18 @@ public class UpdateTagTool(IMediator mediator) : IAiTool
         if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(color))
             return new ToolResult(false, Error: "name and color are required.");
 
-        var result = await mediator.Send(new UpdateTagCommand(userId, tagId, name, color), ct);
+        var command = new UpdateTagCommand(userId, tagId, name, color);
+        if (checkOnly)
+            return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
+
+        var result = await mediator.Send(command, ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: tagId.ToString(), EntityName: name)
             : ToolResult.FromFailure(result);
     }
 }
 
-public class DeleteTagTool(IMediator mediator) : IAiTool
+public class DeleteTagTool(IMediator mediator) : IAiTool, IArgumentCheckTool
 {
     public string Name => "delete_tag";
     public string Description => "Delete a tag. Use only when the user clearly wants a tag removed.";
@@ -106,13 +126,23 @@ public class DeleteTagTool(IMediator mediator) : IAiTool
         required = new[] { "tag_id" }
     };
 
-    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
+    public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ExecuteCoreAsync(args, userId, ct, checkOnly: false);
+
+    public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ChatToolArgumentCheck.CheckAsync(this, args, () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+
+    private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         var tagIdValue = JsonArgumentParser.GetOptionalString(args, "tag_id");
         if (!Guid.TryParse(tagIdValue, out var tagId))
             return new ToolResult(false, Error: "tag_id is required and must be a valid GUID.");
 
-        var result = await mediator.Send(new DeleteTagCommand(userId, tagId), ct);
+        var command = new DeleteTagCommand(userId, tagId);
+        if (checkOnly)
+            return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
+
+        var result = await mediator.Send(command, ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: tagId.ToString(), EntityName: "Deleted tag")
             : ToolResult.FromFailure(result);

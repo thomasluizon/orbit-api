@@ -1,0 +1,406 @@
+using System.Linq.Expressions;
+using System.Text.Json;
+using FluentAssertions;
+using NSubstitute;
+using Orbit.Application.Chat;
+using Orbit.Application.Chat.Tools;
+using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Habits.Commands;
+using Orbit.Application.Habits.Validators;
+using Orbit.Domain.Common;
+using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
+using Orbit.Domain.Interfaces;
+using Orbit.Domain.ValueObjects;
+
+namespace Orbit.Application.Tests.Chat;
+
+public sealed class PendingOperationChangePreviewerTests
+{
+    private static readonly Guid UserId = Guid.NewGuid();
+    private readonly IGenericRepository<Habit> _habits = Substitute.For<IGenericRepository<Habit>>();
+    private readonly IGenericRepository<Goal> _goals = Substitute.For<IGenericRepository<Goal>>();
+    private readonly IGenericRepository<Tag> _tags = Substitute.For<IGenericRepository<Tag>>();
+    private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
+
+    public PendingOperationChangePreviewerTests() =>
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new DateOnly(2026, 9, 25));
+
+    [Fact]
+    public async Task PreviewAsync_ThreeMatches_UsesEachRealOldEmoji()
+    {
+        var habits = new[] { CreateHabit("One", "🔴"), CreateHabit("Two", "🟡"), CreateHabit("Three", "🔵") };
+        Setup(habits);
+
+        var preview = await Preview("bulk_update_habits", """{"filter":{"all":true},"updates":{"emoji":"✅"}}""");
+
+        preview!.ChangeTargetCount.Should().Be(3);
+        preview.Changes.Select(row => row.Field).Should().OnlyContain(field => field == "emoji");
+        preview.Changes.Select(row => row.OldValue).Should().BeEquivalentTo(["🔴", "🟡", "🔵"]);
+        preview.Changes.Select(row => row.NewValue).Should().OnlyContain(value => value == "✅");
+    }
+
+    [Fact]
+    public async Task PreviewAsync_BulkDelete_ReturnsTargetPreview()
+    {
+        Setup([CreateHabit("One", null), CreateHabit("Two", null)]);
+
+        var preview = await Preview("bulk_delete_habits", """{"filter":{"all":true}}""");
+
+        preview.Should().NotBeNull();
+        preview!.ChangeTargetCount.Should().Be(2);
+        AssertRemovesData(preview, true);
+    }
+
+    [Fact]
+    public async Task PreviewAsync_FortyMatches_ListsTenEntitiesAndTotal()
+    {
+        Setup(Enumerable.Range(1, 40).Select(index => CreateHabit($"Habit {index}", null)).ToArray());
+
+        var preview = await Preview("bulk_update_habits", """{"filter":{"all":true},"updates":{"emoji":"✅"}}""");
+
+        preview!.ChangeTargetCount.Should().Be(40);
+        preview.Changes.Select(row => row.EntityId).Distinct().Should().HaveCount(10);
+        preview.Items.Should().HaveCount(40);
+        preview.Items!.Select(item => item.ItemId).Should().OnlyHaveUniqueItems();
+        preview.PreviewFingerprint.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Theory]
+    [InlineData("bulk_delete_habits", "delete")]
+    [InlineData("bulk_log_habits", "date")]
+    [InlineData("bulk_skip_habits", "date")]
+    public async Task PreviewAsync_BulkActions_ListEachTarget(string operationId, string field)
+    {
+        Setup([CreateHabit("One", null), CreateHabit("Two", null)]);
+
+        var preview = await Preview(operationId, """{"filter":{"all":true}}""");
+
+        preview!.Items.Should().HaveCount(2);
+        preview.Items!.SelectMany(item => item.Fields).Select(change => change.Field)
+            .Should().OnlyContain(value => value == field);
+        preview.Items.SelectMany(item => item.Fields).Select(change => change.IsEditable)
+            .Should().OnlyContain(value => value == (field == "date"));
+    }
+
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("{\"infer_from_title\":true}")]
+    [InlineData("{\"emoji\":\"✅\",\"infer_from_title\":true}")]
+    public async Task PreviewAsync_InferredEmojis_DoNotOfferEditableItems(string arguments)
+    {
+        Setup([CreateHabit("One", null), CreateHabit("Two", null)]);
+
+        var preview = await Preview("bulk_update_habit_emojis", arguments);
+
+        preview.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task PreviewAsync_ExplicitEmoji_ListsEachApprovedValue()
+    {
+        Setup([CreateHabit("One", "🔴"), CreateHabit("Two", "🔵")]);
+
+        var preview = await Preview("bulk_update_habit_emojis", """{"emoji":"✅"}""");
+
+        preview!.Items.Should().HaveCount(2);
+        preview.Items!.SelectMany(item => item.Fields).Should()
+            .OnlyContain(field => field.Field == "emoji" && field.NewValue == "✅");
+    }
+
+    [Fact]
+    public async Task PreviewAsync_Create_UsesStableInputIndexes()
+    {
+        var preview = await Preview("bulk_create_habits", """{"habits":[{"title":"One"},{"title":"Two"}]}""");
+
+        preview!.Items.Should().HaveCount(2);
+        preview.Items!.Select(item => item.ItemId).Should().Equal("0", "1");
+        preview.Items.SelectMany(item => item.Fields).Select(field => field.Field)
+            .Should().OnlyContain(field => field == "title");
+        preview.Items[0].Fields[0].IsEditable.Should().BeTrue();
+        preview.Items[0].Fields[0].ProposedValue!.Value.GetString().Should().Be("One");
+        AssertRemovesData(preview, false);
+    }
+
+    [Fact]
+    public async Task PreviewAsync_Create_InvalidItemCarriesValidatorFieldError()
+    {
+        using var arguments = JsonDocument.Parse("""{"habits":[{"title":"Valid","frequency_unit":"Day","frequency_quantity":1},{"title":"Invalid","frequency_unit":"Day","frequency_quantity":0,"preview_item_id":"retained"}]}""");
+        var command = new BulkCreateHabitsCommand(UserId, arguments.RootElement.GetProperty("habits")
+            .EnumerateArray().Select(item => BulkCreateHabitsTool.ParseBulkHabitItem(item)!).ToList());
+        var validation = await new BulkCreateHabitsCommandValidator().ValidateAsync(command);
+        var failure = validation.Errors.Should().ContainSingle().Subject;
+        failure.PropertyName.Should().Be("Habits[1].FrequencyQuantity");
+        failure.ErrorCode.Should().Be("GreaterThanValidator");
+
+        var preview = await Preview("bulk_create_habits", arguments.RootElement.GetRawText());
+
+        preview!.Items!.Select(item => item.ItemId).Should().Equal("0", "retained");
+        var items = JsonSerializer.SerializeToElement(preview, JsonSerializerOptions.Web).GetProperty("items");
+        items[0].TryGetProperty("validationErrors", out _).Should().BeFalse();
+        items[1].TryGetProperty("validationErrors", out var errors).Should().BeTrue();
+        errors.GetArrayLength().Should().Be(1);
+        errors[0].GetProperty("field").GetString().Should().Be("frequency_quantity");
+        errors[0].GetProperty("errorCode").GetString().Should().Be(failure.ErrorCode);
+        errors[0].GetProperty("error").GetString().Should().Be(failure.ErrorMessage);
+    }
+
+    [Theory]
+    [InlineData("""{"title":""}""", "title")]
+    [InlineData("""{}""", "title")]
+    [InlineData("""{"title":"Invalid","frequency_unit":"Day","frequency_quantity":-1}""", "frequency_quantity")]
+    public async Task PreviewAsync_Create_InvalidFieldsRemainVisible(string itemJson, string field)
+    {
+        var preview = await Preview("bulk_create_habits", $$"""{"habits":[{{itemJson}}]}""");
+
+        preview!.Items.Should().ContainSingle().Which.ValidationErrors.Should()
+            .Contain(error => error.Field == field);
+        preview.Items![0].Fields.Should().Contain(change => change.Field == field && change.IsEditable);
+    }
+
+    [Fact]
+    public async Task PreviewAsync_Create_ValidBatchPreservesPreviewAndFingerprint()
+    {
+        const string json = """{"habits":[{"title":"Valid","frequency_unit":"Day","frequency_quantity":1}]}""";
+        var preview = await Preview("bulk_create_habits", json);
+        var item = preview!.Items.Should().ContainSingle().Subject;
+
+        item.ValidationErrors.Should().BeNull();
+        preview.Changes.Should().BeEmpty();
+        preview.ChangeTargetCount.Should().Be(1);
+        item.Fields.Select(field => field.Field).Should().Equal("title", "frequency_unit", "frequency_quantity");
+        var legacyItemJson = JsonSerializer.SerializeToElement(item);
+        legacyItemJson.EnumerateObject().Select(property => property.Name).Should().Equal(
+            "ItemId", "EntityId", "EntityName", "Fields", "StateFingerprint", "RemovesData");
+        preview.PreviewFingerprint.Should().Be(AgentOperationFingerprint.Compute(
+            "bulk_create_habits", JsonSerializer.Serialize(preview.Items)));
+    }
+
+    [Theory]
+    [InlineData("bulk_log_habits", """{"filter":{"all":true}}""")]
+    [InlineData("bulk_skip_habits", """{"filter":{"all":true}}""")]
+    [InlineData("bulk_update_habits", """{"filter":{"all":true},"updates":{"emoji":"✅"}}""")]
+    [InlineData("bulk_reschedule_habits", """{"filter":{"all":true},"due_date":"2026-10-01"}""")]
+    public async Task PreviewAsync_ReversibleBulkWrite_ReportsNoDataRemoval(string operation, string arguments)
+    {
+        Setup([CreateHabit("One", null), CreateHabit("Two", null)]);
+
+        var preview = await Preview(operation, arguments);
+
+        preview!.Items.Should().HaveCount(2);
+        AssertRemovesData(preview, false);
+    }
+
+    [Fact]
+    public async Task PreviewAsync_MixedBatch_MarksExactlyTheDeleteItems()
+    {
+        var habit = CreateHabit("Existing", null);
+        Setup([habit]);
+        var create = await Preview("bulk_create_habits", """{"habits":[{"title":"New"}]}""");
+        var log = await Preview("bulk_log_habits", """{"filter":{"all":true}}""");
+        var skip = await Preview("bulk_skip_habits", """{"filter":{"all":true}}""");
+        var delete = await Preview("delete_habit", $$"""{"habit_id":"{{habit.Id}}"}""");
+        var bulkDelete = await Preview("bulk_delete_habits", """{"filter":{"all":true}}""");
+
+        var items = new[] { create, log, skip, delete, bulkDelete }.SelectMany(preview => preview!.Items!);
+        var json = JsonSerializer.SerializeToElement(items, JsonSerializerOptions.Web);
+
+        json.EnumerateArray().Select(item => item.GetProperty("removesData").GetBoolean())
+            .Should().Equal(false, false, false, true, true);
+    }
+
+    private static void AssertRemovesData(Orbit.Domain.Models.PendingOperationChangePreview preview, bool expected)
+    {
+        var json = JsonSerializer.SerializeToElement(preview, JsonSerializerOptions.Web);
+        var items = json.GetProperty("items").EnumerateArray().ToList();
+        items.Should().NotBeEmpty();
+        foreach (var item in items)
+        {
+            item.TryGetProperty("removesData", out var removesData).Should().BeTrue();
+            removesData.GetBoolean().Should().Be(expected);
+        }
+    }
+
+    [Fact]
+    public async Task PreviewAsync_Create_PreservesNestedProposedValues()
+    {
+        var preview = await Preview("bulk_create_habits", """{"habits":[{"title":"One","checklist_items":[{"text":"First","is_checked":true}],"sub_habits":[{"title":"Child"}]}]}""");
+
+        var fields = preview!.Items![0].Fields;
+        fields.Single(field => field.Field == "checklist_items").ProposedValue!.Value[0]
+            .GetProperty("is_checked").GetBoolean().Should().BeTrue();
+        fields.Single(field => field.Field == "sub_habits").ProposedValue!.Value[0]
+            .GetProperty("title").GetString().Should().Be("Child");
+        fields.Should().OnlyContain(field => field.IsEditable);
+    }
+
+    [Fact]
+    public async Task PreviewAsync_Reschedule_ShowsOldAndNewDate()
+    {
+        Setup([CreateHabit("One", null)]);
+
+        var preview = await Preview("bulk_reschedule_habits", """{"filter":{"all":true},"due_date":"2026-10-01"}""");
+
+        preview!.Changes.Should().ContainSingle().Which.Should().Match<Orbit.Domain.Models.PendingOperationChange>(
+            row => row.Field == "due_date" && row.OldValue == "2026-09-25" && row.NewValue == "2026-10-01");
+    }
+
+    [Fact]
+    public async Task PreviewAsync_ZeroMatches_ReturnsEmptyRowsAndZeroTotal()
+    {
+        Setup([]);
+
+        var preview = await Preview("bulk_update_habits", """{"filter":{"all":true},"updates":{"emoji":"✅"}}""");
+
+        preview!.ChangeTargetCount.Should().Be(0);
+        preview.Changes.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task PreviewAsync_FlexibleOnly_ShowsDaysClearedByUpdate()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "One", FrequencyUnit.Day, 1, new DateOnly(2026, 9, 25),
+            Days: [DayOfWeek.Monday, DayOfWeek.Wednesday])).Value;
+        Setup([habit]);
+
+        var preview = await Preview("bulk_update_habits", """{"filter":{"all":true},"updates":{"is_flexible":true}}""");
+
+        preview!.Changes.Should().Contain(row => row.Field == "days"
+            && row.OldValue == "Monday, Wednesday" && row.NewValue == "");
+        preview.Changes.Should().Contain(row => row.Field == "is_flexible"
+            && row.OldValue == "false" && row.NewValue == "true");
+        habit.Days.Should().Equal(DayOfWeek.Monday, DayOfWeek.Wednesday);
+    }
+
+    [Fact]
+    public async Task PreviewAsync_ScheduledReminderForTimedHabit_ShowsNormalizedStore()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "One", FrequencyUnit.Day, 1, new DateOnly(2026, 9, 25),
+            DueTime: new TimeOnly(9, 0), ReminderTimes: [])).Value;
+        Setup([habit]);
+
+        var preview = await Preview("bulk_update_habits", """{"filter":{"all":true},"updates":{"scheduled_reminders":[{"when":"same_day","time":"08:30"}]}}""");
+
+        preview!.Changes.Should().ContainSingle().Which.Should().Match<Orbit.Domain.Models.PendingOperationChange>(
+            row => row.Field == "scheduled_reminders" && row.OldValue == "(none)" && row.NewValue == "same_day 08:30");
+        preview.Items![0].Fields.Single(field => field.Field == "scheduled_reminders")
+            .ProposedValue!.Value[0].GetProperty("time").GetString().Should().Be("08:30");
+        habit.ReminderTimes.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task PreviewAsync_EqualSizeReminderAndChecklistReplacement_ShowsActualValues()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "One", FrequencyUnit.Day, 1, new DateOnly(2026, 9, 25),
+            DueTime: new TimeOnly(9, 0), ReminderTimes: [15],
+            ChecklistItems: [new ChecklistItem("Warm up", false)])).Value;
+        Setup([habit]);
+
+        var preview = await Preview("bulk_update_habits", """{"filter":{"all":true},"updates":{"reminder_times":[30],"checklist_items":[{"text":"Stretch"}]}}""");
+
+        preview!.Changes.Should().Contain(row => row.Field == "reminder_times"
+            && row.OldValue == "15 min before due" && row.NewValue == "30 min before due");
+        preview.Changes.Should().Contain(row => row.Field == "checklist_items"
+            && row.OldValue == "Warm up" && row.NewValue == "Stretch");
+    }
+
+    [Fact]
+    public async Task PreviewAsync_LongChecklist_ShowsThreeValuesAndRemainder()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "One", FrequencyUnit.Day, 1, new DateOnly(2026, 9, 25),
+            ChecklistItems: [new("One", false), new("Two", false), new("Three", false), new("Four", false), new("Five", false)])).Value;
+        Setup([habit]);
+
+        var preview = await Preview("bulk_update_habits", """{"filter":{"all":true},"updates":{"checklist_items":[{"text":"Alpha"},{"text":"Beta"},{"text":"Gamma"},{"text":"Delta"},{"text":"Epsilon"}]}}""");
+
+        preview!.Changes.Should().ContainSingle().Which.Should().Match<Orbit.Domain.Models.PendingOperationChange>(
+            row => row.Field == "checklist_items"
+                && row.OldValue == "One, Two, Three, +2 more"
+                && row.NewValue == "Alpha, Beta, Gamma, +2 more");
+        var serialized = JsonSerializer.SerializeToElement(preview.Items![0].Fields[0],
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        serialized.GetProperty("isEditable").GetBoolean().Should().BeTrue();
+        serialized.GetProperty("proposedValue").EnumerateArray()
+            .Select(item => item.GetProperty("text").GetString())
+            .Should().Equal("Alpha", "Beta", "Gamma", "Delta", "Epsilon");
+    }
+
+    [Fact]
+    public async Task PreviewAsync_ChecklistFourthItemReplacement_ShowsChangedWindow()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "One", FrequencyUnit.Day, 1, new DateOnly(2026, 9, 25),
+            ChecklistItems: [new("One", false), new("Two", false), new("Three", false), new("Four", false), new("Five", false)])).Value;
+        Setup([habit]);
+
+        var preview = await Preview("bulk_update_habits", """{"filter":{"all":true},"updates":{"checklist_items":[{"text":"One"},{"text":"Two"},{"text":"Three"},{"text":"Changed"},{"text":"Five"}]}}""");
+
+        preview!.Changes.Should().ContainSingle().Which.Should().Match<Orbit.Domain.Models.PendingOperationChange>(
+            row => row.Field == "checklist_items"
+                && row.OldValue == "+3 earlier, Four, Five"
+                && row.NewValue == "+3 earlier, Changed, Five");
+    }
+
+    [Fact]
+    public async Task PreviewAsync_FifthScheduledReminderReplacement_ShowsChangedWindow()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "One", FrequencyUnit.Day, 1, new DateOnly(2026, 9, 25),
+            ScheduledReminders: [
+                new(ScheduledReminderWhen.SameDay, new TimeOnly(8, 0)),
+                new(ScheduledReminderWhen.SameDay, new TimeOnly(9, 0)),
+                new(ScheduledReminderWhen.SameDay, new TimeOnly(10, 0)),
+                new(ScheduledReminderWhen.SameDay, new TimeOnly(11, 0)),
+                new(ScheduledReminderWhen.SameDay, new TimeOnly(12, 0))])).Value;
+        Setup([habit]);
+
+        var preview = await Preview("bulk_update_habits", """{"filter":{"all":true},"updates":{"scheduled_reminders":[{"when":"same_day","time":"08:00"},{"when":"same_day","time":"09:00"},{"when":"same_day","time":"10:00"},{"when":"same_day","time":"11:00"},{"when":"same_day","time":"12:30"}]}}""");
+
+        preview!.Changes.Should().ContainSingle().Which.Should().Match<Orbit.Domain.Models.PendingOperationChange>(
+            row => row.Field == "scheduled_reminders"
+                && row.OldValue == "+4 earlier, same_day 12:00"
+                && row.NewValue == "+4 earlier, same_day 12:30");
+        var proposed = preview.Items![0].Fields.Single(field => field.Field == "scheduled_reminders")
+            .ProposedValue!.Value;
+        proposed.GetArrayLength().Should().Be(5);
+        proposed[4].GetProperty("when").GetString().Should().Be("same_day");
+        proposed[4].GetProperty("time").GetString().Should().Be("12:30");
+    }
+
+    [Fact]
+    public async Task PreviewAsync_CrossMidnightRelativeReminder_ShowsOffsetWithoutClock()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "One", FrequencyUnit.Day, 1, new DateOnly(2026, 9, 25),
+            DueTime: new TimeOnly(0, 30), ReminderTimes: [15])).Value;
+        Setup([habit]);
+
+        var preview = await Preview("bulk_update_habits", """{"filter":{"all":true},"updates":{"reminder_times":[60]}}""");
+
+        preview!.Changes.Should().ContainSingle().Which.Should().Match<Orbit.Domain.Models.PendingOperationChange>(
+            row => row.Field == "reminder_times"
+                && row.OldValue == "15 min before due"
+                && row.NewValue == "60 min before due");
+    }
+
+    private async Task<Orbit.Domain.Models.PendingOperationChangePreview?> Preview(string operation, string json) =>
+        await new PendingOperationChangePreviewer(_habits, _goals, _tags, _userDateService,
+            new AiToolRegistry([])).PreviewAsync(
+            UserId, operation, JsonDocument.Parse(json).RootElement);
+
+    private void Setup(IReadOnlyList<Habit> habits) =>
+        _habits.FindAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(habits);
+
+    private static Habit CreateHabit(string title, string? emoji) =>
+        Habit.Create(new HabitCreateParams(
+            UserId, title, FrequencyUnit.Day, 1, new DateOnly(2026, 9, 25), Emoji: emoji)).Value;
+}

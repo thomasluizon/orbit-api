@@ -21,6 +21,29 @@ public class SystemPromptBuilderTests
         return builder.BuildStatic(request) + builder.BuildDynamic(request);
     }
 
+    [Theory]
+    [InlineData("English", "create", "create", "Nothing has been saved.")]
+    [InlineData("English", "update", "move", "Nothing has been saved.")]
+    [InlineData("English", "delete", "delete", "Nothing has been saved.")]
+    [InlineData("Portuguese", "create", "criar", "Nada foi salvo.")]
+    [InlineData("Portuguese", "update", "mudar", "Nada foi salvo.")]
+    [InlineData("Portuguese", "delete", "excluir", "Nada foi salvo.")]
+    public void BuildStatic_HeldWriteExamples_DescribeUnsavedProposalsWithoutAskingForApproval(
+        string language, string operation, string proposedChange, string unsavedState)
+    {
+        var prompt = new SystemPromptBuilder().BuildStatic(
+            new PromptBuildRequest(Array.Empty<Habit>(), Array.Empty<UserFact>()));
+        var prefix = $"- {language} {operation}: ";
+        var example = prompt.Split('\n').Should().ContainSingle(line => line.StartsWith(prefix, StringComparison.Ordinal)).Subject;
+
+        example.Should().Contain(proposedChange);
+        example.Should().Contain(unsavedState);
+        example.Should().NotMatchRegex(@"(?i)\b(confirm|approve|approval|confirme|confirmar|confirmação|aprove|aprovar|aprovação)\b|\?");
+        prompt.Should().Contain("Do not request confirmation or approval in assistant prose");
+        prompt.Should().Contain("Execution still waits for explicit preview approval");
+        prompt.Should().Contain("Never bypass irreversible confirmation or identity verification");
+    }
+
     [Fact]
     public void Build_NoHabits_ContainsNoneMarker()
     {
@@ -157,6 +180,26 @@ public class SystemPromptBuilderTests
 
         result.Should().Contain("Tone and Encouragement");
         result.Should().Contain("non-judgmental");
+    }
+
+    [Theory]
+    [InlineData("English", "If the user writes in English, respond in English.")]
+    [InlineData("Portuguese", "If they write in Portuguese, respond in Portuguese.")]
+    public void BuildStatic_CopyableContentRules_ApplyToBothReplyLanguages(string language, string languageRule)
+    {
+        var prompt = new SystemPromptBuilder().BuildStatic(
+            new PromptBuildRequest(Array.Empty<Habit>(), Array.Empty<UserFact>()));
+        var rule = prompt.Split('\n').Should()
+            .ContainSingle(line => line.Contains("COPYABLE CONTENT:", StringComparison.Ordinal)).Subject;
+
+        prompt.Should().Contain(languageRule);
+        rule.Should().Contain(language);
+        rule.Should().Contain("In English and Portuguese replies");
+        rule.Should().Contain("one fenced block (three backticks: ```, no language tag needed)");
+        rule.Should().Contain("only for code, a command, or ready-to-paste text (a message, list, or template)");
+        rule.Should().Contain("the user will copy and use elsewhere");
+        rule.Should().Contain("Keep everything else in normal prose");
+        rule.Should().Contain("never wrap your whole reply, a single word, or an explanation in a block");
     }
 
     [Fact]

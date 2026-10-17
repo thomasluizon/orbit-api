@@ -359,6 +359,21 @@ public class HabitToolsTests
     }
 
     [Fact]
+    public async Task UndoSkipHabit_RoutesThroughExecutorWithSkipId()
+    {
+        var habitId = Guid.NewGuid();
+        var skipId = Guid.NewGuid();
+        StubExecutor(AgentOperationStatus.Succeeded, targetId: habitId.ToString());
+
+        var request = await CapturedRequestAsync(() => _tools.UndoSkipHabit(_user, habitId.ToString(), skipId.ToString()));
+
+        request.OperationId.Should().Be("undo_skip_habit");
+        request.Surface.Should().Be(AgentExecutionSurface.Mcp);
+        request.Arguments.GetProperty("habit_id").GetString().Should().Be(habitId.ToString());
+        request.Arguments.GetProperty("skip_id").GetString().Should().Be(skipId.ToString());
+    }
+
+    [Fact]
     public async Task SkipHabit_Failure_ReturnsError()
     {
         StubExecutor(AgentOperationStatus.Failed, policyReason: "Not a recurring habit");

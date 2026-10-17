@@ -5,7 +5,7 @@ using Orbit.Application.Profile.Commands;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
-public class ManageAccountTool(IMediator mediator) : IAiTool
+public class ManageAccountTool(IMediator mediator) : IAiTool, IArgumentCheckTool
 {
     public string Name => "manage_account";
     public string Description => "Reset the account, request an account deletion code, or confirm account deletion with a code.";
@@ -21,7 +21,13 @@ public class ManageAccountTool(IMediator mediator) : IAiTool
         required = new[] { "action" }
     };
 
-    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
+    public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ExecuteCoreAsync(args, userId, ct, checkOnly: false);
+
+    public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ChatToolArgumentCheck.CheckAsync(this, args, () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+
+    private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         var action = JsonArgumentParser.GetOptionalString(args, "action");
         if (string.IsNullOrWhiteSpace(action))
@@ -29,36 +35,48 @@ public class ManageAccountTool(IMediator mediator) : IAiTool
 
         return action switch
         {
-            "reset_account" => await ResetAccountAsync(userId, ct),
-            "request_deletion" => await RequestDeletionAsync(userId, ct),
-            "confirm_deletion" => await ConfirmDeletionAsync(args, userId, ct),
+            "reset_account" => await ResetAccountAsync(userId, ct, checkOnly),
+            "request_deletion" => await RequestDeletionAsync(userId, ct, checkOnly),
+            "confirm_deletion" => await ConfirmDeletionAsync(args, userId, ct, checkOnly),
             _ => new ToolResult(false, Error: $"Unsupported action '{action}'.")
         };
     }
 
-    private async Task<ToolResult> ResetAccountAsync(Guid userId, CancellationToken ct)
+    private async Task<ToolResult> ResetAccountAsync(Guid userId, CancellationToken ct, bool checkOnly)
     {
-        var result = await mediator.Send(new ResetAccountCommand(userId), ct);
+        var command = new ResetAccountCommand(userId);
+        if (checkOnly)
+            return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
+
+        var result = await mediator.Send(command, ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: userId.ToString(), EntityName: "Account reset completed", Payload: new { success = true })
             : ToolResult.FromFailure(result, userId.ToString());
     }
 
-    private async Task<ToolResult> RequestDeletionAsync(Guid userId, CancellationToken ct)
+    private async Task<ToolResult> RequestDeletionAsync(Guid userId, CancellationToken ct, bool checkOnly)
     {
-        var result = await mediator.Send(new RequestAccountDeletionCommand(userId), ct);
+        var command = new RequestAccountDeletionCommand(userId);
+        if (checkOnly)
+            return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
+
+        var result = await mediator.Send(command, ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: userId.ToString(), EntityName: "Deletion code requested", Payload: new { success = true })
             : ToolResult.FromFailure(result, userId.ToString());
     }
 
-    private async Task<ToolResult> ConfirmDeletionAsync(JsonElement args, Guid userId, CancellationToken ct)
+    private async Task<ToolResult> ConfirmDeletionAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         var code = JsonArgumentParser.GetOptionalString(args, "code");
         if (string.IsNullOrWhiteSpace(code))
             return new ToolResult(false, Error: "code is required.");
 
-        var result = await mediator.Send(new ConfirmAccountDeletionCommand(userId, code), ct);
+        var command = new ConfirmAccountDeletionCommand(userId, code);
+        if (checkOnly)
+            return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
+
+        var result = await mediator.Send(command, ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: userId.ToString(), EntityName: "Account deletion confirmed", Payload: new { scheduledDeletionAt = result.Value })
             : ToolResult.FromFailure(result, userId.ToString());

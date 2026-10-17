@@ -4,6 +4,7 @@ using NSubstitute;
 using Orbit.Application.Profile.Commands;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Commands.Profile;
 
@@ -51,7 +52,7 @@ public class DismissImportPromptCommandHandlerTests
         var result = await _handler.Handle(new DismissImportPromptCommand(UserId), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("User not found.");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 }

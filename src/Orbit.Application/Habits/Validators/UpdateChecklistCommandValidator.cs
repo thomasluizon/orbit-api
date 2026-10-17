@@ -19,10 +19,10 @@ public class UpdateChecklistCommandValidator : AbstractValidator<UpdateChecklist
 
         RuleFor(x => x.ChecklistItems)
             .Must(items => items is null || items.Count <= AppConstants.MaxChecklistItems)
-            .WithMessage($"A checklist can have at most {AppConstants.MaxChecklistItems} items");
+            .WithCopy(ValidationErrorCodes.ChecklistItemLimit);
 
         RuleFor(x => x.ChecklistItems)
             .Must(items => items is null || items.All(i => i.Text.Length <= AppConstants.MaxChecklistItemTextLength))
-            .WithMessage($"Checklist item text must not exceed {AppConstants.MaxChecklistItemTextLength} characters");
+            .WithCopy(ValidationErrorCodes.ChecklistItemLength);
     }
 }

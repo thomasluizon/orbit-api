@@ -13,6 +13,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Commands.Auth;
 
@@ -67,7 +68,7 @@ public class VerifyCodeCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Invalid");
+        result.Error.Should().Be(ErrorMessages.InvalidVerificationCode.Message);
         result.ErrorCode.Should().Be("INVALID_VERIFICATION_CODE");
         _cache.TryGetValue($"verify-attempts:{TestEmail}", out int attempts).Should().BeTrue();
         attempts.Should().Be(1);
@@ -110,7 +111,7 @@ public class VerifyCodeCommandHandlerTests
         var result = await _handler.Handle(new VerifyCodeCommand(TestEmail, "123456"), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("Too many attempts. Try again in 15 minutes");
+        result.Error.Should().Be(ErrorMessages.TooManyCodeAttempts.Message);
         result.ErrorCode.Should().Be("TOO_MANY_ATTEMPTS");
     }
 

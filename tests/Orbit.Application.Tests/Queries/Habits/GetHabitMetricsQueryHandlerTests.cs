@@ -5,6 +5,7 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Queries.Habits;
 
@@ -72,7 +73,7 @@ public class GetHabitMetricsQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Habit not found");
+        result.Error.Should().Be(ErrorMessages.HabitNotFound.Message);
         result.ErrorCode.Should().Be("HABIT_NOT_FOUND");
     }
 
@@ -94,7 +95,7 @@ public class GetHabitMetricsQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("User not found");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
         result.ErrorCode.Should().Be("USER_NOT_FOUND");
     }
 }

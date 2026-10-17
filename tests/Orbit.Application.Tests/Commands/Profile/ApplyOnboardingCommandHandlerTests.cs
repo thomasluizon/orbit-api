@@ -121,7 +121,7 @@ public class ApplyOnboardingCommandHandlerTests
         result.Value.LoggedFirstHabit.Should().BeTrue();
         user.HasCompletedOnboarding.Should().BeTrue();
         user.WeekStartDay.Should().Be(0);
-        user.ColorScheme.Should().Be("blue");
+        user.ColorScheme.Should().Be(ColorSchemes.Granted);
         await _habitRepo.Received(2).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
         await _goalRepo.Received(1).AddAsync(Arg.Any<Goal>(), Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
@@ -164,7 +164,7 @@ public class ApplyOnboardingCommandHandlerTests
         var result = await CreateHandler().Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("User not found.");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -285,7 +285,7 @@ public class ApplyOnboardingCommandHandlerTests
         var result = await CreateHandler().Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("Deadline cannot be in the past.");
+        result.Error.Should().Be(ErrorMessages.DeadlineInPast.Message);
         user.HasCompletedOnboarding.Should().BeFalse();
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }

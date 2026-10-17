@@ -62,7 +62,7 @@ public class HandleWebhookCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("not configured");
+        result.Error.Should().Be(ErrorMessages.WebhookSecretNotConfigured.Message);
     }
 
     [Fact]
@@ -78,7 +78,7 @@ public class HandleWebhookCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("not configured");
+        result.Error.Should().Be(ErrorMessages.WebhookSecretNotConfigured.Message);
     }
 
     [Fact]
@@ -89,7 +89,7 @@ public class HandleWebhookCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("signature");
+        result.Error.Should().Be(ErrorMessages.InvalidWebhookSignature.Message);
     }
 
     [Fact]
@@ -696,7 +696,7 @@ public class HandleWebhookCommandHandlerTests
         var result = await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Stripe API");
+        result.Error.Should().Be(ErrorMessages.WebhookStripeApiError.Message);
         user.IsPro.Should().BeFalse();
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
@@ -731,7 +731,7 @@ public class HandleWebhookCommandHandlerTests
         var result = await _handler.Handle(new HandleWebhookCommand(malformed, signature), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("signature");
+        result.Error.Should().Be(ErrorMessages.InvalidWebhookSignature.Message);
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -743,7 +743,7 @@ public class HandleWebhookCommandHandlerTests
         var result = await _handler.Handle(new HandleWebhookCommand("", signature), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("signature");
+        result.Error.Should().Be(ErrorMessages.InvalidWebhookSignature.Message);
     }
 
     [Fact]
@@ -817,7 +817,7 @@ public class HandleWebhookCommandHandlerTests
         var result = await _handler.Handle(new HandleWebhookCommand(eventJson, signature), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("signature");
+        result.Error.Should().Be(ErrorMessages.InvalidWebhookSignature.Message);
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 

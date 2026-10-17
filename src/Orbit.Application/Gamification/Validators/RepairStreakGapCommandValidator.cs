@@ -12,15 +12,15 @@ public class RepairStreakGapCommandValidator : AbstractValidator<RepairStreakGap
         RuleFor(command => command.Dates).Cascade(CascadeMode.Stop)
             .NotEmpty()
             .Must(dates => dates.Count < AppConstants.MaxStreakLookbackDays)
-            .WithMessage("The gap exceeds the streak history window.")
+            .WithCopy(ValidationErrorCodes.StreakGapLimit)
             .Must(dates => dates.All(date => date != DateOnly.MinValue))
-            .WithMessage("Each date is required.")
+            .WithCopy(ValidationErrorCodes.StreakDateRequired)
             /**
              * Duplicates only. Contiguity is a property of the user's SCHEDULE, not of the calendar, so
              * it is enforced in UserStreakService where the scheduled occurrences are known. Asserting
              * calendar-consecutiveness at this boundary rejected every valid weekly and every-N-day gap.
              */
             .Must(dates => dates.Distinct().Count() == dates.Count)
-            .WithMessage("Select each date once.");
+            .WithCopy(ValidationErrorCodes.StreakDatesUnique);
     }
 }

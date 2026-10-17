@@ -25,7 +25,8 @@ public record HabitWidgetResponse(
     string Language,
     int CurrentStreak,
     IReadOnlyList<HabitWidgetItem> Items,
-    string? EmptyReason = null);
+    string? EmptyReason = null,
+    bool Uses24HourClock = true);
 
 public record GetHabitWidgetQuery(Guid UserId) : IRequest<Result<HabitWidgetResponse>>;
 
@@ -84,7 +85,8 @@ public class GetHabitWidgetQueryHandler(
             user.Language ?? "en",
             user.CurrentStreak,
             selectedItems,
-            emptyReason));
+            emptyReason,
+            TimeFormatResolver.Uses24HourClock(user.Uses24HourClockPreference, user.TimeZone)));
     }
 
     private async Task<IReadOnlyList<Habit>> LoadWidgetHabits(

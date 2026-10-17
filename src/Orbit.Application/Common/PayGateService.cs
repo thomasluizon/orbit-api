@@ -35,7 +35,7 @@ public class PayGateService(
 
         var subHabitsProOnly = await appConfig.GetAsync(AppConfigKeys.SubHabitsProOnly, true, ct);
         if (subHabitsProOnly && !user.HasProAccess)
-            return Result.PayGateFailure("Sub-habits are a Pro feature. Upgrade to unlock!");
+            return Result.PayGateFailure(ErrorMessages.ProFeature.Message);
 
         return Result.Success();
     }
@@ -111,7 +111,7 @@ public class PayGateService(
 
         var summaryProOnly = await appConfig.GetAsync(AppConfigKeys.DailySummaryProOnly, true, ct);
         if (summaryProOnly && !user.HasProAccess)
-            return Result.PayGateFailure("Daily summaries are a Pro feature. Upgrade to unlock!");
+            return Result.PayGateFailure(ErrorMessages.ProFeature.Message);
 
         return Result.Success();
     }
@@ -124,7 +124,7 @@ public class PayGateService(
 
         var rescheduleProOnly = await appConfig.GetAsync(AppConfigKeys.SmartRescheduleProOnly, true, ct);
         if (rescheduleProOnly && !user.HasProAccess)
-            return Result.PayGateFailure("Smart reschedule is a Pro feature. Upgrade to unlock!");
+            return Result.PayGateFailure(ErrorMessages.ProFeature.Message);
 
         return Result.Success();
     }
@@ -137,7 +137,7 @@ public class PayGateService(
 
         var proOnly = await appConfig.GetAsync(AppConfigKeys.RetrospectiveProOnly, true, ct);
         if (proOnly && !user.HasProAccess)
-            return Result.PayGateFailure("Retrospectives are a Pro feature. Upgrade to unlock!");
+            return Result.PayGateFailure(ErrorMessages.ProFeature.Message);
 
         return Result.Success();
     }
@@ -162,9 +162,6 @@ public class PayGateService(
 
     public Task<Result> CanManageProactiveAstra(Guid userId, CancellationToken ct = default) =>
         RequireProAccess(userId, "Proactive Astra check-ins are a Pro feature. Upgrade to unlock!", ct);
-
-    public Task<Result> CanManagePremiumColors(Guid userId, CancellationToken ct = default) =>
-        RequireProAccess(userId, "Premium color schemes are a Pro feature. Upgrade to unlock!", ct);
 
     public Task<Result> CanReadUserFacts(Guid userId, CancellationToken ct = default) =>
         RequireProAccess(userId, "AI memory is a Pro feature. Upgrade to unlock!", ct);

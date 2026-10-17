@@ -98,7 +98,7 @@ public class CreateCheckoutCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("not found");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
     }
 
     [Fact]
@@ -112,7 +112,7 @@ public class CreateCheckoutCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("billing interval");
+        result.Error.Should().Be(ErrorMessages.InvalidBillingInterval.Message);
     }
 
     [Fact]
@@ -153,7 +153,7 @@ public class CreateCheckoutCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("temporarily unavailable");
+        result.Error.Should().Be(ErrorMessages.PaymentServiceUnavailable.Message);
     }
 
     [Fact]
@@ -213,7 +213,7 @@ public class CreateCheckoutCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("temporarily unavailable");
+        result.Error.Should().Be(ErrorMessages.PaymentServiceUnavailable.Message);
         user.StripeCustomerId.Should().BeNull();
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
@@ -245,7 +245,7 @@ public class CreateCheckoutCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("temporarily unavailable");
+        result.Error.Should().Be(ErrorMessages.PaymentServiceUnavailable.Message);
     }
 
     private void SetupExistingUser(User user)

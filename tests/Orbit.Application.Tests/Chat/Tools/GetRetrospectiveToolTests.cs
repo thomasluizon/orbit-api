@@ -38,6 +38,7 @@ public class GetRetrospectiveToolTests
 
         result.Success.Should().BeTrue();
         result.Payload.Should().Be(response);
+        result.Payload.Should().BeOfType<RetrospectiveResponse>();
     }
 
     [Fact]

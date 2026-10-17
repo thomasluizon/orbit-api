@@ -199,7 +199,7 @@ public class UpdateMarketingConsentCommandHandlerTests
         var result = await _handler.Handle(new UpdateMarketingConsentCommand(UserId, true), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("User not found.");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 }

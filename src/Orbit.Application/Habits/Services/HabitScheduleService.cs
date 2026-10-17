@@ -17,7 +17,7 @@ public static class HabitScheduleService
     /// frequency, quantity, active days, and anchor (due) date.
     /// For flexible habits, they appear on every date in range (filtering by log count is done separately).
     /// </summary>
-    public static bool IsHabitDueOnDate(IHabitSchedule habit, DateOnly target, int weekStartDay = 1)
+    public static bool IsHabitDueOnDate(Habit habit, DateOnly target, int weekStartDay = 1)
     {
         if (habit.EndDate.HasValue && target > habit.EndDate.Value)
             return false;
@@ -47,10 +47,11 @@ public static class HabitScheduleService
     /// Returns all dates within [from, to] where the habit is scheduled.
     /// </summary>
     public static List<DateOnly> GetScheduledDates(
-        IHabitSchedule habit,
+        Habit habit,
         DateOnly from,
         DateOnly to,
-        int weekStartDay = 1)
+        int weekStartDay = 1,
+        DateOnly? recurrenceAnchor = null)
     {
         if (to.DayNumber - from.DayNumber > AppConstants.MaxRangeDays)
             to = from.AddDays(AppConstants.MaxRangeDays);
@@ -59,7 +60,11 @@ public static class HabitScheduleService
         var current = from;
         while (current <= to)
         {
-            if (IsHabitDueOnDate(habit, current, weekStartDay))
+            if (recurrenceAnchor.HasValue
+                ? current >= recurrenceAnchor.Value
+                    && (!habit.EndDate.HasValue || current <= habit.EndDate.Value)
+                    && IsHistoricallyDueOnDate(habit, current, recurrenceAnchor.Value, weekStartDay)
+                : IsHabitDueOnDate(habit, current, weekStartDay))
                 dates.Add(current);
             current = current.AddDays(1);
         }
@@ -590,7 +595,7 @@ public static class HabitScheduleService
     /// establishing a non-null <paramref name="unit"/> and their own earliest-date gate.
     /// </summary>
     private static bool MatchesFrequency(
-        IHabitSchedule habit,
+        Habit habit,
         DateOnly target,
         DateOnly anchor,
         FrequencyUnit? unit,
@@ -615,7 +620,7 @@ public static class HabitScheduleService
     }
 
     public static bool IsActiveIntervalWeek(
-        IHabitSchedule habit,
+        Habit habit,
         DateOnly target,
         int weekStartDay,
         DateOnly? recurrenceAnchor = null)

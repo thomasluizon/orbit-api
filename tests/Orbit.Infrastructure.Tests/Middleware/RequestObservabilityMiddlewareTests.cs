@@ -2,8 +2,13 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.DependencyInjection;
+using NSubstitute;
+using Orbit.Domain.Entities;
+using Orbit.Domain.Interfaces;
 using Orbit.Api.Extensions;
 using Orbit.Api.Middleware;
+using Orbit.Application.Common;
 
 namespace Orbit.Infrastructure.Tests.Middleware;
 
@@ -16,6 +21,10 @@ public class RequestObservabilityMiddlewareTests
         var context = new DefaultHttpContext();
         context.Request.Headers[HttpContextExtensions.RequestIdHeaderName] = IncomingRequestId;
         context.Response.Body = new MemoryStream();
+        context.RequestServices = new ServiceCollection()
+            .AddSingleton<IRequestLanguageResolver>(
+                new RequestLanguageResolver(Substitute.For<IGenericRepository<User>>()))
+            .BuildServiceProvider();
 
         var correlation = new RequestCorrelationMiddleware(_ => Task.CompletedTask);
         await correlation.InvokeAsync(context);
@@ -79,7 +88,7 @@ public class RequestObservabilityMiddlewareTests
             .Should().Be(IncomingRequestId);
 
         var body = await ReadBodyAsync(context);
-        body.GetProperty("error").GetString().Should().Be("Unexpected server error");
+        body.GetProperty("error").GetString().Should().Be(ErrorMessages.UnexpectedServerError.Message);
         body.GetProperty("requestId").GetString().Should().Be(IncomingRequestId);
         body.GetProperty("status").GetInt32().Should().Be(StatusCodes.Status500InternalServerError);
     }

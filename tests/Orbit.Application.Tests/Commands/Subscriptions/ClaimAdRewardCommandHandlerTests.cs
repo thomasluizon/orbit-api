@@ -4,6 +4,7 @@ using NSubstitute;
 using Orbit.Application.Subscriptions.Commands;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Commands.Subscriptions;
 
@@ -51,7 +52,7 @@ public class ClaimAdRewardCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("not found");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 

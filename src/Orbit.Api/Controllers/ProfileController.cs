@@ -28,6 +28,7 @@ public partial class ProfileController(
     public record SetProactiveAstraEnabledRequest([property: JsonRequired] bool Enabled);
     public record SetLanguageRequest(string Language);
     public record SetWeekStartDayRequest([property: JsonRequired] int WeekStartDay);
+    public record SetClockFormatRequest([property: JsonRequired] bool Uses24HourClock);
     public record SetThemePreferenceRequest(string? ThemePreference);
     public record SetColorSchemeRequest(string? ColorScheme);
     public record SetHandleRequest(string Handle);
@@ -181,6 +182,23 @@ public partial class ProfileController(
 
         if (result.IsSuccess)
             LogWeekStartDayChanged(logger, request.WeekStartDay, HttpContext.GetUserId());
+
+        return result.ToPayGateAwareResult(() => NoContent());
+    }
+
+    [HttpPut("clock-format")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> SetClockFormat(
+        [FromBody] SetClockFormatRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new SetClockFormatCommand(HttpContext.GetUserId(), request.Uses24HourClock);
+        var result = await mediator.Send(command, cancellationToken);
+
+        if (result.IsSuccess)
+            LogClockFormatChanged(logger, request.Uses24HourClock ? "24-hour" : "12-hour", HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
     }
@@ -430,6 +448,9 @@ public partial class ProfileController(
 
     [LoggerMessage(EventId = 14, Level = LogLevel.Information, Message = "Marketing email consent {State} for user {UserId}")]
     private static partial void LogMarketingConsentChanged(ILogger logger, string state, Guid userId);
+
+    [LoggerMessage(EventId = 15, Level = LogLevel.Information, Message = "Clock format changed to {Format} for user {UserId}")]
+    private static partial void LogClockFormatChanged(ILogger logger, string format, Guid userId);
 
     [LoggerMessage(EventId = 13, Level = LogLevel.Information, Message = "Proactive Astra check-ins {State} for user {UserId}")]
     private static partial void LogProactiveAstraToggled(ILogger logger, string state, Guid userId);

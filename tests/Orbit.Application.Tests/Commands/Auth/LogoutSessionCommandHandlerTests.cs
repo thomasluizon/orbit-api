@@ -3,6 +3,7 @@ using NSubstitute;
 using Orbit.Application.Auth.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Commands.Auth;
 
@@ -37,6 +38,6 @@ public class LogoutSessionCommandHandlerTests
         var result = await _handler.Handle(new LogoutSessionCommand("invalid-token"), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Invalid");
+        result.Error.Should().Be("Invalid refresh token");
     }
 }

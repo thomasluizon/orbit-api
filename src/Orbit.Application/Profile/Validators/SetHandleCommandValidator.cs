@@ -1,3 +1,4 @@
+using Orbit.Application.Common;
 using FluentValidation;
 using Orbit.Application.Profile.Commands;
 
@@ -11,6 +12,6 @@ public class SetHandleCommandValidator : AbstractValidator<SetHandleCommand>
         RuleFor(x => x.Handle)
             .NotEmpty()
             .Matches("^[A-Za-z0-9_]{3,20}$")
-            .WithMessage("Handle must be 3-20 characters using only letters, numbers, or underscores.");
+            .WithCopy(ValidationErrorCodes.HandleFormat);
     }
 }

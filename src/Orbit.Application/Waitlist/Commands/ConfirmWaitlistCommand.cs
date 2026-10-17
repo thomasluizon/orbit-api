@@ -1,4 +1,5 @@
 using MediatR;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 
@@ -13,10 +14,10 @@ public class ConfirmWaitlistCommandHandler(
     public async Task<Result> Handle(ConfirmWaitlistCommand request, CancellationToken cancellationToken)
     {
         if (!tokenService.TryValidateToken(request.Token, out var email, out var language))
-            return Result.Failure("Invalid or expired confirmation link.");
+            return Result.Failure(ErrorMessages.InvalidWaitlistConfirmation);
 
         if (!WaitlistLanguage.TryCanonicalize(language, out var canonicalLanguage))
-            return Result.Failure("Invalid or expired confirmation link.");
+            return Result.Failure(ErrorMessages.InvalidWaitlistConfirmation);
 
         await contactsService.AddContactAsync(email, canonicalLanguage, cancellationToken);
 

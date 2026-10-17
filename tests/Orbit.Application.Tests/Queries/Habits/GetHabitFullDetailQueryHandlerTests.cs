@@ -7,6 +7,7 @@ using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text.Json;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Queries.Habits;
 
@@ -92,7 +93,7 @@ public class GetHabitFullDetailQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Habit not found");
+        result.Error.Should().Be(ErrorMessages.HabitNotFound.Message);
         result.ErrorCode.Should().Be("HABIT_NOT_FOUND");
     }
 
@@ -130,7 +131,7 @@ public class GetHabitFullDetailQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("User not found");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
         result.ErrorCode.Should().Be("USER_NOT_FOUND");
     }
 

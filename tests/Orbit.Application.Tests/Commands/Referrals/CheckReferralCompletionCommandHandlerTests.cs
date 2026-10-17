@@ -356,6 +356,10 @@ public class CheckReferralCompletionCommandHandlerTests
         var referredUser = CreateReferredUser();
         var referrer = CreateReferrer();
         referrer.SetLanguage(language);
+        referredUser.SetLanguage(language);
+        var notifications = new List<Notification>();
+        _notificationRepo.AddAsync(Arg.Do<Notification>(notifications.Add), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
         SetupPendingReferral(referral);
         SetupReferredAndReferrerUsers(referredUser, referrer);
         SetupHabitsAndLogs(ReferredUserId, 1, AppConstants.ReferralCompletionThreshold);
@@ -367,5 +371,13 @@ public class CheckReferralCompletionCommandHandlerTests
         await _notificationRepo.Received(1).AddAsync(
             Arg.Is<Notification>(n => n.UserId == ReferrerId && n.Title == expectedTitle),
             Arg.Any<CancellationToken>());
+        notifications.Should().HaveCount(2);
+        notifications.Should().AllSatisfy(n =>
+        {
+            n.Title.Should().NotEndWith("!");
+            n.Body.Should().NotEndWith("!");
+        });
+        notifications.Should().Contain(n => n.UserId == ReferredUserId && n.Title ==
+            (language == "pt-BR" ? "Você ganhou um cupom" : "You earned a coupon"));
     }
 }

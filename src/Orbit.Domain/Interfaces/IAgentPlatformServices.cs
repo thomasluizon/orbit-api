@@ -47,6 +47,9 @@ public interface IPendingAgentOperationStore
 
     PendingAgentOperationConfirmation? Confirm(Guid userId, Guid pendingOperationId);
     PendingAgentOperationExecution? GetExecution(Guid userId, Guid pendingOperationId);
+    bool Revise(Guid userId, Guid pendingOperationId, string expectedFingerprint,
+        string argumentsJson, string operationFingerprint, string previewFingerprint);
+    bool Cancel(Guid userId, Guid pendingOperationId, string expectedFingerprint);
     bool TryConsumeFreshConfirmation(
         Guid userId,
         string capabilityId,
@@ -127,6 +130,27 @@ public interface IAgentOperationExecutor
     Task<AgentExecuteOperationResponse> ExecuteAsync(
         AgentExecuteOperationRequest request,
         CancellationToken cancellationToken = default);
+}
+
+public interface IPendingOperationChangePreviewer
+{
+    Task<PendingOperationChangePreview?> PreviewAsync(
+        Guid userId,
+        string operationId,
+        JsonElement arguments,
+        CancellationToken cancellationToken = default);
+}
+
+public interface IDestructiveOperationPreviewer
+{
+    Task<PendingOperationChangePreview?> PreviewAsync(Guid userId, string operationId,
+        JsonElement arguments, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reports whether this previewer owns <paramref name="operationId"/>. An operation it does
+    /// not own falls back to the preview built from the arguments of the held write.
+    /// </summary>
+    bool Handles(string operationId);
 }
 
 public interface IDistributedRateLimitService

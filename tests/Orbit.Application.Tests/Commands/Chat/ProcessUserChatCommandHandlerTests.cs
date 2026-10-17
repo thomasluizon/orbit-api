@@ -10,10 +10,16 @@ using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
+using Orbit.Application.Chat.Tools.Implementations;
+using System.Text.RegularExpressions;
+using Orbit.Application.ApiKeys.Queries;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification.Queries;
 using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Queries;
+using Orbit.Application.Notifications.Queries;
+using Orbit.Application.Referrals.Queries;
+using Orbit.Application.Tags.Queries;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -53,6 +59,7 @@ public class ProcessUserChatCommandHandlerTests
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly DateOnly Today = new(2026, 4, 3);
     private static readonly string[] ExpectedOrderedToolNames = new[] { "assign_tags", "create_habit", "delete_habit" };
+    private static readonly string[] SupportToolNames = new[] { "send_support_request" };
     private static readonly string[] GamificationTodaySurfaces = new[] { "gamification", "today" };
     private static readonly string[] HabitsSurfaces = new[] { "habits" };
     private const string EnglishToolFailureMessage = "I couldn't complete that. Please try again.";
@@ -202,6 +209,9 @@ public class ProcessUserChatCommandHandlerTests
                             "unsupported_by_policy"));
                 }
 
+                if (request.OnExecutionStarted is not null)
+                    await request.OnExecutionStarted();
+
                 try
                 {
                     var toolResult = await tool.ExecuteAsync(request.Arguments, request.UserId, cancellationToken);
@@ -295,6 +305,27 @@ public class ProcessUserChatCommandHandlerTests
         ConversationContext = TestConversationContext
     };
 
+    private static IAiTool ReadTool(string name, ToolResult result)
+    {
+        var tool = Substitute.For<IAiTool>();
+        tool.Name.Returns(name);
+        tool.Description.Returns(name);
+        tool.IsReadOnly.Returns(true);
+        tool.GetParameterSchema().Returns(new { type = "object" });
+        tool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(result);
+        return tool;
+    }
+
+    private void SetupReadToolReply(string toolName, string reply)
+    {
+        SetupAiResponse(ToolResponse(toolName, "call_1", "{}"));
+        _aiIntentService.ContinueWithToolResultsAsync(
+                Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = reply }));
+    }
+
     private static JsonElement ParseArguments(string arguments) =>
         JsonDocument.Parse(arguments).RootElement.Clone();
 
@@ -369,6 +400,12 @@ public class ProcessUserChatCommandHandlerTests
 
     private static List<string> ToolNames(IReadOnlyList<object> declarations) =>
         declarations.Select(declaration => (string)declaration.GetType().GetProperty("name")!.GetValue(declaration)!).ToList();
+
+    private static AgentClientContext DeserializeClientContext(string json) =>
+        JsonSerializer.Deserialize<AgentClientContext>(
+            json,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+        ?? throw new InvalidOperationException("Client context deserialization returned null.");
 
     [Fact]
     public async Task Handle_PayGateBlocks_ReturnsPayGateError()
@@ -1058,7 +1095,7 @@ public class ProcessUserChatCommandHandlerTests
             "Free",
             Arg.Is<IReadOnlyDictionary<string, object>>(properties =>
                 properties["platform"].Equals("ios")
-                && properties["chip_present"].Equals(true)));
+                && properties["kind"].Equals("metrics")));
     }
 
     [Theory]
@@ -1146,6 +1183,442 @@ public class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.MetricsCard.Should().NotBeNull();
         result.Value.MetricsCard!.HasData.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_InsightDirectiveWithoutRetrospective_StripsTokenAndOmitsCard()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "Your month:\n[[orbit:insight]]" });
+
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(
+            UserId, "How was my month?",
+            ClientContext: new AgentClientContext(SupportsPeriodInsightCard: true)), CancellationToken.None);
+
+        result.Value.PeriodInsight.Should().BeNull();
+        result.Value.AiMessage.Should().Be("Your month:");
+    }
+
+    [Fact]
+    public async Task Handle_PeriodKillFlag_OmitsMetricsCard()
+    {
+        SetupUserAndPayGate();
+        _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns([FeatureFlagKeys.AstraPeriodBlocksDisabled]);
+        SetupAiResponse(new AiResponse { TextMessage = "Your week [[orbit:metrics]]" });
+        SetupRecap(Metrics(totalScheduled: 3));
+
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(
+            UserId, "How was my week?", ClientContext: new AgentClientContext(SupportsMetricsCard: true)),
+            CancellationToken.None);
+
+        result.Value.MetricsCard.Should().BeNull();
+        result.Value.AiMessage.Should().Be("Your week");
+        await _mediator.DidNotReceive().Send(Arg.Any<GetRecapQuery>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task Handle_RecommendedStreakRead_ReturnsValueInCard(
+        bool recoverAfterDefaultRead, bool followWithAchievementsOnly)
+    {
+        SetupUserAndPayGate();
+        var profile = new GamificationProfileResponse(
+            120, 3, "Level", "level", 100, 200, 80, 0, 0, [], [],
+            7, 9, Today, true, false, new NextRewardCarrot(4, "Next", 80, null));
+        var streak = new StreakInfoResponse(
+            7, 9, Today, 1, 2, 3, false, [], 0, 3, 0, 2, true, false, null, 0);
+        _mediator.Send(Arg.Any<GetGamificationProfileQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(profile));
+        _mediator.Send(Arg.Any<GetAchievementsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AchievementsResponse([])));
+        _mediator.Send(Arg.Any<GetStreakInfoQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(streak));
+        var tool = new GetGamificationOverviewTool(_mediator);
+        var schema = JsonSerializer.SerializeToElement(tool.GetParameterSchema());
+        var description = schema.GetProperty("properties").GetProperty("include_streak")
+            .GetProperty("description").GetString()!;
+        var recommendedArguments = JsonSerializer.Serialize(
+            Regex.Matches(description, @"(include_(?:profile|achievements|streak))=(true|false)")
+                .ToDictionary(match => match.Groups[1].Value, match => bool.Parse(match.Groups[2].Value)));
+        var recovery = ToolResponse(tool.Name, "call_recovery", recommendedArguments);
+        SetupAiResponse(recoverAfterDefaultRead ? ToolResponse(tool.Name, "call_default", "{}") : recovery);
+        var reply = Result.Success(new AiResponse { TextMessage = "Your streak:\n[[orbit:streak]]" });
+        var continuations = new List<Result<AiResponse>>();
+        if (recoverAfterDefaultRead)
+            continuations.Add(Result.Success(recovery));
+        if (followWithAchievementsOnly)
+            continuations.Add(Result.Success(ToolResponse(tool.Name, "call_achievements",
+                """{"include_profile":false,"include_achievements":true,"include_streak":false}""")));
+        continuations.Add(reply);
+        _aiIntentService.ContinueWithToolResultsAsync(
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(continuations[0], continuations.Skip(1).ToArray());
+
+        var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
+            UserId, "What is my current streak?",
+            ClientContext: new AgentClientContext(SupportsStreakCard: true)), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Streak.Should().NotBeNull();
+        result.Value.Streak!.CurrentStreak.Should().Be(7);
+        result.Value.Streak.Level.Should().Be(3);
+        result.Value.Streak.TotalXp.Should().Be(120);
+        result.Value.AiMessage.Should().Be("Your streak:");
+    }
+
+    [Fact]
+    public async Task Handle_StatusKillFlag_OmitsDayCard()
+    {
+        SetupUserAndPayGate();
+        _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns([FeatureFlagKeys.AstraStatusBlocksDisabled]);
+        SetupAiResponse(new AiResponse { TextMessage = "Today [[orbit:day]]" });
+
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(
+            UserId, "How is today?", ClientContext: new AgentClientContext(SupportsDaySummaryCard: true)),
+            CancellationToken.None);
+
+        result.Value.DaySummary.Should().BeNull();
+        result.Value.AiMessage.Should().Be("Today");
+    }
+
+    [Fact]
+    public async Task Handle_DayDirectiveWithoutSuccessfulSummaryTool_OmitsCard()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "Today [[orbit:day]]" });
+
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(
+            UserId, "How is today?", ClientContext: new AgentClientContext(SupportsDaySummaryCard: true)),
+            CancellationToken.None);
+
+        result.Value.DaySummary.Should().BeNull();
+        result.Value.AiMessage.Should().Be("Today");
+    }
+
+    [Fact]
+    public async Task Handle_FailedDailySummaryTool_OmitsCard()
+    {
+        SetupUserAndPayGate();
+        var tool = ReadTool("get_daily_summary", new ToolResult(false, Error: "PAY_GATE", ErrorCode: "PAY_GATE"));
+        SetupReadToolReply("get_daily_summary", "Today [[orbit:day]]");
+
+        var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
+            UserId, "How is today?", ClientContext: new AgentClientContext(SupportsDaySummaryCard: true)),
+            CancellationToken.None);
+
+        result.Value.DaySummary.Should().BeNull();
+        result.Value.AiMessage.Should().NotContain("[[orbit:day]]");
+    }
+
+    [Fact]
+    public async Task Handle_SuccessfulDailySummary_BuildsCardFromLoggedSchedule()
+    {
+        SetupUserAndPayGate();
+        var habits = Enumerable.Range(0, 2).Select(index =>
+            Habit.Create(new HabitCreateParams(UserId, $"Daily {index}", FrequencyUnit.Day, 1, Today)).Value)
+            .ToList();
+        habits.Add(Habit.Create(new HabitCreateParams(UserId, "Once", null, null, Today)).Value);
+        foreach (var habit in habits)
+            typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
+                habit, new DateTime(2026, 4, 1, 12, 0, 0, DateTimeKind.Utc));
+        habits[0].Log(Today).IsSuccess.Should().BeTrue();
+        habits[2].Log(Today).IsSuccess.Should().BeTrue();
+        _habitRepo.FindAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(habits.AsReadOnly());
+        var tool = ReadTool("get_daily_summary", new ToolResult(true,
+            Payload: new DailySummaryResponse("Summary", string.Empty, false)));
+        SetupReadToolReply("get_daily_summary", "Today [[orbit:day]]");
+
+        var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
+            UserId, "How is today?", ClientContext: new AgentClientContext(SupportsDaySummaryCard: true)),
+            CancellationToken.None);
+
+        result.Value.DaySummary.Should().NotBeNull();
+        result.Value.DaySummary!.Due.Should().Be(3);
+        result.Value.DaySummary.Done.Should().Be(2);
+        result.Value.DaySummary.CompletionRate.Should().Be(67);
+    }
+
+    [Fact]
+    public async Task Handle_OverdueOffCadenceLog_BuildsCompletedDayCard()
+    {
+        SetupUserAndPayGate();
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Every other day", FrequencyUnit.Day, 2, Today.AddDays(-1))).Value;
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
+            habit, new DateTime(2026, 4, 1, 12, 0, 0, DateTimeKind.Utc));
+        habit.Log(Today).IsSuccess.Should().BeTrue();
+        _habitRepo.FindAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { habit }.AsReadOnly());
+        var tool = ReadTool("get_daily_summary", new ToolResult(true,
+            Payload: new DailySummaryResponse("Summary", string.Empty, false)));
+        SetupReadToolReply("get_daily_summary", "Today [[orbit:day]]");
+
+        var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
+            UserId, "How is today?", ClientContext: new AgentClientContext(SupportsDaySummaryCard: true)),
+            CancellationToken.None);
+
+        result.Value.DaySummary.Should().NotBeNull();
+        result.Value.DaySummary!.Due.Should().Be(1);
+        result.Value.DaySummary.Done.Should().Be(1);
+        result.Value.DaySummary.CompletionRate.Should().Be(100);
+    }
+
+    [Fact]
+    public async Task Handle_RecordListKillFlag_OmitsSuccessfulNotificationCard()
+    {
+        SetupUserAndPayGate();
+        _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns([FeatureFlagKeys.AstraRecordListsDisabled]);
+        var notifications = new GetNotificationsResponse([], 0, 0);
+        var tool = ReadTool("get_notifications", new ToolResult(true, Payload: notifications));
+        SetupReadToolReply("get_notifications", "Here [[orbit:records:notifications]]");
+
+        var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
+            UserId, "Show notifications",
+            ClientContext: new AgentClientContext(SupportsRecordListCard: true)), CancellationToken.None);
+
+        result.Value.RecordLists.Should().BeNull();
+        result.Value.AiMessage.Should().Be("Here");
+    }
+
+    [Fact]
+    public async Task Handle_NotificationTool_BuildsRecordListFromPayload()
+    {
+        SetupUserAndPayGate();
+        var notice = new NotificationItemDto(Guid.NewGuid(), "Reminder", "Do it", null, null, false,
+            new DateTime(2026, 4, 3, 12, 0, 0, DateTimeKind.Utc));
+        var tool = ReadTool("get_notifications", new ToolResult(true,
+            Payload: new GetNotificationsResponse([notice], 1, 37)));
+        SetupReadToolReply("get_notifications", "Here [[orbit:records:notifications]]");
+
+        var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
+            UserId, "Show notifications",
+            ClientContext: new AgentClientContext(SupportsRecordListCard: true)), CancellationToken.None);
+
+        result.Value.RecordLists.Should().ContainSingle();
+        result.Value.RecordLists![0].TotalCount.Should().Be(37);
+        result.Value.RecordLists[0].Items.Single().Title.Should().Be("Reminder");
+    }
+
+    [Fact]
+    public async Task Handle_TwoRecordDirectives_BuildsTwoLists()
+    {
+        SetupUserAndPayGate();
+        var notifications = ReadTool("get_notifications", new ToolResult(true,
+            Payload: new GetNotificationsResponse([], 0, 0)));
+        var tags = ReadTool("list_tags", new ToolResult(true,
+            Payload: new List<TagResponse> { new(Guid.NewGuid(), "Health", "#ff0000") }));
+        SetupAiResponse(new AiResponse
+        {
+            ToolCalls = [new AiToolCall("get_notifications", "call_1", ParseArguments("{}")),
+                new AiToolCall("list_tags", "call_2", ParseArguments("{}"))],
+            ConversationContext = TestConversationContext
+        });
+        _aiIntentService.ContinueWithToolResultsAsync(
+                Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse
+            {
+                TextMessage = "Lists [[orbit:records:notifications]] [[orbit:records:tags]]"
+            }));
+
+        var result = await CreateHandler(notifications, tags).Handle(new ProcessUserChatCommand(
+            UserId, "Show notifications and tags",
+            ClientContext: new AgentClientContext(SupportsRecordListCard: true)), CancellationToken.None);
+
+        result.Value.RecordLists.Should().HaveCount(2);
+        result.Value.RecordLists!.Select(card => card.Kind).Should().ContainInOrder("notifications", "tags");
+    }
+
+    [Fact]
+    public async Task Handle_FreeKeyReadFailure_OmitsCard()
+    {
+        SetupUserAndPayGate();
+        var tool = ReadTool("get_api_keys", new ToolResult(false, Error: "PAY_GATE", ErrorCode: "PAY_GATE"));
+        SetupReadToolReply("get_api_keys", "Keys [[orbit:records:keys]]");
+
+        var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
+            UserId, "Show API keys",
+            ClientContext: new AgentClientContext(SupportsRecordListCard: true)), CancellationToken.None);
+
+        result.Value.RecordLists.Should().BeNull();
+        result.Value.AiMessage.Should().NotContain("[[orbit:records:keys]]");
+    }
+
+    [Fact]
+    public async Task Handle_SuccessfulKeyRead_BuildsProfileRecordCard()
+    {
+        SetupUserAndPayGate();
+        var createdAt = new DateTime(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc);
+        var key = new ApiKeyResponse(Guid.NewGuid(), "Automation", "orb_123", ["read"], true,
+            null, createdAt, null, false);
+        var tool = ReadTool("get_api_keys", new ToolResult(true,
+            Payload: new List<ApiKeyResponse> { key }));
+        SetupReadToolReply("get_api_keys", "Keys [[orbit:records:keys]]");
+
+        var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
+            UserId, "Show API keys",
+            ClientContext: new AgentClientContext(SupportsRecordListCard: true)), CancellationToken.None);
+
+        result.Value.RecordLists.Should().ContainSingle();
+        result.Value.RecordLists![0].SurfaceId.Should().Be("profile");
+        result.Value.RecordLists[0].Items.Single().Detail.Should().Be("orb_123");
+        result.Value.RecordLists[0].Items.Single().State.Should().Be("active");
+    }
+
+    [Fact]
+    public async Task Handle_AccountKillFlag_OmitsSuccessfulReferralCard()
+    {
+        SetupUserAndPayGate();
+        _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns([FeatureFlagKeys.AstraAccountRowsDisabled]);
+        var dashboard = new ReferralDashboardResponse("CODE", "https://example.test/r/CODE",
+            new ReferralStatsResponse("CODE", "https://example.test/r/CODE", 1, 0, 10, "discount", 20));
+        var tool = ReadTool("get_referral_overview", new ToolResult(true, Payload: dashboard));
+        SetupReadToolReply("get_referral_overview", "Referral [[orbit:account:referral]]");
+
+        var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
+            UserId, "Show my referrals",
+            ClientContext: new AgentClientContext(SupportsAccountRowsCard: true)), CancellationToken.None);
+
+        result.Value.AccountRows.Should().BeNull();
+        result.Value.AiMessage.Should().Be("Referral");
+    }
+
+    [Fact]
+    public async Task Handle_ReferralTool_BuildsAccountRowsFromPayload()
+    {
+        SetupUserAndPayGate();
+        var dashboard = new ReferralDashboardResponse("CODE", "https://example.test/r/CODE",
+            new ReferralStatsResponse("CODE", "https://example.test/r/CODE", 1, 0, 10, "discount", 20));
+        var tool = ReadTool("get_referral_overview", new ToolResult(true, Payload: dashboard));
+        SetupReadToolReply("get_referral_overview", "Referral [[orbit:account:referral]]");
+
+        var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
+            UserId, "Show my referrals",
+            ClientContext: new AgentClientContext(SupportsAccountRowsCard: true)), CancellationToken.None);
+
+        result.Value.AccountRows!.ReferralCode.Should().Be("CODE");
+        result.Value.AccountRows.Kind.Should().Be("referral");
+    }
+
+    [Fact]
+    public async Task Handle_SuccessfulRetrospective_BuildsInsightFromSameTurnPayload()
+    {
+        SetupUserAndPayGate();
+        var from = Today.AddDays(-29);
+        var retrospective = new RetrospectiveResponse("month", Metrics(totalScheduled: 12),
+            new RetrospectiveNarrative("Highlights", "Missed", "Trends", "Suggestion"),
+            false, from, Today);
+        var tool = ReadTool("get_retrospective", new ToolResult(true, Payload: retrospective));
+        SetupAiResponse(ToolResponse("get_retrospective", "call_1", "{}"));
+        _aiIntentService.ContinueWithToolResultsAsync(
+                Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Your month:\n[[orbit:insight]]" }));
+
+        var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
+            UserId, "How did last month go?",
+            ClientContext: new AgentClientContext(SupportsPeriodInsightCard: true)), CancellationToken.None);
+
+        result.Value.PeriodInsight.Should().NotBeNull();
+        result.Value.PeriodInsight!.DateFrom.Should().Be(from);
+        result.Value.PeriodInsight.Narrative.Highlights.Should().Be("Highlights");
+    }
+
+    [Fact]
+    public async Task Handle_FailedRetrospectiveWithDirective_OmitsInsight()
+    {
+        SetupUserAndPayGate();
+        var tool = ReadTool("get_retrospective", new ToolResult(false, Error: "PAY_GATE"));
+        SetupAiResponse(ToolResponse("get_retrospective", "call_1", "{}"));
+        _aiIntentService.ContinueWithToolResultsAsync(
+                Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "[[orbit:insight]]" }));
+
+        var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
+            UserId, "How did my month go?",
+            ClientContext: new AgentClientContext(SupportsPeriodInsightCard: true)), CancellationToken.None);
+
+        result.Value.PeriodInsight.Should().BeNull();
+        result.Value.AiMessage.Should().NotContain("[[orbit:insight]]");
+    }
+
+    [Fact]
+    public async Task Handle_HabitMetricsTool_BuildsThirtyDayHabitCard()
+    {
+        SetupUserAndPayGate();
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Read", FrequencyUnit.Day, 1, Today.AddDays(-29))).Value;
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
+            habit, new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc));
+        habit.Log(Today).IsSuccess.Should().BeTrue();
+        _habitRepo.FindOneTrackedAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(habit);
+        var payload = new HabitMetrics(3, 8, 50, 60, 20, Today, habit.Id, habit.Title);
+        var tool = ReadTool("get_habit_metrics", new ToolResult(true, Payload: payload));
+        SetupAiResponse(ToolResponse("get_habit_metrics", "call_1", "{}"));
+        _aiIntentService.ContinueWithToolResultsAsync(
+                Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Your habit:\n[[orbit:metrics]]" }));
+
+        var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
+            UserId, "How is my reading habit?",
+            ClientContext: new AgentClientContext(SupportsMetricsCard: true)), CancellationToken.None);
+
+        result.Value.MetricsCard!.HabitId.Should().Be(habit.Id);
+        result.Value.MetricsCard.Series!.Points.Should().HaveCount(30);
+        result.Value.MetricsCard.Series.Points[^1].Scheduled.Should().Be(1);
+        result.Value.MetricsCard.Series.Points[^1].Completed.Should().Be(1);
+        result.Value.MetricsCard.SurfaceId.Should().Be("habit");
+    }
+
+    [Fact]
+    public async Task Handle_OverdueOffCadenceLog_BuildsThirtyDayHabitSeries()
+    {
+        SetupUserAndPayGate();
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Every other day", FrequencyUnit.Day, 2, Today.AddDays(-1))).Value;
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
+            habit, new DateTime(2026, 4, 1, 12, 0, 0, DateTimeKind.Utc));
+        habit.Log(Today).IsSuccess.Should().BeTrue();
+        _habitRepo.FindOneTrackedAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(habit);
+        var payload = new HabitMetrics(1, 1, 50, 50, 1, Today, habit.Id, habit.Title);
+        var tool = ReadTool("get_habit_metrics", new ToolResult(true, Payload: payload));
+        SetupAiResponse(ToolResponse("get_habit_metrics", "call_1", "{}"));
+        _aiIntentService.ContinueWithToolResultsAsync(
+                Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Your habit:\n[[orbit:metrics]]" }));
+
+        var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
+            UserId, "How is my habit?",
+            ClientContext: new AgentClientContext(SupportsMetricsCard: true)), CancellationToken.None);
+
+        result.Value.MetricsCard.Should().NotBeNull();
+        result.Value.MetricsCard!.TotalScheduled.Should().Be(2);
+        result.Value.MetricsCard.Series!.Points[^1].Should().Be(
+            new CompletionSeriesPoint(Today, Today, 1, 1, 100));
     }
 
     [Fact]
@@ -1518,10 +1991,428 @@ public class ProcessUserChatCommandHandlerTests
     }
 
     [Theory]
+    [InlineData(true, false, 1)]
+    [InlineData(false, false, 0)]
+    [InlineData(true, true, 0)]
+    public async Task Handle_TwoHabitReads_GatesDeduplicatedStep(
+        bool supportsSteps, bool disabledByServer, int expectedSteps)
+    {
+        SetupUserAndPayGate();
+        if (disabledByServer)
+            _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
+                .Returns([FeatureFlagKeys.AstraToolStepsDisabled]);
+        var first = FakeTool("read_habits_one");
+        var second = FakeTool("read_habits_two");
+        first.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(new ToolResult(true));
+        second.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(new ToolResult(true));
+        _catalogService.GetCapabilityByChatTool(Arg.Any<string>())
+            .Returns(call => BuildCapability(call.Arg<string>()) with { Domain = "habits" });
+        SetupAiResponse(new AiResponse
+        {
+            ToolCalls =
+            [
+                new AiToolCall(first.Name, "one", ParseArguments("{}")),
+                new AiToolCall(second.Name, "two", ParseArguments("{}"))
+            ],
+            ConversationContext = TestConversationContext
+        });
+        _aiIntentService.ContinueWithToolResultsAsync(
+                Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Done" }));
+        var events = new List<ChatStreamEvent>();
+        var handler = CreateHandler(first, second);
+
+        var result = await handler.Handle(new ProcessUserChatCommand(
+            UserId, "Show habits", ClientContext: new AgentClientContext(SupportsToolSteps: supportsSteps),
+            StreamSink: streamEvent => { events.Add(streamEvent); return Task.CompletedTask; }), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        events.Where(item => item.Type == "step").Should().HaveCount(expectedSteps);
+        if (expectedSteps == 1)
+            events.Single(item => item.Type == "step")
+                .Should().Match<ChatStreamEvent>(item => item.Domain == "habits" && item.Access == "read");
+    }
+
+    [Fact]
+    public async Task Handle_TwoToolCalls_StreamsStepsBeforeNextToolAndFinal()
+    {
+        SetupUserAndPayGate();
+        var habitTool = FakeTool("create_habit");
+        var goalTool = FakeTool("create_goal");
+        habitTool.IsReadOnly.Returns(false);
+        goalTool.IsReadOnly.Returns(false);
+        var events = new List<ChatStreamEvent>();
+        var firstStepVisibleAtFirstExecution = false;
+        var firstStepVisibleAtSecondExecution = false;
+        var bothStepsVisibleAtContinuation = false;
+        habitTool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                firstStepVisibleAtFirstExecution = events.Any(item =>
+                    item.Type == "step" && item.Domain == "habits" && item.Access == "write");
+                return new ToolResult(true);
+            });
+        goalTool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                firstStepVisibleAtSecondExecution = events.Any(item =>
+                    item.Type == "step" && item.Domain == "habits" && item.Access == "write");
+                return new ToolResult(true);
+            });
+        _catalogService.GetCapabilityByChatTool(Arg.Any<string>())
+            .Returns(call => BuildCapability(call.Arg<string>()) with
+            {
+                Domain = call.Arg<string>() == "create_habit" ? "habits" : "goals"
+            });
+        SetupAiResponse(new AiResponse
+        {
+            ToolCalls =
+            [
+                new AiToolCall("create_habit", "habit", ParseArguments("{}")),
+                new AiToolCall("create_goal", "goal", ParseArguments("{}"))
+            ],
+            ConversationContext = TestConversationContext
+        });
+        _aiIntentService.ContinueWithToolResultsAsync(
+                Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                bothStepsVisibleAtContinuation = events.Count(item => item.Type == "step") == 2;
+                return Result.Success(new AiResponse { TextMessage = "Done" });
+            });
+
+        var result = await CreateHandler(habitTool, goalTool).Handle(new ProcessUserChatCommand(
+            UserId, "Create a habit and goal",
+            ClientContext: new AgentClientContext(SupportsToolSteps: true),
+            StreamSink: streamEvent => { events.Add(streamEvent); return Task.CompletedTask; }), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        firstStepVisibleAtFirstExecution.Should().BeTrue();
+        firstStepVisibleAtSecondExecution.Should().BeTrue();
+        bothStepsVisibleAtContinuation.Should().BeTrue();
+        events.Add(ChatStreamEvent.Final(result.Value));
+        events.Where(item => item.Type is "step" or "final")
+            .Select(item => item.Type).Should().Equal("step", "step", "final");
+        events.Where(item => item.Type == "step")
+            .Select(item => (item.Domain, item.Access))
+            .Should().Equal(("habits", "write"), ("goals", "write"));
+    }
+
+    [Fact]
+    public async Task Handle_UnknownTool_EmitsNoStep()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(ToolResponse("unknown_tool", "one", "{}"));
+        _aiIntentService.ContinueWithToolResultsAsync(
+                Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Done" }));
+        var events = new List<ChatStreamEvent>();
+
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(
+            UserId, "Show habits", ClientContext: new AgentClientContext(SupportsToolSteps: true),
+            StreamSink: streamEvent => { events.Add(streamEvent); return Task.CompletedTask; }), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        events.Should().NotContain(item => item.Type == "step");
+    }
+
+    [Theory]
+    [InlineData(AgentOperationStatus.Denied, "pay_gate")]
+    [InlineData(AgentOperationStatus.UnsupportedByPolicy, "unsupported_by_policy")]
+    public async Task Handle_DeniedRead_EmitsNoStep(AgentOperationStatus status, string reason)
+    {
+        SetupUserAndPayGate();
+        const string toolName = "query_habits";
+        var tool = FakeTool(toolName);
+        SetupAiResponse(ToolResponse(toolName, "one", "{}"));
+        _aiIntentService.ContinueWithToolResultsAsync(
+                Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "No results" }));
+        var events = new List<ChatStreamEvent>();
+        var handler = CreateHandler(tool);
+        _operationExecutor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new AgentExecuteOperationResponse(new AgentOperationResult(
+                toolName, toolName, AgentRiskClass.Low, AgentConfirmationRequirement.None,
+                status, PolicyReason: reason)));
+
+        var result = await handler.Handle(new ProcessUserChatCommand(
+            UserId, "Show habits", ClientContext: new AgentClientContext(SupportsToolSteps: true),
+            StreamSink: streamEvent => { events.Add(streamEvent); return Task.CompletedTask; }), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        events.Should().NotContain(item => item.Type == "step");
+    }
+
+    [Fact]
+    public async Task Handle_RepeatedSingleHabitUpdates_EmitNoStep()
+    {
+        SetupUserAndPayGate();
+        var tool = FakeTool("update_habit");
+        tool.IsReadOnly.Returns(false);
+        var calls = Enumerable.Range(1, BulkToolRepeatGuard.Threshold)
+            .Select(index => new AiToolCall(tool.Name, $"call_{index}",
+                ParseArguments($"{{\"habit_id\":\"{Guid.NewGuid()}\",\"emoji\":\"✅\"}}")))
+            .ToList();
+        SetupAiResponse(new AiResponse { ToolCalls = calls, ConversationContext = TestConversationContext });
+        _aiIntentService.ContinueWithToolResultsAsync(
+                Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Use a bulk update" }));
+        var events = new List<ChatStreamEvent>();
+
+        var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
+            UserId, "Update several habits", ClientContext: new AgentClientContext(SupportsToolSteps: true),
+            StreamSink: streamEvent => { events.Add(streamEvent); return Task.CompletedTask; }), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _operationExecutor.DidNotReceive().ExecuteAsync(
+            Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>());
+        events.Should().NotContain(item => item.Type == "step");
+    }
+
+    [Fact]
+    public async Task Handle_ToolFailure_EmitsStartedStepButNoFollowUps()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(ToolResponse("create_habit", "one", "{}"));
+        var events = new List<ChatStreamEvent>();
+
+        var result = await CreateHandler(CreateFailingCreateHabitTool()).Handle(new ProcessUserChatCommand(
+            UserId, "Create a habit",
+            ClientContext: new AgentClientContext(SupportsToolSteps: true, SupportsFollowUps: true),
+            StreamSink: streamEvent => { events.Add(streamEvent); return Task.CompletedTask; }), CancellationToken.None);
+
+        result.Value.AiMessage.Should().Be(EnglishToolFailureMessage);
+        result.Value.FollowUps.Should().BeNull();
+        events.Should().ContainSingle(item => item.Type == "step"
+            && item.Domain == "chat" && item.Access == "write");
+    }
+
+    [Fact]
+    public async Task Handle_LaterToolFailure_KeepsStartedSteps()
+    {
+        SetupUserAndPayGate();
+        var readTool = FakeTool("read_habits_one");
+        readTool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(new ToolResult(true));
+        SetupAiResponse(ToolResponse("read_habits_one", "one", "{}"));
+        _aiIntentService.ContinueWithToolResultsAsync(
+                Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(ToolResponse("create_habit", "two", "{}")));
+        var events = new List<ChatStreamEvent>();
+
+        var result = await CreateHandler(readTool, CreateFailingCreateHabitTool()).Handle(
+            new ProcessUserChatCommand(UserId, "Read then create a habit",
+                ClientContext: new AgentClientContext(SupportsToolSteps: true),
+                StreamSink: streamEvent => { events.Add(streamEvent); return Task.CompletedTask; }),
+            CancellationToken.None);
+
+        result.Value.AiMessage.Should().Be(EnglishToolFailureMessage);
+        events.Where(item => item.Type == "step")
+            .Select(item => (item.Domain, item.Access))
+            .Should().Equal(("chat", "read"), ("chat", "write"));
+    }
+
+    [Fact]
+    public async Task Handle_FiveToolIterations_DeduplicatesStepsForWholeTurn()
+    {
+        SetupUserAndPayGate();
+        var tool = FakeTool("read_habits_one");
+        tool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(new ToolResult(true));
+        SetupAiResponse(ToolResponse("read_habits_one", "one", "{}"));
+        var continuations = 0;
+        _aiIntentService.ContinueWithToolResultsAsync(
+                Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                continuations++;
+                return Result.Success(continuations == 5
+                    ? new AiResponse { TextMessage = "Done" }
+                    : ToolResponse("read_habits_one", $"call_{continuations}", "{}"));
+            });
+        var events = new List<ChatStreamEvent>();
+
+        var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
+            UserId, "Show habits", ClientContext: new AgentClientContext(SupportsToolSteps: true),
+            StreamSink: streamEvent => { events.Add(streamEvent); return Task.CompletedTask; }), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        events.Count(item => item.Type == "round").Should().Be(5);
+        events.Count(item => item.Type == "step").Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_PendingOperation_EmitsNoStepOrFollowUps(bool previewDisabled)
+    {
+        SetupUserAndPayGate();
+        if (previewDisabled)
+            _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
+                .Returns([FeatureFlagKeys.AstraChangePreviewDisabled]);
+        var tool = FakeTool("bulk_update_habits");
+        const string toolName = "bulk_update_habits";
+        var handler = CreateHandler(tool);
+        var pending = new PendingAgentOperation(Guid.NewGuid(), AgentCapabilityIds.HabitsBulkWrite,
+            "Bulk update", "Update habits", AgentRiskClass.High,
+            AgentConfirmationRequirement.FreshConfirmation, DateTime.UtcNow.AddMinutes(5));
+        _operationExecutor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new AgentExecuteOperationResponse(
+                new AgentOperationResult(toolName, toolName, AgentRiskClass.High,
+                    AgentConfirmationRequirement.FreshConfirmation, AgentOperationStatus.PendingConfirmation),
+                PendingOperation: pending));
+        SetupAiResponse(ToolResponse(toolName, "one", "{}"));
+        _aiIntentService.ContinueWithToolResultsAsync(
+                Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse
+            {
+                TextMessage = "Confirm first.\n[[orbit:followups]]\nWhat changed?\nWhat next?"
+            }));
+        var events = new List<ChatStreamEvent>();
+
+        var result = await handler.Handle(new ProcessUserChatCommand(
+            UserId, "Update habits",
+            ClientContext: new AgentClientContext(
+                SupportsToolSteps: true, SupportsFollowUps: true, SupportsPendingOperationChanges: true),
+            StreamSink: streamEvent => { events.Add(streamEvent); return Task.CompletedTask; }), CancellationToken.None);
+
+        result.Value.PendingOperations.Should().ContainSingle();
+        result.Value.FollowUps.Should().BeNull();
+        events.Should().NotContain(item => item.Type == "step");
+        await _operationExecutor.Received(1).ExecuteAsync(
+            Arg.Is<AgentExecuteOperationRequest>(item => item.IncludeChangePreview == !previewDisabled),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_FollowUpsSplitAcrossCharacters_StripsStreamAndReturnsValidatedItems()
+    {
+        SetupUserAndPayGate();
+        const string response = "Pronto.\n[[orbit:followups]]\nComo foi meu dia?\nQuais hábitos faltam?";
+        _aiIntentService.SendWithToolsAsync(
+                Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                var sink = call.ArgAt<Func<AiStreamEvent, Task>?>(1)!;
+                foreach (var character in response)
+                    await sink(AiStreamEvent.Delta(character.ToString()));
+                return Result.Success(new AiResponse { TextMessage = response });
+            });
+        var events = new List<ChatStreamEvent>();
+        var handler = CreateHandler();
+
+        var result = await handler.Handle(new ProcessUserChatCommand(
+            UserId, "Help me plan", ClientContext: new AgentClientContext(SupportsFollowUps: true),
+            StreamSink: streamEvent => { events.Add(streamEvent); return Task.CompletedTask; }), CancellationToken.None);
+
+        result.Value.FollowUps.Should().Equal("Como foi meu dia?", "Quais hábitos faltam?");
+        string.Concat(events.Where(item => item.Type == "delta").Select(item => item.Text))
+            .Should().Be("Pronto.\n");
+        _productAnalytics.Received(1).CaptureUserEvent(
+            UserId, "chat_follow_ups_emitted", Arg.Any<string>(),
+            Arg.Is<IReadOnlyDictionary<string, object>>(properties =>
+                (int)properties["count"] == 2 && (string)properties["platform"] == "unknown"));
+    }
+
+    [Fact]
+    public async Task Handle_FollowUpOrigin_RecordsSentEvent()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "Ready." });
+
+        await CreateHandler().Handle(new ProcessUserChatCommand(
+            UserId, "What next?", ClientContext: new AgentClientContext(MessageOrigin: "followUp")),
+            CancellationToken.None);
+
+        _productAnalytics.Received(1).CaptureUserEvent(
+            UserId, "astra_follow_up_sent", Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, object>>());
+    }
+
+    [Fact]
+    public async Task Handle_FollowUpMarkerReset_ClearsPartialMarker()
+    {
+        SetupUserAndPayGate();
+        const string response = "Ready.\n[[orbit:followups]]\nWhat changed?\nWhat next?";
+        _aiIntentService.SendWithToolsAsync(
+                Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                var sink = call.ArgAt<Func<AiStreamEvent, Task>?>(1)!;
+                await sink(AiStreamEvent.Delta("[[orbit:fol"));
+                await sink(AiStreamEvent.Reset());
+                foreach (var character in response)
+                    await sink(AiStreamEvent.Delta(character.ToString()));
+                return Result.Success(new AiResponse { TextMessage = response });
+            });
+        var events = new List<ChatStreamEvent>();
+
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(
+            UserId, "Help me plan", ClientContext: new AgentClientContext(SupportsFollowUps: true),
+            StreamSink: streamEvent => { events.Add(streamEvent); return Task.CompletedTask; }), CancellationToken.None);
+
+        result.Value.FollowUps.Should().HaveCount(2);
+        events.Should().Contain(item => item.Type == "reset");
+        string.Concat(events.Where(item => item.Type == "delta").Select(item => item.Text)).Should().Be("Ready.\n");
+    }
+
+    [Fact]
+    public async Task Handle_FollowUpsDisabledByServerFlag_DoesNotReturnItemsOrPrompt()
+    {
+        SetupUserAndPayGate();
+        _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns([FeatureFlagKeys.AstraFollowUpsDisabled]);
+        SetupAiResponse(new AiResponse
+        {
+            TextMessage = "Ready.\n[[orbit:followups]]\nWhat changed?\nWhat next?"
+        });
+
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(
+            UserId, "Help me plan", ClientContext: new AgentClientContext(SupportsFollowUps: true)),
+            CancellationToken.None);
+
+        result.Value.FollowUps.Should().BeNull();
+        result.Value.AiMessage.Should().Be("Ready.");
+        await _aiIntentService.Received(1).SendWithToolsAsync(
+            Arg.Is<AiToolRequest>(item => !item.SystemPrompt.Contains(FollowUpDirective.Marker)),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_TruncatedReply_DoesNotReturnFollowUps()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse
+        {
+            TextMessage = "Ready.\n[[orbit:followups]]\nWhat changed?\nWhat next?",
+            IsTruncated = true
+        });
+
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(
+            UserId, "Help me plan", ClientContext: new AgentClientContext(SupportsFollowUps: true)),
+            CancellationToken.None);
+
+        result.Value.FollowUps.Should().BeNull();
+        result.Value.AiMessage.Should().NotContain(FollowUpDirective.Marker);
+    }
+
+    [Theory]
     [InlineData("[[orbit:habits:today]]")]
     [InlineData("[[orbit:habits:all]]")]
     [InlineData("[[orbit:goals]]")]
     [InlineData("[[orbit:metrics]]")]
+    [InlineData("[[orbit:insight]]")]
+    [InlineData("[[orbit:records:notifications]]")]
+    [InlineData("[[orbit:account:profile]]")]
     public async Task Handle_StreamedDirective_NeverEmitsToken(string directive)
     {
         SetupUserAndPayGate();
@@ -1555,9 +2446,42 @@ public class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_StreamedHabitDirectiveAcrossChunks_StripsTokenAndReturnsCard()
+    public async Task Handle_StreamedDirectiveOneCharacterAtATime_NeverLeaksPrefix()
     {
         SetupUserAndPayGate();
+        const string reply = "Ready [[orbit:records:notifications]] done";
+        _aiIntentService.SendWithToolsAsync(
+                Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(async callInfo =>
+            {
+                var sink = callInfo.ArgAt<Func<AiStreamEvent, Task>?>(1)!;
+                foreach (var character in reply)
+                    await sink(AiStreamEvent.Delta(character.ToString()));
+                return Result.Success(new AiResponse { TextMessage = reply });
+            });
+        var streamEvents = new List<ChatStreamEvent>();
+
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(
+            UserId, "Show notifications", StreamSink: streamEvent =>
+            {
+                streamEvents.Add(streamEvent);
+                return Task.CompletedTask;
+            }), CancellationToken.None);
+
+        result.Value.AiMessage.Should().Be("Ready  done");
+        string.Concat(streamEvents.Where(item => item.Type == "delta").Select(item => item.Text))
+            .Should().Be("Ready  done");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_StreamedHabitDirectiveAcrossChunks_StripsTokenAndReturnsCard(bool cardAfterFollowUps)
+    {
+        SetupUserAndPayGate();
+        var response = cardAfterFollowUps
+            ? "Your habits:\n[[orbit:followups]]\nWhat changed?\nWhat next?\n[[orbit:habits:today]]"
+            : "Your habits:\n[[orbit:habits:today]]\n[[orbit:followups]]\nWhat changed?\nWhat next?";
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
@@ -1569,10 +2493,10 @@ public class ProcessUserChatCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(async callInfo =>
             {
-                var sink = callInfo.ArgAt<Func<AiStreamEvent, Task>?>(1);
-                await sink!(AiStreamEvent.Delta("Your habits:\n[[orbit:habi"));
-                await sink(AiStreamEvent.Delta("ts:today]]"));
-                return Result.Success(new AiResponse { TextMessage = "Your habits:\n[[orbit:habits:today]]" });
+                var sink = callInfo.ArgAt<Func<AiStreamEvent, Task>?>(1)!;
+                foreach (var character in response)
+                    await sink(AiStreamEvent.Delta(character.ToString()));
+                return Result.Success(new AiResponse { TextMessage = response });
             });
         var streamEvents = new List<ChatStreamEvent>();
         var handler = CreateHandler();
@@ -1581,7 +2505,7 @@ public class ProcessUserChatCommandHandlerTests
             new ProcessUserChatCommand(
                 UserId,
                 "Show today's habits",
-                ClientContext: new AgentClientContext(SupportsHabitListCard: true),
+                ClientContext: new AgentClientContext(SupportsHabitListCard: true, SupportsFollowUps: true),
                 StreamSink: streamEvent =>
                 {
                     streamEvents.Add(streamEvent);
@@ -1591,10 +2515,11 @@ public class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         string.Concat(streamEvents.Where(streamEvent => streamEvent.Type == "delta").Select(streamEvent => streamEvent.Text))
-            .Should().Be("Your habits:\n");
+            .Trim().Should().Be("Your habits:");
         result.Value.AiMessage.Should().Be("Your habits:");
         result.Value.HabitList.Should().NotBeNull();
         result.Value.HabitList!.Scope.Should().Be("today");
+        result.Value.FollowUps.Should().Equal("What changed?", "What next?");
     }
 
     [Fact]
@@ -1697,6 +2622,121 @@ public class ProcessUserChatCommandHandlerTests
             Arg.Is<AiToolRequest>(request =>
                 ToolNames(request.ToolDeclarations).SequenceEqual(ExpectedOrderedToolNames)),
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_SupportEntryPointIntent_FirstTurnDeclaresSupportTool()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "I can help with that." });
+        var handler = CreateHandler(FakeTool("send_support_request"));
+        var clientContext = DeserializeClientContext("""{"entryPointIntent":"support"}""");
+
+        await handler.Handle(
+            new ProcessUserChatCommand(
+                UserId,
+                "my streak reset after I travelled",
+                ClientContext: clientContext),
+            CancellationToken.None);
+
+        await _aiIntentService.Received(1).SendWithToolsAsync(
+            Arg.Is<AiToolRequest>(request => ToolNames(request.ToolDeclarations).SequenceEqual(SupportToolNames)),
+            Arg.Any<Func<AiStreamEvent, Task>?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_SupportEntryPointIntent_TrivialMessageKeepsSupportTool()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "Hello." });
+        var handler = CreateHandler(FakeTool("send_support_request"));
+        var clientContext = DeserializeClientContext("""{"entryPointIntent":"support"}""");
+
+        await handler.Handle(
+            new ProcessUserChatCommand(UserId, "hello", ClientContext: clientContext),
+            CancellationToken.None);
+
+        await _aiIntentService.Received(1).SendWithToolsAsync(
+            Arg.Is<AiToolRequest>(request => ToolNames(request.ToolDeclarations).SequenceEqual(SupportToolNames)),
+            Arg.Any<Func<AiStreamEvent, Task>?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_NoEntryPointIntentWithoutPhrase_DoesNotDeclareSupportTool()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "I can help with that." });
+        var handler = CreateHandler(FakeTool("send_support_request"));
+
+        await handler.Handle(
+            new ProcessUserChatCommand(UserId, "my streak reset after I travelled"),
+            CancellationToken.None);
+
+        await _aiIntentService.Received(1).SendWithToolsAsync(
+            Arg.Is<AiToolRequest>(request => request.ToolDeclarations.Count == 0),
+            Arg.Any<Func<AiStreamEvent, Task>?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_NoEntryPointIntentWithPhrase_DeclaresSupportTool()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "I can help with that." });
+        var handler = CreateHandler(FakeTool("send_support_request"));
+
+        await handler.Handle(
+            new ProcessUserChatCommand(UserId, "Please contact the team about my streak"),
+            CancellationToken.None);
+
+        await _aiIntentService.Received(1).SendWithToolsAsync(
+            Arg.Is<AiToolRequest>(request => ToolNames(request.ToolDeclarations).SequenceEqual(SupportToolNames)),
+            Arg.Any<Func<AiStreamEvent, Task>?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_SupportEntryPointIntent_DoesNotDeclareUnrelatedExtendedTools()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "I can help with that." });
+        var handler = CreateHandler(
+            FakeTool("send_support_request"),
+            FakeTool("get_calendar_overview"),
+            FakeTool("manage_subscription"));
+        var clientContext = DeserializeClientContext("""{"entryPointIntent":"support"}""");
+
+        await handler.Handle(
+            new ProcessUserChatCommand(
+                UserId,
+                "my streak reset after I travelled",
+                ClientContext: clientContext),
+            CancellationToken.None);
+
+        await _aiIntentService.Received(1).SendWithToolsAsync(
+            Arg.Is<AiToolRequest>(request => ToolNames(request.ToolDeclarations).SequenceEqual(SupportToolNames)),
+            Arg.Any<Func<AiStreamEvent, Task>?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_UnknownEntryPointIntent_TrivialMessageDoesNotDeclareTools()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "Hello." });
+        var handler = CreateHandler(FakeTool("create_habit"));
+        var clientContext = DeserializeClientContext("""{"entryPointIntent":"unknown"}""");
+
+        await handler.Handle(
+            new ProcessUserChatCommand(UserId, "hello", ClientContext: clientContext),
+            CancellationToken.None);
+
+        await _aiIntentService.Received(1).SendWithToolsAsync(
+            Arg.Is<AiToolRequest>(request => request.ToolDeclarations.Count == 0),
+            Arg.Any<Func<AiStreamEvent, Task>?>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

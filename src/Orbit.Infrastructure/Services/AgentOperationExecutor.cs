@@ -15,6 +15,8 @@ public partial class AgentOperationExecutor(
     IAgentTargetOwnershipService targetOwnershipService,
     IAgentStepUpAuthorizationBridge stepUpAuthorizationBridge,
     AiToolRegistry toolRegistry,
+    IPendingOperationChangePreviewer changePreviewer,
+    IPendingAgentOperationStore pendingOperationStore,
     IUnitOfWork unitOfWork,
     ILogger<AgentOperationExecutor> logger) : IAgentOperationExecutor
 {
@@ -40,6 +42,16 @@ public partial class AgentOperationExecutor(
         var escalatedRequirement = await stepUpAuthorizationBridge.GetRequiredConfirmationAsync(
             declaredCapability.Id,
             cancellationToken);
+        var tool = toolRegistry.GetTool(operation.Id);
+        if (AgentChatWriteHold.Applies(
+                request.Surface,
+                operation,
+                escalatedRequirement ?? declaredCapability.ConfirmationRequirement)
+            && !AsksClarificationFirst(tool, arguments))
+        {
+            escalatedRequirement = AgentConfirmationRequirement.FreshConfirmation;
+        }
+
         var capability = escalatedRequirement is { } required
             ? declaredCapability with { ConfirmationRequirement = required }
             : declaredCapability;
@@ -65,6 +77,9 @@ public partial class AgentOperationExecutor(
 
         return await ExecuteWithPolicyAsync(execution, cancellationToken);
     }
+
+    private static bool AsksClarificationFirst(IAiTool? tool, JsonElement arguments) =>
+        tool is IClarificationPrecheckTool precheck && precheck.NeedsClarification(arguments);
 
     private async Task<AgentExecuteOperationResponse> DenyUnknownOperationAsync(
         AgentExecuteOperationRequest request,
@@ -190,13 +205,49 @@ public partial class AgentOperationExecutor(
                 ShadowReason: policyDecision.ShadowReason),
             cancellationToken);
 
+        var pending = policyDecision.PendingOperation;
+        if (pending is not null && execution.Request.Surface == AgentExecutionSurface.Chat
+            && execution.Request.IncludeChangePreview)
+        {
+            PendingOperationChangePreview? preview = null;
+            try
+            {
+                preview = await changePreviewer.PreviewAsync(
+                    execution.Request.UserId, execution.Operation.Id, execution.Arguments, cancellationToken);
+            }
+            catch (Exception exception)
+            {
+                logger.LogWarning(exception, "Pending operation change preview failed for {OperationId}", execution.Operation.Id);
+            }
+
+            if (preview is not null)
+            {
+                if (!string.IsNullOrWhiteSpace(preview.PreviewFingerprint))
+                {
+                    var argumentsJson = execution.Arguments.GetRawText();
+                    var operationFingerprint = AgentOperationFingerprint.Compute(execution.Operation.Id, argumentsJson);
+                    if (!pendingOperationStore.Revise(execution.Request.UserId, pending.Id, operationFingerprint,
+                        argumentsJson, operationFingerprint, preview.PreviewFingerprint))
+                        throw new InvalidOperationException("The pending operation preview binding could not be persisted.");
+                }
+
+                pending = pending with
+                {
+                    Changes = preview.Changes,
+                    ChangeTargetCount = preview.ChangeTargetCount,
+                    Items = preview.Items,
+                    PreviewFingerprint = preview.PreviewFingerprint
+                };
+            }
+        }
+
         return AgentOperationResponseFactory.ConfirmationRequired(
             execution.Operation.Id,
             execution.Capability.RiskClass,
             execution.Capability.ConfirmationRequirement,
             execution.Summary,
             policyDecision.Reason,
-            policyDecision.PendingOperation);
+            pending);
     }
 
     private async Task<AgentExecuteOperationResponse> ExecuteWithPolicyAsync(
@@ -246,11 +297,26 @@ public partial class AgentOperationExecutor(
                 execution.Capability.ConfirmationRequirement,
                 execution.Summary);
 
-        var result = await ExecuteToolWithConcurrencyRetryAsync(tool, execution, cancellationToken);
+        var executionCancellationToken = cancellationToken;
+        if (execution.Request.OnExecutionStarted is not null)
+        {
+            try
+            {
+                await execution.Request.OnExecutionStarted();
+            }
+            catch (Exception exception)
+            {
+                logger.LogWarning(exception, "Agent tool step notification failed for {OperationId}", execution.Operation.Id);
+                if (policyDecision.ConsumedConfirmation)
+                    executionCancellationToken = CancellationToken.None;
+            }
+        }
+
+        var result = await ExecuteToolWithConcurrencyRetryAsync(tool, execution, executionCancellationToken);
         if (tool is ITransactionalAiTool && !result.Success)
             throw new ToolOutcomeRollbackException(policyDecision, result);
 
-        return await BuildToolOutcomeResponseAsync(execution, policyDecision, result, cancellationToken);
+        return await BuildToolOutcomeResponseAsync(execution, policyDecision, result, executionCancellationToken);
     }
 
     private async Task<AgentExecuteOperationResponse> FailOperationAsync(

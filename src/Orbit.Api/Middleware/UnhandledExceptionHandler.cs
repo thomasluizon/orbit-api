@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Diagnostics;
 using Orbit.Api.Extensions;
+using Orbit.Application.Common;
 using Sentry;
 
 namespace Orbit.Api.Middleware;
@@ -35,9 +36,11 @@ internal sealed partial class UnhandledExceptionHandler(
         httpContext.Response.ContentType = "application/json";
         httpContext.Response.Headers[HttpContextExtensions.RequestIdHeaderName] = httpContext.GetRequestId();
 
+        var isPtBr = LocaleHelper.IsPortuguese(httpContext.Request.Headers.AcceptLanguage.ToString());
+
         await httpContext.Response.WriteAsJsonAsync(new
         {
-            error = "Unexpected server error",
+            error = ErrorCopy.Resolve(ErrorCodes.InternalServerError, isPtBr),
             requestId = httpContext.GetRequestId(),
             status = StatusCodes.Status500InternalServerError
         }, cancellationToken);

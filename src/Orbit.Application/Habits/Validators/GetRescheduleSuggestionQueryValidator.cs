@@ -17,6 +17,6 @@ public class GetRescheduleSuggestionQueryValidator : AbstractValidator<GetResche
         RuleFor(x => x.Language)
             .MaximumLength(AppConstants.MaxLanguageLength)
             .Must(lang => string.IsNullOrEmpty(lang) || AppConstants.SupportedLanguages.Contains(lang))
-            .WithMessage($"Language must be one of: {string.Join(", ", AppConstants.SupportedLanguages)}");
+            .WithCopy(ValidationErrorCodes.LanguageSupported);
     }
 }
