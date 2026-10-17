@@ -39,7 +39,7 @@ public sealed class UndoSkipHabitCommandHandler(
         if (receipt.IsUndone)
             return Result.Success();
         var habits = await repos.Habits.FindAsync(h => h.Id == request.HabitId && h.UserId == request.UserId,
-            query => query.Include(h => h.Tags).Include(h => h.Goals), ct);
+            query => query.Include(h => h.Tags).Include(h => h.Goals).AsSplitQuery(), ct);
         var habit = habits.FirstOrDefault();
         return habit is null ? Result.Failure(ErrorMessages.HabitNotFound)
             : receipt.CheckUndo(habit, await SkipUndoLogState.ReadAsync(repos.HabitLogs, habit, ct));

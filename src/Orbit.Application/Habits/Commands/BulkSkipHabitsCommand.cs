@@ -40,19 +40,15 @@ public class BulkSkipHabitsCommandHandler(
         var weekStartDay = await userDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
         var results = new List<BulkSkipItemResult>();
 
-        var refreshFailed = false;
         /** A skip advances a due date or writes a skip log, both inputs a streak repair reads. */
-        await HabitCeilingLock.ExecuteAsync(unitOfWork, request.UserId, async ct =>
+        var refreshed = await HabitCeilingLock.ExecuteAsync(unitOfWork, request.UserId, async ct =>
         {
             var habitMap = await BulkHabitLoader.LoadHabitsWithRecentLogsAsync(
                 habitRepository, request.Items.Select(i => i.HabitId), request.UserId, today, ct);
             foreach (var habit in habitMap.Values)
             {
                 if (!await habitRepository.TryRefreshAsync(habit, ct))
-                {
-                    refreshFailed = true;
-                    return;
-                }
+                    return false;
             }
             var dueDateResolution = await HabitDueDateResolutionLoader.LoadAsync(
                 habitLogRepository, habitMap.Values, today.AddDays(-AppConstants.MaxRangeDays), ct);
@@ -86,9 +82,10 @@ public class BulkSkipHabitsCommandHandler(
             }
 
             await unitOfWork.SaveChangesAsync(ct);
+            return true;
         }, cancellationToken);
 
-        if (refreshFailed)
+        if (!refreshed)
             return Result.Failure<BulkSkipResult>(ErrorMessages.ConcurrentUpdateConflict);
 
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
