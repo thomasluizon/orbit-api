@@ -1,7 +1,6 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Orbit.Infrastructure.Migrations;
@@ -17,7 +16,7 @@ public sealed class RedesignMigrationCompatibilityTests
         using var context = CreateContext();
         var initializer = context.GetService<IModelRuntimeInitializer>();
         var baseline = initializer.Initialize(new AddMarketingContacts().TargetModel, designTime: true);
-        var current = context.GetService<IDesignTimeModel>().Model;
+        var current = initializer.Initialize(new AddHabitSkipUndo().TargetModel, designTime: true);
 
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(baseline.GetRelationalModel(), current.GetRelationalModel());
@@ -65,7 +64,8 @@ public sealed class RedesignMigrationCompatibilityTests
             "20260926145421_AddPendingOperationRevision",
             "20260929070016_LinkGamificationNotificationsToProgress",
             "20260929070408_AddClockFormatPreference",
-            "20261001074038_AddHabitSkipUndo"
+            "20261001074038_AddHabitSkipUndo",
+            "20261017011939_AddFeatureFlagAccounts"
         ];
         foreach (var migration in missingMigrations)
             script.Should().Contain(

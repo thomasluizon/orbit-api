@@ -12,5 +12,5 @@ public class AiToolRegistry
     public IAiTool? GetTool(string name) =>
         _tools.TryGetValue(name, out var tool) ? tool : null;
 
-    public IReadOnlyList<IAiTool> GetAll() => _tools.Values.ToList();
+    public IReadOnlyList<IAiTool> GetAll() => _tools.Values.Where(tool => tool is not IMcpOnlyAiTool).ToList();
 }
