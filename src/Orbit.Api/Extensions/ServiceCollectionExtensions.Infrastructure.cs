@@ -251,7 +251,7 @@ public static partial class ServiceCollectionExtensions
                     policy.WithOrigins(thirdPartyOrigins)
                           .WithHeaders("Authorization", "Content-Type", "api-version", "Mcp-Session-Id")
                           .WithExposedHeaders("api-supported-versions", "api-deprecated-versions")
-                      .WithMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS");
+                          .WithMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS");
                 });
             }
             if (landingOrigins.Length > 0)
@@ -260,6 +260,7 @@ public static partial class ServiceCollectionExtensions
                 {
                     policy.WithOrigins(landingOrigins)
                           .WithHeaders("Content-Type", "api-version")
+                          .WithExposedHeaders("api-supported-versions", "api-deprecated-versions")
                           .WithMethods("POST", "OPTIONS");
                 });
             }
@@ -343,13 +344,18 @@ public static partial class ServiceCollectionExtensions
             .AddMvc()
             .AddApiExplorer(options => options.GroupNameFormat = "'v'VVV");
 
-        builder.Services.AddOpenApi("v1", ConfigureOrbitOpenApi);
-        builder.Services.AddOpenApi("v2", ConfigureOrbitOpenApi);
+        builder.Services.AddOpenApi("v1", options => ConfigureOrbitOpenApi(options, "1.0"));
+        builder.Services.AddOpenApi("v2", options => ConfigureOrbitOpenApi(options, "2.0"));
     }
 
-    private static void ConfigureOrbitOpenApi(Microsoft.AspNetCore.OpenApi.OpenApiOptions options)
+    private static void ConfigureOrbitOpenApi(Microsoft.AspNetCore.OpenApi.OpenApiOptions options, string version)
     {
         options.AddDocumentTransformer<BearerSecuritySchemeTransformer>();
+        options.AddDocumentTransformer((document, _, _) =>
+        {
+            document.Info.Version = version;
+            return Task.CompletedTask;
+        });
         options.AddOperationTransformer((operation, context, _) =>
         {
             if (context.Description.ActionDescriptor is ControllerActionDescriptor action &&
