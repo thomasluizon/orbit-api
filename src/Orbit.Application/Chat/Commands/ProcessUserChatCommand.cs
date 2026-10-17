@@ -149,6 +149,19 @@ public partial class ProcessUserChatCommandHandler(
     ChatExecutionDependencies execution,
     ILogger<ProcessUserChatCommandHandler> logger) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
 {
+    private static class PartKinds
+    {
+        public const string HabitList = "habitList";
+        public const string GoalList = "goalList";
+        public const string Metrics = "metrics";
+        public const string PeriodInsight = "periodInsight";
+        public const string DaySummary = "daySummary";
+        public const string Streak = "streak";
+        public const string Calendar = "calendar";
+        public const string RecordList = "recordList";
+        public const string AccountRows = "accountRows";
+    }
+
     private const int MaxToolIterations = 5;
     private const string UnsupportedByPolicyReason = "unsupported_by_policy";
     private const string DescribeFeatureToolName = "describe_feature";
@@ -440,11 +453,11 @@ public partial class ProcessUserChatCommandHandler(
         {
             var events = cards.Parts.OfType<ChatBlockPart>().Select(part => part.Block switch
             {
-                MetricsCard => ("chat_metrics_card_emitted", "metrics"),
+                MetricsCard => ("chat_metrics_card_emitted", PartKinds.Metrics),
                 PeriodInsightCard => ("chat_period_insight_card_emitted", "period"),
                 DaySummaryCard => ("chat_day_summary_card_emitted", "day"),
-                StreakCard => ("chat_streak_card_emitted", "streak"),
-                CalendarCard => ("chat_calendar_card_emitted", "calendar"),
+                StreakCard => ("chat_streak_card_emitted", PartKinds.Streak),
+                CalendarCard => ("chat_calendar_card_emitted", PartKinds.Calendar),
                 RecordListCard recordList => ("chat_record_list_card_emitted", recordList.Kind),
                 AccountRowsCard accountRows => ("chat_account_rows_card_emitted", accountRows.Kind),
                 _ => (string.Empty, string.Empty)
@@ -458,15 +471,15 @@ public partial class ProcessUserChatCommandHandler(
         }
 
         if (cards.MetricsCard is not null)
-            Capture("chat_metrics_card_emitted", "metrics");
+            Capture("chat_metrics_card_emitted", PartKinds.Metrics);
         if (cards.PeriodInsight is not null)
             Capture("chat_period_insight_card_emitted", "period");
         if (cards.DaySummary is not null)
             Capture("chat_day_summary_card_emitted", "day");
         if (cards.Streak is not null)
-            Capture("chat_streak_card_emitted", "streak");
+            Capture("chat_streak_card_emitted", PartKinds.Streak);
         if (cards.Calendar is not null)
-            Capture("chat_calendar_card_emitted", "calendar");
+            Capture("chat_calendar_card_emitted", PartKinds.Calendar);
         foreach (var recordList in cards.RecordLists ?? [])
             Capture("chat_record_list_card_emitted", recordList.Kind);
         if (cards.AccountRows is not null)
@@ -548,15 +561,15 @@ public partial class ProcessUserChatCommandHandler(
             var cards = await TryBuildResponseCardsAsync(directive, request, context, results, cancellationToken);
             object? block = kind switch
             {
-                "habitList" => cards.HabitList,
-                "goalList" => cards.GoalList,
-                "metrics" => cards.MetricsCard,
-                "periodInsight" => cards.PeriodInsight,
-                "daySummary" => cards.DaySummary,
-                "streak" => cards.Streak,
-                "calendar" => cards.Calendar,
-                "recordList" => cards.RecordLists?.FirstOrDefault(),
-                "accountRows" => cards.AccountRows,
+                PartKinds.HabitList => cards.HabitList,
+                PartKinds.GoalList => cards.GoalList,
+                PartKinds.Metrics => cards.MetricsCard,
+                PartKinds.PeriodInsight => cards.PeriodInsight,
+                PartKinds.DaySummary => cards.DaySummary,
+                PartKinds.Streak => cards.Streak,
+                PartKinds.Calendar => cards.Calendar,
+                PartKinds.RecordList => cards.RecordLists is { Count: > 0 } lists ? lists[0] : null,
+                PartKinds.AccountRows => cards.AccountRows,
                 _ => null
             };
             if (block is null)
@@ -575,16 +588,16 @@ public partial class ProcessUserChatCommandHandler(
 
     private static string? DirectivePartKind(string directive) => directive.ToLowerInvariant() switch
     {
-        "[[orbit:habits:today]]" or "[[orbit:habits:remaining]]" or "[[orbit:habits:all]]" => "habitList",
-        "[[orbit:goals]]" => "goalList",
-        "[[orbit:metrics]]" => "metrics",
-        "[[orbit:insight]]" => "periodInsight",
-        "[[orbit:day]]" => "daySummary",
-        "[[orbit:streak]]" => "streak",
-        "[[orbit:calendar]]" => "calendar",
+        "[[orbit:habits:today]]" or "[[orbit:habits:remaining]]" or "[[orbit:habits:all]]" => PartKinds.HabitList,
+        "[[orbit:goals]]" => PartKinds.GoalList,
+        "[[orbit:metrics]]" => PartKinds.Metrics,
+        "[[orbit:insight]]" => PartKinds.PeriodInsight,
+        "[[orbit:day]]" => PartKinds.DaySummary,
+        "[[orbit:streak]]" => PartKinds.Streak,
+        "[[orbit:calendar]]" => PartKinds.Calendar,
         "[[orbit:records:notifications]]" or "[[orbit:records:tags]]"
-            or "[[orbit:records:templates]]" or "[[orbit:records:keys]]" => "recordList",
-        "[[orbit:account:profile]]" or "[[orbit:account:plan]]" or "[[orbit:account:referral]]" => "accountRows",
+            or "[[orbit:records:templates]]" or "[[orbit:records:keys]]" => PartKinds.RecordList,
+        "[[orbit:account:profile]]" or "[[orbit:account:plan]]" or "[[orbit:account:referral]]" => PartKinds.AccountRows,
         _ => null
     };
 

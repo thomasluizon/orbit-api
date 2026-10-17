@@ -103,41 +103,57 @@ public partial class ProcessUserChatCommandHandler
             prompt = string.Join(Environment.NewLine, prompt,
                 "Write the reply in reading order, placing each card directive on its own line where its block belongs. Use at most three directives and never repeat a block's figures in the text.");
         if (client?.SupportsHabitListCard == true)
-            prompt = AppendCardPrompt(prompt, client, "habitList",
+            prompt = AppendCardPrompt(prompt, client, PartKinds.HabitList,
                 HabitListCardBuilder.PromptInstruction, HabitListCardBuilder.PartsPromptInstruction);
         if (client?.SupportsGoalListCard == true && activeToolNames.Contains("review_goals"))
-            prompt = AppendCardPrompt(prompt, client, "goalList",
+            prompt = AppendCardPrompt(prompt, client, PartKinds.GoalList,
                 GoalListCardBuilder.PromptInstruction, GoalListCardBuilder.PartsPromptInstruction);
 
-        if (!context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraPeriodBlocksDisabled))
-        {
-            if (client?.SupportsMetricsCard == true)
-            {
-                prompt = AppendCardPrompt(prompt, client, "metrics",
-                MetricsCardBuilder.PromptInstruction, MetricsCardBuilder.PartsPromptInstruction);
-                if (activeToolNames.Contains("get_habit_metrics"))
-                    prompt = AppendCardPrompt(prompt, client, "metrics",
-                MetricsCardBuilder.HabitPromptInstruction, MetricsCardBuilder.HabitPartsPromptInstruction);
-            }
-            if (client?.SupportsPeriodInsightCard == true && activeToolNames.Contains("get_retrospective"))
-                prompt = AppendCardPrompt(prompt, client, "periodInsight",
-                PeriodInsightCardBuilder.PromptInstruction, PeriodInsightCardBuilder.PartsPromptInstruction);
-        }
-
-        if (!context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraStatusBlocksDisabled))
-        {
-            if (client?.SupportsDaySummaryCard == true && activeToolNames.Contains("get_daily_summary"))
-                prompt = AppendCardPrompt(prompt, client, "daySummary",
-                StatusCardBuilder.DayPrompt, StatusCardBuilder.DayPartsPrompt);
-            if (client?.SupportsStreakCard == true && activeToolNames.Contains("get_gamification_overview"))
-                prompt = AppendCardPrompt(prompt, client, "streak",
-                StatusCardBuilder.StreakPrompt, StatusCardBuilder.StreakPartsPrompt);
-            if (client?.SupportsCalendarCard == true && activeToolNames.Contains("get_calendar_overview"))
-                prompt = AppendCardPrompt(prompt, client, "calendar",
-                StatusCardBuilder.CalendarPrompt, StatusCardBuilder.CalendarPartsPrompt);
-        }
-
+        prompt = AppendPeriodCardPrompts(prompt, client, context.EnabledFeatureFlags, activeToolNames);
+        prompt = AppendStatusCardPrompts(prompt, client, context.EnabledFeatureFlags, activeToolNames);
         return AppendListAndAccountPrompts(prompt, client, context.EnabledFeatureFlags, activeToolNames);
+    }
+
+    private static string AppendPeriodCardPrompts(
+        string prompt, AgentClientContext? client, IReadOnlyList<string> enabledFlags,
+        IReadOnlyCollection<string> activeToolNames)
+    {
+        if (enabledFlags.Contains(FeatureFlagKeys.AstraPeriodBlocksDisabled))
+            return prompt;
+
+        if (client?.SupportsMetricsCard == true)
+        {
+            prompt = AppendCardPrompt(prompt, client, PartKinds.Metrics,
+                MetricsCardBuilder.PromptInstruction, MetricsCardBuilder.PartsPromptInstruction);
+            if (activeToolNames.Contains("get_habit_metrics"))
+                prompt = AppendCardPrompt(prompt, client, PartKinds.Metrics,
+                    MetricsCardBuilder.HabitPromptInstruction, MetricsCardBuilder.HabitPartsPromptInstruction);
+        }
+        if (client?.SupportsPeriodInsightCard == true && activeToolNames.Contains("get_retrospective"))
+            prompt = AppendCardPrompt(prompt, client, PartKinds.PeriodInsight,
+                PeriodInsightCardBuilder.PromptInstruction, PeriodInsightCardBuilder.PartsPromptInstruction);
+
+        return prompt;
+    }
+
+    private static string AppendStatusCardPrompts(
+        string prompt, AgentClientContext? client, IReadOnlyList<string> enabledFlags,
+        IReadOnlyCollection<string> activeToolNames)
+    {
+        if (enabledFlags.Contains(FeatureFlagKeys.AstraStatusBlocksDisabled))
+            return prompt;
+
+        if (client?.SupportsDaySummaryCard == true && activeToolNames.Contains("get_daily_summary"))
+            prompt = AppendCardPrompt(prompt, client, PartKinds.DaySummary,
+                StatusCardBuilder.DayPrompt, StatusCardBuilder.DayPartsPrompt);
+        if (client?.SupportsStreakCard == true && activeToolNames.Contains("get_gamification_overview"))
+            prompt = AppendCardPrompt(prompt, client, PartKinds.Streak,
+                StatusCardBuilder.StreakPrompt, StatusCardBuilder.StreakPartsPrompt);
+        if (client?.SupportsCalendarCard == true && activeToolNames.Contains("get_calendar_overview"))
+            prompt = AppendCardPrompt(prompt, client, PartKinds.Calendar,
+                StatusCardBuilder.CalendarPrompt, StatusCardBuilder.CalendarPartsPrompt);
+
+        return prompt;
     }
 
     private static string AppendListAndAccountPrompts(
@@ -148,7 +164,7 @@ public partial class ProcessUserChatCommandHandler
             && !enabledFlags.Contains(FeatureFlagKeys.AstraRecordListsDisabled)
             && activeToolNames.Any(name => name is "get_notifications" or "list_tags" or "get_checklist_templates" or "get_api_keys"))
         {
-            prompt = AppendCardPrompt(prompt, client, "recordList",
+            prompt = AppendCardPrompt(prompt, client, PartKinds.RecordList,
                 RecordListCardBuilder.PromptInstruction, RecordListCardBuilder.PartsPromptInstruction);
         }
 
@@ -156,7 +172,7 @@ public partial class ProcessUserChatCommandHandler
             && !enabledFlags.Contains(FeatureFlagKeys.AstraAccountRowsDisabled)
             && activeToolNames.Any(name => name is "get_profile" or "get_subscription_overview" or "get_referral_overview"))
         {
-            prompt = AppendCardPrompt(prompt, client, "accountRows",
+            prompt = AppendCardPrompt(prompt, client, PartKinds.AccountRows,
                 AccountRowsCardBuilder.PromptInstruction, AccountRowsCardBuilder.PartsPromptInstruction);
         }
 
