@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
@@ -22,6 +23,8 @@ public record AgentPendingStores(
 
 [Authorize]
 [ApiController]
+[ApiVersion(1.0)]
+[ApiVersion(2.0)]
 [Route("api/ai")]
 public class AiController(
     IAgentCatalogService catalogService,

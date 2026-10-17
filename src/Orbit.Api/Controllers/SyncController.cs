@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,6 +14,8 @@ namespace Orbit.Api.Controllers;
 
 [Authorize]
 [ApiController]
+[ApiVersion(1.0)]
+[ApiVersion(2.0)]
 [Route("api/[controller]")]
 public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncController> logger, IAccountEventCollector? eventCollector = null) : ControllerBase
 {

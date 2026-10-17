@@ -58,7 +58,9 @@ public static partial class WebApplicationExtensions
         if (app.Environment.IsDevelopment())
         {
             app.MapOpenApi();
-            app.MapScalarApiReference();
+            app.MapScalarApiReference(options => options
+                .AddDocument("v1", "Orbit API v1", isDefault: true)
+                .AddDocument("v2", "Orbit API v2"));
         }
 
         app.UseExceptionHandler();

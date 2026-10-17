@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using System.Text.Json;
 using FluentValidation;
 using MediatR;
@@ -19,6 +20,8 @@ namespace Orbit.Api.Controllers;
 
 [Authorize]
 [ApiController]
+[ApiVersion(1.0)]
+[ApiVersion(2.0)]
 [Route("api/[controller]")]
 [DistributedRateLimit("chat")]
 public partial class ChatController(IMediator mediator, IImageValidationService imageValidation, ILogger<ChatController> logger) : ControllerBase

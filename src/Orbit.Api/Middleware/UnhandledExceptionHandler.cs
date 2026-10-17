@@ -34,7 +34,7 @@ internal sealed partial class UnhandledExceptionHandler(
 
         httpContext.Response.StatusCode = StatusCodes.Status500InternalServerError;
         httpContext.Response.ContentType = "application/json";
-        httpContext.Response.Headers[HttpContextExtensions.RequestIdHeaderName] = httpContext.GetRequestId();
+        httpContext.Response.Headers[Orbit.Api.Extensions.HttpContextExtensions.RequestIdHeaderName] = httpContext.GetRequestId();
 
         var isPtBr = LocaleHelper.IsPortuguese(httpContext.Request.Headers.AcceptLanguage.ToString());
 
