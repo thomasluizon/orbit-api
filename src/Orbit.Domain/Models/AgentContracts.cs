@@ -336,6 +336,7 @@ public static class AgentScopes
     public const string ManageAuth = "manage_auth";
     public const string ManageSocial = "manage_social";
     public const string UploadMedia = "upload_media";
+    public const string ManageFeatureFlags = "manage_feature_flags";
     public const string ManageMarketing = "manage_marketing";
 
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -380,7 +381,8 @@ public static class AgentScopes
         ManageAuth,
         ManageSocial,
         UploadMedia,
-        ManageMarketing
+        ManageMarketing,
+        ManageFeatureFlags
     };
 
     public static readonly IReadOnlyList<string> ClaudeDefaultScopes =

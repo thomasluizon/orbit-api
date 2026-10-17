@@ -1,3 +1,4 @@
+using Orbit.Application.FeatureFlags;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Orbit.Domain.Entities;
@@ -46,6 +47,9 @@ public class AgentPolicyEvaluator(
         var user = GetUser(context.UserId);
         if (user is null)
             return new AgentPolicyDecision(AgentPolicyDecisionStatus.Denied, capability, "user_not_found");
+
+        if (capability.Id == FeatureFlagActions.CapabilityId && !user.IsAdmin)
+            return new AgentPolicyDecision(AgentPolicyDecisionStatus.Denied, capability, "tool_not_found");
 
         var accessDecision = EvaluateAccessRequirements(context, capability, user);
         if (accessDecision is not null)

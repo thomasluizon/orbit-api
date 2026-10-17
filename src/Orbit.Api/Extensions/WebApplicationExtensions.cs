@@ -1,3 +1,4 @@
+using Orbit.Application.FeatureFlags;
 using System.Net;
 using System.Security.Claims;
 using System.Text.Json;
@@ -283,7 +284,8 @@ public static partial class WebApplicationExtensions
         string body,
         McpToolCallRequest toolCall)
     {
-        if (string.Equals(toolCall.ToolName, "execute_agent_operation_v2", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(toolCall.ToolName, "execute_agent_operation_v2", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(toolCall.ToolName, FeatureFlagActions.ToolName, StringComparison.Ordinal))
         {
             await next();
             return;

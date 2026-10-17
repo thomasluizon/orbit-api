@@ -1,3 +1,4 @@
+using Orbit.Application.FeatureFlags;
 using Microsoft.AspNetCore.Mvc;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -8,6 +9,8 @@ public static class ResultActionResultExtensions
 {
     private static readonly Dictionary<string, int> StatusByErrorCode = new()
     {
+        [FeatureFlagActions.NotFound] = StatusCodes.Status404NotFound,
+        [FeatureFlagActions.AlreadyExists] = StatusCodes.Status409Conflict,
         [Result.PayGateErrorCode] = StatusCodes.Status403Forbidden,
         [ErrorCodes.NoPermission] = StatusCodes.Status403Forbidden,
         [ErrorCodes.HabitNotOwned] = StatusCodes.Status403Forbidden,

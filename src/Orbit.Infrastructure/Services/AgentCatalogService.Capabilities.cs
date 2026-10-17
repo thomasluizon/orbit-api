@@ -1,3 +1,4 @@
+using Orbit.Application.FeatureFlags;
 using Orbit.Domain.Models;
 
 namespace Orbit.Infrastructure.Services;
@@ -15,6 +16,13 @@ public partial class AgentCatalogService
             .. ChatCapabilities(),
             .. CatalogCapabilities(),
             .. ConfigCapabilities(),
+            CreateCapability(FeatureFlagActions.CapabilityId,
+                "Manage Feature Flags", "Administers feature flags and account targeting.", "admin",
+                FeatureFlagActions.Scope, AgentRiskClass.Low,
+                isMutation: true, isPhaseOneReadOnly: false, AgentConfirmationRequirement.None,
+                chatTools: [FeatureFlagActions.ToolName],
+                mcpTools: [FeatureFlagActions.ToolName],
+                controllerActions: ["AdminController.ListFeatureFlags", "AdminController.ManageFeatureFlags"]),
             .. HabitCoreCapabilities(),
             .. HabitBulkAndInsightCapabilities(),
             .. GoalCapabilities(),
