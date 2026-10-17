@@ -13,7 +13,8 @@ public class FeatureFlagService(OrbitDbContext dbContext, IMemoryCache cache) : 
 
     public async Task<IReadOnlyList<string>> GetEnabledKeysForUserAsync(
         Guid userId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool forceRefresh = false)
     {
         var user = await dbContext.Users
             .AsNoTracking()
@@ -22,7 +23,7 @@ public class FeatureFlagService(OrbitDbContext dbContext, IMemoryCache cache) : 
         if (user is null)
             return [];
 
-        var flags = await GetEnabledFlagsAsync(cancellationToken);
+        var flags = await GetEnabledFlagsAsync(cancellationToken, forceRefresh);
 
         return flags
             .Where(flag => string.IsNullOrWhiteSpace(flag.PlanRequirement) || UserHasFeaturePlan(user, flag.PlanRequirement))
@@ -31,9 +32,9 @@ public class FeatureFlagService(OrbitDbContext dbContext, IMemoryCache cache) : 
             .ToList();
     }
 
-    private async Task<IReadOnlyList<EnabledFlag>> GetEnabledFlagsAsync(CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<EnabledFlag>> GetEnabledFlagsAsync(CancellationToken cancellationToken, bool forceRefresh)
     {
-        if (cache.TryGetValue(EnabledFlagsCacheKey, out IReadOnlyList<EnabledFlag>? cached) && cached is not null)
+        if (!forceRefresh && cache.TryGetValue(EnabledFlagsCacheKey, out IReadOnlyList<EnabledFlag>? cached) && cached is not null)
             return cached;
 
         var flags = await dbContext.AppFeatureFlags

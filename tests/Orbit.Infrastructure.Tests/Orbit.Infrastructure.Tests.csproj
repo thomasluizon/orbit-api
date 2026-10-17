@@ -24,6 +24,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="Fixtures/Notion/*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Orbit.Infrastructure\Orbit.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\Orbit.Application\Orbit.Application.csproj" />
     <ProjectReference Include="..\..\src\Orbit.Domain\Orbit.Domain.csproj" />

@@ -145,6 +145,9 @@ public class PayGateService(
     public Task<Result> CanAccessCalendar(Guid userId, CancellationToken ct = default) =>
         RequireProAccess(userId, "Calendar integration is a Pro feature. Upgrade to unlock!", ct);
 
+    public Task<Result> CanAccessNotion(Guid userId, CancellationToken ct = default) =>
+        RequireProAccess(userId, ErrorMessages.ProFeature.Message, ct);
+
     public Task<Result> CanManageCalendar(Guid userId, CancellationToken ct = default) =>
         CanAccessCalendar(userId, ct);
 

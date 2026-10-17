@@ -1,0 +1,11 @@
+{
+  "Status": {
+    "id": "stat",
+    "type": "status",
+    "status": {
+      "id": "330aeafb-598c-4e1c-bc13-1148aa5963d3",
+      "name": "In progress",
+      "color": "blue"
+    }
+  }
+}

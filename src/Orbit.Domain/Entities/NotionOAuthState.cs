@@ -8,6 +8,7 @@ public sealed class NotionOAuthState : Entity
     public string StateHash { get; private set; } = string.Empty;
     public string RedirectUri { get; private set; } = string.Empty;
     public DateTime ExpiresAtUtc { get; private set; }
+    public bool IsConsumed { get; private set; }
 
     private NotionOAuthState() { }
 

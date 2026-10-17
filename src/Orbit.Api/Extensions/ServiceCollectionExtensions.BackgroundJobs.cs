@@ -7,6 +7,7 @@ using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
+using Orbit.Infrastructure.Services.Notion;
 
 namespace Orbit.Api.Extensions;
 
@@ -55,6 +56,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddHostedService<SyncCleanupService>();
         builder.Services.AddHostedService<PlayNotificationCleanupService>();
         builder.Services.AddHostedService<CalendarAutoSyncService>();
+        builder.Services.AddHostedService<NotionAutoSyncService>();
         builder.Services.AddHostedService<OpenAiBatchPollerService>();
         builder.Services.AddHostedService<AiUsageSummaryService>();
         builder.Services.AddHostedService<FoundingAchievementReconciliationService>();
@@ -100,6 +102,7 @@ public static partial class ServiceCollectionExtensions
         AddScheduledJob<SyncCleanupService>(builder);
         AddScheduledJob<PlayNotificationCleanupService>(builder);
         AddScheduledJob<CalendarAutoSyncService>(builder);
+        AddScheduledJob<NotionAutoSyncService>(builder);
         AddScheduledJob<OpenAiBatchPollerService>(builder);
         AddScheduledJob<AiUsageSummaryService>(builder);
         AddScheduledJob<FoundingAchievementReconciliationService>(builder);

@@ -220,7 +220,9 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.BlockedUser>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Report>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.FriendFeedEvent>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.ProactiveItem>>()));
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.ProactiveItem>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.NotionConnection>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.NotionTask>>()));
         builder.Services.AddScoped<Orbit.Application.Social.Services.SocialInteractionServices>();
         builder.Services.AddScoped<Orbit.Application.Gamification.Services.GamificationNotifiers>();
         builder.Services.AddScoped<IGoogleTokenService, GoogleTokenService>();
@@ -228,6 +230,8 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IGoogleAuthorizationCodeService, GoogleAuthorizationCodeService>();
         builder.Services.AddScoped<IGoogleIdTokenValidator, GoogleIdTokenValidator>();
         builder.Services.AddGoogleCalendarServices(GetDefaultHttpTimeout(builder));
+        Orbit.Infrastructure.Services.Notion.NotionServiceCollectionExtensions.AddNotionServices(
+            builder.Services, builder.Configuration, GetDefaultHttpTimeout(builder));
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddScoped<ITokenService, JwtTokenService>();
         builder.Services.AddScoped<IAuthSessionService, AuthSessionService>();

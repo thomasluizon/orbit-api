@@ -23,6 +23,7 @@ public partial class AgentCatalogService
             .. ProactiveCapabilities(),
             .. NotificationCapabilities(),
             .. CalendarCapabilities(),
+            .. NotionCapabilities(),
             .. GamificationCapabilities(),
             .. ChecklistTemplateCapabilities(),
             .. UserFactCapabilities(),
@@ -661,6 +662,18 @@ public partial class AgentCatalogService
                 ])
         ];
     }
+
+    private static AgentCapability[] NotionCapabilities() =>
+    [
+        CreateCapability(AgentCapabilityIds.NotionRead, "Read Notion Tasks", "Reads stored shared Notion tasks.",
+            "notion", AgentScopes.ReadNotion, AgentRiskClass.Low, false, false, AgentConfirmationRequirement.None,
+            planRequirement: "Pro", featureFlagKeys: ["notion_integration"], chatTools: ["get_notion_tasks"],
+            controllerActions: ["ConnectionsController.GetNotion"]),
+        CreateCapability(AgentCapabilityIds.NotionManage, "Manage Notion Connection", "Connects or disconnects Notion through the person's OAuth flow.",
+            "notion", AgentScopes.ManageNotion, AgentRiskClass.Destructive, true, false, AgentConfirmationRequirement.None,
+            planRequirement: "Pro", featureFlagKeys: ["notion_integration"],
+            controllerActions: ["ConnectionsController.AuthorizeNotion", "ConnectionsController.CompleteNotion", "ConnectionsController.DisconnectNotion"])
+    ];
 
     private static AgentCapability[] GamificationCapabilities()
     {

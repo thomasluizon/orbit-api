@@ -88,6 +88,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAiTool, UpdateNotificationsTool>();
         builder.Services.AddScoped<IAiTool, DeleteNotificationsTool>();
         builder.Services.AddScoped<IAiTool, GetCalendarOverviewTool>();
+        builder.Services.AddScoped<IAiTool, GetNotionTasksTool>();
         builder.Services.AddScoped<IAiTool, ManageCalendarSyncTool>();
         builder.Services.AddScoped<IAiTool, GetChecklistTemplatesTool>();
         builder.Services.AddScoped<IAiTool, CreateChecklistTemplateTool>();

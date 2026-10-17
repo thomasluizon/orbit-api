@@ -1617,6 +1617,9 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<DateTime>("ExpiresAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("IsConsumed")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("RedirectUri")
                         .IsRequired()
                         .HasMaxLength(2048)
