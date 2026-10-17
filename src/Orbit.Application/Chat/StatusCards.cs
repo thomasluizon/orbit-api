@@ -7,7 +7,9 @@ namespace Orbit.Application.Chat;
 
 public record DaySummaryCard(
     DateOnly Date, int Due, int Done, int? CompletionRate,
-    int OverdueCount, int CurrentStreak, string SurfaceId = "today");
+    int OverdueCount, int CurrentStreak, string SurfaceId = "today",
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<HabitListCardItem>? Rows = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? TotalRows = null);
 
 public record StreakAchievement(string Id, string IconKey, DateTime EarnedAt);
 
@@ -20,7 +22,9 @@ public record StreakCard(
     string SurfaceId = "progress",
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<StreakAchievementDisc>? AchievementDiscs = null);
 
-public record CalendarCardEvent(string Title, string Start, string? End, bool IsAllDay);
+public record CalendarCardEvent(string Title, string Start, string? End, bool IsAllDay,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Id = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CalendarName = null);
 
 public record CalendarCardSync(bool Enabled, string Status, DateTime? LastSyncedAt);
 
@@ -38,11 +42,12 @@ public static class StatusCardBuilder
     public const string StreakPrompt = "After get_gamification_overview succeeds, write one short line without figures, then emit [[orbit:streak]] last.";
     public const string CalendarPrompt = "After get_calendar_overview succeeds, write one short line without listing events, then emit [[orbit:calendar]] last.";
 
-    public static DaySummaryCard BuildDay(DateOnly date, RetrospectiveMetrics metrics, int overdueCount) =>
+    public static DaySummaryCard BuildDay(
+        DateOnly date, RetrospectiveMetrics metrics, int overdueCount, IReadOnlyList<HabitListCardItem>? rows = null) =>
         new(date, metrics.TotalScheduled,
             metrics.CompletionSeries?.Points.SingleOrDefault()?.Completed ?? 0,
             metrics.TotalScheduled == 0 ? null : metrics.CompletionRate,
-            overdueCount, metrics.CurrentStreak);
+            overdueCount, metrics.CurrentStreak, Rows: rows?.Take(20).ToList() ?? [], TotalRows: rows?.Count ?? 0);
 
     public static StreakCard? BuildStreak(GamificationOverviewPayload? payload)
     {
@@ -84,7 +89,9 @@ public static class StatusCardBuilder
                 item.StartTime is null
                     ? null
                     : item.EndUtc?.ToString("O", CultureInfo.InvariantCulture) ?? item.EndTime,
-                item.StartTime is null))
+                item.StartTime is null,
+                item.Id,
+                item.CalendarName))
             .ToList();
         var sync = payload.AutoSyncState is { } state
             ? new CalendarCardSync(state.Enabled, state.Status.ToString(), state.LastSyncedAt)

@@ -1347,6 +1347,70 @@ public class ProcessUserChatCommandHandlerTests
         result.Value.DaySummary.CompletionRate.Should().Be(67);
     }
 
+    [Theory]
+    [InlineData(true, "done")]
+    [InlineData(false, "none")]
+    [InlineData(null, "none")]
+    public async Task Handle_DaySummaryRows_MatchTodayHabitListAndScheduleFacts(
+        bool? supportsDoneStatus, string doneStatus)
+    {
+        SetupUserAndPayGate();
+        var done = Habit.Create(new HabitCreateParams(UserId, "Done", FrequencyUnit.Day, 1, Today,
+            Position: 0, CreatedAtUtc: new DateTime(2026, 4, 1, 12, 0, 0, DateTimeKind.Utc))).Value;
+        done.Log(Today).IsSuccess.Should().BeTrue();
+        var due = Habit.Create(new HabitCreateParams(UserId, "Due", null, null, Today, Position: 1)).Value;
+        var overdue = Habit.Create(new HabitCreateParams(UserId, "Overdue", null, null,
+            Today.AddDays(-1), Position: 2)).Value;
+        var future = Habit.Create(new HabitCreateParams(UserId, "Future", null, null,
+            Today.AddDays(1), Position: 3)).Value;
+        _habitRepo.FindAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { future, overdue, due, done }.AsReadOnly());
+        _scheduleLogReader.ReadDaysAsync(
+                Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(),
+                Arg.Any<CancellationToken>())
+            .Returns([new HabitScheduleLogDay(done.Id, Today, 1, 0, true)]);
+        var tool = ReadTool("get_daily_summary", new ToolResult(true,
+            Payload: new DailySummaryResponse("Summary", string.Empty, false)));
+        SetupReadToolReply("get_daily_summary", "Today [[orbit:day]] [[orbit:habits:today]]");
+
+        var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
+            UserId, "How is today?", ClientContext: new AgentClientContext(
+                SupportsDaySummaryCard: true, SupportsHabitListCard: true,
+                SupportsHabitListDoneStatus: supportsDoneStatus)), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.DaySummary.Should().NotBeNull();
+        result.Value.DaySummary!.Rows.Should().Equal(result.Value.HabitList!.Items);
+        result.Value.DaySummary.Rows!.Select(row => row.Id).Should().Equal(
+            done.Id.ToString(), due.Id.ToString(), overdue.Id.ToString());
+        result.Value.DaySummary.Rows.Select(row => row.Status).Should().Equal(doneStatus, "today", "overdue");
+        result.Value.DaySummary.TotalRows.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task Handle_DaySummaryWithNothingDue_ReturnsEmptyRows()
+    {
+        SetupUserAndPayGate();
+        var tool = ReadTool("get_daily_summary", new ToolResult(true,
+            Payload: new DailySummaryResponse("Summary", string.Empty, false)));
+        SetupReadToolReply("get_daily_summary", "Today [[orbit:day]]");
+
+        var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
+            UserId, "How is today?", ClientContext: new AgentClientContext(SupportsDaySummaryCard: true)),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.DaySummary!.Rows.Should().BeEmpty();
+        result.Value.DaySummary.TotalRows.Should().Be(0);
+        result.Value.DaySummary.Due.Should().Be(0);
+        result.Value.DaySummary.Done.Should().Be(0);
+        result.Value.DaySummary.OverdueCount.Should().Be(0);
+        result.Value.DaySummary.CompletionRate.Should().BeNull();
+    }
+
     [Fact]
     public async Task Handle_OverdueOffCadenceLog_BuildsCompletedDayCard()
     {

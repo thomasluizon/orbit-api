@@ -14620,6 +14620,18 @@
           },
           "isAllDay": {
             "type": "boolean"
+          },
+          "id": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "calendarName": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -15640,6 +15652,24 @@
           "surfaceId": {
             "type": "string",
             "default": "today"
+          },
+          "rows": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/HabitListCardItem"
+            }
+          },
+          "totalRows": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },

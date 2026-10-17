@@ -654,7 +654,11 @@ public partial class ProcessUserChatCommandHandler(
             && executionResults.LastSuccessfulPayload<DailySummaryResponse>("get_daily_summary") is not null)
         {
             day = await TryBuildDaySummaryCardAsync(request.UserId, context.UserToday,
-                context.User?.CurrentStreak ?? 0, context.User?.TimeZone, cancellationToken);
+                context.User?.CurrentStreak ?? 0, context.User?.TimeZone,
+                HabitListCardBuilder.Build(context.TodayHabits, context.UserToday,
+                    HabitListCardBuilder.ScopeToday, context.TodayFacts,
+                    request.ClientContext.SupportsHabitListDoneStatus == true).Items,
+                cancellationToken);
         }
 
         var streak = request.ClientContext?.SupportsStreakCard == true
@@ -672,7 +676,8 @@ public partial class ProcessUserChatCommandHandler(
     }
 
     private async Task<DaySummaryCard?> TryBuildDaySummaryCardAsync(
-        Guid userId, DateOnly userToday, int currentStreak, string? timeZone, CancellationToken cancellationToken)
+        Guid userId, DateOnly userToday, int currentStreak, string? timeZone,
+        IReadOnlyList<HabitListCardItem> rows, CancellationToken cancellationToken)
     {
         try
         {
@@ -684,7 +689,7 @@ public partial class ProcessUserChatCommandHandler(
                 habits.ToList(), userToday, userToday, currentStreak, currentStreak,
                 TimeZoneHelper.FindTimeZone(timeZone), weekStartDay);
             var overdue = habits.Count(h => !h.IsGeneral && !h.IsCompleted && h.DueDate < userToday);
-            return StatusCardBuilder.BuildDay(userToday, metrics, overdue);
+            return StatusCardBuilder.BuildDay(userToday, metrics, overdue, rows);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
