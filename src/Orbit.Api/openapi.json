@@ -4009,7 +4009,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppConfigResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppConfigResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppConfigResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -14132,6 +14149,35 @@
       "AiActionType": {
         "type": "integer"
       },
+      "AppConfigResponse": {
+        "required": [
+          "limits",
+          "features",
+          "settings",
+          "minVersion"
+        ],
+        "type": "object",
+        "properties": {
+          "limits": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "features": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FeatureFlagStateResponse"
+            }
+          },
+          "settings": {
+            "$ref": "#/components/schemas/SyncSettingsResponse"
+          },
+          "minVersion": {
+            "type": "string"
+          }
+        }
+      },
       "ApplyGoalInput": {
         "required": [
           "title",
@@ -15837,6 +15883,24 @@
             }
           },
           "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "FeatureFlagStateResponse": {
+        "required": [
+          "enabled",
+          "planRequirement"
+        ],
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "planRequirement": {
             "type": [
               "null",
               "string"
@@ -18421,6 +18485,31 @@
               "null",
               "object"
             ]
+          }
+        }
+      },
+      "SyncSettingsResponse": {
+        "required": [
+          "syncIntervalSeconds",
+          "syncMaxBatchSize"
+        ],
+        "type": "object",
+        "properties": {
+          "syncIntervalSeconds": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "syncMaxBatchSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },
