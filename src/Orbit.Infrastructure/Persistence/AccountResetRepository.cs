@@ -65,7 +65,11 @@ public class AccountResetRepository(OrbitDbContext context, IAccountEventCollect
             .Where(sf => sf.UserId == userId)
             .ExecuteDeleteAsync(cancellationToken);
 
-        await context.SentProactiveCheckins
+        await context.ProactiveItems
+            .Where(p => p.UserId == userId)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        await context.ProactiveCalendarDays
             .Where(p => p.UserId == userId)
             .ExecuteDeleteAsync(cancellationToken);
 

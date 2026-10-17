@@ -258,6 +258,7 @@ public static partial class ErrorCopy
     /// <summary>Push delivery registration.</summary>
     private static readonly (string Code, string En, string PtBr)[] Notifications =
     [
+        (ErrorCodes.ProactiveItemNotFound, "That Astra item is not here any more.", "Esse item da Astra não está mais aqui."),
         (ErrorCodes.NotificationNotFound, "That notification is not here any more.", "Essa notificação não está mais aqui."),
         (ErrorCodes.NoPushSubscriptions, "No device on this account is set up for notifications. Turn them on in settings.", "Nenhum aparelho desta conta está configurado para notificações. Ative nas configurações."),
         (ErrorCodes.PushEndpointInvalid, "This device could not register for notifications. Turn them off and on again in settings.", "Este aparelho não conseguiu registrar as notificações. Desative e ative de novo nas configurações."),

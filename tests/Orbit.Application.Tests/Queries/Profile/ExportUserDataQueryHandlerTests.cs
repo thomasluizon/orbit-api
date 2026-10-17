@@ -34,6 +34,7 @@ public class ExportUserDataQueryHandlerTests
     private readonly IGenericRepository<FriendFeedEvent> _friendFeedEventRepo = Substitute.For<IGenericRepository<FriendFeedEvent>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IGoalProgressReadSyncer _goalProgressReadSyncer = Substitute.For<IGoalProgressReadSyncer>();
+    private readonly IGenericRepository<ProactiveItem> _proactiveRepo = Substitute.For<IGenericRepository<ProactiveItem>>();
     private readonly ExportUserDataQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -45,13 +46,14 @@ public class ExportUserDataQueryHandlerTests
             new ExportUserDataRepositories(
                 _userRepo, _habitRepo, _habitLogRepo, _goalRepo, _goalProgressLogRepo, _tagRepo, _userFactRepo,
                 _notificationRepo, _checklistTemplateRepo, _userAchievementRepo, _streakFreezeRepo, _referralRepo, _apiKeyRepo,
-                _friendshipRepo, _cheerRepo, _blockedUserRepo, _reportRepo, _friendFeedEventRepo),
+                _friendshipRepo, _cheerRepo, _blockedUserRepo, _reportRepo, _friendFeedEventRepo, _proactiveRepo),
             _userDateService, _goalProgressReadSyncer);
 
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
         _goalProgressReadSyncer.ComputeFreshValuesAsync(Arg.Any<Guid>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
             .Returns(new Dictionary<Guid, int>());
 
+        ReturnsEmpty(_proactiveRepo);
         ReturnsEmpty(_habitRepo);
         ReturnsEmpty(_habitLogRepo);
         ReturnsEmpty(_goalRepo);
@@ -95,6 +97,22 @@ public class ExportUserDataQueryHandlerTests
     private static User CreateTestUser() => User.Create("Test User", "test@example.com").Value;
 
     [Fact]
+    public async Task Handle_ExportsItemsWithoutFactsAndPreservesStoredSetting()
+    {
+        var user = CreateTestUser();
+        user.SetProactiveAstraEnabled(false);
+        ArrangeUser(user);
+        var item = ProactiveItem.Create(UserId, Orbit.Domain.Enums.ProactiveTrigger.EveningCheckin, Today,
+            "{\"privateFact\":\"omit me\"}", "Text.", "Action", "Prompt", DateTime.UtcNow);
+        _proactiveRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<ProactiveItem, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<ProactiveItem> { item });
+        var result = await _handler.Handle(new(UserId), default);
+        result.Value.ProactiveItems.Should().ContainSingle(i => i.Id == item.Id);
+        result.Value.Settings.StoredProactiveAstraEnabled.Should().BeFalse();
+        System.Text.Json.JsonSerializer.Serialize(result.Value.ProactiveItems).Should().NotContain("privateFact").And.NotContain("FactsJson");
+    }
+
+    [Fact]
     public async Task Handle_UserNotFound_ReturnsFailure()
     {
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns((User?)null);
@@ -119,7 +137,8 @@ public class ExportUserDataQueryHandlerTests
         result.Value.Account.Email.Should().Be("test@example.com");
         result.Value.Account.Plan.Should().Be("free");
         result.Value.Settings.AiMemoryEnabled.Should().Be(user.AiMemoryEnabled);
-        result.Value.Settings.ProactiveAstraEnabled.Should().Be(user.ProactiveAstraEnabled);
+        result.Value.Settings.ProactiveAstraEnabled.Should().Be(user.EffectiveProactivePushEnabled);
+        result.Value.Settings.StoredProactiveAstraEnabled.Should().Be(user.ProactiveAstraEnabled);
         result.Value.Settings.Uses24HourClock.Should().BeNull();
         result.Value.Habits.Should().BeEmpty();
         result.Value.Goals.Should().BeEmpty();

@@ -195,7 +195,7 @@ public class GetProfileQueryHandlerTests
                 ShowAchievements = true,
                 ShowTopHabits = false
             },
-            user.ProactiveAstraEnabled,
+            ProactiveAstraEnabled = user.EffectiveProactivePushEnabled,
             user.MarketingEmailConsent,
             LastCompletionDate = (DateOnly?)null
         });

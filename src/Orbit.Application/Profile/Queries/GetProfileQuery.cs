@@ -158,7 +158,7 @@ public class GetProfileQueryHandler(
             user.SocialOptIn,
             TimeFormatResolver.Uses24HourClock(user.Uses24HourClockPreference, user.TimeZone),
             publicProfile,
-            user.ProactiveAstraEnabled,
+            user.EffectiveProactivePushEnabled,
             user.MarketingEmailConsent,
             lastCompletionDate,
             activeApiKeyCount));

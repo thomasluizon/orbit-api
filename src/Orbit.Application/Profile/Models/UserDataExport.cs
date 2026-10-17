@@ -26,7 +26,8 @@ public sealed record UserDataExport(
     IReadOnlyList<ExportedCheer> Cheers,
     IReadOnlyList<ExportedBlockedUser> BlockedUsers,
     IReadOnlyList<ExportedReport> Reports,
-    IReadOnlyList<ExportedFriendFeedEvent> FriendFeedEvents);
+    IReadOnlyList<ExportedFriendFeedEvent> FriendFeedEvents,
+    IReadOnlyList<ExportedProactiveItem>? ProactiveItems = null);
 
 public sealed record ExportedAccount(
     string Name,
@@ -43,7 +44,8 @@ public sealed record ExportedSettings(
     bool AiMemoryEnabled,
     bool AiSummaryEnabled,
     bool ProactiveAstraEnabled,
-    bool? Uses24HourClock);
+    bool? Uses24HourClock,
+    bool? StoredProactiveAstraEnabled = null);
 
 public sealed record ExportedHabit(
     Guid Id,
@@ -182,3 +184,8 @@ public sealed record ExportedApiKey(
     DateTime? ExpiresAtUtc,
     DateTime? LastUsedAtUtc,
     bool IsRevoked);
+
+public sealed record ExportedProactiveItem(
+    Guid Id, string Trigger, DateOnly LocalDate, string Text, string ActionLabel, string ActionPrompt,
+    DateTime CreatedAtUtc, DateTime? ShownAtUtc, DateTime? PushedAtUtc, DateTime? OpenedAtUtc,
+    DateTime? ActedAtUtc, DateTime? EndedAtUtc, string? EndReason);

@@ -377,12 +377,6 @@
         "reason": "instant: the Play and Stripe processed-event retention cutoffs."
       }
     },
-    "src/Orbit.Infrastructure/Services/ProactiveCheckinSchedulerService.cs": {
-      "ORBIT0004": {
-        "count": 1,
-        "reason": "bucket: the UTC-date dedupe key for SentProactiveCheckin; per-user send timing uses the converted user clock."
-      }
-    },
     "src/Orbit.Infrastructure/Services/SlipAlertSchedulerService.cs": {
       "ORBIT0004": {
         "count": 1,

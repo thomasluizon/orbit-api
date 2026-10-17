@@ -313,7 +313,7 @@ public class OrbitDbContextTests
             (typeof(HabitLog), nameof(HabitLog.HabitId), typeof(Habit), DeleteBehavior.Cascade),
             (typeof(Tag), nameof(Tag.UserId), typeof(User), DeleteBehavior.Cascade),
             (typeof(PushSubscription), nameof(PushSubscription.UserId), typeof(User), DeleteBehavior.Cascade),
-            (typeof(SentProactiveCheckin), nameof(SentProactiveCheckin.UserId), typeof(User), DeleteBehavior.Cascade),
+            (typeof(ProactiveItem), nameof(ProactiveItem.UserId), typeof(User), DeleteBehavior.Cascade),
             (typeof(ProcessedRequest), nameof(ProcessedRequest.UserId), typeof(User), DeleteBehavior.Cascade),
             (typeof(ClosedMonthRecap), nameof(ClosedMonthRecap.UserId), typeof(User), DeleteBehavior.Cascade),
             (typeof(AiFactExtractionBatch), nameof(AiFactExtractionBatch.UserId), typeof(User), DeleteBehavior.Cascade),
@@ -371,7 +371,7 @@ public class OrbitDbContextTests
                 nameof(SentReminder.ReminderTimeUtc), nameof(SentReminder.When),
             }),
             (typeof(SentSlipAlert), new[] { nameof(SentSlipAlert.HabitId), nameof(SentSlipAlert.WeekStart) }),
-            (typeof(SentProactiveCheckin), new[] { nameof(SentProactiveCheckin.UserId), nameof(SentProactiveCheckin.Date) }),
+            (typeof(ProactiveItem), new[] { nameof(ProactiveItem.UserId), nameof(ProactiveItem.Trigger), nameof(ProactiveItem.LocalDate) }),
             (typeof(ProcessedPlayNotification), new[] { nameof(ProcessedPlayNotification.MessageId) }),
             (typeof(ProcessedStripeEvent), new[] { nameof(ProcessedStripeEvent.EventId) }),
             (typeof(ProcessedRequest), new[]

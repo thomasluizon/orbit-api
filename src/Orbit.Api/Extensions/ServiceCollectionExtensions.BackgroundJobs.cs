@@ -16,6 +16,7 @@ public static partial class ServiceCollectionExtensions
     {
         builder.Services.AddScoped<ISlipAlertMessageService, AiSlipAlertMessageService>();
         builder.Services.AddScoped<IProactiveCheckinMessageService, AiProactiveCheckinMessageService>();
+        builder.Services.AddScoped<Orbit.Application.Proactive.Services.IProactiveEngine, ProactiveEngineService>();
 
         if (!BuildTimeDocumentGeneration.IsActive)
         {
@@ -45,7 +46,7 @@ public static partial class ServiceCollectionExtensions
         if (IsPeriodCloseNotificationEnabled(builder.Configuration))
             builder.Services.AddHostedService<PeriodCloseNotificationService>();
         builder.Services.AddHostedService<SlipAlertSchedulerService>();
-        builder.Services.AddHostedService<ProactiveCheckinSchedulerService>();
+        builder.Services.AddHostedService<ProactiveEngineSchedulerService>();
         builder.Services.AddHostedService<AccountDeletionService>();
         builder.Services.AddHostedService<HabitDueDateAdvancementService>();
         if (IsStreakFreezeAutoActivationEnabled(builder.Configuration))
@@ -90,7 +91,7 @@ public static partial class ServiceCollectionExtensions
         if (IsPeriodCloseNotificationEnabled(builder.Configuration))
             AddScheduledJob<PeriodCloseNotificationService>(builder);
         AddScheduledJob<SlipAlertSchedulerService>(builder);
-        AddScheduledJob<ProactiveCheckinSchedulerService>(builder);
+        AddScheduledJob<ProactiveEngineSchedulerService>(builder);
         AddScheduledJob<AccountDeletionService>(builder);
         AddScheduledJob<HabitDueDateAdvancementService>(builder);
         if (IsStreakFreezeAutoActivationEnabled(builder.Configuration))

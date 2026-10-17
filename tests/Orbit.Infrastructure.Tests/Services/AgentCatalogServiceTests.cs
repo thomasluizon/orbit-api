@@ -221,6 +221,25 @@ public class AgentCatalogServiceTests
         capability.ControllerActionKeys.Should().ContainSingle("GamificationController.RepairStreak");
     }
 
+    [Theory]
+    [InlineData(AgentCapabilityIds.ProactiveItemsRead, AgentScopes.ReadNotifications, false, "ProactiveAstraController.Current")]
+    [InlineData(AgentCapabilityIds.ProactiveItemsWrite, AgentScopes.WriteNotifications, true, "ProactiveAstraController.Opened")]
+    [InlineData(AgentCapabilityIds.ProactiveItemsWrite, AgentScopes.WriteNotifications, true, "ProactiveAstraController.Acted")]
+    public void ProactiveItems_AreCatalogedAsProClientCapabilities(string capabilityId, string scope, bool isMutation, string action)
+    {
+        var capability = _catalogService.GetCapability(capabilityId);
+
+        capability.Should().NotBeNull();
+        capability!.PlanRequirement.Should().Be("Pro");
+        capability.Scope.Should().Be(scope);
+        capability.IsMutation.Should().Be(isMutation);
+        capability.RiskClass.Should().Be(AgentRiskClass.Low);
+        capability.ConfirmationRequirement.Should().Be(AgentConfirmationRequirement.None);
+        capability.ChatToolNames.Should().BeNullOrEmpty();
+        capability.McpToolNames.Should().BeNullOrEmpty();
+        capability.ControllerActionKeys.Should().Contain(action);
+    }
+
     [Fact]
     public void RequiredAppSurfaces_ArePresent()
     {

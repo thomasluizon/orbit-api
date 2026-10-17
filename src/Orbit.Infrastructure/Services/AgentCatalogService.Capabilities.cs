@@ -20,6 +20,7 @@ public partial class AgentCatalogService
             .. GoalCapabilities(),
             .. TagCapabilities(),
             .. ProfileCapabilities(),
+            .. ProactiveCapabilities(),
             .. NotificationCapabilities(),
             .. CalendarCapabilities(),
             .. GamificationCapabilities(),
@@ -513,7 +514,7 @@ public partial class AgentCatalogService
             CreateCapability(
                 AgentCapabilityIds.ProfileProactiveAstraWrite,
                 "Write Proactive Astra Settings",
-                "Updates whether Astra sends proactive check-in pushes when the user falls behind.",
+                "Stores an explicit preference for proactive Astra pushes; in-app items remain available.",
                 "profile",
                 AgentScopes.WriteAiSettings,
                 AgentRiskClass.Low,
@@ -522,6 +523,38 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.None,
                 planRequirement: "Pro",
                 controllerActions: ["ProfileController.SetProactiveAstra"])
+        ];
+    }
+
+    private static AgentCapability[] ProactiveCapabilities()
+    {
+        return
+        [
+            CreateCapability(
+                AgentCapabilityIds.ProactiveItemsRead,
+                "Read Proactive Astra Item",
+                "Returns the highest-priority active item for the person's local day and records its first display.",
+                "proactive",
+                AgentScopes.ReadNotifications,
+                AgentRiskClass.Low,
+                isMutation: false,
+                isPhaseOneReadOnly: false,
+                AgentConfirmationRequirement.None,
+                planRequirement: "Pro",
+                controllerActions: ["ProactiveAstraController.Current"]),
+
+            CreateCapability(
+                AgentCapabilityIds.ProactiveItemsWrite,
+                "Record Proactive Astra Outcome",
+                "Records the first opening or action for a proactive item owned by the person.",
+                "proactive",
+                AgentScopes.WriteNotifications,
+                AgentRiskClass.Low,
+                isMutation: true,
+                isPhaseOneReadOnly: false,
+                AgentConfirmationRequirement.None,
+                planRequirement: "Pro",
+                controllerActions: ["ProactiveAstraController.Opened", "ProactiveAstraController.Acted"])
         ];
     }
 

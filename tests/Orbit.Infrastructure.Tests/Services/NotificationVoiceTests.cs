@@ -32,8 +32,8 @@ public class NotificationVoiceTests
         { "slip alert, en", AiSlipAlertMessageService.BuildPrompt("Smoking", DayOfWeek.Friday, 14, "en") },
         { "slip alert, pt-BR", AiSlipAlertMessageService.BuildPrompt("Fumar", DayOfWeek.Monday, null, "pt-BR") },
         { "proactive checkin, system", AiProactiveCheckinMessageService.SystemPrompt },
-        { "proactive checkin, en", AiProactiveCheckinMessageService.BuildPrompt("Alex", ["Run"], 4, "en") },
-        { "proactive checkin, pt-BR", AiProactiveCheckinMessageService.BuildPrompt("Alex", ["Correr"], 0, "pt-BR") },
+        { "proactive checkin, en", AiProactiveCheckinMessageService.BuildPrompt(new(ProactiveTrigger.EveningCheckin, ["Run"], 1, 4), "en") },
+        { "proactive checkin, pt-BR", AiProactiveCheckinMessageService.BuildPrompt(new(ProactiveTrigger.EveningCheckin, ["Correr"], 1, 0), "pt-BR") },
         { "daily summary, system", AiSummaryService.SystemPrompt },
         { "daily summary, en", DailySummaryPrompt("en") },
         { "daily summary, pt-BR", DailySummaryPrompt("pt-BR") },
@@ -44,8 +44,8 @@ public class NotificationVoiceTests
     {
         { "slip alert, en", AiSlipAlertMessageService.BuildPrompt("Smoking", DayOfWeek.Friday, 14, "en") },
         { "slip alert, pt-BR", AiSlipAlertMessageService.BuildPrompt("Fumar", DayOfWeek.Monday, null, "pt-BR") },
-        { "proactive checkin, en", AiProactiveCheckinMessageService.BuildPrompt("Alex", ["Run"], 4, "en") },
-        { "proactive checkin, pt-BR", AiProactiveCheckinMessageService.BuildPrompt("Alex", ["Correr"], 0, "pt-BR") },
+        { "proactive checkin, en", AiProactiveCheckinMessageService.BuildPrompt(new(ProactiveTrigger.EveningCheckin, ["Run"], 1, 4), "en") },
+        { "proactive checkin, pt-BR", AiProactiveCheckinMessageService.BuildPrompt(new(ProactiveTrigger.EveningCheckin, ["Correr"], 1, 0), "pt-BR") },
         { "daily summary, en", DailySummaryPrompt("en") },
         { "daily summary, pt-BR", DailySummaryPrompt("pt-BR") },
     };

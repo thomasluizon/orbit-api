@@ -219,7 +219,8 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Cheer>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.BlockedUser>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Report>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.FriendFeedEvent>>()));
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.FriendFeedEvent>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.ProactiveItem>>()));
         builder.Services.AddScoped<Orbit.Application.Social.Services.SocialInteractionServices>();
         builder.Services.AddScoped<Orbit.Application.Gamification.Services.GamificationNotifiers>();
         builder.Services.AddScoped<IGoogleTokenService, GoogleTokenService>();

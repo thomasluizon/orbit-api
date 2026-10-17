@@ -63,7 +63,7 @@ internal sealed class SqliteOrbitDbContextFactory : IDisposable
                 }
 
                 foreach (var index in entityType.GetIndexes())
-                    index.SetFilter(null);
+                    if (index.GetFilter() != "\"PushedAtUtc\" IS NOT NULL") index.SetFilter(null);
             }
         }
     }

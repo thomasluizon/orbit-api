@@ -4,6 +4,7 @@ namespace Orbit.Application.Common;
 
 public static class ErrorCodes
 {
+    public const string ProactiveItemNotFound = "PROACTIVE_ITEM_NOT_FOUND";
     public const string UserNotFound = "USER_NOT_FOUND";
     public const string HabitNotFound = "HABIT_NOT_FOUND";
     public const string HabitLimitReached = "HABIT_LIMIT_REACHED";
