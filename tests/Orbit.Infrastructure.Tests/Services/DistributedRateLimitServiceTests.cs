@@ -411,6 +411,7 @@ public class DistributedRateLimitServiceTests : IDisposable
             modelBuilder.Ignore<AgentAuditLog>();
             modelBuilder.Ignore<ChecklistTemplate>();
             modelBuilder.Ignore<AppFeatureFlag>();
+            modelBuilder.Ignore<AppFeatureFlagAccount>();
             modelBuilder.Ignore<ContentBlock>();
             modelBuilder.Ignore<GoogleCalendarSyncSuggestion>();
 
