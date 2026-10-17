@@ -20,7 +20,8 @@ namespace Orbit.Infrastructure.Migrations
                 type: "boolean",
                 nullable: true,
                 oldClrType: typeof(bool),
-                oldType: "boolean");
+                oldType: "boolean",
+                oldDefaultValue: false);
 
             migrationBuilder.CreateTable(
                 name: "ProactiveCalendarDays",

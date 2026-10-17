@@ -193,7 +193,7 @@ public sealed partial class ProactiveEngineService(
     internal List<ProactiveFacts> BuildFacts(Batch batch, User user, DateOnly today, ProactiveCalendarDay? calendarDay)
     {
         var result = new List<ProactiveFacts>();
-        var allHabits = batch.Habits.Where(h => h.UserId == user.Id && !h.IsGeneral && h.ParentHabitId is null).ToList();
+        var allHabits = batch.Habits.Where(h => h.UserId == user.Id && !h.IsGeneral).ToList();
         var habits = allHabits.Where(h => !h.IsDeleted && !h.IsCompleted).ToList();
         var due = habits.Where(h => HabitScheduleService.IsHabitDueOnDate(h, today, user.WeekStartDay)).ToList();
         var open = habits.Where(h => (HabitScheduleService.IsHabitDueOnDate(h, today, user.WeekStartDay)
@@ -223,18 +223,28 @@ public sealed partial class ProactiveEngineService(
                 result.Add(new(ProactiveTrigger.GoalBehind, [], GoalId: goal.Id, GoalTitle: goal.Title,
                     TrackingStatus: metrics.TrackingStatus));
         }
-        if ((int)today.DayOfWeek == user.WeekStartDay)
-        {
-            var from = today.AddDays(-ProactiveRules.WeekDays);
-            var metrics = RetrospectiveMetricsCalculator.ComputeHistorical(allHabits, from, yesterday,
-                user.CurrentStreak, user.LongestStreak, timeZone, user.WeekStartDay);
-            if (metrics.TotalScheduled > 0)
-                result.Add(new(ProactiveTrigger.WeeklyReview, [], PeriodFrom: from, PeriodTo: yesterday,
-                    TotalCompletions: metrics.TotalCompletions, TotalScheduled: metrics.TotalScheduled));
-        }
+        var review = WeeklyFacts(allHabits, user, today, timeZone);
+        if (review is not null) result.Add(review);
         if (due.Count > 0)
             result.Add(new(ProactiveTrigger.MorningPlan, due.Select(h => h.Title).ToList(), due.Count));
         return result;
+    }
+
+    private static ProactiveFacts? WeeklyFacts(List<Habit> allHabits, User user, DateOnly today, TimeZoneInfo timeZone)
+    {
+        var yesterday = today.AddDays(-1);
+        if ((int)today.DayOfWeek != user.WeekStartDay) return null;
+        var from = today.AddDays(-ProactiveRules.WeekDays);
+        var scheduled = allHabits.Sum(h => HabitScheduleService.GetHistoricalScheduledDates(
+            h, from, yesterday, timeZone, user.WeekStartDay).Count);
+        var completions = allHabits.Where(h => !h.IsBadHabit).SelectMany(h => h.Logs)
+            .Count(l => l.Value > 0 && l.Date >= from && l.Date <= yesterday);
+        var slips = allHabits.Where(h => h.IsBadHabit).SelectMany(h => h.Logs)
+            .Count(l => l.Value > 0 && l.Date >= from && l.Date <= yesterday);
+        if (scheduled > 0)
+            return new(ProactiveTrigger.WeeklyReview, [], PeriodFrom: from, PeriodTo: yesterday,
+                TotalCompletions: completions, TotalScheduled: scheduled, BadHabitSlips: slips);
+        return null;
     }
 
     private static bool CalendarAllowed(Batch batch, User user) =>
@@ -276,8 +286,8 @@ public sealed partial class ProactiveEngineService(
 
     internal static List<(DateTime Start, DateTime End)> TimedRanges(List<CalendarEventItem> events, DateOnly today, TimeZoneInfo zone)
     {
-        var dayStart = today.ToDateTime(TimeOnly.MinValue);
-        var dayEnd = today.AddDays(1).ToDateTime(TimeOnly.MinValue);
+        var dayStart = StartOfDayUtc(today, zone);
+        var dayEnd = StartOfDayUtc(today.AddDays(1), zone);
         var ranges = new List<(DateTime, DateTime)>();
         foreach (var item in events.Where(e => e.StartTime is not null && e.StartUtc.HasValue))
         {
@@ -286,14 +296,22 @@ public sealed partial class ProactiveEngineService(
             var duration = item.EndUtc - item.StartUtc;
             foreach (var startUtc in starts)
             {
-                var start = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(startUtc, DateTimeKind.Utc), zone);
-                var end = duration is { } length && length > TimeSpan.Zero
-                    ? TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(startUtc + length, DateTimeKind.Utc), zone) : start;
+                var start = DateTime.SpecifyKind(startUtc, DateTimeKind.Utc);
+                var end = duration is { } length && length > TimeSpan.Zero ? start + length : start;
                 if (start >= dayEnd || end < dayStart || (end == dayStart && start < dayStart)) continue;
                 ranges.Add((start < dayStart ? dayStart : start, end > dayEnd ? dayEnd : end));
             }
         }
         return ranges;
+    }
+
+    private static DateTime StartOfDayUtc(DateOnly date, TimeZoneInfo zone)
+    {
+        var local = date.ToDateTime(TimeOnly.MinValue);
+        while (zone.IsInvalidTime(local)) local = local.AddMinutes(1);
+        if (zone.IsAmbiguousTime(local))
+            return DateTime.SpecifyKind(local - zone.GetAmbiguousTimeOffsets(local).Max(), DateTimeKind.Utc);
+        return TimeZoneInfo.ConvertTimeToUtc(local, zone);
     }
 
     public async Task<ProactiveItem?> GetCurrentAsync(Guid userId, CancellationToken cancellationToken)
@@ -317,7 +335,7 @@ public sealed partial class ProactiveEngineService(
     public async Task<Result> RecordOutcomeAsync(Guid userId, Guid itemId, bool acted, CancellationToken cancellationToken)
     {
         var item = await db.ProactiveItems.SingleOrDefaultAsync(i => i.Id == itemId && i.UserId == userId, cancellationToken);
-        if (item is null) return Result.Failure("Proactive item not found.", ErrorCodes.ProactiveItemNotFound);
+        if (item is null) return Result.Failure(ErrorMessages.ProactiveItemNotFound);
         var nowUtc = clock.GetUtcNow().UtcDateTime;
         var ended = false;
         if (acted) ended = item.Act(nowUtc);

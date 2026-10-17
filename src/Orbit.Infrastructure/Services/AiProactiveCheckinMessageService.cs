@@ -63,7 +63,7 @@ public sealed partial class AiProactiveCheckinMessageService : IProactiveCheckin
         var template = Template(facts, language).Text;
         var factualText = string.Join(' ', facts.HabitTitles.Append(facts.GoalTitle ?? string.Empty));
         var numbers = new[] { facts.HabitCount, facts.CurrentStreak, facts.TimedEventCount,
-            facts.TimedMinutes, facts.TotalCompletions, facts.TotalScheduled }
+            facts.TimedMinutes, facts.TotalCompletions, facts.TotalScheduled, facts.BadHabitSlips }
             .Where(n => n.HasValue).Select(n => n!.Value.ToString(CultureInfo.InvariantCulture)).ToHashSet();
         foreach (Match number in Numbers().Matches(factualText)) numbers.Add(number.Value);
         if (Numbers().Matches(text).Any(n => !numbers.Contains(n.Value))) return false;
@@ -111,10 +111,10 @@ public sealed partial class AiProactiveCheckinMessageService : IProactiveCheckin
                 "A goal needs attention to its deadline; we can choose a small next step.",
                 "See next step", $"Look at goal id {facts.GoalId} and help me choose the next step based on its current progress."),
             (ProactiveTrigger.WeeklyReview, true) => new(
-                $"Na semana passada, você fez {facts.TotalCompletions} registros positivos para {facts.TotalScheduled} ocorrências previstas.",
+                $"Semana passada: {facts.TotalCompletions} conclusões e {facts.BadHabitSlips ?? 0} deslizes em {facts.TotalScheduled} ocorrências previstas.",
                 "Rever minha semana", $"Mostre minha retrospectiva semanal de {facts.PeriodFrom:yyyy-MM-dd} a {facts.PeriodTo:yyyy-MM-dd}."),
             (ProactiveTrigger.WeeklyReview, false) => new(
-                $"Last week had {facts.TotalCompletions} positive logs across {facts.TotalScheduled} scheduled occurrences.",
+                $"Last week: {facts.TotalCompletions} habit completions and {facts.BadHabitSlips ?? 0} slips across {facts.TotalScheduled} scheduled occurrences.",
                 "Review my week", $"Show my weekly retrospective from {facts.PeriodFrom:yyyy-MM-dd} to {facts.PeriodTo:yyyy-MM-dd}."),
             (ProactiveTrigger.MorningPlan, true) => new(
                 $"Hoje tem {n} {(n == 1 ? "hábito previsto" : "hábitos previstos")}; estou pronta para ajudar você a escolher por onde começar.",

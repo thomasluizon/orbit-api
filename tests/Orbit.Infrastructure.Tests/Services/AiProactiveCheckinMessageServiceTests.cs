@@ -20,7 +20,7 @@ public sealed class AiProactiveCheckinMessageServiceTests
     }
 
     private static ProactiveFacts Facts(ProactiveTrigger trigger) => new(trigger, ["Read"], 2, 3, true,
-        Guid.NewGuid(), "Learn", "behind", 4, 240, new(2030, 10, 7), new(2030, 10, 13), 5, 7);
+        Guid.NewGuid(), "Learn", "behind", 4, 240, new(2030, 10, 7), new(2030, 10, 13), 5, 7, 0);
 
     [Theory]
     [MemberData(nameof(LocalesAndTriggers))]

@@ -16881,11 +16881,11 @@
           "habitCount": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
+              "null",
               "integer",
               "string"
             ],
-            "format": "int32",
-            "default": 0
+            "format": "int32"
           },
           "currentStreak": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
@@ -16961,6 +16961,15 @@
             "format": "int32"
           },
           "totalScheduled": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "badHabitSlips": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
               "null",

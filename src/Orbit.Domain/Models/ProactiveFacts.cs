@@ -5,7 +5,7 @@ namespace Orbit.Domain.Models;
 public sealed record ProactiveFacts(
     ProactiveTrigger Trigger,
     IReadOnlyList<string> HabitTitles,
-    int HabitCount = 0,
+    int? HabitCount = null,
     int? CurrentStreak = null,
     bool HasEstablishedStreak = false,
     Guid? GoalId = null,
@@ -16,6 +16,7 @@ public sealed record ProactiveFacts(
     DateOnly? PeriodFrom = null,
     DateOnly? PeriodTo = null,
     int? TotalCompletions = null,
-    int? TotalScheduled = null);
+    int? TotalScheduled = null,
+    int? BadHabitSlips = null);
 
 public sealed record ProactiveMessage(string Text, string ActionLabel, string ActionPrompt);

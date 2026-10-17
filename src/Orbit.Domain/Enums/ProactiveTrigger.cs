@@ -15,6 +15,5 @@ public enum ProactiveEndReason
     WindowClosed,
     ConditionResolved,
     Acted,
-    DayEnded,
-    AccessEnded
+    DayEnded
 }

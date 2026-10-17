@@ -40,6 +40,8 @@ public sealed class ProactiveEngineServiceTests
             if (condition) h.SeedTrigger(trigger);
             await h.Run();
             h.Db.ProactiveItems.Any(i => i.Trigger == trigger).Should().Be(expected, $"{trigger} at {hour} with condition {condition}");
+            if (!ProactiveRules.MayPush(trigger))
+                h.Db.ProactiveItems.Any(i => i.Trigger == trigger && i.PushedAtUtc.HasValue).Should().BeFalse();
         }
     }
 
@@ -95,6 +97,40 @@ public sealed class ProactiveEngineServiceTests
         await h.Run();
         h.Db.ProactiveItems.Any(i => i.Trigger == ProactiveTrigger.BusyCalendarDay).Should().BeTrue();
         ProactiveEngineService.TimedRanges([Event(8, 12) with { StartTime = null }], Today, TimeZoneInfo.Utc).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void BusyCalendar_DurationCountsElapsedHoursAcrossDst()
+    {
+        var day = new DateOnly(2030, 11, 3);
+        var item = Event(5, 9, day);
+        var ranges = ProactiveEngineService.TimedRanges([item], day,
+            TimeZoneInfo.FindSystemTimeZoneById("America/New_York"));
+        ranges.Should().ContainSingle();
+        (ranges[0].End - ranges[0].Start).TotalHours.Should().Be(4);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task WeeklyReview_IncludesWeeksWithOnlyBadOrChildHabits(bool badHabit)
+    {
+        using var h = new Harness(8);
+        h.User.SetWeekStartDay(1);
+        Guid? parentId = null;
+        if (!badHabit)
+        {
+            var parent = Habit.Create(new HabitCreateParams(h.User.Id, "Routine", FrequencyUnit.Day, 1, Today.AddDays(1))).Value;
+            h.Db.Habits.Add(parent);
+            parentId = parent.Id;
+        }
+        var habit = Habit.Create(new HabitCreateParams(h.User.Id, "Read", FrequencyUnit.Day, 1,
+            Today.AddDays(-20), IsBadHabit: badHabit, ParentHabitId: parentId,
+            CreatedAtUtc: new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc))).Value;
+        h.Db.Habits.Add(habit);
+        await h.Run();
+        h.Db.ProactiveItems.Any(i => i.Trigger == ProactiveTrigger.WeeklyReview).Should().BeTrue();
+        h.Db.ProactiveItems.Any(i => i.Trigger == ProactiveTrigger.MorningPlan).Should().BeTrue();
     }
 
     [Fact]
@@ -201,6 +237,8 @@ public sealed class ProactiveEngineServiceTests
         h.SeedTrigger(ProactiveTrigger.EveningCheckin);
         await h.Run();
         var item = h.Db.ProactiveItems.Single();
+        await h.Engine.GetCurrentAsync(h.User.Id, default);
+        h.Clock.Now = h.Clock.Now.AddMinutes(5);
         (await h.Engine.RecordOutcomeAsync(Guid.NewGuid(), item.Id, false, default)).ErrorCode.Should().Be(ErrorCodes.ProactiveItemNotFound);
         (await h.Engine.RecordOutcomeAsync(Guid.NewGuid(), item.Id, true, default)).ErrorCode.Should().Be(ErrorCodes.ProactiveItemNotFound);
         (await h.Engine.RecordOutcomeAsync(h.User.Id, item.Id, false, default)).IsSuccess.Should().BeTrue();
@@ -214,6 +252,11 @@ public sealed class ProactiveEngineServiceTests
         await h.Engine.RecordOutcomeAsync(h.User.Id, item.Id, true, default);
         item.ActedAtUtc.Should().Be(acted);
         item.EndReason.Should().Be(ProactiveEndReason.Acted);
+        h.Analytics.Received(1).CaptureUserEvent(h.User.Id, "astra_proactive_item_created", Arg.Any<string>(),
+            Arg.Is<IReadOnlyDictionary<string, object>?>(p => p != null && (bool)p["pushed"]));
+        h.Analytics.Received(1).CaptureUserEvent(h.User.Id, "astra_proactive_item_ended", Arg.Any<string>(),
+            Arg.Is<IReadOnlyDictionary<string, object>?>(p => p != null && (string)p["outcome"] == "acted"
+                && (double)p["minutes_from_shown_to_opened"] == 5));
         (await h.Engine.GetCurrentAsync(h.User.Id, default)).Should().BeNull();
     }
 
@@ -322,6 +365,7 @@ public sealed class ProactiveEngineServiceTests
         public FixedClock Clock { get; }
         public ICalendarEventFetcher Calendar { get; } = Substitute.For<ICalendarEventFetcher>();
         public IPushNotificationService Push { get; } = Substitute.For<IPushNotificationService>();
+        public IProductAnalytics Analytics { get; } = Substitute.For<IProductAnalytics>();
         public ProactiveEngineService Engine { get; }
 
         public Harness(int hour, CountingDbCommandInterceptor? interceptor = null, bool lifetime = true)
@@ -340,7 +384,7 @@ public sealed class ProactiveEngineServiceTests
             tokens.TryRefreshAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(new GoogleTokenRefreshOutcome("access", GoogleTokenRefreshResult.Success, null));
             var dates = new UserDateService(Substitute.For<IGenericRepository<User>>(),
                 new MemoryDistributedCache(Options.Create(new MemoryDistributedCacheOptions())), Clock);
-            Engine = new(Db, Clock, messages, Push, Calendar, tokens, Substitute.For<IProductAnalytics>(), dates,
+            Engine = new(Db, Clock, messages, Push, Calendar, tokens, Analytics, dates,
                 NullLogger<ProactiveEngineService>.Instance);
         }
 
