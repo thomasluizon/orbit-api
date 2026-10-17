@@ -37,7 +37,8 @@ public class OrbitDbContext : DbContext
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
     public DbSet<SentReminder> SentReminders => Set<SentReminder>();
     public DbSet<SentSlipAlert> SentSlipAlerts => Set<SentSlipAlert>();
-    public DbSet<SentProactiveCheckin> SentProactiveCheckins => Set<SentProactiveCheckin>();
+    public DbSet<ProactiveItem> ProactiveItems => Set<ProactiveItem>();
+    public DbSet<ProactiveCalendarDay> ProactiveCalendarDays => Set<ProactiveCalendarDay>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<Goal> Goals => Set<Goal>();
     public DbSet<GoalProgressLog> GoalProgressLogs => Set<GoalProgressLog>();
@@ -108,7 +109,7 @@ public class OrbitDbContext : DbContext
         ConfigurePushSubscriptionEntity(modelBuilder);
         ConfigureSentReminderEntity(modelBuilder);
         ConfigureSentSlipAlertEntity(modelBuilder);
-        ConfigureSentProactiveCheckinEntity(modelBuilder);
+        ConfigureProactiveEntities(modelBuilder);
         ConfigureProcessedPlayNotificationEntity(modelBuilder);
         ConfigureProcessedStripeEventEntity(modelBuilder);
         ConfigureProcessedRequestEntity(modelBuilder);
@@ -232,11 +233,29 @@ public class OrbitDbContext : DbContext
         });
     }
 
-    private static void ConfigureSentProactiveCheckinEntity(ModelBuilder modelBuilder)
+    private static void ConfigureProactiveEntities(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<SentProactiveCheckin>(entity =>
+        modelBuilder.Entity<User>().Ignore(u => u.EffectiveProactivePushEnabled);
+        modelBuilder.Entity<ProactiveItem>(entity =>
         {
-            entity.HasIndex(a => new { a.UserId, a.Date }).IsUnique();
+            entity.HasIndex(a => new { a.UserId, a.Trigger, a.LocalDate }).IsUnique();
+            entity.HasIndex(a => new { a.UserId, a.LocalDate }).IsUnique()
+                .HasFilter("\"PushedAtUtc\" IS NOT NULL");
+            entity.HasIndex(a => new { a.UserId, a.Trigger, a.EndedAtUtc });
+            entity.Property(a => a.Text).HasMaxLength(140).IsRequired();
+            entity.Property(a => a.ActionLabel).IsRequired();
+            entity.Property(a => a.ActionPrompt).IsRequired();
+            entity.Property(a => a.FactsJson).IsRequired();
+            entity.Ignore(a => a.Ignored);
+            entity.Property(a => a.ShownAtUtc).IsConcurrencyToken();
+            entity.Property(a => a.OpenedAtUtc).IsConcurrencyToken();
+            entity.Property(a => a.ActedAtUtc).IsConcurrencyToken();
+            entity.Property(a => a.EndedAtUtc).IsConcurrencyToken();
+            entity.HasOne<User>().WithMany().HasForeignKey(a => a.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<ProactiveCalendarDay>(entity =>
+        {
+            entity.HasIndex(a => new { a.UserId, a.LocalDate }).IsUnique();
             entity.HasOne<User>().WithMany().HasForeignKey(a => a.UserId).OnDelete(DeleteBehavior.Cascade);
         });
     }

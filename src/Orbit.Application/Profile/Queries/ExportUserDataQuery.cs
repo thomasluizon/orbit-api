@@ -29,7 +29,8 @@ public record ExportUserDataRepositories(
     IGenericRepository<Cheer> Cheers,
     IGenericRepository<BlockedUser> BlockedUsers,
     IGenericRepository<Report> Reports,
-    IGenericRepository<FriendFeedEvent> FriendFeedEvents);
+    IGenericRepository<FriendFeedEvent> FriendFeedEvents,
+    IGenericRepository<ProactiveItem> ProactiveItems);
 
 public class ExportUserDataQueryHandler(
     ExportUserDataRepositories repos,
@@ -80,6 +81,8 @@ public class ExportUserDataQueryHandler(
         var friendFeedEvents = await repos.FriendFeedEvents.FindAsync(
             e => e.ActorUserId == request.UserId, cancellationToken);
 
+        var proactiveItems = await repos.ProactiveItems.FindAsync(i => i.UserId == request.UserId, cancellationToken);
+
         var exportedAtUtc = DateTime.UtcNow;
         var export = new UserDataExport(
             exportedAtUtc,
@@ -92,8 +95,9 @@ public class ExportUserDataQueryHandler(
                 user.ColorScheme,
                 user.AiMemoryEnabled,
                 user.AiSummaryEnabled,
-                user.ProactiveAstraEnabled,
-                user.Uses24HourClockPreference),
+                user.EffectiveProactivePushEnabled,
+                user.Uses24HourClockPreference,
+                user.ProactiveAstraEnabled),
             new ExportedSubscription(
                 user.Plan.ToString(),
                 user.IsLifetimePro,
@@ -148,7 +152,11 @@ public class ExportUserDataQueryHandler(
             friendFeedEvents
                 .OrderBy(e => e.CreatedAtUtc)
                 .Select(e => new ExportedFriendFeedEvent(e.Type.ToString(), e.Value, e.AchievementId, e.CreatedAtUtc))
-                .ToList());
+                .ToList(),
+            proactiveItems.OrderBy(i => i.CreatedAtUtc).Select(i => new ExportedProactiveItem(
+                i.Id, i.Trigger.ToString(), i.LocalDate, i.Text, i.ActionLabel, i.ActionPrompt,
+                i.CreatedAtUtc, i.ShownAtUtc, i.PushedAtUtc, i.OpenedAtUtc, i.ActedAtUtc,
+                i.EndedAtUtc, i.EndReason?.ToString())).ToList());
 
         return Result.Success(export);
     }

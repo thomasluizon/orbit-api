@@ -13,6 +13,7 @@ public static class ResultActionResultExtensions
         [ErrorCodes.NoPermission] = StatusCodes.Status403Forbidden,
         [ErrorCodes.HabitNotOwned] = StatusCodes.Status403Forbidden,
 
+        [ErrorCodes.ProactiveItemNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.UserNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.SkipNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.HabitNotFound] = StatusCodes.Status404NotFound,

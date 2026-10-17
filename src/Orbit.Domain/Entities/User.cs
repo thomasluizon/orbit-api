@@ -20,7 +20,8 @@ public partial class User : Entity
     public string? TimeZone { get; private set; }
     public bool AiMemoryEnabled { get; private set; } = true;
     public bool AiSummaryEnabled { get; private set; } = true;
-    public bool ProactiveAstraEnabled { get; private set; } = false;
+    public bool? ProactiveAstraEnabled { get; private set; }
+    public bool EffectiveProactivePushEnabled => HasProAccess && (ProactiveAstraEnabled ?? true);
     public bool HasCompletedOnboarding { get; private set; } = false;
     public bool HasCompletedTour { get; private set; } = false;
     public bool HasCreatedFirstHabit { get; private set; } = false;

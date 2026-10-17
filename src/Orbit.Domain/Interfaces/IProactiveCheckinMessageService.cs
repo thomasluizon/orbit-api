@@ -1,13 +1,8 @@
-using Orbit.Domain.Common;
+using Orbit.Domain.Models;
 
 namespace Orbit.Domain.Interfaces;
 
 public interface IProactiveCheckinMessageService
 {
-    Task<Result<(string Title, string Body)>> GenerateMessageAsync(
-        string displayName,
-        IReadOnlyList<string> offTrackHabitTitles,
-        int currentStreak,
-        string language,
-        CancellationToken cancellationToken = default);
+    Task<ProactiveMessage> GenerateAsync(ProactiveFacts facts, string language, CancellationToken cancellationToken);
 }
