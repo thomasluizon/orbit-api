@@ -17,9 +17,10 @@ public record NotificationItemDto(
 
 public record GetNotificationsResponse(
     IReadOnlyList<NotificationItemDto> Items,
-    int UnreadCount);
+    int UnreadCount,
+    int? TotalCount = null);
 
-public record GetNotificationsQuery(Guid UserId) : IRequest<Result<GetNotificationsResponse>>;
+public record GetNotificationsQuery(Guid UserId, int Offset = 0, int Limit = AppConstants.MaxNotificationsReturned) : IRequest<Result<GetNotificationsResponse>>;
 
 public class GetNotificationsQueryHandler(
     IGenericRepository<Notification> notificationRepository) : IRequestHandler<GetNotificationsQuery, Result<GetNotificationsResponse>>
@@ -28,7 +29,8 @@ public class GetNotificationsQueryHandler(
     {
         var notifications = await notificationRepository.FindAsync(
             n => n.UserId == request.UserId,
-            q => q.OrderByDescending(n => n.CreatedAtUtc).Take(AppConstants.MaxNotificationsReturned),
+            q => q.OrderByDescending(n => n.CreatedAtUtc).ThenByDescending(n => n.Id)
+                .Skip(request.Offset).Take(request.Limit),
             cancellationToken);
 
         var items = notifications
@@ -39,6 +41,10 @@ public class GetNotificationsQueryHandler(
             n => n.UserId == request.UserId && !n.IsRead,
             cancellationToken);
 
-        return Result.Success(new GetNotificationsResponse(items, unreadCount));
+        var totalCount = await notificationRepository.CountAsync(
+            n => n.UserId == request.UserId,
+            cancellationToken);
+
+        return Result.Success(new GetNotificationsResponse(items, unreadCount, totalCount));
     }
 }

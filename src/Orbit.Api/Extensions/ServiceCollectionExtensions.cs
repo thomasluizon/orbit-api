@@ -167,10 +167,12 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.GoogleCalendarSyncSuggestion>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Tag>>()));
+        builder.Services.AddScoped<IHabitSkipUndoWriter, HabitSkipUndoWriter>();
         builder.Services.AddScoped<Orbit.Application.Habits.Commands.SkipHabitRepositories>(sp =>
             new Orbit.Application.Habits.Commands.SkipHabitRepositories(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.HabitLog>>()));
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.HabitLog>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.HabitSkipUndo>>()));
         builder.Services.AddScoped<Orbit.Application.Calendar.Queries.GetCalendarEventsRepositories>(sp =>
             new Orbit.Application.Calendar.Queries.GetCalendarEventsRepositories(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),

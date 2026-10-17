@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Orbit.Infrastructure.Services;
+using Orbit.Application.Common;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
@@ -24,7 +25,7 @@ public class ImageValidationServiceTests
         var result = await _sut.ValidateAsync(stream, "large.jpg", length: 21_000_000L);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("exceeds");
+        result.ErrorCode.Should().Be(ErrorCodes.ImageTooLarge);
     }
 
     [Fact]
@@ -35,7 +36,7 @@ public class ImageValidationServiceTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain(".gif");
-        result.Error.Should().Contain("not allowed");
+        result.ErrorCode.Should().Be(ErrorCodes.ImageExtensionNotAllowed);
     }
 
     [Fact]
@@ -45,7 +46,7 @@ public class ImageValidationServiceTests
         var result = await _sut.ValidateAsync(stream, "noextension", length: 1024L);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("not allowed");
+        result.ErrorCode.Should().Be(ErrorCodes.ImageExtensionNotAllowed);
     }
 
     [Fact]

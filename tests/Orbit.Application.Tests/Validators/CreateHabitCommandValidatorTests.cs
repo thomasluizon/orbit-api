@@ -238,7 +238,7 @@ public class CreateHabitCommandValidatorTests
 
         var result = _validator.TestValidate(command);
 
-        result.Errors.Should().Contain(e => e.ErrorMessage.Contains("Sub-habit title must not be empty"));
+        result.Errors.Should().Contain(e => e.ErrorMessage.Contains("Give the sub-habit a title"));
     }
 
     [Fact]
@@ -248,7 +248,7 @@ public class CreateHabitCommandValidatorTests
 
         var result = _validator.TestValidate(command);
 
-        result.Errors.Should().Contain(e => e.ErrorMessage.Contains("Sub-habit title must not exceed 200 characters"));
+        result.Errors.Should().Contain(e => e.ErrorMessage.Contains("Shorten the sub-habit title to 200 characters or fewer"));
     }
 
     [Fact]

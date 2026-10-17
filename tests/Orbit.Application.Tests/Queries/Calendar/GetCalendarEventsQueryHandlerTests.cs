@@ -89,7 +89,7 @@ public class GetCalendarEventsQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("User not found");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
         result.ErrorCode.Should().Be("USER_NOT_FOUND");
     }
 
@@ -105,7 +105,7 @@ public class GetCalendarEventsQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Google Calendar not connected");
+        result.Error.Should().Be(ErrorMessages.CalendarNotConnected.Message);
     }
 
     [Fact]
@@ -182,7 +182,7 @@ public class GetCalendarEventsQueryHandlerTests
         var query = new GetCalendarEventsQuery(UserId);
         var result = await _handler.Handle(query, CancellationToken.None);
 
-        result.Error.Should().Contain("sign in with Google");
+        result.Error.Should().Be(ErrorMessages.CalendarNotConnected.Message);
     }
 
     [Fact]
@@ -223,6 +223,60 @@ public class GetCalendarEventsQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_IncludeImported_ReturnsImportedAndAvailableEvents()
+    {
+        var user = CreateTestUser();
+        _userRepo.GetByIdAsync(user.Id, Arg.Any<CancellationToken>()).Returns(user);
+        StubSuccessfulFetch(user,
+            new("evt_already", "Existing", null, "2026-05-01", null, null, false, null, []),
+            new("evt_new", "New", null, "2026-05-01", null, null, false, null, []));
+        var habit = Habit.Create(new HabitCreateParams(
+            user.Id, "Existing", Domain.Enums.FrequencyUnit.Week, 1,
+            DueDate: new DateOnly(2026, 5, 1), GoogleEventId: "evt_already")).Value;
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { habit }.AsReadOnly());
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(user.Id, IncludeImported: true), CancellationToken.None);
+
+        result.Value.Should().HaveCount(2);
+        result.Value[0].IsImported.Should().BeTrue();
+        result.Value[0].ImportedHabitId.Should().Be(habit.Id);
+        result.Value[1].IsImported.Should().BeFalse();
+        result.Value[1].ImportedHabitId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_IncludeImported_DeletedAndOtherUsersHabitsDoNotMarkEventsImported()
+    {
+        var user = CreateTestUser();
+        _userRepo.GetByIdAsync(user.Id, Arg.Any<CancellationToken>()).Returns(user);
+        user.SetSelectedCalendars(["selected-calendar"]);
+        StubSuccessfulFetch(user,
+            new("evt_deleted", "Deleted", null, "2026-05-01", null, null, false, null, []),
+            new("evt_other", "Other", null, "2026-05-01", null, null, false, null, []));
+        var deletedHabit = Habit.Create(new HabitCreateParams(
+            user.Id, "Deleted", Domain.Enums.FrequencyUnit.Week, 1,
+            DueDate: new DateOnly(2026, 5, 1), GoogleEventId: "evt_deleted")).Value;
+        deletedHabit.SoftDelete(new DateTime(2026, 5, 2, 0, 0, 0, DateTimeKind.Utc));
+        var otherHabit = Habit.Create(new HabitCreateParams(
+            Guid.NewGuid(), "Other", Domain.Enums.FrequencyUnit.Week, 1,
+            DueDate: new DateOnly(2026, 5, 1), GoogleEventId: "evt_other")).Value;
+        var habits = new List<Habit> { deletedHabit, otherHabit };
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => habits.Where(call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile()).ToList());
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(user.Id, IncludeImported: true), CancellationToken.None);
+
+        result.Value.Should().HaveCount(2);
+        result.Value.Should().OnlyContain(item => item.IsImported == false && item.ImportedHabitId == null);
+        await _eventFetcher.Received(1).FetchAsync(
+            "valid-access-token",
+            Arg.Is<IReadOnlyCollection<string>?>(ids => ids != null && ids.SequenceEqual(new[] { "selected-calendar" })),
+            null,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_ShiftedMultiDayAlternateWeekRule_OmitsEvent()
     {
         var user = CreateTestUser();
@@ -256,6 +310,33 @@ public class GetCalendarEventsQueryHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().BeEmpty();
+
+        var unlinkedOptInResult = await _handler.Handle(
+            new GetCalendarEventsQuery(UserId, IncludeImported: true), CancellationToken.None);
+        unlinkedOptInResult.IsSuccess.Should().BeTrue();
+        unlinkedOptInResult.Value.Should().BeEmpty();
+
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Tokyo breakfast", Domain.Enums.FrequencyUnit.Week, 1,
+            DueDate: new DateOnly(2026, 4, 15), GoogleEventId: "evt_tokyo")).Value;
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(call => new[] { habit }
+                .Where(call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile()).ToList());
+
+        var importedResult = await _handler.Handle(
+            new GetCalendarEventsQuery(UserId, IncludeImported: true), CancellationToken.None);
+
+        importedResult.IsSuccess.Should().BeTrue();
+        importedResult.Value.Should().ContainSingle();
+        importedResult.Value[0].Id.Should().Be("evt_tokyo");
+        importedResult.Value[0].IsImported.Should().BeTrue();
+        importedResult.Value[0].ImportedHabitId.Should().Be(habit.Id);
+
+        var linkedDefaultResult = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+        linkedDefaultResult.IsSuccess.Should().BeTrue();
+        linkedDefaultResult.Value.Should().BeEmpty();
     }
 
     [Fact]
@@ -1209,7 +1290,7 @@ public class GetCalendarEventsQueryHandlerTests
         var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Google Calendar not connected");
+        result.Error.Should().Be(ErrorMessages.CalendarNotConnected.Message);
         user.GoogleAccessToken.Should().BeNull();
         user.GoogleRefreshToken.Should().BeNull();
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
@@ -1247,7 +1328,7 @@ public class GetCalendarEventsQueryHandlerTests
         var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("Google Calendar connection expired. Please reconnect.");
+        result.Error.Should().Be(ErrorMessages.CalendarReconnectRequired.Message);
         user.GoogleAccessToken.Should().BeNull();
         user.GoogleRefreshToken.Should().BeNull();
         await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());

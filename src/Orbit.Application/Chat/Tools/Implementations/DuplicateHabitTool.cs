@@ -7,7 +7,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class DuplicateHabitTool(
     IMediator mediator,
-    IGenericRepository<Habit>? habitRepository = null) : IAiTool
+    IGenericRepository<Habit>? habitRepository = null) : IAiTool, IArgumentCheckTool
 {
     public string Name => "duplicate_habit";
 
@@ -24,14 +24,23 @@ public class DuplicateHabitTool(
         required = new[] { "habit_id" }
     };
 
-    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
+    public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ExecuteCoreAsync(args, userId, ct, checkOnly: false);
+
+    public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ChatToolArgumentCheck.CheckAsync(this, args, () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+
+    private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         if (!args.TryGetProperty("habit_id", out var habitIdEl) ||
             !Guid.TryParse(habitIdEl.GetString(), out var habitId))
             return new ToolResult(false, Error: "habit_id is required and must be a valid GUID.");
 
-        var result = await mediator.Send(
-            new Orbit.Application.Habits.Commands.DuplicateHabitCommand(userId, habitId), ct);
+        var command = new Orbit.Application.Habits.Commands.DuplicateHabitCommand(userId, habitId);
+        if (checkOnly)
+            return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
+
+        var result = await mediator.Send(command, ct);
 
         if (result.IsFailure)
             return ToolResult.FromFailure(result);

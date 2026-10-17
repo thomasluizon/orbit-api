@@ -26,6 +26,7 @@ public class BulkSkipHabitsCommandHandlerTests
 
     public BulkSkipHabitsCommandHandlerTests()
     {
+        _habitRepo.TryRefreshAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>()).Returns(true);
         _handler = new BulkSkipHabitsCommandHandler(
             _habitRepo, _habitLogRepo, _userDateService, _unitOfWork, _cache);
 
@@ -144,7 +145,7 @@ public class BulkSkipHabitsCommandHandlerTests
     public async Task Handle_CompletedHabit_ReportsFailedItem()
     {
         var habit = Habit.Create(new HabitCreateParams(UserId, "Task", null, null, DueDate: Today)).Value;
-        habit.Log(Today);        SetupHabitsForUser(new List<Habit> { habit });
+        habit.Log(Today); SetupHabitsForUser(new List<Habit> { habit });
 
         var items = new List<BulkSkipItem> { new(habit.Id) };
         var command = new BulkSkipHabitsCommand(UserId, items);
@@ -153,7 +154,7 @@ public class BulkSkipHabitsCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Results[0].Status.Should().Be(BulkItemStatus.Failed);
-        result.Value.Results[0].Error.Should().Contain("completed");
+        result.Value.Results[0].Error.Should().Be(ErrorMessages.CannotSkipCompletedHabit.Message);
     }
 
     [Fact]
@@ -170,7 +171,7 @@ public class BulkSkipHabitsCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Results[0].Status.Should().Be(BulkItemStatus.Failed);
-        result.Value.Results[0].Error.Should().Contain("future");
+        result.Value.Results[0].Error.Should().Be(ErrorMessages.CannotSkipFutureDate.Message);
     }
 
     [Fact]
@@ -188,7 +189,7 @@ public class BulkSkipHabitsCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Results[0].Status.Should().Be(BulkItemStatus.Failed);
-        result.Value.Results[0].Error.Should().Contain("not yet due");
+        result.Value.Results[0].Error.Should().Be(ErrorMessages.HabitNotYetDue.Message);
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Orbit.Application.Chat.Models;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Models;
 using Orbit.Domain.ValueObjects;
@@ -12,6 +13,8 @@ public partial class ProcessUserChatCommandHandler
         private readonly List<string> _relatedSurfaces = [];
         private readonly HashSet<string> _seenRelatedSurfaces = new(StringComparer.Ordinal);
         private readonly HashSet<string> _calledToolNames = new(StringComparer.Ordinal);
+        private readonly HashSet<(string Domain, string Access)> _seenToolSteps = [];
+        private readonly SemaphoreSlim _toolStepGate = new(1, 1);
 
         public List<ActionResult> ActionResults { get; } = [];
         public List<AgentOperationResult> OperationResults { get; } = [];
@@ -24,11 +27,36 @@ public partial class ProcessUserChatCommandHandler
         /// </summary>
         public IReadOnlyCollection<string> CalledToolNames => _calledToolNames;
 
+        public async Task EmitToolStepAsync(string domain, string access, Func<ChatStreamEvent, Task> streamSink)
+        {
+            await _toolStepGate.WaitAsync();
+            try
+            {
+                if (_seenToolSteps.Add((domain, access)))
+                    await streamSink(ChatStreamEvent.Step(domain, access));
+            }
+            finally
+            {
+                _toolStepGate.Release();
+            }
+        }
+
         /// <summary>
         /// App surface IDs (e.g. "today", "gamification") surfaced by read-only tools such as
         /// describe_feature, deduplicated in first-seen order. The client maps these to deep links.
         /// </summary>
         public IReadOnlyList<string> RelatedSurfaces => _relatedSurfaces;
+
+        public T? LastSuccessfulPayload<T>(string toolName, Func<T, bool>? predicate = null) where T : class =>
+            OperationResults
+                .LastOrDefault(operation => operation.OperationId == toolName
+                    && operation.Status == AgentOperationStatus.Succeeded
+                    && operation.Payload is T payload
+                    && (predicate is null || predicate(payload)))?.Payload as T;
+
+        public AgentOperationResult? LastSuccessfulOperation(string toolName) =>
+            OperationResults.LastOrDefault(operation => operation.OperationId == toolName
+                && operation.Status == AgentOperationStatus.Succeeded);
 
         public void SanitizeFailedActions(string error)
         {

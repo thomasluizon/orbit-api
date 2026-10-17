@@ -2,7 +2,9 @@ using FluentAssertions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Application.Common;
+using Orbit.Application.Chat;
 using Orbit.Application.Profile.Queries;
+using Orbit.Application.Tests.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -14,6 +16,7 @@ namespace Orbit.Application.Tests.Queries.Profile;
 public class GetProfileQueryHandlerTests
 {
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
+    private readonly IGenericRepository<ApiKey> _apiKeyRepo = Substitute.For<IGenericRepository<ApiKey>>();
     private readonly IGenericRepository<StreakFreeze> _streakFreezeRepo = Substitute.For<IGenericRepository<StreakFreeze>>();
     private readonly IHabitLogReader _habitLogReader = Substitute.For<IHabitLogReader>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
@@ -30,6 +33,7 @@ public class GetProfileQueryHandlerTests
             .Returns(Array.Empty<string>());
         _handler = new GetProfileQueryHandler(
             _userRepo,
+            _apiKeyRepo,
             _streakFreezeRepo,
             _habitLogReader,
             _userDateService,
@@ -63,6 +67,62 @@ public class GetProfileQueryHandlerTests
             Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
             Arg.Any<CancellationToken>())
             .Returns(new List<StreakFreeze>().AsReadOnly());
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(3)]
+    public async Task Handle_CountsOnlyCallersActiveApiKeys(int activeCount)
+    {
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(CreateTestUser());
+        StubFreezeRepoEmpty();
+
+        var keys = Enumerable.Range(0, activeCount)
+            .Select(index => ApiKey.Create(UserId, $"Active {index}").Value.Entity)
+            .ToList();
+        var revoked = ApiKey.Create(UserId, "Revoked").Value.Entity;
+        revoked.Revoke();
+        keys.Add(revoked);
+        keys.Add(ApiKey.Create(Guid.NewGuid(), "Other account").Value.Entity);
+        var expired = ApiKey.Create(UserId, "Expired").Value.Entity;
+        typeof(ApiKey).GetProperty(nameof(ApiKey.ExpiresAtUtc))!
+            .SetValue(expired, DateTime.UtcNow.AddMinutes(-1));
+        keys.Add(expired);
+
+        _apiKeyRepo.CountAsync(Arg.Any<Expression<Func<ApiKey, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => keys.Count(call.ArgAt<Expression<Func<ApiKey, bool>>>(0).Compile()));
+
+        var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.ActiveApiKeyCount.Should().Be(activeCount);
+        await _apiKeyRepo.Received(1).CountAsync(
+            Arg.Any<Expression<Func<ApiKey, bool>>>(), Arg.Any<CancellationToken>());
+
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result.Value, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        json.RootElement.GetProperty("activeApiKeyCount").GetInt32().Should().Be(activeCount);
+        json.RootElement.EnumerateObject()
+            .Where(property => property.Name.Contains("key", StringComparison.OrdinalIgnoreCase))
+            .Select(property => property.Name)
+            .Should().Equal("activeApiKeyCount");
+    }
+
+    [Fact]
+    public async Task FreePlanAccountCard_ContainsNoBillingOrUpgradeFields()
+    {
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(CreateFreeUser());
+        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(10);
+        StubFreezeRepoEmpty();
+
+        var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var card = AccountRowsCardBuilder.Plan(result.Value);
+        card.Rows.Single(row => row.Key == "plan").Value.Should().Be("Free");
+        var json = JsonSerializer.Serialize(card, new JsonSerializerOptions(JsonSerializerDefaults.Web)).ToLowerInvariant();
+        json.Should().NotContain("price").And.NotContain("plans")
+            .And.NotContain("checkout").And.NotContain("portal").And.NotContain("upgrade");
     }
 
     [Fact]
@@ -117,7 +177,7 @@ public class GetProfileQueryHandlerTests
             user.LongestStreak,
             StreakFreezesAvailable = 3,
             user.ThemePreference,
-            user.ColorScheme,
+            ColorScheme = "orange",
             user.GoogleCalendarAutoSyncEnabled,
             GoogleCalendarAutoSyncStatus = Orbit.Domain.Enums.GoogleCalendarAutoSyncStatus.Idle,
             user.GoogleCalendarLastSyncedAt,
@@ -313,7 +373,7 @@ public class GetProfileQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("User not found");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
         result.ErrorCode.Should().Be("USER_NOT_FOUND");
         var readValue = () => result.Value;
         readValue.Should().Throw<InvalidOperationException>();
@@ -444,6 +504,26 @@ public class GetProfileQueryHandlerTests
         result.Value.Uses24HourClock.Should().BeFalse();
     }
 
+    [Theory]
+    [InlineData("America/New_York", true)]
+    [InlineData("America/Sao_Paulo", false)]
+    public async Task Handle_StoredClockChoiceOverridesTimeZone(string timeZone, bool uses24HourClock)
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone(timeZone);
+        user.SetClockFormat(uses24HourClock);
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(20);
+        _streakFreezeRepo.FindAsync(
+            Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<StreakFreeze>().AsReadOnly());
+
+        var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
+
+        result.Value.Uses24HourClock.Should().Be(uses24HourClock);
+    }
+
     [Fact]
     public async Task Handle_ProUser_CanViewGamificationTrue()
     {
@@ -498,6 +578,55 @@ public class GetProfileQueryHandlerTests
 
         result.Value.Level.Should().Be(12);
         result.Value.LevelTitle.Should().Be("Legend");
+    }
+
+    [Theory]
+    [InlineData("purple")]
+    [InlineData("blue")]
+    [InlineData("green")]
+    [InlineData("rose")]
+    [InlineData("orange")]
+    [InlineData("cyan")]
+    public async Task Handle_LegacyStoredColorScheme_ResolvesToGrantedAccent(string storedColorScheme)
+    {
+        var user = CreateTestUser().WithStoredColorScheme(storedColorScheme);
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(20);
+        StubFreezeRepoEmpty();
+
+        var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.ColorScheme.Should().Be("orange");
+    }
+
+    [Fact]
+    public async Task Handle_NoStoredColorScheme_ResolvesToGrantedAccent()
+    {
+        var user = CreateTestUser();
+        user.ColorScheme.Should().BeNull();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(20);
+        StubFreezeRepoEmpty();
+
+        var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.ColorScheme.Should().Be("orange");
+    }
+
+    [Fact]
+    public async Task Handle_FreeAccountWithLegacyStoredColorScheme_ResolvesToGrantedAccent()
+    {
+        var user = CreateFreeUser().WithStoredColorScheme("rose");
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(20);
+        StubFreezeRepoEmpty();
+
+        var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.ColorScheme.Should().Be("orange");
     }
 
     private sealed record LegacyProfileResponse(string Name, string Email);

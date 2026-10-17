@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
@@ -39,17 +40,23 @@ public class BulkSkipHabitsCommandHandler(
         var weekStartDay = await userDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
         var results = new List<BulkSkipItemResult>();
 
-        var habitMap = await BulkHabitLoader.LoadHabitsWithRecentLogsAsync(
-            habitRepository, request.Items.Select(i => i.HabitId), request.UserId, today, cancellationToken);
-        var dueDateResolution = await HabitDueDateResolutionLoader.LoadAsync(
-            habitLogRepository,
-            habitMap.Values,
-            today.AddDays(-AppConstants.MaxRangeDays),
-            cancellationToken);
-
+        var refreshFailed = false;
         /** A skip advances a due date or writes a skip log, both inputs a streak repair reads. */
         await HabitCeilingLock.ExecuteAsync(unitOfWork, request.UserId, async ct =>
         {
+            var habitMap = await BulkHabitLoader.LoadHabitsWithRecentLogsAsync(
+                habitRepository, request.Items.Select(i => i.HabitId), request.UserId, today, ct);
+            foreach (var habit in habitMap.Values)
+            {
+                if (!await habitRepository.TryRefreshAsync(habit, ct))
+                {
+                    refreshFailed = true;
+                    return;
+                }
+            }
+            var dueDateResolution = await HabitDueDateResolutionLoader.LoadAsync(
+                habitLogRepository, habitMap.Values, today.AddDays(-AppConstants.MaxRangeDays), ct);
+
             for (int i = 0; i < request.Items.Count; i++)
             {
                 var item = request.Items[i];
@@ -81,9 +88,34 @@ public class BulkSkipHabitsCommandHandler(
             await unitOfWork.SaveChangesAsync(ct);
         }, cancellationToken);
 
+        if (refreshFailed)
+            return Result.Failure<BulkSkipResult>(ErrorMessages.ConcurrentUpdateConflict);
+
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
         return Result.Success(new BulkSkipResult(results));
+    }
+
+    internal static async Task<Result> CheckArgumentsAsync(BulkSkipHabitsCommand request,
+        IGenericRepository<Habit> habits, IGenericRepository<HabitLog> logs, IUserDateService dates, CancellationToken ct)
+    {
+        var today = await dates.GetUserTodayAsync(request.UserId, ct);
+        var weekStart = await dates.GetUserWeekStartDayAsync(request.UserId, ct);
+        var ids = request.Items.Select(item => item.HabitId).ToList();
+        var selected = await habits.FindAsync(h => h.UserId == request.UserId && ids.Contains(h.Id), q => q.Include(h => h.Logs), ct);
+        var ownership = OwnershipValidation.AllResolved(ids, selected, h => h.Id, ErrorMessages.HabitNotFound);
+        if (ownership.IsFailure)
+            return ownership;
+        var resolution = await HabitDueDateResolutionLoader.LoadAsync(logs, selected, today.AddDays(-AppConstants.MaxRangeDays), ct);
+        var byId = selected.ToDictionary(h => h.Id);
+        foreach (var item in request.Items)
+        {
+            var result = SkipHabitArgumentChecks.Check(byId[item.HabitId], item.Date ?? today, today, weekStart,
+                allowOverdue: true, resolution.Contains(item.HabitId), enforceWindow: true);
+            if (result.IsFailure)
+                return result;
+        }
+        return Result.Success();
     }
 
     private async Task<BulkSkipItemResult> ProcessSkipItem(

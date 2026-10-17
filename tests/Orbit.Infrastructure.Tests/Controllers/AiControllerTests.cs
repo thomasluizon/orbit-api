@@ -6,8 +6,11 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 using Orbit.Api.Controllers;
+using Orbit.Application.Chat;
+using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Models;
 using Orbit.Domain.Common;
+using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
@@ -22,6 +25,7 @@ public class AiControllerTests
     private readonly IAgentStepUpService _stepUpService = Substitute.For<IAgentStepUpService>();
     private readonly IAgentAuditService _auditService = Substitute.For<IAgentAuditService>();
     private readonly IAgentOperationExecutor _operationExecutor = Substitute.For<IAgentOperationExecutor>();
+    private readonly IPendingOperationChangePreviewer _changePreviewer = Substitute.For<IPendingOperationChangePreviewer>();
     private readonly IValidator<ResolveClarificationRequest> _resolveClarificationValidator =
         Substitute.For<IValidator<ResolveClarificationRequest>>();
     private readonly AiController _controller;
@@ -36,6 +40,10 @@ public class AiControllerTests
             _stepUpService,
             _auditService,
             _operationExecutor,
+            new PendingOperationRevisionService(_pendingOperationStore,
+                _changePreviewer,
+                Substitute.For<IValidator<RevisePendingOperationRequest>>(),
+                new AiToolRegistry([])),
             _resolveClarificationValidator);
 
         var claims = new[] { new Claim(ClaimTypes.NameIdentifier, UserId.ToString()) };
@@ -172,6 +180,71 @@ public class AiControllerTests
     }
 
     [Fact]
+    public async Task RefreshPendingOperationPreview_ForApiKeyUser_ReturnsForbid()
+    {
+        SetUser(isApiKey: true);
+
+        var result = await _controller.RefreshPendingOperationPreview(Guid.NewGuid(), CancellationToken.None);
+
+        result.Should().BeOfType<ForbidResult>();
+        _pendingOperationStore.DidNotReceiveWithAnyArgs().GetExecution(default, default);
+    }
+
+    [Fact]
+    public async Task RefreshPendingOperationPreview_ReturnsFreshPreviewWithoutExecuting()
+    {
+        var pendingId = Guid.NewGuid();
+        var arguments = JsonDocument.Parse("""{"habits":[{"title":"First"}]}""").RootElement.Clone();
+        _pendingOperationStore.GetExecution(UserId, pendingId).Returns(new PendingAgentOperationExecution(
+            pendingId, AgentCapabilityIds.HabitsBulkWrite, "bulk_create_habits", arguments,
+            AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation,
+            PreviewFingerprint: "old"));
+        var item = new PendingOperationItem("0", null, "First", [], "item-state");
+        _changePreviewer.PreviewAsync(UserId, "bulk_create_habits", arguments,
+                Arg.Any<CancellationToken>())
+            .Returns(new PendingOperationChangePreview([], 1, [item], "fresh"));
+        _pendingOperationStore.Revise(UserId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<string>(), "fresh").Returns(true);
+
+        var result = await _controller.RefreshPendingOperationPreview(pendingId, CancellationToken.None);
+
+        var response = result.Should().BeOfType<OkObjectResult>().Subject.Value
+            .Should().BeOfType<PendingOperationRevisionResult>().Subject;
+        response.Preview!.Items.Should().ContainSingle().Which.ItemId.Should().Be("0");
+        response.Preview.ChangeTargetCount.Should().Be(1);
+        response.Preview.PreviewFingerprint.Should().Be("fresh");
+        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+        await _auditService.Received(1).RecordAsync(
+            Arg.Is<AgentAuditEntry>(entry => entry.TargetId == pendingId.ToString()
+                && entry.OutcomeStatus == AgentOperationStatus.Succeeded),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(false, 404, "pending_operation_not_found")]
+    [InlineData(true, 409, "preview_unavailable")]
+    public async Task RefreshPendingOperationPreview_ReturnsExplicitFailure(
+        bool exists, int status, string error)
+    {
+        var pendingId = Guid.NewGuid();
+        if (exists)
+        {
+            var arguments = JsonDocument.Parse("{}").RootElement.Clone();
+            _pendingOperationStore.GetExecution(UserId, pendingId).Returns(new PendingAgentOperationExecution(
+                pendingId, AgentCapabilityIds.HabitsBulkWrite, "bulk_create_habits", arguments,
+                AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation));
+        }
+
+        var result = await _controller.RefreshPendingOperationPreview(pendingId, CancellationToken.None);
+
+        var response = result.Should().BeAssignableTo<ObjectResult>().Subject;
+        response.StatusCode.Should().Be(status);
+        response.Value.Should().BeOfType<PendingOperationRevisionResult>()
+            .Which.Error.Should().Be(error);
+        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+    }
+
+    [Fact]
     public async Task ConfirmPendingOperation_NotFound_ReturnsNotFoundAndAudits()
     {
         var pendingOperationId = Guid.NewGuid();
@@ -204,6 +277,74 @@ public class AiControllerTests
         var response = ok.Value.Should().BeOfType<AiController.ConfirmPendingOperationResponse>().Subject;
         response.PendingOperationId.Should().Be(pendingOperationId);
         response.ConfirmationToken.Should().Be("agc_token");
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    public async Task PendingOperation_InvalidBulkCreateCannotConfirmOrExecute(bool confirm, bool hasFingerprint)
+    {
+        var (controller, id) = await SetupBulkCreateAsync(
+            """{"habits":[{"title":"Valid"},{"title":"Invalid","frequency_unit":"Day","frequency_quantity":0}]}""",
+            hasFingerprint);
+
+        var result = confirm
+            ? await controller.ConfirmPendingOperation(id, CancellationToken.None)
+            : await controller.ExecutePendingOperation(id,
+                new AiController.ExecutePendingOperationRequest("agc_token"), CancellationToken.None);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+        _pendingOperationStore.DidNotReceiveWithAnyArgs().Confirm(default, default);
+        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PendingOperation_ValidBulkCreateCanConfirmAndExecute(bool hasFingerprint)
+    {
+        var (controller, id) = await SetupBulkCreateAsync(
+            """{"habits":[{"title":"Valid","frequency_unit":"Day","frequency_quantity":1}]}""",
+            hasFingerprint);
+
+        var confirmation = await controller.ConfirmPendingOperation(id, CancellationToken.None);
+        var execution = await controller.ExecutePendingOperation(id,
+            new AiController.ExecutePendingOperationRequest("agc_token"), CancellationToken.None);
+
+        confirmation.Should().BeOfType<OkObjectResult>();
+        execution.Should().BeOfType<OkObjectResult>();
+        _pendingOperationStore.Received(1).Confirm(UserId, id);
+        await _operationExecutor.Received(1).ExecuteAsync(
+            Arg.Is<AgentExecuteOperationRequest>(request => request.OperationId == "bulk_create_habits"),
+            Arg.Any<CancellationToken>());
+    }
+
+    private async Task<(AiController Controller, Guid Id)> SetupBulkCreateAsync(string json, bool hasFingerprint)
+    {
+        var id = Guid.NewGuid();
+        var arguments = Parse(json);
+        var previewer = new PendingOperationChangePreviewer(Substitute.For<IGenericRepository<Habit>>(),
+            Substitute.For<IGenericRepository<Goal>>(), Substitute.For<IGenericRepository<Tag>>(),
+            Substitute.For<IUserDateService>(), new AiToolRegistry([]));
+        var preview = await previewer.PreviewAsync(UserId, "bulk_create_habits", arguments);
+        _pendingOperationStore.GetExecution(UserId, id).Returns(new PendingAgentOperationExecution(id,
+            AgentCapabilityIds.HabitsBulkWrite, "bulk_create_habits", arguments,
+            AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation,
+            PreviewFingerprint: hasFingerprint ? preview!.PreviewFingerprint : null));
+        _pendingOperationStore.Confirm(UserId, id).Returns(new PendingAgentOperationConfirmation(
+            id, "agc_token", DateTime.UtcNow.AddMinutes(5)));
+        var controller = new AiController(_catalogService, _policyEvaluator,
+            new AgentPendingStores(_pendingOperationStore, _pendingClarificationStore),
+            _stepUpService, _auditService, _operationExecutor,
+            new PendingOperationRevisionService(_pendingOperationStore, previewer,
+                Substitute.For<IValidator<RevisePendingOperationRequest>>(), new AiToolRegistry([])),
+            _resolveClarificationValidator)
+        {
+            ControllerContext = _controller.ControllerContext
+        };
+        return (controller, id);
     }
 
     [Fact]
@@ -369,6 +510,27 @@ public class AiControllerTests
     }
 
     [Fact]
+    public async Task ExecutePendingOperation_ChangedTargetReturnsConflictWithoutExecuting()
+    {
+        var pendingOperationId = Guid.NewGuid();
+        var arguments = JsonDocument.Parse("""{"filter":{"all":true}}""").RootElement.Clone();
+        _pendingOperationStore.GetExecution(UserId, pendingOperationId)
+            .Returns(new PendingAgentOperationExecution(pendingOperationId,
+                AgentCapabilityIds.HabitsBulkDelete, "bulk_delete_habits", arguments,
+                AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation,
+                PreviewFingerprint: "old-state"));
+        _changePreviewer.PreviewAsync(UserId, "bulk_delete_habits", Arg.Any<JsonElement>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new PendingOperationChangePreview([], 0, [], "new-state"));
+
+        var result = await _controller.ExecutePendingOperation(pendingOperationId,
+            new AiController.ExecutePendingOperationRequest("agc_token"), CancellationToken.None);
+
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(409);
+        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+    }
+
+    [Fact]
     public async Task ExecutePendingOperation_ForApiKeyUser_ReturnsForbid()
     {
         SetUser(isApiKey: true);
@@ -525,6 +687,35 @@ public class AiControllerTests
                 request.ConfirmationToken == null &&
                 request.Arguments.GetProperty("title").GetString() == "Morning habit" &&
                 request.Arguments.GetProperty("frequency_unit").GetString() == "Day"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ResolveClarification_AsksForTheChangePreview()
+    {
+        StubValidatorOutcome(isValid: true);
+        StubPendingClarification(
+            toolName: "create_habit",
+            partialArgs: "{\"title\":\"Morning habit\"}",
+            allowedValues: ["{\"frequency_unit\":\"Day\",\"frequency_quantity\":1}"]);
+        _pendingClarificationStore
+            .MarkResolvedAsync(Arg.Any<Guid>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(true);
+        _operationExecutor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new AgentExecuteOperationResponse(new AgentOperationResult(
+                OperationId: "create_habit",
+                SourceName: "create_habit",
+                RiskClass: AgentRiskClass.Low,
+                ConfirmationRequirement: AgentConfirmationRequirement.FreshConfirmation,
+                Status: AgentOperationStatus.PendingConfirmation)));
+
+        await _controller.ResolveClarification(
+            Guid.NewGuid(),
+            new ResolveClarificationRequest("{\"frequency_unit\":\"Day\",\"frequency_quantity\":1}"),
+            CancellationToken.None);
+
+        await _operationExecutor.Received(1).ExecuteAsync(
+            Arg.Is<AgentExecuteOperationRequest>(request => request.IncludeChangePreview),
             Arg.Any<CancellationToken>());
     }
 

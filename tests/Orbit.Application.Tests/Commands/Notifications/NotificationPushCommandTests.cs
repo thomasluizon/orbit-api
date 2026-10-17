@@ -5,6 +5,7 @@ using Orbit.Application.Notifications.Commands;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Commands.Notifications;
 
@@ -57,7 +58,7 @@ public class TestPushNotificationCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("No push subscriptions found for this user.");
+        result.Error.Should().Be(ErrorMessages.NoPushSubscriptions.Message);
     }
 
     [Fact]

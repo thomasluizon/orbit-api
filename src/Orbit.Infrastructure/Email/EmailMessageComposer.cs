@@ -20,7 +20,7 @@ internal sealed class EmailMessageComposer(string frontendBaseUrl)
         var htmlCopy = EmailCopy.Welcome(isPtBr, WebUtility.HtmlEncode(userName));
         var textCopy = EmailCopy.Welcome(isPtBr, userName);
 
-        var layout = new EmailLayout(LangCode(isPtBr), htmlCopy.Preheader, htmlCopy.Footer, LogoUrl, GradientHeader: true);
+        var layout = new EmailLayout(LangCode(isPtBr), htmlCopy.Preheader, htmlCopy.Footer, LogoUrl);
         var html = EmailTemplateRenderer.RenderHtml("Welcome", layout, WelcomeTokens(htmlCopy));
         var text = EmailTemplateRenderer.RenderText("Welcome", WelcomeTokens(textCopy));
 
@@ -44,7 +44,7 @@ internal sealed class EmailMessageComposer(string frontendBaseUrl)
             [FooterToken] = copy.Footer,
         };
 
-        var layout = new EmailLayout(LangCode(isPtBr), copy.Preheader, copy.Footer, LogoUrl, GradientHeader: false);
+        var layout = new EmailLayout(LangCode(isPtBr), copy.Preheader, copy.Footer, LogoUrl);
         var html = EmailTemplateRenderer.RenderHtml("VerificationCode", layout, tokens);
         var text = EmailTemplateRenderer.RenderText("VerificationCode", tokens);
 
@@ -80,7 +80,7 @@ internal sealed class EmailMessageComposer(string frontendBaseUrl)
             [FooterToken] = footer,
         };
 
-        var layout = new EmailLayout(LangCode(isPtBr), preheader, footer, LogoUrl, GradientHeader: false);
+        var layout = new EmailLayout(LangCode(isPtBr), preheader, footer, LogoUrl);
         var html = EmailTemplateRenderer.RenderHtml(template, layout, tokens);
         var text = EmailTemplateRenderer.RenderText(template, tokens);
 
@@ -102,7 +102,7 @@ internal sealed class EmailMessageComposer(string frontendBaseUrl)
             [FooterToken] = copy.Footer,
         };
 
-        var layout = new EmailLayout(LangCode(isPtBr), copy.Preheader, copy.Footer, LogoUrl, GradientHeader: true);
+        var layout = new EmailLayout(LangCode(isPtBr), copy.Preheader, copy.Footer, LogoUrl);
         var html = EmailTemplateRenderer.RenderHtml("WaitlistConfirmation", layout, tokens);
         var text = EmailTemplateRenderer.RenderText("WaitlistConfirmation", tokens);
 
@@ -113,10 +113,11 @@ internal sealed class EmailMessageComposer(string frontendBaseUrl)
     {
         var isPtBr = LocaleHelper.IsPortuguese(language);
         var footer = MarketingFooterHtml(isPtBr, unsubscribeUrl);
-        var layout = new EmailLayout(LangCode(isPtBr), Preheader: "", footer, LogoUrl, GradientHeader: true);
+        var layout = new EmailLayout(LangCode(isPtBr), Preheader: "", footer, LogoUrl);
         var readableBody =
-            "<div style=\"font-family: Rubik, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; " +
-            $"font-size: 16px; line-height: 1.6; color: #E2E8F0;\">{bodyHtml}</div>";
+            "<div class=\"orbit-fg-2\" style=\"font-family: 'Geist Sans', Geist, -apple-system, BlinkMacSystemFont, " +
+            "'Segoe UI', Roboto, Helvetica, Arial, sans-serif; " +
+            $"font-size: 16px; line-height: 1.6; color: #424247;\">{bodyHtml}</div>";
         var html = EmailTemplateRenderer.RenderLayout(layout, readableBody);
 
         return new EmailMessage(subject, html, null);
@@ -133,15 +134,18 @@ internal sealed class EmailMessageComposer(string frontendBaseUrl)
 
         var encodedUrl = WebUtility.HtmlEncode(unsubscribeUrl);
         return $"{reason}<br>{legalIdentity}<br>" +
-            $"<a href=\"{encodedUrl}\" style=\"color: #90A1B9; text-decoration: underline;\">{unsubscribeLabel}</a>";
+            $"<a class=\"orbit-fg-3\" href=\"{encodedUrl}\" style=\"color: #68686D; text-decoration: underline;\">{unsubscribeLabel}</a>";
     }
 
     public EmailMessage ComposeSupport(string fromName, string fromEmail, string subject, string message)
     {
-        const string supportFooter = "Reply directly to respond to the user.";
+        var copy = EmailCopy.Support();
 
         var htmlTokens = new Dictionary<string, string>
         {
+            [HeadingToken] = copy.Heading,
+            ["fromLabel"] = copy.FromLabel,
+            ["subjectLabel"] = copy.SubjectLabel,
             ["fromName"] = WebUtility.HtmlEncode(fromName),
             ["fromEmail"] = WebUtility.HtmlEncode(fromEmail),
             ["subject"] = WebUtility.HtmlEncode(subject),
@@ -150,13 +154,17 @@ internal sealed class EmailMessageComposer(string frontendBaseUrl)
 
         var textTokens = new Dictionary<string, string>
         {
+            [HeadingToken] = copy.Heading,
+            ["fromLabel"] = copy.FromLabel,
+            ["subjectLabel"] = copy.SubjectLabel,
             ["fromName"] = fromName,
             ["fromEmail"] = fromEmail,
             ["subject"] = subject,
             ["message"] = message,
+            [FooterToken] = copy.Footer,
         };
 
-        var layout = new EmailLayout("en", Preheader: "", Footer: supportFooter, LogoUrl, GradientHeader: false);
+        var layout = new EmailLayout("en", Preheader: "", Footer: copy.Footer, LogoUrl);
         var html = EmailTemplateRenderer.RenderHtml("Support", layout, htmlTokens);
         var text = EmailTemplateRenderer.RenderText("Support", textTokens);
 

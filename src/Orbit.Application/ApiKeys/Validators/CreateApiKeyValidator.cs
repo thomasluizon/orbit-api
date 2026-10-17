@@ -1,3 +1,4 @@
+using Orbit.Application.Common;
 using FluentValidation;
 using Orbit.Application.ApiKeys.Commands;
 using Orbit.Domain.Models;
@@ -13,18 +14,18 @@ public class CreateApiKeyValidator : AbstractValidator<CreateApiKeyCommand>
 
         RuleFor(x => x.Name)
             .NotEmpty()
-            .WithMessage("API key name is required.")
+            .WithCopy(ValidationErrorCodes.ApiKeyNameRequired)
             .MaximumLength(50)
-            .WithMessage("API key name must be 50 characters or less.");
+            .WithCopy(ValidationErrorCodes.ApiKeyNameLength);
 
         RuleForEach(x => x.Scopes)
             .NotEmpty()
-            .WithMessage("API key scopes must be non-empty strings.")
+            .WithCopy(ValidationErrorCodes.ApiKeyScopesRequired)
             .Must(scope => string.IsNullOrWhiteSpace(scope) || AgentScopes.All.Contains(scope.Trim()))
-            .WithMessage("API key scope '{PropertyValue}' is not a recognized scope.");
+            .WithCopy(ValidationErrorCodes.ApiKeyScopeInvalid);
 
         RuleFor(x => x.ExpiresAtUtc)
             .Must(expiresAtUtc => !expiresAtUtc.HasValue || expiresAtUtc.Value > DateTime.UtcNow)
-            .WithMessage("API key expiry must be in the future.");
+            .WithCopy(ValidationErrorCodes.ApiKeyExpiryFuture);
     }
 }

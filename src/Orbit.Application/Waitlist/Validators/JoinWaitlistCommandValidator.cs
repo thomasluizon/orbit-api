@@ -1,3 +1,4 @@
+using Orbit.Application.Common;
 using FluentValidation;
 using Orbit.Application.Waitlist.Commands;
 
@@ -14,6 +15,6 @@ public class JoinWaitlistCommandValidator : AbstractValidator<JoinWaitlistComman
 
         RuleFor(x => x.Language)
             .Must(language => WaitlistLanguage.TryCanonicalize(language, out _))
-            .WithMessage("Language must be one of: en, pt-BR.");
+            .WithCopy(ValidationErrorCodes.WaitlistLanguageSupported);
     }
 }

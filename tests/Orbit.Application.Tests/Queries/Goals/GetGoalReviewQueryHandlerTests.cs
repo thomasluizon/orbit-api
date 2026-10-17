@@ -2,6 +2,7 @@ using System.Globalization;
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
+using Orbit.Application.Common;
 using Orbit.Application.Goals.Queries;
 using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
@@ -244,7 +245,7 @@ public class GetGoalReviewQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("No active goals found");
+        result.Error.Should().Be(ErrorMessages.NoActiveGoals.Message);
         await _payGate.DidNotReceive().TryConsumeAiMessage(
             UserId, _unitOfWork, Arg.Any<CancellationToken>());
     }

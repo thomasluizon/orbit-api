@@ -1,9 +1,9 @@
 {
   "provenance": {
-    "generatedFrom": "82ce5eb92cfa",
+    "generatedFrom": "fd5f278f328b",
     "baselineRef": null,
     "baselineSha": null,
-    "inputFiles": 1121,
+    "inputFiles": 1212,
     "generatorVersion": 2
   },
   "note": "A live AppConfigs row overrides its compiled default at runtime. This offline artifact does not claim live values.",
@@ -79,14 +79,6 @@
     {
       "capability": "CanManageCalendar",
       "enforcingMethod": "PayGateService.CanManageCalendar",
-      "planRequirement": "Pro",
-      "quotaLiftedByPlan": null,
-      "appConfigs": [],
-      "featureFlags": []
-    },
-    {
-      "capability": "CanManagePremiumColors",
-      "enforcingMethod": "PayGateService.CanManagePremiumColors",
       "planRequirement": "Pro",
       "quotaLiftedByPlan": null,
       "appConfigs": [],

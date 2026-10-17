@@ -57,7 +57,7 @@ public class CreatePortalSessionCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("not found");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
     }
 
     [Fact]
@@ -91,6 +91,6 @@ public class CreatePortalSessionCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("temporarily unavailable");
+        result.Error.Should().Be(ErrorMessages.PaymentServiceUnavailable.Message);
     }
 }

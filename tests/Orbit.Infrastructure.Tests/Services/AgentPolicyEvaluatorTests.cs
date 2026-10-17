@@ -108,6 +108,7 @@ public class AgentPolicyEvaluatorTests : IDisposable
         decision.Status.Should().Be(AgentPolicyDecisionStatus.ConfirmationRequired);
         decision.PendingOperation.Should().NotBeNull();
         decision.PendingOperation!.CapabilityId.Should().Be(AgentCapabilityIds.HabitsDelete);
+        decision.ConsumedConfirmation.Should().BeFalse();
     }
 
     [Fact]
@@ -119,13 +120,15 @@ public class AgentPolicyEvaluatorTests : IDisposable
             AgentExecutionSurface.Chat,
             AgentAuthMethod.Jwt,
             [],
-            "manage_api_key",
+            "manage_api_keys",
             "Create API key",
-            OperationFingerprint: "create_api_key:{\"name\":\"Claude\"}"));
+            OperationFingerprint: "manage_api_keys:{\"action\":\"create\",\"name\":\"Claude\"}",
+            OperationArgumentsJson: "{\"action\":\"create\",\"name\":\"Claude\"}"));
 
         decision.Status.Should().Be(AgentPolicyDecisionStatus.ConfirmationRequired);
         decision.Reason.Should().Be("step_up_required");
         decision.PendingOperation.Should().NotBeNull();
+        decision.PendingOperation!.ActionKey.Should().Be("createApiKey");
     }
 
     [Fact]
@@ -156,6 +159,7 @@ public class AgentPolicyEvaluatorTests : IDisposable
             ConfirmationToken: confirmation!.ConfirmationToken));
 
         confirmedDecision.Status.Should().Be(AgentPolicyDecisionStatus.Allowed);
+        confirmedDecision.ConsumedConfirmation.Should().BeTrue();
     }
 
     [Fact]
@@ -167,9 +171,10 @@ public class AgentPolicyEvaluatorTests : IDisposable
             AgentExecutionSurface.Chat,
             AgentAuthMethod.Jwt,
             [],
-            "manage_api_key",
+            "manage_api_keys",
             "Create API key",
-            OperationFingerprint: "create_api_key:{\"name\":\"Claude\"}"));
+            OperationFingerprint: "manage_api_keys:{\"action\":\"create\",\"name\":\"Claude\"}",
+            OperationArgumentsJson: "{\"action\":\"create\",\"name\":\"Claude\"}"));
 
         var pendingOperation = initialDecision.PendingOperation;
         pendingOperation.Should().NotBeNull();
@@ -187,9 +192,9 @@ public class AgentPolicyEvaluatorTests : IDisposable
             AgentExecutionSurface.Chat,
             AgentAuthMethod.Jwt,
             [],
-            "manage_api_key",
+            "manage_api_keys",
             "Create API key",
-            OperationFingerprint: "create_api_key:{\"name\":\"Claude\"}",
+            OperationFingerprint: "manage_api_keys:{\"action\":\"create\",\"name\":\"Claude\"}",
             ConfirmationToken: confirmation!.ConfirmationToken));
 
         confirmedDecision.Status.Should().Be(AgentPolicyDecisionStatus.Allowed);
@@ -209,6 +214,7 @@ public class AgentPolicyEvaluatorTests : IDisposable
             OperationFingerprint: "get_api_keys:{}"));
 
         decision.Status.Should().Be(AgentPolicyDecisionStatus.Allowed);
+        decision.ConsumedConfirmation.Should().BeFalse();
     }
 
     [Fact]
@@ -361,13 +367,63 @@ public class AgentPolicyEvaluatorTests : IDisposable
         decision.ShadowStatus.Should().Be(AgentPolicyDecisionStatus.ConfirmationRequired);
         decision.ShadowReason.Should().Be("step_up_required");
         decision.PendingOperation.Should().BeNull();
+        decision.ConsumedConfirmation.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Evaluate_InShadowMode_PreservesConsumedConfirmation()
+    {
+        const string fingerprint = "delete_habit:{\"habitId\":\"123\"}";
+        var pending = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+            AgentCapabilityIds.HabitsDelete,
+            _userId,
+            AgentExecutionSurface.Chat,
+            AgentAuthMethod.Jwt,
+            [],
+            "delete_habit",
+            "Delete habit via chat",
+            OperationFingerprint: fingerprint));
+        var confirmation = _pendingOperationStore.Confirm(_userId, pending.PendingOperation!.Id);
+        confirmation.Should().NotBeNull();
+
+        var shadowEvaluator = new AgentPolicyEvaluator(
+            _dbContext,
+            _catalogService,
+            _pendingOperationStore,
+            _stepUpAuthorizationBridge,
+            Options.Create(new AgentPlatformSettings { ShadowModeEnabled = true }));
+        var decision = shadowEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+            AgentCapabilityIds.HabitsDelete,
+            _userId,
+            AgentExecutionSurface.Chat,
+            AgentAuthMethod.Jwt,
+            [],
+            "delete_habit",
+            "Delete habit via chat",
+            OperationFingerprint: fingerprint,
+            ConfirmationToken: confirmation!.ConfirmationToken));
+
+        decision.Status.Should().Be(AgentPolicyDecisionStatus.Allowed);
+        decision.ShadowStatus.Should().Be(AgentPolicyDecisionStatus.Allowed);
+        decision.ConsumedConfirmation.Should().BeTrue();
+
+        var replay = shadowEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+            AgentCapabilityIds.HabitsDelete,
+            _userId,
+            AgentExecutionSurface.Chat,
+            AgentAuthMethod.Jwt,
+            [],
+            "delete_habit",
+            "Delete habit via chat",
+            OperationFingerprint: fingerprint,
+            ConfirmationToken: confirmation.ConfirmationToken));
+
+        replay.ConsumedConfirmation.Should().BeFalse();
+        replay.ShadowStatus.Should().Be(AgentPolicyDecisionStatus.ConfirmationRequired);
     }
 
     [Theory]
     [InlineData(AgentCapabilityIds.HabitsDelete, "delete_habit")]
-    [InlineData(AgentCapabilityIds.HabitsBulkWrite, "bulk_create_habits")]
-    [InlineData(AgentCapabilityIds.HabitsBulkWrite, "bulk_log_habits")]
-    [InlineData(AgentCapabilityIds.HabitsBulkWrite, "bulk_skip_habits")]
     [InlineData(AgentCapabilityIds.HabitsBulkDelete, "bulk_delete_habits")]
     [InlineData(AgentCapabilityIds.TagsDelete, "delete_tag")]
     public void Evaluate_DestructiveChatCapability_OnChatSurface_RequiresConfirmation(
@@ -388,6 +444,33 @@ public class AgentPolicyEvaluatorTests : IDisposable
         decision.Reason.Should().Be("confirmation_required");
         decision.PendingOperation.Should().NotBeNull();
         decision.PendingOperation!.CapabilityId.Should().Be(capabilityId);
+    }
+
+    [Theory]
+    [InlineData("bulk_create_habits")]
+    [InlineData("bulk_log_habits")]
+    [InlineData("bulk_skip_habits")]
+    [InlineData("bulk_update_habits")]
+    [InlineData("bulk_reschedule_habits")]
+    public void Evaluate_ReversibleBulkCapability_RequiresConfirmationWhenChatHoldIsApplied(string sourceName)
+    {
+        var context = new AgentPolicyEvaluationContext(
+            AgentCapabilityIds.HabitsBulkWrite, _userId, AgentExecutionSurface.Chat,
+            AgentAuthMethod.Jwt, [], sourceName, $"{sourceName} via chat",
+            OperationFingerprint: $"{sourceName}:{{}}");
+
+        var declared = _policyEvaluator.Evaluate(context);
+        var held = _policyEvaluator.Evaluate(context with
+        {
+            ConfirmationRequirementOverride = AgentConfirmationRequirement.FreshConfirmation
+        });
+
+        declared.Status.Should().Be(AgentPolicyDecisionStatus.Allowed);
+        declared.Capability!.RiskClass.Should().Be(AgentRiskClass.Low);
+        declared.PendingOperation.Should().BeNull();
+        held.Status.Should().Be(AgentPolicyDecisionStatus.ConfirmationRequired);
+        held.PendingOperation!.RiskClass.Should().Be(AgentRiskClass.Low);
+        held.PendingOperation.ConfirmationRequirement.Should().Be(AgentConfirmationRequirement.FreshConfirmation);
     }
 
     [Fact]
@@ -453,7 +536,7 @@ public class AgentPolicyEvaluatorTests : IDisposable
     [Theory]
     [InlineData("create_habit")]
     [InlineData("log_habit")]
-    public void Evaluate_LowRiskHabitWrite_OnChatSurface_IsAllowed(string sourceName)
+    public void Evaluate_LowRiskHabitWrite_OnChatSurface_WaitsForApproval(string sourceName)
     {
         var decision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.HabitsWrite,
@@ -463,6 +546,29 @@ public class AgentPolicyEvaluatorTests : IDisposable
             [],
             sourceName,
             $"{sourceName} via chat",
+            OperationFingerprint: $"{sourceName}:{{\"title\":\"Meditate\"}}",
+            ConfirmationRequirementOverride: AgentConfirmationRequirement.FreshConfirmation));
+
+        decision.Status.Should().Be(AgentPolicyDecisionStatus.ConfirmationRequired);
+        decision.Reason.Should().Be("confirmation_required");
+        decision.PendingOperation.Should().NotBeNull();
+        decision.PendingOperation!.ConfirmationRequirement
+            .Should().Be(AgentConfirmationRequirement.FreshConfirmation);
+    }
+
+    [Theory]
+    [InlineData("create_habit")]
+    [InlineData("log_habit")]
+    public void Evaluate_LowRiskHabitWrite_OnMcpSurface_IsAllowed(string sourceName)
+    {
+        var decision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+            AgentCapabilityIds.HabitsWrite,
+            _userId,
+            AgentExecutionSurface.Mcp,
+            AgentAuthMethod.Jwt,
+            [],
+            sourceName,
+            $"{sourceName} via mcp",
             OperationFingerprint: $"{sourceName}:{{\"title\":\"Meditate\"}}"));
 
         decision.Status.Should().Be(AgentPolicyDecisionStatus.Allowed);

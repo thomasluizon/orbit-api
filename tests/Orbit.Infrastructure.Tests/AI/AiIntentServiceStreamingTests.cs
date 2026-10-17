@@ -87,7 +87,7 @@ public class AiIntentServiceStreamingTests
         var result = await service.SendWithToolsAsync(new AiToolRequest("hello", "system", []), streamSink: sink.Handle);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("AI service temporarily unavailable");
+        result.Error.Should().Be(ErrorMessages.AiUnavailable.Message);
     }
 
     [Fact]

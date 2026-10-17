@@ -112,7 +112,7 @@ public class RestoreHabitCommandHandlerTests
         var result = await _handler.Handle(new RestoreHabitCommand(UserId, habit.Id), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("Habit not found.");
+        result.Error.Should().Be(ErrorMessages.HabitNotFound.Message);
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -124,7 +124,7 @@ public class RestoreHabitCommandHandlerTests
         var result = await _handler.Handle(new RestoreHabitCommand(UserId, Guid.NewGuid()), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("Habit not found.");
+        result.Error.Should().Be(ErrorMessages.HabitNotFound.Message);
     }
 
     [Fact]

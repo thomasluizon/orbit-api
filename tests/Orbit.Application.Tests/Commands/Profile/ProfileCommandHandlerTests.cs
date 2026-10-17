@@ -7,6 +7,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Commands.Profile;
 
@@ -33,8 +34,6 @@ public class ProfileCommandHandlerTests
         _payGate.CanManageAiMemory(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result.Success()));
         _payGate.CanManageAiSummary(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(Result.Success()));
-        _payGate.CanManagePremiumColors(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result.Success()));
         _payGate.CanManageProactiveAstra(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result.Success()));
@@ -94,7 +93,7 @@ public class ProfileCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("User not found.");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
     }
 
     [Fact]
@@ -197,18 +196,18 @@ public class ProfileCommandHandlerTests
     }
 
     [Fact]
-    public async Task SetColorScheme_Valid_UpdatesAndSaves()
+    public async Task SetColorScheme_Valid_StoresTheGrantedAccentAndSaves()
     {
         var user = CreateTestUser();
         SetupUserFound(user);
 
-        var handler = new SetColorSchemeCommandHandler(_userRepo, _payGate, _unitOfWork);
+        var handler = new SetColorSchemeCommandHandler(_userRepo, _unitOfWork);
         var command = new SetColorSchemeCommand(UserId, "purple");
 
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        user.ColorScheme.Should().Be("purple");
+        user.ColorScheme.Should().Be(ColorSchemes.Granted);
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -217,13 +216,13 @@ public class ProfileCommandHandlerTests
     {
         SetupUserNotFound();
 
-        var handler = new SetColorSchemeCommandHandler(_userRepo, _payGate, _unitOfWork);
+        var handler = new SetColorSchemeCommandHandler(_userRepo, _unitOfWork);
         var command = new SetColorSchemeCommand(UserId, "purple");
 
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("User not found.");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
     }
 
     [Fact]
@@ -232,7 +231,7 @@ public class ProfileCommandHandlerTests
         var user = CreateTestUser();
         SetupUserFound(user);
 
-        var handler = new SetColorSchemeCommandHandler(_userRepo, _payGate, _unitOfWork);
+        var handler = new SetColorSchemeCommandHandler(_userRepo, _unitOfWork);
         var command = new SetColorSchemeCommand(UserId, null);
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -268,7 +267,7 @@ public class ProfileCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("User not found.");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
     }
 
     [Fact]
@@ -313,7 +312,7 @@ public class ProfileCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("User not found.");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
     }
 
     [Fact]
@@ -348,7 +347,7 @@ public class ProfileCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("User not found.");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
         await accountResetRepo.DidNotReceive().DeleteAllUserDataAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 }

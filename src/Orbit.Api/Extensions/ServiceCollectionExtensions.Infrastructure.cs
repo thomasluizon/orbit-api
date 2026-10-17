@@ -288,6 +288,7 @@ public static partial class ServiceCollectionExtensions
             .WithTools<ProfileTools>()
             .WithTools<GamificationTools>()
             .WithTools<NotificationTools>()
+            .WithTools<RecordPageTools>()
             .WithTools<SubscriptionTools>()
             .WithTools<UserFactTools>()
             .WithTools<CalendarTools>()
@@ -302,7 +303,12 @@ public static partial class ServiceCollectionExtensions
     {
         AddResponseCompression(builder);
 
-        builder.Services.AddControllers()
+        builder.Services.AddScoped<IRequestLanguageResolver, RequestLanguageResolver>();
+
+        builder.Services.AddControllers(options =>
+            {
+                options.Filters.Add<LocalizedErrorResultFilter>();
+            })
             .AddJsonOptions(options =>
             {
                 options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());

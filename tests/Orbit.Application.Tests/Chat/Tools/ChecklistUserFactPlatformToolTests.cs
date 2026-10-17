@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using FluentAssertions;
 using MediatR;
 using NSubstitute;
@@ -9,6 +10,9 @@ using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.ChecklistTemplates.Commands;
 using Orbit.Application.ChecklistTemplates.Queries;
+using Orbit.Application.Common;
+using Orbit.Application.Gamification;
+using Orbit.Application.Gamification.Models;
 using Orbit.Application.Gamification.Queries;
 using Orbit.Application.Referrals.Queries;
 using Orbit.Application.Profile.Commands;
@@ -320,6 +324,88 @@ public class ChecklistUserFactPlatformToolTests
 
         result.Success.Should().BeTrue();
         await mediator.DidNotReceiveWithAnyArgs().Send(default!, default);
+    }
+
+    [Fact]
+    public async Task GetGamificationOverviewTool_KeepsFullyEarnedProPayloadWithinLimit()
+    {
+        var earnedAt = new DateTime(2026, 4, 14, 12, 30, 0, DateTimeKind.Utc);
+        var achievements = AchievementDefinitions.Active.Select(def =>
+        {
+            var (current, target) = AchievementProgressCalculator.Compute(def, AchievementProgressMetrics.Empty, true);
+            return new AchievementDto(def.Id, def.Name, def.Description, def.Category.ToString(),
+                def.Rarity.ToString(), def.XpReward, def.IconKey, true, earnedAt, current, target);
+        }).ToList();
+        var profile = new GamificationProfileResponse(10000, 10, "Legend", "legend", 9000, 12000, 2000,
+            achievements.Count, achievements.Count, achievements,
+            achievements.Select(a => new UserAchievementDto(a.Id, earnedAt)).ToList(),
+            1000, 1000, new DateOnly(2026, 4, 14), true, false,
+            new NextRewardCarrot(11, "Legend", 2000, null));
+        var streak = new StreakInfoResponse(1000, 1000, new DateOnly(2026, 4, 14), 1, 3, 3, true,
+            [new DateOnly(2026, 4, 14)], 3, 3, 0, 2, false, false, null, 3);
+        var mediator = Substitute.For<IMediator>();
+        mediator.Send(Arg.Any<GetGamificationProfileQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(profile));
+        mediator.Send(Arg.Any<GetAchievementsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AchievementsResponse(achievements)));
+        mediator.Send(Arg.Any<GetStreakInfoQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(streak));
+        var tool = new GetGamificationOverviewTool(mediator);
+        var options = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        };
+        string[] calls =
+        [
+            "{}",
+            """{"include_profile":true,"include_achievements":false,"include_streak":false}""",
+            """{"include_profile":false,"include_achievements":true,"include_streak":false}""",
+            """{"include_profile":false,"include_achievements":false,"include_streak":true}""",
+            """{"include_profile":true,"include_achievements":true,"include_streak":false}""",
+            """{"include_profile":true,"include_achievements":false,"include_streak":true}""",
+            """{"include_profile":false,"include_achievements":true,"include_streak":true}"""
+        ];
+
+        foreach (var call in calls)
+        {
+            var args = Parse(call);
+            var result = await tool.ExecuteAsync(args, UserId, CancellationToken.None);
+
+            result.Success.Should().BeTrue();
+            var json = JsonSerializer.Serialize(result.Payload, options);
+            json.Length.Should().BeLessThanOrEqualTo(AppConstants.MaxAiToolPayloadJsonLength, "arguments were {0}", call);
+            var payload = result.Payload.Should().BeOfType<GamificationOverviewPayload>().Subject;
+            var includesProfile = !args.TryGetProperty("include_profile", out var p) || p.GetBoolean();
+            var includesAchievements = !args.TryGetProperty("include_achievements", out var a) || a.GetBoolean();
+            var includesStreak = !args.TryGetProperty("include_streak", out var s) || s.GetBoolean();
+            (payload.Profile is not null).Should().Be(includesProfile);
+            (payload.Achievements is not null).Should().Be(includesAchievements);
+            payload.Streak.Should().Be(includesStreak ? streak : null);
+            var catalogue = (payload.Profile?.Achievements ?? []).Concat(payload.Achievements?.Achievements ?? []);
+            catalogue.Should().Equal(includesProfile || includesAchievements ? achievements : []);
+            if (payload.Profile is not null)
+                payload.Profile.Should().BeEquivalentTo(profile, config => config.Excluding(value => value.Achievements));
+        }
+
+        profile.Achievements.Should().Equal(achievements);
+    }
+
+    [Fact]
+    public void GetGamificationOverviewTool_DescribesFlagsAndStreakOnlyArguments()
+    {
+        var tool = new GetGamificationOverviewTool(Substitute.For<IMediator>());
+        using var schema = JsonDocument.Parse(JsonSerializer.Serialize(tool.GetParameterSchema()));
+        var properties = schema.RootElement.GetProperty("properties");
+
+        foreach (var flag in new[] { "include_profile", "include_achievements", "include_streak" })
+        {
+            var property = properties.GetProperty(flag);
+            property.TryGetProperty("description", out var description).Should().BeTrue("{0} needs a description", flag);
+            description.GetString().Should().NotBeNullOrWhiteSpace();
+        }
+        properties.GetProperty("include_streak").GetProperty("description").GetString()
+            .Should().ContainAll("include_profile=true", "include_achievements=false");
     }
 
     [Fact]

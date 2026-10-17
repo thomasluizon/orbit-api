@@ -5,7 +5,7 @@ using Orbit.Application.Goals.Commands;
 namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class ReorderGoalsTool(
-    IMediator mediator) : IAiTool
+    IMediator mediator) : IAiTool, IArgumentCheckTool
 {
     public string Name => "reorder_goals";
 
@@ -36,7 +36,13 @@ public class ReorderGoalsTool(
         required = new[] { "positions" }
     };
 
-    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
+    public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ExecuteCoreAsync(args, userId, ct, checkOnly: false);
+
+    public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ChatToolArgumentCheck.CheckAsync(this, args, () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+
+    private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         if (!args.TryGetProperty("positions", out var positionsEl) || positionsEl.ValueKind != JsonValueKind.Array)
             return new ToolResult(false, Error: "positions is required and must be an array.");
@@ -52,7 +58,11 @@ public class ReorderGoalsTool(
             positions.Add(new GoalPositionUpdate(goalId, position.Value));
         }
 
-        var result = await mediator.Send(new ReorderGoalsCommand(userId, positions), ct);
+        var command = new ReorderGoalsCommand(userId, positions);
+        if (checkOnly)
+            return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
+
+        var result = await mediator.Send(command, ct);
 
         if (result.IsFailure)
             return ToolResult.FromFailure(result);

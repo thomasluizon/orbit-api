@@ -72,7 +72,7 @@ public class GetHabitLogsQueryHandlerTests
         var result = await _handler.Handle(new GetHabitLogsQuery(UserId, HabitId), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Habit not found");
+        result.Error.Should().Be(ErrorMessages.HabitNotFound.Message);
         result.ErrorCode.Should().Be("HABIT_NOT_FOUND");
     }
 

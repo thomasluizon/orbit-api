@@ -16,11 +16,11 @@ public class JoinChallengeCommandValidator : AbstractValidator<JoinChallengeComm
 
         RuleFor(x => x.LinkedHabitIds)
             .NotEmpty()
-            .WithMessage("Link at least one of your habits to the challenge.");
+            .WithCopy(ValidationErrorCodes.ChallengeHabitsRequired);
 
         RuleFor(x => x.LinkedHabitIds)
             .Must(ids => ids.Count <= AppConstants.MaxHabitsPerChallengeParticipant)
-            .WithMessage($"You can link at most {AppConstants.MaxHabitsPerChallengeParticipant} habits.");
+            .WithCopy(ValidationErrorCodes.ChallengeHabitLimit);
 
         RuleForEach(x => x.LinkedHabitIds).NotEmpty();
     }

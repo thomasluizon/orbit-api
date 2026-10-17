@@ -13,9 +13,9 @@ public class BulkCreateHabitsCommandValidator : AbstractValidator<BulkCreateHabi
 
         RuleFor(x => x.Habits)
             .NotEmpty()
-            .WithMessage("Habits list must not be empty")
+            .WithCopy(ValidationErrorCodes.BulkHabitsRequired)
             .Must(habits => habits.Count <= AppConstants.MaxBulkOperationSize)
-            .WithMessage($"Cannot create more than {AppConstants.MaxBulkOperationSize} habits at once");
+            .WithCopy(ValidationErrorCodes.BulkCreateLimit);
 
         RuleForEach(x => x.Habits).ChildRules(habit =>
         {
@@ -25,11 +25,12 @@ public class BulkCreateHabitsCommandValidator : AbstractValidator<BulkCreateHabi
 
             habit.RuleFor(h => h.FrequencyQuantity)
                 .GreaterThan(0)
+                .WithFieldCopy(ValidationCopyKeys.FrequencyPositive)
                 .When(h => h.FrequencyQuantity is not null);
 
             habit.RuleFor(h => h.FrequencyQuantity)
                 .NotNull()
-                .WithMessage("Frequency quantity is required when frequency unit is set")
+                .WithCopy(ValidationErrorCodes.FrequencyQuantityRequired)
                 .When(h => h.FrequencyUnit is not null);
 
             SharedHabitRules.AddIntervalWeeksRules(habit.RuleFor(h => h.IntervalWeeks));
@@ -37,11 +38,12 @@ public class BulkCreateHabitsCommandValidator : AbstractValidator<BulkCreateHabi
 
             habit.RuleFor(h => h.Tags)
                 .Must(tags => tags!.Count <= AppConstants.MaxTagsPerHabit)
-                .WithMessage($"Cannot assign more than {AppConstants.MaxTagsPerHabit} tags per habit")
+                .WithCopy(ValidationErrorCodes.BulkTagLimit)
                 .When(h => h.Tags is not null);
 
             habit.RuleForEach(h => h.Tags)
                 .MaximumLength(50)
+                .WithFieldCopy(ValidationCopyKeys.TagNameLength)
                 .When(h => h.Tags is not null);
         });
     }

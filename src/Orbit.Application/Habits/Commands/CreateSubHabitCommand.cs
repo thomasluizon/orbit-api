@@ -51,11 +51,6 @@ public class CreateSubHabitCommandHandler(
             return Result.Failure<Guid>(ErrorMessages.MaxDepthReached.Format(maxDepth));
 
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-        var childDueDate = request.DueDate
-            ?? (parent.DueDate > userToday ? parent.DueDate : userToday);
-
-        var opts = request.Options ?? new HabitCommandOptions();
-
         var siblings = await habitRepository.FindAsync(
             h => h.UserId == request.UserId && h.ParentHabitId == request.ParentHabitId && !h.IsDeleted,
             cancellationToken);
@@ -63,48 +58,7 @@ public class CreateSubHabitCommandHandler(
             ? 0
             : siblings.Max(h => h.Position ?? -1) + 1;
 
-        var frequencyUnit = request.FrequencyUnit;
-        var frequencyQuantity = request.FrequencyQuantity;
-        var intervalWeeks = request.IntervalWeeks;
-        var days = opts.Days;
-        var hasExplicitCadence = frequencyUnit is not null
-            || frequencyQuantity is not null
-            || intervalWeeks is not null
-            || days is not null;
-        if (request.InheritParentFrequency)
-        {
-            frequencyUnit ??= parent.FrequencyUnit;
-            frequencyQuantity ??= parent.FrequencyQuantity;
-            if (days is null && frequencyUnit == FrequencyUnit.Day && frequencyQuantity == 1)
-                days = parent.Days.ToList();
-            if (!hasExplicitCadence)
-                intervalWeeks = parent.IntervalWeeks;
-        }
-
-        var childResult = Habit.Create(new HabitCreateParams(
-            request.UserId,
-            request.Title,
-            frequencyUnit,
-            frequencyQuantity,
-            childDueDate,
-            request.Description,
-            Emoji: request.Emoji,
-            Days: days,
-            IsBadHabit: request.IsBadHabit,
-            DueTime: opts.DueTime,
-            DueEndTime: opts.DueEndTime,
-            ParentHabitId: parent.Id,
-            ReminderEnabled: opts.ReminderEnabled,
-            ReminderTimes: opts.ReminderTimes,
-            SlipAlertEnabled: opts.SlipAlertEnabled,
-            ChecklistItems: opts.ChecklistItems,
-            IsGeneral: parent.IsGeneral,
-            IsFlexible: opts.IsFlexible,
-            EndDate: opts.EndDate,
-            ScheduledReminders: opts.ScheduledReminders,
-            RelativeReminders: opts.RelativeReminders,
-            Position: nextPosition,
-            IntervalWeeks: intervalWeeks));
+        var childResult = BuildHabit(request, parent, userToday, nextPosition);
 
         if (childResult.IsFailure)
             return childResult.PropagateError<Guid>();
@@ -131,6 +85,70 @@ public class CreateSubHabitCommandHandler(
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, userToday);
 
         return Result.Success(childResult.Value.Id);
+    }
+
+    internal static async Task<Result> CheckArgumentsAsync(CreateSubHabitCommand request,
+        IGenericRepository<Habit> repository, IUserDateService dates, IAppConfigService config, CancellationToken ct)
+    {
+        var parents = await repository.FindAsync(h => h.Id == request.ParentHabitId && h.UserId == request.UserId, ct);
+        var parent = parents.FirstOrDefault();
+        if (parent is null)
+            return Result.Failure(ErrorMessages.ParentHabitNotFound);
+        var maxDepth = await config.GetAsync(AppConfigKeys.MaxHabitDepth, AppConstants.MaxHabitDepth, ct);
+        if (await GetDepthAsync(parent, repository, ct) >= maxDepth - 1)
+            return Result.Failure(ErrorMessages.MaxDepthReached.Format(maxDepth));
+        var today = await dates.GetUserTodayAsync(request.UserId, ct);
+        return BuildHabit(request, parent, today, 0);
+    }
+
+    private static Result<Habit> BuildHabit(CreateSubHabitCommand request, Habit parent, DateOnly userToday, int position)
+    {
+        var childDueDate = request.DueDate ?? (parent.DueDate > userToday ? parent.DueDate : userToday);
+        var opts = request.Options ?? new HabitCommandOptions();
+
+        var frequencyUnit = request.FrequencyUnit;
+        var frequencyQuantity = request.FrequencyQuantity;
+        var intervalWeeks = request.IntervalWeeks;
+        var days = opts.Days;
+        var hasExplicitCadence = frequencyUnit is not null
+            || frequencyQuantity is not null
+            || intervalWeeks is not null
+            || days is not null;
+        if (request.InheritParentFrequency)
+        {
+            frequencyUnit ??= parent.FrequencyUnit;
+            frequencyQuantity ??= parent.FrequencyQuantity;
+            if (days is null && frequencyUnit == FrequencyUnit.Day && frequencyQuantity == 1)
+                days = parent.Days.ToList();
+            if (!hasExplicitCadence)
+                intervalWeeks = parent.IntervalWeeks;
+        }
+
+        return Habit.Create(new HabitCreateParams(
+            request.UserId,
+            request.Title,
+            frequencyUnit,
+            frequencyQuantity,
+            childDueDate,
+            request.Description,
+            Emoji: request.Emoji,
+            Days: days,
+            IsBadHabit: request.IsBadHabit,
+            DueTime: opts.DueTime,
+            DueEndTime: opts.DueEndTime,
+            ParentHabitId: parent.Id,
+            ReminderEnabled: opts.ReminderEnabled,
+            ReminderTimes: opts.ReminderTimes,
+            SlipAlertEnabled: opts.SlipAlertEnabled,
+            ChecklistItems: opts.ChecklistItems,
+            IsGeneral: parent.IsGeneral,
+            IsFlexible: opts.IsFlexible,
+            EndDate: opts.EndDate,
+            ScheduledReminders: opts.ScheduledReminders,
+            RelativeReminders: opts.RelativeReminders,
+            Position: position,
+            IntervalWeeks: intervalWeeks));
+
     }
 
     private static async Task<int> GetDepthAsync(Habit habit, IGenericRepository<Habit> repo, CancellationToken ct)

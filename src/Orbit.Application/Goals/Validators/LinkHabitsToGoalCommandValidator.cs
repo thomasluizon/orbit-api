@@ -12,6 +12,6 @@ public class LinkHabitsToGoalCommandValidator : AbstractValidator<LinkHabitsToGo
         RuleFor(x => x.GoalId).NotEmpty();
         RuleFor(x => x.HabitIds)
             .Must(ids => ids.Count <= AppConstants.MaxHabitsPerGoal)
-            .WithMessage($"A goal can have at most {AppConstants.MaxHabitsPerGoal} linked habits.");
+            .WithCopy(ValidationErrorCodes.GoalHabitLimit);
     }
 }

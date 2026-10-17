@@ -6,6 +6,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Commands.Profile;
 
@@ -100,7 +101,7 @@ public class ResetAccountCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("User not found.");
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
         await _accountResetRepo.DidNotReceive().DeleteAllUserDataAsync(UserId, Arg.Any<CancellationToken>());
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
         await _userDateService.DidNotReceive().GetUserTodayAsync(UserId, Arg.Any<CancellationToken>());

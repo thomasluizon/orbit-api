@@ -111,6 +111,27 @@ public partial class LogHabitCommandHandler(
         return await HandleLogAsync(habit, request, targetDate, today, weekStartDay, user, cancellationToken);
     }
 
+    internal static async Task<Result> CheckArgumentsAsync(LogHabitCommand request,
+        IGenericRepository<Habit> habits, IGenericRepository<HabitLog> logs, IUserDateService dates, CancellationToken ct)
+    {
+        var today = await dates.GetUserTodayAsync(request.UserId, ct);
+        var matches = await habits.FindAsync(h => h.Id == request.HabitId && h.UserId == request.UserId,
+            q => q.Include(h => h.Logs), ct);
+        var habit = matches.FirstOrDefault();
+        if (habit is null)
+            return Result.Failure(ErrorMessages.HabitNotFound);
+        var target = request.Date ?? today;
+        var window = ValidateDateWindow(habit, target, today);
+        if (window.IsFailure)
+            return window;
+        if (habit.Logs.Any(l => l.Date == target && l.Value > 0 && !l.IsDeleted) && !habit.IsFlexible && !habit.IsBadHabit)
+            return Result.Success();
+        var weekStart = await dates.GetUserWeekStartDayAsync(request.UserId, ct);
+        var resolution = await HabitDueDateResolutionLoader.LoadAsync(logs, [habit], today.AddDays(-AppConstants.MaxRangeDays), ct);
+        var schedule = ValidateTargetDate(habit, target, today, weekStart, resolution.Contains(habit.Id));
+        return schedule.IsFailure ? schedule : habit.CheckLog(target, weekStart);
+    }
+
     private async Task<Result<Habit>> PrepareUnlogAsync(
         LogHabitCommand request,
         DateOnly today,

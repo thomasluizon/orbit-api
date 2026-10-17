@@ -125,4 +125,24 @@ public class GetNotificationsQueryHandlerTests
         result.Value.Items.Should().HaveCount(2);
         result.Value.UnreadCount.Should().Be(1);
     }
+
+    [Fact]
+    public async Task Handle_ThirtySevenNotifications_ReportsTotalCount()
+    {
+        var notifications = Enumerable.Range(0, 37)
+            .Select(index => Notification.Create(UserId, $"Notice {index}", "Body"))
+            .ToList();
+        _notificationRepo.FindAsync(
+                Arg.Any<Expression<Func<Notification, bool>>>(),
+                Arg.Any<Func<IQueryable<Notification>, IQueryable<Notification>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(notifications.AsReadOnly());
+        _notificationRepo.CountAsync(
+                Arg.Any<Expression<Func<Notification, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => notifications.Count(call.ArgAt<Expression<Func<Notification, bool>>>(0).Compile()));
+
+        var result = await _handler.Handle(new GetNotificationsQuery(UserId), CancellationToken.None);
+
+        result.Value.TotalCount.Should().Be(37);
+    }
 }

@@ -66,6 +66,7 @@ public class ProfileToolsTests
         result.Should().Contain("alex@example.com");
         result.Should().Contain("Pro");
         result.Should().Contain("Monday");
+        result.Should().Contain("Clock: 24-hour");
     }
 
     [Fact]
@@ -190,29 +191,6 @@ public class ProfileToolsTests
     }
 
     [Fact]
-    public async Task SetColorScheme_Success_RoutesThroughExecutor()
-    {
-        StubExecutor(AgentOperationStatus.Succeeded);
-
-        string result = string.Empty;
-        var request = await CapturedRequestAsync(async () => result = await _tools.SetColorScheme(_user, "blue"));
-
-        request.OperationId.Should().Be("set_color_scheme");
-        result.Should().Contain("Color scheme set to blue");
-    }
-
-    [Fact]
-    public async Task SetColorScheme_Null_SendsExplicitNullColorScheme()
-    {
-        StubExecutor(AgentOperationStatus.Succeeded);
-
-        var request = await CapturedRequestAsync(async () => await _tools.SetColorScheme(_user, null));
-
-        request.OperationId.Should().Be("set_color_scheme");
-        request.Arguments.GetRawText().Should().Contain("color_scheme");
-    }
-
-    [Fact]
     public async Task SetWeekStartDay_Sunday_RoutesToUpdatePreferencesAndReturnsSundayMessage()
     {
         StubExecutor(AgentOperationStatus.Succeeded);
@@ -241,6 +219,30 @@ public class ProfileToolsTests
         StubExecutor(AgentOperationStatus.Failed, policyReason: "Invalid");
 
         var result = await _tools.SetWeekStartDay(_user, 5);
+
+        result.Should().StartWith("Error: ");
+    }
+
+    [Fact]
+    public async Task SetClockFormat_RoutesChoiceThroughPreferencesTool()
+    {
+        StubExecutor(AgentOperationStatus.Succeeded);
+
+        string result = string.Empty;
+        var request = await CapturedRequestAsync(async () => result = await _tools.SetClockFormat(_user, false));
+
+        request.OperationId.Should().Be("update_profile_preferences");
+        request.Arguments.GetProperty("action").GetString().Should().Be("set_clock_format");
+        request.Arguments.GetProperty("uses_24_hour_clock").GetBoolean().Should().BeFalse();
+        result.Should().Be("Clock set to 12-hour");
+    }
+
+    [Fact]
+    public async Task SetClockFormat_FailureReturnsMessage()
+    {
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "Invalid");
+
+        var result = await _tools.SetClockFormat(_user, false);
 
         result.Should().StartWith("Error: ");
     }

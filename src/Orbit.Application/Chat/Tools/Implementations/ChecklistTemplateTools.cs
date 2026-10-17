@@ -28,7 +28,7 @@ public class GetChecklistTemplatesTool(IMediator mediator) : IAiTool
     }
 }
 
-public class CreateChecklistTemplateTool(IMediator mediator) : IAiTool
+public class CreateChecklistTemplateTool(IMediator mediator) : IAiTool, IArgumentCheckTool
 {
     public string Name => "create_checklist_template";
     public string Description => "Create a reusable checklist template.";
@@ -48,7 +48,13 @@ public class CreateChecklistTemplateTool(IMediator mediator) : IAiTool
         required = new[] { "name", "items" }
     };
 
-    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
+    public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ExecuteCoreAsync(args, userId, ct, checkOnly: false);
+
+    public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ChatToolArgumentCheck.CheckAsync(this, args, () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+
+    private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         var name = JsonArgumentParser.GetOptionalString(args, "name");
         var items = JsonArgumentParser.ParseStringArray(args, "items");
@@ -56,14 +62,18 @@ public class CreateChecklistTemplateTool(IMediator mediator) : IAiTool
         if (string.IsNullOrWhiteSpace(name) || items is null || items.Count == 0)
             return new ToolResult(false, Error: "name and at least one item are required.");
 
-        var result = await mediator.Send(new CreateChecklistTemplateCommand(userId, name, items), ct);
+        var command = new CreateChecklistTemplateCommand(userId, name, items);
+        if (checkOnly)
+            return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
+
+        var result = await mediator.Send(command, ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: result.Value.ToString(), EntityName: name, Payload: new { id = result.Value, name, items })
             : ToolResult.FromFailure(result);
     }
 }
 
-public class DeleteChecklistTemplateTool(IMediator mediator) : IAiTool
+public class DeleteChecklistTemplateTool(IMediator mediator) : IAiTool, IArgumentCheckTool
 {
     public string Name => "delete_checklist_template";
     public string Description => "Delete a checklist template by ID.";
@@ -78,13 +88,23 @@ public class DeleteChecklistTemplateTool(IMediator mediator) : IAiTool
         required = new[] { "template_id" }
     };
 
-    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
+    public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ExecuteCoreAsync(args, userId, ct, checkOnly: false);
+
+    public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ChatToolArgumentCheck.CheckAsync(this, args, () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+
+    private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         var templateId = JsonArgumentParser.GetOptionalString(args, "template_id");
         if (!Guid.TryParse(templateId, out var parsedId))
             return new ToolResult(false, Error: "template_id must be a valid GUID.");
 
-        var result = await mediator.Send(new DeleteChecklistTemplateCommand(userId, parsedId), ct);
+        var command = new DeleteChecklistTemplateCommand(userId, parsedId);
+        if (checkOnly)
+            return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
+
+        var result = await mediator.Send(command, ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: parsedId.ToString(), EntityName: "Deleted checklist template", Payload: new { id = parsedId })
             : ToolResult.FromFailure(result, parsedId.ToString());

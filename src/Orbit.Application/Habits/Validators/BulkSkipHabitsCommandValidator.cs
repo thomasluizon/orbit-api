@@ -7,7 +7,7 @@ public class BulkSkipHabitsCommandValidator
     : BulkHabitCommandValidatorBase<BulkSkipHabitsCommand, BulkSkipItem>
 {
     public BulkSkipHabitsCommandValidator()
-        : base($"Bulk skip cannot exceed {AppConstants.MaxBulkOperationSize} items")
+        : base(ValidationErrorCodes.BulkSkipLimit)
     {
     }
 }

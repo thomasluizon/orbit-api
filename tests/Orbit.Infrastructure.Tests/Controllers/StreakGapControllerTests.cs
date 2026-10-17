@@ -46,7 +46,7 @@ public class StreakGapControllerTests
 
         var response = result.Should().BeOfType<ObjectResult>().Subject;
         response.StatusCode.Should().Be(StatusCodes.Status409Conflict);
-        response.Value.Should().BeEquivalentTo(new { error = error.Message, errorCode = error.Code });
+        response.Value.Should().BeEquivalentTo(new { Error = error.Message, ErrorCode = error.Code });
         await sender.Received(1).Send(Arg.Is<RepairStreakGapCommand>(command => command.UserId == userId && command.Dates.SequenceEqual(dates)),
             Arg.Any<CancellationToken>());
     }

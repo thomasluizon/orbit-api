@@ -29,9 +29,10 @@ public class SkipHabitCommandHandlerTests
 
     public SkipHabitCommandHandlerTests()
     {
-        _unitOfWork.PassThroughTransactions<Result>();
+        _habitRepo.TryRefreshAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>()).Returns(true);
+        _unitOfWork.PassThroughTransactions<Result<SkipHabitResponse>>();
         _handler = new SkipHabitCommandHandler(
-            new SkipHabitRepositories(_habitRepo, _habitLogRepo), _userDateService,
+            new SkipHabitRepositories(_habitRepo, _habitLogRepo, Substitute.For<IGenericRepository<HabitSkipUndo>>()), _userDateService,
             _goalCompletionService, _unitOfWork, _cache);
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
@@ -52,7 +53,7 @@ public class SkipHabitCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         habit.DueDate.Should().Be(Today.AddDays(1));
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -168,7 +169,7 @@ public class SkipHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("completed");
+        result.Error.Should().Be(ErrorMessages.CannotSkipCompletedHabit.Message);
     }
 
     [Fact]
@@ -185,7 +186,7 @@ public class SkipHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("future");
+        result.Error.Should().Be(ErrorMessages.CannotSkipFutureDate.Message);
     }
 
     [Fact]
@@ -202,7 +203,7 @@ public class SkipHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("not yet due");
+        result.Error.Should().Be(ErrorMessages.HabitNotYetDue.Message);
     }
 
     [Fact]
