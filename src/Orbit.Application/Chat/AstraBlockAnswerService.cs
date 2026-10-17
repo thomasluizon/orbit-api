@@ -11,7 +11,8 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Application.Chat;
 
-public sealed record PreparedAstraBlockAnswer(string Message, ChatResponse? Response = null);
+public sealed record PreparedAstraBlockAnswer(
+    string Message, ChatResponse? Response = null, CrisisLocales Crisis = CrisisLocales.None);
 
 public sealed class AstraBlockAnswerService(
     IIssuedAstraBlockStore store,
@@ -20,6 +21,7 @@ public sealed class AstraBlockAnswerService(
     IAgentOperationExecutor executor,
     IGenericRepository<User> users,
     IProductAnalytics analytics,
+    IFeatureFlagService featureFlags,
     ILogger? logger = null)
 {
     public async Task<Result<PreparedAstraBlockAnswer>> PrepareAsync(ProcessUserChatCommand request, CancellationToken ct)
@@ -43,7 +45,10 @@ public sealed class AstraBlockAnswerService(
                 var answerError = CheckAnswer(definition, answer);
                 if (answerError is not null)
                     return answerError;
-                if (definition.Form == AstraBlockKinds.Choice)
+                var isChoice = definition.Form == AstraBlockKinds.Choice;
+                var message = BuildMessage(definition, answer);
+                var crisis = isChoice ? await DetectCrisisTurnAsync(request.UserId, message, token) : CrisisLocales.None;
+                if (isChoice && crisis == CrisisLocales.None)
                 {
                     var allowance = await payGate.CanSendAiMessage(request.UserId, token);
                     if (allowance.IsFailure)
@@ -55,10 +60,6 @@ public sealed class AstraBlockAnswerService(
                         ?? Failure(ErrorCodes.AstraBlockAnswered);
 
                 var user = await users.GetByIdAsync(request.UserId, token);
-                var labels = definition.Form == AstraBlockKinds.Choice
-                    ? definition.Options.Where(option => answer.SelectedIds.Contains(option.Id)).Select(option => option.Label)
-                    : definition.Items.Where(item => answer.SelectedIds.Contains(item.Id)).Select(item => item.Label);
-                var message = string.Join(", ", labels.Concat(string.IsNullOrWhiteSpace(answer.FreeText) ? [] : new[] { answer.FreeText }));
                 ChatResponse? response = null;
                 if (definition.Form == AstraBlockKinds.PickList)
                 {
@@ -76,20 +77,37 @@ public sealed class AstraBlockAnswerService(
                         CorrelationId: request.CorrelationId,
                         Parts: request.ClientContext?.SupportsParts == true ? [new ChatTextPart(line)] : null);
                 }
-                else
+                else if (crisis == CrisisLocales.None)
                 {
                     var reservation = await payGate.TryConsumeAiMessage(request.UserId, unitOfWork, token);
                     if (reservation.IsFailure)
                         throw new AnswerRejectedException(reservation.PropagateError<PreparedAstraBlockAnswer>());
-                    message = definition.Title + "\n" + message;
                 }
-                return Result.Success(new PreparedAstraBlockAnswer(message, response));
+                return Result.Success(new PreparedAstraBlockAnswer(message, response, crisis));
             }, ct);
         }
         catch (AnswerRejectedException exception)
         {
             return exception.Result;
         }
+    }
+
+    private static string BuildMessage(AstraBlockDefinition definition, AstraBlockAnswer answer)
+    {
+        var labels = definition.Form == AstraBlockKinds.Choice
+            ? definition.Options.Where(option => answer.SelectedIds.Contains(option.Id)).Select(option => option.Label)
+            : definition.Items.Where(item => answer.SelectedIds.Contains(item.Id)).Select(item => item.Label);
+        var message = string.Join(", ", labels.Concat(string.IsNullOrWhiteSpace(answer.FreeText) ? [] : new[] { answer.FreeText }));
+        return definition.Form == AstraBlockKinds.Choice ? definition.Title + "\n" + message : message;
+    }
+
+    private async Task<CrisisLocales> DetectCrisisTurnAsync(Guid userId, string message, CancellationToken ct)
+    {
+        var locales = CrisisSupportGuard.Detect(message);
+        if (locales == CrisisLocales.None)
+            return locales;
+        var enabledFlags = await featureFlags.GetEnabledKeysForUserAsync(userId, ct);
+        return CrisisSupportGuard.IsEnabled(locales, enabledFlags) ? locales : CrisisLocales.None;
     }
 
     public async Task CaptureAnsweredAsync(ProcessUserChatCommand request, CancellationToken ct)

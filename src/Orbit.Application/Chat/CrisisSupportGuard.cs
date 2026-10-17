@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Orbit.Application.Common;
 using Orbit.Domain.Models;
 
 namespace Orbit.Application.Chat;
@@ -46,6 +47,10 @@ public static class CrisisSupportGuard
             locales |= CrisisLocales.Portuguese;
         return locales;
     }
+
+    public static bool IsEnabled(CrisisLocales locales, IReadOnlyList<string> enabledFlags) =>
+        locales != CrisisLocales.None
+        && !enabledFlags.Contains(FeatureFlagKeys.AstraCrisisResourcesDisabled, StringComparer.OrdinalIgnoreCase);
 
     public static string LocaleLabel(CrisisLocales locales) => locales switch
     {

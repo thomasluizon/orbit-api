@@ -182,14 +182,11 @@ public partial class ProcessUserChatCommandHandler(
         LogProcessingChatMessage(logger, request.Message);
         if (request.BlockAnswer is not null)
         {
-            var answerService = new AstraBlockAnswerService(execution.BlockStore, execution.UnitOfWork,
-                execution.PayGateService, execution.OperationExecutor, data.UserRepository, execution.ProductAnalytics, logger);
-            var prepared = await answerService.PrepareAsync(request, cancellationToken);
+            var prepared = await PrepareBlockAnswerAsync(request, cancellationToken);
             if (prepared.IsFailure)
                 return prepared.PropagateError<ChatResponse>();
-            await answerService.CaptureAnsweredAsync(request, cancellationToken);
-            if (prepared.Value.Response is { } preview)
-                return Result.Success(preview);
+            if (prepared.Value.Response is { } preparedResponse)
+                return Result.Success(preparedResponse);
             request = request with { Message = prepared.Value.Message };
         }
         else
@@ -207,7 +204,7 @@ public partial class ProcessUserChatCommandHandler(
             return contextResult.PropagateError<ChatResponse>();
 
         var context = contextResult.Value;
-        var crisisTurn = IsCrisisTurn(detectedCrisisLocales, context.EnabledFeatureFlags);
+        var crisisTurn = CrisisSupportGuard.IsEnabled(detectedCrisisLocales, context.EnabledFeatureFlags);
         if (crisisTurn)
             return await HandleCrisisTurnAsync(request, detectedCrisisLocales);
 
@@ -328,6 +325,24 @@ public partial class ProcessUserChatCommandHandler(
             cards.Parts));
     }
 
+    private async Task<Result<PreparedAstraBlockAnswer>> PrepareBlockAnswerAsync(
+        ProcessUserChatCommand request, CancellationToken cancellationToken)
+    {
+        var answerService = new AstraBlockAnswerService(execution.BlockStore, execution.UnitOfWork,
+            execution.PayGateService, execution.OperationExecutor, data.UserRepository, execution.ProductAnalytics,
+            data.FeatureFlagService, logger);
+        var prepared = await answerService.PrepareAsync(request, cancellationToken);
+        if (prepared.IsFailure)
+            return prepared;
+        await answerService.CaptureAnsweredAsync(request, cancellationToken);
+        if (prepared.Value.Crisis == CrisisLocales.None)
+            return prepared;
+
+        var crisisRequest = request with { Message = prepared.Value.Message };
+        var response = await HandleCrisisTurnAsync(crisisRequest, prepared.Value.Crisis);
+        return Result.Success(prepared.Value with { Response = response.Value });
+    }
+
     private static string? GetUserLanguage(User? user) => user?.Language;
 
     private static ProcessUserChatCommand ApplyClientKillFlags(
@@ -421,10 +436,6 @@ public partial class ProcessUserChatCommandHandler(
                 });
         }
     }
-
-    private static bool IsCrisisTurn(CrisisLocales locales, IReadOnlyList<string> enabledFlags) =>
-        locales != CrisisLocales.None
-        && !enabledFlags.Contains(FeatureFlagKeys.AstraCrisisResourcesDisabled, StringComparer.OrdinalIgnoreCase);
 
     private static string? TryGetCachedFaqAnswer((string Key, string Locale)? match) =>
         match is { } faq && ChatFaqCache.TryGetAnswer(faq.Key, faq.Locale, out var answer)
