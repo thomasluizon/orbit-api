@@ -50,6 +50,7 @@ public class OrbitDbContext : DbContext
     public DbSet<UserSessionRefreshToken> UserSessionRefreshTokens => Set<UserSessionRefreshToken>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
     public DbSet<PendingAgentOperationState> PendingAgentOperations => Set<PendingAgentOperationState>();
+    public DbSet<IssuedAstraBlock> IssuedAstraBlocks => Set<IssuedAstraBlock>();
     public DbSet<PendingClarification> PendingClarifications => Set<PendingClarification>();
     public DbSet<AgentStepUpChallengeState> AgentStepUpChallenges => Set<AgentStepUpChallengeState>();
     public DbSet<AgentAuditLog> AgentAuditLogs => Set<AgentAuditLog>();
@@ -128,6 +129,14 @@ public class OrbitDbContext : DbContext
         ConfigurePendingAgentOperationEntity(modelBuilder);
         ConfigureAgentStepUpChallengeEntity(modelBuilder);
         ConfigurePendingClarificationEntity(modelBuilder);
+        modelBuilder.Entity<IssuedAstraBlock>(entity =>
+        {
+            entity.HasIndex(block => new { block.UserId, block.CreatedAtUtc });
+            entity.HasIndex(block => block.ExpiresAtUtc);
+            entity.Property(block => block.Form).HasMaxLength(16);
+            entity.Property(block => block.DefinitionJson).HasColumnType(JsonbColumnType);
+            entity.HasOne<User>().WithMany().HasForeignKey(block => block.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
         ConfigureAgentAuditLogEntity(modelBuilder);
         ConfigureDistributedRateLimitBucketEntity(modelBuilder);
         ConfigureAppConfigEntity(modelBuilder);

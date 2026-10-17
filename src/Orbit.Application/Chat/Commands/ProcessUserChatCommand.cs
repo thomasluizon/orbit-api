@@ -43,7 +43,8 @@ public record ProcessUserChatCommand(
     IReadOnlyList<string>? GrantedScopes = null,
     bool IsReadOnlyCredential = false,
     string? CorrelationId = null,
-    Func<ChatStreamEvent, Task>? StreamSink = null) : IRequest<Result<ChatResponse>>;
+    Func<ChatStreamEvent, Task>? StreamSink = null,
+    AstraBlockAnswer? BlockAnswer = null) : IRequest<Result<ChatResponse>>;
 
 public record ChatResponse(
     string? AiMessage,
@@ -141,7 +142,8 @@ public record ChatExecutionDependencies(
     IGamificationService GamificationService,
     IMediator Mediator,
     IProductAnalytics ProductAnalytics,
-    IHabitScheduleLogReader ScheduleLogReader);
+    IHabitScheduleLogReader ScheduleLogReader,
+    IIssuedAstraBlockStore BlockStore);
 
 public partial class ProcessUserChatCommandHandler(
     ChatDataDependencies data,
@@ -178,6 +180,23 @@ public partial class ProcessUserChatCommandHandler(
     {
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
         LogProcessingChatMessage(logger, request.Message);
+        if (request.BlockAnswer is not null)
+        {
+            var prepared = await PrepareBlockAnswerAsync(request, cancellationToken);
+            if (prepared.IsFailure)
+                return prepared.PropagateError<ChatResponse>();
+            if (prepared.Value.Response is { } preparedResponse)
+                return Result.Success(preparedResponse);
+            request = request with { Message = prepared.Value.Message };
+        }
+        else
+        {
+            await execution.UnitOfWork.ExecuteInTransactionAsync(async token =>
+            {
+                await execution.UnitOfWork.AcquireAdvisoryLockAsync($"astra-blocks:{request.UserId}", token);
+                await execution.BlockStore.InvalidateOpenAsync(request.UserId, token);
+            }, cancellationToken);
+        }
         var detectedCrisisLocales = CrisisSupportGuard.Detect(request.Message);
 
         var contextResult = await LoadChatContextAsync(request, cancellationToken);
@@ -185,7 +204,7 @@ public partial class ProcessUserChatCommandHandler(
             return contextResult.PropagateError<ChatResponse>();
 
         var context = contextResult.Value;
-        var crisisTurn = IsCrisisTurn(detectedCrisisLocales, context.EnabledFeatureFlags);
+        var crisisTurn = CrisisSupportGuard.IsEnabled(detectedCrisisLocales, context.EnabledFeatureFlags);
         if (crisisTurn)
             return await HandleCrisisTurnAsync(request, detectedCrisisLocales);
 
@@ -199,7 +218,7 @@ public partial class ProcessUserChatCommandHandler(
             : aiStreamFilter.HandleAsync;
 
         var faqMatch = ChatFaqCache.TryMatchFaqKey(request.Message);
-        var cachedFaqAnswer = TryGetCachedFaqAnswer(faqMatch);
+        var cachedFaqAnswer = request.BlockAnswer is null ? TryGetCachedFaqAnswer(faqMatch) : null;
         if (cachedFaqAnswer is not null)
             return Result.Success(new ChatResponse(cachedFaqAnswer, [], CorrelationId: request.CorrelationId));
 
@@ -257,6 +276,8 @@ public partial class ProcessUserChatCommandHandler(
                 request, context, executionResults, cancellationToken)
             : await TryBuildResponseCardsAsync(
                 responseText, request, context, executionResults, cancellationToken);
+        if (executionResults.AskBlock is { } askBlock)
+            cards = cards with { Parts = (cards.Parts ?? []).Concat(new[] { askBlock }).ToArray() };
         var aiMessage = cards.AiMessage;
 
         if (GetShareableFaqAnswer(faqMatch, aiMessage, executionResults, cards) is { } faqToCache)
@@ -304,6 +325,24 @@ public partial class ProcessUserChatCommandHandler(
             cards.Parts));
     }
 
+    private async Task<Result<PreparedAstraBlockAnswer>> PrepareBlockAnswerAsync(
+        ProcessUserChatCommand request, CancellationToken cancellationToken)
+    {
+        var answerService = new AstraBlockAnswerService(execution.BlockStore, execution.UnitOfWork,
+            execution.PayGateService, execution.OperationExecutor, data.UserRepository, execution.ProductAnalytics,
+            data.FeatureFlagService, logger);
+        var prepared = await answerService.PrepareAsync(request, cancellationToken);
+        if (prepared.IsFailure)
+            return prepared;
+        await answerService.CaptureAnsweredAsync(request, cancellationToken);
+        if (prepared.Value.Crisis == CrisisLocales.None)
+            return prepared;
+
+        var crisisRequest = request with { Message = prepared.Value.Message };
+        var response = await HandleCrisisTurnAsync(crisisRequest, prepared.Value.Crisis);
+        return Result.Success(prepared.Value with { Response = response.Value });
+    }
+
     private static string? GetUserLanguage(User? user) => user?.Language;
 
     private static ProcessUserChatCommand ApplyClientKillFlags(
@@ -338,6 +377,7 @@ public partial class ProcessUserChatCommandHandler(
         && !aiResponse.IsTruncated
         && !toolLoopResult.TokenBudgetExceeded
         && !toolLoopResult.HadToolFailure
+        && results.AskBlock is null
         && results.PendingOperations.Count == 0
         && !results.ActionResults.Any(action => action.Status == ActionStatus.NeedsClarification);
 
@@ -396,10 +436,6 @@ public partial class ProcessUserChatCommandHandler(
                 });
         }
     }
-
-    private static bool IsCrisisTurn(CrisisLocales locales, IReadOnlyList<string> enabledFlags) =>
-        locales != CrisisLocales.None
-        && !enabledFlags.Contains(FeatureFlagKeys.AstraCrisisResourcesDisabled, StringComparer.OrdinalIgnoreCase);
 
     private static string? TryGetCachedFaqAnswer((string Key, string Locale)? match) =>
         match is { } faq && ChatFaqCache.TryGetAnswer(faq.Key, faq.Locale, out var answer)
@@ -889,6 +925,7 @@ public partial class ProcessUserChatCommandHandler(
         ToolExecutionAccumulator results,
         ResponseCards? cards = null) =>
         (cards is null || !cards.HasAnyCard)
+        && results.AskBlock is null
         && results.PendingOperations.Count == 0
         && results.CalledToolNames.All(name => name == DescribeFeatureToolName)
         && results.OperationResults.All(operation => operation.Status == AgentOperationStatus.Succeeded);

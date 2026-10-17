@@ -108,6 +108,10 @@ public class AccountResetRepository(OrbitDbContext context, IAccountEventCollect
             .Where(a => a.UserId == userId)
             .ExecuteDeleteAsync(cancellationToken);
 
+        await context.IssuedAstraBlocks
+            .Where(block => block.UserId == userId)
+            .ExecuteDeleteAsync(cancellationToken);
+
         await context.PendingClarifications
             .Where(pc => pc.UserId == userId)
             .ExecuteDeleteAsync(cancellationToken);

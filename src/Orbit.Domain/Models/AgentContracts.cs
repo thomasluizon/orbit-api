@@ -113,7 +113,8 @@ public record AgentPolicyEvaluationContext(
     string? ConfirmationToken = null,
     bool StepUpSatisfied = false,
     bool IsReadOnlyCredential = false,
-    AgentConfirmationRequirement? ConfirmationRequirementOverride = null);
+    AgentConfirmationRequirement? ConfirmationRequirementOverride = null,
+    bool PreviewOnly = false);
 
 public record AgentPolicyDecision(
     AgentPolicyDecisionStatus Status,
@@ -196,7 +197,8 @@ public record AgentExecuteOperationRequest(
     string? ConfirmationToken = null,
     string? CorrelationId = null,
     bool IncludeChangePreview = false,
-    Func<Task>? OnExecutionStarted = null);
+    Func<Task>? OnExecutionStarted = null,
+    bool PreviewOnly = false);
 
 public record AgentOperationResult(
     string OperationId,
@@ -223,6 +225,12 @@ public record AgentPolicyDenial(
     AgentConfirmationRequirement ConfirmationRequirement,
     string Reason,
     Guid? PendingOperationId = null);
+
+public static class AstraBlockKinds
+{
+    public const string Choice = "choice";
+    public const string PickList = "pickList";
+}
 
 public record AgentClientContext(
     string? Platform = null,

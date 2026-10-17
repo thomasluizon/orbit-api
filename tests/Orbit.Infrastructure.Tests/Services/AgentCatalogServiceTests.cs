@@ -27,7 +27,7 @@ public class AgentCatalogServiceTests
         AgentConfirmationRequirement confirmation)
     {
         var tool = typeof(IAiTool).Assembly.GetTypes()
-            .Where(type => type.IsClass && !type.IsAbstract && typeof(IAiTool).IsAssignableFrom(type))
+            .Where(type => type.IsClass && !type.IsAbstract && typeof(IAiTool).IsAssignableFrom(type) && !typeof(IChatOnlyAiTool).IsAssignableFrom(type))
             .Select(type => (IAiTool)RuntimeHelpers.GetUninitializedObject(type))
             .Single(tool => tool.Name == operationId);
         var catalog = new AgentCatalogService([tool]);
@@ -42,11 +42,21 @@ public class AgentCatalogServiceTests
     }
 
     [Fact]
+    public void Ask_IsExcludedFromAgentOperationsAndMcpCapabilities()
+    {
+        var tool = (IAiTool)RuntimeHelpers.GetUninitializedObject(typeof(Orbit.Application.Chat.Tools.Implementations.AskTool));
+        var catalog = new AgentCatalogService([tool]);
+        catalog.GetOperation("ask").Should().BeNull();
+        catalog.GetCapabilityByMcpTool("ask").Should().BeNull();
+        catalog.GetCapabilityByChatTool("ask").Should().BeNull();
+    }
+
+    [Fact]
     public void SetColorScheme_IsAvailableOnlyThroughTheHttpCompatibilityEndpoint()
     {
         var chatToolNames = typeof(AiToolRegistry).Assembly
             .GetTypes()
-            .Where(type => type.IsClass && !type.IsAbstract && typeof(IAiTool).IsAssignableFrom(type))
+            .Where(type => type.IsClass && !type.IsAbstract && typeof(IAiTool).IsAssignableFrom(type) && !typeof(IChatOnlyAiTool).IsAssignableFrom(type))
             .Select(type => ((IAiTool)RuntimeHelpers.GetUninitializedObject(type)).Name);
         var mcpToolNames = typeof(Orbit.Api.Mcp.Tools.HabitTools).Assembly
             .GetTypes()
@@ -105,11 +115,11 @@ public class AgentCatalogServiceTests
     }
 
     [Fact]
-    public void EveryChatTool_IsMappedToTheCatalog()
+    public void EveryAgentTool_IsMappedToTheCatalog()
     {
         var toolNames = typeof(AiToolRegistry).Assembly
             .GetTypes()
-            .Where(type => type.IsClass && !type.IsAbstract && typeof(IAiTool).IsAssignableFrom(type))
+            .Where(type => type.IsClass && !type.IsAbstract && typeof(IAiTool).IsAssignableFrom(type) && !typeof(IChatOnlyAiTool).IsAssignableFrom(type))
             .Select(type => ((IAiTool)RuntimeHelpers.GetUninitializedObject(type)).Name)
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToList();
@@ -365,7 +375,7 @@ public class AgentCatalogServiceTests
     {
         return typeof(AiToolRegistry).Assembly
             .GetTypes()
-            .Where(type => type.IsClass && !type.IsAbstract && typeof(IAiTool).IsAssignableFrom(type))
+            .Where(type => type.IsClass && !type.IsAbstract && typeof(IAiTool).IsAssignableFrom(type) && !typeof(IChatOnlyAiTool).IsAssignableFrom(type))
             .Select(type => (IAiTool)RuntimeHelpers.GetUninitializedObject(type))
             .Select(tool => ($"chat tool {tool.Name}", tool.Description));
     }

@@ -69,7 +69,7 @@ public class AgentChatWriteHoldTests : IDisposable
     private static IReadOnlyList<IAiTool> ProductionTools()
     {
         return typeof(IAiTool).Assembly.GetTypes()
-            .Where(type => type is { IsAbstract: false, IsInterface: false } && typeof(IAiTool).IsAssignableFrom(type))
+            .Where(type => type is { IsAbstract: false, IsInterface: false } && typeof(IAiTool).IsAssignableFrom(type) && !typeof(IChatOnlyAiTool).IsAssignableFrom(type))
             .Select(type => (IAiTool)RuntimeHelpers.GetUninitializedObject(type))
             .Select(tool => (IAiTool)new StubTool(tool.Name, tool.IsReadOnly))
             .OrderBy(tool => tool.Name, StringComparer.Ordinal)
