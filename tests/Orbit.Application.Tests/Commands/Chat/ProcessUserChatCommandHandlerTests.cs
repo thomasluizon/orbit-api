@@ -558,18 +558,21 @@ public class ProcessUserChatCommandHandlerTests
     }
 
     [Theory]
-    [InlineData("I want to hurt myself", "988")]
-    [InlineData("Quero me machucar", "188")]
-    public async Task Handle_CrisisDisclosure_AddsMatchingResource(string message, string number)
+    [InlineData("I want to hurt myself", "988", false)]
+    [InlineData("I want to hurt myself", "988", true)]
+    [InlineData("Quero me machucar", "188", true)]
+    public async Task Handle_CrisisDisclosure_AddsMatchingResource(string message, string number, bool supportsParts)
     {
         SetupUserAndPayGate();
         SetupAiResponse(new AiResponse { TextMessage = "Let's work on habits.", ToolCalls = null });
         var handler = CreateHandler();
 
         var result = await handler.Handle(
-            new ProcessUserChatCommand(UserId, message), CancellationToken.None);
+            new ProcessUserChatCommand(UserId, message,
+                ClientContext: new AgentClientContext(SupportsParts: supportsParts)), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
+        result.Value.Parts.Should().BeNull();
         result.Value.AiMessage.Should().Contain(number);
         result.Value.AiMessage.Should().NotContain("habits");
     }
@@ -3040,6 +3043,63 @@ public class ProcessUserChatCommandHandlerTests
         staticSections.Should().BeLessThan(staticSupplement);
         staticSupplement.Should().BeLessThan(dynamicSections);
         dynamicSections.Should().BeLessThan(dynamicSupplement);
+    }
+
+    [Theory]
+    [InlineData(false, true, false)]
+    [InlineData(true, true, false)]
+    [InlineData(true, false, false)]
+    [InlineData(true, true, true)]
+    public async Task Handle_CardPrompts_UseClientShapeAndDeclaredKinds(
+        bool supportsParts, bool declaresKinds, bool disabled)
+    {
+        SetupUserAndPayGate();
+        if (disabled)
+            _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
+                .Returns([FeatureFlagKeys.AstraPartsDisabled]);
+        string? prompt = null;
+        _aiIntentService.SendWithToolsAsync(Arg.Do<AiToolRequest>(request => prompt = request.SystemPrompt),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Ready." }));
+        var instructions = new[]
+        {
+            (Kind: "habitList", Legacy: HabitListCardBuilder.PromptInstruction, Parts: HabitListCardBuilder.PartsPromptInstruction),
+            (Kind: "goalList", Legacy: GoalListCardBuilder.PromptInstruction, Parts: GoalListCardBuilder.PartsPromptInstruction),
+            (Kind: "metrics", Legacy: MetricsCardBuilder.PromptInstruction, Parts: MetricsCardBuilder.PartsPromptInstruction),
+            (Kind: "metrics", Legacy: MetricsCardBuilder.HabitPromptInstruction, Parts: MetricsCardBuilder.HabitPartsPromptInstruction),
+            (Kind: "periodInsight", Legacy: PeriodInsightCardBuilder.PromptInstruction, Parts: PeriodInsightCardBuilder.PartsPromptInstruction),
+            (Kind: "daySummary", Legacy: StatusCardBuilder.DayPrompt, Parts: StatusCardBuilder.DayPartsPrompt),
+            (Kind: "streak", Legacy: StatusCardBuilder.StreakPrompt, Parts: StatusCardBuilder.StreakPartsPrompt),
+            (Kind: "calendar", Legacy: StatusCardBuilder.CalendarPrompt, Parts: StatusCardBuilder.CalendarPartsPrompt),
+            (Kind: "recordList", Legacy: RecordListCardBuilder.PromptInstruction, Parts: RecordListCardBuilder.PartsPromptInstruction),
+            (Kind: "accountRows", Legacy: AccountRowsCardBuilder.PromptInstruction, Parts: AccountRowsCardBuilder.PartsPromptInstruction)
+        };
+        var tools = new[] { "review_goals", "get_habit_metrics", "get_retrospective", "get_daily_summary",
+            "get_gamification_overview", "get_calendar_overview", "get_notifications", "get_profile" }
+            .Select(name => ReadTool(name, new ToolResult(true))).ToArray();
+
+        await CreateHandler(tools).Handle(new ProcessUserChatCommand(UserId, "Show goals calendar notifications and my week",
+            ClientContext: new AgentClientContext(SupportsParts: supportsParts,
+                PartKinds: declaresKinds ? instructions.Select(item => item.Kind).Distinct().ToList() : [],
+                SupportsHabitListCard: true, SupportsGoalListCard: true, SupportsMetricsCard: true,
+                SupportsPeriodInsightCard: true, SupportsDaySummaryCard: true, SupportsStreakCard: true,
+                SupportsCalendarCard: true, SupportsRecordListCard: true, SupportsAccountRowsCard: true,
+                SupportsFollowUps: true)), CancellationToken.None);
+
+        var expected = new List<string> { "static prompt", "static supplement", "dynamic prompt", "dynamic supplement" };
+        if (supportsParts && !disabled)
+        {
+            expected.Add("Write the reply in reading order, placing each card directive on its own line where its block belongs. Use at most three directives and never repeat a block's figures in the text.");
+            if (declaresKinds)
+                expected.AddRange(instructions.Select(item => item.Parts));
+            expected.Add("After the reply's text and blocks, end with [[orbit:followups]] followed by two or three short next questions, one per line. Do not add other text after them.");
+        }
+        else
+        {
+            expected.AddRange(instructions.Select(item => item.Legacy));
+            expected.Add("After any card directive, end your reply with [[orbit:followups]] followed by two or three short next questions, one per line. Do not add other text after them.");
+        }
+        prompt.Should().Be(string.Join(Environment.NewLine, expected));
     }
 
     [Theory]
