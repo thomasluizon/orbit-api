@@ -1,15 +1,45 @@
 using System.Reflection;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Orbit.Domain.Entities;
 using Orbit.Infrastructure.Migrations;
+using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Persistence;
 
 public class FeatureFlagAccountsMigrationTests
 {
+    [Fact]
+    public void TargetModel_PreservesRedesignAndMatchesCurrentModel()
+    {
+        using var context = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
+            .UseNpgsql("Host=unused;Database=unused").Options);
+        var initializer = context.GetService<IModelRuntimeInitializer>();
+        var target = initializer.Initialize(new AddFeatureFlagAccounts().TargetModel, designTime: true);
+        var current = context.GetService<IDesignTimeModel>().Model;
+
+        var differences = context.GetService<IMigrationsModelDiffer>()
+            .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
+
+        differences.Should().BeEmpty();
+        var redesign = initializer.Initialize(new AddHabitSkipUndo().TargetModel, designTime: true);
+        var additions = context.GetService<IMigrationsModelDiffer>()
+            .GetDifferences(redesign.GetRelationalModel(), current.GetRelationalModel());
+        additions.Should().HaveCount(3).And.OnlyContain(operation =>
+            operation is CreateTableOperation || operation is CreateIndexOperation || operation is InsertDataOperation);
+        additions.OfType<CreateTableOperation>().Should().ContainSingle()
+            .Which.Name.Should().Be("AppFeatureFlagAccounts");
+        additions.OfType<InsertDataOperation>().Should().ContainSingle()
+            .Which.Table.Should().Be("AppFeatureFlags");
+        context.Database.HasPendingModelChanges().Should().BeFalse();
+        context.Database.GetMigrations().TakeLast(2).Should().Equal(
+            "20261001074038_AddHabitSkipUndo", "20261017011939_AddFeatureFlagAccounts");
+    }
+
     [Fact]
     public void Up_AddsCompositeKeyCascadeRelationshipsAndDisabledSeed()
     {

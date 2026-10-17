@@ -65,6 +65,7 @@ public class FeatureFlagOperationTests
         var evaluator = new AgentPolicyEvaluator(context, catalog, pending, stepUp, settings, resolver);
         var executor = new AgentOperationExecutor(catalog, evaluator, new AgentAuditService(context),
             new AgentTargetOwnershipService(context), stepUp, new AiToolRegistry([adapter]),
+            Substitute.For<IPendingOperationChangePreviewer>(), pending,
             new UnitOfWork(context, new DatabaseConnectionSettings()), NullLogger<AgentOperationExecutor>.Instance);
         var tool = new FeatureFlagTools(provider.GetRequiredService<IMediator>(), new McpExecutorBridge(executor), provider);
         var principal = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, admin.Id.ToString())], "Test"));

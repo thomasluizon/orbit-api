@@ -411,7 +411,8 @@ public class AgentPolicyEvaluatorTests : IDisposable
             _catalogService,
             _pendingOperationStore,
             _stepUpAuthorizationBridge,
-            Options.Create(new AgentPlatformSettings { ShadowModeEnabled = true }));
+            Options.Create(new AgentPlatformSettings { ShadowModeEnabled = true }),
+            new FeatureFlagService(_dbContext, new MemoryCache(new MemoryCacheOptions())));
         var decision = shadowEvaluator.Evaluate(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.HabitsDelete,
             _userId,

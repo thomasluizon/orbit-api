@@ -1,6 +1,7 @@
 ﻿using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -217,7 +218,9 @@ public class AgentExecutionAndSanitizerTests
             .Returns((AgentConfirmationRequirement?)null);
         var settings = Options.Create(new AgentPlatformSettings());
         var pendingStore = new PendingAgentOperationStore(dbContext, settings);
-        var policy = new AgentPolicyEvaluator(dbContext, catalog, pendingStore, stepUpBridge, settings);
+        using var flagCache = new MemoryCache(new MemoryCacheOptions());
+        var policy = new AgentPolicyEvaluator(dbContext, catalog, pendingStore, stepUpBridge, settings,
+            new FeatureFlagService(dbContext, flagCache));
         var arguments = Parse("""{"habit_id":"123"}""");
         var pending = pendingStore.Create(user.Id, capability, operation.Id, arguments.GetRawText(),
             "Delete habit", AgentOperationFingerprint.Compute(operation.Id, arguments.GetRawText()),
