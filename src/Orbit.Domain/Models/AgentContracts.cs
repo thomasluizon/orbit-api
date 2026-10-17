@@ -244,7 +244,9 @@ public record AgentClientContext(
     bool? SupportsCalendarCard = null,
     bool? SupportsRecordListCard = null,
     bool? SupportsAccountRowsCard = null,
-    bool? SupportsHabitListDoneStatus = null);
+    bool? SupportsHabitListDoneStatus = null,
+    bool? SupportsParts = null,
+    IReadOnlyList<string>? PartKinds = null);
 
 public record AgentContextSnapshot(
     string Plan,

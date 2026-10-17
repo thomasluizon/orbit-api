@@ -16,6 +16,8 @@ public static class AccountRowsCardBuilder
     public const string ProfileDirective = "[[orbit:account:profile]]";
     public const string PlanDirective = "[[orbit:account:plan]]";
     public const string ReferralDirective = "[[orbit:account:referral]]";
+    public const string PartsPromptInstruction = "After get_profile, get_subscription_overview, or get_referral_overview succeeds, place the matching [[orbit:account:profile]], [[orbit:account:plan]], or [[orbit:account:referral]] directive on its own line where the account block belongs. Never repeat its figures in text. Never mention prices or upgrade actions.";
+
     public const string PromptInstruction = "For successful get_profile, get_subscription_overview, or get_referral_overview, write one short line without repeating account figures. Then emit the matching [[orbit:account:profile]], [[orbit:account:plan]], or [[orbit:account:referral]] directive before optional follow-ups. Never mention prices or upgrade actions.";
 
     public static AccountRowsCard Profile(ProfileResponse profile) =>

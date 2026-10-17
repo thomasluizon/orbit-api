@@ -6,7 +6,10 @@ namespace Orbit.Application.Chat;
 public record ParsedResponseDirectives(
     string? VisibleText,
     string? CardText,
-    IReadOnlyList<string>? FollowUps);
+    IReadOnlyList<string>? FollowUps,
+    IReadOnlyList<ResponseDirectiveSegment> Segments);
+
+public record ResponseDirectiveSegment(string? Text = null, string? Directive = null);
 
 public static class FollowUpDirective
 {
@@ -21,7 +24,7 @@ public static class FollowUpDirective
     public static ParsedResponseDirectives Parse(string? response)
     {
         if (response is null)
-            return new(null, null, null);
+            return new(null, null, null, []);
 
         var parser = new ResponseDirectiveParser();
         parser.Process(response, flush: true);
@@ -38,6 +41,8 @@ public sealed class ResponseDirectiveParser
     private readonly StringBuilder _visible = new();
     private readonly StringBuilder _followUpTail = new();
     private readonly List<string> _cardDirectives = [];
+    private readonly List<ResponseDirectiveSegment> _segments = [];
+    private readonly StringBuilder _segmentText = new();
     private string _pending = string.Empty;
     private bool _inFollowUps;
 
@@ -77,7 +82,11 @@ public sealed class ResponseDirectiveParser
                 }
 
                 if (DirectiveRegex.IsMatch(token))
+                {
+                    FlushSegment();
                     _cardDirectives.Add(token);
+                    _segments.Add(new(Directive: token));
+                }
                 continue;
             }
 
@@ -107,8 +116,14 @@ public sealed class ResponseDirectiveParser
             ? visibleText
             : string.Join('\n', visibleText, string.Join('\n', cardDirectives));
 
+        var segments = new List<ResponseDirectiveSegment>(_segments);
+        if (!string.IsNullOrWhiteSpace(_segmentText.ToString()))
+            segments.Add(new(Text: _segmentText.ToString().Trim()));
+        segments.AddRange(cardDirectives.Skip(_cardDirectives.Count)
+            .Select(token => new ResponseDirectiveSegment(Directive: token)));
+
         if (!_inFollowUps)
-            return new(visibleText, cardText, null);
+            return new(visibleText, cardText, null, segments);
 
         var items = new List<string>(3);
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -127,13 +142,21 @@ public sealed class ResponseDirectiveParser
                 break;
         }
 
-        return new(visibleText, cardText, items.Count >= 2 ? items : null);
+        return new(visibleText, cardText, items.Count >= 2 ? items : null, segments);
     }
 
     private void AppendVisible(string text, StringBuilder emitted)
     {
+        _segmentText.Append(text);
         _visible.Append(text);
         emitted.Append(text);
+    }
+
+    private void FlushSegment()
+    {
+        if (!string.IsNullOrWhiteSpace(_segmentText.ToString()))
+            _segments.Add(new(Text: _segmentText.ToString().Trim()));
+        _segmentText.Clear();
     }
 
     private static int DirectivePrefixSuffixLength(string text)
