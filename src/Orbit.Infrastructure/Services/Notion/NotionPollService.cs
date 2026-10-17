@@ -70,9 +70,9 @@ internal sealed class NotionPollService(OrbitDbContext db, NotionAccessGate gate
         {
             await unitOfWork.AcquireUserRowLockAsync(userId, transactionToken);
             if ((await gate.CheckAsync(userId, transactionToken)).IsFailure) return;
-            var current = await db.NotionConnections.SingleOrDefaultAsync(c => c.Id == connection.Id, transactionToken);
-            if (current is null || current.Status == NotionConnectionStatus.ReconnectRequired
-                || current.LastPollAtUtc != nowUtc) return;
+            var current = await db.NotionConnections.SingleOrDefaultAsync(
+                c => c.Id == connection.Id && c.LastPollAtUtc == nowUtc, transactionToken);
+            if (current is null || current.Status == NotionConnectionStatus.ReconnectRequired) return;
             if (failureCode is not null) current.FailPoll(failureCode == 401, nowUtc);
             else
             {

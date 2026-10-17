@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using NSubstitute;
 using Orbit.Api.Controllers;
 using Orbit.Application.Common;
@@ -30,13 +31,13 @@ internal sealed class NotionTestContext : IDisposable
     internal readonly NotionAccessGate Gate;
     internal readonly IUnitOfWork UnitOfWork;
 
-    internal NotionTestContext()
+    internal NotionTestContext(params IInterceptor[] interceptors)
     {
         var encryption = new EncryptionService(Options.Create(new EncryptionSettings
         {
             Key = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32))
         }), NullLogger<EncryptionService>.Instance);
-        Factory = new SqliteOrbitDbContextFactory(encryption);
+        Factory = new SqliteOrbitDbContextFactory(encryption, interceptors);
         User.SetTimeZone("America/Sao_Paulo");
         Db.Users.Add(User);
         Db.SaveChanges();

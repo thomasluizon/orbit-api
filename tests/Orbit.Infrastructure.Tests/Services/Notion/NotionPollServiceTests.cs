@@ -1,6 +1,7 @@
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -14,6 +15,16 @@ namespace Orbit.Infrastructure.Tests.Services.Notion;
 
 public class NotionPollServiceTests
 {
+    [Fact]
+    public async Task PollPersistsWhenProviderMaterializesTimestampsAtMicrosecondPrecision()
+    {
+        using var test = new NotionTestContext(new MicrosecondTimestampMaterializer());
+        test.Clock.Now = new DateTimeOffset(2026, 9, 15, 12, 0, 0, TimeSpan.Zero).AddTicks(7);
+        await test.SeedConnectionAsync();
+        await test.Poller().PollAsync(test.User.Id, CancellationToken.None);
+        (await test.Db.NotionTasks.CountAsync()).Should().Be(1);
+    }
+
     [Fact]
     public async Task ForcedFeatureFlagReadObservesKillSwitchWithAWarmCache()
     {
@@ -195,5 +206,18 @@ public class NotionPollServiceTests
             NullLogger<NotionAutoSyncService>.Instance);
         await scheduled.RunAsync(CancellationToken.None);
         await test.Api.Received(1).SearchAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    private sealed class MicrosecondTimestampMaterializer : IMaterializationInterceptor
+    {
+        public object InitializedInstance(MaterializationInterceptionData materializationData, object entity)
+        {
+            if (entity is NotionConnection { LastPollAtUtc: { } timestamp })
+            {
+                typeof(NotionConnection).GetProperty(nameof(NotionConnection.LastPollAtUtc))!
+                    .SetValue(entity, new DateTime(timestamp.Ticks / 10 * 10, DateTimeKind.Utc));
+            }
+            return entity;
+        }
     }
 }
