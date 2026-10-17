@@ -100,5 +100,34 @@ resource "render_env_group_link" "production_api" {
 
 resource "render_env_group_link" "production_web" {
   env_group_id = render_env_group.production_web.id
-  service_ids  = [render_web_service.production_web.id]
+  service_ids  = [render_web_service.production_web.id, render_web_service.production_redesign_web.id]
+}
+
+resource "render_web_service" "production_redesign_web" {
+  environment_id    = render_project.orbit.environments["Production"].id
+  name              = "orbit-web-redesign"
+  plan              = "0.5c-512mb"
+  region            = "ohio"
+  health_check_path = var.web_health_check_path
+
+  lifecycle {
+    ignore_changes = [runtime_source.image.digest]
+  }
+
+  runtime_source = {
+    image = {
+      image_url = "ghcr.io/thomasluizon/orbit-web"
+      digest    = var.production_redesign_web_digest
+    }
+  }
+}
+
+output "production_redesign_web_service_id" {
+  description = "Render service ID for the manual production redesign release."
+  value       = render_web_service.production_redesign_web.id
+}
+
+output "production_redesign_web_host" {
+  description = "Render origin hostname for the production redesign web service."
+  value       = split("/", render_web_service.production_redesign_web.url)[2]
 }
