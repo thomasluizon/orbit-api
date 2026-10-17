@@ -1,6 +1,12 @@
+using System.Reflection;
 using FluentAssertions;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using ModelContextProtocol.Server;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.Services;
+using ServiceCollectionExtensions = Orbit.Api.Extensions.ServiceCollectionExtensions;
 
 namespace Orbit.Infrastructure.Tests.Mcp;
 
@@ -21,6 +27,29 @@ public class CapabilityParityTests
         AgentCapabilityIds.CatalogDataRead,
         AgentCapabilityIds.CatalogSurfacesRead,
     };
+
+    [Fact]
+    public void EveryDeclaredMcpTool_IsRegisteredByProductionBootstrap()
+    {
+        var builder = WebApplication.CreateBuilder();
+        var registerTools = typeof(ServiceCollectionExtensions).GetMethod(
+            "AddMcpToolServer", BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("The production MCP registration method was not found.");
+        registerTools.Invoke(null, [builder]);
+        using var services = builder.Services.BuildServiceProvider();
+        var options = services.GetRequiredService<IOptions<McpServerOptions>>().Value;
+        var registeredTools = options.ToolCollection
+            ?? throw new InvalidOperationException("The production MCP tool collection was not configured.");
+        var registeredNames = registeredTools.Select(tool => tool.ProtocolTool.Name).ToHashSet(StringComparer.Ordinal);
+        var declaredNames = _catalogService.GetCapabilities()
+            .SelectMany(capability => capability.McpToolNames ?? [])
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        declaredNames.Should().NotBeEmpty();
+        declaredNames.Except(registeredNames, StringComparer.Ordinal).Should().BeEmpty(
+            "every MCP tool declared in the capability catalog must be registered by the production bootstrap");
+    }
 
     [Fact]
     public void EveryCapability_HasMatchingChatAndMcpSurfaces()
