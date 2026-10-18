@@ -132,39 +132,6 @@ public partial class AgentCatalogService
         return
         [
             new AgentOperation(
-                "exchange_google_auth",
-                "Exchange Google Auth",
-                "Exchange a Google access token for a direct Orbit session.",
-                AgentCapabilityIds.AuthManage,
-                AgentRiskClass.Low,
-                AgentConfirmationRequirement.None,
-                true,
-                false,
-                CloneJson(new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        access_token = new { type = "string" },
-                        language = new { type = "string", nullable = true },
-                        google_access_token = new { type = "string", nullable = true },
-                        google_refresh_token = new { type = "string", nullable = true },
-                        referral_code = new { type = "string", nullable = true }
-                    },
-                    required = new[] { "access_token" }
-                }),
-                CloneJson(new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        access_token = new { type = "string" },
-                        refresh_token = new { type = "string" },
-                        user_id = new { type = "string" }
-                    },
-                    required = new[] { "access_token", "refresh_token", "user_id" }
-                })),
-            new AgentOperation(
                 "exchange_google_auth_code",
                 "Exchange Google Auth Code",
                 "Exchange a Google authorization code for a direct Orbit session.",

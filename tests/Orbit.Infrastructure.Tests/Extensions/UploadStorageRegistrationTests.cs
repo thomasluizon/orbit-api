@@ -14,7 +14,7 @@ public class UploadStorageRegistrationTests
     [InlineData(null)]
     [InlineData("S3")]
     [InlineData("Supabase")]
-    public void AddEmailAndSupabaseClients_RegistersOnlyS3ForUploadsReadsAndErasure(string? provider)
+    public void AddEmailAndStorageServices_RegistersOnlyS3ForUploadsReadsAndErasure(string? provider)
     {
         var builder = WebApplication.CreateBuilder();
         builder.Configuration.Sources.Clear();
@@ -26,9 +26,6 @@ public class UploadStorageRegistrationTests
             ["Storage:S3:Region"] = "us-east-2",
             ["Storage:S3:AccessKeyId"] = "test-access-key",
             ["Storage:S3:SecretAccessKey"] = "test-secret",
-            ["Supabase:Url"] = "https://project.supabase.co",
-            ["Supabase:AnonKey"] = "test-anon-key",
-            ["Supabase:SecretKey"] = "test-service-key",
             ["Ses:AccessKeyId"] = "test-ses-key",
             ["Ses:SecretAccessKey"] = "test-ses-secret",
             ["Ses:Region"] = "us-east-2",
@@ -40,7 +37,7 @@ public class UploadStorageRegistrationTests
             ["Ses:TopicArn"] = "arn:aws:sns:us-east-2:123456789012:test",
         });
 
-        Orbit.Api.Extensions.ServiceCollectionExtensions.AddEmailAndSupabaseClients(builder, TimeSpan.FromSeconds(10));
+        Orbit.Api.Extensions.ServiceCollectionExtensions.AddEmailAndStorageServices(builder, TimeSpan.FromSeconds(10));
 
         using var services = builder.Services.BuildServiceProvider();
         using var scope = services.CreateScope();

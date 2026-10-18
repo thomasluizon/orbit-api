@@ -52,42 +52,10 @@ public class StartupConfigValidationTests
         act.Should().NotThrow();
     }
 
-    [Theory]
-    [InlineData("Supabase:Url")]
-    [InlineData("Supabase:AnonKey")]
-    public void AddOrbitInfrastructure_MissingSupabaseKey_ThrowsWithKeyName(string omittedKey)
-    {
-        var values = ValidInfrastructure();
-        values.Remove(omittedKey);
-        var builder = BuildWith(values);
-
-        var act = () => builder.AddOrbitInfrastructure();
-
-        act.Should().Throw<InvalidOperationException>()
-            .WithMessage($"Configuration key '{omittedKey}' is missing or empty.");
-    }
-
-    [Theory]
-    [InlineData("Supabase:Url")]
-    [InlineData("Supabase:AnonKey")]
-    public void AddOrbitInfrastructure_WhitespaceSupabaseKey_ThrowsWithKeyName(string blankedKey)
-    {
-        var values = ValidInfrastructure();
-        values[blankedKey] = "   ";
-        var builder = BuildWith(values);
-
-        var act = () => builder.AddOrbitInfrastructure();
-
-        act.Should().Throw<InvalidOperationException>()
-            .WithMessage($"Configuration key '{blankedKey}' is missing or empty.");
-    }
-
     [Fact]
-    public void AddOrbitInfrastructure_S3_DoesNotRequireDeletedSupabaseStorageSecret()
+    public void AddOrbitInfrastructure_WithoutLegacyAuthConfiguration_DoesNotThrow()
     {
-        var values = ValidInfrastructure();
-        values.Remove("Supabase:SecretKey");
-        var builder = BuildWith(values);
+        var builder = BuildWith(ValidInfrastructure());
 
         var act = () => builder.AddOrbitInfrastructure();
 
@@ -161,8 +129,6 @@ public class StartupConfigValidationTests
 
     private static Dictionary<string, string?> ValidInfrastructure() => new()
     {
-        ["Supabase:Url"] = "https://example.supabase.co",
-        ["Supabase:AnonKey"] = "anon-key",
         ["Storage:S3:Bucket"] = "orbit-uploads-staging-713285551626",
         ["Storage:S3:Region"] = "us-east-2",
         ["Storage:S3:PublicBaseUrl"] = "https://api-staging.useorbit.org",

@@ -95,41 +95,6 @@ public class AuthControllerTests
     }
 
     [Fact]
-    public async Task GoogleAuth_Success_ReturnsOk()
-    {
-        _mediator.Send(Arg.Any<GoogleAuthCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(default(LoginResponse)!));
-
-        var request = new AuthController.GoogleAuthRequest("google-access-token", GoogleAccessToken: "calendar-access", GoogleRefreshToken: "calendar-refresh");
-        var result = await _controller.GoogleAuth(request, CancellationToken.None);
-
-        result.Should().BeOfType<OkObjectResult>();
-        await _mediator.Received(1).Send(
-            Arg.Is<GoogleAuthCommand>(command => command is IConcurrencyRetryable
-                && command.GoogleAccessToken == "calendar-access"
-                && command.GoogleRefreshToken == "calendar-refresh"),
-            Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task GoogleAuth_Failure_ReturnsUnauthorizedWithErrorCode()
-    {
-        _mediator.Send(Arg.Any<GoogleAuthCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<LoginResponse>(ErrorMessages.InvalidGoogleToken));
-
-        var request = new AuthController.GoogleAuthRequest("invalid-token");
-        var result = await _controller.GoogleAuth(request, CancellationToken.None);
-
-        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
-        objectResult.StatusCode.Should().Be(401);
-        objectResult.Value.Should().BeEquivalentTo(new
-        {
-            Error = ErrorMessages.InvalidGoogleToken.Message,
-            ErrorCode = ErrorMessages.InvalidGoogleToken.Code
-        });
-    }
-
-    [Fact]
     public async Task GoogleCodeAuth_ReturnsLoginResponseAndDispatchesCodeCommand()
     {
         var login = new LoginResponse(UserId, "token", "Name", "test@example.com", false, "refresh");
@@ -274,7 +239,6 @@ public class AuthControllerTests
     [Theory]
     [InlineData(nameof(AuthController.SendCode), true)]
     [InlineData(nameof(AuthController.VerifyCode), true)]
-    [InlineData(nameof(AuthController.GoogleAuth), true)]
     [InlineData(nameof(AuthController.GoogleCodeAuth), true)]
     [InlineData(nameof(AuthController.GoogleCodeAuthOperation), true)]
     [InlineData(nameof(AuthController.Refresh), true)]
@@ -349,36 +313,6 @@ public class AuthControllerTests
 
         var request = new AuthController.VerifyCodeOperationRequest("test@example.com", "000000");
         var result = await _controller.VerifyCodeOperation(request, CancellationToken.None);
-
-        result.Should().BeOfType<UnauthorizedObjectResult>();
-    }
-
-    [Fact]
-    public async Task GoogleAuthOperation_Success_ReturnsOk()
-    {
-        _mediator.Send(Arg.Any<GoogleAuthCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(new LoginResponse(Guid.NewGuid(), "token", "Name", "e@x.com", false, "refresh")));
-
-        var request = new AuthController.GoogleAuthOperationRequest("google-token", GoogleAccessToken: "calendar-access", GoogleRefreshToken: "calendar-refresh");
-        var result = await _controller.GoogleAuthOperation(request, CancellationToken.None);
-
-        result.Should().BeOfType<OkObjectResult>();
-        await _mediator.Received(1).Send(
-            Arg.Is<GoogleAuthCommand>(command => command is IConcurrencyRetryable
-                && command.GoogleAccessToken == "calendar-access"
-                && command.GoogleRefreshToken == "calendar-refresh"),
-            Arg.Any<CancellationToken>());
-        await _auditService.Received(1).RecordAsync(Arg.Any<AgentAuditEntry>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task GoogleAuthOperation_Failure_ReturnsUnauthorized()
-    {
-        _mediator.Send(Arg.Any<GoogleAuthCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<LoginResponse>("Invalid token"));
-
-        var request = new AuthController.GoogleAuthOperationRequest("invalid-token");
-        var result = await _controller.GoogleAuthOperation(request, CancellationToken.None);
 
         result.Should().BeOfType<UnauthorizedObjectResult>();
     }

@@ -12,7 +12,7 @@ The backend for **Orbit** -- an AI-powered habit tracker. Provides a REST API fo
 | Database | [PostgreSQL](https://www.postgresql.org) via [EF Core 10](https://learn.microsoft.com/ef/core) (Npgsql) |
 | CQRS | [MediatR 14](https://github.com/jbogard/MediatR) |
 | Validation | [FluentValidation 12](https://docs.fluentvalidation.net) |
-| Auth | JWT Bearer + email verification codes + Google OAuth ([Supabase](https://supabase.com) tokens) |
+| Auth | JWT Bearer + email verification codes + Google OAuth authorization code exchange |
 | AI | [OpenAI](https://platform.openai.com) — `gpt-4.1-mini` (primary), `gpt-5.4-nano` (sub-tasks), via the OpenAI .NET SDK |
 | Email | [Amazon SES](https://aws.amazon.com/ses/) (verification codes, contacts) |
 | Push | [Firebase Admin SDK](https://firebase.google.com/docs/admin/setup) (FCM, native Android) + [WebPush](https://github.com/nichelaboratory/Lib.Net.Http.WebPush) (VAPID, browsers) |
@@ -82,7 +82,6 @@ Settings are bound from `appsettings.json`, with secrets overridden in `appsetti
 | `ConnectionStrings:DefaultConnection` / `SessionConnection` | PostgreSQL (direct + session pooler) |
 | `AI:ApiKey` / `AI:Model` / `AI:SubTaskModel` / `AI:BaseUrl` | OpenAI credentials and models (`BaseUrl` defaults to `https://api.openai.com/v1`) |
 | `Jwt:SecretKey` / `Issuer` / `Audience` | JWT signing and claims |
-| `Supabase:Url` / `AnonKey` | Supabase auth tokens |
 | `Storage:S3:Bucket` / `Region` / `PublicBaseUrl` / `AccessKeyId` / `SecretAccessKey` | Required S3 upload, read, and erasure configuration |
 | `Ses:AccessKeyId` / `SecretAccessKey` / `FromEmail` | Transactional email |
 | `Vapid:PublicKey` / `PrivateKey` / `Subject` | Web Push (VAPID) |

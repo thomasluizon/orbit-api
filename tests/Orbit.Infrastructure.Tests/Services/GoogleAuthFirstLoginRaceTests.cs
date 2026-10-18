@@ -1,6 +1,4 @@
 using System.Linq.Expressions;
-using System.Net;
-using System.Text;
 using FluentAssertions;
 using MediatR;
 using Microsoft.Data.Sqlite;
@@ -89,11 +87,11 @@ public class GoogleAuthFirstLoginRaceTests
         loserWork.When(work => work.ResetTracking()).Do(_ => loserContext.ChangeTracker.Clear());
         var loserHandler = CreateHandler(loserContext, loserRepository, loserWork, emailService, scopeFactory, analytics);
 
-        var loserRequest = new GoogleAuthCommand("valid-token", GoogleAccessToken: "google-access", ReferralCode: "referral");
+        var loserRequest = new CompleteGoogleSignInCommand("Google@Example.com", "Google User", "en", "referral", "google-access", null);
         var loserTask = loserHandler.Handle(loserRequest, CancellationToken.None);
         await lookupStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
         var winner = await winnerHandler.Handle(
-            new GoogleAuthCommand("valid-token", ReferralCode: "referral"), CancellationToken.None);
+            new CompleteGoogleSignInCommand("Google@Example.com", "Google User", "en", "referral", null, null), CancellationToken.None);
         releaseLookup.SetResult();
         var loser = await loserTask;
         await Task.WhenAll(welcomeSent.Task, referralProcessed.Task).WaitAsync(TimeSpan.FromSeconds(5));
@@ -115,7 +113,7 @@ public class GoogleAuthFirstLoginRaceTests
             command.NewUserId == winner.Value.UserId && command.ReferralCode == "referral"), Arg.Any<CancellationToken>());
     }
 
-    private static GoogleAuthCommandHandler CreateHandler(
+    private static CompleteGoogleSignInCommandHandler CreateHandler(
         OrbitDbContext context,
         IGenericRepository<User> userRepository,
         IUnitOfWork unitOfWork,
@@ -132,26 +130,13 @@ public class GoogleAuthFirstLoginRaceTests
             Options.Create(new JwtSettings
             {
                 SecretKey = "test-secret-key-that-is-at-least-32-bytes-long-for-hmac",
-                Issuer = "test-issuer", Audience = "test-audience", RefreshExpiryDays = 90
+                Issuer = "test-issuer",
+                Audience = "test-audience",
+                RefreshExpiryDays = 90
             }));
-        var httpFactory = Substitute.For<IHttpClientFactory>();
-        httpFactory.CreateClient("Supabase").Returns(new HttpClient(new GoogleTokenHandler())
-        {
-            BaseAddress = new Uri("https://supabase.example.com")
-        });
         var flow = new GoogleSignInFlow(userRepository, unitOfWork, sessionService,
             emailService, scopeFactory, analytics, NullLogger<GoogleSignInFlow>.Instance);
-        return new GoogleAuthCommandHandler(httpFactory, flow);
+        return new CompleteGoogleSignInCommandHandler(flow);
     }
 
-    private sealed class GoogleTokenHandler : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent(
-                    """{"email":"Google@Example.com","user_metadata":{"full_name":"Google User"}}""",
-                    Encoding.UTF8, "application/json")
-            });
-    }
 }

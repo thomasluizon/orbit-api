@@ -16,7 +16,7 @@ Controllers, middleware, OpenAPI/Scalar, DI config, `Program.cs`. This project s
 
 Exempt by construction:
 - `GET /health` (mapped via `MapHealthChecks` in `Extensions/WebApplicationExtensions.cs` — no controller)
-- `POST /api/auth/send-code`, `verify-code`, `google` (AuthController)
+- `POST /api/auth/send-code`, `verify-code`, `google/code` (AuthController)
 - Stripe webhook (verified by signature, not JWT)
 
 ## Request validation
