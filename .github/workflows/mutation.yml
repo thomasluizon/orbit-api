@@ -18,23 +18,37 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Select mutation shards
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+      has-shards: ${{ steps.select.outputs.has-shards }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Test shard selection
+        run: node --test .github/scripts/mutation-matrix.test.mjs
+      - name: Select changed projects
+        id: select
+        env:
+          BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
+        run: node .github/scripts/mutation-matrix.mjs "$BASE_REF" >> "$GITHUB_OUTPUT"
+
   mutation:
     name: Mutation (${{ matrix.shard || matrix.project }})
+    needs: changes
+    if: needs.changes.outputs.has-shards == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - project: domain
-            shard: domain-habit-freeze
-            mutate: ["**/Entities/Habit.cs", "**/Entities/StreakFreeze.cs"]
-          - project: domain
-            shard: domain-user-invariants
-            mutate: ["**/Entities/User.cs", "**/Entities/HabitInvariants.cs"]
-          - project: application
-          - project: infrastructure
+      matrix: ${{ fromJSON(needs.changes.outputs.matrix) }}
 
     steps:
       - uses: actions/checkout@v7
