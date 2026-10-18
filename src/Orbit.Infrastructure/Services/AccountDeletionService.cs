@@ -108,8 +108,10 @@ public partial class AccountDeletionService(
                     && userToDelete.ScheduledDeletionAt <= nowAtUtc)
                 {
                     await MarketingContactOptOut.RecordAsync(userToDelete.Email, contactRepository, unitOfWork, transactionToken);
-                    await scope.ServiceProvider.GetRequiredService<CancelSubscriptionOnDeletionJob>()
-                        .CancelBeforeDeletionAsync(userToDelete, transactionToken);
+                    if (!string.IsNullOrWhiteSpace(userToDelete.StripeSubscriptionId)
+                        || !string.IsNullOrWhiteSpace(userToDelete.PlayPurchaseToken))
+                        await scope.ServiceProvider.GetRequiredService<CancelSubscriptionOnDeletionJob>()
+                            .CancelBeforeDeletionAsync(userToDelete, transactionToken);
                     await dbContext.AiUsageDaily
                         .Where(u => u.UserId == userId)
                         .ExecuteDeleteAsync(transactionToken);

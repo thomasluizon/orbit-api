@@ -248,6 +248,7 @@ public class GoogleCodeAuthCommandHandlerTests
             .AddSingleton(_sessions)
             .AddSingleton(_email)
             .AddSingleton(_analytics)
+            .AddSingleton(_jobs)
             .BuildServiceProvider();
         using var scope = provider.CreateScope();
 
