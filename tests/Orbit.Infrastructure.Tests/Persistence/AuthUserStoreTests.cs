@@ -2,6 +2,7 @@ using System.Data.Common;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Orbit.Domain.Entities;
 using Orbit.Infrastructure.Persistence;
 
@@ -34,6 +35,29 @@ public class AuthUserStoreTests
         returning.Should().BeEquivalentTo(first);
         returning.Should().BeEquivalentTo(candidate);
         (await context.Users.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Insert_IncludesEveryRequiredMappedColumnWithoutDatabaseDefault()
+    {
+        var commands = new CommandRecorder();
+        using var database = new SqliteOrbitDbContextFactory(commands);
+        commands.Sql.Clear();
+
+        await new AuthUserStore(database.Context).UpsertAsync(Candidate("New", "pt-BR"), CancellationToken.None);
+
+        var entity = database.Context.Model.FindEntityType(typeof(User))!;
+        var table = StoreObjectIdentifier.Table(entity.GetTableName()!, entity.GetSchema());
+        var requiredColumns = entity.GetProperties()
+            .Where(property => !property.IsNullable && property.GetBeforeSaveBehavior() == PropertySaveBehavior.Save
+                && property.GetDefaultValueSql() is null && !property.TryGetDefaultValue(out _))
+            .Select(property => property.GetColumnName(table)!)
+            .ToArray();
+        var insert = commands.Sql.Single(sql => sql.StartsWith("INSERT", StringComparison.Ordinal));
+        var columns = insert[(insert.IndexOf('(') + 1)..insert.IndexOf(')')]
+            .Split(',').Select(column => column.Trim().Trim('"'));
+
+        columns.Should().Contain(requiredColumns);
     }
 
     [Fact]

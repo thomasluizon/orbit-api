@@ -1,3 +1,4 @@
+using Hangfire;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
@@ -8,39 +9,52 @@ using Orbit.Domain.Interfaces;
 namespace Orbit.Application.Auth.Jobs;
 
 /// <summary>
-/// Enqueued once per successful sign-in so signup-only work runs outside the response path.
-/// Hangfire resolves fresh scoped collaborators rather than retaining request-scoped services.
+/// Dispatches signup side effects as independently retried jobs outside the sign-in response path.
+/// A welcome-email retry cannot repeat referral processing or signup analytics.
 /// </summary>
 public sealed partial class CompleteSignupJob(
     IGenericRepository<User> userRepository,
-    IEmailService emailService,
+    IBackgroundJobClient backgroundJobClient,
     IMediator mediator,
     IProductAnalytics productAnalytics,
     ILogger<CompleteSignupJob> logger)
 {
-    public async Task ExecuteAsync(Guid userId, bool isNewUser, string language, string? referralCode)
+    public Task ExecuteAsync(Guid userId, bool isNewUser, string language, string? referralCode)
     {
-        if (!isNewUser)
+        if (isNewUser)
+        {
+            backgroundJobClient.Enqueue<CompleteSignupJob>(job => job.ProcessReferralAsync(userId, referralCode));
+            backgroundJobClient.Enqueue<CompleteSignupJob>(job => job.CaptureSignupAsync(userId));
+            backgroundJobClient.Enqueue<SendWelcomeEmailJob>(job => job.ExecuteAsync(userId, language));
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public async Task ProcessReferralAsync(Guid userId, string? referralCode)
+    {
+        if (string.IsNullOrWhiteSpace(referralCode))
             return;
 
         var user = await userRepository.GetByIdAsync(userId, CancellationToken.None);
         if (user is null)
             return;
 
-        if (!string.IsNullOrWhiteSpace(referralCode))
+        try
         {
-            try
-            {
-                await mediator.Send(new ProcessReferralCodeCommand(user.Id, referralCode), CancellationToken.None);
-            }
-            catch (Exception exception)
-            {
-                LogReferralProcessingFailed(logger, exception, user.Id);
-            }
+            await mediator.Send(new ProcessReferralCodeCommand(user.Id, referralCode), CancellationToken.None);
         }
+        catch (Exception exception)
+        {
+            LogReferralProcessingFailed(logger, exception, user.Id);
+        }
+    }
 
-        AnalyticsCapture.SafeCaptureUserEvent(productAnalytics, logger, user, "signup_completed");
-        await emailService.SendWelcomeEmailAsync(user.Email, user.Name, language, CancellationToken.None);
+    public async Task CaptureSignupAsync(Guid userId)
+    {
+        var user = await userRepository.GetByIdAsync(userId, CancellationToken.None);
+        if (user is not null)
+            AnalyticsCapture.SafeCaptureUserEvent(productAnalytics, logger, user, "signup_completed");
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Referral processing failed for user {UserId}")]

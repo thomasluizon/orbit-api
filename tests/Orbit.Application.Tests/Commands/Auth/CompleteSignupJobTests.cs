@@ -1,4 +1,8 @@
+using System.Collections.Concurrent;
 using FluentAssertions;
+using Hangfire;
+using Hangfire.Common;
+using Hangfire.States;
 using MediatR;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -16,6 +20,17 @@ public class CompleteSignupJobTests
     private readonly IEmailService _email = Substitute.For<IEmailService>();
     private readonly IMediator _mediator = Substitute.For<IMediator>();
     private readonly IProductAnalytics _analytics = Substitute.For<IProductAnalytics>();
+    private readonly IBackgroundJobClient _jobs = Substitute.For<IBackgroundJobClient>();
+    private readonly ConcurrentQueue<Job> _queued = new();
+
+    public CompleteSignupJobTests()
+    {
+        _jobs.Create(Arg.Any<Job>(), Arg.Any<IState>()).Returns(call =>
+        {
+            _queued.Enqueue(call.Arg<Job>());
+            return Guid.NewGuid().ToString();
+        });
+    }
 
     [Fact]
     public async Task ReturningUser_PerformsNoSignupWork()
@@ -26,6 +41,7 @@ public class CompleteSignupJobTests
         _email.ReceivedCalls().Should().BeEmpty();
         _mediator.ReceivedCalls().Should().BeEmpty();
         _analytics.ReceivedCalls().Should().BeEmpty();
+        _jobs.ReceivedCalls().Should().BeEmpty();
     }
 
     [Theory]
@@ -38,7 +54,7 @@ public class CompleteSignupJobTests
         _mediator.Send(Arg.Any<ProcessReferralCodeCommand>(), Arg.Any<CancellationToken>())
             .Returns(_ => referralFails ? throw new InvalidOperationException("Referral unavailable") : Result.Success());
 
-        await CreateJob().ExecuteAsync(user.Id, true, "pt-BR", "friend");
+        await RunSignupAsync(user.Id, "pt-BR", "friend");
 
         await _mediator.Received(1).Send(Arg.Is<ProcessReferralCodeCommand>(c => c.NewUserId == user.Id && c.ReferralCode == "friend"), CancellationToken.None);
         _analytics.Received(1).CaptureUserEvent(user.Id, "signup_completed", "Free");
@@ -53,11 +69,62 @@ public class CompleteSignupJobTests
         _analytics.When(a => a.CaptureUserEvent(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(),
             Arg.Any<IReadOnlyDictionary<string, object>?>())).Do(_ => throw new InvalidOperationException("Analytics unavailable"));
 
-        await CreateJob().ExecuteAsync(user.Id, true, "en", null);
+        await RunSignupAsync(user.Id, "en", null);
 
         await _email.Received(1).SendWelcomeEmailAsync(user.Email, user.Name, "en", CancellationToken.None);
         _mediator.ReceivedCalls().Should().BeEmpty();
     }
 
-    private CompleteSignupJob CreateJob() => new(_users, _email, _mediator, _analytics, NullLogger<CompleteSignupJob>.Instance);
+    [Fact]
+    public async Task WelcomeFailure_RetriesOnlyEmailWithoutRepeatingSignupAnalyticsOrReferral()
+    {
+        var user = User.Create("Person", "person@example.com").Value;
+        _users.GetByIdAsync(user.Id, Arg.Any<CancellationToken>()).Returns(user);
+        _mediator.Send(Arg.Any<ProcessReferralCodeCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        var attempts = 0;
+        _email.SendWelcomeEmailAsync(user.Email, user.Name, "en", CancellationToken.None)
+            .Returns(_ => ++attempts == 1
+                ? Task.FromException(new InvalidOperationException("Email unavailable"))
+                : Task.CompletedTask);
+        Job? current = null;
+
+        async Task AttemptAsync()
+        {
+            if (current is null)
+                await CreateJob().ExecuteAsync(user.Id, true, "en", "friend");
+            else
+                await InvokeAsync(current);
+
+            while (_queued.TryDequeue(out var next))
+            {
+                current = next;
+                await InvokeAsync(current);
+            }
+        }
+
+        await ((Func<Task>)AttemptAsync).Should().ThrowAsync<InvalidOperationException>().WithMessage("Email unavailable");
+        await AttemptAsync();
+
+        attempts.Should().Be(2);
+        _analytics.Received(1).CaptureUserEvent(user.Id, "signup_completed", "Free");
+        await _mediator.Received(1).Send(Arg.Any<ProcessReferralCodeCommand>(), CancellationToken.None);
+    }
+
+    private async Task InvokeAsync(Job job)
+    {
+        object instance = job.Type == typeof(CompleteSignupJob)
+            ? CreateJob()
+            : new SendWelcomeEmailJob(_users, _email);
+        var operation = (Task)job.Method.Invoke(instance, job.Args.ToArray())!;
+        await operation;
+    }
+
+    private async Task RunSignupAsync(Guid userId, string language, string? referralCode)
+    {
+        await CreateJob().ExecuteAsync(userId, true, language, referralCode);
+        while (_queued.TryDequeue(out var job))
+            await InvokeAsync(job);
+    }
+
+    private CompleteSignupJob CreateJob() => new(_users, _jobs, _mediator, _analytics, NullLogger<CompleteSignupJob>.Instance);
 }
