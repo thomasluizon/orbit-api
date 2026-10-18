@@ -36,11 +36,11 @@ if (baseRef) {
     || path === ".github/workflows/mutation.yml"
     || path.startsWith(".github/scripts/mutation-matrix.")
   );
-  selected = shards.filter(({ project }) => shared || changed.some((path) =>
+  selected = shards.filter(({ project }) => shared || changed.some((path) => !/\.(md|mdx|rst|adoc)$/i.test(path) && (
     path.startsWith(`src/${projects[project]}/`)
     || path.startsWith(`tests/${projects[project]}.Tests/`)
     || path === `stryker-config.${project}.json`
-  ));
+  )));
 }
 
 process.stdout.write(`matrix=${JSON.stringify({ include: selected })}\n`);

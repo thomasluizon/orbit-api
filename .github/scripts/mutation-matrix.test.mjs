@@ -46,7 +46,7 @@ function names(matrix) {
 
 test("documentation and unrelated projects select no shards", (t) => {
   const repo = repository(t);
-  for (const path of ["README.md", "docs/mutation notes.md", "src/Orbit.Api/Controllers/AuthController.cs", "tests/Orbit.Analyzers.Tests/RuleTests.cs"]) repo.write(path);
+  for (const path of ["README.md", "docs/mutation notes.md", "src/Orbit.Domain/CLAUDE.md", "tests/Orbit.Application.Tests/README.md", "src/Orbit.Infrastructure/docs/design.MD", "src/Orbit.Api/Controllers/AuthController.cs", "tests/Orbit.Analyzers.Tests/RuleTests.cs"]) repo.write(path);
   repo.commit();
   assert.deepEqual(repo.select(), []);
 });
