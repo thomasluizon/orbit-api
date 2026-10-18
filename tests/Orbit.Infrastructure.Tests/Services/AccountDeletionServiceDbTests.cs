@@ -17,6 +17,8 @@ public class AccountDeletionServiceDbTests : IDisposable
     private readonly SqliteConnection _connection;
     private readonly OrbitDbContext _dbContext;
     private readonly AccountDeletionService _service;
+    private readonly FakeObjectStore _objects = new();
+    private readonly FakeObjectStore _legacyObjects = new();
 
     public AccountDeletionServiceDbTests()
     {
@@ -32,6 +34,8 @@ public class AccountDeletionServiceDbTests : IDisposable
 
         var serviceProvider = new ServiceCollection()
             .AddSingleton(_dbContext)
+            .AddSingleton<IObjectStorageDeletionService>(_objects)
+            .AddSingleton<IObjectStorageDeletionService>(_legacyObjects)
             .AddSingleton<IUnitOfWork>(new UnitOfWork(_dbContext, new DatabaseConnectionSettings()))
             .AddSingleton<IGenericRepository<MarketingContact>>(new GenericRepository<MarketingContact>(_dbContext))
             .AddSingleton<IAccountResetRepository>(new AccountResetRepository(_dbContext, NSubstitute.Substitute.For<Orbit.Domain.Events.IAccountEventCollector>()))
@@ -174,6 +178,84 @@ public class AccountDeletionServiceDbTests : IDisposable
 
         var remaining = await _dbContext.Users.IgnoreQueryFilters().Select(u => u.Id).ToListAsync();
         remaining.Should().BeEquivalentTo(new[] { futureDated, active });
+    }
+
+    [Fact]
+    public async Task RunAsync_DeletesObjectsFromEveryProviderBeforeRemovingUser()
+    {
+        var userId = Guid.NewGuid();
+        var otherKey = $"{Guid.NewGuid()}/keep.png";
+        SeedDeactivatedUser(userId, "objects@example.com", DateTime.UtcNow.AddDays(-1));
+        await _dbContext.SaveChangesAsync();
+        _objects.Keys.UnionWith([$"{userId}/one.png", $"{userId}/nested/two.jpg", otherKey]);
+        _legacyObjects.Keys.Add($"{userId}/legacy.png");
+        _objects.BeforeDelete = () => _dbContext.Users.IgnoreQueryFilters().Any(u => u.Id == userId).Should().BeTrue();
+
+        await _service.RunAsync(CancellationToken.None);
+
+        _objects.Keys.Should().BeEquivalentTo([otherKey]);
+        _legacyObjects.Keys.Should().BeEmpty();
+        (await _dbContext.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == userId)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RunAsync_StorageFailureRetriesAndCompletesOnlyAfterSuccess()
+    {
+        var userId = Guid.NewGuid();
+        SeedDeactivatedUser(userId, "retry@example.com", DateTime.UtcNow.AddDays(-1));
+        await _dbContext.SaveChangesAsync();
+        _objects.Keys.Add($"{userId}/one.png");
+        _objects.FailuresRemaining = 1;
+
+        await _service.RunAsync(CancellationToken.None);
+
+        _objects.Attempts.Should().Be(2);
+        _objects.Keys.Should().BeEmpty();
+        (await _dbContext.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == userId)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RunAsync_PersistentStorageFailureKeepsUserScheduledForNextRun()
+    {
+        var userId = Guid.NewGuid();
+        SeedDeactivatedUser(userId, "persistent@example.com", DateTime.UtcNow.AddDays(-1));
+        _dbContext.Tags.Add(Tag.Create(userId, "Keep until erased", "#ff0000").Value);
+        await _dbContext.SaveChangesAsync();
+        _legacyObjects.Keys.Add($"{userId}/legacy.png");
+        _legacyObjects.FailuresRemaining = 3;
+
+        await _service.RunAsync(CancellationToken.None);
+
+        _legacyObjects.Attempts.Should().Be(3);
+        _legacyObjects.Keys.Should().HaveCount(1);
+        var retained = await _dbContext.Users.IgnoreQueryFilters().SingleAsync(u => u.Id == userId);
+        retained.IsDeactivated.Should().BeTrue();
+        retained.ScheduledDeletionAt.Should().NotBeNull();
+        (await _dbContext.Tags.AnyAsync(t => t.UserId == userId)).Should().BeTrue();
+
+        await _service.RunAsync(CancellationToken.None);
+
+        _legacyObjects.Keys.Should().BeEmpty();
+        (await _dbContext.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == userId)).Should().BeFalse();
+    }
+
+    private sealed class FakeObjectStore : IObjectStorageDeletionService
+    {
+        public HashSet<string> Keys { get; } = [];
+        public int FailuresRemaining { get; set; }
+        public int Attempts { get; private set; }
+        public Action? BeforeDelete { get; set; }
+
+        public Task DeleteUserObjectsAsync(Guid userId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Attempts++;
+            BeforeDelete?.Invoke();
+            if (FailuresRemaining-- > 0)
+                throw new HttpRequestException("Storage unavailable");
+            Keys.RemoveWhere(key => key.StartsWith($"{userId}/", StringComparison.Ordinal));
+            return Task.CompletedTask;
+        }
     }
 
     private void SeedUser(Guid userId, string email)

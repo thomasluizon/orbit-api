@@ -50,18 +50,24 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<S3ObjectStorageService>();
         builder.Services.AddScoped<IObjectStorageReadService>(serviceProvider =>
             serviceProvider.GetRequiredService<S3ObjectStorageService>());
+        builder.Services.AddScoped<IObjectStorageDeletionService>(serviceProvider =>
+            serviceProvider.GetRequiredService<S3ObjectStorageService>());
+        var supabaseSecretKey = RequireConfigValue(builder, "Supabase:SecretKey");
+        builder.Services.Configure<SupabaseStorageSettings>(
+            builder.Configuration.GetSection(SupabaseStorageSettings.SectionName));
+        builder.Services.AddHttpClient(SupabaseObjectStorageService.HttpClientName, client =>
+        {
+            client.BaseAddress = new Uri(supabaseUrl);
+            client.DefaultRequestHeaders.Add("apikey", supabaseSecretKey);
+            client.Timeout = httpTimeout;
+        });
+        builder.Services.AddScoped<SupabaseObjectStorageService>();
+        builder.Services.AddScoped<IObjectStorageDeletionService>(serviceProvider =>
+            serviceProvider.GetRequiredService<SupabaseObjectStorageService>());
         if (storageProvider.Equals("Supabase", StringComparison.OrdinalIgnoreCase))
         {
-            var supabaseSecretKey = RequireConfigValue(builder, "Supabase:SecretKey");
-            builder.Services.Configure<SupabaseStorageSettings>(
-                builder.Configuration.GetSection(SupabaseStorageSettings.SectionName));
-            builder.Services.AddHttpClient(SupabaseObjectStorageService.HttpClientName, client =>
-            {
-                client.BaseAddress = new Uri(supabaseUrl);
-                client.DefaultRequestHeaders.Add("apikey", supabaseSecretKey);
-                client.Timeout = httpTimeout;
-            });
-            builder.Services.AddScoped<IObjectStorageService, SupabaseObjectStorageService>();
+            builder.Services.AddScoped<IObjectStorageService>(serviceProvider =>
+                serviceProvider.GetRequiredService<SupabaseObjectStorageService>());
         }
         else if (storageProvider.Equals("S3", StringComparison.OrdinalIgnoreCase))
         {
