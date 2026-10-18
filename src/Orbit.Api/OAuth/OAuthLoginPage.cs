@@ -10,7 +10,8 @@ public static class OAuthLoginPage
 
     public static string Render(string clientId, string redirectUri, string state,
         string codeChallenge, string codeChallengeMethod, string? nonce = null,
-        string? error = null, string language = "en")
+        string? error = null, string language = "en",
+        bool botProtectionEnabled = false, string? turnstileSiteKey = null)
     {
         var copy = OAuthPageStrings.For(language);
         var requestJson = OAuthPageJson.Write(new
@@ -22,7 +23,9 @@ public static class OAuthLoginPage
             codeChallengeMethod,
             nonce,
             language = copy.Locale,
-            error
+            error,
+            botProtectionEnabled,
+            turnstileSiteKey = botProtectionEnabled ? turnstileSiteKey : null
         });
         var copyJson = OAuthPageJson.Write(new
         {
@@ -39,6 +42,11 @@ public static class OAuthLoginPage
             resendCountdown = copy.ResendCountdown,
             authorizedLine = copy.AuthorizedLine
         });
+
+        var turnstileWidget = botProtectionEnabled ? """<div id="turnstile-widget"></div>""" : "";
+        var turnstileScript = botProtectionEnabled
+            ? """<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&amp;onload=onOAuthTurnstileLoad" defer onerror="onOAuthTurnstileError()"></script>"""
+            : "";
 
         var googleStartQuery = $"client_id={Uri.EscapeDataString(clientId)}"
             + $"&redirect_uri={Uri.EscapeDataString(redirectUri)}"
@@ -73,6 +81,7 @@ public static class OAuthLoginPage
 <p class="note hidden" id="status" role="status"></p>
 </div>
 <p class="alert hidden" id="error" role="alert"></p>
+{{turnstileWidget}}
 <section class="step" id="step-email">
 <div class="field" id="email-field">
 <label for="email">{{copy.EmailLabel}}</label>
@@ -112,6 +121,7 @@ public static class OAuthLoginPage
 <script>
 {{OAuthPageScript.Js}}
 </script>
+{{turnstileScript}}
 </body>
 </html>
 """;

@@ -163,14 +163,14 @@ public partial class GoalDeadlineNotificationService(
 
         if (daysUntilDeadline < 1) return;
 
-        foreach (var daysBefore in NotifyDaysBefore)
+        foreach (var milestoneDaysBefore in NotifyDaysBefore)
         {
-            if (daysUntilDeadline > daysBefore) continue;
+            if (daysUntilDeadline > milestoneDaysBefore) continue;
 
-            var notificationKey = BuildDedupeKey(goal.Id, daysBefore);
+            var notificationKey = BuildDedupeKey(goal.Id, milestoneDaysBefore);
             if (sentKeys.Contains(notificationKey)) continue;
 
-            var body = FormatDeadlineBody(goal, currentValue, daysBefore, user.Language ?? "en");
+            var body = FormatDeadlineBody(goal, currentValue, daysUntilDeadline, user.Language ?? "en");
 
             sentKeys.Add(notificationKey);
 
@@ -178,7 +178,7 @@ public partial class GoalDeadlineNotificationService(
                 return;
 
             if (logger.IsEnabled(LogLevel.Debug))
-                LogSentDeadlineNotification(logger, daysBefore, goal.Id, goal.UserId);
+                LogSentDeadlineNotification(logger, milestoneDaysBefore, goal.Id, goal.UserId);
 
             return;
         }
@@ -228,19 +228,19 @@ public partial class GoalDeadlineNotificationService(
             entry.State = EntityState.Detached;
     }
 
-    internal static string FormatDeadlineBody(Goal goal, decimal currentValue, int daysBefore, string lang)
+    internal static string FormatDeadlineBody(Goal goal, decimal currentValue, int daysUntilDeadline, string lang)
     {
         var isPt = LocaleHelper.IsPortuguese(lang);
         var culture = CultureInfo.GetCultureInfo(isPt ? "pt-BR" : "en-US");
         var progressText = string.Create(culture, $"{currentValue}/{goal.TargetValue} {goal.Unit}");
-        return daysBefore switch
+        return daysUntilDeadline switch
         {
             1 => isPt
                 ? $"Sua meta termina amanhã. Progresso: {progressText}"
                 : $"Your goal is due tomorrow - you're at {progressText}",
             _ => isPt
-                ? $"Sua meta termina em {daysBefore} dias. Progresso: {progressText}"
-                : $"Your goal is due in {daysBefore} days - you're at {progressText}"
+                ? $"Sua meta termina em {daysUntilDeadline} dias. Progresso: {progressText}"
+                : $"Your goal is due in {daysUntilDeadline} days - you're at {progressText}"
         };
     }
 

@@ -46,6 +46,7 @@ public static class DomainErrors
     public static readonly AppError TagColorRequired = new("TAG_COLOR_REQUIRED", "Tag color is required.");
 
     public static readonly AppError PushEndpointRequired = new("PUSH_ENDPOINT_REQUIRED", "Endpoint is required.");
+    public static readonly AppError PushEndpointInvalid = new("PUSH_ENDPOINT_INVALID", "Endpoint must use a supported Web Push service.");
     public static readonly AppError PushP256dhRequired = new("PUSH_P256DH_REQUIRED", "P256dh key is required.");
     public static readonly AppError PushAuthKeyRequired = new("PUSH_AUTH_KEY_REQUIRED", "Auth key is required.");
 

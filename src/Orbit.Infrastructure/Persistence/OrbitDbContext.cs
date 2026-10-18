@@ -629,8 +629,8 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(p => p.AddresseeId);
             entity.Property(p => p.Status).HasConversion<string>().HasMaxLength(32);
             entity.Property(p => p.Cadence).HasConversion<string>().HasMaxLength(32);
-            entity.HasOne<User>().WithMany().HasForeignKey(p => p.RequesterId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne<User>().WithMany().HasForeignKey(p => p.AddresseeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<User>().WithMany().HasForeignKey(p => p.RequesterId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<User>().WithMany().HasForeignKey(p => p.AddresseeId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 
