@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Orbit.Infrastructure.Configuration;
@@ -21,11 +22,38 @@ public class JwtTokenServiceTests
             SecretKey = "test-secret-key-that-is-at-least-32-bytes-long-for-hmac",
             Issuer = "test-issuer",
             Audience = "test-audience",
-            ExpiryHours = 168,
-            ExpiryMinutes = 0
+            ExpiryHours = 0,
+            ExpiryMinutes = 15
         };
 
         _sut = new JwtTokenService(Options.Create(_settings));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("appsettings.Production.json")]
+    public void GenerateToken_CommittedConfiguration_SetsFifteenMinuteExpiry(string? environmentFile)
+    {
+        var directory = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../..", "src/Orbit.Api"));
+        var configuration = new ConfigurationBuilder()
+            .AddJsonFile(Path.Combine(directory, "appsettings.json"));
+        if (environmentFile is not null)
+            configuration.AddJsonFile(Path.Combine(directory, environmentFile));
+        configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Jwt:SecretKey"] = _settings.SecretKey
+        });
+        var settings = configuration.Build().GetSection(JwtSettings.SectionName).Get<JwtSettings>()
+            ?? throw new InvalidOperationException("Committed Jwt configuration is missing.");
+        var service = new JwtTokenService(Options.Create(settings));
+        var beforeGeneration = DateTime.UtcNow;
+
+        var token = service.GenerateToken(Guid.NewGuid(), "test@example.com", Guid.NewGuid());
+
+        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(token);
+        jwt.ValidTo.Should().BeOnOrBefore(beforeGeneration.AddMinutes(60));
+        jwt.ValidTo.Should().BeCloseTo(beforeGeneration.AddMinutes(15), TimeSpan.FromSeconds(5));
+        settings.Validate();
     }
 
     [Fact]
@@ -187,5 +215,31 @@ public class JwtTokenServiceTests
             : beforeGeneration.AddHours(_settings.ExpiryHours);
 
         jwt.ValidTo.Should().BeCloseTo(expectedExpiry, TimeSpan.FromSeconds(5));
+    }
+
+    [Theory]
+    [InlineData(0, 15, 15)]
+    [InlineData(168, 15, 15)]
+    [InlineData(1, 0, 60)]
+    [InlineData(1, -1, 60)]
+    public void GenerateToken_EffectiveLifetime_PrefersPositiveMinutesOtherwiseHours(
+        int hours, int minutes, int expectedMinutes)
+    {
+        var settings = new JwtSettings
+        {
+            SecretKey = _settings.SecretKey,
+            Issuer = _settings.Issuer,
+            Audience = _settings.Audience,
+            ExpiryHours = hours,
+            ExpiryMinutes = minutes
+        };
+        settings.Validate();
+        var service = new JwtTokenService(Options.Create(settings));
+        var beforeGeneration = DateTime.UtcNow;
+
+        var token = service.GenerateToken(Guid.NewGuid(), "test@example.com", Guid.NewGuid());
+
+        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(token);
+        jwt.ValidTo.Should().BeCloseTo(beforeGeneration.AddMinutes(expectedMinutes), TimeSpan.FromSeconds(5));
     }
 }
