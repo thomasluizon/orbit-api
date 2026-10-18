@@ -85,14 +85,31 @@ public class GetGoalByIdQueryHandlerTests
     [Fact]
     public async Task Handle_WrongUser_ReturnsGoalNotFound()
     {
-        ArrangeGoal(null);
+        var goal = CreateTestGoal();
+
+        _goalRepo.FindAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var predicate = call.ArgAt<Expression<Func<Goal, bool>>>(0).Compile();
+                return new List<Goal> { goal }.Where(predicate).ToList().AsReadOnly();
+            });
+
+        var ownerResult = await _handler.Handle(
+            new GetGoalByIdQuery(UserId, goal.Id), CancellationToken.None);
+
+        ownerResult.IsSuccess.Should().BeTrue();
+        ownerResult.Value.Id.Should().Be(goal.Id);
 
         var wrongUserId = Guid.NewGuid();
-        var query = new GetGoalByIdQuery(wrongUserId, GoalId);
+        var query = new GetGoalByIdQuery(wrongUserId, goal.Id);
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(ErrorMessages.GoalNotFound.Message);
         result.ErrorCode.Should().Be("GOAL_NOT_FOUND");
     }
 
