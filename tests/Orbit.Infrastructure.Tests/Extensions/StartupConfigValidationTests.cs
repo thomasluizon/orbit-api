@@ -85,7 +85,7 @@ public class StartupConfigValidationTests
     }
 
     [Fact]
-    public void AddOrbitInfrastructure_S3_RegistersS3StorageWithoutSupabaseStorageSecret()
+    public void AddOrbitInfrastructure_S3_RequiresSupabaseStorageSecretForLegacyErasure()
     {
         var values = ValidInfrastructure();
         values.Remove("Supabase:SecretKey");
@@ -98,10 +98,10 @@ public class StartupConfigValidationTests
         values["ConnectionStrings:DefaultConnection"] = "Host=localhost;Database=orbit;Username=orbit;Password=unused";
         var builder = BuildWith(values);
 
-        builder.AddOrbitInfrastructure();
+        var act = () => builder.AddOrbitInfrastructure();
 
-        builder.Services.Single(service => service.ServiceType == typeof(IObjectStorageService))
-            .ImplementationFactory.Should().NotBeNull();
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("Configuration key 'Supabase:SecretKey' is missing or empty.");
     }
 
     [Fact]
@@ -132,10 +132,9 @@ public class StartupConfigValidationTests
 
         builder.AddOrbitInfrastructure();
 
-        builder.Services.Single(service => service.ServiceType == typeof(IObjectStorageService))
-            .ImplementationType.Should().Be<SupabaseObjectStorageService>();
         using var provider = builder.Services.BuildServiceProvider();
         using var scope = provider.CreateScope();
+        scope.ServiceProvider.GetRequiredService<IObjectStorageService>().Should().BeOfType<SupabaseObjectStorageService>();
         var reader = scope.ServiceProvider.GetRequiredService<IObjectStorageReadService>();
         reader.Should().BeOfType<S3ObjectStorageService>();
         var readUrl = await reader.CreateReadUrlAsync(objectKey);
