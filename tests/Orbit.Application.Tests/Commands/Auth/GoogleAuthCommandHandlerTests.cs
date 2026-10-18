@@ -1,3 +1,6 @@
+using Orbit.Infrastructure.Services;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.AspNetCore.Http;
 using System.Net;
 using System.Text;
 using FluentAssertions;
@@ -42,7 +45,7 @@ public class GoogleAuthCommandHandlerTests
         var httpFactory = Substitute.For<IHttpClientFactory>();
         httpFactory.CreateClient("Supabase").Returns(httpClient);
 
-        var flow = new GoogleSignInFlow(_userRepo, _unitOfWork, _authSessionService, _jobs);
+        var flow = new GoogleSignInFlow(_userRepo, _unitOfWork, _authSessionService, new SignupJobDispatcher(_jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance));
         _handler = new GoogleAuthCommandHandler(httpFactory, flow);
 
         _userRepo.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(call => call.Arg<User>());

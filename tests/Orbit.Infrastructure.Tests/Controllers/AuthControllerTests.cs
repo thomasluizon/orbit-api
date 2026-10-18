@@ -1,3 +1,5 @@
+using Orbit.Infrastructure.Services;
+using Microsoft.Extensions.Logging.Abstractions;
 using Hangfire;
 using Microsoft.Extensions.Caching.Memory;
 using System.Reflection;
@@ -69,7 +71,7 @@ public class AuthControllerTests
                     new MemoryCacheEntryOptions { AbsoluteExpiration = DateTimeOffset.UtcNow.AddMinutes(-1) });
             if (mode == "throttled")
                 cache.Set("verify-attempts:person@example.com", 3);
-            var handler = new VerifyCodeCommandHandler(cache, store, work, sessions, jobs);
+            var handler = new VerifyCodeCommandHandler(cache, store, work, sessions, new SignupJobDispatcher(jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance));
             _mediator.Send(Arg.Any<VerifyCodeCommand>(), Arg.Any<CancellationToken>())
                 .Returns(call => handler.Handle(call.Arg<VerifyCodeCommand>(), call.Arg<CancellationToken>()));
 

@@ -1,7 +1,5 @@
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
-using Hangfire;
-using Orbit.Application.Auth.Jobs;
 using Orbit.Application.Auth.Queries;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -19,7 +17,7 @@ public class VerifyCodeCommandHandler(
     IAuthUserStore userStore,
     IUnitOfWork unitOfWork,
     IAuthSessionService authSessionService,
-    IBackgroundJobClient backgroundJobClient) : IRequestHandler<VerifyCodeCommand, Result<LoginResponse>>
+    ISignupJobDispatcher signupJobDispatcher) : IRequestHandler<VerifyCodeCommand, Result<LoginResponse>>
 {
     public async Task<Result<LoginResponse>> Handle(VerifyCodeCommand request, CancellationToken cancellationToken)
     {
@@ -29,15 +27,19 @@ public class VerifyCodeCommandHandler(
         if (codeValidation.IsFailure)
             return codeValidation.PropagateError<LoginResponse>();
 
-        var isNewUser = false;
+        var signupPending = false;
+        var signupLanguage = request.Language;
+        var signupReferralCode = request.ReferralCode;
         var result = await unitOfWork.ExecuteInTransactionAsync(async transactionToken =>
         {
-            var findResult = await FindOrCreateUserAsync(email, request.Language, transactionToken);
+            var findResult = await FindOrCreateUserAsync(email, request.Language, request.ReferralCode, transactionToken);
             if (findResult.IsFailure)
                 return findResult.PropagateError<LoginResponse>();
 
-            var (user, created) = findResult.Value;
-            isNewUser = created;
+            var user = findResult.Value;
+            signupPending = user.SignupLanguage is not null && user.SignupCompletedAtUtc is null;
+            signupLanguage = user.SignupLanguage ?? request.Language;
+            signupReferralCode = user.SignupLanguage is not null ? user.SignupReferralCode : request.ReferralCode;
 
             var wasReactivated = user.IsDeactivated;
             if (wasReactivated)
@@ -60,8 +62,7 @@ public class VerifyCodeCommandHandler(
         if (result.IsFailure)
             return result;
 
-        backgroundJobClient.Enqueue<CompleteSignupJob>(job => job.ExecuteAsync(
-            result.Value.UserId, isNewUser, request.Language, request.ReferralCode));
+        signupJobDispatcher.Dispatch(result.Value.UserId, signupPending, signupLanguage, signupReferralCode);
 
         return result;
     }
@@ -103,8 +104,8 @@ public class VerifyCodeCommandHandler(
 
     private static string FailedAttemptCacheKey(string email) => $"verify-attempts:{email}";
 
-    private Task<Result<(User User, bool IsNew)>> FindOrCreateUserAsync(
-        string email, string language, CancellationToken cancellationToken) =>
+    private Task<Result<User>> FindOrCreateUserAsync(
+        string email, string language, string? referralCode, CancellationToken cancellationToken) =>
         AuthUserProvisioning.FindOrCreateUserAsync(
-            userStore, email, email.Split('@')[0], language, cancellationToken);
+            userStore, email, email.Split('@')[0], language, cancellationToken, referralCode);
 }

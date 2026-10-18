@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Linq.Expressions;
 using FluentAssertions;
 using Hangfire;
 using Hangfire.Common;
@@ -16,6 +17,7 @@ namespace Orbit.Application.Tests.Commands.Auth;
 
 public class CompleteSignupJobTests
 {
+    private readonly IUnitOfWork _work = Substitute.For<IUnitOfWork>();
     private readonly IGenericRepository<User> _users = Substitute.For<IGenericRepository<User>>();
     private readonly IEmailService _email = Substitute.For<IEmailService>();
     private readonly IMediator _mediator = Substitute.For<IMediator>();
@@ -25,11 +27,58 @@ public class CompleteSignupJobTests
 
     public CompleteSignupJobTests()
     {
+        _work.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task>>()(call.Arg<CancellationToken>()));
         _jobs.Create(Arg.Any<Job>(), Arg.Any<IState>()).Returns(call =>
         {
             _queued.Enqueue(call.Arg<Job>());
             return Guid.NewGuid().ToString();
         });
+    }
+
+    [Fact]
+    public async Task DuplicateSignupJobs_DoNotRepeatCompletedEffects()
+    {
+        var user = User.Create("Person", "person@example.com").Value;
+        _users.FindOneTrackedIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>()).Returns(user);
+        _mediator.Send(Arg.Any<ProcessReferralCodeCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+
+        await RunSignupAsync(user.Id, "pt-BR", "friend");
+        await RunSignupAsync(user.Id, "pt-BR", "friend");
+
+        _analytics.Received(1).CaptureUserEvent(user.Id, "signup_completed", "Free");
+        await _mediator.Received(1).Send(Arg.Any<ProcessReferralCodeCommand>(), CancellationToken.None);
+        await _email.Received(1).SendWelcomeEmailAsync(user.Email, user.Name, "pt-BR", CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task PartialDispatchFailure_RetryDoesNotRepeatAlreadyQueuedEffects()
+    {
+        var user = User.Create("Person", "person@example.com").Value;
+        user.BeginSignup("pt-BR", "friend");
+        _users.FindOneTrackedIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>()).Returns(user);
+        _mediator.Send(Arg.Any<ProcessReferralCodeCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        var dispatches = 0;
+        _jobs.Create(Arg.Any<Job>(), Arg.Any<IState>()).Returns(call =>
+        {
+            if (++dispatches == 3)
+                throw new BackgroundJobClientException("Storage unavailable", new InvalidOperationException("Connection failed"));
+            _queued.Enqueue(call.Arg<Job>());
+            return "child-job";
+        });
+
+        var act = () => CreateJob().ExecuteAsync(user.Id, true, "en", "replacement");
+        await act.Should().ThrowAsync<BackgroundJobClientException>();
+        while (_queued.TryDequeue(out var child))
+            await InvokeAsync(child);
+        user.SignupCompletedAtUtc.Should().BeNull();
+
+        await RunSignupAsync(user.Id, "en", "replacement");
+
+        user.SignupCompletedAtUtc.Should().NotBeNull();
+        _analytics.Received(1).CaptureUserEvent(user.Id, "signup_completed", "Free");
+        await _mediator.Received(1).Send(Arg.Is<ProcessReferralCodeCommand>(c => c.ReferralCode == "friend"), CancellationToken.None);
+        await _email.Received(1).SendWelcomeEmailAsync(user.Email, user.Name, "pt-BR", CancellationToken.None);
     }
 
     [Fact]
@@ -50,7 +99,7 @@ public class CompleteSignupJobTests
     public async Task Signup_ProcessesReferralCapturesAnalyticsAndSendsWelcome(bool referralFails)
     {
         var user = User.Create("Person", "person@example.com").Value;
-        _users.GetByIdAsync(user.Id, Arg.Any<CancellationToken>()).Returns(user);
+        _users.FindOneTrackedIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>()).Returns(user);
         _mediator.Send(Arg.Any<ProcessReferralCodeCommand>(), Arg.Any<CancellationToken>())
             .Returns(_ => referralFails ? throw new InvalidOperationException("Referral unavailable") : Result.Success());
 
@@ -65,7 +114,7 @@ public class CompleteSignupJobTests
     public async Task Signup_AnalyticsFailureDoesNotPreventWelcome()
     {
         var user = User.Create("Person", "person@example.com").Value;
-        _users.GetByIdAsync(user.Id, Arg.Any<CancellationToken>()).Returns(user);
+        _users.FindOneTrackedIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>()).Returns(user);
         _analytics.When(a => a.CaptureUserEvent(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(),
             Arg.Any<IReadOnlyDictionary<string, object>?>())).Do(_ => throw new InvalidOperationException("Analytics unavailable"));
 
@@ -79,7 +128,7 @@ public class CompleteSignupJobTests
     public async Task WelcomeFailure_RetriesOnlyEmailWithoutRepeatingSignupAnalyticsOrReferral()
     {
         var user = User.Create("Person", "person@example.com").Value;
-        _users.GetByIdAsync(user.Id, Arg.Any<CancellationToken>()).Returns(user);
+        _users.FindOneTrackedIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>()).Returns(user);
         _mediator.Send(Arg.Any<ProcessReferralCodeCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
         var attempts = 0;
         _email.SendWelcomeEmailAsync(user.Email, user.Name, "en", CancellationToken.None)
@@ -114,7 +163,7 @@ public class CompleteSignupJobTests
     {
         object instance = job.Type == typeof(CompleteSignupJob)
             ? CreateJob()
-            : new SendWelcomeEmailJob(_users, _email);
+            : new SendWelcomeEmailJob(_users, _email, _work);
         var operation = (Task)job.Method.Invoke(instance, job.Args.ToArray())!;
         await operation;
     }
@@ -126,5 +175,5 @@ public class CompleteSignupJobTests
             await InvokeAsync(job);
     }
 
-    private CompleteSignupJob CreateJob() => new(_users, _jobs, _mediator, _analytics, NullLogger<CompleteSignupJob>.Instance);
+    private CompleteSignupJob CreateJob() => new(_users, _jobs, _mediator, _analytics, NullLogger<CompleteSignupJob>.Instance, _work);
 }

@@ -11,21 +11,23 @@ namespace Orbit.Application.Auth.Commands;
 /// </summary>
 internal static class AuthUserProvisioning
 {
-    public static async Task<Result<(User User, bool IsNew)>> FindOrCreateUserAsync(
+    public static async Task<Result<User>> FindOrCreateUserAsync(
         IAuthUserStore userStore,
         string email,
         string name,
         string language,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? referralCode = null)
     {
         var createResult = User.Create(name, email);
         if (createResult.IsFailure)
-            return createResult.PropagateError<(User, bool)>();
+            return createResult.PropagateError<User>();
 
         var candidate = createResult.Value;
         candidate.SetLanguage(language);
         candidate.SeedDefaultHandle();
+        candidate.BeginSignup(language, referralCode);
         var user = await userStore.UpsertAsync(candidate, cancellationToken);
-        return Result.Success((user, user.Id == candidate.Id));
+        return Result.Success(user);
     }
 }

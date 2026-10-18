@@ -6,12 +6,18 @@ namespace Orbit.Application.Auth.Jobs;
 /// <summary>
 /// Retries welcome-email delivery independently of the account's other signup side effects.
 /// </summary>
-public sealed class SendWelcomeEmailJob(IGenericRepository<User> userRepository, IEmailService emailService)
+public sealed class SendWelcomeEmailJob(IGenericRepository<User> userRepository, IEmailService emailService,
+    IUnitOfWork unitOfWork)
 {
-    public async Task ExecuteAsync(Guid userId, string language)
-    {
-        var user = await userRepository.GetByIdAsync(userId, CancellationToken.None);
-        if (user is not null)
-            await emailService.SendWelcomeEmailAsync(user.Email, user.Name, language, CancellationToken.None);
-    }
+    public Task ExecuteAsync(Guid userId, string language) =>
+        SignupWork.RunAsync(userId, userRepository, unitOfWork, async user =>
+        {
+            if (user.SignupWelcomeCompletedAtUtc is not null)
+                return;
+
+            await emailService.SendWelcomeEmailAsync(user.Email, user.Name,
+                user.SignupLanguage ?? language, CancellationToken.None);
+            if (user.SignupLanguage is not null)
+                user.CompleteSignupWelcome();
+        });
 }

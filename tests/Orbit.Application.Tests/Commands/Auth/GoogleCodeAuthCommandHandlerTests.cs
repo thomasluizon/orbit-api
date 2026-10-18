@@ -1,3 +1,5 @@
+using Orbit.Infrastructure.Services;
+using Microsoft.AspNetCore.Http;
 using Hangfire;
 using Hangfire.Common;
 using Hangfire.States;
@@ -38,7 +40,7 @@ public class GoogleCodeAuthCommandHandlerTests
         _work.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>(), Arg.Any<CancellationToken>())
             .Returns(call => call.Arg<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>()(call.Arg<CancellationToken>()));
         _store.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(call => call.Arg<User>());
-        var flow = new GoogleSignInFlow(_store, _work, _sessions, _jobs);
+        var flow = new GoogleSignInFlow(_store, _work, _sessions, new SignupJobDispatcher(_jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance));
         _handler = new GoogleCodeAuthCommandHandler(_exchange, _signInMediator);
         _signInMediator.Send(Arg.Any<CompleteGoogleSignInCommand>(), Arg.Any<CancellationToken>())
             .Returns(call =>
@@ -190,6 +192,7 @@ public class GoogleCodeAuthCommandHandlerTests
                 cfg.AddOpenBehavior(typeof(ConcurrencyRetryBehavior<,>));
             })
             .AddScoped<GoogleSignInFlow>()
+            .AddSingleton<ISignupJobDispatcher>(new SignupJobDispatcher(_jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance))
             .AddSingleton(_store)
             .AddSingleton(_jobs)
             .AddSingleton(_exchange)

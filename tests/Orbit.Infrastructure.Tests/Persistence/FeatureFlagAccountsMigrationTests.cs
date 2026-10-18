@@ -19,7 +19,8 @@ public class FeatureFlagAccountsMigrationTests
         using var context = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
             .UseNpgsql("Host=unused;Database=unused").Options);
         var initializer = context.GetService<IModelRuntimeInitializer>();
-        var target = initializer.Initialize(new AddFeatureFlagAccounts().TargetModel, designTime: true);
+        var target = initializer.Initialize(new AddDurableSignupWork().TargetModel, designTime: true);
+        var featureFlags = initializer.Initialize(new AddFeatureFlagAccounts().TargetModel, designTime: true);
         var current = context.GetService<IDesignTimeModel>().Model;
 
         var differences = context.GetService<IMigrationsModelDiffer>()
@@ -28,16 +29,25 @@ public class FeatureFlagAccountsMigrationTests
         differences.Should().BeEmpty();
         var redesign = initializer.Initialize(new AddHabitSkipUndo().TargetModel, designTime: true);
         var additions = context.GetService<IMigrationsModelDiffer>()
-            .GetDifferences(redesign.GetRelationalModel(), current.GetRelationalModel());
+            .GetDifferences(redesign.GetRelationalModel(), featureFlags.GetRelationalModel());
         additions.Should().HaveCount(3).And.OnlyContain(operation =>
             operation is CreateTableOperation || operation is CreateIndexOperation || operation is InsertDataOperation);
         additions.OfType<CreateTableOperation>().Should().ContainSingle()
             .Which.Name.Should().Be("AppFeatureFlagAccounts");
         additions.OfType<InsertDataOperation>().Should().ContainSingle()
             .Which.Table.Should().Be("AppFeatureFlags");
+        var signupAdditions = context.GetService<IMigrationsModelDiffer>()
+            .GetDifferences(featureFlags.GetRelationalModel(), current.GetRelationalModel());
+        signupAdditions.Should().HaveCount(6).And.OnlyContain(operation =>
+            operation is AddColumnOperation && !operation.IsDestructiveChange);
+        var signupColumns = signupAdditions.Cast<AddColumnOperation>().ToArray();
+        signupColumns.Should().OnlyContain(column => column.Table == "Users" && column.IsNullable);
+        signupColumns.Select(column => column.Name).Should().BeEquivalentTo(
+            "SignupLanguage", "SignupReferralCode", "SignupCompletedAtUtc",
+            "SignupReferralCompletedAtUtc", "SignupAnalyticsCompletedAtUtc", "SignupWelcomeCompletedAtUtc");
         context.Database.HasPendingModelChanges().Should().BeFalse();
-        context.Database.GetMigrations().TakeLast(2).Should().Equal(
-            "20261001074038_AddHabitSkipUndo", "20261017011939_AddFeatureFlagAccounts");
+        context.Database.GetMigrations().TakeLast(3).Should().Equal(
+            "20261001074038_AddHabitSkipUndo", "20261017011939_AddFeatureFlagAccounts", "20261018111350_AddDurableSignupWork");
     }
 
     [Fact]

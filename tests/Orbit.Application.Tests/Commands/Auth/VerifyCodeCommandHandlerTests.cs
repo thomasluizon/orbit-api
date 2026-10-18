@@ -1,3 +1,6 @@
+using Orbit.Infrastructure.Services;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.AspNetCore.Http;
 using FluentAssertions;
 using Hangfire;
 using Hangfire.Common;
@@ -30,7 +33,7 @@ public class VerifyCodeCommandHandlerTests
         _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>(), Arg.Any<CancellationToken>())
             .Returns(call => call.Arg<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>()(call.Arg<CancellationToken>()));
         _handler = new VerifyCodeCommandHandler(
-            _cache, _userRepo, _unitOfWork, _authSessionService, _jobs);
+            _cache, _userRepo, _unitOfWork, _authSessionService, new SignupJobDispatcher(_jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance));
 
         _userRepo.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(call => call.Arg<User>());
         _authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())

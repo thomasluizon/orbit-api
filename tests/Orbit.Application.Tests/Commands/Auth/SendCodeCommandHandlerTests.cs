@@ -1,3 +1,6 @@
+using Orbit.Infrastructure.Services;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.AspNetCore.Http;
 using FluentAssertions;
 using Hangfire;
 using Hangfire.Common;
@@ -205,7 +208,7 @@ public class SendCodeCommandHandlerTests
             .Returns(Result.Success(new SessionTokens("jwt-token", "refresh-token")));
 
         return new VerifyCodeCommandHandler(
-            _cache, userRepo, unitOfWork, authSessionService, _backgroundJobClient);
+            _cache, userRepo, unitOfWork, authSessionService, new SignupJobDispatcher(_backgroundJobClient, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance));
     }
 
     private static async Task WithEnv(string aspNetEnv, string? smokeEmail, string? smokeCode, Func<Task> body)

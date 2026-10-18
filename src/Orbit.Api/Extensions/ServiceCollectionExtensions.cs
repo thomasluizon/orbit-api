@@ -227,6 +227,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IGoogleTokenService, GoogleTokenService>();
         builder.Services.AddScoped<GoogleSignInFlow>();
         builder.Services.AddScoped<IAuthUserStore, AuthUserStore>();
+        builder.Services.AddScoped<ISignupJobDispatcher, SignupJobDispatcher>();
         builder.Services.AddScoped<IGoogleAuthorizationCodeService, GoogleAuthorizationCodeService>();
         builder.Services.AddScoped<IGoogleIdTokenValidator, GoogleIdTokenValidator>();
         builder.Services.AddGoogleCalendarServices(GetDefaultHttpTimeout(builder));

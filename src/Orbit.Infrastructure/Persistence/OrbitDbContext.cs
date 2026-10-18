@@ -736,6 +736,7 @@ public class OrbitDbContext : DbContext
 
             entity.Property(u => u.ColorScheme).HasMaxLength(50);
             entity.Property(u => u.Language).HasMaxLength(10);
+            entity.Property(u => u.SignupLanguage).HasMaxLength(10);
             entity.Property(u => u.ThemePreference).HasMaxLength(10);
             entity.Property(u => u.TimeZone).HasMaxLength(100);
 
