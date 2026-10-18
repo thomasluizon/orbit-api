@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using Orbit.Infrastructure.Persistence;
 
@@ -10,27 +11,51 @@ internal sealed class SqliteOrbitDbContextFactory : IDisposable
 {
     private readonly SqliteConnection _connection;
     private readonly DbContextOptions<OrbitDbContext> _options;
+    private readonly string? _databasePath;
 
     internal SqliteOrbitDbContextFactory(params IInterceptor[] interceptors)
-        : this(null, interceptors)
+        : this(null, null, interceptors)
     {
     }
 
     internal SqliteOrbitDbContextFactory(
         Func<ExecutionStrategyDependencies, IExecutionStrategy>? executionStrategyFactory,
         params IInterceptor[] interceptors)
+        : this(executionStrategyFactory, null, interceptors)
     {
-        _connection = new SqliteConnection("Data Source=:memory:");
+    }
+
+    internal SqliteOrbitDbContextFactory(string databasePath, params IInterceptor[] interceptors)
+        : this(null, databasePath, interceptors)
+    {
+    }
+
+    private SqliteOrbitDbContextFactory(
+        Func<ExecutionStrategyDependencies, IExecutionStrategy>? executionStrategyFactory,
+        string? databasePath,
+        IInterceptor[] interceptors)
+    {
+        _databasePath = databasePath;
+        var connectionString = new SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath ?? ":memory:",
+            Pooling = false
+        }.ToString();
+        _connection = new SqliteConnection(connectionString);
         _connection.Open();
 
-        _options = new DbContextOptionsBuilder<OrbitDbContext>()
-            .UseSqlite(_connection, sqlite =>
-            {
-                if (executionStrategyFactory is not null)
-                    sqlite.ExecutionStrategy(executionStrategyFactory);
-            })
-            .AddInterceptors(interceptors)
-            .Options;
+        var options = new DbContextOptionsBuilder<OrbitDbContext>();
+        void Configure(SqliteDbContextOptionsBuilder sqlite)
+        {
+            if (executionStrategyFactory is not null)
+                sqlite.ExecutionStrategy(executionStrategyFactory);
+        }
+
+        if (databasePath is null)
+            options.UseSqlite(_connection, Configure);
+        else
+            options.UseSqlite(connectionString, Configure);
+        _options = options.AddInterceptors(interceptors).Options;
 
         Context = CreateContext();
         Context.Database.EnsureCreated();
@@ -44,6 +69,8 @@ internal sealed class SqliteOrbitDbContextFactory : IDisposable
     {
         Context.Dispose();
         _connection.Dispose();
+        if (_databasePath is not null)
+            File.Delete(_databasePath);
     }
 
     private sealed class SqliteCompatOrbitDbContext(DbContextOptions<OrbitDbContext> options)
