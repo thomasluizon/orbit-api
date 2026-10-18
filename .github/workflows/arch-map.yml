@@ -2,8 +2,20 @@ name: arch-map
 
 on:
   pull_request:
+    paths:
+      - 'src/**/*.cs'
+      - 'src/**/*.csproj'
+      - 'tests/**/*.cs'
+      - 'tools/arch-map.mjs'
+      - '.github/workflows/arch-map.yml'
   push:
     branches: [main]
+    paths:
+      - 'src/**/*.cs'
+      - 'src/**/*.csproj'
+      - 'tests/**/*.cs'
+      - 'tools/arch-map.mjs'
+      - '.github/workflows/arch-map.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
