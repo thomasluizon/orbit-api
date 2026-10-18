@@ -188,12 +188,13 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<Orbit.Application.Subscriptions.Services.IPlayReferralCouponConsumer, Orbit.Application.Subscriptions.Services.PlayReferralCouponConsumer>();
     }
 
-    private static void AddPushAndReferralServices(WebApplicationBuilder builder, TimeSpan httpTimeout)
+    internal static void AddPushAndReferralServices(WebApplicationBuilder builder, TimeSpan httpTimeout)
     {
         builder.Services.Configure<VapidSettings>(
             builder.Configuration.GetSection(VapidSettings.SectionName));
         builder.Services.AddHttpClient<IPushNotificationService, PushNotificationService>()
-            .ConfigureHttpClient(c => c.Timeout = httpTimeout);
+            .ConfigureHttpClient(c => c.Timeout = httpTimeout)
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
         builder.Services.AddScoped<IReferralRewardService, StripeCouponRewardService>();
         builder.Services.AddScoped<Orbit.Application.Referrals.Commands.ReferralRepositories>(sp =>
             new Orbit.Application.Referrals.Commands.ReferralRepositories(
