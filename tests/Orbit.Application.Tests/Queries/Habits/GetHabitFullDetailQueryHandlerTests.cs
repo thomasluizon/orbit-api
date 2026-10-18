@@ -100,15 +100,38 @@ public class GetHabitFullDetailQueryHandlerTests
     [Fact]
     public async Task Handle_ForeignUserHabit_DoesNotQueryLogs()
     {
+        var habit = CreateTestHabit();
+        var user = CreateTestUser();
+
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>())
-            .Returns(new List<Habit>().AsReadOnly());
+            .Returns(call =>
+            {
+                var predicate = call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile();
+                return new List<Habit> { habit }.Where(predicate).ToList().AsReadOnly();
+            });
+        _userRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(user);
+        _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
+        _habitLogRepo.FindAsync(
+            Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<HabitLog>().AsReadOnly());
 
-        var result = await _handler.Handle(new GetHabitFullDetailQuery(Guid.NewGuid(), HabitId), CancellationToken.None);
+        var ownerResult = await _handler.Handle(
+            new GetHabitFullDetailQuery(UserId, habit.Id), CancellationToken.None);
+
+        ownerResult.IsSuccess.Should().BeTrue();
+        ownerResult.Value.Habit.Id.Should().Be(habit.Id);
+        _habitLogRepo.ClearReceivedCalls();
+
+        var result = await _handler.Handle(
+            new GetHabitFullDetailQuery(Guid.NewGuid(), habit.Id), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(ErrorMessages.HabitNotFound.Message);
+        result.ErrorCode.Should().Be("HABIT_NOT_FOUND");
         await _habitLogRepo.DidNotReceive().FindAsync(
             Arg.Any<Expression<Func<HabitLog, bool>>>(), Arg.Any<CancellationToken>());
     }
@@ -139,6 +162,7 @@ public class GetHabitFullDetailQueryHandlerTests
     public async Task Handle_WithLogs_ReturnsLogsInResponse()
     {
         var habit = CreateTestHabit();
+        var log = habit.Log(Today).Value;
         var user = CreateTestUser();
 
         _habitRepo.FindAsync(
@@ -152,14 +176,17 @@ public class GetHabitFullDetailQueryHandlerTests
         _habitLogRepo.FindAsync(
             Arg.Any<Expression<Func<HabitLog, bool>>>(),
             Arg.Any<CancellationToken>())
-            .Returns(new List<HabitLog>().AsReadOnly());
+            .Returns(new List<HabitLog> { log }.AsReadOnly());
 
-        var query = new GetHabitFullDetailQuery(UserId, HabitId);
+        var query = new GetHabitFullDetailQuery(UserId, habit.Id);
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Logs.Should().BeEmpty();
+        var responseLog = result.Value.Logs.Should().ContainSingle().Which;
+        responseLog.Id.Should().Be(log.Id);
+        responseLog.Date.Should().Be(log.Date);
+        responseLog.Value.Should().Be(log.Value);
     }
 
     [Fact]
