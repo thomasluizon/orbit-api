@@ -1,25 +1,3 @@
-variable "production_bff_forwarding_secret" {
-  description = "Shared forwarding secret for the production API and web BFF."
-  type        = string
-  sensitive   = true
-
-  validation {
-    condition     = length(trimspace(var.production_bff_forwarding_secret)) > 0
-    error_message = "production_bff_forwarding_secret must not be blank."
-  }
-}
-
-variable "staging_bff_forwarding_secret" {
-  description = "Shared forwarding secret for the staging API and web BFF."
-  type        = string
-  sensitive   = true
-
-  validation {
-    condition     = length(trimspace(var.staging_bff_forwarding_secret)) > 0
-    error_message = "staging_bff_forwarding_secret must not be blank."
-  }
-}
-
 variable "render_owner_id" {
   description = "Render workspace that owns both environments."
   type        = string
