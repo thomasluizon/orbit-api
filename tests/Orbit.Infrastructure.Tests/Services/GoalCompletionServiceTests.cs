@@ -1,7 +1,9 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification.Services;
@@ -16,6 +18,7 @@ using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
+using Orbit.Infrastructure.Services;
 using Orbit.Infrastructure.Tests.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Services;
@@ -24,6 +27,41 @@ public class GoalCompletionServiceTests
 {
     private static readonly DateOnly Today = new(2026, 8, 23);
     private static readonly DateOnly BackdatedCompletion = Today.AddDays(-2201);
+
+    [Fact]
+    public async Task SyncDerivedGoals_PassiveSyncAfterLateSaoPauloSync_CompletesNextLocalDay()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var dbContext = factory.Context;
+        var user = User.Create("Local User", "local@example.com").Value;
+        user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
+        var habit = Habit.Create(new HabitCreateParams(
+            user.Id, "Avoid scrolling", FrequencyUnit.Day, 1,
+            DueDate: Today.AddDays(-1), IsBadHabit: true)).Value;
+        var goal = Goal.Create(new Goal.CreateGoalParams(
+            user.Id, "Two quiet days", 2, "days", Type: GoalType.Streak)).Value;
+        goal.AddHabit(habit);
+        goal.SyncStreakProgress(1).IsSuccess.Should().BeTrue();
+        typeof(Goal).GetProperty(nameof(Goal.StreakSyncedAtUtc))!
+            .SetValue(goal, Today.ToDateTime(new TimeOnly(2, 30), DateTimeKind.Utc));
+        dbContext.AddRange(user, habit, goal);
+        await dbContext.SaveChangesAsync();
+        dbContext.ChangeTracker.Clear();
+
+        var cache = new MemoryDistributedCache(Options.Create(new MemoryDistributedCacheOptions()));
+        var dates = new UserDateService(new GenericRepository<User>(dbContext), cache, TimeProvider.System);
+        var gamification = Substitute.For<IGamificationService>();
+        var service = new GoalCompletionService(
+            new GenericRepository<Goal>(dbContext), gamification, CreateUnitOfWork(dbContext), dates);
+
+        var updates = await service.SyncDerivedGoalsAsync(user.Id, [goal.Id], Today, passiveSync: true);
+
+        updates.Should().ContainSingle(update => update.GoalId == goal.Id && update.JustCompleted);
+        var persisted = await dbContext.Goals.AsNoTracking().SingleAsync(candidate => candidate.Id == goal.Id);
+        persisted.CurrentValue.Should().Be(2);
+        persisted.Status.Should().Be(GoalStatus.Completed);
+        await gamification.Received(1).ProcessGoalCompleted(user.Id, goal.Id, Arg.Any<CancellationToken>());
+    }
 
     [Fact]
     public async Task GetGoalDetail_BackdatedCompletionCreatedAfterGoal_RemainsInCurrentValue()

@@ -34,13 +34,32 @@ public class GoalStreakSyncServiceTests
     private static DateOnly SyncedDate(Goal goal) =>
         DateOnly.FromDateTime(goal.StreakSyncedAtUtc!.Value);
 
+    [Theory]
+    [InlineData("America/Sao_Paulo", 2, 30, 0, true)]
+    [InlineData("America/Sao_Paulo", 2, 30, -1, false)]
+    [InlineData("Pacific/Kiritimati", 10, 30, 1, false)]
+    [InlineData("Pacific/Kiritimati", 10, 30, 2, true)]
+    public void NeedsPassiveSync_UsesLocalSyncDate(
+        string timeZoneId, int utcHour, int utcMinute, int todayOffset, bool expected)
+    {
+        var syncUtcDate = new DateOnly(2026, 8, 23);
+        var goal = CreateStreakGoal();
+        goal.AddHabit(CreateDailyHabit("Meditate", syncUtcDate.AddDays(-3)));
+        typeof(Goal).GetProperty(nameof(Goal.StreakSyncedAtUtc))!
+            .SetValue(goal, syncUtcDate.ToDateTime(new TimeOnly(utcHour, utcMinute), DateTimeKind.Utc));
+        var timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+
+        GoalStreakSyncService.NeedsPassiveSync(goal, syncUtcDate.AddDays(todayOffset), timeZone)
+            .Should().Be(expected);
+    }
+
     [Fact]
     public void NeedsPassiveSync_NeverSyncedActiveStreakGoalWithHabit_ReturnsTrue()
     {
         var goal = CreateStreakGoal();
         goal.AddHabit(CreateDailyHabit("Meditate", Today.AddDays(-1)));
 
-        GoalStreakSyncService.NeedsPassiveSync(goal, Today).Should().BeTrue();
+        GoalStreakSyncService.NeedsPassiveSync(goal, Today, TimeZoneInfo.Utc).Should().BeTrue();
     }
 
     [Fact]
@@ -48,7 +67,7 @@ public class GoalStreakSyncServiceTests
     {
         var goal = Goal.Create(new Goal.CreateGoalParams(UserId, "Save money", 100, "BRL")).Value;
 
-        GoalStreakSyncService.NeedsPassiveSync(goal, Today).Should().BeFalse();
+        GoalStreakSyncService.NeedsPassiveSync(goal, Today, TimeZoneInfo.Utc).Should().BeFalse();
     }
 
     [Fact]
@@ -57,7 +76,7 @@ public class GoalStreakSyncServiceTests
         var goal = CreateStreakGoal();
         goal.MarkCompleted();
 
-        GoalStreakSyncService.NeedsPassiveSync(goal, Today).Should().BeFalse();
+        GoalStreakSyncService.NeedsPassiveSync(goal, Today, TimeZoneInfo.Utc).Should().BeFalse();
     }
 
     [Fact]
@@ -67,7 +86,7 @@ public class GoalStreakSyncServiceTests
         goal.AddHabit(CreateDailyHabit("Meditate", Today.AddDays(-1)));
         GoalStreakSyncService.SyncCurrentStreak(goal, Today, 1);
 
-        GoalStreakSyncService.NeedsPassiveSync(goal, SyncedDate(goal)).Should().BeFalse();
+        GoalStreakSyncService.NeedsPassiveSync(goal, SyncedDate(goal), TimeZoneInfo.Utc).Should().BeFalse();
     }
 
     [Fact]
@@ -77,7 +96,7 @@ public class GoalStreakSyncServiceTests
         goal.AddHabit(CreateDailyHabit("Meditate", Today.AddDays(-1)));
         GoalStreakSyncService.SyncCurrentStreak(goal, Today, 1);
 
-        GoalStreakSyncService.NeedsPassiveSync(goal, SyncedDate(goal).AddDays(1)).Should().BeTrue();
+        GoalStreakSyncService.NeedsPassiveSync(goal, SyncedDate(goal).AddDays(1), TimeZoneInfo.Utc).Should().BeTrue();
     }
 
     [Fact]
@@ -184,7 +203,7 @@ public class GoalStreakSyncServiceTests
         var goal = CreateStreakGoal();
         SetCurrentValue(goal, 4);
 
-        GoalStreakSyncService.NeedsPassiveSync(goal, Today).Should().BeTrue();
+        GoalStreakSyncService.NeedsPassiveSync(goal, Today, TimeZoneInfo.Utc).Should().BeTrue();
     }
 
     [Fact]
@@ -192,7 +211,7 @@ public class GoalStreakSyncServiceTests
     {
         var goal = CreateStreakGoal();
 
-        GoalStreakSyncService.NeedsPassiveSync(goal, Today).Should().BeFalse();
+        GoalStreakSyncService.NeedsPassiveSync(goal, Today, TimeZoneInfo.Utc).Should().BeFalse();
     }
 
     private static void SetCurrentValue(Goal goal, decimal value)
@@ -210,7 +229,7 @@ public class GoalStreakSyncServiceTests
         GoalStreakSyncService.SyncCurrentStreak(goal, Today, 1);
         var valueAfterFirstSync = goal.CurrentValue;
 
-        var resynced = GoalStreakSyncService.SyncCurrentStreakIfNeeded(goal, SyncedDate(goal), 1);
+        var resynced = GoalStreakSyncService.SyncCurrentStreakIfNeeded(goal, SyncedDate(goal), 1, TimeZoneInfo.Utc);
 
         resynced.Synced.Should().BeFalse();
         goal.CurrentValue.Should().Be(valueAfterFirstSync);
@@ -226,7 +245,7 @@ public class GoalStreakSyncServiceTests
         goal.AddHabit(habit);
         GoalStreakSyncService.SyncCurrentStreak(goal, Today.AddDays(-1), 1);
 
-        var resynced = GoalStreakSyncService.SyncCurrentStreakIfNeeded(goal, SyncedDate(goal).AddDays(1), 1);
+        var resynced = GoalStreakSyncService.SyncCurrentStreakIfNeeded(goal, SyncedDate(goal).AddDays(1), 1, TimeZoneInfo.Utc);
 
         resynced.Synced.Should().BeTrue();
         goal.CurrentValue.Should().Be(2);
@@ -240,7 +259,7 @@ public class GoalStreakSyncServiceTests
         habit.Log(Today);
         goal.AddHabit(habit);
 
-        var synced = GoalStreakSyncService.SyncCurrentStreakIfNeeded(goal, Today, 1);
+        var synced = GoalStreakSyncService.SyncCurrentStreakIfNeeded(goal, Today, 1, TimeZoneInfo.Utc);
 
         synced.Synced.Should().BeTrue();
         goal.CurrentValue.Should().Be(1);
