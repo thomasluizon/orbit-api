@@ -344,6 +344,12 @@ public static class AgentCapabilityIds
 
 public static class AgentScopes
 {
+    /// <summary>
+    /// Required for API-key access to /api/chat, /api/chat/stream, /api/chat/transcribe,
+    /// and /api/chat/records/{kind}. Grants access to the owner's chat context and record pages;
+    /// individual tools still require their own scopes and honor read-only credentials.
+    /// JWT sessions do not require API-key scopes.
+    /// </summary>
     public const string ChatInteract = "chat_interact";
     public const string CatalogRead = "catalog_read";
     public const string ReadConfig = "read_config";
