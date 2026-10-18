@@ -14,6 +14,7 @@ using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
 using Orbit.Infrastructure.Tests.Persistence;
+using Orbit.Infrastructure.Tests.Services;
 using OrbitServiceCollectionExtensions = Orbit.Api.Extensions.ServiceCollectionExtensions;
 
 namespace Orbit.Infrastructure.Tests.BackgroundJobs;
@@ -157,7 +158,7 @@ public class ScheduledJobRegistryTests
         new PeriodCloseNotificationService(ScopeFactory(), NullLogger<PeriodCloseNotificationService>.Instance, EmptyConfiguration),
         new SlipAlertSchedulerService(ScopeFactory(), NullLogger<SlipAlertSchedulerService>.Instance, EmptyConfiguration),
         new ProactiveEngineSchedulerService(ScopeFactory(), NullLogger<ProactiveEngineSchedulerService>.Instance),
-        new AccountDeletionService(ScopeFactory(), NullLogger<AccountDeletionService>.Instance, EmptyConfiguration),
+        new AccountDeletionService(AccountDeletionScopeFactory(), NullLogger<AccountDeletionService>.Instance, EmptyConfiguration),
         new HabitDueDateAdvancementService(ScopeFactory(), NullLogger<HabitDueDateAdvancementService>.Instance, EmptyConfiguration),
         new StreakFreezeAutoActivationService(
             ScopeFactory(),
@@ -176,6 +177,14 @@ public class ScheduledJobRegistryTests
     ];
 
     private static IServiceScopeFactory ScopeFactory() => Substitute.For<IServiceScopeFactory>();
+
+    private static IServiceScopeFactory AccountDeletionScopeFactory()
+    {
+        var provider = new ServiceCollection()
+            .AddSingleton<IObjectStorageDeletionService>(new FakeObjectStore())
+            .BuildServiceProvider();
+        return provider.GetRequiredService<IServiceScopeFactory>();
+    }
 
     private static IServiceScopeFactory ScopeFactoryFor(OrbitDbContext dbContext, IPushNotificationService pushService)
     {

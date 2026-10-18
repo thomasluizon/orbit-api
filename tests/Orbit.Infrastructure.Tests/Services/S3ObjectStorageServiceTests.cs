@@ -1,6 +1,8 @@
 using Amazon;
 using Amazon.Runtime;
 using Amazon.S3;
+using Amazon.S3.Model;
+using NSubstitute;
 using FluentAssertions;
 using Microsoft.Extensions.Options;
 using Orbit.Application.Uploads.Common;
@@ -76,11 +78,91 @@ public class S3ObjectStorageServiceTests
             .Should().NotBe(ParseQuery(new Uri(second.SignedUrl))["X-Amz-Signature"]);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(1001)]
+    public async Task DeleteUserObjectsAsync_DrainsAllPagesAndPreservesOtherUsers(int count)
+    {
+        var userId = Guid.NewGuid();
+        var prefix = $"{userId}/";
+        var keys = Enumerable.Range(0, count).Select(i => $"{prefix}nested/{i}.png").ToHashSet();
+        var other = $"{Guid.NewGuid()}/keep.png";
+        keys.Add(other);
+        var client = Substitute.For<IAmazonS3>();
+        client.ListObjectsV2Async(Arg.Any<ListObjectsV2Request>(), Arg.Any<CancellationToken>())
+            .Returns(call => new ListObjectsV2Response
+            {
+                S3Objects = keys.Where(key => key.StartsWith(call.Arg<ListObjectsV2Request>().Prefix, StringComparison.Ordinal))
+                    .Take(1000).Select(key => new S3Object { Key = key }).ToList(),
+            });
+        client.DeleteObjectsAsync(Arg.Any<DeleteObjectsRequest>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var request = call.Arg<DeleteObjectsRequest>();
+                request.BucketName.Should().Be(Bucket);
+                request.Objects.Should().HaveCountLessThanOrEqualTo(1000);
+                foreach (var item in request.Objects)
+                    keys.Remove(item.Key);
+                return new DeleteObjectsResponse();
+            });
+
+        await CreateService(client).DeleteUserObjectsAsync(userId);
+
+        keys.Should().BeEquivalentTo([other]);
+        await client.Received(count == 0 ? 1 : count > 1000 ? 3 : 2).ListObjectsV2Async(
+            Arg.Is<ListObjectsV2Request>(request => request.BucketName == Bucket && request.Prefix == prefix
+                && request.Delimiter == null && request.ContinuationToken == null && request.MaxKeys == 1000),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DeleteUserObjectsAsync_PropagatesPartialDeleteErrors()
+    {
+        var client = Substitute.For<IAmazonS3>();
+        var userId = Guid.NewGuid();
+        client.ListObjectsV2Async(Arg.Any<ListObjectsV2Request>(), Arg.Any<CancellationToken>())
+            .Returns(new ListObjectsV2Response { S3Objects = [new S3Object { Key = $"{userId}/one.png" }] });
+        client.DeleteObjectsAsync(Arg.Any<DeleteObjectsRequest>(), Arg.Any<CancellationToken>())
+            .Returns<Task<DeleteObjectsResponse>>(_ => throw new DeleteObjectsException(new DeleteObjectsResponse
+            {
+                DeleteErrors = [new DeleteError { Key = $"{userId}/one.png", Code = "AccessDenied" }],
+            }));
+
+        var act = () => CreateService(client).DeleteUserObjectsAsync(userId);
+
+        await act.Should().ThrowAsync<DeleteObjectsException>();
+    }
+
+    [Fact]
+    public async Task DeleteUserObjectsAsync_RefusesSuccessWhenObjectsRemain()
+    {
+        var client = Substitute.For<IAmazonS3>();
+        var userId = Guid.NewGuid();
+        client.ListObjectsV2Async(Arg.Any<ListObjectsV2Request>(), Arg.Any<CancellationToken>())
+            .Returns(new ListObjectsV2Response { S3Objects = [new S3Object { Key = $"{userId}/one.png" }] });
+        client.DeleteObjectsAsync(Arg.Any<DeleteObjectsRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new DeleteObjectsResponse());
+
+        var act = () => CreateService(client).DeleteUserObjectsAsync(userId);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*same objects*");
+    }
+
+    [Fact]
+    public async Task DeleteUserObjectsAsync_RejectsEmptyOwner()
+    {
+        using var client = CreateClient();
+        var act = () => CreateService(client).DeleteUserObjectsAsync(Guid.Empty);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
     private static AmazonS3Client CreateClient() => new(
         new BasicAWSCredentials("AKIAEXAMPLE123456789", "example-secret-key"),
         RegionEndpoint.USEast2);
 
-    private static S3ObjectStorageService CreateService(AmazonS3Client client) => new(client,
+    private static S3ObjectStorageService CreateService(IAmazonS3 client) => new(client,
         Options.Create(new S3StorageSettings
         {
             Bucket = Bucket,
