@@ -18,13 +18,22 @@ permissions:
   pull-requests: read
 
 jobs:
-  workflows:
-    name: Workflow Syntax
+  guards:
+    name: Guards
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v7
-      - name: Check workflow files
-        shell: bash
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Workflow Syntax
+        if: ${{ !cancelled() }}
         # https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#concurrency documents queue, which actionlint does not recognize.
         run: |
           lint_dir="$(mktemp -d)"
@@ -32,65 +41,40 @@ jobs:
           bash "$lint_dir/download-actionlint.bash" 1.7.12 "$lint_dir"
           "$lint_dir/actionlint" -color -ignore '^unexpected key "queue" for "concurrency" section\. expected one of "cancel-in-progress", "group"$'
 
-  timeless:
-    name: Timeless Text
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-      - name: Check changed text
-        if: github.event_name == 'pull_request'
-        run: node tools/check-timeless.mjs --base origin/${{ github.base_ref }}
-      - name: Check tracked text
-        if: github.event_name == 'push'
-        run: node tools/check-timeless.mjs --all
-
-  dashes:
-    name: Dash Ban
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-      - name: Changed files carry no new dashes
-        if: github.event_name == 'pull_request'
-        run: |
-          git diff --name-only --diff-filter=ACMR origin/${{ github.base_ref }}...HEAD -z \
-            | xargs -0 --no-run-if-empty node tools/check-dashes.mjs --files
-      - name: Baseline only shrinks
-        run: node tools/check-dashes.mjs --check-baseline
-      - name: PR title and body carry no dashes
-        # Bot PR bodies quote upstream text that Orbit cannot edit.
-        # The file-level dash check still covers bot changes.
-        if: github.event_name == 'pull_request' && github.event.pull_request.user.type != 'Bot'
+      - name: Timeless Text
+        if: ${{ !cancelled() }}
         env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ "$EVENT_NAME" = pull_request ]; then
+            node tools/check-timeless.mjs --base "origin/$BASE_REF"
+          else
+            node tools/check-timeless.mjs --all
+          fi
+
+      - name: Dash Ban
+        if: ${{ !cancelled() }}
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          PR_AUTHOR_TYPE: ${{ github.event.pull_request.user.type }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}
-        run: node tools/check-dashes.mjs --text "$PR_TITLE $PR_BODY"
+        run: |
+          if [ "$EVENT_NAME" = pull_request ]; then
+            git diff --name-only --diff-filter=ACMR "origin/$BASE_REF...HEAD" -z \
+              | xargs -0 --no-run-if-empty node tools/check-dashes.mjs --files
+          fi
+          node tools/check-dashes.mjs --check-baseline
+          if [ "$EVENT_NAME" = pull_request ] && [ "$PR_AUTHOR_TYPE" != Bot ]; then
+            node tools/check-dashes.mjs --text "$PR_TITLE $PR_BODY"
+          fi
 
-  frontmatter:
-    name: Skill and Agent Frontmatter
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-      - run: node tools/check-frontmatter.mjs
+      - name: Skill and Agent Frontmatter
+        if: ${{ !cancelled() }}
+        run: node tools/check-frontmatter.mjs
 
-  root-allowlist:
-    name: Root Allowlist
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-      - run: node tools/check-root-allowlist.mjs
+      - name: Root Allowlist
+        if: ${{ !cancelled() }}
+        run: node tools/check-root-allowlist.mjs
