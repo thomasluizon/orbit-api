@@ -1,13 +1,10 @@
-using System.Data.Common;
-using System.Linq.Expressions;
 using FluentAssertions;
 using Hangfire;
-using MediatR;
-using Microsoft.EntityFrameworkCore;
+using Hangfire.Common;
+using Hangfire.States;
+using Orbit.Application.Auth.Jobs;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging;
 using NSubstitute;
-using NSubstitute.ExceptionExtensions;
 using Orbit.Application.Auth.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -20,22 +17,22 @@ namespace Orbit.Application.Tests.Commands.Auth;
 public class VerifyCodeCommandHandlerTests
 {
     private readonly MemoryCache _cache = new(new MemoryCacheOptions());
-    private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
+    private readonly IAuthUserStore _userRepo = Substitute.For<IAuthUserStore>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IAuthSessionService _authSessionService = Substitute.For<IAuthSessionService>();
-    private readonly IEmailService _emailService = Substitute.For<IEmailService>();
-    private readonly IMediator _mediator = Substitute.For<IMediator>();
-    private readonly IProductAnalytics _analytics = Substitute.For<IProductAnalytics>();
+    private readonly IBackgroundJobClient _jobs = Substitute.For<IBackgroundJobClient>();
     private readonly VerifyCodeCommandHandler _handler;
 
     private const string TestEmail = "test@example.com";
 
     public VerifyCodeCommandHandlerTests()
     {
+        _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>()(call.Arg<CancellationToken>()));
         _handler = new VerifyCodeCommandHandler(
-            _cache, _userRepo, _unitOfWork, _authSessionService, _emailService, _mediator, _analytics,
-            Substitute.For<ILogger<VerifyCodeCommandHandler>>());
+            _cache, _userRepo, _unitOfWork, _authSessionService, _jobs);
 
+        _userRepo.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(call => call.Arg<User>());
         _authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new SessionTokens("jwt-token", "refresh-token")));
     }
@@ -55,7 +52,7 @@ public class VerifyCodeCommandHandlerTests
         result.Value.Token.Should().Be("jwt-token");
         result.Value.Email.Should().Be(TestEmail);
         _cache.TryGetValue($"verify:{TestEmail}", out _).Should().BeFalse();
-        await _userRepo.DidNotReceive().AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
+        await _userRepo.Received(1).UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -97,7 +94,7 @@ public class VerifyCodeCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Token.Should().Be("jwt-token");
-        await _userRepo.Received(1).AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
+        await _userRepo.Received(1).UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -133,25 +130,6 @@ public class VerifyCodeCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ConcurrentFirstLogin_ResolvesToExistingUserWithout500()
-    {
-        SetupCacheWithCode("123456");
-        var racedUser = User.Create("Raced", TestEmail).Value;
-        _userRepo.FindOneTrackedIgnoringFiltersAsync(
-            Arg.Any<Expression<Func<User, bool>>>(),
-            Arg.Any<CancellationToken>())
-            .Returns((User?)null, racedUser);
-        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
-            .ThrowsAsync(new DbUpdateException("duplicate", new FakeUniqueViolationException()));
-
-        var result = await _handler.Handle(new VerifyCodeCommand(TestEmail, "123456"), CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        result.Value.Email.Should().Be(TestEmail);
-        await _userRepo.Received(1).AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
     public async Task Handle_DeactivatedUser_ReactivatesAndSaves()
     {
         var user = User.Create("Deactivated", TestEmail).Value;
@@ -168,43 +146,56 @@ public class VerifyCodeCommandHandlerTests
         user.IsDeactivated.Should().BeFalse();
     }
 
-    [Fact]
-    public async Task Handle_NewUser_CapturesSignupCompleted()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_AlwaysEnqueuesSignupDecision(bool exists)
     {
         SetupCacheWithCode("123456");
-        User? created = null;
-        _userRepo.When(r => r.AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()))
-            .Do(call => created = call.Arg<User>());
+        if (exists)
+            SetupExistingUser(User.Create("Existing", TestEmail).Value);
 
-        await _handler.Handle(new VerifyCodeCommand(TestEmail, "123456"), CancellationToken.None);
-
-        created.Should().NotBeNull();
-        _analytics.Received(1).CaptureUserEvent(created!.Id, "signup_completed", "Free");
-    }
-
-    [Fact]
-    public async Task Handle_ExistingUser_DoesNotCaptureSignupCompleted()
-    {
-        SetupCacheWithCode("123456");
-        SetupExistingUser(User.Create("Existing User", TestEmail).Value);
-
-        await _handler.Handle(new VerifyCodeCommand(TestEmail, "123456"), CancellationToken.None);
-
-        _analytics.DidNotReceive().CaptureUserEvent(
-            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>());
-    }
-
-    [Fact]
-    public async Task Handle_CaptureThrows_SignupStillSucceeds()
-    {
-        SetupCacheWithCode("123456");
-        _analytics
-            .When(a => a.CaptureUserEvent(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>()))
-            .Do(_ => throw new InvalidOperationException("PostHog unreachable"));
-
-        var result = await _handler.Handle(new VerifyCodeCommand(TestEmail, "123456"), CancellationToken.None);
+        var result = await _handler.Handle(new VerifyCodeCommand(TestEmail, "123456", "pt-BR", "friend"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
+        _jobs.Received(1).Create(Arg.Is<Job>(job => job.Type == typeof(CompleteSignupJob)
+            && (Guid)job.Args[0] == result.Value.UserId && (bool)job.Args[1] == !exists
+            && (string)job.Args[2] == "pt-BR" && (string)job.Args[3] == "friend"), Arg.Any<IState>());
+    }
+
+    [Theory]
+    [InlineData("absent")]
+    [InlineData("wrong")]
+    [InlineData("throttled")]
+    public async Task Handle_AnonymousFailure_NeverTouchesPersistence(string mode)
+    {
+        var failures = new List<(string Error, string? Code, int Attempts)>();
+        foreach (var exists in new[] { true, false })
+        {
+            _cache.Remove($"verify:{TestEmail}");
+            _cache.Remove($"verify-attempts:{TestEmail}");
+            if (exists)
+                SetupExistingUser(User.Create("Existing", TestEmail).Value);
+            else
+                _userRepo.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(call => call.Arg<User>());
+            if (mode != "absent")
+                SetupCacheWithCode("123456");
+            if (mode == "throttled")
+                _cache.Set($"verify-attempts:{TestEmail}", 3);
+
+            var result = await _handler.Handle(new VerifyCodeCommand(TestEmail, "999999"), CancellationToken.None);
+
+            result.IsFailure.Should().BeTrue();
+            _cache.TryGetValue($"verify-attempts:{TestEmail}", out int attempts);
+            failures.Add((result.Error, result.ErrorCode, attempts));
+        }
+
+        failures[0].Should().Be(failures[1]);
+        failures[0].Attempts.Should().Be(mode == "wrong" ? 1 : mode == "throttled" ? 3 : 0);
+        _userRepo.ReceivedCalls().Should().BeEmpty();
+        _unitOfWork.ReceivedCalls().Should().BeEmpty();
+        _authSessionService.ReceivedCalls().Should().BeEmpty();
+        _jobs.ReceivedCalls().Should().BeEmpty();
     }
 
     private void SetupCacheWithCode(string code)
@@ -216,14 +207,6 @@ public class VerifyCodeCommandHandlerTests
 
     private void SetupExistingUser(User user)
     {
-        _userRepo.FindOneTrackedIgnoringFiltersAsync(
-            Arg.Any<Expression<Func<User, bool>>>(),
-            Arg.Any<CancellationToken>())
-            .Returns(user);
-    }
-
-    private sealed class FakeUniqueViolationException : DbException
-    {
-        public override string SqlState => "23505";
+        _userRepo.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(user);
     }
 }

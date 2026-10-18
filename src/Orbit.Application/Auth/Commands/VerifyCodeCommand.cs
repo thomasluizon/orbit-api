@@ -1,9 +1,9 @@
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging;
+using Hangfire;
+using Orbit.Application.Auth.Jobs;
 using Orbit.Application.Auth.Queries;
 using Orbit.Application.Common;
-using Orbit.Application.Referrals.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using System.Security.Cryptography;
@@ -14,15 +14,12 @@ namespace Orbit.Application.Auth.Commands;
 public record VerifyCodeCommand(string Email, string Code, string Language = "en", string? ReferralCode = null)
     : IRequest<Result<LoginResponse>>;
 
-public partial class VerifyCodeCommandHandler(
+public class VerifyCodeCommandHandler(
     IMemoryCache cache,
-    IGenericRepository<User> userRepository,
+    IAuthUserStore userStore,
     IUnitOfWork unitOfWork,
     IAuthSessionService authSessionService,
-    IEmailService emailService,
-    IMediator mediator,
-    IProductAnalytics productAnalytics,
-    ILogger<VerifyCodeCommandHandler> logger) : IRequestHandler<VerifyCodeCommand, Result<LoginResponse>>
+    IBackgroundJobClient backgroundJobClient) : IRequestHandler<VerifyCodeCommand, Result<LoginResponse>>
 {
     public async Task<Result<LoginResponse>> Handle(VerifyCodeCommand request, CancellationToken cancellationToken)
     {
@@ -32,25 +29,41 @@ public partial class VerifyCodeCommandHandler(
         if (codeValidation.IsFailure)
             return codeValidation.PropagateError<LoginResponse>();
 
-        var findResult = await FindOrCreateUserAsync(email, request.Language, cancellationToken);
-        if (findResult.IsFailure)
-            return findResult.PropagateError<LoginResponse>();
+        var isNewUser = false;
+        var result = await unitOfWork.ExecuteInTransactionAsync(async transactionToken =>
+        {
+            var findResult = await FindOrCreateUserAsync(email, request.Language, transactionToken);
+            if (findResult.IsFailure)
+                return findResult.PropagateError<LoginResponse>();
 
-        var (user, isNewUser) = findResult.Value;
+            var (user, created) = findResult.Value;
+            isNewUser = created;
 
-        var wasReactivated = await HandlePostLoginAsync(user, isNewUser, request, cancellationToken);
+            var wasReactivated = user.IsDeactivated;
+            if (wasReactivated)
+                user.CancelDeactivation();
+            await unitOfWork.SaveChangesAsync(transactionToken);
 
-        var sessionResult = await authSessionService.CreateSessionAsync(user.Id, user.Email, cancellationToken);
-        if (sessionResult.IsFailure)
-            return sessionResult.PropagateError<LoginResponse>();
+            var sessionResult = await authSessionService.CreateSessionAsync(user.Id, user.Email, transactionToken);
+            if (sessionResult.IsFailure)
+                return sessionResult.PropagateError<LoginResponse>();
 
-        return Result.Success(new LoginResponse(
-            user.Id,
-            sessionResult.Value.AccessToken,
-            user.Name,
-            user.Email,
-            wasReactivated,
-            sessionResult.Value.RefreshToken));
+            return Result.Success(new LoginResponse(
+                user.Id,
+                sessionResult.Value.AccessToken,
+                user.Name,
+                user.Email,
+                wasReactivated,
+                sessionResult.Value.RefreshToken));
+        }, cancellationToken);
+
+        if (result.IsFailure)
+            return result;
+
+        backgroundJobClient.Enqueue<CompleteSignupJob>(job => job.ExecuteAsync(
+            result.Value.UserId, isNewUser, request.Language, request.ReferralCode));
+
+        return result;
     }
 
     private Result ValidateCode(string email, string code)
@@ -93,61 +106,5 @@ public partial class VerifyCodeCommandHandler(
     private Task<Result<(User User, bool IsNew)>> FindOrCreateUserAsync(
         string email, string language, CancellationToken cancellationToken) =>
         AuthUserProvisioning.FindOrCreateUserAsync(
-            userRepository, unitOfWork, email, email.Split('@')[0], language, cancellationToken);
-
-    private async Task<bool> HandlePostLoginAsync(
-        User user, bool isNewUser, VerifyCodeCommand request, CancellationToken cancellationToken)
-    {
-        if (isNewUser && !string.IsNullOrWhiteSpace(request.ReferralCode))
-            await ProcessReferralSafeAsync(user.Id, request.ReferralCode, cancellationToken);
-
-        var wasReactivated = false;
-        if (user.IsDeactivated)
-        {
-            user.CancelDeactivation();
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-            wasReactivated = true;
-        }
-
-        if (isNewUser)
-        {
-            AnalyticsCapture.SafeCaptureUserEvent(productAnalytics, logger, user, "signup_completed");
-            SendWelcomeEmailInBackground(user.Id, user.Email, user.Name, request.Language);
-        }
-
-        return wasReactivated;
-    }
-
-    private async Task ProcessReferralSafeAsync(Guid userId, string referralCode, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await mediator.Send(new ProcessReferralCodeCommand(userId, referralCode), cancellationToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            LogReferralProcessingFailed(logger, ex, userId);
-        }
-    }
-
-    private void SendWelcomeEmailInBackground(Guid userId, string email, string name, string language)
-    {
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await emailService.SendWelcomeEmailAsync(email, name, language, CancellationToken.None);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                LogWelcomeEmailFailed(logger, ex, userId);
-            }
-        }, CancellationToken.None);
-    }
-
-    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Referral processing failed for user {UserId}")]
-    private static partial void LogReferralProcessingFailed(ILogger logger, Exception ex, Guid userId);
-
-    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Welcome email failed for user {UserId}")]
-    private static partial void LogWelcomeEmailFailed(ILogger logger, Exception ex, Guid userId);
+            userStore, email, email.Split('@')[0], language, cancellationToken);
 }

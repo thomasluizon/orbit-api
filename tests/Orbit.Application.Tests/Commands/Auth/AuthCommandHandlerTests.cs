@@ -18,13 +18,19 @@ namespace Orbit.Application.Tests.Commands.Auth;
 public class AuthCommandHandlerTests
 {
     private readonly MemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
-    private readonly IEmailService _emailService = Substitute.For<IEmailService>();
     private readonly IBackgroundJobClient _backgroundJobClient = Substitute.For<IBackgroundJobClient>();
-    private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
+    private readonly IAuthUserStore _userRepo = Substitute.For<IAuthUserStore>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IAuthSessionService _authSessionService = Substitute.For<IAuthSessionService>();
 
     private const string TestEmail = "test@example.com";
+
+    public AuthCommandHandlerTests()
+    {
+        _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>()(call.Arg<CancellationToken>()));
+        _userRepo.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(call => call.Arg<User>());
+    }
 
     [Fact]
     public async Task SendCode_Valid_CachesCodeAndEnqueuesEmail()
@@ -75,7 +81,7 @@ public class AuthCommandHandlerTests
         _authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new SessionTokens("jwt-token", "refresh-token")));
 
-        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _authSessionService, _emailService, Substitute.For<MediatR.IMediator>(), Substitute.For<IProductAnalytics>(), Substitute.For<ILogger<VerifyCodeCommandHandler>>());
+        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _authSessionService, _backgroundJobClient);
         var command = new VerifyCodeCommand(TestEmail, "123456");
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -91,7 +97,7 @@ public class AuthCommandHandlerTests
     {
         SetupCacheWithCode("123456");
 
-        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _authSessionService, _emailService, Substitute.For<MediatR.IMediator>(), Substitute.For<IProductAnalytics>(), Substitute.For<ILogger<VerifyCodeCommandHandler>>());
+        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _authSessionService, _backgroundJobClient);
         var command = new VerifyCodeCommand(TestEmail, "999999");
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -109,7 +115,7 @@ public class AuthCommandHandlerTests
             new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(15) });
         SetupCacheWithCode("123456");
 
-        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _authSessionService, _emailService, Substitute.For<MediatR.IMediator>(), Substitute.For<IProductAnalytics>(), Substitute.For<ILogger<VerifyCodeCommandHandler>>());
+        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _authSessionService, _backgroundJobClient);
         var command = new VerifyCodeCommand(TestEmail, "123456");
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -125,13 +131,13 @@ public class AuthCommandHandlerTests
         _authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new SessionTokens("jwt-token", "refresh-token")));
 
-        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _authSessionService, _emailService, Substitute.For<MediatR.IMediator>(), Substitute.For<IProductAnalytics>(), Substitute.For<ILogger<VerifyCodeCommandHandler>>());
+        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _authSessionService, _backgroundJobClient);
         var command = new VerifyCodeCommand(TestEmail, "123456");
 
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _userRepo.Received(1).AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
+        await _userRepo.Received(1).UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -144,14 +150,14 @@ public class AuthCommandHandlerTests
         _authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new SessionTokens("jwt-token", "refresh-token")));
 
-        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _authSessionService, _emailService, Substitute.For<MediatR.IMediator>(), Substitute.For<IProductAnalytics>(), Substitute.For<ILogger<VerifyCodeCommandHandler>>());
+        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _authSessionService, _backgroundJobClient);
         var command = new VerifyCodeCommand(TestEmail, "123456");
 
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Token.Should().Be("jwt-token");
-        await _userRepo.DidNotReceive().AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
+        await _userRepo.Received(1).UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
     }
 
     private void SetupCacheWithCode(string code)
@@ -163,9 +169,6 @@ public class AuthCommandHandlerTests
 
     private void SetupExistingUser(User user)
     {
-        _userRepo.FindOneTrackedIgnoringFiltersAsync(
-            Arg.Any<System.Linq.Expressions.Expression<Func<User, bool>>>(),
-            Arg.Any<CancellationToken>())
-            .Returns(user);
+        _userRepo.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(user);
     }
 }
