@@ -1,4 +1,6 @@
+using Hangfire;
 using MediatR;
+using Orbit.Application.Auth.Jobs;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Auth.Queries;
@@ -22,7 +24,8 @@ public partial class VerifyCodeCommandHandler(
     IEmailService emailService,
     IMediator mediator,
     IProductAnalytics productAnalytics,
-    ILogger<VerifyCodeCommandHandler> logger) : IRequestHandler<VerifyCodeCommand, Result<LoginResponse>>
+    ILogger<VerifyCodeCommandHandler> logger,
+    IBackgroundJobClient backgroundJobClient) : IRequestHandler<VerifyCodeCommand, Result<LoginResponse>>
 {
     public async Task<Result<LoginResponse>> Handle(VerifyCodeCommand request, CancellationToken cancellationToken)
     {
@@ -106,6 +109,7 @@ public partial class VerifyCodeCommandHandler(
         {
             user.CancelDeactivation();
             await unitOfWork.SaveChangesAsync(cancellationToken);
+            CancelSubscriptionOnDeletionJob.EnqueueRestoration(backgroundJobClient, user);
             wasReactivated = true;
         }
 

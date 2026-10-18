@@ -1,4 +1,6 @@
+using Hangfire;
 using MediatR;
+using Orbit.Application.Auth.Jobs;
 using Orbit.Application.Auth.Services;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -12,7 +14,8 @@ public record ConfirmAccountDeletionCommand(Guid UserId, string Code) : IRequest
 public class ConfirmAccountDeletionCommandHandler(
     EmailChallengeService challengeService,
     IGenericRepository<User> userRepository,
-    IUnitOfWork unitOfWork) : IRequestHandler<ConfirmAccountDeletionCommand, Result<DateTime>>
+    IUnitOfWork unitOfWork,
+    IBackgroundJobClient backgroundJobClient) : IRequestHandler<ConfirmAccountDeletionCommand, Result<DateTime>>
 {
     public async Task<Result<DateTime>> Handle(ConfirmAccountDeletionCommand request, CancellationToken cancellationToken)
     {
@@ -36,6 +39,7 @@ public class ConfirmAccountDeletionCommandHandler(
 
         user.Deactivate(scheduledDate);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        CancelSubscriptionOnDeletionJob.EnqueueCancellation(backgroundJobClient, user);
 
         return Result.Success(scheduledDate);
     }

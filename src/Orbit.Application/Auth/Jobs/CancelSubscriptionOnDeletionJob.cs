@@ -1,0 +1,89 @@
+using Hangfire;
+using Microsoft.Extensions.Options;
+using Orbit.Application.Common;
+using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
+using Orbit.Domain.Interfaces;
+
+namespace Orbit.Application.Auth.Jobs;
+
+/// <summary>
+/// Persists renewal changes as primitive Hangfire arguments. Retries reconcile the current account
+/// state under its row lock so delayed cancellation and restoration cannot reverse a later sign-in or deletion.
+/// </summary>
+public sealed class CancelSubscriptionOnDeletionJob(
+    IGenericRepository<User> userRepository,
+    IUnitOfWork unitOfWork,
+    IBillingService billingService,
+    IPlayBillingService playBillingService,
+    IOptions<GooglePlaySettings> playSettings)
+{
+    public static void EnqueueCancellation(IBackgroundJobClient jobs, User user)
+    {
+        var stripeId = user.SubscriptionSource == SubscriptionSource.Stripe ? user.StripeSubscriptionId : null;
+        var playToken = user.SubscriptionSource == SubscriptionSource.GooglePlay ? user.PlayPurchaseToken : null;
+        if (!string.IsNullOrWhiteSpace(stripeId) || !string.IsNullOrWhiteSpace(playToken))
+            jobs.Enqueue<CancelSubscriptionOnDeletionJob>(job =>
+                job.ExecuteAsync(user.Id, stripeId, playToken, true, CancellationToken.None));
+    }
+
+    public static void EnqueueRestoration(IBackgroundJobClient jobs, User user)
+    {
+        if (user.SubscriptionSource == SubscriptionSource.Stripe
+            && !string.IsNullOrWhiteSpace(user.StripeSubscriptionId) && user.IsPro)
+            jobs.Enqueue<CancelSubscriptionOnDeletionJob>(job =>
+                job.ExecuteAsync(user.Id, user.StripeSubscriptionId, null, false, CancellationToken.None));
+    }
+
+    [AutomaticRetry(Attempts = int.MaxValue, DelaysInSeconds = new[] { 60, 300, 3600 })]
+    public Task ExecuteAsync(Guid userId, string? stripeSubscriptionId, string? playPurchaseToken,
+        bool cancelAtPeriodEnd, CancellationToken cancellationToken) =>
+        unitOfWork.ExecuteInTransactionAsync(async ct =>
+        {
+            await unitOfWork.AcquireUserRowLockAsync(userId, ct);
+            var user = await userRepository.FindOneTrackedIgnoringFiltersAsync(u => u.Id == userId, ct);
+            if (user is null || user.IsDeactivated != cancelAtPeriodEnd)
+                return;
+
+            if (!string.IsNullOrWhiteSpace(stripeSubscriptionId)
+                && user.SubscriptionSource == SubscriptionSource.Stripe
+                && user.StripeSubscriptionId == stripeSubscriptionId)
+            {
+                if (cancelAtPeriodEnd)
+                    await CancelProvidersAsync(stripeSubscriptionId, null, ct);
+                else if (user.IsPro)
+                    await billingService.SetSubscriptionCancelAtPeriodEndAsync(stripeSubscriptionId, false, ct);
+            }
+
+            if (cancelAtPeriodEnd && !string.IsNullOrWhiteSpace(playPurchaseToken)
+                && user.SubscriptionSource == SubscriptionSource.GooglePlay
+                && user.PlayPurchaseToken == playPurchaseToken)
+                await CancelProvidersAsync(null, playPurchaseToken, ct);
+        }, cancellationToken);
+
+    /// <summary>
+    /// The hard-delete backstop checks both retained provider identifiers, including an older provider
+    /// after a billing-source switch. Provider failures must leave the reconciliation row intact.
+    /// </summary>
+    public Task CancelBeforeDeletionAsync(User user, CancellationToken cancellationToken) =>
+        CancelProvidersAsync(user.StripeSubscriptionId, user.PlayPurchaseToken, cancellationToken);
+
+    private async Task CancelProvidersAsync(string? stripeSubscriptionId, string? playPurchaseToken,
+        CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(stripeSubscriptionId))
+        {
+            var subscription = await billingService.GetSubscriptionDetailsAsync(stripeSubscriptionId, cancellationToken);
+            if (subscription is not null && subscription.Status is not ("canceled" or "incomplete_expired")
+                && !subscription.CancelAtPeriodEnd)
+                await billingService.SetSubscriptionCancelAtPeriodEndAsync(stripeSubscriptionId, true, cancellationToken);
+        }
+
+        if (!string.IsNullOrWhiteSpace(playPurchaseToken))
+        {
+            var purchase = await playBillingService.VerifyAsync(playSettings.Value.ProductId, playPurchaseToken, cancellationToken);
+            if (purchase is { IsActive: true })
+                await playBillingService.CancelAsync(playPurchaseToken, cancellationToken);
+        }
+    }
+}

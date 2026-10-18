@@ -70,6 +70,24 @@ public sealed class GooglePlayBillingService(
             purchase.SubscriptionState == "SUBSCRIPTION_STATE_IN_GRACE_PERIOD");
     }
 
+    public async Task CancelAsync(string purchaseToken, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await androidPublisher.Purchases.Subscriptionsv2.Cancel(new CancelSubscriptionPurchaseRequest
+            {
+                CancellationContext = new CancellationContext
+                {
+                    CancellationType = "USER_REQUESTED_STOP_RENEWALS"
+                }
+            }, _settings.PackageName, purchaseToken).ExecuteAsync(cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            throw new BillingProviderException("Failed to cancel Play subscription", ex);
+        }
+    }
+
     public async Task AcknowledgeAsync(string productId, string purchaseToken, CancellationToken cancellationToken)
     {
         try

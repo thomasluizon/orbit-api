@@ -1,4 +1,6 @@
+using Hangfire;
 using MediatR;
+using Orbit.Application.Auth.Jobs;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Auth.Queries;
@@ -17,7 +19,8 @@ public partial class GoogleSignInFlow(
     IEmailService emailService,
     IServiceScopeFactory scopeFactory,
     IProductAnalytics productAnalytics,
-    ILogger<GoogleSignInFlow> logger)
+    ILogger<GoogleSignInFlow> logger,
+    IBackgroundJobClient backgroundJobClient)
 {
     public async Task<Result<LoginResponse>> CompleteAsync(
         string rawEmail, string name, string language, string? referralCode,
@@ -49,6 +52,9 @@ public partial class GoogleSignInFlow(
 
         if (wasReactivated || googleAccessToken is not null)
             await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        if (wasReactivated)
+            CancelSubscriptionOnDeletionJob.EnqueueRestoration(backgroundJobClient, user);
 
         if (isNewUser)
             AnalyticsCapture.SafeCaptureUserEvent(productAnalytics, logger, user, "signup_completed");

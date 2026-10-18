@@ -198,7 +198,7 @@ public class SendCodeCommandHandlerTests
         return new VerifyCodeCommandHandler(
             _cache, userRepo, unitOfWork, authSessionService, _emailService, mediator,
             Substitute.For<IProductAnalytics>(),
-            Substitute.For<ILogger<VerifyCodeCommandHandler>>());
+            Substitute.For<ILogger<VerifyCodeCommandHandler>>(), Substitute.For<Hangfire.IBackgroundJobClient>());
     }
 
     private static async Task WithEnv(string aspNetEnv, string? smokeEmail, string? smokeCode, Func<Task> body)

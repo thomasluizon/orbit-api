@@ -1,3 +1,9 @@
+using Hangfire;
+using Hangfire.Common;
+using Hangfire.States;
+using System.Linq.Expressions;
+using Orbit.Application.Auth.Jobs;
+using Orbit.Domain.Enums;
 using System.Reflection;
 using System.Security.Claims;
 using System.Text;
@@ -67,6 +73,59 @@ public class OAuthControllerTests : IDisposable
     {
         _authStore.Dispose();
         GC.SuppressFinalize(this);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task GoogleCallback_Reactivation_RestoresOnlyUnexpiredStripeRenewal(bool expired, bool play)
+    {
+        var user = User.Create("Returning", "returning@example.com").Value;
+        var expiryAtUtc = DateTime.UtcNow.AddDays(expired ? -1 : 3);
+        if (play)
+            user.SetPlaySubscription("play-token", expiryAtUtc);
+        else
+            user.SetStripeSubscription("sub_paid", expiryAtUtc);
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        user.Deactivate(DateTime.UtcNow.AddDays(7));
+        var users = Substitute.For<IGenericRepository<User>>();
+        users.FindOneTrackedIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>()).Returns(user);
+        var sessions = Substitute.For<IAuthSessionService>();
+        sessions.CreateSessionAsync(user.Id, user.Email, Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new SessionTokens("access", "refresh")));
+        var jobs = Substitute.For<IBackgroundJobClient>();
+        Job? enqueued = null;
+        jobs.Create(Arg.Do<Job>(job => enqueued = job), Arg.Any<IState>());
+        var flow = new GoogleSignInFlow(users, _unitOfWork, sessions, Substitute.For<IEmailService>(),
+            Substitute.For<Microsoft.Extensions.DependencyInjection.IServiceScopeFactory>(), Substitute.For<IProductAnalytics>(),
+            NullLogger<GoogleSignInFlow>.Instance, jobs);
+        var exchange = Substitute.For<IGoogleAuthorizationCodeService>();
+        exchange.ExchangeAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new GoogleCodeIdentity(user.Email, user.Name, "google-access", "google-refresh")));
+        var googleHandler = new GoogleCodeAuthCommandHandler(exchange, _mediator);
+        var completeHandler = new CompleteGoogleSignInCommandHandler(flow);
+        _mediator.Send(Arg.Any<GoogleCodeAuthCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call => googleHandler.Handle(call.Arg<GoogleCodeAuthCommand>(), call.Arg<CancellationToken>()));
+        _mediator.Send(Arg.Any<CompleteGoogleSignInCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call => completeHandler.Handle(call.Arg<CompleteGoogleSignInCommand>(), call.Arg<CancellationToken>()));
+        var pending = CreatePendingGoogleRequest();
+
+        var result = await _controller.GoogleCallback(pending.GoogleState, "code", null, CancellationToken.None);
+
+        result.Should().BeOfType<RedirectResult>();
+        user.IsDeactivated.Should().BeFalse();
+        user.HasProAccess.Should().Be(!expired);
+        user.Plan.Should().Be(expired ? UserPlan.Free : UserPlan.Pro);
+        if (!expired && !play)
+        {
+            jobs.Received(1).Create(Arg.Any<Job>(), Arg.Any<IState>());
+            enqueued!.Type.Should().Be<CancelSubscriptionOnDeletionJob>();
+            enqueued.Args.Should().Equal(user.Id, "sub_paid", null, false, CancellationToken.None);
+        }
+        else
+            jobs.DidNotReceive().Create(Arg.Any<Job>(), Arg.Any<IState>());
     }
 
     [Fact]

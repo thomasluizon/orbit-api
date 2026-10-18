@@ -75,7 +75,7 @@ public class AuthCommandHandlerTests
         _authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new SessionTokens("jwt-token", "refresh-token")));
 
-        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _authSessionService, _emailService, Substitute.For<MediatR.IMediator>(), Substitute.For<IProductAnalytics>(), Substitute.For<ILogger<VerifyCodeCommandHandler>>());
+        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _authSessionService, _emailService, Substitute.For<MediatR.IMediator>(), Substitute.For<IProductAnalytics>(), Substitute.For<ILogger<VerifyCodeCommandHandler>>(), Substitute.For<Hangfire.IBackgroundJobClient>());
         var command = new VerifyCodeCommand(TestEmail, "123456");
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -91,7 +91,7 @@ public class AuthCommandHandlerTests
     {
         SetupCacheWithCode("123456");
 
-        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _authSessionService, _emailService, Substitute.For<MediatR.IMediator>(), Substitute.For<IProductAnalytics>(), Substitute.For<ILogger<VerifyCodeCommandHandler>>());
+        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _authSessionService, _emailService, Substitute.For<MediatR.IMediator>(), Substitute.For<IProductAnalytics>(), Substitute.For<ILogger<VerifyCodeCommandHandler>>(), Substitute.For<Hangfire.IBackgroundJobClient>());
         var command = new VerifyCodeCommand(TestEmail, "999999");
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -109,7 +109,7 @@ public class AuthCommandHandlerTests
             new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(15) });
         SetupCacheWithCode("123456");
 
-        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _authSessionService, _emailService, Substitute.For<MediatR.IMediator>(), Substitute.For<IProductAnalytics>(), Substitute.For<ILogger<VerifyCodeCommandHandler>>());
+        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _authSessionService, _emailService, Substitute.For<MediatR.IMediator>(), Substitute.For<IProductAnalytics>(), Substitute.For<ILogger<VerifyCodeCommandHandler>>(), Substitute.For<Hangfire.IBackgroundJobClient>());
         var command = new VerifyCodeCommand(TestEmail, "123456");
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -125,7 +125,7 @@ public class AuthCommandHandlerTests
         _authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new SessionTokens("jwt-token", "refresh-token")));
 
-        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _authSessionService, _emailService, Substitute.For<MediatR.IMediator>(), Substitute.For<IProductAnalytics>(), Substitute.For<ILogger<VerifyCodeCommandHandler>>());
+        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _authSessionService, _emailService, Substitute.For<MediatR.IMediator>(), Substitute.For<IProductAnalytics>(), Substitute.For<ILogger<VerifyCodeCommandHandler>>(), Substitute.For<Hangfire.IBackgroundJobClient>());
         var command = new VerifyCodeCommand(TestEmail, "123456");
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -144,7 +144,7 @@ public class AuthCommandHandlerTests
         _authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new SessionTokens("jwt-token", "refresh-token")));
 
-        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _authSessionService, _emailService, Substitute.For<MediatR.IMediator>(), Substitute.For<IProductAnalytics>(), Substitute.For<ILogger<VerifyCodeCommandHandler>>());
+        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _authSessionService, _emailService, Substitute.For<MediatR.IMediator>(), Substitute.For<IProductAnalytics>(), Substitute.For<ILogger<VerifyCodeCommandHandler>>(), Substitute.For<Hangfire.IBackgroundJobClient>());
         var command = new VerifyCodeCommand(TestEmail, "123456");
 
         var result = await handler.Handle(command, CancellationToken.None);

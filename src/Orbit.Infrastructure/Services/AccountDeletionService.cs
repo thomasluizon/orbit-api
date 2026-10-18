@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Marketing.Services;
+using Orbit.Application.Auth.Jobs;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.BackgroundJobs;
@@ -98,13 +99,17 @@ public partial class AccountDeletionService(
             var contactRepository = scope.ServiceProvider.GetRequiredService<IGenericRepository<MarketingContact>>();
             await unitOfWork.ExecuteInTransactionAsync(async transactionToken =>
             {
+                await unitOfWork.AcquireUserRowLockAsync(userId, transactionToken);
                 var userToDelete = await dbContext.Users
                     .IgnoreQueryFilters()
                     .FirstOrDefaultAsync(u => u.Id == userId, transactionToken);
-                if (userToDelete is not null)
+                var nowAtUtc = DateTime.UtcNow;
+                if (userToDelete is { IsDeactivated: true, ScheduledDeletionAt: not null }
+                    && userToDelete.ScheduledDeletionAt <= nowAtUtc)
                 {
                     await MarketingContactOptOut.RecordAsync(userToDelete.Email, contactRepository, unitOfWork, transactionToken);
-                    await unitOfWork.AcquireUserRowLockAsync(userId, transactionToken);
+                    await scope.ServiceProvider.GetRequiredService<CancelSubscriptionOnDeletionJob>()
+                        .CancelBeforeDeletionAsync(userToDelete, transactionToken);
                     await dbContext.AiUsageDaily
                         .Where(u => u.UserId == userId)
                         .ExecuteDeleteAsync(transactionToken);

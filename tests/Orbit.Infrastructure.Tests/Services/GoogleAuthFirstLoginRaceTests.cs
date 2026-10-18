@@ -132,7 +132,9 @@ public class GoogleAuthFirstLoginRaceTests
             Options.Create(new JwtSettings
             {
                 SecretKey = "test-secret-key-that-is-at-least-32-bytes-long-for-hmac",
-                Issuer = "test-issuer", Audience = "test-audience", RefreshExpiryDays = 90
+                Issuer = "test-issuer",
+                Audience = "test-audience",
+                RefreshExpiryDays = 90
             }));
         var httpFactory = Substitute.For<IHttpClientFactory>();
         httpFactory.CreateClient("Supabase").Returns(new HttpClient(new GoogleTokenHandler())
@@ -140,7 +142,7 @@ public class GoogleAuthFirstLoginRaceTests
             BaseAddress = new Uri("https://supabase.example.com")
         });
         var flow = new GoogleSignInFlow(userRepository, unitOfWork, sessionService,
-            emailService, scopeFactory, analytics, NullLogger<GoogleSignInFlow>.Instance);
+            emailService, scopeFactory, analytics, NullLogger<GoogleSignInFlow>.Instance, Substitute.For<Hangfire.IBackgroundJobClient>());
         return new GoogleAuthCommandHandler(httpFactory, flow);
     }
 

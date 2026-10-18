@@ -501,6 +501,9 @@ public partial class User : Entity
 
     public void CancelDeactivation()
     {
+        if (!IsLifetimePro && PlanExpiresAt.HasValue && PlanExpiresAt.Value <= DateTime.UtcNow)
+            Plan = UserPlan.Free;
+
         IsDeactivated = false;
         ReminderPreferencesVersion++;
         DeactivatedAt = null;

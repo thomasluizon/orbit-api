@@ -1,16 +1,98 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using NSubstitute;
+using NSubstitute.ExceptionExtensions;
+using Orbit.Application.Auth.Jobs;
+using Orbit.Application.Common;
+using Orbit.Domain.Enums;
+using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.Persistence;
+using Orbit.Infrastructure.Services;
+using Orbit.Infrastructure.Tests.Persistence;
 using FluentAssertions;
 using Orbit.Domain.Entities;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
-/// <summary>
-/// Tests the domain logic that AccountDeletionService relies on:
-/// User deactivation, scheduled deletion, cancellation, and the
-/// stale record cleanup cutoff logic.
-/// The background service loop and DB interactions are integration concerns.
-/// </summary>
 public class AccountDeletionServiceTests
 {
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task RunAsync_DuePaidAccount_CancelsBeforeRemovingAndRetainsRowOnFailure(bool play, bool failure)
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var user = CreateUser();
+        if (play)
+            user.SetPlaySubscription("play-token", DateTime.UtcNow.AddDays(20));
+        else
+            user.SetStripeSubscription("sub_paid", DateTime.UtcNow.AddDays(20));
+        user.Deactivate(DateTime.UtcNow.AddDays(-1));
+        factory.Context.Users.Add(user);
+        await factory.Context.SaveChangesAsync();
+        var stripe = Substitute.For<IBillingService>();
+        var playBilling = Substitute.For<IPlayBillingService>();
+        var reset = Substitute.For<IAccountResetRepository>();
+        stripe.GetSubscriptionDetailsAsync("sub_paid", Arg.Any<CancellationToken>())
+            .Returns(new BillingSubscriptionDetails("active", DateTime.UtcNow.AddDays(20), false,
+                SubscriptionInterval.Monthly, 1000, "usd", null));
+        playBilling.VerifyAsync("orbit_pro", "play-token", Arg.Any<CancellationToken>())
+            .Returns(new PlaySubscriptionState(true, DateTime.UtcNow.AddDays(20), SubscriptionInterval.Monthly, true, "orbit_pro", null, null));
+        if (failure)
+        {
+            stripe.SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>())
+                .ThrowsAsync(new BillingProviderException("unavailable"));
+            playBilling.CancelAsync("play-token", Arg.Any<CancellationToken>())
+                .ThrowsAsync(new BillingProviderException("unavailable"));
+        }
+        reset.DeleteAllUserDataAsync(user.Id, Arg.Any<CancellationToken>()).Returns(async _ =>
+        {
+            if (play)
+                await playBilling.Received(1).CancelAsync("play-token", Arg.Any<CancellationToken>());
+            else
+                await stripe.Received(1).SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>());
+            using var beforeRemoval = factory.CreateContext();
+            (await beforeRemoval.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == user.Id)).Should().BeTrue();
+        });
+        var services = new ServiceCollection();
+        services.AddScoped(_ => factory.CreateContext());
+        services.AddScoped<IUnitOfWork>(sp =>
+        {
+            var context = sp.GetRequiredService<OrbitDbContext>();
+            var work = Substitute.For<IUnitOfWork>();
+            work.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+                .Returns(call => call.Arg<Func<CancellationToken, Task>>()(call.Arg<CancellationToken>()));
+            work.SaveChangesAsync(Arg.Any<CancellationToken>())
+                .Returns(call => context.SaveChangesAsync(call.Arg<CancellationToken>()));
+            return work;
+        });
+        services.AddScoped<IGenericRepository<User>, GenericRepository<User>>();
+        services.AddSingleton(Substitute.For<IGenericRepository<MarketingContact>>());
+        services.AddSingleton(reset);
+        services.AddSingleton(stripe);
+        services.AddSingleton(playBilling);
+        services.AddSingleton(Options.Create(new GooglePlaySettings { ProductId = "orbit_pro" }));
+        services.AddScoped<CancelSubscriptionOnDeletionJob>();
+        using var provider = services.BuildServiceProvider();
+        using var service = new AccountDeletionService(provider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<AccountDeletionService>.Instance, new ConfigurationBuilder().Build());
+
+        await service.RunAsync(CancellationToken.None);
+
+        using var afterRemoval = factory.CreateContext();
+        (await afterRemoval.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == user.Id)).Should().Be(failure);
+        await reset.Received(failure ? 0 : 1).DeleteAllUserDataAsync(user.Id, Arg.Any<CancellationToken>());
+        if (play)
+            await playBilling.Received(1).CancelAsync("play-token", Arg.Any<CancellationToken>());
+        else
+            await stripe.Received(1).SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>());
+    }
+
     private static User CreateUser()
     {
         return User.Create("Test User", "test@example.com").Value;

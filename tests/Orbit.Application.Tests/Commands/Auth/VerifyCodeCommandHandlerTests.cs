@@ -1,3 +1,7 @@
+using Hangfire.Common;
+using Hangfire.States;
+using Orbit.Application.Auth.Jobs;
+using Orbit.Domain.Enums;
 using System.Data.Common;
 using System.Linq.Expressions;
 using FluentAssertions;
@@ -26,6 +30,7 @@ public class VerifyCodeCommandHandlerTests
     private readonly IEmailService _emailService = Substitute.For<IEmailService>();
     private readonly IMediator _mediator = Substitute.For<IMediator>();
     private readonly IProductAnalytics _analytics = Substitute.For<IProductAnalytics>();
+    private readonly Hangfire.IBackgroundJobClient _jobs = Substitute.For<Hangfire.IBackgroundJobClient>();
     private readonly VerifyCodeCommandHandler _handler;
 
     private const string TestEmail = "test@example.com";
@@ -34,10 +39,48 @@ public class VerifyCodeCommandHandlerTests
     {
         _handler = new VerifyCodeCommandHandler(
             _cache, _userRepo, _unitOfWork, _authSessionService, _emailService, _mediator, _analytics,
-            Substitute.For<ILogger<VerifyCodeCommandHandler>>());
+            Substitute.For<ILogger<VerifyCodeCommandHandler>>(), _jobs);
 
         _authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new SessionTokens("jwt-token", "refresh-token")));
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task Reactivation_RestoresOnlyUnexpiredStripeRenewal(bool expired, bool play)
+    {
+        var user = User.Create("Returning", TestEmail).Value;
+        SetupExistingUser(user);
+        SetupCacheWithCode("123456");
+        var expiryAtUtc = DateTime.UtcNow.AddDays(expired ? -1 : 3);
+        if (play)
+            user.SetPlaySubscription("play-token", expiryAtUtc);
+        else
+            user.SetStripeSubscription("sub_paid", expiryAtUtc);
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        user.Deactivate(DateTime.UtcNow.AddDays(7));
+        Job? enqueued = null;
+        _jobs.Create(Arg.Do<Job>(job => enqueued = job), Arg.Any<IState>());
+
+        var result = await _handler.Handle(new VerifyCodeCommand(TestEmail, "123456"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.WasReactivated.Should().BeTrue();
+        user.IsDeactivated.Should().BeFalse();
+        user.ScheduledDeletionAt.Should().BeNull();
+        user.HasProAccess.Should().Be(!expired);
+        user.Plan.Should().Be(expired ? UserPlan.Free : UserPlan.Pro);
+        if (!expired && !play)
+        {
+            _jobs.Received(1).Create(Arg.Any<Job>(), Arg.Any<IState>());
+            enqueued!.Type.Should().Be<CancelSubscriptionOnDeletionJob>();
+            enqueued.Args.Should().Equal(user.Id, "sub_paid", null, false, CancellationToken.None);
+        }
+        else
+            _jobs.DidNotReceive().Create(Arg.Any<Job>(), Arg.Any<IState>());
     }
 
     [Fact]

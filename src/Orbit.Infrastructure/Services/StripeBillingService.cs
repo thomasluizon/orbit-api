@@ -160,6 +160,23 @@ public sealed partial class StripeBillingService(
         }
     }
 
+    public async Task SetSubscriptionCancelAtPeriodEndAsync(
+        string subscriptionId, bool cancelAtPeriodEnd, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await StripeRetryPolicy.ExecuteWithRetryAsync(
+                () => clients.Subscriptions.UpdateAsync(subscriptionId,
+                    new SubscriptionUpdateOptions { CancelAtPeriodEnd = cancelAtPeriodEnd },
+                    cancellationToken: cancellationToken),
+                cancellationToken);
+        }
+        catch (StripeException ex)
+        {
+            throw new BillingProviderException("Failed to update subscription renewal", ex);
+        }
+    }
+
     public async Task<IReadOnlyList<BillingInvoice>> ListInvoicesAsync(string customerId, int limit, CancellationToken cancellationToken)
     {
         try

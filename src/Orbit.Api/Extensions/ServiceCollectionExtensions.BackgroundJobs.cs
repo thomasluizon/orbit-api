@@ -79,6 +79,7 @@ public static partial class ServiceCollectionExtensions
 
         builder.Services.AddScoped<SendVerificationCodeEmailJob>();
         builder.Services.AddScoped<SendAccountDeletionCodeEmailJob>();
+        builder.Services.AddScoped<CancelSubscriptionOnDeletionJob>();
         builder.Services.AddScoped<SendMarketingEmailJob>();
     }
 

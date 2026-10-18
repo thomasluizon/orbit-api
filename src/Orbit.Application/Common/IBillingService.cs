@@ -33,6 +33,10 @@ public interface IBillingService
         string subscriptionId,
         CancellationToken cancellationToken);
 
+    /// <summary>Stops or restores renewal while preserving the current paid period.</summary>
+    Task SetSubscriptionCancelAtPeriodEndAsync(
+        string subscriptionId, bool cancelAtPeriodEnd, CancellationToken cancellationToken);
+
     /// <summary>List recent invoices for a customer.</summary>
     Task<IReadOnlyList<BillingInvoice>> ListInvoicesAsync(
         string customerId,
