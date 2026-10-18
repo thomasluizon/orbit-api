@@ -16,7 +16,7 @@ public readonly record struct StreakSyncOutcome(bool Synced, bool JustCompleted)
 
 public static class GoalStreakSyncService
 {
-    public static bool NeedsPassiveSync(Goal goal, DateOnly userToday)
+    public static bool NeedsPassiveSync(Goal goal, DateOnly userToday, TimeZoneInfo timeZone)
     {
         if (!IsActiveStreakGoal(goal))
             return false;
@@ -25,7 +25,7 @@ public static class GoalStreakSyncService
             return goal.CurrentValue != 0;
 
         var syncedDate = goal.StreakSyncedAtUtc.HasValue
-            ? DateOnly.FromDateTime(goal.StreakSyncedAtUtc.Value)
+            ? DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(goal.StreakSyncedAtUtc.Value, timeZone))
             : (DateOnly?)null;
 
         return syncedDate is null || syncedDate < userToday;
@@ -69,9 +69,10 @@ public static class GoalStreakSyncService
         return new StreakSyncOutcome(Synced: true, JustCompleted: result.IsSuccess && result.Value);
     }
 
-    public static StreakSyncOutcome SyncCurrentStreakIfNeeded(Goal goal, DateOnly userToday, int weekStartDay)
+    public static StreakSyncOutcome SyncCurrentStreakIfNeeded(
+        Goal goal, DateOnly userToday, int weekStartDay, TimeZoneInfo timeZone)
     {
-        if (!NeedsPassiveSync(goal, userToday))
+        if (!NeedsPassiveSync(goal, userToday, timeZone))
             return StreakSyncOutcome.NotSynced;
 
         return SyncCurrentStreak(goal, userToday, weekStartDay);

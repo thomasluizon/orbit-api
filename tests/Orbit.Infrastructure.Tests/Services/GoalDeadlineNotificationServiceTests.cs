@@ -376,22 +376,26 @@ public class GoalDeadlineNotificationServiceTests
         notification.DedupeKey.Should().Be(GoalDeadlineNotificationService.BuildDedupeKey(goal.Id, 7));
     }
 
-    [Fact]
-    public async Task CheckAndSendDeadlineNotifications_MissedSevenDayTick_StillSendsHighestCrossedMilestone()
+    [Theory]
+    [InlineData(1, "due tomorrow")]
+    [InlineData(2, "due in 2 days")]
+    [InlineData(5, "due in 5 days")]
+    public async Task CheckAndSendDeadlineNotifications_MissedSevenDayTick_StillSendsHighestCrossedMilestone(
+        int deadlineInDays, string expectedTimeLeft)
     {
         await using var dbContext = CreateInMemoryDbContext();
         var pushService = Substitute.For<IPushNotificationService>();
-        var (user, goal) = await SeedDeadlineGoalAsync(dbContext, deadlineInDays: 5);
+        var (user, goal) = await SeedDeadlineGoalAsync(dbContext, deadlineInDays);
 
         var service = CreateService(dbContext, pushService);
         await service.CheckAndSendDeadlineNotifications(CancellationToken.None);
 
         await pushService.Received(1).SendToUserAsync(
-            user.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
-        (await dbContext.Notifications.CountAsync(
-            n => n.DedupeKey == GoalDeadlineNotificationService.BuildDedupeKey(goal.Id, 7))).Should().Be(1);
-        (await dbContext.Notifications.CountAsync(
-            n => n.DedupeKey == GoalDeadlineNotificationService.BuildDedupeKey(goal.Id, 3))).Should().Be(0);
+            user.Id, Arg.Any<string>(), Arg.Is<string>(body => body.Contains(expectedTimeLeft)),
+            NotificationUrls.Progress, Arg.Any<CancellationToken>());
+        var notification = await dbContext.Notifications.SingleAsync();
+        notification.Body.Should().Contain(expectedTimeLeft);
+        notification.DedupeKey.Should().Be(GoalDeadlineNotificationService.BuildDedupeKey(goal.Id, 7));
     }
 
     [Fact]
