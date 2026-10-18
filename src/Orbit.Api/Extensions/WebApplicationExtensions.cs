@@ -449,6 +449,7 @@ public static partial class WebApplicationExtensions
                 options.KnownProxies.Add(parsedProxy);
         }
 
+        // https://github.com/thomasluizon/orbit-tickets/issues/114: Render staging logged peer 10.24.103.103 as the refresh IP bucket, so trust the configured private proxy network for one hop.
         var knownNetworks = app.Configuration.GetSection("ForwardedHeaders:KnownNetworks").Get<string[]>() ?? [];
         foreach (var network in knownNetworks)
         {
