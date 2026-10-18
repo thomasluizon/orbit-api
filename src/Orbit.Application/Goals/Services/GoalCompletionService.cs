@@ -92,9 +92,12 @@ public sealed class GoalCompletionService(
             .Select(goal => goal.Id).ToList();
         var standardCounts = await GoalStandardCompletionReader.ReadCountsAsync(
             goalRepository, userId, standardIds, cancellationToken);
+        var timeZone = passiveSync
+            ? await userDateService.GetUserTimeZoneAsync(userId, cancellationToken)
+            : TimeZoneInfo.Utc;
         var snapshots = candidates
             .Select(goal => CreateSnapshot(
-                goal, userToday, weekStartDay, passiveSync, standardCounts.GetValueOrDefault(goal.Id)))
+                goal, userToday, weekStartDay, passiveSync, standardCounts.GetValueOrDefault(goal.Id), timeZone))
             .Where(snapshot => snapshot.HasValue)
             .Select(snapshot => snapshot!.Value)
             .ToList();
@@ -132,7 +135,8 @@ public sealed class GoalCompletionService(
         DateOnly userToday,
         int weekStartDay,
         bool passiveSync,
-        int standardCompletionCount)
+        int standardCompletionCount,
+        TimeZoneInfo timeZone)
     {
         if (goal.Status != GoalStatus.Active)
             return null;
@@ -152,7 +156,7 @@ public sealed class GoalCompletionService(
                 goal.UpdatedAtUtc);
         }
 
-        if (passiveSync && !GoalStreakSyncService.NeedsPassiveSync(goal, userToday))
+        if (passiveSync && !GoalStreakSyncService.NeedsPassiveSync(goal, userToday, timeZone))
             return null;
 
         if (!goal.HasActiveLinkedHabits)

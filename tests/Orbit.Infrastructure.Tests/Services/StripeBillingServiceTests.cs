@@ -230,6 +230,19 @@ public class StripeBillingServiceTests
         options.CancelUrl.Should().Be(cancel);
     }
 
+    [Theory]
+    [InlineData("7092bf88-d132-46df-b4ee-2dcc2197cd69", null)]
+    [InlineData("497685db-9fc3-4d2a-ad73-f6bf5524d339", "coupon_referral")]
+    public async Task Checkout_UserId_IsSentInSessionMetadata(string user, string? coupon)
+    {
+        var userId = Guid.Parse(user);
+        await CheckoutKeyAsync(user: userId, coupon: coupon);
+
+        var metadata = _checkoutRequests.Single().Options.Metadata;
+        metadata.Should().ContainKey("userId");
+        metadata["userId"].Should().Be(userId.ToString());
+    }
+
     [Fact]
     public async Task Portal_IdenticalRequests_UseSameKey()
     {

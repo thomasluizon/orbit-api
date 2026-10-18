@@ -2515,13 +2515,13 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("AddresseeId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("RequesterId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 

@@ -1,4 +1,8 @@
 using FluentAssertions;
+using System.Collections;
+using System.Reflection;
+using Microsoft.EntityFrameworkCore;
+using Orbit.Infrastructure.Services;
 using Orbit.Api.Controllers;
 using Orbit.Api.RateLimiting;
 using Orbit.Application.Auth.Validators;
@@ -20,12 +24,19 @@ public class DistributedRateLimitPartitionKeyTests
     }
 
     [Fact]
-    public void TryResolveEmailPartitionKey_Auth_DifferentEmailsMapToDifferentKeys()
+    public async Task Auth_DifferentEmailsKeepSeparateEmailKeysAndShareIpKey()
     {
         var first = ResolveFor("auth", new AuthController.SendCodeRequest("first@x.com"));
         var second = ResolveFor("auth", new AuthController.SendCodeRequest("second@x.com"));
 
         first.PartitionKey.Should().NotBe(second.PartitionKey);
+        using var scope = new RateLimitFilterTestScope();
+        await scope.ExecuteAsync(scope.CreateContext(new AuthController.SendCodeRequest("first@x.com")));
+        await scope.ExecuteAsync(scope.CreateContext(new AuthController.SendCodeRequest("second@x.com")));
+        var buckets = await scope.DbContext.DistributedRateLimitBuckets.ToListAsync();
+        buckets.Where(b => b.PolicyName == "auth").Select(b => b.PartitionKey)
+            .Should().BeEquivalentTo([first.PartitionKey, second.PartitionKey]);
+        buckets.Single(b => b.PolicyName == "auth-ip").Count.Should().Be(2);
     }
 
     [Fact]
@@ -73,6 +84,20 @@ public class DistributedRateLimitPartitionKeyTests
 
         resolved.Should().BeFalse();
         partitionKey.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void EveryEmailPartitionedPolicy_HasExplicitIpCeiling()
+    {
+        var emailPolicies = (IEnumerable<string>)typeof(DistributedRateLimitFilter)
+            .GetField("EmailPartitionedPolicies", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
+        var registeredPolicies = (IDictionary)typeof(DistributedRateLimitService)
+            .GetField("Policies", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
+
+        emailPolicies.Should().NotBeEmpty();
+        foreach (var policy in emailPolicies)
+            registeredPolicies.Contains($"{policy.ToLowerInvariant()}-ip").Should().BeTrue(
+                $"email-partitioned policy {policy} must also limit email rotation by source IP");
     }
 
     private static readonly string RefreshTokenA = new('A', RefreshTokenRules.TokenLength);

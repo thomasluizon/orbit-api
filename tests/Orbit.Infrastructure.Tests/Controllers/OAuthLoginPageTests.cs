@@ -22,6 +22,7 @@ public class OAuthLoginPageTests : IDisposable
     private readonly OAuthAuthorizationStore _authStore =
         new(NullLogger<OAuthAuthorizationStore>.Instance, TimeProvider.System);
     private readonly OAuthController _controller;
+    private readonly IConfigurationRoot _configuration = new ConfigurationBuilder().AddInMemoryCollection().Build();
 
     public OAuthLoginPageTests()
     {
@@ -34,7 +35,7 @@ public class OAuthLoginPageTests : IDisposable
             Substitute.For<IMediator>(), _authStore,
             Substitute.For<IGenericRepository<ApiKey>>(),
             Substitute.For<IUnitOfWork>(),
-            googleSettings, new ConfigurationBuilder().Build(),
+            googleSettings, _configuration,
             Substitute.For<ILogger<OAuthController>>());
 
         var httpContext = new DefaultHttpContext();
@@ -164,6 +165,45 @@ public class OAuthLoginPageTests : IDisposable
         page.Should().Contain("Continuar com o Google");
         page.Should().Contain("Na sua conta, o Claude pode:");
         page.Should().Contain("Gerenciar seus hábitos, metas e tags");
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Authorize_OnlyLoadsTurnstileWhenEnabled_AndNeverPublishesSecret(bool enabled)
+    {
+        _configuration["BotProtection:Enabled"] = enabled.ToString();
+        _configuration["BotProtection:SiteKey"] = "public-site-key";
+        _configuration["BotProtection:SecretKey"] = "private-secret-key";
+
+        var page = RenderThroughController("pt-BR");
+        var requestJson = Regex.Match(page, "<script type=\"application/json\" id=\"oauth-request\">(.*?)</script>", RegexOptions.Singleline).Groups[1].Value;
+        using var request = JsonDocument.Parse(requestJson);
+
+        request.RootElement.GetProperty("botProtectionEnabled").GetBoolean().Should().Be(enabled);
+        if (enabled)
+        {
+            page.Should().Contain("<div id=\"turnstile-widget\"></div>");
+            page.Should().Contain("src=\"https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&amp;onload=onOAuthTurnstileLoad\"");
+            request.RootElement.GetProperty("turnstileSiteKey").GetString().Should().Be("public-site-key");
+        }
+        else
+        {
+            page.Should().NotContain("<div id=\"turnstile-widget\"></div>");
+            page.Should().NotContain("challenges.cloudflare.com");
+            request.RootElement.GetProperty("turnstileSiteKey").ValueKind.Should().Be(JsonValueKind.Null);
+        }
+        page.Should().NotContain("private-secret-key");
+    }
+
+    [Fact]
+    public void Page_EscapesSiteKeyInsideTheRequestJson()
+    {
+        var page = OAuthLoginPage.Render("client", "https://claude.ai/callback", "state", "challenge", "S256",
+            botProtectionEnabled: true, turnstileSiteKey: "</script><script>alert(1)</script>");
+
+        page.Should().NotContain("</script><script>alert(1)</script>");
+        page.Should().Contain("\\u003C/script\\u003E");
     }
 
     [Fact]

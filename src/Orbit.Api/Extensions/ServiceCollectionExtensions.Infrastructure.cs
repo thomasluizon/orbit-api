@@ -39,7 +39,18 @@ public static partial class ServiceCollectionExtensions
             client.Timeout = httpTimeout;
         });
 
-        var storageProvider = builder.Configuration["Storage:Provider"] ?? "Supabase";
+        if (!BuildTimeDocumentGeneration.IsActive)
+        {
+            foreach (var key in new[]
+            {
+                "Storage:S3:Bucket", "Storage:S3:PublicBaseUrl", "Storage:S3:Region",
+                "Storage:S3:AccessKeyId", "Storage:S3:SecretAccessKey",
+            })
+            {
+                RequireConfigValue(builder, key);
+            }
+        }
+
         builder.Services.Configure<S3StorageSettings>(
             builder.Configuration.GetSection(S3StorageSettings.SectionName));
         builder.Services.AddSingleton<IAmazonS3>(_ => new AmazonS3Client(
@@ -50,33 +61,10 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<S3ObjectStorageService>();
         builder.Services.AddScoped<IObjectStorageReadService>(serviceProvider =>
             serviceProvider.GetRequiredService<S3ObjectStorageService>());
-        if (storageProvider.Equals("Supabase", StringComparison.OrdinalIgnoreCase))
-        {
-            var supabaseSecretKey = RequireConfigValue(builder, "Supabase:SecretKey");
-            builder.Services.Configure<SupabaseStorageSettings>(
-                builder.Configuration.GetSection(SupabaseStorageSettings.SectionName));
-            builder.Services.AddHttpClient(SupabaseObjectStorageService.HttpClientName, client =>
-            {
-                client.BaseAddress = new Uri(supabaseUrl);
-                client.DefaultRequestHeaders.Add("apikey", supabaseSecretKey);
-                client.Timeout = httpTimeout;
-            });
-            builder.Services.AddScoped<IObjectStorageService, SupabaseObjectStorageService>();
-        }
-        else if (storageProvider.Equals("S3", StringComparison.OrdinalIgnoreCase))
-        {
-            RequireConfigValue(builder, "Storage:S3:Bucket");
-            RequireConfigValue(builder, "Storage:S3:PublicBaseUrl");
-            RequireConfigValue(builder, "Storage:S3:Region");
-            RequireConfigValue(builder, "Storage:S3:AccessKeyId");
-            RequireConfigValue(builder, "Storage:S3:SecretAccessKey");
-            builder.Services.AddScoped<IObjectStorageService>(serviceProvider =>
-                serviceProvider.GetRequiredService<S3ObjectStorageService>());
-        }
-        else
-        {
-            throw new InvalidOperationException($"Unsupported Storage:Provider '{storageProvider}'.");
-        }
+        builder.Services.AddScoped<IObjectStorageDeletionService>(serviceProvider =>
+            serviceProvider.GetRequiredService<S3ObjectStorageService>());
+        builder.Services.AddScoped<IObjectStorageService>(serviceProvider =>
+            serviceProvider.GetRequiredService<S3ObjectStorageService>());
 
         if (!BuildTimeDocumentGeneration.IsActive)
         {
@@ -188,12 +176,13 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<Orbit.Application.Subscriptions.Services.IPlayReferralCouponConsumer, Orbit.Application.Subscriptions.Services.PlayReferralCouponConsumer>();
     }
 
-    private static void AddPushAndReferralServices(WebApplicationBuilder builder, TimeSpan httpTimeout)
+    internal static void AddPushAndReferralServices(WebApplicationBuilder builder, TimeSpan httpTimeout)
     {
         builder.Services.Configure<VapidSettings>(
             builder.Configuration.GetSection(VapidSettings.SectionName));
         builder.Services.AddHttpClient<IPushNotificationService, PushNotificationService>()
-            .ConfigureHttpClient(c => c.Timeout = httpTimeout);
+            .ConfigureHttpClient(c => c.Timeout = httpTimeout)
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
         builder.Services.AddScoped<IReferralRewardService, StripeCouponRewardService>();
         builder.Services.AddScoped<Orbit.Application.Referrals.Commands.ReferralRepositories>(sp =>
             new Orbit.Application.Referrals.Commands.ReferralRepositories(

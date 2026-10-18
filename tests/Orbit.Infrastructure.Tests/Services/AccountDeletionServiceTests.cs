@@ -83,7 +83,10 @@ public class AccountDeletionServiceTests
             using var beforeRemoval = factory.CreateContext();
             (await beforeRemoval.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == user.Id)).Should().BeTrue();
         });
+        var objects = new FakeObjectStore();
+        objects.Keys.Add($"{user.Id}/one.png");
         var services = new ServiceCollection();
+        services.AddSingleton<IObjectStorageDeletionService>(objects);
         services.AddScoped(_ => factory.CreateContext());
         services.AddScoped<IUnitOfWork>(sp =>
         {
@@ -120,6 +123,8 @@ public class AccountDeletionServiceTests
         using var afterRemoval = factory.CreateContext();
         var retained = failure && overdueDays < 7 || queueFailure != 0;
         (await afterRemoval.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == user.Id)).Should().Be(retained);
+        objects.Attempts.Should().Be(retained ? 0 : 1);
+        objects.Keys.Should().HaveCount(retained ? 1 : 0);
         await reset.Received(retained ? 0 : 1).DeleteAllUserDataAsync(user.Id, Arg.Any<CancellationToken>());
         if (play)
             await playBilling.Received(expectedInlineCalls).CancelAsync("play-token", Arg.Any<CancellationToken>());

@@ -117,8 +117,8 @@ public class UnsubscribePushCommandHandlerTests
     [Fact]
     public async Task Handle_SubscriptionFound_DeletesOnlyTheReadRowAndOwner()
     {
-        var subscription = PushSubscription.Create(UserId, "https://push.example.com/endpoint", "p256dh", "auth").Value;
-        var otherSubscription = PushSubscription.Create(UserId, "https://push.example.com/other", "p256dh", "auth").Value;
+        var subscription = PushSubscription.Create(UserId, "https://fcm.googleapis.com/endpoint", "p256dh", "auth").Value;
+        var otherSubscription = PushSubscription.Create(UserId, "https://fcm.googleapis.com/other", "p256dh", "auth").Value;
         using var cancellation = new CancellationTokenSource();
 
         _pushSubRepo.FindOneTrackedAsync(
@@ -127,7 +127,7 @@ public class UnsubscribePushCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(subscription);
 
-        var command = new UnsubscribePushCommand(UserId, "https://push.example.com/endpoint", "p256dh", "auth");
+        var command = new UnsubscribePushCommand(UserId, "https://fcm.googleapis.com/endpoint", "p256dh", "auth");
 
         var result = await _handler.Handle(command, cancellation.Token);
 
@@ -146,10 +146,10 @@ public class UnsubscribePushCommandHandlerTests
     [Fact]
     public async Task Handle_ExplicitCrossAccountReleaseWithDeviceKeys_DeletesThePreviousOwnersRow()
     {
-        var subscription = PushSubscription.Create(Guid.NewGuid(), "https://push.example.com/endpoint", "p256dh", "auth").Value;
+        var subscription = PushSubscription.Create(Guid.NewGuid(), "https://fcm.googleapis.com/endpoint", "p256dh", "auth").Value;
         ArrangeFound(subscription);
 
-        var command = new UnsubscribePushCommand(UserId, "https://push.example.com/endpoint", "p256dh", "auth", ReleaseOtherAccount: true);
+        var command = new UnsubscribePushCommand(UserId, "https://fcm.googleapis.com/endpoint", "p256dh", "auth", ReleaseOtherAccount: true);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -166,10 +166,10 @@ public class UnsubscribePushCommandHandlerTests
     {
         var p256dh = native ? PushSubscription.FcmSentinel : "p256dh";
         var auth = native ? PushSubscription.FcmSentinel : "auth";
-        var subscription = PushSubscription.Create(Guid.NewGuid(), "endpoint", p256dh, auth).Value;
+        var subscription = PushSubscription.Create(Guid.NewGuid(), "https://fcm.googleapis.com/endpoint", p256dh, auth).Value;
         ArrangeFound(subscription);
 
-        var result = await _handler.Handle(new UnsubscribePushCommand(UserId, "endpoint", p256dh, auth), CancellationToken.None);
+        var result = await _handler.Handle(new UnsubscribePushCommand(UserId, "https://fcm.googleapis.com/endpoint", p256dh, auth), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _pushSubRepo.DidNotReceive().DeleteAsync(
@@ -181,10 +181,10 @@ public class UnsubscribePushCommandHandlerTests
     [InlineData(null, null)]
     public async Task Handle_OtherAccountsRowWithoutItsDeviceKeys_LeavesItInPlace(string? p256dh, string? auth)
     {
-        var subscription = PushSubscription.Create(Guid.NewGuid(), "https://push.example.com/endpoint", "p256dh", "auth").Value;
+        var subscription = PushSubscription.Create(Guid.NewGuid(), "https://fcm.googleapis.com/endpoint", "p256dh", "auth").Value;
         ArrangeFound(subscription);
 
-        var command = new UnsubscribePushCommand(UserId, "https://push.example.com/endpoint", p256dh, auth, ReleaseOtherAccount: true);
+        var command = new UnsubscribePushCommand(UserId, "https://fcm.googleapis.com/endpoint", p256dh, auth, ReleaseOtherAccount: true);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -196,10 +196,10 @@ public class UnsubscribePushCommandHandlerTests
     [Fact]
     public async Task Handle_OwnRowWithoutDeviceKeys_DeletesTheRow()
     {
-        var subscription = PushSubscription.Create(UserId, "https://push.example.com/endpoint", "p256dh", "auth").Value;
+        var subscription = PushSubscription.Create(UserId, "https://fcm.googleapis.com/endpoint", "p256dh", "auth").Value;
         ArrangeFound(subscription);
 
-        var command = new UnsubscribePushCommand(UserId, "https://push.example.com/endpoint", null, null);
+        var command = new UnsubscribePushCommand(UserId, "https://fcm.googleapis.com/endpoint", null, null);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -218,7 +218,7 @@ public class UnsubscribePushCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns((PushSubscription?)null);
 
-        var command = new UnsubscribePushCommand(UserId, "https://push.example.com/endpoint", "p256dh", "auth");
+        var command = new UnsubscribePushCommand(UserId, "https://fcm.googleapis.com/endpoint", "p256dh", "auth");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 

@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Api.Controllers;
 using Orbit.Application.Uploads.Commands;
+using Orbit.Application.Uploads.Queries;
 using Orbit.Api.RateLimiting;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
@@ -26,6 +27,7 @@ public class UploadsControllerTests
 
     public UploadsControllerTests()
     {
+        _mediator.Send(Arg.Any<UploadOwnerExistsQuery>(), Arg.Any<CancellationToken>()).Returns(true);
         _controller = new UploadsController(_mediator, _objectStorage, _logger);
         var claims = new[] { new Claim(ClaimTypes.NameIdentifier, UserId.ToString()) };
         var identity = new ClaimsIdentity(claims, "Test");
@@ -84,7 +86,7 @@ public class UploadsControllerTests
         var result = await _controller.ReadObject(userId, fileName, CancellationToken.None);
 
         result.Should().BeOfType<RedirectResult>().Which.Url.Should().Be("https://example.s3.amazonaws.com/signed-read");
-        _controller.Response.Headers.CacheControl.ToString().Should().Be("public, max-age=300");
+        _controller.Response.Headers.CacheControl.ToString().Should().Be("no-store");
         await _objectStorage.Received(1).CreateReadUrlAsync(key, Arg.Any<CancellationToken>());
     }
 
@@ -103,6 +105,17 @@ public class UploadsControllerTests
         await _objectStorage.Received(1).CreateReadUrlAsync(canonicalKey, Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task ReadObject_MissingOwner_ReturnsNotFoundWithoutPresigning()
+    {
+        _mediator.Send(Arg.Any<UploadOwnerExistsQuery>(), Arg.Any<CancellationToken>()).Returns(false);
+
+        var result = await _controller.ReadObject(Guid.NewGuid().ToString(), $"{Guid.NewGuid()}.png", CancellationToken.None);
+
+        result.Should().BeOfType<NotFoundResult>();
+        await _objectStorage.DidNotReceive().CreateReadUrlAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
     [Theory]
     [InlineData("../other", "1e21a217-e146-43c9-b61c-b5871a991578.webp")]
     [InlineData("2b3b1fc7-813c-4eb6-ad02-bd7754299703", "../other.webp")]
@@ -113,6 +126,7 @@ public class UploadsControllerTests
 
         result.Should().BeOfType<NotFoundResult>();
         await _objectStorage.DidNotReceive().CreateReadUrlAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _mediator.DidNotReceive().Send(Arg.Any<UploadOwnerExistsQuery>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
