@@ -146,6 +146,7 @@ public class AuthControllerTests
     }
 
     [Fact]
+    [Obsolete("Covers the deprecated POST /api/Auth/google route.")]
     public async Task GoogleAuth_Success_ReturnsOk()
     {
         _mediator.Send(Arg.Any<GoogleAuthCommand>(), Arg.Any<CancellationToken>())
@@ -163,6 +164,7 @@ public class AuthControllerTests
     }
 
     [Fact]
+    [Obsolete("Covers the deprecated POST /api/Auth/google route.")]
     public async Task GoogleAuth_Failure_ReturnsUnauthorizedWithErrorCode()
     {
         _mediator.Send(Arg.Any<GoogleAuthCommand>(), Arg.Any<CancellationToken>())
@@ -436,6 +438,7 @@ public class AuthControllerTests
     }
 
     [Fact]
+    [Obsolete("Covers the deprecated POST /api/Auth/operations/google route.")]
     public async Task GoogleAuthOperation_Success_ReturnsOk()
     {
         _mediator.Send(Arg.Any<GoogleAuthCommand>(), Arg.Any<CancellationToken>())
@@ -454,6 +457,7 @@ public class AuthControllerTests
     }
 
     [Fact]
+    [Obsolete("Covers the deprecated POST /api/Auth/operations/google route.")]
     public async Task GoogleAuthOperation_Failure_ReturnsUnauthorized()
     {
         _mediator.Send(Arg.Any<GoogleAuthCommand>(), Arg.Any<CancellationToken>())
