@@ -52,14 +52,9 @@ public sealed partial class CompleteSignupJob(
             var originalReferral = user.SignupLanguage is not null ? user.SignupReferralCode : referralCode;
             if (!string.IsNullOrWhiteSpace(originalReferral))
             {
-                try
-                {
-                    await mediator.Send(new ProcessReferralCodeCommand(user.Id, originalReferral), CancellationToken.None);
-                }
-                catch (Exception exception)
-                {
-                    LogReferralProcessingFailed(logger, exception, user.Id);
-                }
+                var result = await mediator.Send(new ProcessReferralCodeCommand(user.Id, originalReferral), CancellationToken.None);
+                if (result.IsFailure)
+                    LogReferralRejected(logger, user.Id, result.ErrorCode);
             }
 
             if (user.SignupLanguage is not null)
@@ -78,6 +73,6 @@ public sealed partial class CompleteSignupJob(
             return Task.CompletedTask;
         });
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Referral processing failed for user {UserId}")]
-    private static partial void LogReferralProcessingFailed(ILogger logger, Exception exception, Guid userId);
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Signup referral rejected for user {UserId}: {ErrorCode}")]
+    private static partial void LogReferralRejected(ILogger logger, Guid userId, string? errorCode);
 }

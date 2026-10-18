@@ -103,7 +103,18 @@ public class CompleteSignupJobTests
         _mediator.Send(Arg.Any<ProcessReferralCodeCommand>(), Arg.Any<CancellationToken>())
             .Returns(_ => referralFails ? throw new InvalidOperationException("Referral unavailable") : Result.Success());
 
-        await RunSignupAsync(user.Id, "pt-BR", "friend");
+        var signup = () => RunSignupAsync(user.Id, "pt-BR", "friend");
+        if (referralFails)
+        {
+            await signup.Should().ThrowAsync<InvalidOperationException>().WithMessage("Referral unavailable");
+            user.SignupReferralCompletedAtUtc.Should().BeNull();
+            while (_queued.TryDequeue(out var child))
+                await InvokeAsync(child);
+        }
+        else
+        {
+            await signup();
+        }
 
         await _mediator.Received(1).Send(Arg.Is<ProcessReferralCodeCommand>(c => c.NewUserId == user.Id && c.ReferralCode == "friend"), CancellationToken.None);
         _analytics.Received(1).CaptureUserEvent(user.Id, "signup_completed", "Free");
