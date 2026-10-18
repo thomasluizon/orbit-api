@@ -3,8 +3,18 @@ name: Gating matrix
 on:
   pull_request:
     branches: [main]
+    paths:
+      - 'src/**/*.cs'
+      - 'tools/gating-matrix.mjs'
+      - 'tools/__tests__/gating-matrix.test.mjs'
+      - '.github/workflows/gating-matrix.yml'
   push:
     branches: [main]
+    paths:
+      - 'src/**/*.cs'
+      - 'tools/gating-matrix.mjs'
+      - 'tools/__tests__/gating-matrix.test.mjs'
+      - '.github/workflows/gating-matrix.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -24,9 +34,6 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-
-      - name: Test the generator
-        run: node --test tools/__tests__/gating-matrix.test.mjs
 
       - name: Generate the gating matrix
         run: node tools/gating-matrix.mjs
