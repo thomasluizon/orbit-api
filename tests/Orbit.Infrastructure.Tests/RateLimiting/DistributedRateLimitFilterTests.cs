@@ -11,11 +11,15 @@ using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.Configuration;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using System.Security.Claims;
 using System.Reflection;
 using Orbit.Api.Controllers;
+using Orbit.Api.Extensions;
 using Orbit.Api.RateLimiting;
 using Orbit.Application.Auth.Validators;
 using Orbit.Domain.Interfaces;
@@ -39,6 +43,7 @@ public class DistributedRateLimitFilterTests
         var provider = Substitute.For<IServiceProvider>();
         provider.GetService(typeof(IDistributedRateLimitService)).Returns(_service);
         provider.GetService(typeof(IAuthSessionService)).Returns(_authSessionService);
+        provider.GetService(typeof(IOptions<BffForwardingSettings>)).Returns(Options.Create(new BffForwardingSettings()));
         provider.GetService(typeof(ILogger<DistributedRateLimitFilter>)).Returns(_logger);
         var attribute = typeof(AuthController).GetMethod(action)!
             .GetCustomAttribute<DistributedRateLimitAttribute>()!;
@@ -56,7 +61,7 @@ public class DistributedRateLimitFilterTests
         _service.TryAcquireAsync("support", Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("rate-limit store down"));
 
-        var filter = new DistributedRateLimitFilter("support", _service, _authSessionService, _logger);
+        var filter = new DistributedRateLimitFilter("support", _service, _authSessionService, Options.Create(new BffForwardingSettings()), _logger);
         var (context, _) = CreateExecutingContext();
         var nextCalled = false;
 
@@ -76,7 +81,7 @@ public class DistributedRateLimitFilterTests
         _service.TryAcquireAsync("chat", Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("rate-limit store down"));
 
-        var filter = new DistributedRateLimitFilter("chat", _service, _authSessionService, _logger);
+        var filter = new DistributedRateLimitFilter("chat", _service, _authSessionService, Options.Create(new BffForwardingSettings()), _logger);
         var (context, _) = CreateExecutingContext();
         var nextCalled = false;
 
@@ -96,7 +101,7 @@ public class DistributedRateLimitFilterTests
         _service.TryAcquireAsync("support", Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new DistributedRateLimitDecision(false, 3, 3, DateTime.UtcNow.AddHours(1)));
 
-        var filter = new DistributedRateLimitFilter("support", _service, _authSessionService, _logger);
+        var filter = new DistributedRateLimitFilter("support", _service, _authSessionService, Options.Create(new BffForwardingSettings()), _logger);
         var (context, _) = CreateExecutingContext();
         var nextCalled = false;
 
@@ -119,7 +124,7 @@ public class DistributedRateLimitFilterTests
         _service.TryAcquireAsync("refresh", Arg.Do<string>(key => capturedPartitionKey = key), Arg.Any<CancellationToken>())
             .Returns(new DistributedRateLimitDecision(true, 1, 10, DateTime.UtcNow.AddMinutes(1)));
 
-        var filter = new DistributedRateLimitFilter("refresh", _service, _authSessionService, _logger);
+        var filter = new DistributedRateLimitFilter("refresh", _service, _authSessionService, Options.Create(new BffForwardingSettings()), _logger);
         var (context, _) = CreateExecutingContext(new AuthController.RefreshSessionRequest(refreshToken));
 
         await filter.OnActionExecutionAsync(context, () => Task.FromResult(CreateExecutedContext(context)));
@@ -137,7 +142,7 @@ public class DistributedRateLimitFilterTests
         _service.TryAcquireAsync("refresh", Arg.Do<string>(key => capturedPartitionKey = key), Arg.Any<CancellationToken>())
             .Returns(new DistributedRateLimitDecision(true, 1, 10, DateTime.UtcNow.AddMinutes(1)));
 
-        var filter = new DistributedRateLimitFilter("refresh", _service, _authSessionService, _logger);
+        var filter = new DistributedRateLimitFilter("refresh", _service, _authSessionService, Options.Create(new BffForwardingSettings()), _logger);
         var (context, httpContext) = CreateExecutingContext(new AuthController.RefreshSessionRequest(forgedToken));
         httpContext.Connection.RemoteIpAddress = System.Net.IPAddress.Parse("203.0.113.7");
 
@@ -303,7 +308,7 @@ public class DistributedRateLimitFilterTests
             .Returns(new DistributedRateLimitDecision(true, 10, 1, DateTime.UtcNow.AddMinutes(1)));
         var (context, _) = CreateAuthenticatedExecutingContext(userId);
         context.ActionArguments["request"] = new AuthController.SendCodeRequest("a@x.com");
-        var filter = new DistributedRateLimitFilter("auth", _service, _authSessionService, _logger);
+        var filter = new DistributedRateLimitFilter("auth", _service, _authSessionService, Options.Create(new BffForwardingSettings()), _logger);
 
         await filter.OnActionExecutionAsync(context, () => Task.FromResult(CreateExecutedContext(context)));
 
@@ -347,6 +352,100 @@ public class DistributedRateLimitFilterTests
     }
 
     [Theory]
+    [InlineData("auth", 30)]
+    [InlineData("waitlist", 15)]
+    public async Task VerifiedBff_DistinctClients_HaveIndependentIpBuckets(string policy, int limit)
+    {
+        using var scope = new RateLimitFilterTestScope("test-forwarding-secret");
+        for (var client = 1; client <= 2; client++)
+        {
+            for (var attempt = 1; attempt <= limit; attempt++)
+            {
+                var context = scope.CreateContext(new AuthController.SendCodeRequest($"client{client}-{attempt}@x.com"));
+                context.HttpContext.Request.Headers["X-Orbit-Bff-Secret"] = "test-forwarding-secret";
+                context.HttpContext.Request.Headers["X-Orbit-Client-Ip"] = $"198.51.100.{client}";
+                await scope.ExecuteAsync(context, policy: policy);
+                RateLimitFilterTestScope.AssertOutcome(context, true);
+            }
+        }
+
+        var buckets = await scope.DbContext.DistributedRateLimitBuckets
+            .Where(b => b.PolicyName == $"{policy}-ip").ToListAsync();
+        buckets.Select(b => b.PartitionKey).Should().BeEquivalentTo(["ip:198.51.100.1", "ip:198.51.100.2"]);
+        buckets.Should().OnlyContain(b => b.Count == limit);
+    }
+
+    [Theory]
+    [InlineData("auth", 30)]
+    [InlineData("waitlist", 15)]
+    public async Task VerifiedBff_RotatingEmails_ExhaustsOnlyEndClientBucket(string policy, int limit)
+    {
+        using var scope = new RateLimitFilterTestScope("test-forwarding-secret");
+        for (var attempt = 1; attempt <= limit + 5; attempt++)
+        {
+            var context = scope.CreateContext(new AuthController.SendCodeRequest($"a{attempt}@x.com"));
+            context.HttpContext.Request.Headers["X-Orbit-Bff-Secret"] = "test-forwarding-secret";
+            context.HttpContext.Request.Headers["X-Orbit-Client-Ip"] = "198.51.100.1";
+            await scope.ExecuteAsync(context, policy: policy);
+            RateLimitFilterTestScope.AssertOutcome(context, attempt <= limit);
+        }
+
+        var otherClient = scope.CreateContext(new AuthController.SendCodeRequest("other@x.com"));
+        otherClient.HttpContext.Request.Headers["X-Orbit-Bff-Secret"] = "test-forwarding-secret";
+        otherClient.HttpContext.Request.Headers["X-Orbit-Client-Ip"] = "198.51.100.2";
+        await scope.ExecuteAsync(otherClient, policy: policy);
+        RateLimitFilterTestScope.AssertOutcome(otherClient, true);
+    }
+
+    [Theory]
+    [InlineData("test-forwarding-secret", null)]
+    [InlineData("test-forwarding-secret", "wrong-forwarding-secret")]
+    [InlineData("test-forwarding-secret", "Test-forwarding-secret")]
+    [InlineData(null, "test-forwarding-secret")]
+    [InlineData("", "")]
+    [InlineData(" ", " ")]
+    public async Task UntrustedBffHeaders_CannotEscapeDirectSourceCeiling(string? configuredSecret, string? suppliedSecret)
+    {
+        using var scope = new RateLimitFilterTestScope(configuredSecret);
+        for (var attempt = 1; attempt <= 40; attempt++)
+        {
+            var context = scope.CreateContext(new AuthController.SendCodeRequest($"a{attempt}@x.com"));
+            if (suppliedSecret is not null)
+                context.HttpContext.Request.Headers["X-Orbit-Bff-Secret"] = suppliedSecret;
+            context.HttpContext.Request.Headers["X-Orbit-Client-Ip"] = $"198.51.100.{attempt}";
+            context.HttpContext.Request.Headers["X-Forwarded-For"] = $"198.51.100.{attempt}";
+            context.HttpContext.Request.Headers["Forwarded"] = $"for=198.51.100.{attempt}";
+            await scope.ExecuteAsync(context);
+            RateLimitFilterTestScope.AssertOutcome(context, attempt <= 30);
+        }
+
+        var bucket = await scope.DbContext.DistributedRateLimitBuckets.SingleAsync(b => b.PolicyName == "auth-ip");
+        bucket.PartitionKey.Should().Be("ip:203.0.113.7");
+        bucket.Count.Should().Be(30);
+    }
+
+    [Theory]
+    [InlineData("::ffff:198.51.100.1", "ip:198.51.100.1")]
+    [InlineData("2001:0db8:0000::1", "ip:2001:db8::1")]
+    [InlineData(null, "ip:unknown")]
+    [InlineData("invalid", "ip:unknown")]
+    [InlineData("198.51.100.1, 198.51.100.2", "ip:unknown")]
+    public async Task VerifiedBff_UsesCanonicalClientIpOrUnknown(string? forwardedIp, string expectedKey)
+    {
+        using var scope = new RateLimitFilterTestScope("test-forwarding-secret");
+        var context = scope.CreateContext(new AuthController.SendCodeRequest("a@x.com"));
+        context.HttpContext.Request.Headers["X-Orbit-Bff-Secret"] = "test-forwarding-secret";
+        if (forwardedIp is not null)
+            context.HttpContext.Request.Headers["X-Orbit-Client-Ip"] = forwardedIp;
+
+        await scope.ExecuteAsync(context);
+
+        RateLimitFilterTestScope.AssertOutcome(context, true);
+        var bucket = await scope.DbContext.DistributedRateLimitBuckets.SingleAsync(b => b.PolicyName == "auth-ip");
+        bucket.PartitionKey.Should().Be(expectedKey);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task RejectedDimension_SetsRetryWindow_AndBothDimensionsAreEvaluated(bool rejectIp)
@@ -355,7 +454,7 @@ public class DistributedRateLimitFilterTests
             .Returns(new DistributedRateLimitDecision(rejectIp, 10, 10, DateTime.UtcNow.AddMinutes(2)));
         _service.TryAcquireAsync("auth-ip", Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new DistributedRateLimitDecision(!rejectIp, 30, 30, DateTime.UtcNow.AddMinutes(5)));
-        var filter = new DistributedRateLimitFilter("auth", _service, _authSessionService, _logger);
+        var filter = new DistributedRateLimitFilter("auth", _service, _authSessionService, Options.Create(new BffForwardingSettings()), _logger);
         var (context, http) = CreateExecutingContext(new AuthController.SendCodeRequest("a@x.com"));
         http.TraceIdentifier = "req_composite";
         var nextCalled = false;
@@ -382,7 +481,7 @@ public class DistributedRateLimitFilterTests
             .Returns(new DistributedRateLimitDecision(true, 10, 1, DateTime.UtcNow.AddMinutes(1)));
         _service.TryAcquireAsync("auth-ip", Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("rate-limit store down"));
-        var filter = new DistributedRateLimitFilter("auth", _service, _authSessionService, _logger);
+        var filter = new DistributedRateLimitFilter("auth", _service, _authSessionService, Options.Create(new BffForwardingSettings()), _logger);
         var (context, _) = CreateExecutingContext(new AuthController.SendCodeRequest("a@x.com"));
         var nextCalled = false;
 
@@ -453,9 +552,15 @@ internal sealed class RateLimitFilterTestScope : IDisposable
         .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
     private readonly ServiceProvider _provider;
 
-    public RateLimitFilterTestScope()
+    public RateLimitFilterTestScope(string? bffForwardingSecret = null)
     {
-        _provider = new ServiceCollection()
+        var builder = WebApplication.CreateBuilder();
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Auth:BffForwardingSecret"] = bffForwardingSecret
+        });
+        builder.AddOrbitRateLimiting();
+        _provider = builder.Services
             .AddSingleton<IDistributedRateLimitService>(new DistributedRateLimitService(DbContext, new FrozenClock()))
             .AddSingleton(Substitute.For<IAuthSessionService>())
             .AddSingleton<ILogger<DistributedRateLimitFilter>>(NullLogger<DistributedRateLimitFilter>.Instance)

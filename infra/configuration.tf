@@ -169,6 +169,7 @@ resource "render_env_group" "production_api" {
       Storage__S3__SecretAccessKey = { value = aws_ssm_parameter.uploads_secret_access_key["production"].value }
     },
     { BotProtection__SecretKey = { value = aws_ssm_parameter.turnstile_secret["production"].value } },
+    { Auth__BffForwardingSecret = { value = var.production_bff_forwarding_secret } },
     { Ses__AccessKeyId = { value = aws_ssm_parameter.api_ses_access_key_id["production"].value } },
     { Ses__SecretAccessKey = { value = aws_ssm_parameter.api_ses_secret_access_key["production"].value } },
   )
@@ -185,6 +186,7 @@ resource "render_env_group" "staging_api" {
       Storage__S3__SecretAccessKey = { value = aws_ssm_parameter.uploads_secret_access_key["staging"].value }
     },
     { BotProtection__SecretKey = { value = aws_ssm_parameter.turnstile_secret["staging"].value } },
+    { Auth__BffForwardingSecret = { value = var.staging_bff_forwarding_secret } },
     { Ses__AccessKeyId = { value = aws_ssm_parameter.api_ses_access_key_id["staging"].value } },
     { Ses__SecretAccessKey = { value = aws_ssm_parameter.api_ses_secret_access_key["staging"].value } },
   )
@@ -195,6 +197,7 @@ resource "render_env_group" "production_web" {
   env_vars = merge(
     { for key, value in local.production_web_values : key => { value = value } },
     { SENTRY_DSN = { value = data.aws_ssm_parameter.production_web_sentry.value } },
+    { BFF_FORWARDING_SECRET = { value = var.production_bff_forwarding_secret } },
   )
 }
 
@@ -203,5 +206,6 @@ resource "render_env_group" "staging_web" {
   env_vars = merge(
     { for key, value in local.staging_web_values : key => { value = value } },
     { SENTRY_DSN = { value = data.aws_ssm_parameter.staging_web_sentry.value } },
+    { BFF_FORWARDING_SECRET = { value = var.staging_bff_forwarding_secret } },
   )
 }

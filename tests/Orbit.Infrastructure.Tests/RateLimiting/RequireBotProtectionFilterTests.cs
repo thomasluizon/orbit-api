@@ -241,6 +241,7 @@ public class RequireBotProtectionFilterTests
             "auth",
             rateLimits,
             Substitute.For<IAuthSessionService>(),
+            Options.Create(new BffForwardingSettings()),
             Substitute.For<ILogger<DistributedRateLimitFilter>>());
         var context = CreateContext(new AuthController.SendCodeRequest("person@example.com", TurnstileToken: "token"));
         var commandRan = false;

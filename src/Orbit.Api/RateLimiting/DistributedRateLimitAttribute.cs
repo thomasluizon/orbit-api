@@ -1,8 +1,10 @@
 using System.Reflection;
+using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.Extensions.Options;
 using Orbit.Api.Extensions;
 using Orbit.Application.Auth.Validators;
 using Orbit.Application.Common;
@@ -21,6 +23,7 @@ public sealed class DistributedRateLimitAttribute(string policyName) : Attribute
             policyName,
             serviceProvider.GetRequiredService<IDistributedRateLimitService>(),
             serviceProvider.GetRequiredService<IAuthSessionService>(),
+            serviceProvider.GetRequiredService<IOptions<BffForwardingSettings>>(),
             serviceProvider.GetRequiredService<ILogger<DistributedRateLimitFilter>>());
 }
 
@@ -28,6 +31,7 @@ public sealed partial class DistributedRateLimitFilter(
     string policyName,
     IDistributedRateLimitService distributedRateLimitService,
     IAuthSessionService authSessionService,
+    IOptions<BffForwardingSettings> bffForwardingOptions,
     ILogger<DistributedRateLimitFilter> logger) : IAsyncActionFilter
 {
     private const string FailOpenPolicy = "support";
@@ -115,7 +119,7 @@ public sealed partial class DistributedRateLimitFilter(
             return [(policyName, $"user:{context.GetUserId()}")];
 
         if (TryResolveEmailPartitionKey(policyName, actionArguments, out var emailPartitionKey))
-            return [(policyName, emailPartitionKey), ($"{policyName.ToLowerInvariant()}-ip", $"ip:{context.GetClientIpAddress() ?? "unknown"}")];
+            return [(policyName, emailPartitionKey), ($"{policyName.ToLowerInvariant()}-ip", $"ip:{GetEmailRequestSourceIp(context) ?? "unknown"}")];
 
         if (TryExtractRefreshToken(policyName, actionArguments, out var refreshToken)
             && await authSessionService.HasSessionForTokenAsync(refreshToken, cancellationToken))
@@ -124,6 +128,32 @@ public sealed partial class DistributedRateLimitFilter(
         }
 
         return [(policyName, $"ip:{context.GetClientIpAddress() ?? "unknown"}")];
+    }
+
+    /// <summary>
+    /// Only a BFF authenticated by its separate forwarding secret may supply an end-client IP.
+    /// Direct requests retain the connection IP established by ForwardedHeaders middleware.
+    /// Authenticated BFF requests with no single valid client IP share the unknown bucket.
+    /// </summary>
+    private string? GetEmailRequestSourceIp(HttpContext context)
+    {
+        var configuredSecret = bffForwardingOptions.Value.BffForwardingSecret;
+        var suppliedSecret = context.Request.Headers["X-Orbit-Bff-Secret"];
+        if (string.IsNullOrWhiteSpace(configuredSecret)
+            || suppliedSecret.Count != 1
+            || string.IsNullOrWhiteSpace(suppliedSecret[0])
+            || !CryptographicOperations.FixedTimeEquals(
+                SHA256.HashData(Encoding.UTF8.GetBytes(configuredSecret)),
+                SHA256.HashData(Encoding.UTF8.GetBytes(suppliedSecret.ToString()))))
+        {
+            return context.GetClientIpAddress();
+        }
+
+        var suppliedIp = context.Request.Headers["X-Orbit-Client-Ip"];
+        if (suppliedIp.Count != 1 || !IPAddress.TryParse(suppliedIp[0], out var clientIp))
+            return null;
+
+        return (clientIp.IsIPv4MappedToIPv6 ? clientIp.MapToIPv4() : clientIp).ToString();
     }
 
     private static readonly HashSet<string> EmailPartitionedPolicies =
