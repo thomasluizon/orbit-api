@@ -701,7 +701,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             return scheduleValidation;
 
         var dateValidation = HabitInvariants.ValidateDateOptions(
-            p.DueTime ?? DueTime, p.DueEndTime ?? DueEndTime,
+            p.DueTime, p.DueEndTime,
             effectiveIsGeneral && p.EndDate.HasValue ? p.EndDate
                 : p.ClearEndDate == true || effectiveIsGeneral ? null : (p.EndDate ?? EndDate),
             p.FrequencyUnit, effectiveIsGeneral, p.DueDate ?? DueDate);
