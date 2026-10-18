@@ -55,7 +55,6 @@ public class StartupConfigValidationTests
     [Theory]
     [InlineData("Supabase:Url")]
     [InlineData("Supabase:AnonKey")]
-    [InlineData("Supabase:SecretKey")]
     public void AddOrbitInfrastructure_MissingSupabaseKey_ThrowsWithKeyName(string omittedKey)
     {
         var values = ValidInfrastructure();
@@ -71,7 +70,6 @@ public class StartupConfigValidationTests
     [Theory]
     [InlineData("Supabase:Url")]
     [InlineData("Supabase:AnonKey")]
-    [InlineData("Supabase:SecretKey")]
     public void AddOrbitInfrastructure_WhitespaceSupabaseKey_ThrowsWithKeyName(string blankedKey)
     {
         var values = ValidInfrastructure();
@@ -85,59 +83,63 @@ public class StartupConfigValidationTests
     }
 
     [Fact]
-    public void AddOrbitInfrastructure_S3_RegistersS3StorageWithoutSupabaseStorageSecret()
+    public void AddOrbitInfrastructure_S3_DoesNotRequireDeletedSupabaseStorageSecret()
     {
         var values = ValidInfrastructure();
         values.Remove("Supabase:SecretKey");
-        values["Storage:Provider"] = "S3";
-        values["Storage:S3:Bucket"] = "orbit-uploads-staging-713285551626";
-        values["Storage:S3:Region"] = "us-east-2";
-        values["Storage:S3:PublicBaseUrl"] = "https://api-staging.useorbit.org";
-        values["Storage:S3:AccessKeyId"] = "AKIAEXAMPLE123456789";
-        values["Storage:S3:SecretAccessKey"] = "example-secret-key";
-        values["ConnectionStrings:DefaultConnection"] = "Host=localhost;Database=orbit;Username=orbit;Password=unused";
         var builder = BuildWith(values);
 
-        builder.AddOrbitInfrastructure();
+        var act = () => builder.AddOrbitInfrastructure();
 
-        builder.Services.Single(service => service.ServiceType == typeof(IObjectStorageService))
-            .ImplementationFactory.Should().NotBeNull();
+        act.Should().NotThrow();
+    }
+
+    [Theory]
+    [InlineData("Storage:S3:Bucket")]
+    [InlineData("Storage:S3:PublicBaseUrl")]
+    [InlineData("Storage:S3:Region")]
+    [InlineData("Storage:S3:AccessKeyId")]
+    [InlineData("Storage:S3:SecretAccessKey")]
+    public void AddOrbitInfrastructure_MissingS3Key_ThrowsWithKeyName(string omittedKey)
+    {
+        var values = ValidInfrastructure();
+        values.Remove(omittedKey);
+        var act = () => BuildWith(values).AddOrbitInfrastructure();
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage($"Configuration key '{omittedKey}' is missing or empty.");
+    }
+
+    [Theory]
+    [InlineData("Storage:S3:Bucket")]
+    [InlineData("Storage:S3:PublicBaseUrl")]
+    [InlineData("Storage:S3:Region")]
+    [InlineData("Storage:S3:AccessKeyId")]
+    [InlineData("Storage:S3:SecretAccessKey")]
+    public void AddOrbitInfrastructure_WhitespaceS3Key_ThrowsWithKeyName(string blankedKey)
+    {
+        var values = ValidInfrastructure();
+        values[blankedKey] = "   ";
+        var act = () => BuildWith(values).AddOrbitInfrastructure();
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage($"Configuration key '{blankedKey}' is missing or empty.");
     }
 
     [Fact]
-    public async Task AddOrbitInfrastructure_SupabaseUploadProvider_StillRegistersS3Reader()
+    public async Task AddOrbitInfrastructure_RegistersS3UploadsAndReaderWithoutProviderSetting()
     {
-        var values = ValidInfrastructure();
-        values["Storage:Provider"] = "Supabase";
-        values["Storage:S3:Bucket"] = "orbit-uploads-staging-713285551626";
-        values["Storage:S3:Region"] = "us-east-2";
-        values["Storage:S3:PublicBaseUrl"] = "https://api-staging.useorbit.org";
-        values["Storage:S3:AccessKeyId"] = "AKIAEXAMPLE123456789";
-        values["Storage:S3:SecretAccessKey"] = "example-secret-key";
-        values["ConnectionStrings:DefaultConnection"] = "Host=localhost;Database=orbit;Username=orbit;Password=unused";
-        var s3Values = new Dictionary<string, string?>(values)
-        {
-            ["Storage:Provider"] = "S3"
-        };
-        var s3Builder = BuildWith(s3Values);
-        s3Builder.AddOrbitInfrastructure();
-        using var s3Provider = s3Builder.Services.BuildServiceProvider();
-        using var s3Scope = s3Provider.CreateScope();
-        const string objectKey = "2b3b1fc7-813c-4eb6-ad02-bd7754299703/1e21a217-e146-43c9-b61c-b5871a991578.webp";
-        var signedUpload = await s3Scope.ServiceProvider.GetRequiredService<IObjectStorageService>()
-            .CreateSignedUploadAsync(objectKey, "image/webp", 1024);
-        signedUpload.PublicUrl.Should().Be($"https://api-staging.useorbit.org/api/uploads/object/{objectKey}");
-
-        var builder = BuildWith(values);
-
+        var builder = BuildWith(ValidInfrastructure());
         builder.AddOrbitInfrastructure();
-
-        builder.Services.Single(service => service.ServiceType == typeof(IObjectStorageService))
-            .ImplementationType.Should().Be<SupabaseObjectStorageService>();
         using var provider = builder.Services.BuildServiceProvider();
         using var scope = provider.CreateScope();
+        const string objectKey = "2b3b1fc7-813c-4eb6-ad02-bd7754299703/1e21a217-e146-43c9-b61c-b5871a991578.webp";
+        var writer = scope.ServiceProvider.GetRequiredService<IObjectStorageService>();
+        var signedUpload = await writer.CreateSignedUploadAsync(objectKey, "image/webp", 1024);
+        signedUpload.PublicUrl.Should().Be($"https://api-staging.useorbit.org/api/uploads/object/{objectKey}");
+
         var reader = scope.ServiceProvider.GetRequiredService<IObjectStorageReadService>();
-        reader.Should().BeOfType<S3ObjectStorageService>();
+        reader.Should().BeOfType<S3ObjectStorageService>().And.BeSameAs(writer);
         var readUrl = await reader.CreateReadUrlAsync(objectKey);
         new Uri(readUrl).Host.Should().Contain("orbit-uploads-staging-713285551626");
     }
@@ -161,7 +163,12 @@ public class StartupConfigValidationTests
     {
         ["Supabase:Url"] = "https://example.supabase.co",
         ["Supabase:AnonKey"] = "anon-key",
-        ["Supabase:SecretKey"] = "secret-key",
+        ["Storage:S3:Bucket"] = "orbit-uploads-staging-713285551626",
+        ["Storage:S3:Region"] = "us-east-2",
+        ["Storage:S3:PublicBaseUrl"] = "https://api-staging.useorbit.org",
+        ["Storage:S3:AccessKeyId"] = "AKIAEXAMPLE123456789",
+        ["Storage:S3:SecretAccessKey"] = "example-secret-key",
+        ["ConnectionStrings:DefaultConnection"] = "Host=localhost;Database=orbit;Username=orbit;Password=unused",
         ["Ses:AccessKeyId"] = "key",
         ["Ses:SecretAccessKey"] = "secret",
         ["Ses:Region"] = "us-east-2",

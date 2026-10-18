@@ -19,7 +19,7 @@ public class SecurityHeadersMiddleware(RequestDelegate next)
 
         if (context.Request.Path.StartsWithSegments("/oauth"))
         {
-            headers[ContentSecurityPolicyHeader] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self'; frame-ancestors 'none'";
+            headers[ContentSecurityPolicyHeader] = "default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self'; frame-ancestors 'none'";
         }
         else if (!context.Request.Path.StartsWithSegments("/scalar") &&
                  !context.Request.Path.StartsWithSegments("/openapi"))

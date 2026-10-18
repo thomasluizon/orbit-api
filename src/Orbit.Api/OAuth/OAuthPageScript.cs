@@ -34,6 +34,34 @@ const countdown = document.getElementById('resend-countdown');
 let email = '';
 let resendTicker = null;
 let pending = false;
+let turnstileToken = null;
+let turnstileWidgetId = null;
+
+function clearTurnstileToken() {
+  turnstileToken = null;
+  refreshActions();
+}
+
+function onOAuthTurnstileError() {
+  clearTurnstileToken();
+  setAlert(copy.sendFailed);
+}
+
+function onOAuthTurnstileLoad() {
+  if (!request.botProtectionEnabled) return;
+  turnstileWidgetId = window.turnstile.render('#turnstile-widget', {
+    sitekey: request.turnstileSiteKey,
+    size: 'flexible',
+    language: request.language.toLowerCase(),
+    callback: (token) => {
+      turnstileToken = token;
+      refreshActions();
+    },
+    'expired-callback': clearTurnstileToken,
+    'timeout-callback': clearTurnstileToken,
+    'error-callback': onOAuthTurnstileError
+  });
+}
 
 function show(element, visible) {
   element.classList.toggle('hidden', !visible);
@@ -65,8 +93,9 @@ function setCodeError(message) {
 }
 
 function refreshActions() {
-  sendButton.disabled = pending || emailInput.value.trim().length === 0;
-  resendButton.disabled = pending;
+  const needsVerification = request.botProtectionEnabled && !turnstileToken;
+  sendButton.disabled = pending || needsVerification || emailInput.value.trim().length === 0;
+  resendButton.disabled = pending || needsVerification;
   verifyButton.disabled = pending || codeInput.value.length !== CODE_LENGTH;
 }
 
@@ -152,6 +181,7 @@ async function post(path, payload) {
 }
 
 async function sendCode(resent) {
+  if (pending || (request.botProtectionEnabled && !turnstileToken)) return;
   const typed = emailInput.value.trim();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(typed)) {
     setEmailError(copy.emailInvalid);
@@ -163,7 +193,11 @@ async function sendCode(resent) {
   const button = resent ? resendButton : sendButton;
   busy(button, true);
   try {
-    const result = await post('/oauth/send-code', { email: typed, language: request.language });
+    const token = turnstileToken;
+    clearTurnstileToken();
+    const result = await post('/oauth/send-code', {
+      email: typed, language: request.language, turnstileToken: token
+    });
     if (!result.ok) {
       setAlert(result.data.error || copy.sendFailed);
       return;
@@ -173,6 +207,10 @@ async function sendCode(resent) {
   } catch {
     setAlert(copy.sendFailed);
   } finally {
+    if (request.botProtectionEnabled && turnstileWidgetId !== null) {
+      clearTurnstileToken();
+      window.turnstile.reset(turnstileWidgetId);
+    }
     busy(button, false);
   }
 }

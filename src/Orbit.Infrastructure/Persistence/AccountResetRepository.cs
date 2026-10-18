@@ -140,6 +140,10 @@ public class AccountResetRepository(OrbitDbContext context, IAccountEventCollect
             .Where(f => f.RequesterId == userId || f.AddresseeId == userId)
             .ExecuteDeleteAsync(cancellationToken);
 
+        await context.AccountabilityPairs
+            .Where(p => p.RequesterId == userId || p.AddresseeId == userId)
+            .ExecuteDeleteAsync(cancellationToken);
+
         await context.ChallengeParticipants
             .Where(p => p.UserId == userId)
             .ExecuteDeleteAsync(cancellationToken);

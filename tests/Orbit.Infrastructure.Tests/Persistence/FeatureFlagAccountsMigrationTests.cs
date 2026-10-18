@@ -14,7 +14,7 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 public class FeatureFlagAccountsMigrationTests
 {
     [Fact]
-    public void TargetModel_PreservesRedesignAndMatchesCurrentModel()
+    public void TargetModel_PreservesRedesign()
     {
         using var context = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
             .UseNpgsql("Host=unused;Database=unused").Options);
@@ -26,7 +26,15 @@ public class FeatureFlagAccountsMigrationTests
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
 
-        differences.Should().BeEmpty();
+        differences.Should().HaveCount(4).And.OnlyContain(operation =>
+            operation is DropForeignKeyOperation || operation is AddForeignKeyOperation);
+        differences.OfType<DropForeignKeyOperation>().Select(operation => operation.Name).Should().BeEquivalentTo(
+            "FK_AccountabilityPairs_Users_AddresseeId", "FK_AccountabilityPairs_Users_RequesterId");
+        differences.OfType<AddForeignKeyOperation>().Should().HaveCount(2).And.OnlyContain(operation =>
+            operation.Table == "AccountabilityPairs" && operation.PrincipalTable == "Users"
+            && operation.OnDelete == ReferentialAction.Cascade);
+        differences.OfType<AddForeignKeyOperation>().Select(operation => operation.Name).Should().BeEquivalentTo(
+            "FK_AccountabilityPairs_Users_AddresseeId", "FK_AccountabilityPairs_Users_RequesterId");
         var redesign = initializer.Initialize(new AddHabitSkipUndo().TargetModel, designTime: true);
         var additions = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(redesign.GetRelationalModel(), featureFlags.GetRelationalModel());
@@ -37,7 +45,7 @@ public class FeatureFlagAccountsMigrationTests
         additions.OfType<InsertDataOperation>().Should().ContainSingle()
             .Which.Table.Should().Be("AppFeatureFlags");
         var signupAdditions = context.GetService<IMigrationsModelDiffer>()
-            .GetDifferences(featureFlags.GetRelationalModel(), current.GetRelationalModel());
+            .GetDifferences(featureFlags.GetRelationalModel(), target.GetRelationalModel());
         signupAdditions.Should().HaveCount(6).And.OnlyContain(operation =>
             operation is AddColumnOperation && !operation.IsDestructiveChange);
         var signupColumns = signupAdditions.Cast<AddColumnOperation>().ToArray();
@@ -46,8 +54,9 @@ public class FeatureFlagAccountsMigrationTests
             "SignupLanguage", "SignupReferralCode", "SignupCompletedAtUtc",
             "SignupReferralCompletedAtUtc", "SignupAnalyticsCompletedAtUtc", "SignupWelcomeCompletedAtUtc");
         context.Database.HasPendingModelChanges().Should().BeFalse();
-        context.Database.GetMigrations().TakeLast(3).Should().Equal(
-            "20261001074038_AddHabitSkipUndo", "20261017011939_AddFeatureFlagAccounts", "20261018111350_AddDurableSignupWork");
+        context.Database.GetMigrations().TakeLast(4).Should().Equal(
+            "20261001074038_AddHabitSkipUndo", "20261017011939_AddFeatureFlagAccounts",
+            "20261018093533_CascadeAccountabilityPairsOnUserDeletion", "20261018111350_AddDurableSignupWork");
     }
 
     [Fact]

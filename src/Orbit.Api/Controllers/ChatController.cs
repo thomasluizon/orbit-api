@@ -38,6 +38,9 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetRecordListPage(string kind, [FromQuery] string cursor, CancellationToken cancellationToken)
     {
+        if (!CanAccessChat())
+            return Forbid();
+
         var result = await mediator.Send(new GetRecordListPageQuery(HttpContext.GetUserId(), kind, cursor), cancellationToken);
         return result.ToPayGateAwareResult(v => Ok(v), StatusCodes.Status404NotFound);
     }
@@ -59,6 +62,9 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         [FromForm] string? clientContext = null,
         [FromForm] string? confirmationToken = null)
     {
+        if (!CanAccessChat())
+            return Forbid();
+
         var parsed = await ParseChatInputsAsync(message, history, image, clientContext, cancellationToken);
         if (parsed.Error is not null)
             return parsed.Error;
@@ -88,6 +94,7 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> ProcessChatStream(
         [FromForm] string message,
@@ -97,6 +104,9 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         [FromForm] string? clientContext = null,
         [FromForm] string? confirmationToken = null)
     {
+        if (!CanAccessChat())
+            return Forbid();
+
         var parsed = await ParseChatInputsAsync(message, history, image, clientContext, cancellationToken);
         if (parsed.Error is not null)
             return parsed.Error;
@@ -127,8 +137,12 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> Transcribe(IFormFile? audio, CancellationToken cancellationToken)
     {
+        if (!CanAccessChat())
+            return Forbid();
+
         if (audio is null || audio.Length == 0)
             return BadRequest(ErrorMessages.AudioRequired.ToErrorBody());
 
@@ -138,6 +152,10 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         var result = await mediator.Send(new TranscribeAudioCommand(HttpContext.GetUserId(), ms.ToArray(), audio.FileName), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : result.ToErrorResult();
     }
+
+    private bool CanAccessChat() =>
+        HttpContext.User.GetAgentAuthMethod() != AgentAuthMethod.ApiKey ||
+        HttpContext.User.GetGrantedAgentScopes().Contains(AgentScopes.ChatInteract, StringComparer.OrdinalIgnoreCase);
 
     private async Task StartEventStreamAsync(CancellationToken cancellationToken)
     {
