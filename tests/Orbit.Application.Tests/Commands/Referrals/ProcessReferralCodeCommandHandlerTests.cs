@@ -107,6 +107,32 @@ public class ProcessReferralCodeCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_ReplayedSuccessfulReferral_DoesNotCreateAnotherReferralOrCoupon()
+    {
+        var referrer = CreateReferrer();
+        var newUser = CreateNewUser();
+        _userRepo.FindOneTrackedAsync(
+                Arg.Any<Expression<Func<User, bool>>>(),
+                Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => new[] { referrer, newUser }.SingleOrDefault(call.Arg<Expression<Func<User, bool>>>().Compile()));
+        _referralRepo.FindAsync(Arg.Any<Expression<Func<Referral, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<Referral>());
+        var command = new ProcessReferralCodeCommand(NewUserId, "TESTCODE");
+
+        var first = await _handler.Handle(command, CancellationToken.None);
+        var replay = await _handler.Handle(command, CancellationToken.None);
+
+        first.IsSuccess.Should().BeTrue();
+        replay.IsFailure.Should().BeTrue();
+        replay.Error.Should().Be(ErrorMessages.AlreadyReferred.Message);
+        await _referralRepo.Received(1).AddAsync(Arg.Any<Referral>(), Arg.Any<CancellationToken>());
+        await _referralReward.Received(1).CreateReferralCouponAsync(
+            NewUserId, $"orbit-referral-signup-{NewUserId}", Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_InvalidCode_ReturnsFailure()
     {
         _userRepo.FindOneTrackedAsync(
@@ -176,7 +202,7 @@ public class ProcessReferralCodeCommandHandlerTests
     {
         var referrer = CreateReferrer();
         var newUser = CreateNewUser();
-        newUser.SetReferredBy(Guid.NewGuid());        SetupUsersFound(referrer, newUser);
+        newUser.SetReferredBy(Guid.NewGuid()); SetupUsersFound(referrer, newUser);
 
         _referralRepo.FindAsync(
             Arg.Any<Expression<Func<Referral, bool>>>(),

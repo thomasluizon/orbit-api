@@ -1,4 +1,3 @@
-using Orbit.Application.Auth.Services;
 using System.Linq.Expressions;
 using System.Net;
 using System.Text;
@@ -7,11 +6,17 @@ using MediatR;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.AspNetCore.Http;
+using Hangfire;
+using Hangfire.Common;
+using Hangfire.States;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
-using Npgsql;
 using NSubstitute;
 using Orbit.Application.Auth.Commands;
+using Orbit.Application.Auth.Jobs;
 using Orbit.Application.Referrals.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -26,136 +31,151 @@ namespace Orbit.Infrastructure.Tests.Services;
 public class GoogleAuthFirstLoginRaceTests
 {
     [Fact]
-    public async Task ConcurrentFirstLogins_SaveWinnerSessionWithoutRetryingLosingUser()
+    public Task ConcurrentFirstSignIns_SaveSessionsForSameUserAndQueueOneSignup() => RunSignInsAsync(true);
+
+    [Fact]
+    public Task FirstAndConflictingCandidates_SaveSessionsForSameUserAndQueueOneSignup() => RunSignInsAsync(false);
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task FailedDispatch_LaterSignInInFreshContext_CompletesOriginalSignupOnce(bool firstGoogle, bool laterGoogle)
     {
         using var database = new SqliteOrbitDbContextFactory();
-        await using var winnerContext = database.CreateContext();
-        var loserContext = database.Context;
-        var emailService = Substitute.For<IEmailService>();
-        var analytics = Substitute.For<IProductAnalytics>();
-        var welcomeSent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        emailService.SendWelcomeEmailAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(_ => { welcomeSent.TrySetResult(); return Task.CompletedTask; });
-
-        var mediator = Substitute.For<IMediator>();
-        var referralProcessed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        mediator.Send(Arg.Any<ProcessReferralCodeCommand>(), Arg.Any<CancellationToken>())
-            .Returns(_ => { referralProcessed.TrySetResult(); return Task.FromResult(Result.Success()); });
-        var serviceProvider = Substitute.For<IServiceProvider>();
-        serviceProvider.GetService(typeof(IMediator)).Returns(mediator);
-        var scope = Substitute.For<IServiceScope>();
-        scope.ServiceProvider.Returns(serviceProvider);
-        var scopeFactory = Substitute.For<IServiceScopeFactory>();
-        scopeFactory.CreateScope().Returns(scope);
-
-        var winnerWork = new UnitOfWork(winnerContext, new DatabaseConnectionSettings());
-        var winnerRepository = new GenericRepository<User>(winnerContext);
-        var winnerHandler = CreateHandler(winnerContext, winnerRepository, winnerWork, emailService, scopeFactory, analytics);
-
-        var loserRepository = Substitute.For<IGenericRepository<User>>();
-        var realLoserRepository = new GenericRepository<User>(loserContext);
-        var lookupStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var releaseLookup = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var lookupCount = 0;
-        loserRepository.FindOneTrackedIgnoringFiltersAsync(
-            Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(async call =>
-            {
-                var found = await realLoserRepository.FindOneTrackedIgnoringFiltersAsync(
-                    call.Arg<Expression<Func<User, bool>>>(), call.Arg<CancellationToken>());
-                if (Interlocked.Increment(ref lookupCount) != 1)
-                    return found;
-                lookupStarted.SetResult();
-                await releaseLookup.Task;
-                return found;
-            });
-        loserRepository.AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>())
-            .Returns(call => realLoserRepository.AddAsync(call.Arg<User>(), call.Arg<CancellationToken>()));
-
-        var loserWork = Substitute.For<IUnitOfWork>();
-        var saveAttempts = 0;
-        loserWork.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(async call =>
+        var jobs = Substitute.For<IBackgroundJobClient>();
+        var queued = new ConcurrentQueue<Job>();
+        var dispatches = 0;
+        jobs.Create(Arg.Any<Job>(), Arg.Any<IState>()).Returns(call =>
         {
-            saveAttempts++;
-            try
+            if (++dispatches == 1)
             {
-                return await loserContext.SaveChangesAsync(call.Arg<CancellationToken>());
+                database.Context.Users.Single().SignupLanguage.Should().Be("pt-BR");
+                database.Context.UserSessions.Count().Should().Be(1);
+                throw new BackgroundJobClientException("Storage unavailable", new InvalidOperationException("Connection failed"));
             }
-            catch (DbUpdateException exception) when (saveAttempts == 1 && exception.InnerException is SqliteException)
-            {
-                throw new DbUpdateException("duplicate user email", new PostgresException(
-                    "duplicate user email", "ERROR", "ERROR", PostgresErrorCodes.UniqueViolation));
-            }
+            queued.Enqueue(call.Arg<Job>());
+            return "signup-job";
         });
-        loserWork.When(work => work.ResetTracking()).Do(_ => loserContext.ChangeTracker.Clear());
-        var loserHandler = CreateHandler(loserContext, loserRepository, loserWork, emailService, scopeFactory, analytics);
 
-        var loserRequest = new GoogleAuthCommand("valid-token", GoogleAccessToken: "google-access", ReferralCode: "referral");
-        var loserTask = loserHandler.Handle(loserRequest, CancellationToken.None);
-        await lookupStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        var winner = await winnerHandler.Handle(
-            new GoogleAuthCommand("valid-token", ReferralCode: "referral"), CancellationToken.None);
-        releaseLookup.SetResult();
-        var loser = await loserTask;
-        await Task.WhenAll(welcomeSent.Task, referralProcessed.Task).WaitAsync(TimeSpan.FromSeconds(5));
+        var userId = await SignInAsync(database, jobs, firstGoogle, "pt-BR", "friend");
+        var returningId = await SignInAsync(database, jobs, laterGoogle, "en", "replacement");
 
-        winner.IsSuccess.Should().BeTrue();
-        loser.IsSuccess.Should().BeTrue();
-        loser.Value.UserId.Should().Be(winner.Value.UserId);
-        loser.Value.Token.Should().NotBeNullOrWhiteSpace();
-        saveAttempts.Should().Be(3);
-        loserContext.ChangeTracker.Entries<User>()
-            .Should().NotContain(entry => entry.State == EntityState.Added);
-        await using var verify = database.CreateContext();
-        (await verify.Users.CountAsync()).Should().Be(1);
-        (await verify.UserSessions.CountAsync()).Should().Be(2);
-        (await verify.Users.SingleAsync()).GoogleAccessToken.Should().Be("google-access");
-        analytics.Received(1).CaptureUserEvent(winner.Value.UserId, "signup_completed", "Free", Arg.Any<IReadOnlyDictionary<string, object>?>());
-        await emailService.Received(1).SendWelcomeEmailAsync("google@example.com", "Google User", "en", Arg.Any<CancellationToken>());
-        await mediator.Received(1).Send(Arg.Is<ProcessReferralCodeCommand>(command =>
-            command.NewUserId == winner.Value.UserId && command.ReferralCode == "referral"), Arg.Any<CancellationToken>());
+        returningId.Should().Be(userId);
+        queued.Should().ContainSingle();
+        var original = queued.Single();
+        original.Args.Should().Equal(userId, true, "pt-BR", "friend");
+        queued.Enqueue(original);
+        await CompleteQueuedSignupAsync(database, jobs, queued);
+        await using var verification = database.CreateContext();
+        var user = await verification.Users.SingleAsync();
+        user.SignupCompletedAtUtc.Should().NotBeNull();
+        user.SignupReferralCode.Should().Be("friend");
+        user.SignupLanguage.Should().Be("pt-BR");
+        verification.UserSessions.Count().Should().Be(2);
+
+        await SignInAsync(database, jobs, laterGoogle, "en", "replacement");
+        queued.Should().ContainSingle().Which.Args[1].Should().Be(false);
     }
 
-    private static GoogleAuthCommandHandler CreateHandler(
-        OrbitDbContext context,
-        IGenericRepository<User> userRepository,
-        IUnitOfWork unitOfWork,
-        IEmailService emailService,
-        IServiceScopeFactory scopeFactory,
-        IProductAnalytics analytics)
+    private async Task RunSignInsAsync(bool concurrently)
     {
+        using var database = concurrently
+            ? new SqliteOrbitDbContextFactory(Path.Combine(Path.GetTempPath(), $"orbit-auth-{Guid.NewGuid():N}.db"))
+            : new SqliteOrbitDbContextFactory();
+        var jobs = Substitute.For<IBackgroundJobClient>();
+        var queued = new ConcurrentQueue<Job>();
+        jobs.Create(Arg.Any<Job>(), Arg.Any<IState>()).Returns(call =>
+        {
+            queued.Enqueue(call.Arg<Job>());
+            return "signup-job";
+        });
         var tokenService = Substitute.For<ITokenService>();
-        tokenService.GenerateToken(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>()).Returns("session-access-token");
-        var sessionService = new AuthSessionService(
-            new GenericRepository<UserSession>(context),
-            new GenericRepository<UserSessionRefreshToken>(context),
-            userRepository, tokenService, unitOfWork,
-            Options.Create(new JwtSettings
-            {
-                SecretKey = "test-secret-key-that-is-at-least-32-bytes-long-for-hmac",
-                Issuer = "test-issuer",
-                Audience = "test-audience",
-                RefreshExpiryDays = 90
-            }));
-        var httpFactory = Substitute.For<IHttpClientFactory>();
-        httpFactory.CreateClient("Supabase").Returns(new HttpClient(new GoogleTokenHandler())
+        tokenService.GenerateToken(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>()).Returns("session-token");
+
+        using var ready = new Barrier(2);
+        async Task<Guid> SignInAsync()
         {
-            BaseAddress = new Uri("https://supabase.example.com")
-        });
-        var flow = new GoogleSignInFlow(userRepository, unitOfWork, sessionService,
-            new GoogleSignInNotifications(emailService, scopeFactory, NullLogger<GoogleSignInNotifications>.Instance),
-            analytics, NullLogger<GoogleSignInFlow>.Instance, Substitute.For<Hangfire.IBackgroundJobClient>());
-        return new GoogleAuthCommandHandler(httpFactory, flow);
+            await using var context = database.CreateContext();
+            var work = new UnitOfWork(context, new DatabaseConnectionSettings());
+            var sessions = new AuthSessionService(
+                new GenericRepository<UserSession>(context), new GenericRepository<UserSessionRefreshToken>(context),
+                new GenericRepository<User>(context), tokenService, work,
+                Options.Create(new JwtSettings { SecretKey = "unused-test-secret", Issuer = "test", Audience = "test", RefreshExpiryDays = 90 }));
+            var flow = new GoogleSignInFlow(new AuthUserStore(context), work, sessions, new SignupJobDispatcher(jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), jobs);
+            if (concurrently)
+                ready.SignalAndWait(TimeSpan.FromSeconds(10)).Should().BeTrue();
+            var result = await flow.CompleteAsync("Google@Example.com", "Google User", "pt-BR", "friend",
+                "google-access", "google-refresh", CancellationToken.None);
+            result.IsSuccess.Should().BeTrue();
+            return result.Value.UserId;
+        }
+
+        var results = concurrently
+            ? await Task.WhenAll(Task.Run(SignInAsync), Task.Run(SignInAsync))
+            : [await SignInAsync(), await SignInAsync()];
+        var winner = results[0];
+        var conflicting = results[1];
+
+        conflicting.Should().Be(winner);
+        database.Context.Users.Count().Should().Be(1);
+        database.Context.UserSessions.Count().Should().Be(2);
+        var user = database.Context.Users.Single();
+        user.GoogleAccessToken.Should().Be("google-access");
+        user.Language.Should().Be("pt-BR");
+        user.Handle.Should().NotBeNullOrEmpty();
+        jobs.Received(2).Create(Arg.Is<Job>(job => job.Type == typeof(CompleteSignupJob) && (bool)job.Args[1]), Arg.Any<IState>());
+        jobs.DidNotReceive().Create(Arg.Is<Job>(job => job.Type == typeof(CompleteSignupJob) && !(bool)job.Args[1]), Arg.Any<IState>());
+        await CompleteQueuedSignupAsync(database, jobs, queued);
     }
 
-    private sealed class GoogleTokenHandler : HttpMessageHandler
+    private static async Task<Guid> SignInAsync(SqliteOrbitDbContextFactory database, IBackgroundJobClient jobs,
+        bool google, string language, string referralCode)
     {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent(
-                    """{"email":"Google@Example.com","user_metadata":{"full_name":"Google User"}}""",
-                    Encoding.UTF8, "application/json")
-            });
+        await using var context = database.CreateContext();
+        var work = new UnitOfWork(context, new DatabaseConnectionSettings());
+        var tokenService = Substitute.For<ITokenService>();
+        tokenService.GenerateToken(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>()).Returns("session-token");
+        var sessions = new AuthSessionService(
+            new GenericRepository<UserSession>(context), new GenericRepository<UserSessionRefreshToken>(context),
+            new GenericRepository<User>(context), tokenService, work,
+            Options.Create(new JwtSettings { SecretKey = "unused-test-secret", Issuer = "test", Audience = "test", RefreshExpiryDays = 90 }));
+        var dispatcher = new SignupJobDispatcher(jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance);
+        var users = new AuthUserStore(context);
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        cache.Set("verify:google@example.com", new VerificationEntry("123456", 0, DateTime.UtcNow));
+        var result = google
+            ? await new GoogleSignInFlow(users, work, sessions, dispatcher, jobs).CompleteAsync(
+                "google@example.com", "Google User", language, referralCode, null, null, CancellationToken.None)
+            : await new VerifyCodeCommandHandler(cache, users, work, sessions, dispatcher, jobs).Handle(
+                new VerifyCodeCommand("google@example.com", "123456", language, referralCode), CancellationToken.None);
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Token.Should().Be("session-token");
+        result.Value.RefreshToken.Should().NotBeNullOrEmpty();
+        return result.Value.UserId;
+    }
+
+    private static async Task CompleteQueuedSignupAsync(SqliteOrbitDbContextFactory database,
+        IBackgroundJobClient jobs, ConcurrentQueue<Job> queued)
+    {
+        var analytics = Substitute.For<IProductAnalytics>();
+        var email = Substitute.For<IEmailService>();
+        var mediator = Substitute.For<IMediator>();
+        mediator.Send(Arg.Any<ProcessReferralCodeCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        while (queued.TryDequeue(out var job))
+        {
+            await using var context = database.CreateContext();
+            var work = new UnitOfWork(context, new DatabaseConnectionSettings());
+            var users = new GenericRepository<User>(context);
+            object instance = job.Type == typeof(CompleteSignupJob)
+                ? new CompleteSignupJob(users, jobs, mediator, analytics, NullLogger<CompleteSignupJob>.Instance, work)
+                : new SendWelcomeEmailJob(users, email, work);
+            await (Task)job.Method.Invoke(instance, job.Args.ToArray())!;
+        }
+
+        analytics.Received(1).CaptureUserEvent(Arg.Any<Guid>(), "signup_completed", "Free");
+        await mediator.Received(1).Send(Arg.Is<ProcessReferralCodeCommand>(c => c.ReferralCode == "friend"), CancellationToken.None);
+        await email.Received(1).SendWelcomeEmailAsync("google@example.com", Arg.Any<string>(), "pt-BR", CancellationToken.None);
     }
 }

@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -7,52 +6,28 @@ using Orbit.Domain.Interfaces;
 namespace Orbit.Application.Auth.Commands;
 
 /// <summary>
-/// Shared post-authentication user provisioning: look up an existing user by email or create one,
-/// handling the concurrent-signup race by re-reading the winner on a unique-violation. Callers are
-/// responsible for email normalization and any post-creation side effects (welcome email, referrals).
+/// Builds the same candidate and performs the same write and read for every authenticated email.
+/// This removes registration-dependent request work; it does not promise exact constant time.
 /// </summary>
 internal static class AuthUserProvisioning
 {
-    public static async Task<Result<(User User, bool IsNew)>> FindOrCreateUserAsync(
-        IGenericRepository<User> userRepository,
-        IUnitOfWork unitOfWork,
+    public static async Task<Result<User>> FindOrCreateUserAsync(
+        IAuthUserStore userStore,
         string email,
         string name,
         string language,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? referralCode = null)
     {
-        var user = await userRepository.FindOneTrackedIgnoringFiltersAsync(
-            u => u.Email == email,
-            cancellationToken);
-
-        if (user is not null)
-            return Result.Success((user, false));
-
         var createResult = User.Create(name, email);
         if (createResult.IsFailure)
-            return createResult.PropagateError<(User, bool)>();
+            return createResult.PropagateError<User>();
 
-        user = createResult.Value;
-        user.SetLanguage(language);
-        user.SeedDefaultHandle();
-        await userRepository.AddAsync(user, cancellationToken);
-
-        try
-        {
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException exception) when (DbUniqueViolation.IsUniqueViolation(exception))
-        {
-            unitOfWork.ResetTracking();
-            var raced = await userRepository.FindOneTrackedIgnoringFiltersAsync(
-                u => u.Email == email,
-                cancellationToken);
-            if (raced is null)
-                throw;
-
-            return Result.Success((raced, false));
-        }
-
-        return Result.Success((user, true));
+        var candidate = createResult.Value;
+        candidate.SetLanguage(language);
+        candidate.SeedDefaultHandle();
+        candidate.BeginSignup(language, referralCode);
+        var user = await userStore.UpsertAsync(candidate, cancellationToken);
+        return Result.Success(user);
     }
 }

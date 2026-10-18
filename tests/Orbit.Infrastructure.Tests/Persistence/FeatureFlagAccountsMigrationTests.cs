@@ -2,6 +2,7 @@ using System.Reflection;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Orbit.Domain.Entities;
@@ -18,19 +19,51 @@ public class FeatureFlagAccountsMigrationTests
         using var context = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
             .UseNpgsql("Host=unused;Database=unused").Options);
         var initializer = context.GetService<IModelRuntimeInitializer>();
-        var target = initializer.Initialize(new AddFeatureFlagAccounts().TargetModel, designTime: true);
+        var target = initializer.Initialize(new AddDurableSignupWork().TargetModel, designTime: true);
+        var featureFlags = initializer.Initialize(new AddFeatureFlagAccounts().TargetModel, designTime: true);
+        var current = context.GetService<IDesignTimeModel>().Model;
+
+        var differences = context.GetService<IMigrationsModelDiffer>()
+            .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
+
+        differences.Should().HaveCount(6).And.OnlyContain(operation =>
+            operation is DropForeignKeyOperation || operation is AddForeignKeyOperation || operation is AddColumnOperation);
+        var renewalColumns = differences.OfType<AddColumnOperation>().ToArray();
+        renewalColumns.Should().HaveCount(2).And.OnlyContain(column =>
+            column.Table == "Users" && column.ClrType == typeof(bool) && !column.IsNullable
+            && Equals(column.DefaultValue, false));
+        renewalColumns.Select(column => column.Name).Should().BeEquivalentTo(
+            "StripeRenewalStoppedByDeletion", "PlayRenewalStoppedByDeletion");
+        differences.OfType<DropForeignKeyOperation>().Select(operation => operation.Name).Should().BeEquivalentTo(
+            "FK_AccountabilityPairs_Users_AddresseeId", "FK_AccountabilityPairs_Users_RequesterId");
+        differences.OfType<AddForeignKeyOperation>().Should().HaveCount(2).And.OnlyContain(operation =>
+            operation.Table == "AccountabilityPairs" && operation.PrincipalTable == "Users"
+            && operation.OnDelete == ReferentialAction.Cascade);
+        differences.OfType<AddForeignKeyOperation>().Select(operation => operation.Name).Should().BeEquivalentTo(
+            "FK_AccountabilityPairs_Users_AddresseeId", "FK_AccountabilityPairs_Users_RequesterId");
         var redesign = initializer.Initialize(new AddHabitSkipUndo().TargetModel, designTime: true);
         var additions = context.GetService<IMigrationsModelDiffer>()
-            .GetDifferences(redesign.GetRelationalModel(), target.GetRelationalModel());
+            .GetDifferences(redesign.GetRelationalModel(), featureFlags.GetRelationalModel());
         additions.Should().HaveCount(3).And.OnlyContain(operation =>
             operation is CreateTableOperation || operation is CreateIndexOperation || operation is InsertDataOperation);
         additions.OfType<CreateTableOperation>().Should().ContainSingle()
             .Which.Name.Should().Be("AppFeatureFlagAccounts");
         additions.OfType<InsertDataOperation>().Should().ContainSingle()
             .Which.Table.Should().Be("AppFeatureFlags");
+        var signupAdditions = context.GetService<IMigrationsModelDiffer>()
+            .GetDifferences(featureFlags.GetRelationalModel(), target.GetRelationalModel());
+        signupAdditions.Should().HaveCount(6).And.OnlyContain(operation =>
+            operation is AddColumnOperation && !operation.IsDestructiveChange);
+        var signupColumns = signupAdditions.Cast<AddColumnOperation>().ToArray();
+        signupColumns.Should().OnlyContain(column => column.Table == "Users" && column.IsNullable);
+        signupColumns.Select(column => column.Name).Should().BeEquivalentTo(
+            "SignupLanguage", "SignupReferralCode", "SignupCompletedAtUtc",
+            "SignupReferralCompletedAtUtc", "SignupAnalyticsCompletedAtUtc", "SignupWelcomeCompletedAtUtc");
         context.Database.HasPendingModelChanges().Should().BeFalse();
-        context.Database.GetMigrations().Should().ContainInOrder(
-            "20261001074038_AddHabitSkipUndo", "20261017011939_AddFeatureFlagAccounts");
+        context.Database.GetMigrations().TakeLast(5).Should().Equal(
+            "20261001074038_AddHabitSkipUndo", "20261017011939_AddFeatureFlagAccounts",
+            "20261018093533_CascadeAccountabilityPairsOnUserDeletion", "20261018111350_AddDurableSignupWork",
+            "20261018111711_RecordDeletionStoppedRenewals");
     }
 
     [Fact]

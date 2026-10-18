@@ -1,3 +1,6 @@
+using Orbit.Infrastructure.Services;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.AspNetCore.Http;
 using FluentAssertions;
 using Hangfire;
 using Hangfire.Common;
@@ -19,7 +22,6 @@ namespace Orbit.Application.Tests.Commands.Auth;
 public class SendCodeCommandHandlerTests
 {
     private readonly MemoryCache _cache = new(new MemoryCacheOptions());
-    private readonly IEmailService _emailService = Substitute.For<IEmailService>();
     private readonly IBackgroundJobClient _backgroundJobClient = Substitute.For<IBackgroundJobClient>();
     private readonly SendCodeCommandHandler _handler;
     private Job? _enqueuedJob;
@@ -31,6 +33,14 @@ public class SendCodeCommandHandlerTests
     {
         _backgroundJobClient.Create(Arg.Do<Job>(job => _enqueuedJob = job), Arg.Any<IState>());
         _handler = new SendCodeCommandHandler(_cache, _backgroundJobClient);
+    }
+
+    [Fact]
+    public void Handler_HasNoRegistrationDependentCollaborators()
+    {
+        typeof(SendCodeCommandHandler).GetConstructors().Single().GetParameters()
+            .Select(parameter => parameter.ParameterType)
+            .Should().BeEquivalentTo(new[] { typeof(IMemoryCache), typeof(IBackgroundJobClient) });
     }
 
     [Fact]
@@ -187,18 +197,18 @@ public class SendCodeCommandHandlerTests
 
     private VerifyCodeCommandHandler BuildVerifyHandler()
     {
-        var userRepo = Substitute.For<IGenericRepository<User>>();
+        var userRepo = Substitute.For<IAuthUserStore>();
+        userRepo.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(call => call.Arg<User>());
         var unitOfWork = Substitute.For<IUnitOfWork>();
+        unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>()(call.Arg<CancellationToken>()));
         var authSessionService = Substitute.For<IAuthSessionService>();
-        var mediator = Substitute.For<IMediator>();
 
         authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new SessionTokens("jwt-token", "refresh-token")));
 
         return new VerifyCodeCommandHandler(
-            _cache, userRepo, unitOfWork, authSessionService, _emailService, mediator,
-            Substitute.For<IProductAnalytics>(),
-            Substitute.For<ILogger<VerifyCodeCommandHandler>>(), Substitute.For<Hangfire.IBackgroundJobClient>());
+            _cache, userRepo, unitOfWork, authSessionService, new SignupJobDispatcher(_backgroundJobClient, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _backgroundJobClient);
     }
 
     private static async Task WithEnv(string aspNetEnv, string? smokeEmail, string? smokeCode, Func<Task> body)

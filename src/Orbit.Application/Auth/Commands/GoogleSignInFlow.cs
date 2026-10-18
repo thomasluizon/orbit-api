@@ -1,22 +1,18 @@
+using Orbit.Domain.Entities;
 using Hangfire;
 using Orbit.Application.Auth.Jobs;
-using Microsoft.Extensions.Logging;
 using Orbit.Application.Auth.Queries;
 using Orbit.Application.Common;
-using Orbit.Application.Auth.Services;
 using Orbit.Domain.Common;
-using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Auth.Commands;
 
 public class GoogleSignInFlow(
-    IGenericRepository<User> userRepository,
+    IAuthUserStore userStore,
     IUnitOfWork unitOfWork,
     IAuthSessionService authSessionService,
-    GoogleSignInNotifications notifications,
-    IProductAnalytics productAnalytics,
-    ILogger<GoogleSignInFlow> logger,
+    ISignupJobDispatcher signupJobDispatcher,
     IBackgroundJobClient backgroundJobClient)
 {
     public async Task<Result<LoginResponse>> CompleteAsync(
@@ -24,44 +20,50 @@ public class GoogleSignInFlow(
         string? googleAccessToken, string? googleRefreshToken, CancellationToken cancellationToken)
     {
         var email = rawEmail.Trim().ToLowerInvariant();
-        var findResult = await AuthUserProvisioning.FindOrCreateUserAsync(
-            userRepository, unitOfWork, email, name, language, cancellationToken);
-        if (findResult.IsFailure)
-            return findResult.PropagateError<LoginResponse>();
-
-        var (user, isNewUser) = findResult.Value;
-        if (isNewUser)
+        User? reactivatedUser = null;
+        var signupPending = false;
+        var signupLanguage = language;
+        var signupReferralCode = referralCode;
+        var result = await unitOfWork.ExecuteInTransactionAsync(async transactionToken =>
         {
-            notifications.SendWelcomeEmailInBackground(user.Id, user.Email, user.Name, language);
-            if (!string.IsNullOrWhiteSpace(referralCode))
-                notifications.ProcessReferralInBackground(user.Id, referralCode);
-        }
+            var findResult = await AuthUserProvisioning.FindOrCreateUserAsync(
+                userStore, email, name, language, transactionToken, referralCode);
+            if (findResult.IsFailure)
+                return findResult.PropagateError<LoginResponse>();
 
-        var wasReactivated = false;
-        if (user.IsDeactivated)
-        {
-            user.CancelDeactivation();
-            wasReactivated = true;
-        }
+            var user = findResult.Value;
+            signupPending = user.SignupLanguage is not null && user.SignupCompletedAtUtc is null;
+            signupLanguage = user.SignupLanguage ?? language;
+            signupReferralCode = user.SignupLanguage is not null ? user.SignupReferralCode : referralCode;
+            var wasReactivated = user.IsDeactivated;
+            if (wasReactivated)
+            {
+                user.CancelDeactivation();
+                reactivatedUser = user;
+            }
 
-        if (googleAccessToken is not null)
-            user.SetGoogleTokens(googleAccessToken, googleRefreshToken);
+            if (googleAccessToken is not null)
+                user.SetGoogleTokens(googleAccessToken, googleRefreshToken);
 
-        if (wasReactivated || googleAccessToken is not null)
-            await unitOfWork.SaveChangesAsync(cancellationToken);
+            await unitOfWork.SaveChangesAsync(transactionToken);
 
-        if (wasReactivated)
-            CancelSubscriptionOnDeletionJob.EnqueueRestoration(backgroundJobClient, user);
+            var sessionResult = await authSessionService.CreateSessionAsync(user.Id, user.Email, transactionToken);
+            if (sessionResult.IsFailure)
+                return sessionResult.PropagateError<LoginResponse>();
 
-        if (isNewUser)
-            AnalyticsCapture.SafeCaptureUserEvent(productAnalytics, logger, user, "signup_completed");
+            return Result.Success(new LoginResponse(
+                user.Id, sessionResult.Value.AccessToken, user.Name, user.Email,
+                wasReactivated, sessionResult.Value.RefreshToken));
+        }, cancellationToken);
 
-        var sessionResult = await authSessionService.CreateSessionAsync(user.Id, user.Email, cancellationToken);
-        if (sessionResult.IsFailure)
-            return sessionResult.PropagateError<LoginResponse>();
+        if (result.IsFailure)
+            return result;
 
-        return Result.Success(new LoginResponse(
-            user.Id, sessionResult.Value.AccessToken, user.Name, user.Email,
-            wasReactivated, sessionResult.Value.RefreshToken));
+        if (result.Value.WasReactivated && reactivatedUser is not null)
+            CancelSubscriptionOnDeletionJob.EnqueueRestoration(backgroundJobClient, reactivatedUser);
+
+        signupJobDispatcher.Dispatch(result.Value.UserId, signupPending, signupLanguage, signupReferralCode);
+
+        return result;
     }
 }

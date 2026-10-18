@@ -1,15 +1,17 @@
-using Orbit.Application.Auth.Services;
 using Hangfire.Common;
 using Hangfire.States;
 using Orbit.Application.Auth.Jobs;
 using Orbit.Domain.Enums;
 using System.Data.Common;
 using System.Linq.Expressions;
+using Orbit.Infrastructure.Services;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.AspNetCore.Http;
 using System.Net;
 using System.Text;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
+using Hangfire;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Orbit.Application.Auth.Commands;
@@ -25,13 +27,11 @@ namespace Orbit.Application.Tests.Commands.Auth;
 
 public class GoogleAuthCommandHandlerTests
 {
-    private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
+    private readonly IAuthUserStore _userRepo = Substitute.For<IAuthUserStore>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IAuthSessionService _authSessionService = Substitute.For<IAuthSessionService>();
-    private readonly IEmailService _emailService = Substitute.For<IEmailService>();
+    private readonly IBackgroundJobClient _jobs = Substitute.For<IBackgroundJobClient>();
     private readonly FakeHttpMessageHandler _httpHandler = new();
-    private readonly IProductAnalytics _analytics = Substitute.For<IProductAnalytics>();
-    private readonly Hangfire.IBackgroundJobClient _jobs = Substitute.For<Hangfire.IBackgroundJobClient>();
     private readonly GoogleAuthCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -39,6 +39,8 @@ public class GoogleAuthCommandHandlerTests
 
     public GoogleAuthCommandHandlerTests()
     {
+        _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>()(call.Arg<CancellationToken>()));
         var httpClient = new HttpClient(_httpHandler)
         {
             BaseAddress = new Uri("https://supabase.example.com")
@@ -46,12 +48,10 @@ public class GoogleAuthCommandHandlerTests
         var httpFactory = Substitute.For<IHttpClientFactory>();
         httpFactory.CreateClient("Supabase").Returns(httpClient);
 
-        var flow = new GoogleSignInFlow(_userRepo, _unitOfWork, _authSessionService, new GoogleSignInNotifications(_emailService,
-                Substitute.For<Microsoft.Extensions.DependencyInjection.IServiceScopeFactory>(),
-                Microsoft.Extensions.Logging.Abstractions.NullLogger<GoogleSignInNotifications>.Instance), _analytics,
-            Substitute.For<ILogger<GoogleSignInFlow>>(), _jobs);
+        var flow = new GoogleSignInFlow(_userRepo, _unitOfWork, _authSessionService, new SignupJobDispatcher(_jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _jobs);
         _handler = new GoogleAuthCommandHandler(httpFactory, flow);
 
+        _userRepo.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(call => call.Arg<User>());
         _authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new SessionTokens("jwt-token", "refresh-token")));
     }
@@ -74,7 +74,7 @@ public class GoogleAuthCommandHandlerTests
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
         user.Deactivate(DateTime.UtcNow.AddDays(7));
         Job? enqueued = null;
-        _jobs.Create(Arg.Do<Job>(job => enqueued = job), Arg.Any<IState>());
+        _jobs.Create(Arg.Do<Job>(job => { if (job.Type == typeof(CancelSubscriptionOnDeletionJob)) enqueued = job; }), Arg.Any<IState>());
 
         var result = await _handler.Handle(new GoogleAuthCommand("token"), CancellationToken.None);
 
@@ -84,14 +84,17 @@ public class GoogleAuthCommandHandlerTests
         user.ScheduledDeletionAt.Should().BeNull();
         user.HasProAccess.Should().Be(!expired);
         user.Plan.Should().Be(expired ? UserPlan.Free : UserPlan.Pro);
+        _jobs.Received(1).Create(Arg.Is<Job>(job => job.Type == typeof(CompleteSignupJob)
+            && (Guid)job.Args[0] == user.Id && !(bool)job.Args[1]), Arg.Any<IState>());
+        _jobs.Received(!expired && !play ? 2 : 1).Create(Arg.Any<Job>(), Arg.Any<IState>());
         if (!expired && !play)
         {
-            _jobs.Received(1).Create(Arg.Any<Job>(), Arg.Any<IState>());
+            _jobs.Received(1).Create(Arg.Is<Job>(job => job.Type == typeof(CancelSubscriptionOnDeletionJob)), Arg.Any<IState>());
             enqueued!.Type.Should().Be<CancelSubscriptionOnDeletionJob>();
             enqueued.Args.Should().Equal(user.Id, "sub_paid", null, false, CancellationToken.None);
         }
         else
-            _jobs.DidNotReceive().Create(Arg.Any<Job>(), Arg.Any<IState>());
+            _jobs.DidNotReceive().Create(Arg.Is<Job>(job => job.Type == typeof(CancelSubscriptionOnDeletionJob)), Arg.Any<IState>());
     }
 
     [Fact]
@@ -109,7 +112,7 @@ public class GoogleAuthCommandHandlerTests
         result.Value.Token.Should().Be("jwt-token");
         result.Value.Email.Should().Be(TestEmail);
         result.Value.WasReactivated.Should().BeFalse();
-        await _userRepo.DidNotReceive().AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
+        await _userRepo.Received(1).UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -123,7 +126,7 @@ public class GoogleAuthCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Token.Should().Be("jwt-token");
-        await _userRepo.Received(1).AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
+        await _userRepo.Received(1).UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -143,7 +146,7 @@ public class GoogleAuthCommandHandlerTests
         _unitOfWork.DidNotReceive().ResetTracking();
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
         await _authSessionService.DidNotReceive().CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
-        await _userRepo.DidNotReceive().AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
+        await _userRepo.DidNotReceive().UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -175,9 +178,7 @@ public class GoogleAuthCommandHandlerTests
         SetupGoogleTokenResponse(TestEmail, "Google User");
         var trackerWasReset = false;
         _unitOfWork.When(work => work.ResetTracking()).Do(_ => trackerWasReset = true);
-        _userRepo.FindOneTrackedIgnoringFiltersAsync(
-            Arg.Any<Expression<Func<User, bool>>>(),
-            Arg.Any<CancellationToken>())
+        _userRepo.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>())
             .Returns(_ => trackerWasReset ? currentUser : staleUser);
         var saves = 0;
         _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
@@ -201,8 +202,7 @@ public class GoogleAuthCommandHandlerTests
         trackerWasReset.Should().BeTrue();
         saves.Should().Be(2);
         await _authSessionService.Received(1).CreateSessionAsync(currentUser.Id, currentUser.Email, Arg.Any<CancellationToken>());
-        _analytics.DidNotReceive().CaptureUserEvent(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>());
-        await _emailService.DidNotReceive().SendWelcomeEmailAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+
     }
 
     [Fact]
@@ -223,8 +223,7 @@ public class GoogleAuthCommandHandlerTests
         await _unitOfWork.Received(3).SaveChangesAsync(Arg.Any<CancellationToken>());
         _unitOfWork.Received(2).ResetTracking();
         await _authSessionService.DidNotReceive().CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
-        _analytics.DidNotReceive().CaptureUserEvent(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>());
-        await _emailService.DidNotReceive().SendWelcomeEmailAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+
     }
 
     [Fact]
@@ -232,81 +231,31 @@ public class GoogleAuthCommandHandlerTests
     {
         var existingUser = User.Create("Existing", "google@example.com").Value;
         SetupGoogleTokenResponse("Google@Example.com", "Existing");
-        _userRepo.FindOneTrackedIgnoringFiltersAsync(
-            Arg.Any<Expression<Func<User, bool>>>(),
-            Arg.Any<CancellationToken>())
-            .Returns(callInfo =>
-            {
-                var predicate = callInfo.Arg<Expression<Func<User, bool>>>().Compile();
-                return predicate(existingUser) ? existingUser : null;
-            });
+        _userRepo.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<User>().Email == existingUser.Email ? existingUser : call.Arg<User>());
 
         var result = await _handler.Handle(new GoogleAuthCommand("valid-token"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Email.Should().Be("google@example.com");
-        await _userRepo.DidNotReceive().AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
+        await _userRepo.Received(1).UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task Handle_ConcurrentFirstLogin_ResolvesToExistingUserWithout500()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_AlwaysEnqueuesSignupDecision(bool exists)
     {
-        var racedUser = User.Create("Raced", TestEmail).Value;
-        SetupGoogleTokenResponse(TestEmail, "Raced");
-        _userRepo.FindOneTrackedIgnoringFiltersAsync(
-            Arg.Any<Expression<Func<User, bool>>>(),
-            Arg.Any<CancellationToken>())
-            .Returns((User?)null, racedUser);
-        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
-            .ThrowsAsync(new DbUpdateException("duplicate", new FakeUniqueViolationException()));
+        SetupGoogleTokenResponse(TestEmail, "Google User");
+        if (exists)
+            SetupExistingUser(User.Create("Existing", TestEmail).Value);
 
-        var result = await _handler.Handle(new GoogleAuthCommand("valid-token"), CancellationToken.None);
+        var result = await _handler.Handle(new GoogleAuthCommand("valid-token", "pt-BR", ReferralCode: "friend"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Email.Should().Be(TestEmail);
-        await _userRepo.Received(1).AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
-        _unitOfWork.Received(1).ResetTracking();
-    }
-
-    [Fact]
-    public async Task Handle_UniqueViolationWithoutMatchingUser_Propagates()
-    {
-        SetupGoogleTokenResponse(TestEmail, "Google User");
-        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
-            .ThrowsAsync(new DbUpdateException("duplicate", new FakeUniqueViolationException()));
-
-        var act = () => _handler.Handle(new GoogleAuthCommand("valid-token"), CancellationToken.None);
-
-        await act.Should().ThrowAsync<DbUpdateException>();
-        _unitOfWork.Received(1).ResetTracking();
-        await _authSessionService.DidNotReceive().CreateSessionAsync(
-            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Handle_NewUserProvisioned_CapturesSignupCompleted()
-    {
-        SetupGoogleTokenResponse(TestEmail, "Google User");
-        User? created = null;
-        _userRepo.When(r => r.AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()))
-            .Do(call => created = call.Arg<User>());
-
-        await _handler.Handle(new GoogleAuthCommand("valid-token"), CancellationToken.None);
-
-        created.Should().NotBeNull();
-        _analytics.Received(1).CaptureUserEvent(created!.Id, "signup_completed", "Free");
-    }
-
-    [Fact]
-    public async Task Handle_ReturningUser_DoesNotCaptureSignupCompleted()
-    {
-        SetupGoogleTokenResponse(TestEmail, "Google User");
-        SetupExistingUser(User.Create("Google User", TestEmail).Value);
-
-        await _handler.Handle(new GoogleAuthCommand("valid-token"), CancellationToken.None);
-
-        _analytics.DidNotReceive().CaptureUserEvent(
-            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>());
+        _jobs.Received(1).Create(Arg.Is<Job>(job => job.Type == typeof(CompleteSignupJob)
+            && (Guid)job.Args[0] == result.Value.UserId && (bool)job.Args[1] == !exists
+            && (string)job.Args[2] == "pt-BR" && (string)job.Args[3] == "friend"), Arg.Any<IState>());
     }
 
     private void SetupGoogleTokenResponse(string email, string name)
@@ -324,15 +273,8 @@ public class GoogleAuthCommandHandlerTests
 
     private void SetupExistingUser(User user)
     {
-        _userRepo.FindOneTrackedIgnoringFiltersAsync(
-            Arg.Any<Expression<Func<User, bool>>>(),
-            Arg.Any<CancellationToken>())
+        _userRepo.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>())
             .Returns(user);
-    }
-
-    private sealed class FakeUniqueViolationException : DbException
-    {
-        public override string SqlState => "23505";
     }
 
     /// <summary>

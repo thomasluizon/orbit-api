@@ -1,10 +1,10 @@
-using Orbit.Application.Auth.Services;
 using Hangfire;
 using Hangfire.Common;
 using Hangfire.States;
 using System.Linq.Expressions;
 using Orbit.Application.Auth.Jobs;
 using Orbit.Domain.Enums;
+using Orbit.Infrastructure.Services;
 using System.Reflection;
 using System.Security.Claims;
 using System.Text;
@@ -97,18 +97,18 @@ public class OAuthControllerTests : IDisposable
             user.SetStripeSubscription("sub_paid", expiryAtUtc);
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
         user.Deactivate(DateTime.UtcNow.AddDays(7));
-        var users = Substitute.For<IGenericRepository<User>>();
-        users.FindOneTrackedIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>()).Returns(user);
+        _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>()(call.Arg<CancellationToken>()));
+        var users = Substitute.For<IAuthUserStore>();
+        users.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(user);
         var sessions = Substitute.For<IAuthSessionService>();
         sessions.CreateSessionAsync(user.Id, user.Email, Arg.Any<CancellationToken>())
             .Returns(Result.Success(new SessionTokens("access", "refresh")));
         var jobs = Substitute.For<IBackgroundJobClient>();
         Job? enqueued = null;
-        jobs.Create(Arg.Do<Job>(job => enqueued = job), Arg.Any<IState>());
-        var flow = new GoogleSignInFlow(users, _unitOfWork, sessions, new GoogleSignInNotifications(Substitute.For<IEmailService>(),
-                Substitute.For<Microsoft.Extensions.DependencyInjection.IServiceScopeFactory>(),
-                NullLogger<GoogleSignInNotifications>.Instance), Substitute.For<IProductAnalytics>(),
-            NullLogger<GoogleSignInFlow>.Instance, jobs);
+        jobs.Create(Arg.Do<Job>(job => { if (job.Type == typeof(CancelSubscriptionOnDeletionJob)) enqueued = job; }), Arg.Any<IState>());
+        var flow = new GoogleSignInFlow(users, _unitOfWork, sessions,
+            new SignupJobDispatcher(jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), jobs);
         var exchange = Substitute.For<IGoogleAuthorizationCodeService>();
         exchange.ExchangeAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new GoogleCodeIdentity(user.Email, user.Name, "google-access", "google-refresh")));
@@ -126,14 +126,82 @@ public class OAuthControllerTests : IDisposable
         user.IsDeactivated.Should().BeFalse();
         user.HasProAccess.Should().Be(!expired);
         user.Plan.Should().Be(expired ? UserPlan.Free : UserPlan.Pro);
+        jobs.Received(1).Create(Arg.Is<Job>(job => job.Type == typeof(CompleteSignupJob)
+            && (Guid)job.Args[0] == user.Id && !(bool)job.Args[1]), Arg.Any<IState>());
+        jobs.Received(!expired && !play ? 2 : 1).Create(Arg.Any<Job>(), Arg.Any<IState>());
         if (!expired && !play)
         {
-            jobs.Received(1).Create(Arg.Any<Job>(), Arg.Any<IState>());
+            jobs.Received(1).Create(Arg.Is<Job>(job => job.Type == typeof(CancelSubscriptionOnDeletionJob)), Arg.Any<IState>());
             enqueued!.Type.Should().Be<CancelSubscriptionOnDeletionJob>();
             enqueued.Args.Should().Equal(user.Id, "sub_paid", null, false, CancellationToken.None);
         }
         else
-            jobs.DidNotReceive().Create(Arg.Any<Job>(), Arg.Any<IState>());
+            jobs.DidNotReceive().Create(Arg.Is<Job>(job => job.Type == typeof(CancelSubscriptionOnDeletionJob)), Arg.Any<IState>());
+    }
+
+    [Fact]
+    public async Task GoogleCallback_RegistrationDoesNotChangeWorkAndUsesEmailProvisioningDefaults()
+    {
+        var traces = new List<string[]>();
+        User? googleUser = null;
+        foreach (var exists in new[] { true, false })
+        {
+            var calls = new List<string>();
+            var users = Substitute.For<IAuthUserStore>();
+            var work = Substitute.For<IUnitOfWork>();
+            work.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>(), Arg.Any<CancellationToken>())
+                .Returns(call => call.Arg<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>()(call.Arg<CancellationToken>()));
+            var sessions = Substitute.For<IAuthSessionService>();
+            var jobs = Substitute.For<IBackgroundJobClient>();
+            var exchange = Substitute.For<IGoogleAuthorizationCodeService>();
+            exchange.ExchangeAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+                .Returns(_ => { calls.Add("exchange"); return Result.Success(new GoogleCodeIdentity("person@example.com", "Person", "google-access", "google-refresh")); });
+            users.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(call =>
+            {
+                calls.Add("upsert");
+                googleUser = exists ? User.Create("Existing", "person@example.com").Value : call.Arg<User>();
+                return googleUser;
+            });
+            work.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(_ => { calls.Add("save"); return Task.FromResult(1); });
+            sessions.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+                .Returns(_ => { calls.Add("session"); return Result.Success(new SessionTokens("access", "refresh")); });
+            jobs.Create(Arg.Any<Job>(), Arg.Any<IState>()).Returns(_ => { calls.Add("enqueue"); return "job"; });
+            var flow = new GoogleSignInFlow(users, work, sessions, new SignupJobDispatcher(jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), jobs);
+            var completion = new CompleteGoogleSignInCommandHandler(flow);
+            var codeHandler = new GoogleCodeAuthCommandHandler(exchange, _mediator);
+            _mediator.Send(Arg.Any<CompleteGoogleSignInCommand>(), Arg.Any<CancellationToken>())
+                .Returns(call => completion.Handle(call.Arg<CompleteGoogleSignInCommand>(), call.Arg<CancellationToken>()));
+            _mediator.Send(Arg.Any<GoogleCodeAuthCommand>(), Arg.Any<CancellationToken>())
+                .Returns(call => codeHandler.Handle(call.Arg<GoogleCodeAuthCommand>(), call.Arg<CancellationToken>()));
+            var pending = CreatePendingGoogleRequest();
+
+            var response = await _controller.GoogleCallback(pending.GoogleState, "code", null, CancellationToken.None);
+
+            response.Should().BeOfType<RedirectResult>().Which.Url.Should().StartWith("https://claude.ai/callback?code=");
+            googleUser!.GoogleAccessToken.Should().BeNull();
+            traces.Add(calls.ToArray());
+        }
+
+        traces[0].Should().Equal(traces[1]);
+        traces[0].Should().Equal("exchange", "upsert", "save", "session", "enqueue");
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        cache.Set("verify:email@example.com", new VerificationEntry("123456", 0, DateTime.UtcNow));
+        var emailStore = Substitute.For<IAuthUserStore>();
+        User? emailUser = null;
+        emailStore.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(call => emailUser = call.Arg<User>());
+        var emailSessions = Substitute.For<IAuthSessionService>();
+        emailSessions.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new SessionTokens("access", "refresh")));
+        var emailWork = Substitute.For<IUnitOfWork>();
+        emailWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Result<LoginResponse>>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<Result<LoginResponse>>>>()(call.Arg<CancellationToken>()));
+        var verify = new VerifyCodeCommandHandler(cache, emailStore, emailWork, emailSessions, new SignupJobDispatcher(Substitute.For<IBackgroundJobClient>(), new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), Substitute.For<IBackgroundJobClient>());
+
+        (await verify.Handle(new VerifyCodeCommand("email@example.com", "123456"), CancellationToken.None)).IsSuccess.Should().BeTrue();
+
+        googleUser!.Language.Should().Be(emailUser!.Language).And.Be("en");
+        googleUser.Handle.Should().Be($"user_{googleUser.Id:N}"[..17]);
+        emailUser.Handle.Should().Be($"user_{emailUser.Id:N}"[..17]);
     }
 
     [Fact]

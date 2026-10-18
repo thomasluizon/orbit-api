@@ -1,3 +1,7 @@
+using Orbit.Infrastructure.Services;
+using Microsoft.Extensions.Logging.Abstractions;
+using Hangfire;
+using Microsoft.Extensions.Caching.Memory;
 using System.Reflection;
 using System.Security.Claims;
 using FluentAssertions;
@@ -38,6 +42,52 @@ public class AuthControllerTests
         {
             HttpContext = new DefaultHttpContext { User = principal }
         };
+    }
+
+    [Theory]
+    [InlineData("absent")]
+    [InlineData("expired")]
+    [InlineData("wrong")]
+    [InlineData("throttled")]
+    public async Task VerifyCode_AnonymousFailure_IsIdenticalRegardlessOfRegistration(string mode)
+    {
+        var store = Substitute.For<IAuthUserStore>();
+        var work = Substitute.For<IUnitOfWork>();
+        work.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>()(call.Arg<CancellationToken>()));
+        var sessions = Substitute.For<IAuthSessionService>();
+        var jobs = Substitute.For<IBackgroundJobClient>();
+        var responses = new List<(int? Status, string Body, string Headers)>();
+        foreach (var exists in new[] { true, false })
+        {
+            store.UpsertAsync(Arg.Any<Orbit.Domain.Entities.User>(), Arg.Any<CancellationToken>())
+                .Returns(call => exists ? Orbit.Domain.Entities.User.Create("Existing", "person@example.com").Value
+                    : call.Arg<Orbit.Domain.Entities.User>());
+            using var cache = new MemoryCache(new MemoryCacheOptions());
+            if (mode != "absent")
+                cache.Set("verify:person@example.com", new VerificationEntry("123456", 0, DateTime.UtcNow));
+            if (mode == "expired")
+                cache.Set("verify:person@example.com", new VerificationEntry("123456", 0, DateTime.UtcNow),
+                    new MemoryCacheEntryOptions { AbsoluteExpiration = DateTimeOffset.UtcNow.AddMinutes(-1) });
+            if (mode == "throttled")
+                cache.Set("verify-attempts:person@example.com", 3);
+            var handler = new VerifyCodeCommandHandler(cache, store, work, sessions, new SignupJobDispatcher(jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), jobs);
+            _mediator.Send(Arg.Any<VerifyCodeCommand>(), Arg.Any<CancellationToken>())
+                .Returns(call => handler.Handle(call.Arg<VerifyCodeCommand>(), call.Arg<CancellationToken>()));
+
+            var result = (await _controller.VerifyCode(new AuthController.VerifyCodeRequest(
+                "person@example.com", "999999"), CancellationToken.None)).Should().BeOfType<ObjectResult>().Subject;
+            var body = System.Text.Json.JsonSerializer.Serialize(result.Value, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+            responses.Add((result.StatusCode, body, string.Join(";", _controller.Response.Headers)));
+        }
+
+        responses[0].Should().Be(responses[1]);
+        responses[0].Status.Should().Be(401);
+        responses[0].Body.Should().Contain("\"error\"").And.Contain("\"errorCode\"");
+        store.ReceivedCalls().Should().BeEmpty();
+        work.ReceivedCalls().Should().BeEmpty();
+        sessions.ReceivedCalls().Should().BeEmpty();
+        jobs.ReceivedCalls().Should().BeEmpty();
     }
 
     [Fact]
