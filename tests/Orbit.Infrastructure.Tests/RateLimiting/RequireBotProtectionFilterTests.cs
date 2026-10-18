@@ -226,13 +226,17 @@ public class RequireBotProtectionFilterTests
         commandRan.Should().BeFalse();
     }
 
-    [Fact]
-    public async Task RateLimitRejectsBeforeBotVerification_WithRetryHeader()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RateLimitRejectsBeforeBotVerification_WithRetryHeader(bool rejectIp)
     {
         new RequireBotProtectionAttribute().Order.Should().BeGreaterThan(0);
         var rateLimits = Substitute.For<IDistributedRateLimitService>();
         rateLimits.TryAcquireAsync("auth", "auth:email:person@example.com", Arg.Any<CancellationToken>())
-            .Returns(new DistributedRateLimitDecision(false, 11, 10, DateTime.UtcNow.AddMinutes(1)));
+            .Returns(new DistributedRateLimitDecision(rejectIp, 10, 10, DateTime.UtcNow.AddMinutes(1)));
+        rateLimits.TryAcquireAsync("auth-ip", "ip:unknown", Arg.Any<CancellationToken>())
+            .Returns(new DistributedRateLimitDecision(!rejectIp, 30, 30, DateTime.UtcNow.AddMinutes(1)));
         var rateFilter = new DistributedRateLimitFilter(
             "auth",
             rateLimits,
@@ -253,6 +257,8 @@ public class RequireBotProtectionFilterTests
 
         context.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(429);
         context.HttpContext.Response.Headers.RetryAfter.Should().NotBeEmpty();
+        await rateLimits.Received(1).TryAcquireAsync("auth", "auth:email:person@example.com", Arg.Any<CancellationToken>());
+        await rateLimits.Received(1).TryAcquireAsync("auth-ip", "ip:unknown", Arg.Any<CancellationToken>());
         commandRan.Should().BeFalse();
         await _verifier.DidNotReceiveWithAnyArgs().VerifyAsync(default!, default);
     }
