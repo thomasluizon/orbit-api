@@ -56,8 +56,8 @@ public sealed class IssuedAstraBlock : Entity
         definition.Title.Length <= 120 && definition.Options.Count is >= 2 and <= 4
         && definition.Items.Count == 0 && definition.Action is null
         && definition.Options.All(option => option is not null && !string.IsNullOrWhiteSpace(option.Id)
-            && !string.IsNullOrWhiteSpace(option.Label) && option.Label.Length <= 24
-            && (option.Description is null || option.Description.Length <= 32))
+            && !string.IsNullOrWhiteSpace(option.Label) && option.Label.Length <= 20
+            && (option.Description is null || option.Description.Length <= 24))
         && definition.Options.Select(option => option.Id).Distinct(StringComparer.Ordinal).Count() == definition.Options.Count;
 
     private static bool IsValidPickList(AstraBlockDefinition definition) =>
@@ -66,7 +66,7 @@ public sealed class IssuedAstraBlock : Entity
         && definition.MultiSelect && !definition.AllowFreeText
         && definition.Items.All(item => item is not null && !string.IsNullOrWhiteSpace(item.Id)
             && !string.IsNullOrWhiteSpace(item.Label) && item.Arguments.ValueKind == JsonValueKind.Object
-            && (item.Detail is null || item.Detail.Length <= 32))
+            && (item.Detail is null || item.Detail.Length <= 24))
         && definition.Items.Select(item => item.Id).Distinct(StringComparer.Ordinal).Count() == definition.Items.Count;
 
     public void MarkAnswered(DateTime answeredAtUtc)

@@ -188,10 +188,10 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Theory]
-    [InlineData("label", 25)]
+    [InlineData("label", 21)]
     [InlineData("label", 30)]
-    [InlineData("description", 33)]
-    [InlineData("detail", 33)]
+    [InlineData("description", 25)]
+    [InlineData("detail", 25)]
     public async Task Ask_OverlongText_ReturnsValidationFailureToModelWithoutIssuingBlock(string field, int count)
     {
         SetupUserAndPayGate();

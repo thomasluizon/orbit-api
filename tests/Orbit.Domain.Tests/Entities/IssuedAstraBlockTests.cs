@@ -27,10 +27,10 @@ public class IssuedAstraBlockTests
         ((Action)(() => IssuedAstraBlock.Create(Guid.NewGuid(), Choice(count)))).Should().Throw<ArgumentException>();
 
     [Theory]
-    [InlineData("label", 24, true)]
-    [InlineData("label", 25, false)]
-    [InlineData("description", 32, true)]
-    [InlineData("description", 33, false)]
+    [InlineData("label", 20, true)]
+    [InlineData("label", 21, false)]
+    [InlineData("description", 24, true)]
+    [InlineData("description", 25, false)]
     public void Create_EnforcesChoiceTextLimits(string field, int count, bool valid)
     {
         var option = new AstraBlockOption("a", field == "label" ? new string('l', count) : "Morning",
@@ -46,8 +46,8 @@ public class IssuedAstraBlockTests
 
     [Theory]
     [InlineData(null, true)]
-    [InlineData(32, true)]
-    [InlineData(33, false)]
+    [InlineData(24, true)]
+    [InlineData(25, false)]
     public void Create_EnforcesPickListDetailLimitWithoutCappingHabitLabel(int? count, bool valid)
     {
         var item = new AstraBlockItem("a", new string('l', 100), JsonSerializer.SerializeToElement(new { title = "Walk" }),

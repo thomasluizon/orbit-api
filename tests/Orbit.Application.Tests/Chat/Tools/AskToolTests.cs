@@ -50,11 +50,11 @@ public class AskToolTests
     [Theory]
     [InlineData("question", 120, true)]
     [InlineData("question", 121, false)]
-    [InlineData("label", 24, true)]
-    [InlineData("label", 25, false)]
+    [InlineData("label", 20, true)]
+    [InlineData("label", 21, false)]
     [InlineData("label", 41, false)]
-    [InlineData("description", 32, true)]
-    [InlineData("description", 33, false)]
+    [InlineData("description", 24, true)]
+    [InlineData("description", 25, false)]
     [InlineData("description", 81, false)]
     public async Task Choice_EnforcesTextLimits(string field, int count, bool valid)
     {
@@ -71,8 +71,8 @@ public class AskToolTests
 
     [Theory]
     [InlineData(null, true)]
-    [InlineData(32, true)]
-    [InlineData(33, false)]
+    [InlineData(24, true)]
+    [InlineData(25, false)]
     public async Task PickList_EnforcesDetailLimitWithoutCappingHabitLabel(int? count, bool valid)
     {
         var label = new string('l', 100);
@@ -101,10 +101,10 @@ public class AskToolTests
     {
         var properties = JsonSerializer.SerializeToElement(_tool.GetParameterSchema()).GetProperty("properties");
         var option = properties.GetProperty("options").GetProperty("items").GetProperty("properties");
-        option.GetProperty("label").GetProperty("maxLength").GetInt32().Should().Be(24);
-        option.GetProperty("description").GetProperty("maxLength").GetInt32().Should().Be(32);
+        option.GetProperty("label").GetProperty("maxLength").GetInt32().Should().Be(20);
+        option.GetProperty("description").GetProperty("maxLength").GetInt32().Should().Be(24);
         var item = properties.GetProperty("items").GetProperty("items").GetProperty("properties");
-        item.GetProperty("detail").GetProperty("maxLength").GetInt32().Should().Be(32);
+        item.GetProperty("detail").GetProperty("maxLength").GetInt32().Should().Be(24);
         item.GetProperty("label").TryGetProperty("maxLength", out _).Should().BeFalse();
     }
 
