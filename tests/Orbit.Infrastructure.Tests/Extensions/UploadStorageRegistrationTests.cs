@@ -11,9 +11,10 @@ namespace Orbit.Infrastructure.Tests.Extensions;
 public class UploadStorageRegistrationTests
 {
     [Theory]
+    [InlineData(null)]
     [InlineData("S3")]
     [InlineData("Supabase")]
-    public void AddEmailAndSupabaseClients_RegistersBothDeletionProvidersRegardlessOfUploadProvider(string provider)
+    public void AddEmailAndSupabaseClients_RegistersOnlyS3ForUploadsReadsAndErasure(string? provider)
     {
         var builder = WebApplication.CreateBuilder();
         builder.Configuration.Sources.Clear();
@@ -44,10 +45,9 @@ public class UploadStorageRegistrationTests
         using var services = builder.Services.BuildServiceProvider();
         using var scope = services.CreateScope();
         var stores = scope.ServiceProvider.GetServices<IObjectStorageDeletionService>().ToArray();
-        stores.Should().HaveCount(2);
-        stores.Should().ContainSingle(store => store is S3ObjectStorageService);
-        stores.Should().ContainSingle(store => store is SupabaseObjectStorageService);
+        stores.Should().ContainSingle().Which.Should().BeOfType<S3ObjectStorageService>();
         var uploads = scope.ServiceProvider.GetRequiredService<IObjectStorageService>();
-        uploads.GetType().Should().Be(provider == "S3" ? typeof(S3ObjectStorageService) : typeof(SupabaseObjectStorageService));
+        uploads.Should().BeSameAs(stores.Single());
+        scope.ServiceProvider.GetRequiredService<IObjectStorageReadService>().Should().BeSameAs(uploads);
     }
 }

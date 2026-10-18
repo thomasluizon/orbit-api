@@ -14,7 +14,6 @@ locals {
     "Stripe__SecretKey",
     "Stripe__WebhookSecret",
     "Supabase__AnonKey",
-    "Supabase__SecretKey",
     "TEST_ACCOUNTS",
     "Vapid__PrivateKey",
     "Waitlist__SigningKey",
@@ -65,7 +64,6 @@ locals {
     Stripe__YearlyPriceIdBrl            = "price_1U59lVGwWZvarDk3FBO8ci6L"
     Stripe__YearlyPriceIdUsd            = "price_1U59ncGwWZvarDk3Ydiw7jP7"
     Supabase__Url                       = "https://wdscxamegetmhqldqsdg.supabase.co"
-    Storage__Provider                   = var.production_storage_provider
     Storage__S3__Bucket                 = aws_s3_bucket.uploads["production"].bucket
     Storage__S3__Region                 = "us-east-2"
     Storage__S3__PublicBaseUrl          = "https://api.useorbit.org"
@@ -93,7 +91,6 @@ locals {
     Stripe__CancelUrl                  = "https://app-staging.useorbit.org/upgrade"
     Stripe__SuccessUrl                 = "https://app-staging.useorbit.org/upgrade?subscription=success"
     Supabase__Url                      = "https://staging-storage-disabled.invalid"
-    Storage__Provider                  = var.staging_storage_provider
     Storage__S3__Bucket                = aws_s3_bucket.uploads["staging"].bucket
     Storage__S3__PublicBaseUrl         = "https://api-staging.useorbit.org"
     Waitlist__ApiBaseUrl               = "https://api-staging.useorbit.org"

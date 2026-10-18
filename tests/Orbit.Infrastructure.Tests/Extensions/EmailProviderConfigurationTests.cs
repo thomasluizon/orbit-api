@@ -61,7 +61,11 @@ public sealed class EmailProviderConfigurationTests
         {
             ["Supabase:Url"] = "https://example.supabase.co",
             ["Supabase:AnonKey"] = "anon",
-            ["Supabase:SecretKey"] = "secret",
+            ["Storage:S3:Bucket"] = "uploads-test",
+            ["Storage:S3:PublicBaseUrl"] = "https://api.example.com",
+            ["Storage:S3:Region"] = "us-east-2",
+            ["Storage:S3:AccessKeyId"] = "test-access-key",
+            ["Storage:S3:SecretAccessKey"] = "test-secret",
         });
         var action = () => OrbitServiceCollectionExtensions.AddEmailAndSupabaseClients(builder, TimeSpan.FromSeconds(5));
         action.Should().Throw<InvalidOperationException>()
@@ -76,7 +80,11 @@ public sealed class EmailProviderConfigurationTests
         {
             ["Supabase:Url"] = "https://example.supabase.co",
             ["Supabase:AnonKey"] = "anon",
-            ["Supabase:SecretKey"] = "secret",
+            ["Storage:S3:Bucket"] = "uploads-test",
+            ["Storage:S3:PublicBaseUrl"] = "https://api.example.com",
+            ["Storage:S3:Region"] = "us-east-2",
+            ["Storage:S3:AccessKeyId"] = "test-access-key",
+            ["Storage:S3:SecretAccessKey"] = "test-secret",
             ["Ses:AccessKeyId"] = "key",
             ["Ses:SecretAccessKey"] = "secret",
             ["Ses:Region"] = "us-east-2",
