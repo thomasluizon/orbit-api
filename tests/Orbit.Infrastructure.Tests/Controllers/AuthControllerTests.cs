@@ -4,6 +4,7 @@ using Hangfire;
 using Microsoft.Extensions.Caching.Memory;
 using System.Reflection;
 using System.Security.Claims;
+using System.Text.Json;
 using FluentAssertions;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -225,6 +226,37 @@ public class AuthControllerTests
         method.GetCustomAttribute<AllowAnonymousAttribute>().Should().NotBeNull();
         method.GetCustomAttribute<DistributedRateLimitAttribute>().Should().NotBeNull();
         method.GetCustomAttribute<RequireBotProtectionAttribute>().Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("google")]
+    [InlineData("operations/google")]
+    public void GoogleAuth_RouteRemainsAvailableAndDeprecated(string template)
+    {
+        var route = typeof(AuthController).GetMethods()
+            .SingleOrDefault(method => method.GetCustomAttributes(typeof(HttpPostAttribute), false)
+                .Cast<HttpPostAttribute>().Any(attribute => attribute.Template == template));
+
+        route.Should().NotBeNull();
+        route!.GetCustomAttributes(typeof(ObsoleteAttribute), false).Should().ContainSingle();
+    }
+
+    [Theory]
+    [InlineData("openapi.json")]
+    [InlineData("openapi_v2.json")]
+    public void GoogleAuth_GeneratedOpenApiMarksBothLegacyRoutesDeprecated(string file)
+    {
+        var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
+            "../../../../..", "src/Orbit.Api", file));
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        var paths = document.RootElement.GetProperty("paths");
+
+        foreach (var route in new[] { "/api/Auth/google", "/api/Auth/operations/google" })
+        {
+            var operation = paths.GetProperty(route).GetProperty("post");
+            operation.TryGetProperty("deprecated", out var deprecated).Should().BeTrue();
+            deprecated.GetBoolean().Should().BeTrue();
+        }
     }
 
     [Fact]

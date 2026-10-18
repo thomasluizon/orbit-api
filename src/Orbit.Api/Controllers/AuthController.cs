@@ -125,6 +125,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
     }
 
     [HttpPost("google")]
+    [Obsolete]
     [DistributedRateLimit("auth")]
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -147,6 +148,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
     }
 
     [HttpPost("operations/google")]
+    [Obsolete]
     [DistributedRateLimit("auth")]
     [AllowAnonymous]
     public async Task<IActionResult> GoogleAuthOperation(

@@ -2200,7 +2200,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/Auth/operations/google": {
@@ -2241,7 +2242,8 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/Auth/google/code": {
