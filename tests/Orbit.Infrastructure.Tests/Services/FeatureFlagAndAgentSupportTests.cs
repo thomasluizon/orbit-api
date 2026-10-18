@@ -1,3 +1,4 @@
+using HttpContextExtensions = Orbit.Api.Extensions.HttpContextExtensions;
 using System.Net;
 using System.Security.Claims;
 using System.Text.Json;

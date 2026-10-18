@@ -19,8 +19,14 @@ public sealed class SkipUndoContractTests
         responses.TryGetProperty("204", out _).Should().BeTrue();
         responses.TryGetProperty("404", out _).Should().BeTrue();
         responses.TryGetProperty("409", out _).Should().BeTrue();
-        undo.GetProperty("parameters").EnumerateArray().Select(parameter => parameter.GetProperty("name").GetString())
+        var parameters = undo.GetProperty("parameters").EnumerateArray().ToArray();
+        parameters.Where(parameter => parameter.GetProperty("in").GetString() == "path")
+            .Select(parameter => parameter.GetProperty("name").GetString())
             .Should().BeEquivalentTo("id", "skipId");
+        var versionHeader = parameters.Single(parameter => parameter.GetProperty("name").GetString() == "api-version");
+        versionHeader.GetProperty("in").GetString().Should().Be("header");
+        (versionHeader.TryGetProperty("required", out var requiredHeader) && requiredHeader.GetBoolean())
+            .Should().BeFalse();
         var skip = document.RootElement.GetProperty("components").GetProperty("schemas").GetProperty("SkipHabitRequest");
         skip.GetProperty("properties").GetProperty("skipId").GetProperty("type").EnumerateArray()
             .Select(type => type.GetString()).Should().BeEquivalentTo("string", "null");

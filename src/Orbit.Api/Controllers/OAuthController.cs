@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using System.Text.Json;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -15,6 +16,8 @@ using Orbit.Infrastructure.Configuration;
 namespace Orbit.Api.Controllers;
 
 [ApiController]
+[ApiVersion(1.0)]
+[ApiVersion(2.0)]
 [AllowAnonymous]
 #pragma warning disable S6931 // OAuth/MCP well-known URLs follow protocol-mandated paths with no common prefix
 #pragma warning disable S107 // OAuth controller legitimately requires many DI dependencies
