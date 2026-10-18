@@ -209,6 +209,24 @@ public class OrbitDbContextTests
         AssertCascadingUserForeignKey(context.Model.FindEntityType(typeof(Tag))!, nameof(Tag.UserId));
     }
 
+    [Theory]
+    [InlineData(nameof(AccountabilityPair.RequesterId))]
+    [InlineData(nameof(AccountabilityPair.AddresseeId))]
+    public void Model_AccountabilityParticipant_CascadesInCurrentModelAndMigration(string foreignKeyProperty)
+    {
+        using var context = CreatePostgresContext();
+        AssertCascadingUserForeignKey(context.Model.FindEntityType(typeof(AccountabilityPair))!, foreignKeyProperty);
+
+        var migrationModel = context.GetService<IModelRuntimeInitializer>().Initialize(
+            new Orbit.Infrastructure.Migrations.CascadeAccountabilityPairsOnUserDeletion().TargetModel,
+            designTime: true);
+        var foreignKey = migrationModel.FindEntityType(typeof(AccountabilityPair).FullName!)!
+            .GetForeignKeys().Single(key => key.Properties.Count == 1 && key.Properties[0].Name == foreignKeyProperty);
+
+        foreignKey.PrincipalEntityType.Name.Should().Be(typeof(User).FullName);
+        foreignKey.DeleteBehavior.Should().Be(DeleteBehavior.Cascade);
+    }
+
     private static void AssertCascadingUserForeignKey(
         Microsoft.EntityFrameworkCore.Metadata.IEntityType entityType,
         string foreignKeyPropertyName)
