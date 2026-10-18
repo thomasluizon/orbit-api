@@ -34,42 +34,50 @@ public sealed partial class DistributedRateLimitFilter(
 
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
-        var partitionKey = await ResolvePartitionKeyAsync(
+        var partitions = await ResolvePartitionsAsync(
             policyName,
             context.HttpContext,
             context.ActionArguments.Values,
             context.HttpContext.RequestAborted);
-        DistributedRateLimitDecision decision;
+        (string PolicyName, string PartitionKey, DistributedRateLimitDecision Decision)? rejection = null;
 
-        try
+        foreach (var partition in partitions)
         {
-            decision = await distributedRateLimitService.TryAcquireAsync(
-                policyName,
-                partitionKey,
-                context.HttpContext.RequestAborted);
-        }
-        catch (Exception exception)
-        {
-            LogRateLimitEvaluationFailed(
-                logger,
-                policyName,
-                partitionKey,
-                context.HttpContext.Request.Method,
-                context.HttpContext.Request.Path,
-                context.HttpContext.GetRequestId(),
-                exception);
-
-            if (string.Equals(policyName, FailOpenPolicy, StringComparison.OrdinalIgnoreCase))
+            DistributedRateLimitDecision decision;
+            try
             {
-                await next();
-                return;
+                decision = await distributedRateLimitService.TryAcquireAsync(
+                    partition.PolicyName,
+                    partition.PartitionKey,
+                    context.HttpContext.RequestAborted);
+            }
+            catch (Exception exception)
+            {
+                LogRateLimitEvaluationFailed(
+                    logger,
+                    partition.PolicyName,
+                    partition.PartitionKey,
+                    context.HttpContext.Request.Method,
+                    context.HttpContext.Request.Path,
+                    context.HttpContext.GetRequestId(),
+                    exception);
+
+                if (string.Equals(policyName, FailOpenPolicy, StringComparison.OrdinalIgnoreCase))
+                {
+                    await next();
+                    return;
+                }
+
+                throw;
             }
 
-            throw;
+            if (!decision.Allowed)
+                rejection ??= (partition.PolicyName, partition.PartitionKey, decision);
         }
 
-        if (!decision.Allowed)
+        if (rejection is { } rejected)
         {
+            var decision = rejected.Decision;
             var retryAfterSeconds = Math.Max(
                 1,
                 (int)Math.Ceiling((decision.WindowEndsAtUtc - DateTime.UtcNow).TotalSeconds));
@@ -79,8 +87,8 @@ public sealed partial class DistributedRateLimitFilter(
             context.HttpContext.Response.Headers[Orbit.Api.Extensions.HttpContextExtensions.RequestIdHeaderName] = context.HttpContext.GetRequestId();
             LogRateLimitRejected(
                 logger,
-                policyName,
-                partitionKey,
+                rejected.PolicyName,
+                rejected.PartitionKey,
                 decision.CurrentCount,
                 decision.PermitLimit,
                 retryAfterSeconds,
@@ -97,30 +105,35 @@ public sealed partial class DistributedRateLimitFilter(
         await next();
     }
 
-    private async Task<string> ResolvePartitionKeyAsync(
+    private async Task<(string PolicyName, string PartitionKey)[]> ResolvePartitionsAsync(
         string policyName,
         HttpContext context,
         IEnumerable<object?> actionArguments,
         CancellationToken cancellationToken)
     {
         if (context.User.Identity?.IsAuthenticated == true)
-            return $"user:{context.GetUserId()}";
+            return [(policyName, $"user:{context.GetUserId()}")];
 
         if (TryResolveEmailPartitionKey(policyName, actionArguments, out var emailPartitionKey))
-            return emailPartitionKey;
+            return [(policyName, emailPartitionKey), ($"{policyName.ToLowerInvariant()}-ip", $"ip:{context.GetClientIpAddress() ?? "unknown"}")];
 
         if (TryExtractRefreshToken(policyName, actionArguments, out var refreshToken)
             && await authSessionService.HasSessionForTokenAsync(refreshToken, cancellationToken))
         {
-            return BuildRefreshTokenPartitionKey(policyName, refreshToken);
+            return [(policyName, BuildRefreshTokenPartitionKey(policyName, refreshToken))];
         }
 
-        return $"ip:{context.GetClientIpAddress() ?? "unknown"}";
+        return [(policyName, $"ip:{context.GetClientIpAddress() ?? "unknown"}")];
     }
 
     private static readonly HashSet<string> EmailPartitionedPolicies =
         new(StringComparer.OrdinalIgnoreCase) { "auth", "waitlist" };
 
+    /// <summary>
+    /// Anonymous email requests consume both the per-account bucket and the policy's IP bucket.
+    /// The email ceiling limits attacks across sources; the IP ceiling limits email rotation
+    /// while allowing separate account buckets for callers behind a shared NAT. Either ceiling rejects.
+    /// </summary>
     public static bool TryResolveEmailPartitionKey(
         string policyName,
         IEnumerable<object?> actionArguments,
