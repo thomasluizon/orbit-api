@@ -6,6 +6,7 @@ using Lib.Net.Http.WebPush.Authentication;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Orbit.Domain.Common;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Configuration;
@@ -201,6 +202,9 @@ public partial class PushNotificationService(
     {
         const int MaxRetries = 2;
         const int BaseDelayMs = 300;
+
+        if (!WebPushEndpointPolicy.IsAllowed(sub.Endpoint))
+            return false;
 
         var pushSub = new Lib.Net.Http.WebPush.PushSubscription
         {

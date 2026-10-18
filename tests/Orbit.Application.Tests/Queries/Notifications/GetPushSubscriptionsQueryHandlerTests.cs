@@ -25,12 +25,12 @@ public class GetPushSubscriptionsQueryHandlerTests
         var ownSubscriptions = Enumerable.Range(0, count)
             .Select(index => PushSubscription.Create(
                 userId,
-                $"https://push.example.com/device/{index}",
+                $"https://fcm.googleapis.com/device/{index}",
                 index == 0 ? PushSubscription.FcmSentinel : "private-p256dh",
                 "private-auth").Value)
             .ToList();
         var otherSubscription = PushSubscription.Create(
-            otherUserId, "https://push.example.com/other", "other-p256dh", "other-auth").Value;
+            otherUserId, "https://fcm.googleapis.com/other", "other-p256dh", "other-auth").Value;
         var allSubscriptions = ownSubscriptions.Append(otherSubscription).ToList();
 
         repository.FindAsync(
@@ -74,7 +74,7 @@ public class GetPushSubscriptionsQueryHandlerTests
                 .Should().BeEquivalentTo("id", "transport", "createdAtUtc", "endpointHash");
 
         var payload = root.GetRawText();
-        payload.Should().NotContain("push.example.com").And.NotContain("private-p256dh")
+        payload.Should().NotContain("fcm.googleapis.com").And.NotContain("private-p256dh")
             .And.NotContain("private-auth").And.NotContain("other-p256dh")
             .And.NotContain("other-auth");
     }
