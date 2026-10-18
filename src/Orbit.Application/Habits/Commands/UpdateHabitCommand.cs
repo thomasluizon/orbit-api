@@ -6,6 +6,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 
 namespace Orbit.Application.Habits.Commands;
@@ -116,9 +117,7 @@ public class UpdateHabitCommandHandler(
         var habit = state.Habit;
         var previousDueTime = habit.DueTime;
         var previousReminderEnabled = habit.ReminderEnabled;
-        var previousReminderTimes = habit.ReminderTimes.ToHashSet();
-        var previousScheduledReminders = habit.ScheduledReminders.ToHashSet();
-        var previousRelativeReminders = habit.RelativeReminders.ToHashSet();
+        var previousReminderTimes = GetReminderTimes(habit).ToHashSet();
         var result = habit.Update(state.Update);
 
         if (result.IsFailure)
@@ -126,9 +125,7 @@ public class UpdateHabitCommandHandler(
 
         if (previousDueTime != habit.DueTime
             || previousReminderEnabled != habit.ReminderEnabled
-            || !previousReminderTimes.SetEquals(habit.ReminderTimes)
-            || !previousScheduledReminders.SetEquals(habit.ScheduledReminders)
-            || !previousRelativeReminders.SetEquals(habit.RelativeReminders))
+            || !previousReminderTimes.SetEquals(GetReminderTimes(habit)))
             await ClearTodaySentRemindersAsync(request.UserId, request.HabitId, cancellationToken);
 
         IReadOnlyList<Guid> affectedGoalIds = [];
@@ -157,6 +154,12 @@ public class UpdateHabitCommandHandler(
 
         return Result.Success();
     }
+
+    private static IEnumerable<RelativeReminderTime> GetReminderTimes(Habit habit) =>
+        habit.ScheduledReminders.Select(RelativeReminderTime.FromScheduled)
+            .Concat(habit.DueTime.HasValue
+                ? habit.RelativeReminders.Concat(habit.ReminderTimes.Select(minutes => new RelativeReminderTime(minutes)))
+                : []);
 
     private sealed record UpdateState(
         Habit Habit,

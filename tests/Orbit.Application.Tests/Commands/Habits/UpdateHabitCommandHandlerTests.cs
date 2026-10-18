@@ -160,6 +160,7 @@ public class UpdateHabitCommandHandlerTests
     [InlineData("unchanged", false)]
     [InlineData("reordered", false)]
     [InlineData("clock-equivalent", false)]
+    [InlineData("offset-equivalent", false)]
     [InlineData("due-time", true)]
     [InlineData("clear-due-time", true)]
     [InlineData("enabled", true)]
@@ -200,6 +201,10 @@ public class UpdateHabitCommandHandlerTests
             {
                 RelativeReminders = null,
                 ScheduledReminders = [new(ScheduledReminderWhen.SameDay, new TimeOnly(8, 0))]
+            },
+            "offset-equivalent" => options with
+            {
+                RelativeReminders = habit.RelativeReminders.Concat([new RelativeReminderTime(MinutesBefore: 15)]).ToList()
             },
             "due-time" => options with { DueTime = new TimeOnly(11, 0) },
             "clear-due-time" => options with { DueTime = null },
