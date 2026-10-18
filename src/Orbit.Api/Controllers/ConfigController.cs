@@ -1,47 +1,53 @@
+using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using Orbit.Api.Extensions;
 using Orbit.Domain.Interfaces;
-using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Api.Controllers;
 
 [Authorize]
 [ApiController]
+[ApiVersion(1.0)]
+[ApiVersion(2.0)]
 [Route("api/[controller]")]
 public partial class ConfigController(
     IAppConfigService configService,
-    OrbitDbContext dbContext,
+    IFeatureFlagService featureFlagService,
     ILogger<ConfigController> logger) : ControllerBase
 {
-    public record FeatureFlagDto(string Key, bool Enabled, string? PlanRequirement);
-
     [HttpGet]
-    [ResponseCache(Duration = 300, Location = ResponseCacheLocation.Client)]
+    [ProducesResponseType<AppConfigResponse>(StatusCodes.Status200OK)]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     public async Task<IActionResult> GetConfig(CancellationToken cancellationToken)
     {
         var limits = await configService.GetAllAsync(cancellationToken);
 
-        var featureFlags = await dbContext.AppFeatureFlags
-            .AsNoTracking()
-            .Select(f => new FeatureFlagDto(f.Key, f.Enabled, f.PlanRequirement))
-            .ToListAsync(cancellationToken);
+        var featureFlags = await featureFlagService.ResolveForUserAsync(HttpContext.GetUserId(), cancellationToken);
 
-        var features = featureFlags.ToDictionary(f => f.Key, f => new { f.Enabled, f.PlanRequirement });
+        var features = featureFlags.ToDictionary(f => f.Key, f => new FeatureFlagStateResponse(f.Enabled, f.PlanRequirement));
 
         var minVersion = await configService.GetAsync(
             Orbit.Application.Common.AppConfigKeys.MinSupportedVersion, "0.0.0", cancellationToken);
 
         LogConfigFetched(logger);
-        return Ok(new
-        {
+        return Ok(new AppConfigResponse(
             limits,
             features,
-            settings = new { syncIntervalSeconds = 300, syncMaxBatchSize = 100 },
-            minVersion
-        });
+            new SyncSettingsResponse(SyncIntervalSeconds: 300, SyncMaxBatchSize: 100),
+            minVersion));
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Config fetched")]
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Config fetched")]
     private static partial void LogConfigFetched(ILogger logger);
 }
+
+public sealed record AppConfigResponse(
+    Dictionary<string, string> Limits,
+    Dictionary<string, FeatureFlagStateResponse> Features,
+    SyncSettingsResponse Settings,
+    string MinVersion);
+
+public sealed record FeatureFlagStateResponse(bool Enabled, string? PlanRequirement);
+
+public sealed record SyncSettingsResponse(int SyncIntervalSeconds, int SyncMaxBatchSize);

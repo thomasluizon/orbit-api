@@ -1,3 +1,5 @@
+using Asp.Versioning;
+using Orbit.Api.Mcp;
 using System.IO.Compression;
 using Amazon;
 using Amazon.Runtime;
@@ -37,7 +39,18 @@ public static partial class ServiceCollectionExtensions
             client.Timeout = httpTimeout;
         });
 
-        var storageProvider = builder.Configuration["Storage:Provider"] ?? "Supabase";
+        if (!BuildTimeDocumentGeneration.IsActive)
+        {
+            foreach (var key in new[]
+            {
+                "Storage:S3:Bucket", "Storage:S3:PublicBaseUrl", "Storage:S3:Region",
+                "Storage:S3:AccessKeyId", "Storage:S3:SecretAccessKey",
+            })
+            {
+                RequireConfigValue(builder, key);
+            }
+        }
+
         builder.Services.Configure<S3StorageSettings>(
             builder.Configuration.GetSection(S3StorageSettings.SectionName));
         builder.Services.AddSingleton<IAmazonS3>(_ => new AmazonS3Client(
@@ -48,33 +61,10 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<S3ObjectStorageService>();
         builder.Services.AddScoped<IObjectStorageReadService>(serviceProvider =>
             serviceProvider.GetRequiredService<S3ObjectStorageService>());
-        if (storageProvider.Equals("Supabase", StringComparison.OrdinalIgnoreCase))
-        {
-            var supabaseSecretKey = RequireConfigValue(builder, "Supabase:SecretKey");
-            builder.Services.Configure<SupabaseStorageSettings>(
-                builder.Configuration.GetSection(SupabaseStorageSettings.SectionName));
-            builder.Services.AddHttpClient(SupabaseObjectStorageService.HttpClientName, client =>
-            {
-                client.BaseAddress = new Uri(supabaseUrl);
-                client.DefaultRequestHeaders.Add("apikey", supabaseSecretKey);
-                client.Timeout = httpTimeout;
-            });
-            builder.Services.AddScoped<IObjectStorageService, SupabaseObjectStorageService>();
-        }
-        else if (storageProvider.Equals("S3", StringComparison.OrdinalIgnoreCase))
-        {
-            RequireConfigValue(builder, "Storage:S3:Bucket");
-            RequireConfigValue(builder, "Storage:S3:PublicBaseUrl");
-            RequireConfigValue(builder, "Storage:S3:Region");
-            RequireConfigValue(builder, "Storage:S3:AccessKeyId");
-            RequireConfigValue(builder, "Storage:S3:SecretAccessKey");
-            builder.Services.AddScoped<IObjectStorageService>(serviceProvider =>
-                serviceProvider.GetRequiredService<S3ObjectStorageService>());
-        }
-        else
-        {
-            throw new InvalidOperationException($"Unsupported Storage:Provider '{storageProvider}'.");
-        }
+        builder.Services.AddScoped<IObjectStorageDeletionService>(serviceProvider =>
+            serviceProvider.GetRequiredService<S3ObjectStorageService>());
+        builder.Services.AddScoped<IObjectStorageService>(serviceProvider =>
+            serviceProvider.GetRequiredService<S3ObjectStorageService>());
 
         if (!BuildTimeDocumentGeneration.IsActive)
         {
@@ -186,12 +176,13 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<Orbit.Application.Subscriptions.Services.IPlayReferralCouponConsumer, Orbit.Application.Subscriptions.Services.PlayReferralCouponConsumer>();
     }
 
-    private static void AddPushAndReferralServices(WebApplicationBuilder builder, TimeSpan httpTimeout)
+    internal static void AddPushAndReferralServices(WebApplicationBuilder builder, TimeSpan httpTimeout)
     {
         builder.Services.Configure<VapidSettings>(
             builder.Configuration.GetSection(VapidSettings.SectionName));
         builder.Services.AddHttpClient<IPushNotificationService, PushNotificationService>()
-            .ConfigureHttpClient(c => c.Timeout = httpTimeout);
+            .ConfigureHttpClient(c => c.Timeout = httpTimeout)
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
         builder.Services.AddScoped<IReferralRewardService, StripeCouponRewardService>();
         builder.Services.AddScoped<Orbit.Application.Referrals.Commands.ReferralRepositories>(sp =>
             new Orbit.Application.Referrals.Commands.ReferralRepositories(
@@ -224,7 +215,7 @@ public static partial class ServiceCollectionExtensions
         });
     }
 
-    private static void AddCorsPolicies(WebApplicationBuilder builder)
+    internal static void AddCorsPolicies(WebApplicationBuilder builder)
     {
         var firstPartyOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
             ?? ["http://localhost:3000"];
@@ -237,7 +228,8 @@ public static partial class ServiceCollectionExtensions
             options.AddDefaultPolicy(policy =>
             {
                 policy.WithOrigins(firstPartyOrigins)
-                      .WithHeaders("Authorization", "Content-Type", "Mcp-Session-Id", "Last-Event-ID", "X-Orbit-Event-Origin")
+                      .WithHeaders("Authorization", "Content-Type", "api-version", "Mcp-Session-Id", "Last-Event-ID", "X-Orbit-Event-Origin")
+                      .WithExposedHeaders("api-supported-versions", "api-deprecated-versions")
                       .WithMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
                       .AllowCredentials();
             });
@@ -246,7 +238,8 @@ public static partial class ServiceCollectionExtensions
                 options.AddPolicy("ThirdParty", policy =>
                 {
                     policy.WithOrigins(thirdPartyOrigins)
-                          .WithHeaders("Authorization", "Content-Type", "Mcp-Session-Id")
+                          .WithHeaders("Authorization", "Content-Type", "api-version", "Mcp-Session-Id")
+                          .WithExposedHeaders("api-supported-versions", "api-deprecated-versions")
                           .WithMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS");
                 });
             }
@@ -255,7 +248,8 @@ public static partial class ServiceCollectionExtensions
                 options.AddPolicy("Landing", policy =>
                 {
                     policy.WithOrigins(landingOrigins)
-                          .WithHeaders("Content-Type")
+                          .WithHeaders("Content-Type", "api-version")
+                          .WithExposedHeaders("api-supported-versions", "api-deprecated-versions")
                           .WithMethods("POST", "OPTIONS");
                 });
             }
@@ -297,10 +291,12 @@ public static partial class ServiceCollectionExtensions
             .WithTools<ApiKeyTools>()
             .WithTools<SupportTools>()
             .WithTools<ChecklistTemplateTools>()
-            .WithTools<FeatureTools>();
+            .WithTools<FeatureTools>()
+            .WithTools<FeatureFlagTools>()
+            .WithFeatureFlagAccess();
     }
 
-    private static void AddApiPipeline(WebApplicationBuilder builder)
+    internal static void AddApiPipeline(WebApplicationBuilder builder)
     {
         AddResponseCompression(builder);
 
@@ -327,16 +323,35 @@ public static partial class ServiceCollectionExtensions
             };
         });
 
-        builder.Services.AddOpenApi(options =>
-        {
-            options.AddDocumentTransformer<BearerSecuritySchemeTransformer>();
-            options.AddOperationTransformer((operation, context, _) =>
+        builder.Services.AddApiVersioning(options =>
             {
-                if (context.Description.ActionDescriptor is ControllerActionDescriptor action &&
-                    action.MethodInfo.IsDefined(typeof(ObsoleteAttribute), false))
-                    operation.Deprecated = true;
-                return Task.CompletedTask;
-            });
+                options.ApiVersionReader = new HeaderApiVersionReader("api-version");
+                options.AssumeDefaultVersionWhenUnspecified = true;
+                options.DefaultApiVersion = new ApiVersion(1, 0);
+                options.ReportApiVersions = true;
+                options.UnsupportedApiVersionStatusCode = StatusCodes.Status400BadRequest;
+            })
+            .AddMvc()
+            .AddApiExplorer(options => options.GroupNameFormat = "'v'VVV");
+
+        builder.Services.AddOpenApi("v1", options => ConfigureOrbitOpenApi(options, "1.0"));
+        builder.Services.AddOpenApi("v2", options => ConfigureOrbitOpenApi(options, "2.0"));
+    }
+
+    private static void ConfigureOrbitOpenApi(Microsoft.AspNetCore.OpenApi.OpenApiOptions options, string version)
+    {
+        options.AddDocumentTransformer<BearerSecuritySchemeTransformer>();
+        options.AddDocumentTransformer((document, _, _) =>
+        {
+            document.Info.Version = version;
+            return Task.CompletedTask;
+        });
+        options.AddOperationTransformer((operation, context, _) =>
+        {
+            if (context.Description.ActionDescriptor is ControllerActionDescriptor action &&
+                action.MethodInfo.IsDefined(typeof(ObsoleteAttribute), false))
+                operation.Deprecated = true;
+            return Task.CompletedTask;
         });
     }
 

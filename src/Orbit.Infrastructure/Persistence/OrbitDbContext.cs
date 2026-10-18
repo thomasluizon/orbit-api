@@ -56,6 +56,7 @@ public class OrbitDbContext : DbContext
     public DbSet<AgentAuditLog> AgentAuditLogs => Set<AgentAuditLog>();
     public DbSet<DistributedRateLimitBucket> DistributedRateLimitBuckets => Set<DistributedRateLimitBucket>();
     public DbSet<ChecklistTemplate> ChecklistTemplates => Set<ChecklistTemplate>();
+    public DbSet<AppFeatureFlagAccount> AppFeatureFlagAccounts => Set<AppFeatureFlagAccount>();
     public DbSet<AppFeatureFlag> AppFeatureFlags => Set<AppFeatureFlag>();
     public DbSet<ContentBlock> ContentBlocks => Set<ContentBlock>();
     public DbSet<GoogleCalendarSyncSuggestion> GoogleCalendarSyncSuggestions => Set<GoogleCalendarSyncSuggestion>();
@@ -146,6 +147,13 @@ public class OrbitDbContext : DbContext
         ConfigureAppConfigEntity(modelBuilder);
         ConfigureChecklistTemplateEntity(modelBuilder);
         ConfigureAppFeatureFlagEntity(modelBuilder);
+        modelBuilder.Entity<AppFeatureFlagAccount>(entity =>
+        {
+            entity.HasKey(account => new { account.FlagKey, account.UserId });
+            entity.Property(account => account.FlagKey).HasMaxLength(100);
+            entity.HasOne<AppFeatureFlag>().WithMany().HasForeignKey(account => account.FlagKey).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<User>().WithMany().HasForeignKey(account => account.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
         ConfigureContentBlockEntity(modelBuilder);
         ConfigureFriendshipEntity(modelBuilder);
         ConfigureCheerEntity(modelBuilder);
@@ -602,6 +610,7 @@ public class OrbitDbContext : DbContext
             entity.Property(f => f.PlanRequirement).HasMaxLength(50);
 
             entity.HasData(
+                new { Key = "redesign", Enabled = false, PlanRequirement = (string?)null, Description = (string?)"Serve the redesigned web and Android builds to this account", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "offline_mode", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Enable offline mode with background sync", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "ai_chat", Enabled = true, PlanRequirement = (string?)"Free", Description = (string?)"AI chat assistant", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "ai_summary", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"AI daily summary", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
@@ -691,8 +700,8 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(p => p.AddresseeId);
             entity.Property(p => p.Status).HasConversion<string>().HasMaxLength(32);
             entity.Property(p => p.Cadence).HasConversion<string>().HasMaxLength(32);
-            entity.HasOne<User>().WithMany().HasForeignKey(p => p.RequesterId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne<User>().WithMany().HasForeignKey(p => p.AddresseeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<User>().WithMany().HasForeignKey(p => p.RequesterId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<User>().WithMany().HasForeignKey(p => p.AddresseeId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 
@@ -798,6 +807,7 @@ public class OrbitDbContext : DbContext
 
             entity.Property(u => u.ColorScheme).HasMaxLength(50);
             entity.Property(u => u.Language).HasMaxLength(10);
+            entity.Property(u => u.SignupLanguage).HasMaxLength(10);
             entity.Property(u => u.ThemePreference).HasMaxLength(10);
             entity.Property(u => u.TimeZone).HasMaxLength(100);
 

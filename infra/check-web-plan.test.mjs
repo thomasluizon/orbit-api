@@ -25,15 +25,17 @@ test("allows an unrelated service update", () => {
   assert.deepEqual(checkPlan(fixture("unrelated-update.json")), [])
 })
 
-test("guards the production address and rejects replacement", () => {
-  const update = fixture("web-update.json")
-  update.resource_changes[0].address = "render_web_service.production_web"
-  assert.match(checkPlan(update)[0], /render_web_service\.production_web/)
-  update.resource_changes[0].change.actions = ["delete", "create"]
-  assert.match(checkPlan(update)[0], /replacement/)
-  update.resource_changes[0].change.actions = ["create", "delete"]
-  assert.match(checkPlan(update)[0], /replacement/)
-})
+for (const address of ["render_web_service.production_web", "render_web_service.production_redesign_web"]) {
+  test(`guards ${address} and rejects replacement`, () => {
+    const update = fixture("web-update.json")
+    update.resource_changes[0].address = address
+    assert.ok(checkPlan(update)[0].includes(address))
+    update.resource_changes[0].change.actions = ["delete", "create"]
+    assert.match(checkPlan(update)[0], /replacement/)
+    update.resource_changes[0].change.actions = ["create", "delete"]
+    assert.match(checkPlan(update)[0], /replacement/)
+  })
+}
 
 test("rejects deletion of a web service", () => {
   const deletion = fixture("web-update.json")

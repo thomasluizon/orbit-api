@@ -72,7 +72,7 @@ public class UpdateGoalStatusCommandHandlerTests
     public async Task Handle_Reactivate_SetsStatusToActive()
     {
         var goal = Goal.Create(UserId, "Goal", 100, "km").Value;
-        goal.MarkCompleted();        SetupGoalFound(goal);
+        goal.MarkCompleted(); SetupGoalFound(goal);
 
         var command = new UpdateGoalStatusCommand(UserId, GoalId, GoalStatus.Active);
 

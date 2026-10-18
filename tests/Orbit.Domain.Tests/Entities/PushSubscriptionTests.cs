@@ -13,13 +13,13 @@ public class PushSubscriptionTests
     {
         var result = PushSubscription.Create(
             ValidUserId,
-            "https://push.example.com/sub/123",
+            "https://fcm.googleapis.com/sub/123",
             "BNcR..p256dh-key",
             "auth-secret");
 
         result.IsSuccess.Should().BeTrue();
         result.Value.UserId.Should().Be(ValidUserId);
-        result.Value.Endpoint.Should().Be("https://push.example.com/sub/123");
+        result.Value.Endpoint.Should().Be("https://fcm.googleapis.com/sub/123");
         result.Value.P256dh.Should().Be("BNcR..p256dh-key");
         result.Value.Auth.Should().Be("auth-secret");
     }
@@ -29,7 +29,7 @@ public class PushSubscriptionTests
     {
         var result = PushSubscription.Create(
             Guid.Empty,
-            "https://push.example.com/sub/123",
+            "https://fcm.googleapis.com/sub/123",
             "p256dh-key",
             "auth-secret");
 
@@ -55,7 +55,7 @@ public class PushSubscriptionTests
     {
         var result = PushSubscription.Create(
             ValidUserId,
-            "https://push.example.com/sub/123",
+            "https://fcm.googleapis.com/sub/123",
             "",
             "auth-secret");
 
@@ -68,7 +68,7 @@ public class PushSubscriptionTests
     {
         var result = PushSubscription.Create(
             ValidUserId,
-            "https://push.example.com/sub/123",
+            "https://fcm.googleapis.com/sub/123",
             "p256dh-key",
             "");
 
@@ -92,7 +92,7 @@ public class PushSubscriptionTests
     public void Transport_ReflectsStoredP256dh()
     {
         var fcm = PushSubscription.Create(ValidUserId, "device-token", PushSubscription.FcmSentinel, "auth").Value;
-        var webPush = PushSubscription.Create(ValidUserId, "https://push.example.com/sub/123", "p256dh-key", "auth").Value;
+        var webPush = PushSubscription.Create(ValidUserId, "https://fcm.googleapis.com/sub/123", "p256dh-key", "auth").Value;
 
         fcm.Transport.Should().Be(PushTransport.Fcm);
         webPush.Transport.Should().Be(PushTransport.WebPush);
@@ -106,7 +106,7 @@ public class PushSubscriptionTests
     [InlineData(PushSubscription.FcmSentinel, PushSubscription.FcmSentinel, false)]
     public void MatchesCredentials_WebPush_RequiresBothBrowserKeys(string p256dh, string auth, bool expected)
     {
-        var subscription = PushSubscription.Create(ValidUserId, "https://push.example.com/sub/123", "p256dh-key", "auth-secret").Value;
+        var subscription = PushSubscription.Create(ValidUserId, "https://fcm.googleapis.com/sub/123", "p256dh-key", "auth-secret").Value;
 
         subscription.MatchesCredentials(p256dh, auth).Should().Be(expected);
     }
@@ -125,7 +125,7 @@ public class PushSubscriptionTests
     [Fact]
     public void TransferTo_MovesTheRowToTheNewAccountAsItsNewestDevice()
     {
-        var subscription = PushSubscription.Create(ValidUserId, "https://push.example.com/sub/123", "p256dh-key", "auth-secret").Value;
+        var subscription = PushSubscription.Create(ValidUserId, "https://fcm.googleapis.com/sub/123", "p256dh-key", "auth-secret").Value;
         var registeredAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         typeof(PushSubscription).GetProperty(nameof(PushSubscription.CreatedAtUtc))!.SetValue(subscription, registeredAt);
         var newUserId = Guid.NewGuid();
@@ -135,7 +135,7 @@ public class PushSubscriptionTests
         result.IsSuccess.Should().BeTrue();
         subscription.UserId.Should().Be(newUserId);
         subscription.CreatedAtUtc.Should().BeAfter(registeredAt);
-        subscription.Endpoint.Should().Be("https://push.example.com/sub/123");
+        subscription.Endpoint.Should().Be("https://fcm.googleapis.com/sub/123");
         subscription.P256dh.Should().Be("p256dh-key");
         subscription.Auth.Should().Be("auth-secret");
     }
@@ -143,7 +143,7 @@ public class PushSubscriptionTests
     [Fact]
     public void TransferTo_EmptyUserId_FailsAndKeepsTheOwner()
     {
-        var subscription = PushSubscription.Create(ValidUserId, "https://push.example.com/sub/123", "p256dh-key", "auth-secret").Value;
+        var subscription = PushSubscription.Create(ValidUserId, "https://fcm.googleapis.com/sub/123", "p256dh-key", "auth-secret").Value;
 
         var result = subscription.TransferTo(Guid.Empty);
 

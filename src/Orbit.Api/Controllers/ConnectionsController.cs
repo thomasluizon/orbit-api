@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -8,6 +9,8 @@ using Orbit.Application.Connections;
 namespace Orbit.Api.Controllers;
 
 [ApiController]
+[ApiVersion(1.0)]
+[ApiVersion(2.0)]
 [Authorize]
 [Route("api/connections/notion")]
 public sealed class ConnectionsController(ISender sender, ILogger<ConnectionsController> logger) : ControllerBase

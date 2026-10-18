@@ -121,6 +121,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAiTool, DeleteTagTool>();
         builder.Services.AddScoped<IAiTool, ReorderGoalsTool>();
         builder.Services.AddScoped<IAiTool, GetReferralCodeTool>();
+        builder.Services.AddScoped<IAiTool, ManageFeatureFlagsTool>();
         builder.Services.AddScoped<AiToolRegistry>();
         builder.Services.AddSingleton<ISystemPromptBuilder, SystemPromptBuilder>();
         builder.Services.AddSingleton<IFeatureExplanationService, FeatureExplanationService>();

@@ -383,6 +383,7 @@ public class StreakGoalSyncServiceTests
     {
         unitOfWork ??= CreateUnitOfWork(dbContext);
         var userDateService = Substitute.For<IUserDateService>();
+        userDateService.GetUserTimeZoneAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(TimeZoneInfo.Utc);
         userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
         userDateService.GetUserWeekStartDayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(1);
         var goalCompletionService = new GoalCompletionService(

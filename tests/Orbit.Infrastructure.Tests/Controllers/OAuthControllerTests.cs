@@ -1,13 +1,22 @@
+using Orbit.Infrastructure.Services;
 using System.Reflection;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
+using Hangfire;
+using Hangfire.Common;
+using Hangfire.States;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Controllers;
+using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -26,6 +35,7 @@ using Orbit.Infrastructure.Configuration;
 
 namespace Orbit.Infrastructure.Tests.Controllers;
 
+[Collection("ProcessEnvironment")]
 public class OAuthControllerTests : IDisposable
 {
     private readonly IMediator _mediator = Substitute.For<IMediator>();
@@ -67,6 +77,71 @@ public class OAuthControllerTests : IDisposable
     {
         _authStore.Dispose();
         GC.SuppressFinalize(this);
+    }
+
+    [Fact]
+    public async Task GoogleCallback_RegistrationDoesNotChangeWorkAndUsesEmailProvisioningDefaults()
+    {
+        var traces = new List<string[]>();
+        User? googleUser = null;
+        foreach (var exists in new[] { true, false })
+        {
+            var calls = new List<string>();
+            var users = Substitute.For<IAuthUserStore>();
+            var work = Substitute.For<IUnitOfWork>();
+            work.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>(), Arg.Any<CancellationToken>())
+                .Returns(call => call.Arg<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>()(call.Arg<CancellationToken>()));
+            var sessions = Substitute.For<IAuthSessionService>();
+            var jobs = Substitute.For<IBackgroundJobClient>();
+            var exchange = Substitute.For<IGoogleAuthorizationCodeService>();
+            exchange.ExchangeAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+                .Returns(_ => { calls.Add("exchange"); return Result.Success(new GoogleCodeIdentity("person@example.com", "Person", "google-access", "google-refresh")); });
+            users.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(call =>
+            {
+                calls.Add("upsert");
+                googleUser = exists ? User.Create("Existing", "person@example.com").Value : call.Arg<User>();
+                return googleUser;
+            });
+            work.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(_ => { calls.Add("save"); return Task.FromResult(1); });
+            sessions.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+                .Returns(_ => { calls.Add("session"); return Result.Success(new SessionTokens("access", "refresh")); });
+            jobs.Create(Arg.Any<Job>(), Arg.Any<IState>()).Returns(_ => { calls.Add("enqueue"); return "job"; });
+            var flow = new GoogleSignInFlow(users, work, sessions, new SignupJobDispatcher(jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance));
+            var completion = new CompleteGoogleSignInCommandHandler(flow);
+            var codeHandler = new GoogleCodeAuthCommandHandler(exchange, _mediator);
+            _mediator.Send(Arg.Any<CompleteGoogleSignInCommand>(), Arg.Any<CancellationToken>())
+                .Returns(call => completion.Handle(call.Arg<CompleteGoogleSignInCommand>(), call.Arg<CancellationToken>()));
+            _mediator.Send(Arg.Any<GoogleCodeAuthCommand>(), Arg.Any<CancellationToken>())
+                .Returns(call => codeHandler.Handle(call.Arg<GoogleCodeAuthCommand>(), call.Arg<CancellationToken>()));
+            var pending = CreatePendingGoogleRequest();
+
+            var response = await _controller.GoogleCallback(pending.GoogleState, "code", null, CancellationToken.None);
+
+            response.Should().BeOfType<RedirectResult>().Which.Url.Should().StartWith("https://claude.ai/callback?code=");
+            googleUser!.GoogleAccessToken.Should().BeNull();
+            traces.Add(calls.ToArray());
+        }
+
+        traces[0].Should().Equal(traces[1]);
+        traces[0].Should().Equal("exchange", "upsert", "save", "session", "enqueue");
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        cache.Set("verify:email@example.com", new VerificationEntry("123456", 0, DateTime.UtcNow));
+        var emailStore = Substitute.For<IAuthUserStore>();
+        User? emailUser = null;
+        emailStore.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(call => emailUser = call.Arg<User>());
+        var emailSessions = Substitute.For<IAuthSessionService>();
+        emailSessions.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new SessionTokens("access", "refresh")));
+        var emailWork = Substitute.For<IUnitOfWork>();
+        emailWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Result<LoginResponse>>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<Result<LoginResponse>>>>()(call.Arg<CancellationToken>()));
+        var verify = new VerifyCodeCommandHandler(cache, emailStore, emailWork, emailSessions, new SignupJobDispatcher(Substitute.For<IBackgroundJobClient>(), new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance));
+
+        (await verify.Handle(new VerifyCodeCommand("email@example.com", "123456"), CancellationToken.None)).IsSuccess.Should().BeTrue();
+
+        googleUser!.Language.Should().Be(emailUser!.Language).And.Be("en");
+        googleUser.Handle.Should().Be($"user_{googleUser.Id:N}"[..17]);
+        emailUser.Handle.Should().Be($"user_{emailUser.Id:N}"[..17]);
     }
 
     [Fact]
@@ -434,6 +509,63 @@ public class OAuthControllerTests : IDisposable
         var result = await _controller.SendCode(request, CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Theory]
+    [InlineData(true, null, 400)]
+    [InlineData(true, "rejected", 400)]
+    [InlineData(true, "valid", 200)]
+    [InlineData(false, null, 200)]
+    public async Task SendCode_DeclaredBotProtection_GatesEmailDelivery(bool enabled, string? token, int statusCode)
+    {
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var jobs = Substitute.For<IBackgroundJobClient>();
+        var handler = new SendCodeCommandHandler(cache, jobs);
+        _mediator.Send(Arg.Any<SendCodeCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call => handler.Handle((SendCodeCommand)call[0], CancellationToken.None));
+        var verifier = Substitute.For<ITurnstileVerificationService>();
+        verifier.VerifyAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(call => new TurnstileVerificationResult((string)call[0] == "valid", []));
+        var services = new ServiceCollection();
+        services.AddSingleton(Options.Create(new BotProtectionSettings { Enabled = enabled }));
+        services.AddSingleton(verifier);
+        services.AddSingleton<ILogger<RequireBotProtectionFilter>>(NullLogger<RequireBotProtectionFilter>.Instance);
+        using var provider = services.BuildServiceProvider();
+        var method = typeof(OAuthController).GetMethod(nameof(OAuthController.SendCode))!;
+        var route = method.GetCustomAttribute<HttpPostAttribute>()!.Template;
+        route.Should().Be("/oauth/send-code");
+        var request = JsonSerializer.Deserialize<OAuthController.SendCodeRequest>(
+            JsonSerializer.Serialize(new { email = "oauth-person@example.com", language = "pt-BR", turnstileToken = token }),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+        _controller.HttpContext.Request.Method = "POST";
+        _controller.HttpContext.Request.Path = route;
+        var context = new ActionExecutingContext(
+            new ActionContext(_controller.HttpContext, new RouteData(), new ControllerActionDescriptor { MethodInfo = method }),
+            [], new Dictionary<string, object?> { ["request"] = request }, _controller);
+        IActionResult? actionResult = null;
+        async Task<ActionExecutedContext> InvokeAction()
+        {
+            actionResult = await _controller.SendCode(request, CancellationToken.None);
+            return new ActionExecutedContext(context, context.Filters, _controller) { Result = actionResult };
+        }
+
+        var attribute = method.GetCustomAttribute<RequireBotProtectionAttribute>();
+        if (attribute is null)
+            await InvokeAction();
+        else
+            await ((IAsyncActionFilter)attribute.CreateInstance(provider)).OnActionExecutionAsync(context, InvokeAction);
+
+        var result = (context.Result ?? actionResult).Should().BeAssignableTo<ObjectResult>().Subject;
+        result.StatusCode.Should().Be(statusCode);
+        var delivered = statusCode == 200;
+        cache.TryGetValue("verify:oauth-person@example.com", out _).Should().Be(delivered);
+        jobs.Received(delivered ? 1 : 0).Create(Arg.Any<Job>(), Arg.Any<IState>());
+        if (delivered)
+            await _mediator.Received(1).Send(Arg.Is<SendCodeCommand>(command => command.Language == "pt-BR"), Arg.Any<CancellationToken>());
+        else
+            await _mediator.DidNotReceive().Send(Arg.Any<SendCodeCommand>(), Arg.Any<CancellationToken>());
+        await verifier.Received(enabled && token is not null ? 1 : 0)
+            .VerifyAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

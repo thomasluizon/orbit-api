@@ -56,7 +56,12 @@ public class ResolveClarificationRequestValidatorTests
 
     [Theory]
     [InlineData("not json at all")]
-    [InlineData("[]")]    [InlineData("\"a string\"")]    [InlineData("42")]    [InlineData("null")]    [InlineData("true")]    public void NonObjectValue_Fails(string value)
+    [InlineData("[]")]
+    [InlineData("\"a string\"")]
+    [InlineData("42")]
+    [InlineData("null")]
+    [InlineData("true")]
+    public void NonObjectValue_Fails(string value)
     {
         var result = _validator.Validate(new ResolveClarificationRequest(value));
         result.IsValid.Should().BeFalse();

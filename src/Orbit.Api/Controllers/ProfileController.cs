@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using MediatR;
@@ -15,6 +16,8 @@ namespace Orbit.Api.Controllers;
 
 [Authorize]
 [ApiController]
+[ApiVersion(1.0)]
+[ApiVersion(2.0)]
 [Route("api/[controller]")]
 public partial class ProfileController(
     IMediator mediator,

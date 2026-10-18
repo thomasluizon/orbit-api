@@ -27,6 +27,12 @@ FluentValidation runs via the MediatR validation pipeline. Controllers do NOT ca
 
 Dev-only. `BearerSecuritySchemeTransformer` adds the JWT bearer scheme. New endpoints show up automatically — annotate with `[ProducesResponseType(StatusCodes.Status200OK)]` etc. to document response shapes.
 
+## API versioning
+
+Controllers support v1 and v2 through the `api-version` request header. An omitted header selects v1. Keep the existing routes and declare supported versions on each controller. OpenAPI generates `openapi.json` for v1 and `openapi_v2.json` for v2; the breaking-change gate compares the committed v1 contract.
+
+When a change would break an old client, add the new shape under v2 with separate DTOs and `[MapToApiVersion]` actions, and preserve v1. Shared handlers and DTOs must remain compatible with both versions. Retire v1 only after every live client uses v2, enforcing the carrying client build through the `MinSupportedVersion` gate and its release preconditions in `AGENTS.md`.
+
 ## Middleware (already wired in `Extensions/WebApplicationExtensions.cs`)
 
 - `SecurityHeadersMiddleware` — nosniff, DENY, referrer-policy, XSS headers on every response.

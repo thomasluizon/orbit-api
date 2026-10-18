@@ -11,3 +11,8 @@ public interface IObjectStorageReadService
 {
     Task<string> CreateReadUrlAsync(string objectKey, CancellationToken cancellationToken = default);
 }
+
+public interface IObjectStorageDeletionService
+{
+    Task DeleteUserObjectsAsync(Guid userId, CancellationToken cancellationToken = default);
+}

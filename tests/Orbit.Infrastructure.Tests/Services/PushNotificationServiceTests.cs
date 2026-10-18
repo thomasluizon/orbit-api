@@ -99,12 +99,52 @@ public sealed class PushNotificationServiceTests : IDisposable
         (await _dbContext.PushSubscriptions.CountAsync()).Should().Be(1);
     }
 
-    [Fact]
-    public async Task SendToUserAsync_WebPushDelivered_KeepsSubscription()
+    [Theory]
+    [InlineData("https://example.com/push")]
+    [InlineData("https://fcm.googleapis.com.example.com/push")]
+    [InlineData("https://web.push.apple.com.example.com/push")]
+    [InlineData("https://cloud.notify.windows.com.example.com/push")]
+    [InlineData("https://127.0.0.1/push")]
+    [InlineData("http://fcm.googleapis.com/push")]
+    public async Task SendToUserAsync_UnsupportedStoredEndpoint_SkipsDeliveryAndKeepsSubscription(string endpoint)
     {
-        await SeedWebPushSubscription("https://push.example.com/sub/live");
+        var subscription = await SeedWebPushSubscription("https://fcm.googleapis.com/fcm/send/legacy");
+        _dbContext.Entry(subscription).Property(s => s.Endpoint).CurrentValue = endpoint;
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
 
         var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Created));
+        var service = CreateService(handler);
+
+        var delivered = await service.TrySendToUserAsync(_userId, "Title", "Body");
+
+        delivered.Should().BeFalse();
+        handler.CallCount.Should().Be(0);
+        (await _dbContext.PushSubscriptions.CountAsync()).Should().Be(1);
+    }
+
+    /// <summary>
+    /// Sources: https://web.dev/articles/codelab-notifications-push-server,
+    /// https://mozilla-services.github.io/autopush-rs/http.html,
+    /// https://github.com/andreinwald/webpush-ios-example#subscription-and-saving-token, and
+    /// WNS: https://learn.microsoft.com/en-us/windows/apps/develop/notifications/push-notifications/wns-overview; Edge: https://learn.microsoft.com/en-us/answers/questions/5593523/why-notifications-fail-in-azure-notification-hub-a.
+    /// </summary>
+    [Theory]
+    [InlineData("https://fcm.googleapis.com/fcm/send/cpqAgzGzkzQ:APA9...")]
+    [InlineData("https://updates.push.services.mozilla.com/wpush/v1/...")]
+    [InlineData("https://web.push.apple.com/QGuQyavXutnMH...")]
+    [InlineData("https://cloud.notify.windows.com/?token=test-channel")]
+    [InlineData("https://wns2-sg2p.notify.windows.com/w/?token=...")]
+    public async Task SendToUserAsync_WebPushDelivered_KeepsSubscription(string endpoint)
+    {
+        await SeedWebPushSubscription(endpoint);
+
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            request.Method.Should().Be(HttpMethod.Post);
+            request.RequestUri.Should().Be(new Uri(endpoint));
+            return new HttpResponseMessage(HttpStatusCode.Created);
+        });
         var service = CreateService(handler);
 
         var delivered = await service.TrySendToUserAsync(_userId, "Title", "Body", "/habits");
@@ -114,12 +154,56 @@ public sealed class PushNotificationServiceTests : IDisposable
         (await _dbContext.PushSubscriptions.CountAsync()).Should().Be(1);
     }
 
+    [Fact]
+    public async Task SendToUserAsync_MixedSupportedAndUnsupportedStoredEndpoints_SendsOnlyToProvider()
+    {
+        const string supportedEndpoint = "https://fcm.googleapis.com/fcm/send/live";
+        var legacy = await SeedWebPushSubscription("https://fcm.googleapis.com/fcm/send/legacy");
+        _dbContext.Entry(legacy).Property(s => s.Endpoint).CurrentValue = "https://example.com/push";
+        await _dbContext.SaveChangesAsync();
+        await SeedWebPushSubscription(supportedEndpoint);
+        _dbContext.ChangeTracker.Clear();
+        var destinations = new List<Uri>();
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            destinations.Add(request.RequestUri!);
+            return new HttpResponseMessage(HttpStatusCode.Created);
+        });
+
+        var delivered = await CreateService(handler).TrySendToUserAsync(_userId, "Title", "Body");
+
+        delivered.Should().BeTrue();
+        destinations.Should().ContainSingle().Which.Should().Be(new Uri(supportedEndpoint));
+        (await _dbContext.PushSubscriptions.CountAsync()).Should().Be(2);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.MovedPermanently)]
+    [InlineData(HttpStatusCode.Found)]
+    [InlineData(HttpStatusCode.SeeOther)]
+    [InlineData(HttpStatusCode.TemporaryRedirect)]
+    [InlineData(HttpStatusCode.PermanentRedirect)]
+    public async Task SendToUserAsync_RedirectResponse_DoesNotRetryOrReportDelivery(HttpStatusCode status)
+    {
+        await SeedWebPushSubscription("https://fcm.googleapis.com/fcm/send/redirect");
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(status)
+        {
+            Headers = { Location = new Uri("https://example.com/redirected") }
+        });
+
+        var delivered = await CreateService(handler).TrySendToUserAsync(_userId, "Title", "Body");
+
+        delivered.Should().BeFalse();
+        handler.CallCount.Should().Be(1);
+        (await _dbContext.PushSubscriptions.CountAsync()).Should().Be(1);
+    }
+
     [Theory]
     [InlineData(HttpStatusCode.Gone)]
     [InlineData(HttpStatusCode.NotFound)]
     public async Task SendToUserAsync_WebPushSubscriptionDead_PrunesSubscription(HttpStatusCode deadStatus)
     {
-        await SeedWebPushSubscription("https://push.example.com/sub/dead");
+        await SeedWebPushSubscription("https://fcm.googleapis.com/sub/dead");
 
         var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(deadStatus));
         var service = CreateService(handler);
@@ -133,7 +217,7 @@ public sealed class PushNotificationServiceTests : IDisposable
     [Fact]
     public async Task SendToUserAsync_WebPushTransientFailure_KeepsSubscriptionAndDoesNotThrow()
     {
-        await SeedWebPushSubscription("https://push.example.com/sub/flaky");
+        await SeedWebPushSubscription("https://fcm.googleapis.com/sub/flaky");
 
         var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError));
         var service = CreateService(handler);
@@ -148,8 +232,8 @@ public sealed class PushNotificationServiceTests : IDisposable
     [Fact]
     public async Task SendToUserAsync_MixedLiveAndDeadWebPush_PrunesOnlyDeadSubscription()
     {
-        const string liveEndpoint = "https://push.example.com/sub/keep";
-        const string deadEndpoint = "https://push.example.com/sub/drop";
+        const string liveEndpoint = "https://fcm.googleapis.com/sub/keep";
+        const string deadEndpoint = "https://fcm.googleapis.com/sub/drop";
         await SeedWebPushSubscription(liveEndpoint);
         await SeedWebPushSubscription(deadEndpoint);
 
@@ -169,7 +253,7 @@ public sealed class PushNotificationServiceTests : IDisposable
     [Fact]
     public async Task SendToUserAsync_WebPushTransientThenSuccess_RetriesAndKeepsSubscription()
     {
-        await SeedWebPushSubscription("https://push.example.com/sub/retry");
+        await SeedWebPushSubscription("https://fcm.googleapis.com/sub/retry");
 
         var calls = 0;
         var handler = new StubHttpMessageHandler(_ =>
@@ -185,7 +269,7 @@ public sealed class PushNotificationServiceTests : IDisposable
     [Fact]
     public async Task SendToUserAsync_WebPushTransportErrorThenSuccess_RetriesAndKeepsSubscription()
     {
-        await SeedWebPushSubscription("https://push.example.com/sub/transport");
+        await SeedWebPushSubscription("https://fcm.googleapis.com/sub/transport");
 
         var calls = 0;
         var handler = new StubHttpMessageHandler(_ => calls++ == 0
@@ -202,7 +286,7 @@ public sealed class PushNotificationServiceTests : IDisposable
     [Fact]
     public async Task SendToUserAsync_WebPushSubscriptionGone_MarksStaleWithoutRetry()
     {
-        await SeedWebPushSubscription("https://push.example.com/sub/gone");
+        await SeedWebPushSubscription("https://fcm.googleapis.com/sub/gone");
 
         var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Gone));
         var service = CreateService(handler);
@@ -216,7 +300,7 @@ public sealed class PushNotificationServiceTests : IDisposable
     [Fact]
     public async Task SendToUserAsync_WebPushNonTransientStatus_DoesNotRetryOrPruneSubscription()
     {
-        await SeedWebPushSubscription("https://push.example.com/sub/rejected");
+        await SeedWebPushSubscription("https://fcm.googleapis.com/sub/rejected");
 
         var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.BadRequest));
         var service = CreateService(handler);
@@ -230,7 +314,7 @@ public sealed class PushNotificationServiceTests : IDisposable
     [Fact]
     public async Task SendToUserAsync_HostileOverlongContent_DeliversPayloadUnderPlatformLimit()
     {
-        await SeedWebPushSubscription("https://push.example.com/sub/hostile");
+        await SeedWebPushSubscription("https://fcm.googleapis.com/sub/hostile");
 
         var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Created));
         var service = CreateService(handler);

@@ -16,6 +16,7 @@ public partial class AgentOperationExecutor(
     IAgentStepUpAuthorizationBridge stepUpAuthorizationBridge,
     AiToolRegistry toolRegistry,
     IPendingOperationChangePreviewer changePreviewer,
+    IPendingAgentOperationStore pendingOperationStore,
     IUnitOfWork unitOfWork,
     ILogger<AgentOperationExecutor> logger) : IAgentOperationExecutor
 {
@@ -209,22 +210,35 @@ public partial class AgentOperationExecutor(
         if (pending is not null && execution.Request.Surface == AgentExecutionSurface.Chat
             && execution.Request.IncludeChangePreview)
         {
+            PendingOperationChangePreview? preview = null;
             try
             {
-                var preview = await changePreviewer.PreviewAsync(
+                preview = await changePreviewer.PreviewAsync(
                     execution.Request.UserId, execution.Operation.Id, execution.Arguments, cancellationToken);
-                if (preview is not null)
-                    pending = pending with
-                    {
-                        Changes = preview.Changes,
-                        ChangeTargetCount = preview.ChangeTargetCount,
-                        Items = preview.Items,
-                        PreviewFingerprint = preview.PreviewFingerprint
-                    };
             }
             catch (Exception exception)
             {
                 logger.LogWarning(exception, "Pending operation change preview failed for {OperationId}", execution.Operation.Id);
+            }
+
+            if (preview is not null)
+            {
+                if (!string.IsNullOrWhiteSpace(preview.PreviewFingerprint))
+                {
+                    var argumentsJson = execution.Arguments.GetRawText();
+                    var operationFingerprint = AgentOperationFingerprint.Compute(execution.Operation.Id, argumentsJson);
+                    if (!pendingOperationStore.Revise(execution.Request.UserId, pending.Id, operationFingerprint,
+                        argumentsJson, operationFingerprint, preview.PreviewFingerprint))
+                        throw new InvalidOperationException("The pending operation preview binding could not be persisted.");
+                }
+
+                pending = pending with
+                {
+                    Changes = preview.Changes,
+                    ChangeTargetCount = preview.ChangeTargetCount,
+                    Items = preview.Items,
+                    PreviewFingerprint = preview.PreviewFingerprint
+                };
             }
         }
 

@@ -20,6 +20,12 @@ public class UserDateService(
 
     private static string CacheKey(Guid userId) => $"user-tz:{userId}";
 
+    public async Task<TimeZoneInfo> GetUserTimeZoneAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var preferences = await GetPreferencesAsync(userId, cancellationToken);
+        return TimeZoneHelper.FindTimeZone(preferences.TimeZone, userId: userId);
+    }
+
     public async Task<DateOnly> GetUserTodayAsync(Guid userId, CancellationToken cancellationToken = default)
     {
         var preferences = await GetPreferencesAsync(userId, cancellationToken);

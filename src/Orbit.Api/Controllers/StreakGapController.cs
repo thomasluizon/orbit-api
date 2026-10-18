@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using System.Text.Json.Serialization;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -14,6 +15,8 @@ public sealed record RepairStreakGapRequest(IReadOnlyCollection<DateOnly> Dates)
 
 [Authorize]
 [ApiController]
+[ApiVersion(1.0)]
+[ApiVersion(2.0)]
 [Route("api/gamification/streak")]
 public class StreakGapController(ISender sender) : ControllerBase
 {

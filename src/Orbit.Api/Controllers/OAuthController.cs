@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using System.Text.Json;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -7,6 +8,7 @@ using Orbit.Api.Extensions;
 using Orbit.Api.OAuth;
 using Orbit.Api.RateLimiting;
 using Orbit.Application.Auth.Commands;
+using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
@@ -15,6 +17,8 @@ using Orbit.Infrastructure.Configuration;
 namespace Orbit.Api.Controllers;
 
 [ApiController]
+[ApiVersion(1.0)]
+[ApiVersion(2.0)]
 [AllowAnonymous]
 #pragma warning disable S6931 // OAuth/MCP well-known URLs follow protocol-mandated paths with no common prefix
 #pragma warning disable S107 // OAuth controller legitimately requires many DI dependencies
@@ -142,9 +146,12 @@ public partial class OAuthController(
                 : "Google sign-in is unavailable. Use email instead.",
             _ => null
         };
+        var botProtection = configuration.GetSection(BotProtectionSettings.SectionName).Get<BotProtectionSettings>()
+            ?? new BotProtectionSettings();
         var html = OAuthLoginPage.Render(
             client_id, redirect_uri, state,
-            code_challenge, code_challenge_method, nonce, errorMessage, language);
+            code_challenge, code_challenge_method, nonce, errorMessage, language,
+            botProtection.Enabled, botProtection.SiteKey);
 
         return Content(html, "text/html");
     }
@@ -165,10 +172,11 @@ public partial class OAuthController(
         return File(asset.Value.Content, asset.Value.ContentType);
     }
 
-    public record SendCodeRequest(string Email, string? Language = "en");
+    public record SendCodeRequest(string Email, string? Language = "en", string? TurnstileToken = null);
 
     [HttpPost("/oauth/send-code")]
     [DistributedRateLimit("auth")]
+    [RequireBotProtection]
     public async Task<IActionResult> SendCode([FromBody] SendCodeRequest request, CancellationToken ct)
     {
         var result = await mediator.Send(new SendCodeCommand(request.Email, request.Language ?? "en"), ct);

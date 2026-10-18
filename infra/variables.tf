@@ -24,28 +24,6 @@ variable "production_postgres_ip_allow_list" {
   default = []
 }
 
-variable "production_storage_provider" {
-  description = "Production upload storage provider."
-  type        = string
-  default     = "Supabase"
-
-  validation {
-    condition     = contains(["Supabase", "S3"], var.production_storage_provider)
-    error_message = "production_storage_provider must be Supabase or S3."
-  }
-}
-
-variable "staging_storage_provider" {
-  description = "Staging upload storage provider."
-  type        = string
-  default     = "Supabase"
-
-  validation {
-    condition     = contains(["Supabase", "S3"], var.staging_storage_provider)
-    error_message = "staging_storage_provider must be Supabase or S3."
-  }
-}
-
 variable "production_ses_dlq_alert_email" {
   description = "Email recipient for production SES dead-letter queue alarms. An empty value leaves the operations topic unsubscribed."
   type        = string
@@ -65,6 +43,16 @@ variable "production_web_digest" {
   validation {
     condition     = can(regex("^sha256:[0-9a-f]{64}$", var.production_web_digest))
     error_message = "production_web_digest must be a sha256 image digest."
+  }
+}
+
+variable "production_redesign_web_digest" {
+  description = "Published GHCR digest built from orbit-ui-mobile redesign/main for initial production redesign creation."
+  type        = string
+
+  validation {
+    condition     = can(regex("^sha256:[0-9a-f]{64}$", var.production_redesign_web_digest))
+    error_message = "production_redesign_web_digest must be a sha256 image digest."
   }
 }
 

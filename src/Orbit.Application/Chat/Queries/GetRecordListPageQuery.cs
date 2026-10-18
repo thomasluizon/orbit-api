@@ -20,41 +20,41 @@ public class GetRecordListPageQueryHandler(IMediator mediator) : IRequestHandler
         switch (request.Kind)
         {
             case "notifications":
-            {
-                var result = await mediator.Send(new GetNotificationsQuery(request.UserId, offset, RecordListCardBuilder.PageSize), cancellationToken);
-                if (result.IsFailure)
-                    return result.PropagateError<RecordListCard>();
-                return offset >= result.Value.TotalCount || result.Value.Items.Count == 0
-                    ? Result.Failure<RecordListCard>("Record page not found.")
-                    : Result.Success(RecordListCardBuilder.BuildNotificationPage(result.Value, request.UserId, offset));
-            }
+                {
+                    var result = await mediator.Send(new GetNotificationsQuery(request.UserId, offset, RecordListCardBuilder.PageSize), cancellationToken);
+                    if (result.IsFailure)
+                        return result.PropagateError<RecordListCard>();
+                    return offset >= result.Value.TotalCount || result.Value.Items.Count == 0
+                        ? Result.Failure<RecordListCard>("Record page not found.")
+                        : Result.Success(RecordListCardBuilder.BuildNotificationPage(result.Value, request.UserId, offset));
+                }
             case "tags":
-            {
-                var result = await mediator.Send(new GetTagsQuery(request.UserId), cancellationToken);
-                if (result.IsFailure)
-                    return result.PropagateError<RecordListCard>();
-                return offset >= result.Value.Count
-                    ? Result.Failure<RecordListCard>("Record page not found.")
-                    : Result.Success(RecordListCardBuilder.BuildTags(result.Value, request.UserId, offset));
-            }
+                {
+                    var result = await mediator.Send(new GetTagsQuery(request.UserId), cancellationToken);
+                    if (result.IsFailure)
+                        return result.PropagateError<RecordListCard>();
+                    return offset >= result.Value.Count
+                        ? Result.Failure<RecordListCard>("Record page not found.")
+                        : Result.Success(RecordListCardBuilder.BuildTags(result.Value, request.UserId, offset));
+                }
             case "templates":
-            {
-                var result = await mediator.Send(new GetChecklistTemplatesQuery(request.UserId), cancellationToken);
-                if (result.IsFailure)
-                    return result.PropagateError<RecordListCard>();
-                return offset >= result.Value.Count
-                    ? Result.Failure<RecordListCard>("Record page not found.")
-                    : Result.Success(RecordListCardBuilder.BuildTemplates(result.Value, request.UserId, offset));
-            }
+                {
+                    var result = await mediator.Send(new GetChecklistTemplatesQuery(request.UserId), cancellationToken);
+                    if (result.IsFailure)
+                        return result.PropagateError<RecordListCard>();
+                    return offset >= result.Value.Count
+                        ? Result.Failure<RecordListCard>("Record page not found.")
+                        : Result.Success(RecordListCardBuilder.BuildTemplates(result.Value, request.UserId, offset));
+                }
             case "keys":
-            {
-                var result = await mediator.Send(new GetApiKeysQuery(request.UserId), cancellationToken);
-                if (result.IsFailure)
-                    return result.PropagateError<RecordListCard>();
-                return offset >= result.Value.Count
-                    ? Result.Failure<RecordListCard>("Record page not found.")
-                    : Result.Success(RecordListCardBuilder.BuildKeys(result.Value, TimeProvider.System.GetUtcNow().UtcDateTime, request.UserId, offset));
-            }
+                {
+                    var result = await mediator.Send(new GetApiKeysQuery(request.UserId), cancellationToken);
+                    if (result.IsFailure)
+                        return result.PropagateError<RecordListCard>();
+                    return offset >= result.Value.Count
+                        ? Result.Failure<RecordListCard>("Record page not found.")
+                        : Result.Success(RecordListCardBuilder.BuildKeys(result.Value, TimeProvider.System.GetUtcNow().UtcDateTime, request.UserId, offset));
+                }
             default:
                 return Result.Failure<RecordListCard>("Record page not found.");
         }

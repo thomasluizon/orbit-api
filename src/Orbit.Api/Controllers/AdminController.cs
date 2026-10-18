@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -9,6 +10,8 @@ using Orbit.Application.Marketing.Commands;
 namespace Orbit.Api.Controllers;
 
 [ApiController]
+[ApiVersion(1.0)]
+[ApiVersion(2.0)]
 [Route("api/admin")]
 [Authorize(Policy = AdminPolicy.Name)]
 public partial class AdminController(IMediator mediator, ILogger<AdminController> logger) : ControllerBase

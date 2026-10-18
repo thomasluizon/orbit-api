@@ -94,7 +94,7 @@ resource "cloudflare_dns_record" "existing" {
   content  = each.value.content
   priority = try(each.value.priority, null)
   ttl      = 1
-  proxied  = false
+  proxied  = each.key == "app_cname"
 }
 
 resource "cloudflare_dns_record" "staging" {

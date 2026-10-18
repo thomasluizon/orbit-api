@@ -176,8 +176,16 @@ public interface IDistributedRateLimitService
 
 public interface IFeatureFlagService
 {
+    IReadOnlyList<ResolvedFeatureFlag> ResolveForUser(Guid userId);
+    Task<IReadOnlyList<ResolvedFeatureFlag>> ResolveForUserAsync(Guid userId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyDictionary<Guid, IReadOnlyList<string>>> GetEnabledKeysForUsersAsync(
+        IReadOnlyCollection<Orbit.Domain.Entities.User> users, CancellationToken cancellationToken = default);
+    void Invalidate();
+
     Task<IReadOnlyList<string>> GetEnabledKeysForUserAsync(
         Guid userId,
         CancellationToken cancellationToken = default,
         bool forceRefresh = false);
 }
+
+public sealed record ResolvedFeatureFlag(string Key, bool Enabled, string? PlanRequirement);

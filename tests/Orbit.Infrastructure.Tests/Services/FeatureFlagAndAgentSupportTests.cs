@@ -1,3 +1,4 @@
+using HttpContextExtensions = Orbit.Api.Extensions.HttpContextExtensions;
 using System.Net;
 using System.Security.Claims;
 using System.Text.Json;
@@ -10,6 +11,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Api.Extensions;
 using Orbit.Api.RateLimiting;
@@ -39,6 +41,32 @@ public class FeatureFlagAndAgentSupportTests : IDisposable
     {
         _dbContext.Dispose();
         GC.SuppressFinalize(this);
+    }
+
+    [Fact]
+    public async Task FeatureFlagService_ResolvesTargetsAndPlansAndInvalidatesWrites()
+    {
+        var accountA = User.Create("A", "a@example.com").Value;
+        var accountB = User.Create("B", "b@example.com").Value;
+        accountA.StartTrial(DateTime.UtcNow.AddDays(-1));
+        _dbContext.Users.AddRange(accountA, accountB);
+        _dbContext.AppFeatureFlags.AddRange(AppFeatureFlag.Create("targeted", false), AppFeatureFlag.Create("paid", false, "Pro"));
+        _dbContext.AppFeatureFlagAccounts.AddRange(AppFeatureFlagAccount.Create("targeted", accountA.Id), AppFeatureFlagAccount.Create("paid", accountA.Id));
+        await _dbContext.SaveChangesAsync();
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var service = new FeatureFlagService(_dbContext, cache);
+
+        (await service.GetEnabledKeysForUserAsync(accountA.Id)).Should().Equal("targeted");
+        (await service.GetEnabledKeysForUserAsync(accountB.Id)).Should().BeEmpty();
+        service.ResolveForUser(accountA.Id).Should().Equal(await service.ResolveForUserAsync(accountA.Id));
+        accountA.SetStripeSubscription("sub_paid", DateTime.UtcNow.AddDays(30), SubscriptionInterval.Monthly);
+        await _dbContext.SaveChangesAsync();
+        (await service.GetEnabledKeysForUserAsync(accountA.Id)).Should().Equal("paid", "targeted");
+
+        _dbContext.AppFeatureFlagAccounts.RemoveRange(_dbContext.AppFeatureFlagAccounts);
+        await _dbContext.SaveChangesAsync();
+        service.Invalidate();
+        (await service.GetEnabledKeysForUserAsync(accountA.Id)).Should().BeEmpty();
     }
 
     [Fact]
@@ -152,6 +180,7 @@ public class FeatureFlagAndAgentSupportTests : IDisposable
         var serviceProvider = Substitute.For<IServiceProvider>();
         serviceProvider.GetService(typeof(IDistributedRateLimitService)).Returns(rateLimitService);
         serviceProvider.GetService(typeof(IAuthSessionService)).Returns(Substitute.For<IAuthSessionService>());
+        serviceProvider.GetService(typeof(IOptions<BffForwardingSettings>)).Returns(Options.Create(new BffForwardingSettings()));
         serviceProvider.GetService(typeof(ILogger<DistributedRateLimitFilter>)).Returns(logger);
         var attribute = new DistributedRateLimitAttribute("chat");
 
@@ -168,7 +197,7 @@ public class FeatureFlagAndAgentSupportTests : IDisposable
         var logger = Substitute.For<ILogger<DistributedRateLimitFilter>>();
         rateLimitService.TryAcquireAsync("chat", $"user:{userId}", Arg.Any<CancellationToken>())
             .Returns(new DistributedRateLimitDecision(true, 20, 1, DateTime.UtcNow.AddSeconds(30)));
-        var filter = new DistributedRateLimitFilter("chat", rateLimitService, Substitute.For<IAuthSessionService>(), logger);
+        var filter = new DistributedRateLimitFilter("chat", rateLimitService, Substitute.For<IAuthSessionService>(), Options.Create(new BffForwardingSettings()), logger);
         var context = CreateActionExecutingContext(new DefaultHttpContext
         {
             User = new ClaimsPrincipal(new ClaimsIdentity(
@@ -196,7 +225,7 @@ public class FeatureFlagAndAgentSupportTests : IDisposable
         var retryAt = DateTime.UtcNow.AddSeconds(15);
         rateLimitService.TryAcquireAsync("auth", "ip:203.0.113.10", Arg.Any<CancellationToken>())
             .Returns(new DistributedRateLimitDecision(false, 5, 5, retryAt));
-        var filter = new DistributedRateLimitFilter("auth", rateLimitService, Substitute.For<IAuthSessionService>(), logger);
+        var filter = new DistributedRateLimitFilter("auth", rateLimitService, Substitute.For<IAuthSessionService>(), Options.Create(new BffForwardingSettings()), logger);
         var httpContext = new DefaultHttpContext();
         httpContext.Connection.RemoteIpAddress = IPAddress.Parse("203.0.113.10");
         httpContext.TraceIdentifier = "req_rate_limited";

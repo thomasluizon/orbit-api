@@ -18,20 +18,44 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Select mutation shards
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+      has-shards: ${{ steps.select.outputs.has-shards }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Test shard selection
+        run: node --test .github/scripts/mutation-matrix.test.mjs
+      - name: Select changed projects
+        id: select
+        env:
+          BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
+        run: |
+          set -o pipefail
+          if [ -n "$BASE_REF" ]; then
+            git diff --name-only --no-renames -z --end-of-options "$BASE_REF...HEAD" \
+              | node .github/scripts/mutation-matrix.mjs --stdin >> "$GITHUB_OUTPUT"
+          else
+            node .github/scripts/mutation-matrix.mjs >> "$GITHUB_OUTPUT"
+          fi
+
   mutation:
     name: Mutation (${{ matrix.shard || matrix.project }})
+    needs: changes
+    if: needs.changes.outputs.has-shards == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
     strategy:
       fail-fast: false
-      matrix:
-        include: >-
-          ${{ fromJSON(github.event_name == 'pull_request' &&
-          '[{"project":"domain"},{"project":"application"},{"project":"infrastructure"}]' ||
-          '[{"project":"domain","shard":"domain-habit-freeze","mutate":["**/Entities/Habit.cs","**/Entities/StreakFreeze.cs"]},
-          {"project":"domain","shard":"domain-user-invariants","mutate":["**/Entities/User.cs","**/Entities/HabitInvariants.cs"]},
-          {"project":"application"},{"project":"infrastructure"}]') }}
+      matrix: ${{ fromJSON(needs.changes.outputs.matrix) }}
 
     steps:
       - uses: actions/checkout@v7
@@ -51,9 +75,18 @@ jobs:
 
       - name: Run Stryker (PR changed in-scope files only)
         if: github.event_name == 'pull_request'
+        env:
+          MUTATE_FILES: ${{ matrix.mutate && join(matrix.mutate, ' ') || '' }}
         run: |
           git fetch origin ${{ github.base_ref }}
-          dotnet stryker -f stryker-config.${{ matrix.project }}.json --since:origin/${{ github.base_ref }}
+          concurrency=$(nproc)
+          echo "Stryker concurrency: $concurrency"
+          read -r -a files <<< "$MUTATE_FILES"
+          args=()
+          for file in "${files[@]}"; do
+            args+=(--mutate "$file")
+          done
+          dotnet stryker -f stryker-config.${{ matrix.project }}.json --since:origin/${{ github.base_ref }} --concurrency "$concurrency" "${args[@]}"
 
       - name: Run Stryker (nightly full in-scope)
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

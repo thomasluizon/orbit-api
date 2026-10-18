@@ -17,7 +17,7 @@ The backend for **Orbit** -- an AI-powered habit tracker. Provides a REST API fo
 | Email | [Amazon SES](https://aws.amazon.com/ses/) (verification codes, contacts) |
 | Push | [Firebase Admin SDK](https://firebase.google.com/docs/admin/setup) (FCM, native Android) + [WebPush](https://github.com/nichelaboratory/Lib.Net.Http.WebPush) (VAPID, browsers) |
 | Payments | [Stripe](https://stripe.com) (web) + Google Play Billing (native Android) |
-| Storage | [Supabase](https://supabase.com) object storage (`uploads` bucket) |
+| Storage | Private [Amazon S3](https://aws.amazon.com/s3/) uploads bucket |
 | Password/Token Hashing | BCrypt |
 | Observability | [Sentry](https://sentry.io) |
 | API Docs | [Scalar](https://scalar.com) (dev only) |
@@ -82,7 +82,8 @@ Settings are bound from `appsettings.json`, with secrets overridden in `appsetti
 | `ConnectionStrings:DefaultConnection` / `SessionConnection` | PostgreSQL (direct + session pooler) |
 | `AI:ApiKey` / `AI:Model` / `AI:SubTaskModel` / `AI:BaseUrl` | OpenAI credentials and models (`BaseUrl` defaults to `https://api.openai.com/v1`) |
 | `Jwt:SecretKey` / `Issuer` / `Audience` | JWT signing and claims |
-| `Supabase:Url` / `AnonKey` / `SecretKey` / `Bucket` | Supabase auth tokens + object storage |
+| `Supabase:Url` / `AnonKey` | Supabase auth tokens |
+| `Storage:S3:Bucket` / `Region` / `PublicBaseUrl` / `AccessKeyId` / `SecretAccessKey` | Required S3 upload, read, and erasure configuration |
 | `Ses:AccessKeyId` / `SecretAccessKey` / `FromEmail` | Transactional email |
 | `Vapid:PublicKey` / `PrivateKey` / `Subject` | Web Push (VAPID) |
 | `Encryption:Key` | At-rest field encryption |

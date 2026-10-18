@@ -1,3 +1,4 @@
+using HttpContextExtensions = Orbit.Api.Extensions.HttpContextExtensions;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Orbit.Api.Extensions;

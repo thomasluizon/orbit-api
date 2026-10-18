@@ -72,6 +72,36 @@ public class GetGoalDetailQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_WrongUser_ReturnsGoalNotFound()
+    {
+        var goal = CreateTestGoal();
+
+        _goalRepo.FindAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var predicate = call.ArgAt<Expression<Func<Goal, bool>>>(0).Compile();
+                return new List<Goal> { goal }.Where(predicate).ToList().AsReadOnly();
+            });
+        _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
+
+        var ownerResult = await _handler.Handle(
+            new GetGoalDetailQuery(UserId, goal.Id), CancellationToken.None);
+
+        ownerResult.IsSuccess.Should().BeTrue();
+        ownerResult.Value.Goal.Id.Should().Be(goal.Id);
+
+        var result = await _handler.Handle(
+            new GetGoalDetailQuery(Guid.NewGuid(), goal.Id), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(ErrorMessages.GoalNotFound.Message);
+        result.ErrorCode.Should().Be("GOAL_NOT_FOUND");
+    }
+
+    [Fact]
     public async Task Handle_GoalFound_ReturnsProgressPercentage()
     {
         var goal = CreateTestGoal();

@@ -20,9 +20,10 @@ namespace Orbit.Infrastructure.Services;
 public sealed partial class ProactiveEngineService(
     OrbitDbContext db, TimeProvider clock, IProactiveCheckinMessageService messages,
     IPushNotificationService push, ICalendarEventFetcher calendar, IGoogleTokenService tokens,
-    IProductAnalytics analytics, IUserDateService dates, ILogger<ProactiveEngineService> logger) : IProactiveEngine
+    IProductAnalytics analytics, IUserDateService dates, IFeatureFlagService featureFlags,
+    ILogger<ProactiveEngineService> logger) : IProactiveEngine
 {
-    internal sealed record Batch(List<User> Users, List<AppFeatureFlag> Flags, List<Habit> Habits,
+    internal sealed record Batch(List<User> Users, IReadOnlyDictionary<Guid, IReadOnlyList<string>> EnabledFlags, List<Habit> Habits,
         List<Goal> Goals, List<ProactiveItem> Items, List<ProactiveCalendarDay> CalendarDays)
     {
         public Dictionary<Guid, DateOnly> LocalDates { get; } = [];
@@ -49,13 +50,12 @@ public sealed partial class ProactiveEngineService(
 
     internal async Task<Batch> LoadAsync(Guid? userId, DateTime nowUtc, CancellationToken ct)
     {
-        var flags = await db.AppFeatureFlags.AsNoTracking().Where(f => f.Enabled).ToListAsync(ct);
-        if (flags.Any(f => f.Key == FeatureFlagKeys.AstraProactiveEngineDisabled && AppliesToPro(f)))
-            return new([], flags, [], [], [], []);
-
         var users = await db.Users.AsNoTracking().Where(u => (!userId.HasValue || u.Id == userId.Value)
             && (u.IsLifetimePro || (u.Plan == UserPlan.Pro && u.PlanExpiresAt > nowUtc) || u.TrialEndsAt > nowUtc))
             .ToListAsync(ct);
+        if (users.Count == 0) return new(users, new Dictionary<Guid, IReadOnlyList<string>>(), [], [], [], []);
+        var flags = await featureFlags.GetEnabledKeysForUsersAsync(users, ct);
+        users = users.Where(user => !flags[user.Id].Contains(FeatureFlagKeys.AstraProactiveEngineDisabled)).ToList();
         if (users.Count == 0) return new(users, flags, [], [], [], []);
         var ids = users.Select(u => u.Id).ToList();
         var habits = await db.Habits.IgnoreQueryFilters().AsNoTracking()
@@ -86,9 +86,6 @@ public sealed partial class ProactiveEngineService(
         foreach (var entry in localDates) batch.LocalDates.Add(entry.Key, entry.Value);
         return batch;
     }
-
-    private static bool AppliesToPro(AppFeatureFlag flag) => string.IsNullOrWhiteSpace(flag.PlanRequirement)
-        || flag.PlanRequirement.Trim().ToLowerInvariant() is "free" or "pro";
 
     private DateTime LocalNow(User user, DateTime nowUtc) =>
         TimeZoneInfo.ConvertTimeFromUtc(nowUtc, TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id));
@@ -252,7 +249,7 @@ public sealed partial class ProactiveEngineService(
 
     private static bool CalendarAllowed(Batch batch, User user) =>
         (user.GoogleRefreshToken is not null || user.GoogleAccessToken is not null)
-        && batch.Flags.Any(f => f.Key == FeatureFlagKeys.CalendarIntegration && AppliesToPro(f));
+        && batch.EnabledFlags[user.Id].Contains(FeatureFlagKeys.CalendarIntegration);
 
     private async Task<ProactiveCalendarDay?> ReadCalendarAsync(User user, DateOnly today, Batch batch, CancellationToken ct)
     {

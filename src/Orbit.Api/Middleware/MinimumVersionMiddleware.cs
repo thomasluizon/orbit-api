@@ -37,7 +37,7 @@ public sealed partial class MinimumVersionMiddleware(
 
         context.Response.StatusCode = StatusCodes.Status426UpgradeRequired;
         context.Response.ContentType = "application/json";
-        context.Response.Headers[HttpContextExtensions.RequestIdHeaderName] = context.GetRequestId();
+        context.Response.Headers[Orbit.Api.Extensions.HttpContextExtensions.RequestIdHeaderName] = context.GetRequestId();
 
         await context.Response.WriteAsJsonAsync(new
         {

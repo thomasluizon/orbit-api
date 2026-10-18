@@ -1,3 +1,4 @@
+using Orbit.Application.FeatureFlags;
 using System.Text;
 using System.Security.Claims;
 using FluentValidation;
@@ -116,6 +117,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IGoalCompletionService, GoalCompletionService>();
         builder.Services.AddScoped<IPayGateService, PayGateService>();
         builder.Services.AddScoped<IFeatureFlagService, FeatureFlagService>();
+        builder.Services.AddScoped<IFeatureFlagManagementService, FeatureFlagManagementService>();
         builder.Services.AddScoped<GamificationRepositories>(sp =>
             new GamificationRepositories(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
@@ -227,6 +229,8 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<Orbit.Application.Gamification.Services.GamificationNotifiers>();
         builder.Services.AddScoped<IGoogleTokenService, GoogleTokenService>();
         builder.Services.AddScoped<GoogleSignInFlow>();
+        builder.Services.AddScoped<IAuthUserStore, AuthUserStore>();
+        builder.Services.AddScoped<ISignupJobDispatcher, SignupJobDispatcher>();
         builder.Services.AddScoped<IGoogleAuthorizationCodeService, GoogleAuthorizationCodeService>();
         builder.Services.AddScoped<IGoogleIdTokenValidator, GoogleIdTokenValidator>();
         builder.Services.AddGoogleCalendarServices(GetDefaultHttpTimeout(builder));
@@ -421,6 +425,8 @@ public static partial class ServiceCollectionExtensions
 
     public static WebApplicationBuilder AddOrbitRateLimiting(this WebApplicationBuilder builder)
     {
+        builder.Services.Configure<BffForwardingSettings>(
+            builder.Configuration.GetSection(BffForwardingSettings.SectionName));
         builder.Services.AddScoped<IDistributedRateLimitService, DistributedRateLimitService>();
         builder.Services.AddRateLimiter(options =>
         {

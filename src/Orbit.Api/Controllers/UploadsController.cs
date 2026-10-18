@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using System.Text.Json.Serialization;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -8,12 +9,15 @@ using Orbit.Api.Extensions;
 using Orbit.Api.RateLimiting;
 using Orbit.Api.Uploads;
 using Orbit.Application.Uploads.Commands;
+using Orbit.Application.Uploads.Queries;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Api.Controllers;
 
 [Authorize]
 [ApiController]
+[ApiVersion(1.0)]
+[ApiVersion(2.0)]
 [Route("api/uploads")]
 public partial class UploadsController(IMediator mediator, IObjectStorageReadService objectReader, ILogger<UploadsController> logger) : ControllerBase
 {
@@ -47,8 +51,10 @@ public partial class UploadsController(IMediator mediator, IObjectStorageReadSer
     {
         if (!UploadObjectKey.TryCreate(userId, fileName, out var objectKey))
             return NotFound();
+        if (!await mediator.Send(new UploadOwnerExistsQuery(Guid.Parse(userId)), cancellationToken))
+            return NotFound();
         var readUrl = await objectReader.CreateReadUrlAsync(objectKey, cancellationToken);
-        Response.Headers.CacheControl = "public, max-age=300";
+        Response.Headers.CacheControl = "no-store";
         return Redirect(readUrl);
     }
 

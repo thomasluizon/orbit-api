@@ -17,7 +17,7 @@ internal sealed partial class ValidationExceptionHandler(ILogger<ValidationExcep
 
         httpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
         httpContext.Response.ContentType = "application/json";
-        httpContext.Response.Headers[HttpContextExtensions.RequestIdHeaderName] = httpContext.GetRequestId();
+        httpContext.Response.Headers[Orbit.Api.Extensions.HttpContextExtensions.RequestIdHeaderName] = httpContext.GetRequestId();
 
         var languageResolver = httpContext.RequestServices.GetRequiredService<IRequestLanguageResolver>();
         var isPtBr = await languageResolver.IsPortugueseAsync(httpContext, cancellationToken);

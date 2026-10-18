@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using System.Text.Json.Serialization;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -12,6 +13,8 @@ namespace Orbit.Api.Controllers;
 
 [Authorize]
 [ApiController]
+[ApiVersion(1.0)]
+[ApiVersion(2.0)]
 [Route("api/challenges")]
 public partial class ChallengesController(IMediator mediator, ILogger<ChallengesController> logger) : ControllerBase
 {

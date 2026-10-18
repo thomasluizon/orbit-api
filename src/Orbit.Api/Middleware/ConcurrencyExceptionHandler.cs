@@ -25,7 +25,7 @@ internal sealed partial class ConcurrencyExceptionHandler(ILogger<ConcurrencyExc
 
         httpContext.Response.StatusCode = StatusCodes.Status409Conflict;
         httpContext.Response.ContentType = "application/json";
-        httpContext.Response.Headers[HttpContextExtensions.RequestIdHeaderName] = httpContext.GetRequestId();
+        httpContext.Response.Headers[Orbit.Api.Extensions.HttpContextExtensions.RequestIdHeaderName] = httpContext.GetRequestId();
 
         await httpContext.Response.WriteAsJsonAsync(
             ErrorMessages.ConcurrentUpdateConflict.ToErrorBody(), cancellationToken);

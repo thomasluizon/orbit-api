@@ -18,7 +18,7 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 /// </summary>
 public sealed class PushSubscriptionAccountSwitchTests : IDisposable
 {
-    private const string WebEndpoint = "https://push.example.com/browser-1";
+    private const string WebEndpoint = "https://fcm.googleapis.com/browser-1";
     private const string WebP256dh = "browser-1-p256dh-public-key";
     private const string WebAuth = "browser-1-auth-secret";
     private const string FcmToken = "fcm-token-device-1";

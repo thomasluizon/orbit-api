@@ -1,13 +1,19 @@
 using System.Runtime.CompilerServices;
+using System.Security.Claims;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
+using Orbit.Api.Controllers;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
+using Orbit.Application.Chat.Validators;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -23,6 +29,7 @@ namespace Orbit.Infrastructure.Tests.Services;
 public class AgentChatWriteHoldTests : IDisposable
 {
     private readonly OrbitDbContext _dbContext;
+    private readonly MemoryCache _flagCache = new(new MemoryCacheOptions());
     private readonly AgentCatalogService _catalogService = BuildCatalog();
     private readonly PendingAgentOperationStore _pendingOperationStore;
     private readonly AgentPolicyEvaluator _policyEvaluator;
@@ -55,11 +62,13 @@ public class AgentChatWriteHoldTests : IDisposable
         stepUpBridge.GetRequiredConfirmationAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns((AgentConfirmationRequirement?)null);
         _policyEvaluator = new AgentPolicyEvaluator(
-            _dbContext, _catalogService, _pendingOperationStore, stepUpBridge, settings);
+            _dbContext, _catalogService, _pendingOperationStore, stepUpBridge, settings,
+            new FeatureFlagService(_dbContext, _flagCache));
     }
 
     public void Dispose()
     {
+        _flagCache.Dispose();
         _dbContext.Dispose();
         GC.SuppressFinalize(this);
     }
@@ -284,6 +293,89 @@ public class AgentChatWriteHoldTests : IDisposable
         tool.Calls.Should().Be(0);
     }
 
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task ExecutePendingOperation_InitialPreview_BindsApprovalToTargetSet(
+        bool includePreview, bool addHabit)
+    {
+        var today = new DateOnly(2026, 9, 25);
+        _dbContext.Habits.Add(
+            Habit.Create(new HabitCreateParams(_userId, "One", FrequencyUnit.Day, 1, today)).Value);
+        await _dbContext.SaveChangesAsync();
+        var dates = Substitute.For<IUserDateService>();
+        dates.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(today);
+        var tool = new StubTool("bulk_delete_habits");
+        var tools = new AiToolRegistry([tool]);
+        var previewer = new PendingOperationChangePreviewer(
+            new GenericRepository<Habit>(_dbContext), new GenericRepository<Goal>(_dbContext),
+            new GenericRepository<Tag>(_dbContext), dates, tools);
+        var executor = CreateExecutor(tools, previewer);
+        var revisions = new PendingOperationRevisionService(_pendingOperationStore, previewer,
+            new RevisePendingOperationRequestValidator(), tools);
+
+        var held = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
+            _userId, tool.Name, Parse("""{"filter":{"all":true}}"""),
+            AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, IncludeChangePreview: includePreview));
+
+        held.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation);
+        var pending = held.PendingOperation!;
+        if (includePreview)
+        {
+            pending.Items.Should().ContainSingle();
+            pending.PreviewFingerprint.Should().NotBeNullOrWhiteSpace();
+        }
+        var confirmation = _pendingOperationStore.Confirm(_userId, pending.Id)!;
+        if (addHabit)
+        {
+            _dbContext.Habits.Add(
+                Habit.Create(new HabitCreateParams(_userId, "Two", FrequencyUnit.Day, 1, today)).Value);
+            await _dbContext.SaveChangesAsync();
+        }
+        _dbContext.ChangeTracker.Clear();
+
+        var execution = _pendingOperationStore.GetExecution(_userId, pending.Id)!;
+        var shouldExecute = !includePreview || !addHabit;
+        (await revisions.IsCurrentAsync(_userId, execution, CancellationToken.None))
+            .Should().Be(shouldExecute);
+        execution.PreviewFingerprint.Should().Be(pending.PreviewFingerprint);
+        var controller = new AiController(_catalogService, _policyEvaluator,
+            new AgentPendingStores(_pendingOperationStore, Substitute.For<IPendingClarificationStore>()),
+            Substitute.For<IAgentStepUpService>(), Substitute.For<IAgentAuditService>(),
+            executor, revisions, new ResolveClarificationRequestValidator())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity(
+                        [new Claim(ClaimTypes.NameIdentifier, _userId.ToString())], "Test"))
+                }
+            }
+        };
+
+        var result = await controller.ExecutePendingOperation(pending.Id,
+            new AiController.ExecutePendingOperationRequest(confirmation.ConfirmationToken), CancellationToken.None);
+
+        if (shouldExecute)
+        {
+            result.Should().BeOfType<OkObjectResult>().Which.Value.Should()
+                .BeOfType<AgentExecuteOperationResponse>().Which.Operation.Status.Should()
+                .Be(AgentOperationStatus.Succeeded);
+            tool.Calls.Should().Be(1);
+            _pendingOperationStore.GetExecution(_userId, pending.Id).Should().BeNull();
+        }
+        else
+        {
+            var conflict = result.Should().BeOfType<ConflictObjectResult>().Subject;
+            JsonSerializer.SerializeToElement(conflict.Value).GetProperty("error").GetString()
+                .Should().Be("stale_preview");
+            tool.Calls.Should().Be(0);
+            _pendingOperationStore.GetExecution(_userId, pending.Id).Should().NotBeNull();
+        }
+    }
+
     private AgentOperationExecutor CreateExecutor(AiToolRegistry toolRegistry,
         IPendingOperationChangePreviewer? previewer = null)
     {
@@ -302,6 +394,7 @@ public class AgentChatWriteHoldTests : IDisposable
             stepUpBridge,
             toolRegistry,
             previewer ?? Substitute.For<IPendingOperationChangePreviewer>(),
+            _pendingOperationStore,
             Substitute.For<IUnitOfWork>(),
             NullLogger<AgentOperationExecutor>.Instance);
     }

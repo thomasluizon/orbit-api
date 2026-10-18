@@ -14,7 +14,6 @@ locals {
     "Stripe__SecretKey",
     "Stripe__WebhookSecret",
     "Supabase__AnonKey",
-    "Supabase__SecretKey",
     "TEST_ACCOUNTS",
     "Vapid__PrivateKey",
     "Waitlist__SigningKey",
@@ -45,8 +44,8 @@ locals {
     Google__AllowedRedirectUris__1      = "https://api.useorbit.org/oauth/google/callback"
     Google__ClientId                    = "355604968359-tqco1o3l874mg7rvme91vniael7pn3tk.apps.googleusercontent.com"
     Jwt__Audience                       = "OrbitClient"
-    Jwt__ExpiryHours                    = "168"
-    Jwt__ExpiryMinutes                  = "0"
+    Jwt__ExpiryHours                    = "0"
+    Jwt__ExpiryMinutes                  = "15"
     Jwt__Issuer                         = "OrbitApi"
     Jwt__RefreshExpiryDays              = "90"
     Ses__Region                         = "us-east-2"
@@ -65,7 +64,6 @@ locals {
     Stripe__YearlyPriceIdBrl            = "price_1U59lVGwWZvarDk3FBO8ci6L"
     Stripe__YearlyPriceIdUsd            = "price_1U59ncGwWZvarDk3Ydiw7jP7"
     Supabase__Url                       = "https://wdscxamegetmhqldqsdg.supabase.co"
-    Storage__Provider                   = var.production_storage_provider
     Storage__S3__Bucket                 = aws_s3_bucket.uploads["production"].bucket
     Storage__S3__Region                 = "us-east-2"
     Storage__S3__PublicBaseUrl          = "https://api.useorbit.org"
@@ -81,6 +79,7 @@ locals {
     Database__MigrateOnStartup         = "true"
     Cors__AllowedOrigins__0            = "https://app-staging.useorbit.org"
     Cors__AllowedOrigins__1            = "https://staging.useorbit.org"
+    Cors__LandingOrigins__2            = "https://orbit-landing-staging.onrender.com"
     Frontend__BaseUrl                  = "https://app-staging.useorbit.org"
     GooglePlay__PackageName            = "org.useorbit.app.staging"
     GooglePlay__RtdnAudience           = "https://api-staging.useorbit.org/api/subscriptions/play/rtdn"
@@ -93,7 +92,6 @@ locals {
     Stripe__CancelUrl                  = "https://app-staging.useorbit.org/upgrade"
     Stripe__SuccessUrl                 = "https://app-staging.useorbit.org/upgrade?subscription=success"
     Supabase__Url                      = "https://staging-storage-disabled.invalid"
-    Storage__Provider                  = var.staging_storage_provider
     Storage__S3__Bucket                = aws_s3_bucket.uploads["staging"].bucket
     Storage__S3__PublicBaseUrl         = "https://api-staging.useorbit.org"
     Waitlist__ApiBaseUrl               = "https://api-staging.useorbit.org"
@@ -158,6 +156,21 @@ data "aws_ssm_parameter" "staging_web_sentry" {
   name = "/orbit/staging/web/SENTRY_DSN"
 }
 
+resource "random_password" "bff_forwarding_secret" {
+  for_each = toset(["production", "staging"])
+
+  length  = 64
+  special = false
+}
+
+resource "aws_ssm_parameter" "bff_forwarding_secret" {
+  for_each = random_password.bff_forwarding_secret
+
+  name  = "/orbit/${each.key}/api/Auth__BffForwardingSecret"
+  type  = "SecureString"
+  value = each.value.result
+}
+
 resource "render_env_group" "production_api" {
   name = "orbit-production-api"
   env_vars = merge(
@@ -169,6 +182,7 @@ resource "render_env_group" "production_api" {
       Storage__S3__SecretAccessKey = { value = aws_ssm_parameter.uploads_secret_access_key["production"].value }
     },
     { BotProtection__SecretKey = { value = aws_ssm_parameter.turnstile_secret["production"].value } },
+    { Auth__BffForwardingSecret = { value = aws_ssm_parameter.bff_forwarding_secret["production"].value } },
     { Ses__AccessKeyId = { value = aws_ssm_parameter.api_ses_access_key_id["production"].value } },
     { Ses__SecretAccessKey = { value = aws_ssm_parameter.api_ses_secret_access_key["production"].value } },
   )
@@ -185,6 +199,7 @@ resource "render_env_group" "staging_api" {
       Storage__S3__SecretAccessKey = { value = aws_ssm_parameter.uploads_secret_access_key["staging"].value }
     },
     { BotProtection__SecretKey = { value = aws_ssm_parameter.turnstile_secret["staging"].value } },
+    { Auth__BffForwardingSecret = { value = aws_ssm_parameter.bff_forwarding_secret["staging"].value } },
     { Ses__AccessKeyId = { value = aws_ssm_parameter.api_ses_access_key_id["staging"].value } },
     { Ses__SecretAccessKey = { value = aws_ssm_parameter.api_ses_secret_access_key["staging"].value } },
   )
@@ -195,6 +210,7 @@ resource "render_env_group" "production_web" {
   env_vars = merge(
     { for key, value in local.production_web_values : key => { value = value } },
     { SENTRY_DSN = { value = data.aws_ssm_parameter.production_web_sentry.value } },
+    { BFF_FORWARDING_SECRET = { value = aws_ssm_parameter.bff_forwarding_secret["production"].value } },
   )
 }
 
@@ -203,5 +219,6 @@ resource "render_env_group" "staging_web" {
   env_vars = merge(
     { for key, value in local.staging_web_values : key => { value = value } },
     { SENTRY_DSN = { value = data.aws_ssm_parameter.staging_web_sentry.value } },
+    { BFF_FORWARDING_SECRET = { value = aws_ssm_parameter.bff_forwarding_secret["staging"].value } },
   )
 }
