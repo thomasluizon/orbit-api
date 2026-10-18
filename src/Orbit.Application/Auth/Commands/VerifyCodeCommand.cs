@@ -1,4 +1,6 @@
+using Hangfire;
 using MediatR;
+using Orbit.Application.Auth.Jobs;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Auth.Queries;
 using Orbit.Application.Common;
@@ -17,7 +19,8 @@ public class VerifyCodeCommandHandler(
     IAuthUserStore userStore,
     IUnitOfWork unitOfWork,
     IAuthSessionService authSessionService,
-    ISignupJobDispatcher signupJobDispatcher) : IRequestHandler<VerifyCodeCommand, Result<LoginResponse>>
+    ISignupJobDispatcher signupJobDispatcher,
+    IBackgroundJobClient backgroundJobClient) : IRequestHandler<VerifyCodeCommand, Result<LoginResponse>>
 {
     public async Task<Result<LoginResponse>> Handle(VerifyCodeCommand request, CancellationToken cancellationToken)
     {
@@ -27,6 +30,7 @@ public class VerifyCodeCommandHandler(
         if (codeValidation.IsFailure)
             return codeValidation.PropagateError<LoginResponse>();
 
+        User? reactivatedUser = null;
         var signupPending = false;
         var signupLanguage = request.Language;
         var signupReferralCode = request.ReferralCode;
@@ -43,7 +47,10 @@ public class VerifyCodeCommandHandler(
 
             var wasReactivated = user.IsDeactivated;
             if (wasReactivated)
+            {
                 user.CancelDeactivation();
+                reactivatedUser = user;
+            }
             await unitOfWork.SaveChangesAsync(transactionToken);
 
             var sessionResult = await authSessionService.CreateSessionAsync(user.Id, user.Email, transactionToken);
@@ -61,6 +68,9 @@ public class VerifyCodeCommandHandler(
 
         if (result.IsFailure)
             return result;
+
+        if (result.Value.WasReactivated && reactivatedUser is not null)
+            CancelSubscriptionOnDeletionJob.EnqueueRestoration(backgroundJobClient, reactivatedUser);
 
         signupJobDispatcher.Dispatch(result.Value.UserId, signupPending, signupLanguage, signupReferralCode);
 

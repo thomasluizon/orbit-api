@@ -1,12 +1,17 @@
+using System.Linq.Expressions;
+using System.Net;
+using System.Text;
+using FluentAssertions;
+using MediatR;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.AspNetCore.Http;
-using FluentAssertions;
 using Hangfire;
 using Hangfire.Common;
 using Hangfire.States;
-using MediatR;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -98,7 +103,7 @@ public class GoogleAuthFirstLoginRaceTests
                 new GenericRepository<UserSession>(context), new GenericRepository<UserSessionRefreshToken>(context),
                 new GenericRepository<User>(context), tokenService, work,
                 Options.Create(new JwtSettings { SecretKey = "unused-test-secret", Issuer = "test", Audience = "test", RefreshExpiryDays = 90 }));
-            var flow = new GoogleSignInFlow(new AuthUserStore(context), work, sessions, new SignupJobDispatcher(jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance));
+            var flow = new GoogleSignInFlow(new AuthUserStore(context), work, sessions, new SignupJobDispatcher(jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), jobs);
             if (concurrently)
                 ready.SignalAndWait(TimeSpan.FromSeconds(10)).Should().BeTrue();
             var result = await flow.CompleteAsync("Google@Example.com", "Google User", "pt-BR", "friend",
@@ -141,9 +146,9 @@ public class GoogleAuthFirstLoginRaceTests
         using var cache = new MemoryCache(new MemoryCacheOptions());
         cache.Set("verify:google@example.com", new VerificationEntry("123456", 0, DateTime.UtcNow));
         var result = google
-            ? await new GoogleSignInFlow(users, work, sessions, dispatcher).CompleteAsync(
+            ? await new GoogleSignInFlow(users, work, sessions, dispatcher, jobs).CompleteAsync(
                 "google@example.com", "Google User", language, referralCode, null, null, CancellationToken.None)
-            : await new VerifyCodeCommandHandler(cache, users, work, sessions, dispatcher).Handle(
+            : await new VerifyCodeCommandHandler(cache, users, work, sessions, dispatcher, jobs).Handle(
                 new VerifyCodeCommand("google@example.com", "123456", language, referralCode), CancellationToken.None);
         result.IsSuccess.Should().BeTrue();
         result.Value.Token.Should().Be("session-token");

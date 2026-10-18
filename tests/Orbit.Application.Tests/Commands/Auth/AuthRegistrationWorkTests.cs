@@ -63,7 +63,7 @@ public class AuthRegistrationWorkTests
             });
         if (google)
         {
-            var flow = new GoogleSignInFlow(users, work, sessions, new SignupJobDispatcher(jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance));
+            var flow = new GoogleSignInFlow(users, work, sessions, new SignupJobDispatcher(jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), jobs);
             (await flow.CompleteAsync("person@example.com", "Person", "en", withExtras ? "friend" : null, withExtras ? "access" : null, withExtras ? "refresh" : null,
                 CancellationToken.None)).IsSuccess.Should().BeTrue();
         }
@@ -71,7 +71,7 @@ public class AuthRegistrationWorkTests
         {
             using var cache = new MemoryCache(new MemoryCacheOptions());
             cache.Set("verify:person@example.com", new VerificationEntry("123456", 0, DateTime.UtcNow));
-            var handler = new VerifyCodeCommandHandler(cache, users, work, sessions, new SignupJobDispatcher(jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance));
+            var handler = new VerifyCodeCommandHandler(cache, users, work, sessions, new SignupJobDispatcher(jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), jobs);
             (await handler.Handle(new VerifyCodeCommand("person@example.com", "123456", ReferralCode: withExtras ? "friend" : null),
                 CancellationToken.None)).IsSuccess.Should().BeTrue();
         }
