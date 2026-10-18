@@ -114,7 +114,7 @@ public class SecurityHeadersMiddlewareTests
     }
 
     [Fact]
-    public async Task InvokeAsync_OAuthPath_AllowsOnlySameOriginFontsStylesAndScripts()
+    public async Task InvokeAsync_OAuthPath_AllowsTurnstileScriptsAndFrames()
     {
         var context = new DefaultHttpContext();
         context.Request.Path = "/oauth/authorize";
@@ -125,7 +125,10 @@ public class SecurityHeadersMiddlewareTests
         var csp = context.Response.Headers[HeaderNames.ContentSecurityPolicy].ToString();
         csp.Should().Contain("font-src 'self'");
         csp.Should().Contain("style-src 'self' 'unsafe-inline'");
-        csp.Should().Contain("script-src 'self' 'unsafe-inline'");
+        csp.Should().Contain("script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com;");
+        csp.Should().Contain("frame-src https://challenges.cloudflare.com;");
+        csp.Should().Contain("connect-src 'self';");
+        csp.Should().Contain("frame-ancestors 'none'");
         csp.Should().NotContain("google");
         csp.Should().NotContain("gstatic");
     }
