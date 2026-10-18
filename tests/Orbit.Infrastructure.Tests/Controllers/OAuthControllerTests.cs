@@ -3,11 +3,19 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
+using Hangfire;
+using Hangfire.Common;
+using Hangfire.States;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Controllers;
+using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -26,6 +34,7 @@ using Orbit.Infrastructure.Configuration;
 
 namespace Orbit.Infrastructure.Tests.Controllers;
 
+[Collection("ProcessEnvironment")]
 public class OAuthControllerTests : IDisposable
 {
     private readonly IMediator _mediator = Substitute.For<IMediator>();
@@ -434,6 +443,63 @@ public class OAuthControllerTests : IDisposable
         var result = await _controller.SendCode(request, CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Theory]
+    [InlineData(true, null, 400)]
+    [InlineData(true, "rejected", 400)]
+    [InlineData(true, "valid", 200)]
+    [InlineData(false, null, 200)]
+    public async Task SendCode_DeclaredBotProtection_GatesEmailDelivery(bool enabled, string? token, int statusCode)
+    {
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var jobs = Substitute.For<IBackgroundJobClient>();
+        var handler = new SendCodeCommandHandler(cache, jobs);
+        _mediator.Send(Arg.Any<SendCodeCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call => handler.Handle((SendCodeCommand)call[0], CancellationToken.None));
+        var verifier = Substitute.For<ITurnstileVerificationService>();
+        verifier.VerifyAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(call => new TurnstileVerificationResult((string)call[0] == "valid", []));
+        var services = new ServiceCollection();
+        services.AddSingleton(Options.Create(new BotProtectionSettings { Enabled = enabled }));
+        services.AddSingleton(verifier);
+        services.AddSingleton<ILogger<RequireBotProtectionFilter>>(NullLogger<RequireBotProtectionFilter>.Instance);
+        using var provider = services.BuildServiceProvider();
+        var method = typeof(OAuthController).GetMethod(nameof(OAuthController.SendCode))!;
+        var route = method.GetCustomAttribute<HttpPostAttribute>()!.Template;
+        route.Should().Be("/oauth/send-code");
+        var request = JsonSerializer.Deserialize<OAuthController.SendCodeRequest>(
+            JsonSerializer.Serialize(new { email = "oauth-person@example.com", language = "pt-BR", turnstileToken = token }),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+        _controller.HttpContext.Request.Method = "POST";
+        _controller.HttpContext.Request.Path = route;
+        var context = new ActionExecutingContext(
+            new ActionContext(_controller.HttpContext, new RouteData(), new ControllerActionDescriptor { MethodInfo = method }),
+            [], new Dictionary<string, object?> { ["request"] = request }, _controller);
+        IActionResult? actionResult = null;
+        async Task<ActionExecutedContext> InvokeAction()
+        {
+            actionResult = await _controller.SendCode(request, CancellationToken.None);
+            return new ActionExecutedContext(context, context.Filters, _controller) { Result = actionResult };
+        }
+
+        var attribute = method.GetCustomAttribute<RequireBotProtectionAttribute>();
+        if (attribute is null)
+            await InvokeAction();
+        else
+            await ((IAsyncActionFilter)attribute.CreateInstance(provider)).OnActionExecutionAsync(context, InvokeAction);
+
+        var result = (context.Result ?? actionResult).Should().BeAssignableTo<ObjectResult>().Subject;
+        result.StatusCode.Should().Be(statusCode);
+        var delivered = statusCode == 200;
+        cache.TryGetValue("verify:oauth-person@example.com", out _).Should().Be(delivered);
+        jobs.Received(delivered ? 1 : 0).Create(Arg.Any<Job>(), Arg.Any<IState>());
+        if (delivered)
+            await _mediator.Received(1).Send(Arg.Is<SendCodeCommand>(command => command.Language == "pt-BR"), Arg.Any<CancellationToken>());
+        else
+            await _mediator.DidNotReceive().Send(Arg.Any<SendCodeCommand>(), Arg.Any<CancellationToken>());
+        await verifier.Received(enabled && token is not null ? 1 : 0)
+            .VerifyAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
