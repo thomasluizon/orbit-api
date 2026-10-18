@@ -116,9 +116,7 @@ locals {
 
   production_render_npgsql = "Host=${local.production_db_host};Port=5432;Database=${local.production_db_name};Username=${render_postgres.production.database_user};Password=\"${replace(render_postgres.production.connection_info.password, "\"", "\"\"")}\""
 
-  production_api_database_values = var.api_database == "supabase" ? {
-    for key in local.database_keys : key => data.aws_ssm_parameter.production_api_database[key].value
-    } : {
+  production_api_database_values = {
     for key in local.database_keys : key => local.production_render_npgsql
   }
 
@@ -141,11 +139,6 @@ data "aws_ssm_parameter" "staging_api" {
 data "aws_ssm_parameter" "staging_api_billing" {
   for_each = local.staging_api_billing_keys
   name     = "/orbit/staging/api/${each.key}"
-}
-
-data "aws_ssm_parameter" "production_api_database" {
-  for_each = var.api_database == "supabase" ? local.database_keys : toset([])
-  name     = "/orbit/production/api/${each.key}"
 }
 
 data "aws_ssm_parameter" "production_web_sentry" {
