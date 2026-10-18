@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
@@ -54,6 +55,28 @@ public class JwtTokenServiceTests
         jwt.ValidTo.Should().BeOnOrBefore(beforeGeneration.AddMinutes(60));
         jwt.ValidTo.Should().BeCloseTo(beforeGeneration.AddMinutes(15), TimeSpan.FromSeconds(5));
         settings.Validate();
+    }
+
+    [Fact]
+    public void Validate_CommittedTerraformConfiguration_SetsFifteenMinuteLifetime()
+    {
+        var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../..", "infra/configuration.tf"));
+        var terraform = File.ReadAllText(path);
+        var values = Regex.Matches(terraform, @"(?m)^\s*(Jwt__ExpiryHours|Jwt__ExpiryMinutes)\s*=\s*""(-?\d+)""\s*$")
+            .ToDictionary(match => match.Groups[1].Value.Replace("__", ":"), match => (string?)match.Groups[2].Value);
+        values.Should().HaveCount(2);
+        values["Jwt:SecretKey"] = _settings.SecretKey;
+        values["Jwt:Issuer"] = _settings.Issuer;
+        values["Jwt:Audience"] = _settings.Audience;
+        var settings = new ConfigurationBuilder().AddInMemoryCollection(values).Build()
+            .GetSection(JwtSettings.SectionName).Get<JwtSettings>()
+            ?? throw new InvalidOperationException("Committed Terraform Jwt configuration is missing.");
+
+        var act = () => settings.Validate();
+
+        act.Should().NotThrow();
+        settings.ExpiryMinutes.Should().Be(15);
+        settings.ExpiryHours.Should().Be(0);
     }
 
     [Fact]
