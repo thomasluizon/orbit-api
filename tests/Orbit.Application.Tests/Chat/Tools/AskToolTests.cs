@@ -48,10 +48,15 @@ public class AskToolTests
     }
 
     [Theory]
-    [InlineData("question", 121)]
-    [InlineData("label", 41)]
-    [InlineData("description", 81)]
-    public async Task Choice_EnforcesTextLimits(string field, int count)
+    [InlineData("question", 120, true)]
+    [InlineData("question", 121, false)]
+    [InlineData("label", 24, true)]
+    [InlineData("label", 25, false)]
+    [InlineData("label", 41, false)]
+    [InlineData("description", 32, true)]
+    [InlineData("description", 33, false)]
+    [InlineData("description", 81, false)]
+    public async Task Choice_EnforcesTextLimits(string field, int count, bool valid)
     {
         var args = JsonSerializer.SerializeToElement(new
         {
@@ -61,7 +66,46 @@ public class AskToolTests
                 description = field == "description" ? new string('d', count) : "Early" },
                 new { id = "b", label = "Evening", description = "Later" } }
         });
-        (await _tool.ExecuteAsync(args, UserId, default)).Success.Should().BeFalse();
+        (await _tool.ExecuteAsync(args, UserId, default)).Success.Should().Be(valid);
+    }
+
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData(32, true)]
+    [InlineData(33, false)]
+    public async Task PickList_EnforcesDetailLimitWithoutCappingHabitLabel(int? count, bool valid)
+    {
+        var label = new string('l', 100);
+        var detail = count.HasValue ? new string('d', count.Value) : null;
+        var args = JsonSerializer.SerializeToElement(new
+        {
+            form = "pickList",
+            title = "Choose",
+            action = "create_habits",
+            items = new[] { new { id = "a", label, detail, arguments = new { title = "Walk" } } }
+        });
+
+        var result = await _tool.ExecuteAsync(args, UserId, default);
+
+        result.Success.Should().Be(valid);
+        if (valid)
+        {
+            var item = result.Payload.Should().BeOfType<AstraBlockDefinition>().Subject.Items.Should().ContainSingle().Subject;
+            item.Label.Should().Be(label);
+            item.Detail.Should().Be(detail);
+        }
+    }
+
+    [Fact]
+    public void Schema_DeclaresTextLimitsWithoutCappingPickListLabel()
+    {
+        var properties = JsonSerializer.SerializeToElement(_tool.GetParameterSchema()).GetProperty("properties");
+        var option = properties.GetProperty("options").GetProperty("items").GetProperty("properties");
+        option.GetProperty("label").GetProperty("maxLength").GetInt32().Should().Be(24);
+        option.GetProperty("description").GetProperty("maxLength").GetInt32().Should().Be(32);
+        var item = properties.GetProperty("items").GetProperty("items").GetProperty("properties");
+        item.GetProperty("detail").GetProperty("maxLength").GetInt32().Should().Be(32);
+        item.GetProperty("label").TryGetProperty("maxLength", out _).Should().BeFalse();
     }
 
     [Theory]

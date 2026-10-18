@@ -187,6 +187,55 @@ public partial class ProcessUserChatCommandHandlerTests
         await _blockStore.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
     }
 
+    [Theory]
+    [InlineData("label", 25)]
+    [InlineData("label", 30)]
+    [InlineData("description", 33)]
+    [InlineData("detail", 33)]
+    public async Task Ask_OverlongText_ReturnsValidationFailureToModelWithoutIssuingBlock(string field, int count)
+    {
+        SetupUserAndPayGate();
+        var form = field == "detail" ? "pickList" : "choice";
+        var arguments = field == "detail"
+            ? JsonSerializer.Serialize(new
+            {
+                form,
+                title = "Choose",
+                action = "create_habits",
+                items = new[] { new { id = "a", label = "Walk", detail = new string('d', count), arguments = new { title = "Walk" } } }
+            })
+            : JsonSerializer.Serialize(new
+            {
+                form,
+                question = "When?",
+                options = new[]
+                {
+                    new { id = "a", label = field == "label" ? new string('l', count) : "Morning",
+                        description = field == "description" ? new string('d', count) : "Early" },
+                    new { id = "b", label = "Evening", description = "Later" }
+                }
+            });
+        SetupAiResponse(ToolResponse("ask", "ask1", arguments));
+        _mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        const string rewrittenQuestion = "Would morning or evening suit a walk?";
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = rewrittenQuestion }));
+
+        var result = await CreateHandler(RealAskTool()).Handle(new(UserId, "Help me plan a walk",
+            ClientContext: new(SupportsParts: true, PartKinds: [form])), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessage.Should().Be(rewrittenQuestion);
+        result.Value.Parts!.OfType<ChatBlockPart>().Should().BeEmpty();
+        await _blockStore.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
+        await _aiIntentService.Received(1).ContinueWithToolResultsAsync(TestConversationContext,
+            Arg.Is<IReadOnlyList<AiToolCallResult>>(results => results.Count == 1 && results[0].Name == "ask"
+                && results[0].Id == "ask1" && !results[0].Success
+                && results[0].Error == "Invalid ask form, question, options, items, or action. Ask in plain text instead."),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task PickListAnswer_ReturnsPreviewWithoutModelOrDailyCharge()
     {
