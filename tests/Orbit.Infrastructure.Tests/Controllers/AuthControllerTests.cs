@@ -44,6 +44,7 @@ public class AuthControllerTests
 
     [Theory]
     [InlineData("absent")]
+    [InlineData("expired")]
     [InlineData("wrong")]
     [InlineData("throttled")]
     public async Task VerifyCode_AnonymousFailure_IsIdenticalRegardlessOfRegistration(string mode)
@@ -63,6 +64,9 @@ public class AuthControllerTests
             using var cache = new MemoryCache(new MemoryCacheOptions());
             if (mode != "absent")
                 cache.Set("verify:person@example.com", new VerificationEntry("123456", 0, DateTime.UtcNow));
+            if (mode == "expired")
+                cache.Set("verify:person@example.com", new VerificationEntry("123456", 0, DateTime.UtcNow),
+                    new MemoryCacheEntryOptions { AbsoluteExpiration = DateTimeOffset.UtcNow.AddMinutes(-1) });
             if (mode == "throttled")
                 cache.Set("verify-attempts:person@example.com", 3);
             var handler = new VerifyCodeCommandHandler(cache, store, work, sessions, jobs);

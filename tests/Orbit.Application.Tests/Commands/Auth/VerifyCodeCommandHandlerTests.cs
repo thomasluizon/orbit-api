@@ -165,6 +165,7 @@ public class VerifyCodeCommandHandlerTests
 
     [Theory]
     [InlineData("absent")]
+    [InlineData("expired")]
     [InlineData("wrong")]
     [InlineData("throttled")]
     public async Task Handle_AnonymousFailure_NeverTouchesPersistence(string mode)
@@ -180,6 +181,9 @@ public class VerifyCodeCommandHandlerTests
                 _userRepo.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(call => call.Arg<User>());
             if (mode != "absent")
                 SetupCacheWithCode("123456");
+            if (mode == "expired")
+                _cache.Set($"verify:{TestEmail}", new VerificationEntry("123456", 0, DateTime.UtcNow),
+                    new MemoryCacheEntryOptions { AbsoluteExpiration = DateTimeOffset.UtcNow.AddMinutes(-1) });
             if (mode == "throttled")
                 _cache.Set($"verify-attempts:{TestEmail}", 3);
 

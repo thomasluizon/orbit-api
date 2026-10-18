@@ -22,7 +22,6 @@ public class AuthUserStoreTests
         var first = await store.UpsertAsync(candidate, CancellationToken.None);
         await context.SaveChangesAsync();
         var signupSql = commands.Sql.ToArray();
-        context.ChangeTracker.Clear();
         commands.Sql.Clear();
         var returning = await store.UpsertAsync(Candidate("Replacement", "en"), CancellationToken.None);
         await context.SaveChangesAsync();
