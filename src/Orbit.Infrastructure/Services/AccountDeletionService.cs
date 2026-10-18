@@ -98,13 +98,21 @@ public partial class AccountDeletionService(
             var contactRepository = scope.ServiceProvider.GetRequiredService<IGenericRepository<MarketingContact>>();
             await unitOfWork.ExecuteInTransactionAsync(async transactionToken =>
             {
+                await unitOfWork.AcquireUserRowLockAsync(userId, transactionToken);
+                var now = TimeProvider.System.GetUtcNow().UtcDateTime;
                 var userToDelete = await dbContext.Users
                     .IgnoreQueryFilters()
-                    .FirstOrDefaultAsync(u => u.Id == userId, transactionToken);
+                    .FirstOrDefaultAsync(u => u.Id == userId && u.IsDeactivated
+                        && u.ScheduledDeletionAt.HasValue && u.ScheduledDeletionAt.Value <= now, transactionToken);
                 if (userToDelete is not null)
                 {
+                    var stores = scope.ServiceProvider.GetServices<IObjectStorageDeletionService>().ToArray();
+                    if (stores.Length == 0)
+                        throw new InvalidOperationException("No upload deletion providers are configured.");
+                    foreach (var store in stores)
+                        await DeleteObjectsWithRetryAsync(store, userId, transactionToken);
+
                     await MarketingContactOptOut.RecordAsync(userToDelete.Email, contactRepository, unitOfWork, transactionToken);
-                    await unitOfWork.AcquireUserRowLockAsync(userId, transactionToken);
                     await dbContext.AiUsageDaily
                         .Where(u => u.UserId == userId)
                         .ExecuteDeleteAsync(transactionToken);
@@ -117,10 +125,28 @@ public partial class AccountDeletionService(
             if (logger.IsEnabled(LogLevel.Information))
                 LogAccountDeleted(logger, userId);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             if (logger.IsEnabled(LogLevel.Error))
                 LogAccountDeletionFailed(logger, ex, userId);
+        }
+    }
+
+    private async Task DeleteObjectsWithRetryAsync(
+        IObjectStorageDeletionService store, Guid userId, CancellationToken ct)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                await store.DeleteUserObjectsAsync(userId, ct);
+                return;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException && attempt < 2)
+            {
+                LogStorageDeletionRetry(logger, ex, userId, attempt + 1);
+                await Task.Delay(TimeSpan.FromMilliseconds(300 << attempt), ct);
+            }
         }
     }
 
@@ -151,6 +177,9 @@ public partial class AccountDeletionService(
         if ((deletedReminders > 0 || deletedSlipAlerts > 0 || deletedProcessedRequests > 0) && logger.IsEnabled(LogLevel.Information))
             LogStaleRecordsCleaned(logger, deletedReminders, deletedSlipAlerts, deletedProcessedRequests);
     }
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "Retrying upload deletion for user {UserId} after attempt {Attempt}")]
+    private static partial void LogStorageDeletionRetry(ILogger logger, Exception ex, Guid userId, int attempt);
 
     private const int ProcessedRequestRetentionDays = 30;
 
