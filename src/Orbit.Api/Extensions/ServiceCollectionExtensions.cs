@@ -418,6 +418,8 @@ public static partial class ServiceCollectionExtensions
 
     public static WebApplicationBuilder AddOrbitRateLimiting(this WebApplicationBuilder builder)
     {
+        builder.Services.Configure<BffForwardingSettings>(
+            builder.Configuration.GetSection(BffForwardingSettings.SectionName));
         builder.Services.AddScoped<IDistributedRateLimitService, DistributedRateLimitService>();
         builder.Services.AddRateLimiter(options =>
         {
