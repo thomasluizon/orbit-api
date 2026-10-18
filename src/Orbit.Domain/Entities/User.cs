@@ -42,6 +42,8 @@ public partial class User : Entity
     public DateTime? SubscriptionEndedAtUtc { get; private set; }
     public DateTime? StripeSubscriptionEventCreatedAtUtc { get; private set; }
     public string? PlayPurchaseToken { get; private set; }
+    public bool StripeRenewalStoppedByDeletion { get; private set; }
+    public bool PlayRenewalStoppedByDeletion { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public bool HasImportedCalendar { get; private set; } = false;
     public bool HasSeenImportPrompt { get; private set; } = false;
@@ -281,6 +283,8 @@ public partial class User : Entity
         if (!TryAcceptStripeEvent(eventCreatedAtUtc, acceptEqualTimestamp: true))
             return;
 
+        if (StripeSubscriptionId != subscriptionId)
+            StripeRenewalStoppedByDeletion = false;
         StripeSubscriptionId = subscriptionId;
         PlanExpiresAt = expiresAt;
         Plan = UserPlan.Pro;
@@ -288,6 +292,7 @@ public partial class User : Entity
         SubscriptionLapseReason = null;
         SubscriptionEndedAtUtc = null;
         PlayPurchaseToken = null;
+        PlayRenewalStoppedByDeletion = false;
         if (interval.HasValue)
             SubscriptionInterval = interval.Value;
     }
@@ -295,6 +300,8 @@ public partial class User : Entity
     public void SetPlaySubscription(string purchaseToken, DateTime expiresAt,
         SubscriptionInterval? interval = null, bool isInGracePeriod = false)
     {
+        if (PlayPurchaseToken != purchaseToken)
+            PlayRenewalStoppedByDeletion = false;
         PlayPurchaseToken = purchaseToken;
         PlanExpiresAt = expiresAt;
         Plan = UserPlan.Pro;
@@ -305,7 +312,34 @@ public partial class User : Entity
             SubscriptionInterval = interval.Value;
     }
 
-    public void LinkPlayPurchaseToken(string purchaseToken) => PlayPurchaseToken = purchaseToken;
+    public void LinkPlayPurchaseToken(string purchaseToken)
+    {
+        if (PlayPurchaseToken != purchaseToken)
+            PlayRenewalStoppedByDeletion = false;
+        PlayPurchaseToken = purchaseToken;
+    }
+
+    public void RecordDeletionStoppedRenewal(SubscriptionSource source, string providerIdentifier)
+    {
+        EnsureValidSubscriptionSource(source);
+        ArgumentException.ThrowIfNullOrWhiteSpace(providerIdentifier);
+        var expectedIdentifier = source == Enums.SubscriptionSource.Stripe ? StripeSubscriptionId : PlayPurchaseToken;
+        if (!IsDeactivated || expectedIdentifier != providerIdentifier)
+            throw new InvalidOperationException("Deletion cancellation must match a deactivated account's linked subscription.");
+
+        if (source == Enums.SubscriptionSource.Stripe)
+            StripeRenewalStoppedByDeletion = true;
+        else
+            PlayRenewalStoppedByDeletion = true;
+    }
+
+    public void RecordStripeRenewalRestored(string subscriptionId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(subscriptionId);
+        if (IsDeactivated || StripeSubscriptionId != subscriptionId || !StripeRenewalStoppedByDeletion)
+            throw new InvalidOperationException("Only deletion-owned Stripe cancellation can be restored on an active account.");
+        StripeRenewalStoppedByDeletion = false;
+    }
 
     public void CancelStripeSubscription(
         SubscriptionLapseReason reason,
@@ -316,6 +350,7 @@ public partial class User : Entity
             return;
 
         StripeSubscriptionId = null;
+        StripeRenewalStoppedByDeletion = false;
         if (SubscriptionSource == Enums.SubscriptionSource.Stripe)
             ClearEntitlement(reason);
     }
@@ -324,6 +359,7 @@ public partial class User : Entity
     {
         EnsureValidLapseReason(reason);
         PlayPurchaseToken = null;
+        PlayRenewalStoppedByDeletion = false;
         if (SubscriptionSource == Enums.SubscriptionSource.GooglePlay)
             ClearEntitlement(reason);
     }
@@ -501,6 +537,9 @@ public partial class User : Entity
 
     public void CancelDeactivation()
     {
+        if (!IsLifetimePro && PlanExpiresAt.HasValue && PlanExpiresAt.Value <= DateTime.UtcNow)
+            Plan = UserPlan.Free;
+
         IsDeactivated = false;
         ReminderPreferencesVersion++;
         DeactivatedAt = null;

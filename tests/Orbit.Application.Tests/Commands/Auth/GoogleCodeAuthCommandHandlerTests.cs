@@ -1,9 +1,10 @@
-using Orbit.Infrastructure.Services;
-using Microsoft.AspNetCore.Http;
-using Hangfire;
 using Hangfire.Common;
 using Hangfire.States;
 using Orbit.Application.Auth.Jobs;
+using System.Linq.Expressions;
+using Orbit.Infrastructure.Services;
+using Microsoft.AspNetCore.Http;
+using Hangfire;
 using FluentAssertions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -40,7 +41,7 @@ public class GoogleCodeAuthCommandHandlerTests
         _work.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>(), Arg.Any<CancellationToken>())
             .Returns(call => call.Arg<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>()(call.Arg<CancellationToken>()));
         _store.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(call => call.Arg<User>());
-        var flow = new GoogleSignInFlow(_store, _work, _sessions, new SignupJobDispatcher(_jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance));
+        var flow = new GoogleSignInFlow(_store, _work, _sessions, new SignupJobDispatcher(_jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _jobs);
         _handler = new GoogleCodeAuthCommandHandler(_exchange, _signInMediator);
         _signInMediator.Send(Arg.Any<CompleteGoogleSignInCommand>(), Arg.Any<CancellationToken>())
             .Returns(call =>
@@ -53,6 +54,46 @@ public class GoogleCodeAuthCommandHandlerTests
             .Returns(Result.Success(new GoogleCodeIdentity(Email, "Google User", "access", "refresh")));
         _sessions.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new SessionTokens("orbit-access", "orbit-refresh")));
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task Reactivation_RestoresOnlyUnexpiredStripeRenewal(bool expired, bool play)
+    {
+        var user = User.Create("Returning", Email).Value;
+        _store.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(user);
+        var expiryAtUtc = DateTime.UtcNow.AddDays(expired ? -1 : 3);
+        if (play)
+            user.SetPlaySubscription("play-token", expiryAtUtc);
+        else
+            user.SetStripeSubscription("sub_paid", expiryAtUtc);
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        user.Deactivate(DateTime.UtcNow.AddDays(7));
+        Job? enqueued = null;
+        _jobs.Create(Arg.Do<Job>(job => { if (job.Type == typeof(CancelSubscriptionOnDeletionJob)) enqueued = job; }), Arg.Any<IState>());
+
+        var result = await _handler.Handle(new GoogleCodeAuthCommand("code", "verifier", "https://api.test/oauth/google/callback", PersistGoogleTokens: false), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.WasReactivated.Should().BeTrue();
+        user.IsDeactivated.Should().BeFalse();
+        user.ScheduledDeletionAt.Should().BeNull();
+        user.HasProAccess.Should().Be(!expired);
+        user.Plan.Should().Be(expired ? UserPlan.Free : UserPlan.Pro);
+        _jobs.Received(1).Create(Arg.Is<Job>(job => job.Type == typeof(CompleteSignupJob)
+            && (Guid)job.Args[0] == user.Id && !(bool)job.Args[1]), Arg.Any<IState>());
+        _jobs.Received(!expired && !play ? 2 : 1).Create(Arg.Any<Job>(), Arg.Any<IState>());
+        if (!expired && !play)
+        {
+            _jobs.Received(1).Create(Arg.Is<Job>(job => job.Type == typeof(CancelSubscriptionOnDeletionJob)), Arg.Any<IState>());
+            enqueued!.Type.Should().Be<CancelSubscriptionOnDeletionJob>();
+            enqueued.Args.Should().Equal(user.Id, "sub_paid", null, false, CancellationToken.None);
+        }
+        else
+            _jobs.DidNotReceive().Create(Arg.Is<Job>(job => job.Type == typeof(CancelSubscriptionOnDeletionJob)), Arg.Any<IState>());
     }
 
     [Fact]

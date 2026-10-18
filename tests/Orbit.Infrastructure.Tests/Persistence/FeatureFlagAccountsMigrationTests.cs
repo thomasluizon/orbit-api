@@ -26,8 +26,14 @@ public class FeatureFlagAccountsMigrationTests
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
 
-        differences.Should().HaveCount(4).And.OnlyContain(operation =>
-            operation is DropForeignKeyOperation || operation is AddForeignKeyOperation);
+        differences.Should().HaveCount(6).And.OnlyContain(operation =>
+            operation is DropForeignKeyOperation || operation is AddForeignKeyOperation || operation is AddColumnOperation);
+        var renewalColumns = differences.OfType<AddColumnOperation>().ToArray();
+        renewalColumns.Should().HaveCount(2).And.OnlyContain(column =>
+            column.Table == "Users" && column.ClrType == typeof(bool) && !column.IsNullable
+            && Equals(column.DefaultValue, false));
+        renewalColumns.Select(column => column.Name).Should().BeEquivalentTo(
+            "StripeRenewalStoppedByDeletion", "PlayRenewalStoppedByDeletion");
         differences.OfType<DropForeignKeyOperation>().Select(operation => operation.Name).Should().BeEquivalentTo(
             "FK_AccountabilityPairs_Users_AddresseeId", "FK_AccountabilityPairs_Users_RequesterId");
         differences.OfType<AddForeignKeyOperation>().Should().HaveCount(2).And.OnlyContain(operation =>
@@ -54,9 +60,10 @@ public class FeatureFlagAccountsMigrationTests
             "SignupLanguage", "SignupReferralCode", "SignupCompletedAtUtc",
             "SignupReferralCompletedAtUtc", "SignupAnalyticsCompletedAtUtc", "SignupWelcomeCompletedAtUtc");
         context.Database.HasPendingModelChanges().Should().BeFalse();
-        context.Database.GetMigrations().TakeLast(4).Should().Equal(
+        context.Database.GetMigrations().TakeLast(5).Should().Equal(
             "20261001074038_AddHabitSkipUndo", "20261017011939_AddFeatureFlagAccounts",
-            "20261018093533_CascadeAccountabilityPairsOnUserDeletion", "20261018111350_AddDurableSignupWork");
+            "20261018093533_CascadeAccountabilityPairsOnUserDeletion", "20261018111350_AddDurableSignupWork",
+            "20261018111711_RecordDeletionStoppedRenewals");
     }
 
     [Fact]

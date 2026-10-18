@@ -12,6 +12,34 @@ public class UserTests
         return result.Value;
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void CancelDeactivation_PreservesPaidPeriodAndFreesExpiredPlan(bool expired, bool play)
+    {
+        var user = User.Create("Returning", "returning@example.com").Value;
+        var expiry = DateTime.UtcNow.AddDays(expired ? -1 : 1);
+        if (play)
+            user.SetPlaySubscription("play-token", expiry);
+        else
+            user.SetStripeSubscription("sub_paid", expiry);
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        user.Deactivate(DateTime.UtcNow.AddDays(7));
+
+        user.CancelDeactivation();
+
+        user.IsDeactivated.Should().BeFalse();
+        user.Plan.Should().Be(expired ? UserPlan.Free : UserPlan.Pro);
+        user.HasProAccess.Should().Be(!expired);
+        user.PlanExpiresAt.Should().Be(expiry);
+        if (play)
+            user.PlayPurchaseToken.Should().Be("play-token");
+        else
+            user.StripeSubscriptionId.Should().Be("sub_paid");
+    }
+
     [Fact]
     public void ReminderPreferencesVersion_AdvancesForEverySchedulerPreference()
     {
