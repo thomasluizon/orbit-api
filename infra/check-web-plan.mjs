@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url"
 
 const guardedAddresses = new Set([
   "render_web_service.production_web",
+  "render_web_service.production_redesign_web",
   "render_web_service.staging_web",
 ])
 

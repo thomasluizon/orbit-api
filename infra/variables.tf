@@ -68,6 +68,16 @@ variable "production_web_digest" {
   }
 }
 
+variable "production_redesign_web_digest" {
+  description = "Published GHCR digest built from orbit-ui-mobile redesign/main for initial production redesign creation."
+  type        = string
+
+  validation {
+    condition     = can(regex("^sha256:[0-9a-f]{64}$", var.production_redesign_web_digest))
+    error_message = "production_redesign_web_digest must be a sha256 image digest."
+  }
+}
+
 variable "staging_web_digest" {
   description = "Published GHCR digest for the staging web image."
   type        = string
