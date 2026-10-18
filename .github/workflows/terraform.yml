@@ -27,5 +27,5 @@ jobs:
       - run: terraform fmt -check -recursive infra
       - run: terraform -chdir=infra init -backend=false -input=false
       - run: terraform -chdir=infra validate
-      - run: npm ci --prefix infra
+      - run: npm ci --prefix infra --ignore-scripts
       - run: npm test --prefix infra
