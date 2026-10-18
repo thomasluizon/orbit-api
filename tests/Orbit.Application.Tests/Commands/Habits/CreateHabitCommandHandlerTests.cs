@@ -59,14 +59,16 @@ public class CreateHabitCommandHandlerTests
     public async Task Handle_ValidCommand_CreatesHabitAndSaves()
     {
         var command = new CreateHabitCommand(
-            UserId, "Read 30 minutes", "Daily reading", FrequencyUnit.Day, 1);
+            UserId, "Read 30 minutes", "Daily reading", FrequencyUnit.Day, 1,
+            Options: new HabitCommandOptions(EndDate: Today.AddDays(30)));
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().NotBeEmpty();
         await _habitRepo.Received(1).AddAsync(
-            Arg.Is<Habit>(h => h.Title == "Read 30 minutes" && h.UserId == UserId),
+            Arg.Is<Habit>(h => h.Title == "Read 30 minutes" && h.UserId == UserId
+                && h.ParentHabitId == null && h.EndDate == Today.AddDays(30)),
             Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).AcquireAdvisoryLockAsync(

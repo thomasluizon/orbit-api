@@ -109,6 +109,155 @@ public class UpdateHabitCommandHandlerTests
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(true, true, false)]
+    [InlineData(false, null, false)]
+    [InlineData(true, null, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, true, true)]
+    public async Task Handle_SlipAlerts_OnlyEnablingRequiresPro(
+        bool enabled, bool? requested, bool hasProAccess)
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Original Title", FrequencyUnit.Day, 1, Today,
+            SlipAlertEnabled: enabled)).Value;
+        _habitRepo.FindOneTrackedAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(habit);
+        _payGate.CanUseSlipAlerts(UserId, Arg.Any<CancellationToken>())
+            .Returns(hasProAccess ? Result.Success() : Result.PayGateFailure("Pro required"));
+        var command = new UpdateHabitCommand(
+            UserId, habit.Id, "Updated Title", null, FrequencyUnit.Day, 1,
+            Options: new UpdateHabitCommandOptions(SlipAlertEnabled: requested));
+        var requiresPro = requested == true && !enabled;
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        if (requiresPro && !hasProAccess)
+        {
+            result.ErrorCode.Should().Be(Result.PayGateErrorCode);
+            habit.Title.Should().Be("Original Title");
+            habit.SlipAlertEnabled.Should().BeFalse();
+            await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        }
+        else
+        {
+            result.IsSuccess.Should().BeTrue();
+            habit.Title.Should().Be("Updated Title");
+            habit.SlipAlertEnabled.Should().Be(requested ?? enabled);
+            await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        }
+
+        await _payGate.Received(requiresPro ? 1 : 0)
+            .CanUseSlipAlerts(UserId, Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("unchanged", false)]
+    [InlineData("reordered", false)]
+    [InlineData("clock-equivalent", false)]
+    [InlineData("offset-equivalent", false)]
+    [InlineData("due-time", true)]
+    [InlineData("clear-due-time", true)]
+    [InlineData("enabled", true)]
+    [InlineData("offsets", true)]
+    [InlineData("relative", true)]
+    [InlineData("clock", true)]
+    public async Task Handle_ReminderSchedule_ClearsSentRowsOnlyWhenChanged(string change, bool clears)
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Timed habit", FrequencyUnit.Day, 1, Today,
+            DueTime: new TimeOnly(9, 0), ReminderEnabled: true,
+            ReminderTimes: [15, 30],
+            RelativeReminders: [new(MinutesBefore: 60),
+                new(When: ScheduledReminderWhen.SameDay, Time: new TimeOnly(8, 0))])).Value;
+        var sent = SentReminder.Create(habit.Id, Today, 15);
+        var yesterday = SentReminder.Create(habit.Id, Today.AddDays(-1), 15);
+        var otherHabit = SentReminder.Create(Guid.NewGuid(), Today, 15);
+        SentReminder[] rows = [sent, yesterday, otherHabit];
+        _habitRepo.FindOneTrackedAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(habit);
+        _sentReminderRepo.FindAsync(
+                Arg.Any<Expression<Func<SentReminder, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => rows.Where(call.ArgAt<Expression<Func<SentReminder, bool>>>(0).Compile()).ToList());
+        var options = new UpdateHabitCommandOptions(
+            DueTime: habit.DueTime, ReminderEnabled: habit.ReminderEnabled,
+            ReminderTimes: habit.ReminderTimes, RelativeReminders: habit.RelativeReminders);
+        options = change switch
+        {
+            "reordered" => options with
+            {
+                ReminderTimes = [30, 15],
+                RelativeReminders = habit.RelativeReminders.Reverse().ToList()
+            },
+            "clock-equivalent" => options with
+            {
+                RelativeReminders = null,
+                ScheduledReminders = [new(ScheduledReminderWhen.SameDay, new TimeOnly(8, 0))]
+            },
+            "offset-equivalent" => options with
+            {
+                RelativeReminders = habit.RelativeReminders.Concat([new RelativeReminderTime(MinutesBefore: 15)]).ToList()
+            },
+            "due-time" => options with { DueTime = new TimeOnly(11, 0) },
+            "clear-due-time" => options with { DueTime = null },
+            "enabled" => options with { ReminderEnabled = false },
+            "offsets" => options with { ReminderTimes = [10] },
+            "relative" => options with { RelativeReminders = [new(MinutesBefore: 90)] },
+            "clock" => options with
+            {
+                RelativeReminders = null,
+                ScheduledReminders = [new(ScheduledReminderWhen.SameDay, new TimeOnly(7, 0))]
+            },
+            _ => options
+        };
+        var command = new UpdateHabitCommand(
+            UserId, habit.Id, "Renamed habit", null, FrequencyUnit.Day, 1, Options: options);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        _sentReminderRepo.Received(clears ? 1 : 0).Remove(sent);
+        _sentReminderRepo.DidNotReceive().Remove(yesterday);
+        _sentReminderRepo.DidNotReceive().Remove(otherHabit);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_UntimedReminderSchedule_ClearsSentRowsOnlyWhenChanged(bool changed)
+    {
+        var clock = new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(8, 0));
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Untimed habit", FrequencyUnit.Day, 1, Today,
+            ReminderEnabled: true, ScheduledReminders: [clock])).Value;
+        var sent = SentReminder.Create(habit.Id, Today, 0);
+        _habitRepo.FindOneTrackedAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(habit);
+        _sentReminderRepo.FindAsync(
+                Arg.Any<Expression<Func<SentReminder, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { sent });
+        var command = new UpdateHabitCommand(
+            UserId, habit.Id, "Renamed habit", null, FrequencyUnit.Day, 1,
+            Options: new UpdateHabitCommandOptions(
+                ScheduledReminders: [changed ? clock with { Time = new TimeOnly(7, 0) } : clock]));
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        _sentReminderRepo.Received(changed ? 1 : 0).Remove(sent);
+    }
+
     [Fact]
     public async Task Handle_TimedHabitScheduledReminderEdit_SavesFoldedClockReminder()
     {
