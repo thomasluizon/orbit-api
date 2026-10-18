@@ -38,7 +38,7 @@ public class DistributedRateLimitFilterTests
     [InlineData(true)]
     public async Task AnswerPolicy_OnlyAppliesWhenBlockAnswerIsPresent(bool hasAnswer)
     {
-        var filter = new DistributedRateLimitFilter("ai-resolve", _service, _authSessionService, _logger, blockAnswersOnly: true);
+        var filter = new DistributedRateLimitFilter("ai-resolve", _service, _authSessionService, Options.Create(new BffForwardingSettings()), _logger, blockAnswersOnly: true);
         _service.TryAcquireAsync("ai-resolve", Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new DistributedRateLimitDecision(false, 10, 10, DateTime.UtcNow.AddMinutes(1)));
         var (context, _) = CreateExecutingContext();

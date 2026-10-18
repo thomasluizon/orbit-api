@@ -1,4 +1,9 @@
-using System.Linq.Expressions;
+using Orbit.Infrastructure.Services;
+using Microsoft.AspNetCore.Http;
+using Hangfire;
+using Hangfire.Common;
+using Hangfire.States;
+using Orbit.Application.Auth.Jobs;
 using FluentAssertions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -25,22 +30,17 @@ public class GoogleCodeAuthCommandHandlerTests
     private readonly IGenericRepository<User> _users = Substitute.For<IGenericRepository<User>>();
     private readonly IUnitOfWork _work = Substitute.For<IUnitOfWork>();
     private readonly IAuthSessionService _sessions = Substitute.For<IAuthSessionService>();
-    private readonly IEmailService _email = Substitute.For<IEmailService>();
-    private readonly IProductAnalytics _analytics = Substitute.For<IProductAnalytics>();
-    private readonly IMediator _mediator = Substitute.For<IMediator>();
+    private readonly IAuthUserStore _store = Substitute.For<IAuthUserStore>();
+    private readonly IBackgroundJobClient _jobs = Substitute.For<IBackgroundJobClient>();
     private readonly IMediator _signInMediator = Substitute.For<IMediator>();
     private readonly GoogleCodeAuthCommandHandler _handler;
 
     public GoogleCodeAuthCommandHandlerTests()
     {
-        var provider = Substitute.For<IServiceProvider>();
-        provider.GetService(typeof(IMediator)).Returns(_mediator);
-        var scope = Substitute.For<IServiceScope>();
-        scope.ServiceProvider.Returns(provider);
-        var scopeFactory = Substitute.For<IServiceScopeFactory>();
-        scopeFactory.CreateScope().Returns(scope);
-        var flow = new GoogleSignInFlow(_users, _work, _sessions, _email, scopeFactory, _analytics,
-            NullLogger<GoogleSignInFlow>.Instance);
+        _work.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>()(call.Arg<CancellationToken>()));
+        _store.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(call => call.Arg<User>());
+        var flow = new GoogleSignInFlow(_store, _work, _sessions, new SignupJobDispatcher(_jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance));
         _handler = new GoogleCodeAuthCommandHandler(_exchange, _signInMediator);
         _signInMediator.Send(Arg.Any<CompleteGoogleSignInCommand>(), Arg.Any<CancellationToken>())
             .Returns(call =>
@@ -58,18 +58,11 @@ public class GoogleCodeAuthCommandHandlerTests
     [Fact]
     public async Task NewUser_StoresTokensAndRunsSignupEffects()
     {
-        var welcomeSent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        _email.SendWelcomeEmailAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(_ => { welcomeSent.TrySetResult(); return Task.CompletedTask; });
-        var referralSent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        _mediator.Send(Arg.Any<ProcessReferralCodeCommand>(), Arg.Any<CancellationToken>())
-            .Returns(_ => { referralSent.TrySetResult(); return Task.FromResult(Result.Success()); });
         User? created = null;
-        _users.When(x => x.AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()))
-            .Do(call => created = call.Arg<User>());
+        _store.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>())
+            .Returns(call => created = call.Arg<User>());
 
         var result = await _handler.Handle(new GoogleCodeAuthCommand("code", "verifier", "https://app.test/callback", ReferralCode: "friend"), CancellationToken.None);
-        await Task.WhenAll(welcomeSent.Task, referralSent.Task).WaitAsync(TimeSpan.FromSeconds(5));
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Token.Should().Be("orbit-access");
@@ -77,9 +70,9 @@ public class GoogleCodeAuthCommandHandlerTests
         created.Should().NotBeNull();
         created!.GoogleAccessToken.Should().Be("access");
         created.GoogleRefreshToken.Should().Be("refresh");
-        _analytics.Received(1).CaptureUserEvent(created.Id, "signup_completed", "Free");
-        await _email.Received(1).SendWelcomeEmailAsync(Email, "Google User", "en", Arg.Any<CancellationToken>());
-        await _mediator.Received(1).Send(Arg.Is<ProcessReferralCodeCommand>(x => x.NewUserId == created.Id && x.ReferralCode == "friend"), Arg.Any<CancellationToken>());
+        _jobs.Received(1).Create(Arg.Is<Job>(job => job.Type == typeof(CompleteSignupJob)
+            && (Guid)job.Args[0] == created.Id && (bool)job.Args[1]
+            && (string)job.Args[3] == "friend"), Arg.Any<IState>());
     }
 
     [Theory]
@@ -96,7 +89,7 @@ public class GoogleCodeAuthCommandHandlerTests
             user.EnableCalendarAutoSync().IsSuccess.Should().BeTrue();
             user.MarkCalendarSyncReconnectRequired("invalid_grant");
         }
-        _users.FindOneTrackedIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>())
+        _store.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>())
             .Returns(user);
         _users.GetByIdAsync(user.Id, Arg.Any<CancellationToken>()).Returns(user);
         var payGate = Substitute.For<IPayGateService>();
@@ -121,7 +114,6 @@ public class GoogleCodeAuthCommandHandlerTests
         state.Value.Enabled.Should().BeFalse();
         user.GoogleCalendarLastSyncError.Should().BeNull();
         await _users.DidNotReceive().AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
-        await _email.DidNotReceive().SendWelcomeEmailAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -129,7 +121,7 @@ public class GoogleCodeAuthCommandHandlerTests
     {
         var user = User.Create("Existing", Email).Value;
         user.SetGoogleTokens("calendar-access", "calendar-refresh");
-        _users.FindOneTrackedIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>())
+        _store.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>())
             .Returns(user);
 
         var result = await _handler.Handle(
@@ -147,7 +139,7 @@ public class GoogleCodeAuthCommandHandlerTests
     {
         var user = User.Create("Existing", Email).Value;
         user.Deactivate(DateTime.UtcNow.AddDays(1));
-        _users.FindOneTrackedIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>())
+        _store.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>())
             .Returns(user);
 
         var result = await _handler.Handle(new GoogleCodeAuthCommand("code", "verifier", "https://app.test/callback"), CancellationToken.None);
@@ -179,8 +171,7 @@ public class GoogleCodeAuthCommandHandlerTests
         var currentUser = User.Create("Current", Email).Value;
         var trackerWasReset = false;
         _work.When(work => work.ResetTracking()).Do(_ => trackerWasReset = true);
-        _users.FindOneTrackedIgnoringFiltersAsync(
-                Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>())
+        _store.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>())
             .Returns(_ => trackerWasReset ? currentUser : staleUser);
         var saves = 0;
         _work.SaveChangesAsync(Arg.Any<CancellationToken>())
@@ -201,12 +192,13 @@ public class GoogleCodeAuthCommandHandlerTests
                 cfg.AddOpenBehavior(typeof(ConcurrencyRetryBehavior<,>));
             })
             .AddScoped<GoogleSignInFlow>()
+            .AddSingleton<ISignupJobDispatcher>(new SignupJobDispatcher(_jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance))
+            .AddSingleton(_store)
+            .AddSingleton(_jobs)
             .AddSingleton(_exchange)
             .AddSingleton(_users)
             .AddSingleton(_work)
             .AddSingleton(_sessions)
-            .AddSingleton(_email)
-            .AddSingleton(_analytics)
             .BuildServiceProvider();
         using var scope = provider.CreateScope();
 

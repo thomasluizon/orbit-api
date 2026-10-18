@@ -2499,6 +2499,25 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<DateTime?>("ScheduledDeletionAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("SignupAnalyticsCompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("SignupCompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SignupLanguage")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("SignupReferralCode")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("SignupReferralCompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("SignupWelcomeCompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<bool>("SocialOptIn")
                         .HasColumnType("boolean");
 

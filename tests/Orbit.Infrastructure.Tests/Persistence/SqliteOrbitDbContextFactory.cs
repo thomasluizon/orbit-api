@@ -13,39 +13,58 @@ internal sealed class SqliteOrbitDbContextFactory : IDisposable
     private readonly SqliteConnection _connection;
     private readonly DbContextOptions<OrbitDbContext> _options;
     private readonly IEncryptionService? _encryption;
+    private readonly string? _databasePath;
 
     internal SqliteOrbitDbContextFactory(params IInterceptor[] interceptors)
-        : this(null, null, interceptors)
+        : this(null, null, null, interceptors)
     {
     }
 
     internal SqliteOrbitDbContextFactory(
         Func<ExecutionStrategyDependencies, IExecutionStrategy>? executionStrategyFactory,
         params IInterceptor[] interceptors)
-        : this(executionStrategyFactory, null, interceptors)
+        : this(executionStrategyFactory, null, null, interceptors)
     {
     }
 
     internal SqliteOrbitDbContextFactory(IEncryptionService encryption, params IInterceptor[] interceptors)
-        : this(null, encryption, interceptors)
+        : this(null, encryption, null, interceptors)
+    {
+    }
+
+    internal SqliteOrbitDbContextFactory(string databasePath, params IInterceptor[] interceptors)
+        : this(null, null, databasePath, interceptors)
     {
     }
 
     private SqliteOrbitDbContextFactory(
         Func<ExecutionStrategyDependencies, IExecutionStrategy>? executionStrategyFactory,
-        IEncryptionService? encryption, params IInterceptor[] interceptors)
+        IEncryptionService? encryption,
+        string? databasePath,
+        IInterceptor[] interceptors)
     {
         _encryption = encryption;
-        _connection = new SqliteConnection("Data Source=:memory:");
+        _databasePath = databasePath;
+        var connectionString = new SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath ?? ":memory:",
+            Pooling = false
+        }.ToString();
+        _connection = new SqliteConnection(connectionString);
         _connection.Open();
 
-        _options = new DbContextOptionsBuilder<OrbitDbContext>()
-            .UseSqlite(_connection, sqlite =>
-            {
-                if (executionStrategyFactory is not null)
-                    sqlite.ExecutionStrategy(executionStrategyFactory);
-            })
-            .AddInterceptors(interceptors)
+        var options = new DbContextOptionsBuilder<OrbitDbContext>();
+        void Configure(SqliteDbContextOptionsBuilder sqlite)
+        {
+            if (executionStrategyFactory is not null)
+                sqlite.ExecutionStrategy(executionStrategyFactory);
+        }
+
+        if (databasePath is null)
+            options.UseSqlite(_connection, Configure);
+        else
+            options.UseSqlite(connectionString, Configure);
+        _options = options.AddInterceptors(interceptors)
             .ReplaceService<IModelCacheKeyFactory, EncryptionModelCacheKeyFactory>()
             .Options;
 
@@ -61,6 +80,8 @@ internal sealed class SqliteOrbitDbContextFactory : IDisposable
     {
         Context.Dispose();
         _connection.Dispose();
+        if (_databasePath is not null)
+            File.Delete(_databasePath);
     }
 
     private sealed class EncryptionModelCacheKeyFactory : IModelCacheKeyFactory
