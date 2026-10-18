@@ -1,6 +1,8 @@
 using System.Linq.Expressions;
 using FluentAssertions;
 using Hangfire;
+using Hangfire.Common;
+using Hangfire.States;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -120,11 +122,16 @@ public class CancelSubscriptionOnDeletionJobTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task ExecuteAsync_Restoration_OnlyRestoresBeforeExpiry(bool expired)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task ExecuteAsync_Restoration_OnlyRestoresBeforeExpiry(bool expired, bool lifetime)
     {
         _user.SetStripeSubscription("sub_paid", DateTime.UtcNow.AddDays(expired ? -1 : 20));
+
+        if (lifetime)
+            _user.GrantLifetimePro();
 
         await _job.ExecuteAsync(_user.Id, "sub_paid", null, false, CancellationToken.None);
 
@@ -189,6 +196,30 @@ public class CancelSubscriptionOnDeletionJobTests
         await RunAsync();
 
         _stripe.ReceivedCalls().Should().BeEmpty();
+    }
+
+    [Fact]
+    public void EnqueueRestoration_ExpiredLifetimeBilling_DoesNotEnqueue()
+    {
+        _user.SetStripeSubscription("sub_paid", DateTime.UtcNow.AddDays(-1));
+        _user.GrantLifetimePro();
+        var jobs = Substitute.For<IBackgroundJobClient>();
+
+        CancelSubscriptionOnDeletionJob.EnqueueRestoration(jobs, _user);
+
+        jobs.DidNotReceive().Create(Arg.Any<Job>(), Arg.Any<IState>());
+    }
+
+    [Fact]
+    public async Task CancelBeforeDeletionAsync_RetainedStripeAndPlayIdentifiers_ChecksBothProviders()
+    {
+        _user.SetStripeSubscription("sub_paid", DateTime.UtcNow.AddDays(20));
+        _user.SetPlaySubscription("play-token", DateTime.UtcNow.AddDays(20));
+
+        await _job.CancelBeforeDeletionAsync(_user, CancellationToken.None);
+
+        await _stripe.Received(1).SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>());
+        await _play.Received(1).CancelAsync("play-token", Arg.Any<CancellationToken>());
     }
 
     private Task RunAsync() => _job.ExecuteAsync(_user.Id, "sub_paid", null, true, CancellationToken.None);

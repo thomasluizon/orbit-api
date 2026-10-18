@@ -30,7 +30,7 @@ public sealed class CancelSubscriptionOnDeletionJob(
     public static void EnqueueRestoration(IBackgroundJobClient jobs, User user)
     {
         if (user.SubscriptionSource == SubscriptionSource.Stripe
-            && !string.IsNullOrWhiteSpace(user.StripeSubscriptionId) && user.IsPro)
+            && !string.IsNullOrWhiteSpace(user.StripeSubscriptionId) && HasUnexpiredPaidPeriod(user))
             jobs.Enqueue<CancelSubscriptionOnDeletionJob>(job =>
                 job.ExecuteAsync(user.Id, user.StripeSubscriptionId, null, false, CancellationToken.None));
     }
@@ -51,7 +51,7 @@ public sealed class CancelSubscriptionOnDeletionJob(
             {
                 if (cancelAtPeriodEnd)
                     await CancelProvidersAsync(stripeSubscriptionId, null, ct);
-                else if (user.IsPro)
+                else if (HasUnexpiredPaidPeriod(user))
                     await billingService.SetSubscriptionCancelAtPeriodEndAsync(stripeSubscriptionId, false, ct);
             }
 
@@ -67,6 +67,12 @@ public sealed class CancelSubscriptionOnDeletionJob(
     /// </summary>
     public Task CancelBeforeDeletionAsync(User user, CancellationToken cancellationToken) =>
         CancelProvidersAsync(user.StripeSubscriptionId, user.PlayPurchaseToken, cancellationToken);
+
+    private static bool HasUnexpiredPaidPeriod(User user)
+    {
+        var nowAtUtc = DateTime.UtcNow;
+        return user.IsPro && user.PlanExpiresAt > nowAtUtc;
+    }
 
     private async Task CancelProvidersAsync(string? stripeSubscriptionId, string? playPurchaseToken,
         CancellationToken cancellationToken)
