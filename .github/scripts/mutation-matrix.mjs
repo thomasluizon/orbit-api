@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 
 const shards = [
   {
@@ -21,20 +21,10 @@ const projects = {
   infrastructure: "Orbit.Infrastructure",
 };
 
-const baseRef = process.argv[2];
 let selected = shards;
 
-if (baseRef) {
-  if (!/^[A-Za-z0-9_][A-Za-z0-9._/-]*$/.test(baseRef)
-    || /\s|\.\./.test(baseRef)
-    || baseRef.split("/").some((part) => !/^[A-Za-z0-9_]/.test(part) || part.endsWith(".") || part.endsWith(".lock"))) {
-    process.stderr.write(`Invalid base ref: ${JSON.stringify(baseRef)}. Expected a git ref or object name.\n`);
-    process.exit(1);
-  }
-  const changed = execFileSync("git", ["diff", "--name-only", "--no-renames", "-z", "--end-of-options", `${baseRef}...HEAD`], {
-    encoding: "utf8",
-    env: { ...process.env, PATH: "/usr/bin:/bin" },
-  })
+if (process.argv[2] === "--stdin") {
+  const changed = readFileSync(0, "utf8")
     .split("\0")
     .filter(Boolean);
   for (const path of changed) process.stderr.write(`Changed: ${JSON.stringify(path)}\n`);

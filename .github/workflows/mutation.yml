@@ -37,7 +37,14 @@ jobs:
         id: select
         env:
           BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
-        run: node .github/scripts/mutation-matrix.mjs "$BASE_REF" >> "$GITHUB_OUTPUT"
+        run: |
+          set -o pipefail
+          if [ -n "$BASE_REF" ]; then
+            git diff --name-only --no-renames -z --end-of-options "$BASE_REF...HEAD" \
+              | node .github/scripts/mutation-matrix.mjs --stdin >> "$GITHUB_OUTPUT"
+          else
+            node .github/scripts/mutation-matrix.mjs >> "$GITHUB_OUTPUT"
+          fi
 
   mutation:
     name: Mutation (${{ matrix.shard || matrix.project }})
