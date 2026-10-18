@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -14,6 +15,8 @@ using Orbit.Domain.Models;
 namespace Orbit.Api.Controllers;
 
 [ApiController]
+[ApiVersion(1.0)]
+[ApiVersion(2.0)]
 [Route("api/[controller]")]
 public partial class AuthController(IMediator mediator, IAgentAuditService auditService, ILogger<AuthController> logger) : ControllerBase
 {

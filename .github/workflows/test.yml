@@ -40,13 +40,13 @@ jobs:
       - name: Build
         run: dotnet build --no-restore
 
-      - name: Fail if committed openapi.json is stale
+      - name: Fail if committed OpenAPI documents are stale
         run: |
-          if ! git diff --exit-code -- src/Orbit.Api/openapi.json; then
-            echo "::error::openapi.json is stale. Run 'dotnet build src/Orbit.Api' and commit src/Orbit.Api/openapi.json."
+          if ! git diff --exit-code -- src/Orbit.Api/openapi.json src/Orbit.Api/openapi_v2.json; then
+            echo "::error::OpenAPI documents are stale. Run 'dotnet build src/Orbit.Api' and commit both generated documents."
             exit 1
           fi
-          echo "OK: committed openapi.json matches the build output."
+          echo "OK: committed OpenAPI documents match the build output."
 
   unit-tests:
     name: Unit Tests

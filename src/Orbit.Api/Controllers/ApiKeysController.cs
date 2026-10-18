@@ -1,4 +1,5 @@
-﻿using MediatR;
+using Asp.Versioning;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
@@ -12,6 +13,8 @@ namespace Orbit.Api.Controllers;
 
 [Authorize]
 [ApiController]
+[ApiVersion(1.0)]
+[ApiVersion(2.0)]
 [Route("api/api-keys")]
 public partial class ApiKeysController(IMediator mediator, ILogger<ApiKeysController> logger) : ControllerBase
 {

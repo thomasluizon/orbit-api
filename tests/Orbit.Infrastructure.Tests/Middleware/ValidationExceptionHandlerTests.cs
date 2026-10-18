@@ -1,3 +1,4 @@
+using HttpContextExtensions = Orbit.Api.Extensions.HttpContextExtensions;
 using System.Text.Json;
 using FluentAssertions;
 using FluentValidation;

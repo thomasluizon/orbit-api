@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -12,6 +13,8 @@ namespace Orbit.Api.Controllers;
 
 [Authorize]
 [ApiController]
+[ApiVersion(1.0)]
+[ApiVersion(2.0)]
 [Route("api/[controller]")]
 public partial class TagsController(IMediator mediator, ILogger<TagsController> logger) : ControllerBase
 {

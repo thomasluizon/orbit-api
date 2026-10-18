@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using Orbit.Api.Mcp;
 using System.IO.Compression;
 using Amazon;
@@ -225,7 +226,7 @@ public static partial class ServiceCollectionExtensions
         });
     }
 
-    private static void AddCorsPolicies(WebApplicationBuilder builder)
+    internal static void AddCorsPolicies(WebApplicationBuilder builder)
     {
         var firstPartyOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
             ?? ["http://localhost:3000"];
@@ -238,7 +239,8 @@ public static partial class ServiceCollectionExtensions
             options.AddDefaultPolicy(policy =>
             {
                 policy.WithOrigins(firstPartyOrigins)
-                      .WithHeaders("Authorization", "Content-Type", "Mcp-Session-Id", "Last-Event-ID", "X-Orbit-Event-Origin")
+                      .WithHeaders("Authorization", "Content-Type", "api-version", "Mcp-Session-Id", "Last-Event-ID", "X-Orbit-Event-Origin")
+                      .WithExposedHeaders("api-supported-versions", "api-deprecated-versions")
                       .WithMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
                       .AllowCredentials();
             });
@@ -247,7 +249,8 @@ public static partial class ServiceCollectionExtensions
                 options.AddPolicy("ThirdParty", policy =>
                 {
                     policy.WithOrigins(thirdPartyOrigins)
-                          .WithHeaders("Authorization", "Content-Type", "Mcp-Session-Id")
+                          .WithHeaders("Authorization", "Content-Type", "api-version", "Mcp-Session-Id")
+                          .WithExposedHeaders("api-supported-versions", "api-deprecated-versions")
                           .WithMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS");
                 });
             }
@@ -256,7 +259,8 @@ public static partial class ServiceCollectionExtensions
                 options.AddPolicy("Landing", policy =>
                 {
                     policy.WithOrigins(landingOrigins)
-                          .WithHeaders("Content-Type")
+                          .WithHeaders("Content-Type", "api-version")
+                          .WithExposedHeaders("api-supported-versions", "api-deprecated-versions")
                           .WithMethods("POST", "OPTIONS");
                 });
             }
@@ -303,7 +307,7 @@ public static partial class ServiceCollectionExtensions
             .WithFeatureFlagAccess();
     }
 
-    private static void AddApiPipeline(WebApplicationBuilder builder)
+    internal static void AddApiPipeline(WebApplicationBuilder builder)
     {
         AddResponseCompression(builder);
 
@@ -330,16 +334,35 @@ public static partial class ServiceCollectionExtensions
             };
         });
 
-        builder.Services.AddOpenApi(options =>
-        {
-            options.AddDocumentTransformer<BearerSecuritySchemeTransformer>();
-            options.AddOperationTransformer((operation, context, _) =>
+        builder.Services.AddApiVersioning(options =>
             {
-                if (context.Description.ActionDescriptor is ControllerActionDescriptor action &&
-                    action.MethodInfo.IsDefined(typeof(ObsoleteAttribute), false))
-                    operation.Deprecated = true;
-                return Task.CompletedTask;
-            });
+                options.ApiVersionReader = new HeaderApiVersionReader("api-version");
+                options.AssumeDefaultVersionWhenUnspecified = true;
+                options.DefaultApiVersion = new ApiVersion(1, 0);
+                options.ReportApiVersions = true;
+                options.UnsupportedApiVersionStatusCode = StatusCodes.Status400BadRequest;
+            })
+            .AddMvc()
+            .AddApiExplorer(options => options.GroupNameFormat = "'v'VVV");
+
+        builder.Services.AddOpenApi("v1", options => ConfigureOrbitOpenApi(options, "1.0"));
+        builder.Services.AddOpenApi("v2", options => ConfigureOrbitOpenApi(options, "2.0"));
+    }
+
+    private static void ConfigureOrbitOpenApi(Microsoft.AspNetCore.OpenApi.OpenApiOptions options, string version)
+    {
+        options.AddDocumentTransformer<BearerSecuritySchemeTransformer>();
+        options.AddDocumentTransformer((document, _, _) =>
+        {
+            document.Info.Version = version;
+            return Task.CompletedTask;
+        });
+        options.AddOperationTransformer((operation, context, _) =>
+        {
+            if (context.Description.ActionDescriptor is ControllerActionDescriptor action &&
+                action.MethodInfo.IsDefined(typeof(ObsoleteAttribute), false))
+                operation.Deprecated = true;
+            return Task.CompletedTask;
         });
     }
 
