@@ -172,6 +172,7 @@ public sealed class ProactiveEngineServiceTests
         {
             h.Db.AppFeatureFlags.Add(AppFeatureFlag.Create(FeatureFlagKeys.AstraProactiveEngineDisabled, true));
             await h.Db.SaveChangesAsync();
+            h.Flags.Invalidate();
         }
         h.Clock.Now = h.Clock.Now.AddMinutes(2);
 
@@ -489,15 +490,114 @@ public sealed class ProactiveEngineServiceTests
         h.Db.ProactiveItems.Select(i => i.UserId).Distinct().Should().Equal(h.User.Id);
     }
 
-    [Fact]
-    public async Task KillSwitch_DisablesItemsAndPushAndCurrent()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task KillSwitch_DisablesItemsAndPushAndCurrent(bool globallyDisabled)
     {
         using var h = new Harness(19);
         h.SeedTrigger(ProactiveTrigger.EveningCheckin);
-        h.Db.AppFeatureFlags.Add(AppFeatureFlag.Create(FeatureFlagKeys.AstraProactiveEngineDisabled, true));
+        var other = AddEligibleAccount(h);
+        h.Db.Habits.Add(HabitFor(other.Id));
+        h.Db.AppFeatureFlags.Add(AppFeatureFlag.Create(FeatureFlagKeys.AstraProactiveEngineDisabled, globallyDisabled));
+        h.Db.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create(FeatureFlagKeys.AstraProactiveEngineDisabled, h.User.Id));
         await h.Run();
-        h.Db.ProactiveItems.Should().BeEmpty();
+
+        (await h.Flags.ResolveForUserAsync(h.User.Id)).Should().Contain(f =>
+            f.Key == FeatureFlagKeys.AstraProactiveEngineDisabled && f.Enabled);
+        var expected = globallyDisabled ? Array.Empty<Guid>() : [other.Id];
+        h.Db.ProactiveItems.Select(i => i.UserId).Should().BeEquivalentTo(expected);
+        h.Db.Notifications.Select(n => n.UserId).Should().BeEquivalentTo(expected);
+        await h.Push.DidNotReceive().SendToUserAsync(h.User.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await h.Push.Received(globallyDisabled ? 0 : 1).SendToUserAsync(other.Id, "Astra", Arg.Any<string>(), "/chat", Arg.Any<CancellationToken>());
         (await h.Engine.GetCurrentAsync(h.User.Id, default)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task CurrentAndStatus_AccountKillSwitchHidesExistingItemsOnlyForTargetedAccount()
+    {
+        using var h = new Harness(19);
+        h.SeedTrigger(ProactiveTrigger.EveningCheckin);
+        var other = AddEligibleAccount(h);
+        h.Db.Habits.Add(HabitFor(other.Id));
+        await h.Run();
+        var targetedItem = await h.Engine.GetCurrentAsync(h.User.Id, default);
+        var otherItem = await h.Engine.GetCurrentAsync(other.Id, default);
+        targetedItem.Should().NotBeNull();
+        otherItem.Should().NotBeNull();
+        h.Db.AppFeatureFlags.Add(AppFeatureFlag.Create(FeatureFlagKeys.AstraProactiveEngineDisabled, false));
+        h.Db.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create(FeatureFlagKeys.AstraProactiveEngineDisabled, h.User.Id));
+        await h.Db.SaveChangesAsync();
+        h.Db.ChangeTracker.Clear();
+        h.Flags.Invalidate();
+
+        await AssertStatusReadOnly(h, targetedItem!.Id, false);
+        await AssertStatusReadOnly(h, otherItem!.Id, true, other.Id);
+        (await h.Engine.GetCurrentAsync(h.User.Id, default)).Should().BeNull();
+        (await h.Engine.GetCurrentAsync(other.Id, default))!.Id.Should().Be(otherItem.Id);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Calendar_UsesGlobalOrAccountEligibility(bool globallyEnabled)
+    {
+        using var h = new Harness(8);
+        h.SeedTrigger(ProactiveTrigger.BusyCalendarDay);
+        var other = AddEligibleAccount(h);
+        other.SetGoogleTokens("other-access", "other-refresh");
+        (await h.Db.AppFeatureFlags.SingleAsync(f => f.Key == FeatureFlagKeys.CalendarIntegration)).SetEnabled(globallyEnabled);
+        h.Db.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create(FeatureFlagKeys.CalendarIntegration, h.User.Id));
+        await h.Run();
+
+        var expected = globallyEnabled ? new[] { h.User.Id, other.Id } : [h.User.Id];
+        h.Db.ProactiveItems.Should().OnlyContain(i => i.Trigger == ProactiveTrigger.BusyCalendarDay);
+        h.Db.ProactiveItems.Select(i => i.UserId).Should().BeEquivalentTo(expected);
+        h.Db.Notifications.Select(n => n.UserId).Should().BeEquivalentTo(expected);
+        h.Db.ProactiveCalendarDays.Select(d => d.UserId).Should().BeEquivalentTo(expected);
+        await h.Calendar.Received(expected.Length).FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), null, Arg.Any<CancellationToken>());
+        foreach (var id in expected)
+            await h.Push.Received(1).SendToUserAsync(id, "Astra", Arg.Any<string>(), "/chat", Arg.Any<CancellationToken>());
+        foreach (var id in expected)
+        {
+            var current = await h.Engine.GetCurrentAsync(id, default);
+            current.Should().NotBeNull();
+            await AssertStatusReadOnly(h, current!.Id, true, id);
+        }
+        if (!globallyEnabled)
+        {
+            (await h.Engine.GetCurrentAsync(other.Id, default)).Should().BeNull();
+            await h.Push.DidNotReceive().SendToUserAsync(other.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        }
+    }
+
+    [Fact]
+    public async Task Calendar_AccountKillSwitchSkipsOnlyTargetedAccount()
+    {
+        using var h = new Harness(8);
+        h.SeedTrigger(ProactiveTrigger.BusyCalendarDay);
+        var other = AddEligibleAccount(h);
+        other.SetGoogleTokens("other-access", "other-refresh");
+        h.Db.AppFeatureFlags.Add(AppFeatureFlag.Create(FeatureFlagKeys.AstraProactiveEngineDisabled, false));
+        h.Db.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create(FeatureFlagKeys.AstraProactiveEngineDisabled, h.User.Id));
+        await h.Run();
+
+        h.Db.ProactiveItems.Should().ContainSingle().Which.UserId.Should().Be(other.Id);
+        h.Db.Notifications.Should().ContainSingle().Which.UserId.Should().Be(other.Id);
+        h.Db.ProactiveCalendarDays.Should().ContainSingle().Which.UserId.Should().Be(other.Id);
+        await h.Push.DidNotReceive().SendToUserAsync(h.User.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await h.Push.Received(1).SendToUserAsync(other.Id, "Astra", Arg.Any<string>(), "/chat", Arg.Any<CancellationToken>());
+        await h.Calendar.Received(1).FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), null, Arg.Any<CancellationToken>());
+    }
+
+    private static User AddEligibleAccount(Harness h)
+    {
+        var user = User.Create("Other", "other@example.com").Value;
+        user.GrantLifetimePro();
+        user.SetTimeZone("UTC");
+        user.SetWeekStartDay(0);
+        h.Db.Users.Add(user);
+        return user;
     }
 
     [Fact]
@@ -579,20 +679,24 @@ public sealed class ProactiveEngineServiceTests
         h.Db.ProactiveItems.Any(i => i.PushedAtUtc.HasValue).Should().Be(pushExpected);
     }
 
-    [Fact]
-    public async Task HourlyRun_UsesSameReadCountForTenAndThousandEligibleAccounts()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task HourlyRun_UsesSameReadCountForTenAndThousandEligibleAccounts(bool accountTargets)
     {
-        var small = await CountReads(10);
-        var large = await CountReads(1000);
+        var small = await CountReads(10, accountTargets);
+        var large = await CountReads(1000, accountTargets);
         large.Should().Be(small);
         small.Should().BeGreaterThan(0);
     }
 
-    private static async Task<int> CountReads(int count)
+    private static async Task<int> CountReads(int count, bool accountTargets)
     {
         var interceptor = new CountingDbCommandInterceptor();
         using var h = new Harness(19, interceptor);
         h.Db.Users.Remove(h.User);
+        if (accountTargets)
+            h.Db.AppFeatureFlags.Add(AppFeatureFlag.Create(FeatureFlagKeys.AstraProactiveEngineDisabled, false));
         for (var i = 0; i < count; i++)
         {
             var user = User.Create("Person", $"person{i}@example.com").Value;
@@ -600,13 +704,15 @@ public sealed class ProactiveEngineServiceTests
             user.SetWeekStartDay(0);
             h.Db.Users.Add(user);
             h.Db.Habits.Add(HabitFor(user.Id));
+            if (accountTargets && i % 2 == 0)
+                h.Db.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create(FeatureFlagKeys.AstraProactiveEngineDisabled, user.Id));
         }
         await h.Db.SaveChangesAsync();
         h.Db.ChangeTracker.Clear();
         interceptor.Reset();
         await h.Engine.EvaluateAsync(default);
         var queries = interceptor.SelectCommandCount;
-        h.Db.ProactiveItems.Count().Should().Be(count);
+        h.Db.ProactiveItems.Count().Should().Be(accountTargets ? count / 2 : count);
         return queries;
     }
 
@@ -630,6 +736,7 @@ public sealed class ProactiveEngineServiceTests
     internal sealed class Harness : IDisposable
     {
         private readonly SqliteOrbitDbContextFactory _factory;
+        private readonly MemoryCache _flagCache = new(new MemoryCacheOptions());
         public OrbitDbContext Db => _factory.Context;
         public User User { get; } = User.Create("Alex", "alex@example.com").Value;
         public FixedClock Clock { get; }
@@ -637,6 +744,7 @@ public sealed class ProactiveEngineServiceTests
         public IPushNotificationService Push { get; } = Substitute.For<IPushNotificationService>();
         public IProductAnalytics Analytics { get; } = Substitute.For<IProductAnalytics>();
         public ProactiveEngineService Engine { get; }
+        public FeatureFlagService Flags { get; }
 
         public Harness(int hour, CountingDbCommandInterceptor? interceptor = null, bool lifetime = true)
         {
@@ -654,7 +762,8 @@ public sealed class ProactiveEngineServiceTests
             tokens.TryRefreshAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(new GoogleTokenRefreshOutcome("access", GoogleTokenRefreshResult.Success, null));
             var dates = new UserDateService(Substitute.For<IGenericRepository<User>>(),
                 new MemoryDistributedCache(Options.Create(new MemoryDistributedCacheOptions())), Clock);
-            Engine = new(Db, Clock, messages, Push, Calendar, tokens, Analytics, dates,
+            Flags = new(Db, _flagCache);
+            Engine = new(Db, Clock, messages, Push, Calendar, tokens, Analytics, dates, Flags,
                 NullLogger<ProactiveEngineService>.Instance);
         }
 
@@ -693,6 +802,10 @@ public sealed class ProactiveEngineServiceTests
             }
         }
 
-        public void Dispose() => _factory.Dispose();
+        public void Dispose()
+        {
+            _flagCache.Dispose();
+            _factory.Dispose();
+        }
     }
 }
