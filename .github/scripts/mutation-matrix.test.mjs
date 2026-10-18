@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -131,3 +131,51 @@ test("an unavailable base fails instead of silently skipping mutation", (t) => {
   assert.notEqual(result.status, 0);
   assert.equal(result.stdout, "");
 });
+
+for (const base of ["--output=changed", "origin/main branch", "origin/main\n", "origin/main..HEAD", "origin/main~1", "origin//main", "origin/.hidden", "origin/main.lock"]) {
+  test(`invalid base ${JSON.stringify(base)} is refused before invoking git`, (t) => {
+    const repo = repository(t);
+    const marker = join(repo.root, "child-invoked");
+    const probe = join(repo.root, "probe.mjs");
+    writeFileSync(probe, `
+      import childProcess from "node:child_process";
+      import { writeFileSync } from "node:fs";
+      import { syncBuiltinESMExports } from "node:module";
+      const original = childProcess.execFileSync;
+      childProcess.execFileSync = (...args) => {
+        writeFileSync(${JSON.stringify(marker)}, "invoked");
+        return original(...args);
+      };
+      syncBuiltinESMExports();
+    `);
+    const result = spawnSync(process.execPath, ["--import", probe, selector, base], { cwd: repo.root, encoding: "utf8" });
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, "");
+    assert.equal(result.stderr, `Invalid base ref: ${JSON.stringify(base)}. Expected a git ref or object name.\n`);
+    assert.equal(existsSync(marker), false);
+  });
+}
+
+for (const kind of ["remote ref", "40-character SHA"]) {
+  test(`${kind} is accepted with an untrusted inherited PATH`, (t) => {
+    const repo = repository(t);
+    repo.git("branch", "origin/main", "base");
+    const base = kind === "remote ref" ? "origin/main" : repo.git("rev-parse", "base").trim();
+    if (kind === "40-character SHA") assert.match(base, /^[a-f0-9]{40}$/);
+    repo.write("src/Orbit.Application/Changed.cs");
+    repo.commit();
+    const bin = join(repo.root, "bin");
+    const marker = join(repo.root, "untrusted-git-invoked");
+    mkdirSync(bin);
+    writeFileSync(join(bin, "git"), `#!/bin/sh\ntouch '${marker}'\nexit 99\n`, { mode: 0o755 });
+    const result = spawnSync(process.execPath, [selector, base], {
+      cwd: repo.root,
+      encoding: "utf8",
+      env: { ...process.env, PATH: `${bin}:/usr/bin:/bin` },
+    });
+    assert.equal(result.status, 0);
+    assert.equal(result.stdout, 'matrix={"include":[{"project":"application"}]}\nhas-shards=true\n');
+    assert.equal(result.stderr, 'Changed: "src/Orbit.Application/Changed.cs"\n');
+    assert.equal(existsSync(marker), false);
+  });
+}
