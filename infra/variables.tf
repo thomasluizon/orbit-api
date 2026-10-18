@@ -4,17 +4,6 @@ variable "render_owner_id" {
   default     = "tea-ctg9ljtumphs73dep1o0"
 }
 
-variable "api_database" {
-  description = "Production API database source during the data migration."
-  type        = string
-  default     = "supabase"
-
-  validation {
-    condition     = contains(["supabase", "render"], var.api_database)
-    error_message = "api_database must be supabase or render."
-  }
-}
-
 variable "production_postgres_ip_allow_list" {
   description = "Operator addresses allowed to connect to production Postgres. Copy the live Render list into local.tfvars before planning."
   type = list(object({
