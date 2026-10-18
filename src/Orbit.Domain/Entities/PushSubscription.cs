@@ -48,6 +48,9 @@ public class PushSubscription : Entity
         if (string.IsNullOrWhiteSpace(auth))
             return Result.Failure<PushSubscription>(DomainErrors.PushAuthKeyRequired);
 
+        if (ClassifyTransport(p256dh) == PushTransport.WebPush && !WebPushEndpointPolicy.IsAllowed(endpoint))
+            return Result.Failure<PushSubscription>(DomainErrors.PushEndpointInvalid);
+
         return Result.Success(new PushSubscription
         {
             UserId = userId,

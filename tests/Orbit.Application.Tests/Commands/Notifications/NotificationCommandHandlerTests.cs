@@ -252,7 +252,7 @@ public class SubscribePushCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(new List<PushSubscription>().AsReadOnly());
 
-        var command = new SubscribePushCommand(UserId, "https://push.example.com/endpoint", "p256dh_key", "auth_key");
+        var command = new SubscribePushCommand(UserId, "https://fcm.googleapis.com/endpoint", "p256dh_key", "auth_key");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -264,7 +264,7 @@ public class SubscribePushCommandHandlerTests
     [Fact]
     public async Task Handle_ExistingEndpointSameUser_NoOp()
     {
-        var existing = PushSubscription.Create(UserId, "https://push.example.com/endpoint", "p256dh", "auth").Value;
+        var existing = PushSubscription.Create(UserId, "https://fcm.googleapis.com/endpoint", "p256dh", "auth").Value;
 
         _pushSubRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<PushSubscription, bool>>>(),
@@ -272,7 +272,7 @@ public class SubscribePushCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(existing);
 
-        var command = new SubscribePushCommand(UserId, "https://push.example.com/endpoint", "p256dh", "auth");
+        var command = new SubscribePushCommand(UserId, "https://fcm.googleapis.com/endpoint", "p256dh", "auth");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -284,7 +284,7 @@ public class SubscribePushCommandHandlerTests
     public async Task Handle_ExistingEndpointDifferentUser_RejectsToPreventHijack()
     {
         var otherUserId = Guid.NewGuid();
-        var existing = PushSubscription.Create(otherUserId, "https://push.example.com/endpoint", "p256dh", "auth").Value;
+        var existing = PushSubscription.Create(otherUserId, "https://fcm.googleapis.com/endpoint", "p256dh", "auth").Value;
 
         _pushSubRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<PushSubscription, bool>>>(),
@@ -292,7 +292,7 @@ public class SubscribePushCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(existing);
 
-        var command = new SubscribePushCommand(UserId, "https://push.example.com/endpoint", "new_p256dh", "new_auth");
+        var command = new SubscribePushCommand(UserId, "https://fcm.googleapis.com/endpoint", "new_p256dh", "new_auth");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -305,11 +305,11 @@ public class SubscribePushCommandHandlerTests
     public async Task Handle_SameBrowserUnderNewAccount_TransfersTheRowToTheNewAccount()
     {
         var otherUserId = Guid.NewGuid();
-        var existing = PushSubscription.Create(otherUserId, "https://push.example.com/endpoint", "p256dh", "auth").Value;
+        var existing = PushSubscription.Create(otherUserId, "https://fcm.googleapis.com/endpoint", "p256dh", "auth").Value;
         ArrangeExistingEndpoint(existing);
         ArrangeUserSubscriptions();
 
-        var command = new SubscribePushCommand(UserId, "https://push.example.com/endpoint", "p256dh", "auth");
+        var command = new SubscribePushCommand(UserId, "https://fcm.googleapis.com/endpoint", "p256dh", "auth");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -345,10 +345,10 @@ public class SubscribePushCommandHandlerTests
     public async Task Handle_ForeignWebPushEndpointWithoutItsKeys_KeepsTheRowWithItsOwner(string p256dh, string auth)
     {
         var otherUserId = Guid.NewGuid();
-        var existing = PushSubscription.Create(otherUserId, "https://push.example.com/endpoint", "p256dh", "auth").Value;
+        var existing = PushSubscription.Create(otherUserId, "https://fcm.googleapis.com/endpoint", "p256dh", "auth").Value;
         ArrangeExistingEndpoint(existing);
 
-        var command = new SubscribePushCommand(UserId, "https://push.example.com/endpoint", p256dh, auth);
+        var command = new SubscribePushCommand(UserId, "https://fcm.googleapis.com/endpoint", p256dh, auth);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -362,10 +362,10 @@ public class SubscribePushCommandHandlerTests
     public async Task Handle_TransferIntoAccountAtCap_EvictsItsOldestAndKeepsTheTransferredRow()
     {
         var otherUserId = Guid.NewGuid();
-        var existing = PushSubscription.Create(otherUserId, "https://push.example.com/endpoint", "p256dh", "auth").Value;
+        var existing = PushSubscription.Create(otherUserId, "https://fcm.googleapis.com/endpoint", "p256dh", "auth").Value;
         ArrangeExistingEndpoint(existing);
         var owned = Enumerable.Range(0, AppConstants.MaxPushSubscriptionsPerUser)
-            .Select(i => PushSubscription.Create(UserId, $"https://push.example.com/{i}", "key", "auth").Value)
+            .Select(i => PushSubscription.Create(UserId, $"https://fcm.googleapis.com/{i}", "key", "auth").Value)
             .ToArray();
         ArrangeUserSubscriptions(owned);
 
@@ -373,7 +373,7 @@ public class SubscribePushCommandHandlerTests
         _pushSubRepo.When(r => r.RemoveRange(Arg.Any<IEnumerable<PushSubscription>>()))
             .Do(call => removed = call.Arg<IEnumerable<PushSubscription>>().ToList());
 
-        var command = new SubscribePushCommand(UserId, "https://push.example.com/endpoint", "p256dh", "auth");
+        var command = new SubscribePushCommand(UserId, "https://fcm.googleapis.com/endpoint", "p256dh", "auth");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -393,6 +393,23 @@ public class SubscribePushCommandHandlerTests
 
         result.IsFailure.Should().BeTrue();
         await _pushSubRepo.DidNotReceive().AddAsync(Arg.Any<PushSubscription>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("https://example.com/push")]
+    [InlineData("https://fcm.googleapis.com.example.com/push")]
+    [InlineData("https://fcm.googleapis.com:8443/push")]
+    public async Task Handle_UnsupportedEndpoint_RejectsBeforeLookingUpOrClaimingStoredRow(string endpoint)
+    {
+        var command = new SubscribePushCommand(UserId, endpoint, "p256dh", "auth");
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.PushEndpointInvalid);
+        result.Error.Should().Be(ErrorMessages.PushEndpointInvalid.Message);
+        _pushSubRepo.ReceivedCalls().Should().BeEmpty();
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -455,7 +472,7 @@ public class SubscribePushCommandHandlerTests
         _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
             .ThrowsAsync(new DbUpdateException("duplicate", new FakeUniqueViolationException()));
 
-        var command = new SubscribePushCommand(UserId, "https://push.example.com/endpoint", "p256dh", "auth");
+        var command = new SubscribePushCommand(UserId, "https://fcm.googleapis.com/endpoint", "p256dh", "auth");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -467,7 +484,7 @@ public class SubscribePushCommandHandlerTests
     {
         ArrangeNoExistingEndpoint();
         var existing = Enumerable.Range(0, AppConstants.MaxPushSubscriptionsPerUser)
-            .Select(i => PushSubscription.Create(UserId, $"https://push.example.com/{i}", "key", "auth").Value)
+            .Select(i => PushSubscription.Create(UserId, $"https://fcm.googleapis.com/{i}", "key", "auth").Value)
             .ToArray();
         ArrangeUserSubscriptions(existing);
 
@@ -478,7 +495,7 @@ public class SubscribePushCommandHandlerTests
         _pushSubRepo.When(r => r.RemoveRange(Arg.Any<IEnumerable<PushSubscription>>()))
             .Do(call => removed = call.Arg<IEnumerable<PushSubscription>>().ToList());
 
-        var command = new SubscribePushCommand(UserId, "https://push.example.com/new", "key", "auth");
+        var command = new SubscribePushCommand(UserId, "https://fcm.googleapis.com/new", "key", "auth");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -495,11 +512,11 @@ public class SubscribePushCommandHandlerTests
     {
         ArrangeNoExistingEndpoint();
         var existing = Enumerable.Range(0, AppConstants.MaxPushSubscriptionsPerUser - 1)
-            .Select(i => PushSubscription.Create(UserId, $"https://push.example.com/{i}", "key", "auth").Value)
+            .Select(i => PushSubscription.Create(UserId, $"https://fcm.googleapis.com/{i}", "key", "auth").Value)
             .ToArray();
         ArrangeUserSubscriptions(existing);
 
-        var command = new SubscribePushCommand(UserId, "https://push.example.com/new", "key", "auth");
+        var command = new SubscribePushCommand(UserId, "https://fcm.googleapis.com/new", "key", "auth");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
