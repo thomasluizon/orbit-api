@@ -10,7 +10,7 @@ internal sealed class RequestCorrelationMiddleware(RequestDelegate next)
         if (!string.IsNullOrWhiteSpace(incomingRequestId))
             context.TraceIdentifier = incomingRequestId;
 
-        context.Response.Headers[HttpContextExtensions.RequestIdHeaderName] = context.GetRequestId();
+        context.Response.Headers[Orbit.Api.Extensions.HttpContextExtensions.RequestIdHeaderName] = context.GetRequestId();
 
         await next(context);
     }

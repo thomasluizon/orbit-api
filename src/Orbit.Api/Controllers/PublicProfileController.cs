@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using System.Text.Json;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -10,6 +11,8 @@ using Orbit.Application.Profile.Queries;
 namespace Orbit.Api.Controllers;
 
 [ApiController]
+[ApiVersion(1.0)]
+[ApiVersion(2.0)]
 [Route("api/u")]
 public class PublicProfileController(IMediator mediator, IDistributedCache cache) : ControllerBase
 {

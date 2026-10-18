@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,6 +12,8 @@ namespace Orbit.Api.Controllers;
 
 [Authorize]
 [ApiController]
+[ApiVersion(1.0)]
+[ApiVersion(2.0)]
 [Route("api/user-facts")]
 public partial class UserFactsController(IMediator mediator, ILogger<UserFactsController> logger) : ControllerBase
 {

@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -8,6 +9,8 @@ using Orbit.Application.Marketing.Commands;
 namespace Orbit.Api.Controllers;
 
 [ApiController]
+[ApiVersion(1.0)]
+[ApiVersion(2.0)]
 [Route("api/marketing")]
 [AllowAnonymous]
 public class MarketingController(IMediator mediator) : ControllerBase

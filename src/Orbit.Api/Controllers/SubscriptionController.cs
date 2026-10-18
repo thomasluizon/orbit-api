@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -10,6 +11,8 @@ using Orbit.Application.Subscriptions.Queries;
 namespace Orbit.Api.Controllers;
 
 [ApiController]
+[ApiVersion(1.0)]
+[ApiVersion(2.0)]
 [Route("api/subscriptions")]
 [Authorize]
 public partial class SubscriptionController(
