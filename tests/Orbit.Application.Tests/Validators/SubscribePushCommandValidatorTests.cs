@@ -20,13 +20,14 @@ public class SubscribePushCommandValidatorTests
     /// Sources: https://web.dev/articles/codelab-notifications-push-server,
     /// https://mozilla-services.github.io/autopush-rs/http.html,
     /// https://github.com/andreinwald/webpush-ios-example#subscription-and-saving-token, and
-    /// https://learn.microsoft.com/en-us/windows/apps/develop/notifications/push-notifications/wns-overview.
+    /// WNS: https://learn.microsoft.com/en-us/windows/apps/develop/notifications/push-notifications/wns-overview; Edge: https://learn.microsoft.com/en-us/answers/questions/5593523/why-notifications-fail-in-azure-notification-hub-a.
     /// </summary>
     [Theory]
     [InlineData("https://fcm.googleapis.com/fcm/send/cpqAgzGzkzQ:APA9...")]
     [InlineData("https://updates.push.services.mozilla.com/wpush/v1/...")]
     [InlineData("https://web.push.apple.com/QGuQyavXutnMH...")]
     [InlineData("https://cloud.notify.windows.com/?token=AQE%bU%2fSjZOCvRjjpILow%3d%3d")]
+    [InlineData("https://wns2-sg2p.notify.windows.com/w/?token=...")]
     public void Validate_DocumentedProviderEndpoint_NoErrors(string endpoint)
     {
         _validator.TestValidate(ValidCommand() with { Endpoint = endpoint }).ShouldNotHaveAnyValidationErrors();
