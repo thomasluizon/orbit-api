@@ -1326,6 +1326,29 @@ public class HabitTests
         habit.ChecklistItems.Should().HaveCount(1);
     }
 
+    [Theory]
+    [InlineData(11, null, true)]
+    [InlineData(null, null, true)]
+    [InlineData(11, 12, true)]
+    [InlineData(11, 10, false)]
+    [InlineData(null, 10, true)]
+    public void Update_TimeRange_ValidatesResultingValues(int? startHour, int? endHour, bool succeeds)
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            Guid.NewGuid(), "Exercise", FrequencyUnit.Day, 1, Today,
+            DueTime: new TimeOnly(9, 0), DueEndTime: new TimeOnly(10, 0))).Value;
+        TimeOnly? start = startHour.HasValue ? new TimeOnly(startHour.Value, 0) : null;
+        TimeOnly? end = endHour.HasValue ? new TimeOnly(endHour.Value, 0) : null;
+
+        var result = habit.Update(new HabitUpdateParams(
+            habit.Title, habit.Description, habit.FrequencyUnit, habit.FrequencyQuantity,
+            null, false, null, DueTime: start, DueEndTime: end));
+
+        result.IsSuccess.Should().Be(succeeds);
+        habit.DueTime.Should().Be(succeeds ? start : new TimeOnly(9, 0));
+        habit.DueEndTime.Should().Be(succeeds ? end : new TimeOnly(10, 0));
+    }
+
     [Fact]
     public void Update_DueEndTimeBeforeDueTime_ReturnsFailure()
     {
