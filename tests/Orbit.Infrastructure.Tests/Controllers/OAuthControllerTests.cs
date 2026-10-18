@@ -1,3 +1,4 @@
+using Orbit.Application.Auth.Services;
 using Hangfire;
 using Hangfire.Common;
 using Hangfire.States;
@@ -98,8 +99,9 @@ public class OAuthControllerTests : IDisposable
         var jobs = Substitute.For<IBackgroundJobClient>();
         Job? enqueued = null;
         jobs.Create(Arg.Do<Job>(job => enqueued = job), Arg.Any<IState>());
-        var flow = new GoogleSignInFlow(users, _unitOfWork, sessions, Substitute.For<IEmailService>(),
-            Substitute.For<Microsoft.Extensions.DependencyInjection.IServiceScopeFactory>(), Substitute.For<IProductAnalytics>(),
+        var flow = new GoogleSignInFlow(users, _unitOfWork, sessions, new GoogleSignInNotifications(Substitute.For<IEmailService>(),
+                Substitute.For<Microsoft.Extensions.DependencyInjection.IServiceScopeFactory>(),
+                NullLogger<GoogleSignInNotifications>.Instance), Substitute.For<IProductAnalytics>(),
             NullLogger<GoogleSignInFlow>.Instance, jobs);
         var exchange = Substitute.For<IGoogleAuthorizationCodeService>();
         exchange.ExchangeAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())

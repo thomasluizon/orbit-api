@@ -1,3 +1,4 @@
+using Orbit.Application.Auth.Services;
 using Hangfire.Common;
 using Hangfire.States;
 using Orbit.Application.Auth.Jobs;
@@ -45,8 +46,9 @@ public class GoogleAuthCommandHandlerTests
         var httpFactory = Substitute.For<IHttpClientFactory>();
         httpFactory.CreateClient("Supabase").Returns(httpClient);
 
-        var flow = new GoogleSignInFlow(_userRepo, _unitOfWork, _authSessionService, _emailService,
-            Substitute.For<Microsoft.Extensions.DependencyInjection.IServiceScopeFactory>(), _analytics,
+        var flow = new GoogleSignInFlow(_userRepo, _unitOfWork, _authSessionService, new GoogleSignInNotifications(_emailService,
+                Substitute.For<Microsoft.Extensions.DependencyInjection.IServiceScopeFactory>(),
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<GoogleSignInNotifications>.Instance), _analytics,
             Substitute.For<ILogger<GoogleSignInFlow>>(), _jobs);
         _handler = new GoogleAuthCommandHandler(httpFactory, flow);
 

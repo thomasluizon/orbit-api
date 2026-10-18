@@ -23,20 +23,22 @@ namespace Orbit.Infrastructure.Tests.Services;
 public class AccountDeletionServiceTests
 {
     [Theory]
-    [InlineData(false, false, 1, false, 0)]
-    [InlineData(true, false, 1, false, 0)]
-    [InlineData(false, true, 1, false, 0)]
-    [InlineData(true, true, 1, false, 0)]
-    [InlineData(false, true, 8, false, 0)]
-    [InlineData(false, true, 7, false, 0)]
-    [InlineData(false, true, 6, false, 0)]
-    [InlineData(false, false, 8, false, 0)]
-    [InlineData(true, true, 8, false, 0)]
-    [InlineData(false, false, 1, true, 0)]
-    [InlineData(true, false, 1, true, 0)]
-    [InlineData(false, true, 8, false, 1)]
-    [InlineData(false, true, 8, false, 2)]
-    public async Task RunAsync_DuePaidAccount_CancelsBeforeRemovingAndRetainsRowOnFailure(bool play, bool failure, int overdueDays, bool missing, int queueFailure)
+    [InlineData(false, false, 1, false, 0, false)]
+    [InlineData(true, false, 1, false, 0, false)]
+    [InlineData(false, true, 1, false, 0, false)]
+    [InlineData(true, true, 1, false, 0, false)]
+    [InlineData(false, true, 8, false, 0, false)]
+    [InlineData(false, true, 7, false, 0, false)]
+    [InlineData(false, true, 6, false, 0, false)]
+    [InlineData(false, false, 8, false, 0, false)]
+    [InlineData(true, true, 8, false, 0, false)]
+    [InlineData(false, false, 1, true, 0, false)]
+    [InlineData(true, false, 1, true, 0, false)]
+    [InlineData(false, true, 8, false, 1, false)]
+    [InlineData(false, true, 8, false, 2, false)]
+    [InlineData(true, false, 1, false, 0, true)]
+    [InlineData(true, false, 8, false, 0, true)]
+    public async Task RunAsync_DuePaidAccount_CancelsBeforeRemovingAndRetainsRowOnFailure(bool play, bool failure, int overdueDays, bool missing, int queueFailure, bool paused)
     {
         using var factory = new SqliteOrbitDbContextFactory();
         var user = CreateUser();
@@ -54,7 +56,7 @@ public class AccountDeletionServiceTests
             .Returns(new BillingSubscriptionDetails("active", DateTime.UtcNow.AddDays(20), false,
                 SubscriptionInterval.Monthly, 1000, "usd", null));
         playBilling.VerifyAsync("orbit_pro", "play-token", Arg.Any<CancellationToken>())
-            .Returns(new PlaySubscriptionState(true, DateTime.UtcNow.AddDays(20), SubscriptionInterval.Monthly, true, "orbit_pro", null, null));
+            .Returns(new PlaySubscriptionState(!paused, DateTime.UtcNow.AddDays(paused ? -1 : 20), SubscriptionInterval.Monthly, true, "orbit_pro", null, null, CanRenew: true));
         if (missing)
         {
             stripe.GetSubscriptionDetailsAsync("sub_paid", Arg.Any<CancellationToken>()).Returns((BillingSubscriptionDetails?)null);
@@ -87,8 +89,8 @@ public class AccountDeletionServiceTests
         {
             var context = sp.GetRequiredService<OrbitDbContext>();
             var work = Substitute.For<IUnitOfWork>();
-            work.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
-                .Returns(call => call.Arg<Func<CancellationToken, Task>>()(call.Arg<CancellationToken>()));
+            work.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<bool>>>(), Arg.Any<CancellationToken>())
+                .Returns(call => call.Arg<Func<CancellationToken, Task<bool>>>()(call.Arg<CancellationToken>()));
             work.SaveChangesAsync(Arg.Any<CancellationToken>())
                 .Returns(call => context.SaveChangesAsync(call.Arg<CancellationToken>()));
             return work;

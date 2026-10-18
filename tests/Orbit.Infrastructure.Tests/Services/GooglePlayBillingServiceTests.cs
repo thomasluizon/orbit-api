@@ -7,6 +7,11 @@ using Google.Apis.Services;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Application.Common;
+using Google.Apis.AndroidPublisher.v3.Data;
+using Google.Apis.Json;
+using Orbit.Application.Auth.Jobs;
+using User = Orbit.Domain.Entities.User;
+using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Services;
@@ -106,6 +111,111 @@ public class GooglePlayBillingServiceTests
         await run.Should().ThrowAsync<OperationCanceledException>();
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task VerifyAsync_PausedAutoRenewal_StopsRenewalWithoutGrantingEntitlement(bool hasResumeTime)
+    {
+        var wirePurchase = new SubscriptionPurchaseV2
+        {
+            SubscriptionState = "SUBSCRIPTION_STATE_PAUSED",
+            PausedStateContext = hasResumeTime
+                ? new PausedStateContext { AutoResumeTimeDateTimeOffset = DateTimeOffset.UtcNow.AddDays(60) }
+                : null,
+            LineItems = new[]
+            {
+                new SubscriptionPurchaseLineItem
+                {
+                    ProductId = "orbit_pro",
+                    ExpiryTimeDateTimeOffset = DateTimeOffset.UtcNow.AddDays(-1),
+                    AutoRenewingPlan = new AutoRenewingPlan { AutoRenewEnabled = true }
+                }
+            }
+        };
+        var handler = new RecordingHandler { ResponseBody = NewtonsoftJsonSerializer.Instance.Serialize(wirePurchase) };
+        using var publisher = CreatePublisher(handler);
+        var play = CreateService(publisher);
+        var purchase = await play.VerifyAsync("orbit_pro", "purchase-token", CancellationToken.None);
+        purchase!.IsActive.Should().BeFalse();
+        var user = User.Create("Paused", "paused@example.com").Value;
+        user.SetPlaySubscription("purchase-token", purchase.ExpiresAt);
+        user.Deactivate(DateTime.UtcNow.AddDays(7));
+        var job = new CancelSubscriptionOnDeletionJob(Substitute.For<IGenericRepository<User>>(),
+            Substitute.For<IUnitOfWork>(), Substitute.For<IBillingService>(), play,
+            Options.Create(new GooglePlaySettings { ProductId = "orbit_pro" }));
+
+        await job.CancelBeforeDeletionAsync(user, CancellationToken.None);
+
+        handler.Method.Should().Be(HttpMethod.Post);
+        handler.Path.Should().EndWith("purchase-token:cancel");
+        handler.Calls.Should().Be(3);
+    }
+
+    [Theory]
+    [InlineData("SUBSCRIPTION_STATE_ACTIVE", true, true, true)]
+    [InlineData("SUBSCRIPTION_STATE_ACTIVE", false, true, false)]
+    [InlineData("SUBSCRIPTION_STATE_ACTIVE", null, true, true)]
+    [InlineData("SUBSCRIPTION_STATE_IN_GRACE_PERIOD", true, true, true)]
+    [InlineData("SUBSCRIPTION_STATE_ON_HOLD", true, false, true)]
+    [InlineData("SUBSCRIPTION_STATE_PAUSED", true, false, true)]
+    [InlineData("SUBSCRIPTION_STATE_PAUSED", false, false, false)]
+    [InlineData("SUBSCRIPTION_STATE_CANCELED", true, true, false)]
+    [InlineData("SUBSCRIPTION_STATE_EXPIRED", true, false, false)]
+    [InlineData(null, true, false, true)]
+    public async Task VerifyAsync_SeparatesRenewabilityFromEntitlement(string? state, bool? autoRenew,
+        bool entitled, bool canRenew)
+    {
+        var wirePurchase = new SubscriptionPurchaseV2
+        {
+            SubscriptionState = state,
+            LineItems = new[]
+            {
+                new SubscriptionPurchaseLineItem
+                {
+                    ProductId = "orbit_pro",
+                    ExpiryTimeDateTimeOffset = DateTimeOffset.UtcNow.AddDays(20),
+                    AutoRenewingPlan = new AutoRenewingPlan { AutoRenewEnabled = autoRenew }
+                }
+            }
+        };
+        using var publisher = CreatePublisher(new RecordingHandler
+        {
+            ResponseBody = NewtonsoftJsonSerializer.Instance.Serialize(wirePurchase)
+        });
+
+        var purchase = await CreateService(publisher).VerifyAsync("orbit_pro", "purchase-token", CancellationToken.None);
+
+        purchase!.IsActive.Should().Be(entitled);
+        purchase.CanRenew.Should().Be(canRenew);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task VerifyAsync_AllLineItems_DetectsAnyRenewablePlan(bool addRenewableItem)
+    {
+        var lineItems = new List<SubscriptionPurchaseLineItem>
+        {
+            new() { ProductId = "orbit_pro", ExpiryTimeDateTimeOffset = DateTimeOffset.UtcNow.AddDays(20),
+                AutoRenewingPlan = addRenewableItem ? new AutoRenewingPlan { AutoRenewEnabled = false } : null,
+                PrepaidPlan = addRenewableItem ? null : new PrepaidPlan() }
+        };
+        if (addRenewableItem)
+            lineItems.Add(new SubscriptionPurchaseLineItem { AutoRenewingPlan = new AutoRenewingPlan { AutoRenewEnabled = true } });
+        using var publisher = CreatePublisher(new RecordingHandler
+        {
+            ResponseBody = NewtonsoftJsonSerializer.Instance.Serialize(new SubscriptionPurchaseV2
+            {
+                SubscriptionState = "SUBSCRIPTION_STATE_ACTIVE",
+                LineItems = lineItems
+            })
+        });
+
+        var purchase = await CreateService(publisher).VerifyAsync("orbit_pro", "purchase-token", CancellationToken.None);
+
+        purchase!.CanRenew.Should().Be(addRenewableItem);
+    }
+
     private static GooglePlayBillingService CreateService(AndroidPublisherService publisher) =>
         new(publisher, Options.Create(new GooglePlaySettings { PackageName = "org.orbit.app" }));
 
@@ -125,6 +235,7 @@ public class GooglePlayBillingServiceTests
         public string? Body { get; private set; }
         public HttpStatusCode Status { get; init; } = HttpStatusCode.OK;
         public Exception? Failure { get; init; }
+        public string ResponseBody { get; init; } = "";
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -135,7 +246,7 @@ public class GooglePlayBillingServiceTests
             Method = request.Method;
             Path = request.RequestUri!.AbsolutePath;
             Body = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
-            return new HttpResponseMessage(Status) { Content = new StringContent("") };
+            return new HttpResponseMessage(Status) { Content = new StringContent(request.Method == HttpMethod.Get ? ResponseBody : "") };
         }
     }
 }

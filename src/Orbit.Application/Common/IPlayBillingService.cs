@@ -32,4 +32,5 @@ public sealed record PlaySubscriptionState(
     string? LinkedPurchaseToken,
     string? ObfuscatedAccountId,
     string? OfferId = null,
-    bool IsInGracePeriod = false);
+    bool IsInGracePeriod = false,
+    bool CanRenew = false);

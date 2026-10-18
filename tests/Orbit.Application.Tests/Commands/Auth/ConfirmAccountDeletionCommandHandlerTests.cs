@@ -287,9 +287,11 @@ public class ConfirmAccountDeletionCommandHandlerTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Handle_PaidSubscription_EnqueuesOnlySelectedProviderAfterSaving(bool play)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task Handle_PaidSubscription_EnqueuesEveryRetainedProviderAfterSaving(bool play, bool both)
     {
         var user = User.Create("Paid", TestEmail).Value;
         var expiresAtUtc = DateTime.UtcNow.AddDays(20);
@@ -297,6 +299,16 @@ public class ConfirmAccountDeletionCommandHandlerTests
             user.SetPlaySubscription("play-token", expiresAtUtc);
         else
             user.SetStripeSubscription("sub_paid", expiresAtUtc);
+        if (both)
+        {
+            if (play)
+            {
+                user.SetStripeSubscription("sub_paid", expiresAtUtc);
+                user.SetPlaySubscription("play-token", expiresAtUtc);
+            }
+            else
+                user.LinkPlayPurchaseToken("play-token");
+        }
         SetupUser(user);
         SetupDeletionCode(TestEmail, "123456");
         var saved = false;
@@ -321,7 +333,7 @@ public class ConfirmAccountDeletionCommandHandlerTests
         _jobs.Received(1).Create(Arg.Any<Job>(), Arg.Is<IState>(state => state is EnqueuedState));
         enqueued!.Type.Should().Be<CancelSubscriptionOnDeletionJob>();
         enqueued.Method.Name.Should().Be(nameof(CancelSubscriptionOnDeletionJob.ExecuteAsync));
-        enqueued.Args.Should().Equal(user.Id, play ? null : "sub_paid", play ? "play-token" : null, true, CancellationToken.None);
+        enqueued.Args.Should().Equal(user.Id, play && !both ? null : "sub_paid", play || both ? "play-token" : null, true, CancellationToken.None);
     }
 
     [Fact]
@@ -340,8 +352,8 @@ public class ConfirmAccountDeletionCommandHandlerTests
         stripe.SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>())
             .ThrowsAsync(new BillingProviderException("unavailable"));
         _userRepo.FindOneTrackedIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>()).Returns(user);
-        _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
-            .Returns(call => call.Arg<Func<CancellationToken, Task>>()(call.Arg<CancellationToken>()));
+        _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<bool>>>()(call.Arg<CancellationToken>()));
 
         var result = await _handler.Handle(new ConfirmAccountDeletionCommand(UserId, "123456"), CancellationToken.None);
 

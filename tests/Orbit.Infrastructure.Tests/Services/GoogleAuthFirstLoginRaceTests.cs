@@ -1,3 +1,4 @@
+using Orbit.Application.Auth.Services;
 using System.Linq.Expressions;
 using System.Net;
 using System.Text;
@@ -142,7 +143,8 @@ public class GoogleAuthFirstLoginRaceTests
             BaseAddress = new Uri("https://supabase.example.com")
         });
         var flow = new GoogleSignInFlow(userRepository, unitOfWork, sessionService,
-            emailService, scopeFactory, analytics, NullLogger<GoogleSignInFlow>.Instance, Substitute.For<Hangfire.IBackgroundJobClient>());
+            new GoogleSignInNotifications(emailService, scopeFactory, NullLogger<GoogleSignInNotifications>.Instance),
+            analytics, NullLogger<GoogleSignInFlow>.Instance, Substitute.For<Hangfire.IBackgroundJobClient>());
         return new GoogleAuthCommandHandler(httpFactory, flow);
     }
 

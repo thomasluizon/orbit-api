@@ -25,8 +25,8 @@ public class CancelSubscriptionOnDeletionJobTests
 
     public CancelSubscriptionOnDeletionJobTests()
     {
-        _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
-            .Returns(call => call.Arg<Func<CancellationToken, Task>>()(call.Arg<CancellationToken>()));
+        _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<bool>>>()(call.Arg<CancellationToken>()));
         _users.FindOneTrackedIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(_user);
         _stripe.GetSubscriptionDetailsAsync("sub_paid", Arg.Any<CancellationToken>())
@@ -34,7 +34,7 @@ public class CancelSubscriptionOnDeletionJobTests
                 SubscriptionInterval.Monthly, 1000, "usd", null));
         _play.VerifyAsync("orbit_pro", "play-token", Arg.Any<CancellationToken>())
             .Returns(new PlaySubscriptionState(true, DateTime.UtcNow.AddDays(20), SubscriptionInterval.Monthly,
-                true, "orbit_pro", null, null));
+                true, "orbit_pro", null, null, CanRenew: true));
         _job = new CancelSubscriptionOnDeletionJob(_users, _unitOfWork, _stripe, _play,
             Options.Create(new GooglePlaySettings { ProductId = "orbit_pro" }));
     }
@@ -82,12 +82,12 @@ public class CancelSubscriptionOnDeletionJobTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ExecuteAsync_PlayInactiveOrUnknown_DoesNotCancel(bool unknown)
+    public async Task ExecuteAsync_PlayNonRenewingOrUnknown_DoesNotCancel(bool unknown)
     {
         _user.SetPlaySubscription("play-token", DateTime.UtcNow.AddDays(20));
         _user.Deactivate(DateTime.UtcNow.AddDays(27));
         _play.VerifyAsync("orbit_pro", "play-token", Arg.Any<CancellationToken>())
-            .Returns(unknown ? null : new PlaySubscriptionState(false, DateTime.UtcNow.AddDays(-1), null, true, "orbit_pro", null, null));
+            .Returns(unknown ? null : new PlaySubscriptionState(false, DateTime.UtcNow.AddDays(-1), null, true, "orbit_pro", null, null, CanRenew: false));
 
         await _job.ExecuteAsync(_user.Id, null, "play-token", true, CancellationToken.None);
 
@@ -132,6 +132,9 @@ public class CancelSubscriptionOnDeletionJobTests
     {
         _user.SetStripeSubscription("sub_paid", DateTime.UtcNow.AddDays(expired ? -1 : 20));
 
+        _user.Deactivate(DateTime.UtcNow.AddDays(27));
+        await RunAsync();
+        _user.CancelDeactivation();
         if (lifetime)
             _user.GrantLifetimePro();
 
@@ -183,12 +186,13 @@ public class CancelSubscriptionOnDeletionJobTests
     public async Task ExecuteAsync_MissingUser_CancelsRetainedIdentifiersWithoutRestoring(bool cancel)
     {
         var transactionActive = false;
-        _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+        _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<bool>>>(), Arg.Any<CancellationToken>())
             .Returns(async call =>
             {
                 transactionActive = true;
-                await call.Arg<Func<CancellationToken, Task>>()(call.Arg<CancellationToken>());
+                var result = await call.Arg<Func<CancellationToken, Task<bool>>>()(call.Arg<CancellationToken>());
                 transactionActive = false;
+                return result;
             });
         _stripe.When(stripe => stripe.GetSubscriptionDetailsAsync("sub_paid", Arg.Any<CancellationToken>()))
             .Do(_ => transactionActive.Should().BeFalse());
@@ -212,6 +216,7 @@ public class CancelSubscriptionOnDeletionJobTests
         _stripe.GetSubscriptionDetailsAsync("sub_paid", Arg.Any<CancellationToken>())
             .ThrowsAsync(new BillingProviderException("unavailable"));
 
+        _user.Deactivate(DateTime.UtcNow.AddDays(27));
         var run = () => _job.CancelBeforeDeletionAsync(_user, CancellationToken.None);
 
         await run.Should().ThrowAsync<BillingProviderException>();
@@ -247,10 +252,95 @@ public class CancelSubscriptionOnDeletionJobTests
         _user.SetStripeSubscription("sub_paid", DateTime.UtcNow.AddDays(20));
         _user.SetPlaySubscription("play-token", DateTime.UtcNow.AddDays(20));
 
+        _user.Deactivate(DateTime.UtcNow.AddDays(27));
         await _job.CancelBeforeDeletionAsync(_user, CancellationToken.None);
 
         await _stripe.Received(1).SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>());
         await _play.Received(1).CancelAsync("play-token", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_IndependentlyCanceledStripe_RemainsCanceledAfterReactivation()
+    {
+        _user.SetStripeSubscription("sub_paid", DateTime.UtcNow.AddDays(20));
+        _user.Deactivate(DateTime.UtcNow.AddDays(27));
+        _stripe.GetSubscriptionDetailsAsync("sub_paid", Arg.Any<CancellationToken>())
+            .Returns(new BillingSubscriptionDetails("active", _user.PlanExpiresAt!.Value, true,
+                SubscriptionInterval.Monthly, 1000, "usd", null));
+
+        await RunAsync();
+        _user.CancelDeactivation();
+        await _job.ExecuteAsync(_user.Id, "sub_paid", null, false, CancellationToken.None);
+
+        await _stripe.DidNotReceive().SetSubscriptionCancelAtPeriodEndAsync(
+            Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteAsync_RetainedStripeAndPlay_CancelsBothRegardlessOfEntitlementOwner(bool playOwns)
+    {
+        _user.SetStripeSubscription("sub_paid", DateTime.UtcNow.AddDays(20));
+        if (playOwns)
+            _user.SetPlaySubscription("play-token", DateTime.UtcNow.AddDays(20));
+        else
+            _user.LinkPlayPurchaseToken("play-token");
+        _user.Deactivate(DateTime.UtcNow.AddDays(27));
+        var expiry = _user.PlanExpiresAt;
+
+        await _job.ExecuteAsync(_user.Id, "sub_paid", "play-token", true, CancellationToken.None);
+
+        await _stripe.Received(1).SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>());
+        await _play.Received(1).CancelAsync("play-token", Arg.Any<CancellationToken>());
+        _user.PlanExpiresAt.Should().Be(expiry);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_PlayPausedWithoutEntitlement_CancelsAndPersistsOwnership()
+    {
+        _user.SetPlaySubscription("play-token", DateTime.UtcNow.AddDays(-1));
+        _user.Deactivate(DateTime.UtcNow.AddDays(7));
+        _play.VerifyAsync("orbit_pro", "play-token", Arg.Any<CancellationToken>())
+            .Returns(new PlaySubscriptionState(false, _user.PlanExpiresAt!.Value, null,
+                true, "orbit_pro", null, null, CanRenew: true));
+
+        await _job.ExecuteAsync(_user.Id, null, "play-token", true, CancellationToken.None);
+
+        await _play.Received(1).CancelAsync("play-token", Arg.Any<CancellationToken>());
+        _user.PlayRenewalStoppedByDeletion.Should().BeTrue();
+        Received.InOrder(() =>
+        {
+            _play.CancelAsync("play-token", Arg.Any<CancellationToken>());
+            _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>());
+        });
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ReplacedPlayToken_DoesNotTouchEitherPurchase()
+    {
+        _user.SetPlaySubscription("new-play-token", DateTime.UtcNow.AddDays(20));
+        _user.Deactivate(DateTime.UtcNow.AddDays(27));
+
+        await _job.ExecuteAsync(_user.Id, null, "play-token", true, CancellationToken.None);
+
+        _play.ReceivedCalls().Should().BeEmpty();
+        _user.PlayRenewalStoppedByDeletion.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_RestorationRetry_DoesNotRepeatSuccessfulRestoration()
+    {
+        _user.SetStripeSubscription("sub_paid", DateTime.UtcNow.AddDays(20));
+        _user.Deactivate(DateTime.UtcNow.AddDays(27));
+        await RunAsync();
+        _user.CancelDeactivation();
+
+        await _job.ExecuteAsync(_user.Id, "sub_paid", null, false, CancellationToken.None);
+        await _job.ExecuteAsync(_user.Id, "sub_paid", null, false, CancellationToken.None);
+
+        await _stripe.Received(1).SetSubscriptionCancelAtPeriodEndAsync("sub_paid", false, Arg.Any<CancellationToken>());
+        _user.StripeRenewalStoppedByDeletion.Should().BeFalse();
     }
 
     private Task RunAsync() => _job.ExecuteAsync(_user.Id, "sub_paid", null, true, CancellationToken.None);

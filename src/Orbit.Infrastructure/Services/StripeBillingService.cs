@@ -164,12 +164,16 @@ public sealed partial class StripeBillingService(
         }
     }
 
-    public async Task SetSubscriptionCancelAtPeriodEndAsync(
+    public Task SetSubscriptionCancelAtPeriodEndAsync(
+        string subscriptionId, bool cancelAtPeriodEnd, CancellationToken cancellationToken) =>
+        UpdateSubscriptionRenewalAsync(subscriptionId, cancelAtPeriodEnd, cancellationToken);
+
+    private async Task<Subscription?> UpdateSubscriptionRenewalAsync(
         string subscriptionId, bool cancelAtPeriodEnd, CancellationToken cancellationToken)
     {
         try
         {
-            await StripeRetryPolicy.ExecuteWithRetryAsync(
+            return await StripeRetryPolicy.ExecuteWithRetryAsync(
                 () => clients.Subscriptions.UpdateAsync(subscriptionId,
                     new SubscriptionUpdateOptions { CancelAtPeriodEnd = cancelAtPeriodEnd },
                     cancellationToken: cancellationToken),
@@ -177,7 +181,7 @@ public sealed partial class StripeBillingService(
         }
         catch (StripeException ex) when (IsMissingSubscription(ex))
         {
-            return;
+            return null;
         }
         catch (Exception ex) when (IsProviderFailure(ex, cancellationToken))
         {

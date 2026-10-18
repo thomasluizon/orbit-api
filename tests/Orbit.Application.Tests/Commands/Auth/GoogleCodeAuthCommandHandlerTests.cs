@@ -1,3 +1,4 @@
+using Orbit.Application.Auth.Services;
 using Hangfire.Common;
 using Hangfire.States;
 using Orbit.Application.Auth.Jobs;
@@ -43,7 +44,8 @@ public class GoogleCodeAuthCommandHandlerTests
         scope.ServiceProvider.Returns(provider);
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         scopeFactory.CreateScope().Returns(scope);
-        var flow = new GoogleSignInFlow(_users, _work, _sessions, _email, scopeFactory, _analytics,
+        var flow = new GoogleSignInFlow(_users, _work, _sessions, new GoogleSignInNotifications(_email, scopeFactory,
+            NullLogger<GoogleSignInNotifications>.Instance), _analytics,
             NullLogger<GoogleSignInFlow>.Instance, _jobs);
         _handler = new GoogleCodeAuthCommandHandler(_exchange, _signInMediator);
         _signInMediator.Send(Arg.Any<CompleteGoogleSignInCommand>(), Arg.Any<CancellationToken>())
@@ -242,6 +244,7 @@ public class GoogleCodeAuthCommandHandlerTests
                 cfg.AddOpenBehavior(typeof(ConcurrencyRetryBehavior<,>));
             })
             .AddScoped<GoogleSignInFlow>()
+            .AddScoped<GoogleSignInNotifications>()
             .AddSingleton(_exchange)
             .AddSingleton(_users)
             .AddSingleton(_work)

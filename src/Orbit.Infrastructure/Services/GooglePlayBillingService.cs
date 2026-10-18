@@ -67,7 +67,9 @@ public sealed class GooglePlayBillingService(
             purchase.LinkedPurchaseToken,
             purchase.ExternalAccountIdentifiers?.ObfuscatedExternalAccountId,
             lineItem?.OfferDetails?.OfferId,
-            purchase.SubscriptionState == "SUBSCRIPTION_STATE_IN_GRACE_PERIOD");
+            purchase.SubscriptionState == "SUBSCRIPTION_STATE_IN_GRACE_PERIOD",
+            purchase.SubscriptionState is not ("SUBSCRIPTION_STATE_CANCELED" or "SUBSCRIPTION_STATE_EXPIRED")
+                && purchase.LineItems?.Any(item => item.AutoRenewingPlan is { AutoRenewEnabled: not false }) == true);
     }
 
     public async Task CancelAsync(string purchaseToken, CancellationToken cancellationToken)

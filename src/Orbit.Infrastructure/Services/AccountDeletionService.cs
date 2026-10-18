@@ -6,6 +6,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Marketing.Services;
 using Orbit.Application.Auth.Jobs;
+using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.BackgroundJobs;
@@ -93,48 +94,11 @@ public partial class AccountDeletionService(
         try
         {
             using var scope = scopeFactory.CreateScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
-
             var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-            var resetRepository = scope.ServiceProvider.GetRequiredService<IAccountResetRepository>();
-            var contactRepository = scope.ServiceProvider.GetRequiredService<IGenericRepository<MarketingContact>>();
-            await unitOfWork.ExecuteInTransactionAsync(async transactionToken =>
-            {
-                await unitOfWork.AcquireUserRowLockAsync(userId, transactionToken);
-                var userToDelete = await dbContext.Users
-                    .IgnoreQueryFilters()
-                    .FirstOrDefaultAsync(u => u.Id == userId, transactionToken);
-                var nowAtUtc = DateTime.UtcNow;
-                if (userToDelete is { IsDeactivated: true, ScheduledDeletionAt: not null }
-                    && userToDelete.ScheduledDeletionAt <= nowAtUtc)
-                {
-                    await MarketingContactOptOut.RecordAsync(userToDelete.Email, contactRepository, unitOfWork, transactionToken);
-                    if (!string.IsNullOrWhiteSpace(userToDelete.StripeSubscriptionId)
-                        || !string.IsNullOrWhiteSpace(userToDelete.PlayPurchaseToken))
-                    {
-                        if (nowAtUtc - userToDelete.ScheduledDeletionAt.Value >= MaxBillingDeferral)
-                        {
-                            var jobs = scope.ServiceProvider.GetRequiredService<IBackgroundJobClient>();
-                            var jobId = jobs.Enqueue<CancelSubscriptionOnDeletionJob>(job => job.ExecuteAsync(userId,
-                                userToDelete.StripeSubscriptionId, userToDelete.PlayPurchaseToken, true, CancellationToken.None));
-                            if (jobId is null)
-                                throw new InvalidOperationException("Billing cancellation job was not created.");
-                            LogCancellationDeferred(logger, userId, jobId);
-                        }
-                        else
-                            await scope.ServiceProvider.GetRequiredService<CancelSubscriptionOnDeletionJob>()
-                                .CancelBeforeDeletionAsync(userToDelete, transactionToken);
-                    }
-                    await dbContext.AiUsageDaily
-                        .Where(u => u.UserId == userId)
-                        .ExecuteDeleteAsync(transactionToken);
-                    await resetRepository.DeleteAllUserDataAsync(userId, transactionToken);
-                    dbContext.Users.Remove(userToDelete);
-                    await unitOfWork.SaveChangesAsync(transactionToken);
-                }
-            }, ct);
+            var deleted = await unitOfWork.ExecuteInTransactionAsync(
+                transactionToken => DeleteLockedAccountAsync(scope.ServiceProvider, userId, transactionToken), ct);
 
-            if (logger.IsEnabled(LogLevel.Information))
+            if (deleted && logger.IsEnabled(LogLevel.Information))
                 LogAccountDeleted(logger, userId);
         }
         catch (Exception ex)
@@ -142,6 +106,55 @@ public partial class AccountDeletionService(
             if (logger.IsEnabled(LogLevel.Error))
                 LogAccountDeletionFailed(logger, ex, userId);
         }
+    }
+
+    private async Task<bool> DeleteLockedAccountAsync(IServiceProvider services, Guid userId, CancellationToken ct)
+    {
+        var dbContext = services.GetRequiredService<OrbitDbContext>();
+        var unitOfWork = services.GetRequiredService<IUnitOfWork>();
+        await unitOfWork.AcquireUserRowLockAsync(userId, ct);
+        var user = await dbContext.Users.IgnoreQueryFilters().FirstOrDefaultAsync(u => u.Id == userId, ct);
+        var nowAtUtc = DateTime.UtcNow;
+        if (user is not { IsDeactivated: true, ScheduledDeletionAt: not null } || user.ScheduledDeletionAt > nowAtUtc)
+            return false;
+
+        var contacts = services.GetRequiredService<IGenericRepository<MarketingContact>>();
+        await MarketingContactOptOut.RecordAsync(user.Email, contacts, unitOfWork, ct);
+        try
+        {
+            await StopRenewalsBeforeErasureAsync(services, user, nowAtUtc, ct);
+        }
+        catch (BillingProviderException ex)
+        {
+            LogAccountDeletionFailed(logger, ex, userId);
+            return false;
+        }
+
+        await dbContext.AiUsageDaily.Where(u => u.UserId == userId).ExecuteDeleteAsync(ct);
+        await services.GetRequiredService<IAccountResetRepository>().DeleteAllUserDataAsync(userId, ct);
+        dbContext.Users.Remove(user);
+        await unitOfWork.SaveChangesAsync(ct);
+        return true;
+    }
+
+    private async Task StopRenewalsBeforeErasureAsync(IServiceProvider services, User user, DateTime nowAtUtc,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(user.StripeSubscriptionId) && string.IsNullOrWhiteSpace(user.PlayPurchaseToken))
+            return;
+
+        if (nowAtUtc - user.ScheduledDeletionAt!.Value < MaxBillingDeferral)
+        {
+            await services.GetRequiredService<CancelSubscriptionOnDeletionJob>().CancelBeforeDeletionAsync(user, ct);
+            return;
+        }
+
+        var jobs = services.GetRequiredService<IBackgroundJobClient>();
+        var jobId = jobs.Enqueue<CancelSubscriptionOnDeletionJob>(job => job.ExecuteAsync(user.Id,
+            user.StripeSubscriptionId, user.PlayPurchaseToken, true, CancellationToken.None));
+        if (jobId is null)
+            throw new InvalidOperationException("Billing cancellation job was not created.");
+        LogCancellationDeferred(logger, user.Id, jobId);
     }
 
     internal async Task CleanupStaleSentRecords(CancellationToken ct)
