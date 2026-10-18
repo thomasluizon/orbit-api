@@ -2,6 +2,8 @@ namespace Orbit.Domain.Interfaces;
 
 public interface IUserDateService
 {
+    Task<TimeZoneInfo> GetUserTimeZoneAsync(Guid userId, CancellationToken cancellationToken = default);
+
     Task<DateOnly> GetUserTodayAsync(Guid userId, CancellationToken cancellationToken = default);
 
     Task<DateOnly> GetUserTodayAsync(
