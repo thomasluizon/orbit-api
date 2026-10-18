@@ -38,13 +38,6 @@ public class UpdateHabitCommandHandler(
 {
     public async Task<Result> Handle(UpdateHabitCommand request, CancellationToken cancellationToken)
     {
-        if (request.Options?.SlipAlertEnabled is not null)
-        {
-            var slipAlertGate = await payGate.CanUseSlipAlerts(request.UserId, cancellationToken);
-            if (slipAlertGate.IsFailure)
-                return slipAlertGate;
-        }
-
         return await HabitCeilingLock.ExecuteEntryAsync(
             unitOfWork,
             request.UserId,
@@ -70,6 +63,13 @@ public class UpdateHabitCommandHandler(
 
         if (habit is null)
             return Result.Failure<UpdateState>(ErrorMessages.HabitNotFound);
+
+        if (request.Options?.SlipAlertEnabled == true && !habit.SlipAlertEnabled)
+        {
+            var slipAlertGate = await payGate.CanUseSlipAlerts(request.UserId, cancellationToken);
+            if (slipAlertGate.IsFailure)
+                return slipAlertGate.PropagateError<UpdateState>();
+        }
 
         if (request.IsGeneral.HasValue)
         {
@@ -105,7 +105,7 @@ public class UpdateHabitCommandHandler(
             UserToday: today,
             IntervalWeeks: request.IntervalWeeks ?? habit.IntervalWeeks);
 
-        return Result.Success(new UpdateState(habit, update, opts, today));
+        return Result.Success(new UpdateState(habit, update, today));
     }
 
     private async Task<Result> ApplyUpdateAsync(
@@ -114,12 +114,21 @@ public class UpdateHabitCommandHandler(
         CancellationToken cancellationToken)
     {
         var habit = state.Habit;
+        var previousDueTime = habit.DueTime;
+        var previousReminderEnabled = habit.ReminderEnabled;
+        var previousReminderTimes = habit.ReminderTimes.ToHashSet();
+        var previousScheduledReminders = habit.ScheduledReminders.ToHashSet();
+        var previousRelativeReminders = habit.RelativeReminders.ToHashSet();
         var result = habit.Update(state.Update);
 
         if (result.IsFailure)
             return result;
 
-        if (state.Options.DueTime.HasValue)
+        if (previousDueTime != habit.DueTime
+            || previousReminderEnabled != habit.ReminderEnabled
+            || !previousReminderTimes.SetEquals(habit.ReminderTimes)
+            || !previousScheduledReminders.SetEquals(habit.ScheduledReminders)
+            || !previousRelativeReminders.SetEquals(habit.RelativeReminders))
             await ClearTodaySentRemindersAsync(request.UserId, request.HabitId, cancellationToken);
 
         IReadOnlyList<Guid> affectedGoalIds = [];
@@ -152,7 +161,6 @@ public class UpdateHabitCommandHandler(
     private sealed record UpdateState(
         Habit Habit,
         HabitUpdateParams Update,
-        UpdateHabitCommandOptions Options,
         DateOnly Today);
 
     private async Task<Result> ValidateGeneralAgainstRelativesAsync(
