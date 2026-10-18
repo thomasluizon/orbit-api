@@ -180,7 +180,7 @@ public class AccountResetRepositoryTests : IDisposable
             goal.Id,
             DateTime.UtcNow));
         _dbContext.PushSubscriptions.Add(
-            PushSubscription.Create(userId, $"https://push/{userId}", "p256dh", "auth").Value);
+            PushSubscription.Create(userId, $"https://fcm.googleapis.com/fcm/send/{userId}", "p256dh", "auth").Value);
         _dbContext.StreakFreezes.Add(StreakFreeze.Create(userId, DateOnly.FromDateTime(DateTime.UtcNow), StreakFreezeOrigin.Manual));
         _dbContext.ApiKeys.Add(
             ApiKey.Create(userId, "key", ["habits:read"]).Value.Entity);
@@ -249,11 +249,11 @@ public class AccountResetRepositoryTests : IDisposable
         _dbContext.ApiKeys.Add(ApiKey.Create(_otherUserId, "cli", ["habits:read"]).Value.Entity);
 
         _dbContext.PushSubscriptions.Add(
-            PushSubscription.Create(_userId, "https://push/target-web", "p256dh", "auth").Value);
+            PushSubscription.Create(_userId, "https://fcm.googleapis.com/fcm/send/target-web", "p256dh", "auth").Value);
         _dbContext.PushSubscriptions.Add(
             PushSubscription.Create(_userId, "https://push/target-device", PushSubscription.FcmSentinel, "auth").Value);
         _dbContext.PushSubscriptions.Add(
-            PushSubscription.Create(_otherUserId, "https://push/other", "p256dh", "auth").Value);
+            PushSubscription.Create(_otherUserId, "https://fcm.googleapis.com/fcm/send/other", "p256dh", "auth").Value);
         await _dbContext.SaveChangesAsync();
 
         await _repository.DeleteAllUserDataAsync(_userId);
