@@ -239,25 +239,6 @@ public class AccountDeletionServiceDbTests : IDisposable
         (await _dbContext.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == userId)).Should().BeFalse();
     }
 
-    private sealed class FakeObjectStore : IObjectStorageDeletionService
-    {
-        public HashSet<string> Keys { get; } = [];
-        public int FailuresRemaining { get; set; }
-        public int Attempts { get; private set; }
-        public Action? BeforeDelete { get; set; }
-
-        public Task DeleteUserObjectsAsync(Guid userId, CancellationToken cancellationToken = default)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            Attempts++;
-            BeforeDelete?.Invoke();
-            if (FailuresRemaining-- > 0)
-                throw new HttpRequestException("Storage unavailable");
-            Keys.RemoveWhere(key => key.StartsWith($"{userId}/", StringComparison.Ordinal));
-            return Task.CompletedTask;
-        }
-    }
-
     private void SeedUser(Guid userId, string email)
     {
         var user = User.Create("Test User", email).Value;

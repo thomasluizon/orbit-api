@@ -11,6 +11,7 @@ using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
+using Orbit.Infrastructure.Tests.Services;
 
 namespace Orbit.Infrastructure.Tests.Persistence;
 
@@ -71,6 +72,7 @@ public class AccountabilityDeletionTests
         var unitOfWork = new UnitOfWork(context, new DatabaseConnectionSettings());
         await using var provider = new ServiceCollection()
             .AddSingleton(context)
+            .AddSingleton<IObjectStorageDeletionService>(new FakeObjectStore())
             .AddSingleton<IUnitOfWork>(unitOfWork)
             .AddSingleton<IAccountResetRepository>(repository)
             .AddSingleton<IGenericRepository<MarketingContact>>(new GenericRepository<MarketingContact>(context))
