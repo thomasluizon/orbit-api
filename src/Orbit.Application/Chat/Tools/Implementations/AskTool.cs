@@ -14,7 +14,7 @@ public sealed class AskTool(
     IUserDateService userDateService) : IChatOnlyAiTool
 {
     public string Name => "ask";
-    public string Description => "Ask one short choice question, or offer suggested items to select together for a bulk write preview. Ends the reply. Never use for approval or a yes/no question already asked by a preview.";
+    public string Description => "Ask one short choice question, or offer suggested items to select together for a bulk write preview. Write each choice option as a short phrase of two to four words and each description or item detail as one short line. Ends the reply. Never use for approval or a yes/no question already asked by a preview.";
     public bool IsReadOnly => true;
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -43,8 +43,8 @@ public sealed class AskTool(
                         properties = new
                         {
                             id = new { type = "string" },
-                            label = new { type = "string", maxLength = 40 },
-                            description = new { type = "string", maxLength = 80 }
+                            label = new { type = "string", maxLength = 24 },
+                            description = new { type = "string", maxLength = 32 }
                         },
                         required = new[] { "id", "label" }
                     }
@@ -62,7 +62,7 @@ public sealed class AskTool(
                         {
                             id = new { type = "string" },
                             label = new { type = "string" },
-                            detail = new { type = "string" },
+                            detail = new { type = "string", maxLength = 32 },
                             arguments = new
                             {
                                 description = "One bulk item: a habit definition for create_habits, or {habit_id, date} for log_habits/skip_habits. Dates use YYYY-MM-DD.",

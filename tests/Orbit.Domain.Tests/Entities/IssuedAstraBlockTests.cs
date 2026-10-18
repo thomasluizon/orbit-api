@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Models;
@@ -24,6 +25,41 @@ public class IssuedAstraBlockTests
     [InlineData(5)]
     public void Create_RejectsChoiceCount(int count) =>
         ((Action)(() => IssuedAstraBlock.Create(Guid.NewGuid(), Choice(count)))).Should().Throw<ArgumentException>();
+
+    [Theory]
+    [InlineData("label", 24, true)]
+    [InlineData("label", 25, false)]
+    [InlineData("description", 32, true)]
+    [InlineData("description", 33, false)]
+    public void Create_EnforcesChoiceTextLimits(string field, int count, bool valid)
+    {
+        var option = new AstraBlockOption("a", field == "label" ? new string('l', count) : "Morning",
+            field == "description" ? new string('d', count) : null);
+        var definition = Choice() with { Options = [option, new("b", "Evening")] };
+        Action create = () => IssuedAstraBlock.Create(Guid.NewGuid(), definition);
+
+        if (valid)
+            create.Should().NotThrow();
+        else
+            create.Should().Throw<ArgumentException>().WithParameterName("definition");
+    }
+
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData(32, true)]
+    [InlineData(33, false)]
+    public void Create_EnforcesPickListDetailLimitWithoutCappingHabitLabel(int? count, bool valid)
+    {
+        var item = new AstraBlockItem("a", new string('l', 100), JsonSerializer.SerializeToElement(new { title = "Walk" }),
+            count.HasValue ? new string('d', count.Value) : null);
+        var definition = new AstraBlockDefinition("pickList", "Choose", [], [item], true, Action: "create_habits");
+        Action create = () => IssuedAstraBlock.Create(Guid.NewGuid(), definition);
+
+        if (valid)
+            create.Should().NotThrow();
+        else
+            create.Should().Throw<ArgumentException>().WithParameterName("definition");
+    }
 
     [Fact]
     public void MarkAnswered_RejectsReplayAndExpiry()
