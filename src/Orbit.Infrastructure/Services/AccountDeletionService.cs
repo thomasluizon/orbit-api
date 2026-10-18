@@ -1,3 +1,4 @@
+using Hangfire;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -110,8 +111,20 @@ public partial class AccountDeletionService(
                     await MarketingContactOptOut.RecordAsync(userToDelete.Email, contactRepository, unitOfWork, transactionToken);
                     if (!string.IsNullOrWhiteSpace(userToDelete.StripeSubscriptionId)
                         || !string.IsNullOrWhiteSpace(userToDelete.PlayPurchaseToken))
-                        await scope.ServiceProvider.GetRequiredService<CancelSubscriptionOnDeletionJob>()
-                            .CancelBeforeDeletionAsync(userToDelete, transactionToken);
+                    {
+                        if (nowAtUtc - userToDelete.ScheduledDeletionAt.Value >= MaxBillingDeferral)
+                        {
+                            var jobs = scope.ServiceProvider.GetRequiredService<IBackgroundJobClient>();
+                            var jobId = jobs.Enqueue<CancelSubscriptionOnDeletionJob>(job => job.ExecuteAsync(userId,
+                                userToDelete.StripeSubscriptionId, userToDelete.PlayPurchaseToken, true, CancellationToken.None));
+                            if (jobId is null)
+                                throw new InvalidOperationException("Billing cancellation job was not created.");
+                            LogCancellationDeferred(logger, userId, jobId);
+                        }
+                        else
+                            await scope.ServiceProvider.GetRequiredService<CancelSubscriptionOnDeletionJob>()
+                                .CancelBeforeDeletionAsync(userToDelete, transactionToken);
+                    }
                     await dbContext.AiUsageDaily
                         .Where(u => u.UserId == userId)
                         .ExecuteDeleteAsync(transactionToken);
@@ -160,6 +173,7 @@ public partial class AccountDeletionService(
     }
 
     private const int ProcessedRequestRetentionDays = 30;
+    private static readonly TimeSpan MaxBillingDeferral = TimeSpan.FromDays(7);
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "AccountDeletionService started")]
     private static partial void LogServiceStarted(ILogger logger);
@@ -181,5 +195,8 @@ public partial class AccountDeletionService(
 
     [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Cleaned up {Reminders} stale SentReminders and {SlipAlerts} stale SentSlipAlerts older than 90 days, plus {ProcessedRequests} ProcessedRequests older than 30 days")]
     private static partial void LogStaleRecordsCleaned(ILogger logger, int reminders, int slipAlerts, int processedRequests);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Error, Message = "Billing cancellation for account {UserId} is unconfirmed past the erasure deferral limit; cancellation job {JobId} queued before erasure")]
+    private static partial void LogCancellationDeferred(ILogger logger, Guid userId, string jobId);
 
 }

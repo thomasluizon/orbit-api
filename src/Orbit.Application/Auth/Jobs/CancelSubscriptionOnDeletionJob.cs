@@ -35,14 +35,21 @@ public sealed class CancelSubscriptionOnDeletionJob(
                 job.ExecuteAsync(user.Id, user.StripeSubscriptionId, null, false, CancellationToken.None));
     }
 
-    [AutomaticRetry(Attempts = int.MaxValue, DelaysInSeconds = new[] { 60, 300, 3600 })]
-    public Task ExecuteAsync(Guid userId, string? stripeSubscriptionId, string? playPurchaseToken,
-        bool cancelAtPeriodEnd, CancellationToken cancellationToken) =>
-        unitOfWork.ExecuteInTransactionAsync(async ct =>
+    [AutomaticRetry(Attempts = 26, DelaysInSeconds = new[] { 60, 300, 3600 }, OnAttemptsExceeded = AttemptsExceededAction.Fail)]
+    public async Task ExecuteAsync(Guid userId, string? stripeSubscriptionId, string? playPurchaseToken,
+        bool cancelAtPeriodEnd, CancellationToken cancellationToken)
+    {
+        var accountDeleted = false;
+        await unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
             await unitOfWork.AcquireUserRowLockAsync(userId, ct);
             var user = await userRepository.FindOneTrackedIgnoringFiltersAsync(u => u.Id == userId, ct);
-            if (user is null || user.IsDeactivated != cancelAtPeriodEnd)
+            if (user is null)
+            {
+                accountDeleted = true;
+                return;
+            }
+            if (user.IsDeactivated != cancelAtPeriodEnd)
                 return;
 
             if (!string.IsNullOrWhiteSpace(stripeSubscriptionId)
@@ -61,9 +68,14 @@ public sealed class CancelSubscriptionOnDeletionJob(
                 await CancelProvidersAsync(null, playPurchaseToken, ct);
         }, cancellationToken);
 
+        if (accountDeleted && cancelAtPeriodEnd)
+            await CancelProvidersAsync(stripeSubscriptionId, playPurchaseToken, cancellationToken);
+    }
+
     /// <summary>
     /// The hard-delete backstop checks both retained provider identifiers, including an older provider
-    /// after a billing-source switch. Provider failures must leave the reconciliation row intact.
+    /// after a billing-source switch. Provider failures propagate so the executor can defer erasure
+    /// or persist cancellation arguments before removing an account whose deferral limit has elapsed.
     /// </summary>
     public Task CancelBeforeDeletionAsync(User user, CancellationToken cancellationToken) =>
         CancelProvidersAsync(user.StripeSubscriptionId, user.PlayPurchaseToken, cancellationToken);
@@ -74,8 +86,12 @@ public sealed class CancelSubscriptionOnDeletionJob(
         return user.IsPro && user.PlanExpiresAt > nowAtUtc;
     }
 
-    private async Task CancelProvidersAsync(string? stripeSubscriptionId, string? playPurchaseToken,
-        CancellationToken cancellationToken)
+    private Task CancelProvidersAsync(string? stripeSubscriptionId, string? playPurchaseToken,
+        CancellationToken cancellationToken) =>
+        Task.WhenAll(CancelStripeAsync(stripeSubscriptionId, cancellationToken),
+            CancelPlayAsync(playPurchaseToken, cancellationToken));
+
+    private async Task CancelStripeAsync(string? stripeSubscriptionId, CancellationToken cancellationToken)
     {
         if (!string.IsNullOrWhiteSpace(stripeSubscriptionId))
         {
@@ -84,7 +100,10 @@ public sealed class CancelSubscriptionOnDeletionJob(
                 && !subscription.CancelAtPeriodEnd)
                 await billingService.SetSubscriptionCancelAtPeriodEndAsync(stripeSubscriptionId, true, cancellationToken);
         }
+    }
 
+    private async Task CancelPlayAsync(string? playPurchaseToken, CancellationToken cancellationToken)
+    {
         if (!string.IsNullOrWhiteSpace(playPurchaseToken))
         {
             var purchase = await playBillingService.VerifyAsync(playSettings.Value.ProductId, playPurchaseToken, cancellationToken);

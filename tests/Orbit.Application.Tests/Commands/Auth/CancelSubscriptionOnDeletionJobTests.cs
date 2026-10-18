@@ -118,7 +118,9 @@ public class CancelSubscriptionOnDeletionJobTests
         _user.IsDeactivated.Should().BeTrue();
         var retry = typeof(CancelSubscriptionOnDeletionJob).GetMethod(nameof(CancelSubscriptionOnDeletionJob.ExecuteAsync))!
             .GetCustomAttributes(typeof(AutomaticRetryAttribute), false).Cast<AutomaticRetryAttribute>().Single();
-        retry.Attempts.Should().Be(int.MaxValue);
+        retry.Attempts.Should().Be(26);
+        retry.DelaysInSeconds.Should().Equal(60, 300, 3600);
+        retry.OnAttemptsExceeded.Should().Be(AttemptsExceededAction.Fail);
     }
 
     [Theory]
@@ -175,16 +177,45 @@ public class CancelSubscriptionOnDeletionJobTests
         await _stripe.DidNotReceive().SetSubscriptionCancelAtPeriodEndAsync(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task ExecuteAsync_MissingUser_DoesNotTouchProviders()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteAsync_MissingUser_CancelsRetainedIdentifiersWithoutRestoring(bool cancel)
     {
+        var transactionActive = false;
+        _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                transactionActive = true;
+                await call.Arg<Func<CancellationToken, Task>>()(call.Arg<CancellationToken>());
+                transactionActive = false;
+            });
+        _stripe.When(stripe => stripe.GetSubscriptionDetailsAsync("sub_paid", Arg.Any<CancellationToken>()))
+            .Do(_ => transactionActive.Should().BeFalse());
+        _play.When(play => play.VerifyAsync("orbit_pro", "play-token", Arg.Any<CancellationToken>()))
+            .Do(_ => transactionActive.Should().BeFalse());
         _users.FindOneTrackedIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>())
             .Returns((User?)null);
 
-        await RunAsync();
+        await _job.ExecuteAsync(_user.Id, "sub_paid", "play-token", cancel, CancellationToken.None);
 
-        _stripe.ReceivedCalls().Should().BeEmpty();
-        _play.ReceivedCalls().Should().BeEmpty();
+        await _stripe.Received(cancel ? 1 : 0).SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>());
+        await _play.Received(cancel ? 1 : 0).CancelAsync("play-token", Arg.Any<CancellationToken>());
+        await _stripe.DidNotReceive().SetSubscriptionCancelAtPeriodEndAsync(Arg.Any<string>(), false, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CancelBeforeDeletionAsync_StripeFailure_StillAttemptsPlayCancellation()
+    {
+        _user.SetStripeSubscription("sub_paid", DateTime.UtcNow.AddDays(20));
+        _user.SetPlaySubscription("play-token", DateTime.UtcNow.AddDays(20));
+        _stripe.GetSubscriptionDetailsAsync("sub_paid", Arg.Any<CancellationToken>())
+            .ThrowsAsync(new BillingProviderException("unavailable"));
+
+        var run = () => _job.CancelBeforeDeletionAsync(_user, CancellationToken.None);
+
+        await run.Should().ThrowAsync<BillingProviderException>();
+        await _play.Received(1).CancelAsync("play-token", Arg.Any<CancellationToken>());
     }
 
     [Fact]

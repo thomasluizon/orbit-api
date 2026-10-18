@@ -1,7 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging;
+using Hangfire;
+using Hangfire.Common;
+using Hangfire.States;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -20,11 +23,20 @@ namespace Orbit.Infrastructure.Tests.Services;
 public class AccountDeletionServiceTests
 {
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    [InlineData(true, true)]
-    public async Task RunAsync_DuePaidAccount_CancelsBeforeRemovingAndRetainsRowOnFailure(bool play, bool failure)
+    [InlineData(false, false, 1, false, 0)]
+    [InlineData(true, false, 1, false, 0)]
+    [InlineData(false, true, 1, false, 0)]
+    [InlineData(true, true, 1, false, 0)]
+    [InlineData(false, true, 8, false, 0)]
+    [InlineData(false, true, 7, false, 0)]
+    [InlineData(false, true, 6, false, 0)]
+    [InlineData(false, false, 8, false, 0)]
+    [InlineData(true, true, 8, false, 0)]
+    [InlineData(false, false, 1, true, 0)]
+    [InlineData(true, false, 1, true, 0)]
+    [InlineData(false, true, 8, false, 1)]
+    [InlineData(false, true, 8, false, 2)]
+    public async Task RunAsync_DuePaidAccount_CancelsBeforeRemovingAndRetainsRowOnFailure(bool play, bool failure, int overdueDays, bool missing, int queueFailure)
     {
         using var factory = new SqliteOrbitDbContextFactory();
         var user = CreateUser();
@@ -32,7 +44,7 @@ public class AccountDeletionServiceTests
             user.SetPlaySubscription("play-token", DateTime.UtcNow.AddDays(20));
         else
             user.SetStripeSubscription("sub_paid", DateTime.UtcNow.AddDays(20));
-        user.Deactivate(DateTime.UtcNow.AddDays(-1));
+        user.Deactivate(DateTime.UtcNow.AddDays(-overdueDays));
         factory.Context.Users.Add(user);
         await factory.Context.SaveChangesAsync();
         var stripe = Substitute.For<IBillingService>();
@@ -43,6 +55,11 @@ public class AccountDeletionServiceTests
                 SubscriptionInterval.Monthly, 1000, "usd", null));
         playBilling.VerifyAsync("orbit_pro", "play-token", Arg.Any<CancellationToken>())
             .Returns(new PlaySubscriptionState(true, DateTime.UtcNow.AddDays(20), SubscriptionInterval.Monthly, true, "orbit_pro", null, null));
+        if (missing)
+        {
+            stripe.GetSubscriptionDetailsAsync("sub_paid", Arg.Any<CancellationToken>()).Returns((BillingSubscriptionDetails?)null);
+            playBilling.VerifyAsync("orbit_pro", "play-token", Arg.Any<CancellationToken>()).Returns((PlaySubscriptionState?)null);
+        }
         if (failure)
         {
             stripe.SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>())
@@ -50,12 +67,17 @@ public class AccountDeletionServiceTests
             playBilling.CancelAsync("play-token", Arg.Any<CancellationToken>())
                 .ThrowsAsync(new BillingProviderException("unavailable"));
         }
+        Job? queued = null;
+        var handedOff = overdueDays >= 7;
+        var expectedInlineCalls = missing || handedOff ? 0 : 1;
         reset.DeleteAllUserDataAsync(user.Id, Arg.Any<CancellationToken>()).Returns(async _ =>
         {
             if (play)
-                await playBilling.Received(1).CancelAsync("play-token", Arg.Any<CancellationToken>());
+                await playBilling.Received(expectedInlineCalls).CancelAsync("play-token", Arg.Any<CancellationToken>());
             else
-                await stripe.Received(1).SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>());
+                await stripe.Received(expectedInlineCalls).SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>());
+            if (handedOff)
+                queued.Should().NotBeNull();
             using var beforeRemoval = factory.CreateContext();
             (await beforeRemoval.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == user.Id)).Should().BeTrue();
         });
@@ -78,19 +100,53 @@ public class AccountDeletionServiceTests
         services.AddSingleton(playBilling);
         services.AddSingleton(Options.Create(new GooglePlaySettings { ProductId = "orbit_pro" }));
         services.AddScoped<CancelSubscriptionOnDeletionJob>();
+        var jobs = Substitute.For<IBackgroundJobClient>();
+        jobs.Create(Arg.Do<Job>(job => queued = job), Arg.Any<IState>()).Returns("cancellation-job");
+        if (queueFailure == 1)
+            jobs.Create(Arg.Any<Job>(), Arg.Any<IState>()).Throws(new InvalidOperationException("queue unavailable"));
+        else if (queueFailure == 2)
+            jobs.Create(Arg.Any<Job>(), Arg.Any<IState>()).Returns((string?)null);
+        services.AddSingleton(jobs);
+        var logger = Substitute.For<ILogger<AccountDeletionService>>();
+        logger.IsEnabled(LogLevel.Error).Returns(true);
         using var provider = services.BuildServiceProvider();
         using var service = new AccountDeletionService(provider.GetRequiredService<IServiceScopeFactory>(),
-            NullLogger<AccountDeletionService>.Instance, new ConfigurationBuilder().Build());
+            logger, new ConfigurationBuilder().Build());
 
         await service.RunAsync(CancellationToken.None);
 
         using var afterRemoval = factory.CreateContext();
-        (await afterRemoval.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == user.Id)).Should().Be(failure);
-        await reset.Received(failure ? 0 : 1).DeleteAllUserDataAsync(user.Id, Arg.Any<CancellationToken>());
+        var retained = failure && overdueDays < 7 || queueFailure != 0;
+        (await afterRemoval.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == user.Id)).Should().Be(retained);
+        await reset.Received(retained ? 0 : 1).DeleteAllUserDataAsync(user.Id, Arg.Any<CancellationToken>());
         if (play)
-            await playBilling.Received(1).CancelAsync("play-token", Arg.Any<CancellationToken>());
+            await playBilling.Received(expectedInlineCalls).CancelAsync("play-token", Arg.Any<CancellationToken>());
         else
-            await stripe.Received(1).SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>());
+            await stripe.Received(expectedInlineCalls).SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>());
+        if (handedOff && queueFailure == 0)
+        {
+            await stripe.DidNotReceive().GetSubscriptionDetailsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+            await playBilling.DidNotReceive().VerifyAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+            queued.Should().NotBeNull();
+            queued!.Args.Should().Equal(user.Id, play ? null : "sub_paid", play ? "play-token" : null, true, CancellationToken.None);
+            logger.ReceivedCalls().Should().Contain(call => call.GetMethodInfo().Name == "Log"
+                && (LogLevel)call.GetArguments()[0]! == LogLevel.Error
+                && call.GetArguments()[2]!.ToString()!.Contains(user.Id.ToString()));
+            stripe.SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+            playBilling.CancelAsync("play-token", Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+            using var retryScope = provider.CreateScope();
+            var retryJob = retryScope.ServiceProvider.GetRequiredService<CancelSubscriptionOnDeletionJob>();
+
+            await retryJob.ExecuteAsync((Guid)queued.Args[0], (string?)queued.Args[1], (string?)queued.Args[2],
+                (bool)queued.Args[3], CancellationToken.None);
+
+            if (play)
+                await playBilling.Received(1).CancelAsync("play-token", Arg.Any<CancellationToken>());
+            else
+                await stripe.Received(1).SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>());
+        }
+        else if (queueFailure == 0)
+            queued.Should().BeNull();
     }
 
     private static User CreateUser()

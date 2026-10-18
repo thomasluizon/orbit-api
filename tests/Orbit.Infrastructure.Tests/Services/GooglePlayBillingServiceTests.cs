@@ -13,6 +13,57 @@ namespace Orbit.Infrastructure.Tests.Services;
 
 public class GooglePlayBillingServiceTests
 {
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.Gone)]
+    public async Task VerifyAsync_MissingPurchase_ReturnsNull(HttpStatusCode status)
+    {
+        using var publisher = CreatePublisher(new RecordingHandler { Status = status });
+
+        var purchase = await CreateService(publisher).VerifyAsync("orbit_pro", "purchase-token", CancellationToken.None);
+
+        purchase.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.Gone)]
+    public async Task CancelAsync_DisappearedAfterVerification_Completes(HttpStatusCode status)
+    {
+        using var publisher = CreatePublisher(new RecordingHandler { Status = status });
+
+        var run = () => CreateService(publisher).CancelAsync("purchase-token", CancellationToken.None);
+
+        await run.Should().NotThrowAsync();
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    public async Task VerifyAsync_ProviderOutage_RemainsRetryable(HttpStatusCode status)
+    {
+        using var publisher = CreatePublisher(new RecordingHandler { Status = status });
+
+        var run = () => CreateService(publisher).VerifyAsync("orbit_pro", "purchase-token", CancellationToken.None);
+
+        await run.Should().ThrowAsync<BillingProviderException>();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SubscriptionProviderTimeout_RemainsRetryable(bool cancel)
+    {
+        using var publisher = CreatePublisher(new RecordingHandler { Failure = new TaskCanceledException("provider timeout") });
+        var service = CreateService(publisher);
+
+        Func<Task> run = () => cancel
+            ? service.CancelAsync("purchase-token", CancellationToken.None)
+            : service.VerifyAsync("orbit_pro", "purchase-token", CancellationToken.None);
+
+        await run.Should().ThrowAsync<BillingProviderException>();
+    }
+
     [Fact]
     public async Task CancelAsync_UsesV2CancelAndUserRequestedRenewalStop()
     {
@@ -73,14 +124,17 @@ public class GooglePlayBillingServiceTests
         public string? Path { get; private set; }
         public string? Body { get; private set; }
         public HttpStatusCode Status { get; init; } = HttpStatusCode.OK;
+        public Exception? Failure { get; init; }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (Failure is not null)
+                throw Failure;
             Calls++;
             Method = request.Method;
             Path = request.RequestUri!.AbsolutePath;
-            Body = await request.Content!.ReadAsStringAsync(cancellationToken);
+            Body = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
             return new HttpResponseMessage(Status) { Content = new StringContent("") };
         }
     }

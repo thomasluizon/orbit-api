@@ -46,6 +46,76 @@ public class StripeBillingServiceTests
     }
 
     [Theory]
+    [InlineData(System.Net.HttpStatusCode.NotFound, null)]
+    [InlineData(System.Net.HttpStatusCode.BadRequest, "resource_missing")]
+    public async Task GetSubscriptionDetailsAsync_MissingSubscription_ReturnsNull(System.Net.HttpStatusCode status, string? code)
+    {
+        _subscriptions.GetAsync("sub_paid", Arg.Any<SubscriptionGetOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new StripeException(status, new StripeError { Code = code }, "missing"));
+
+        var details = await _service.GetSubscriptionDetailsAsync("sub_paid", CancellationToken.None);
+
+        details.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(System.Net.HttpStatusCode.NotFound, null)]
+    [InlineData(System.Net.HttpStatusCode.BadRequest, "resource_missing")]
+    public async Task SetSubscriptionCancelAtPeriodEndAsync_DisappearedAfterRead_Completes(System.Net.HttpStatusCode status, string? code)
+    {
+        _subscriptions.UpdateAsync("sub_paid", Arg.Any<SubscriptionUpdateOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new StripeException(status, new StripeError { Code = code }, "missing"));
+
+        var run = () => _service.SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, CancellationToken.None);
+
+        await run.Should().NotThrowAsync();
+    }
+
+    [Theory]
+    [InlineData(System.Net.HttpStatusCode.ServiceUnavailable)]
+    [InlineData(System.Net.HttpStatusCode.TooManyRequests)]
+    public async Task GetSubscriptionDetailsAsync_ProviderOutage_RemainsRetryable(System.Net.HttpStatusCode status)
+    {
+        _subscriptions.GetAsync("sub_paid", Arg.Any<SubscriptionGetOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new StripeException(status, new StripeError(), "unavailable"));
+
+        var run = () => _service.GetSubscriptionDetailsAsync("sub_paid", CancellationToken.None);
+
+        await run.Should().ThrowAsync<BillingProviderException>();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SubscriptionProviderTimeout_RemainsRetryable(bool update)
+    {
+        var failure = new TaskCanceledException("provider timeout");
+        _subscriptions.GetAsync("sub_paid", Arg.Any<SubscriptionGetOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(failure);
+        _subscriptions.UpdateAsync("sub_paid", Arg.Any<SubscriptionUpdateOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(failure);
+
+        Func<Task> run = () => update
+            ? _service.SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, CancellationToken.None)
+            : _service.GetSubscriptionDetailsAsync("sub_paid", CancellationToken.None);
+
+        (await run.Should().ThrowAsync<BillingProviderException>()).Which.InnerException.Should().BeSameAs(failure);
+    }
+
+    [Fact]
+    public async Task GetSubscriptionDetailsAsync_CallerCancellation_IsNotWrapped()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        _subscriptions.GetAsync("sub_paid", Arg.Any<SubscriptionGetOptions>(), Arg.Any<RequestOptions>(), cts.Token)
+            .ThrowsAsync(new OperationCanceledException(cts.Token));
+
+        var run = () => _service.GetSubscriptionDetailsAsync("sub_paid", cts.Token);
+
+        await run.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Theory]
     [InlineData(true)]
     [InlineData(false)]
     public async Task SetSubscriptionCancelAtPeriodEndAsync_UpdatesRenewalWithoutImmediateCancellation(bool cancel)

@@ -154,7 +154,11 @@ public sealed partial class StripeBillingService(
                 subscription.Currency ?? "usd",
                 paymentMethod);
         }
-        catch (StripeException ex)
+        catch (StripeException ex) when (IsMissingSubscription(ex))
+        {
+            return null;
+        }
+        catch (Exception ex) when (IsProviderFailure(ex, cancellationToken))
         {
             throw new BillingProviderException("Failed to fetch subscription", ex);
         }
@@ -171,11 +175,23 @@ public sealed partial class StripeBillingService(
                     cancellationToken: cancellationToken),
                 cancellationToken);
         }
-        catch (StripeException ex)
+        catch (StripeException ex) when (IsMissingSubscription(ex))
+        {
+            return;
+        }
+        catch (Exception ex) when (IsProviderFailure(ex, cancellationToken))
         {
             throw new BillingProviderException("Failed to update subscription renewal", ex);
         }
     }
+
+    private static bool IsMissingSubscription(StripeException exception) =>
+        exception.HttpStatusCode == System.Net.HttpStatusCode.NotFound
+        || exception.StripeError?.Code == "resource_missing";
+
+    private static bool IsProviderFailure(Exception exception, CancellationToken cancellationToken) =>
+        exception is StripeException or HttpRequestException or TimeoutException
+        || exception is OperationCanceledException && !cancellationToken.IsCancellationRequested;
 
     public async Task<IReadOnlyList<BillingInvoice>> ListInvoicesAsync(string customerId, int limit, CancellationToken cancellationToken)
     {

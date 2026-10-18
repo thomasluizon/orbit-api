@@ -32,11 +32,11 @@ public sealed class GooglePlayBillingService(
                 .Get(_settings.PackageName, purchaseToken)
                 .ExecuteAsync(cancellationToken);
         }
-        catch (GoogleApiException ex) when (ex.HttpStatusCode == System.Net.HttpStatusCode.NotFound)
+        catch (GoogleApiException ex) when (ex.HttpStatusCode is System.Net.HttpStatusCode.NotFound or System.Net.HttpStatusCode.Gone)
         {
             return null;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             throw new BillingProviderException("Failed to verify Play subscription", ex);
         }
@@ -82,7 +82,11 @@ public sealed class GooglePlayBillingService(
                 }
             }, _settings.PackageName, purchaseToken).ExecuteAsync(cancellationToken);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (GoogleApiException ex) when (ex.HttpStatusCode is System.Net.HttpStatusCode.NotFound or System.Net.HttpStatusCode.Gone)
+        {
+            return;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             throw new BillingProviderException("Failed to cancel Play subscription", ex);
         }
