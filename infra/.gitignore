@@ -3,3 +3,4 @@
 *.tfplan
 *.tfvars
 !example.tfvars
+node_modules/
