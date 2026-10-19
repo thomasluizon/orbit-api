@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -27,14 +28,15 @@ namespace Orbit.Infrastructure.Tests.Services;
 public class FeatureFlagAndAgentSupportTests : IDisposable
 {
     private readonly OrbitDbContext _dbContext;
+    private readonly DbContextOptions<OrbitDbContext> _options;
 
     public FeatureFlagAndAgentSupportTests()
     {
-        var options = new DbContextOptionsBuilder<OrbitDbContext>()
+        _options = new DbContextOptionsBuilder<OrbitDbContext>()
             .UseInMemoryDatabase($"FeatureFlagAndAgentSupportTests_{Guid.NewGuid()}")
             .Options;
 
-        _dbContext = new OrbitDbContext(options);
+        _dbContext = new OrbitDbContext(_options);
     }
 
     public void Dispose()
@@ -153,7 +155,12 @@ public class FeatureFlagAndAgentSupportTests : IDisposable
     [Fact]
     public async Task AgentAuditService_PersistsAuditLog()
     {
-        var service = new AgentAuditService(_dbContext);
+        using var services = new ServiceCollection()
+            .AddScoped(_ => new OrbitDbContext(_options))
+            .AddScoped<IAgentAuditService, AgentAuditService>()
+            .BuildServiceProvider();
+        using var scope = services.CreateScope();
+        var service = scope.ServiceProvider.GetRequiredService<IAgentAuditService>();
         var entry = new AgentAuditEntry(
             Guid.NewGuid(),
             AgentCapabilityIds.HabitsRead,
