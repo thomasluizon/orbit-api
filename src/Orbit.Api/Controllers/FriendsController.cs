@@ -24,6 +24,7 @@ public partial class FriendsController(IMediator mediator, ILogger<FriendsContro
     public record ReportUserBody([property: JsonRequired] Guid ReportedUserId, [property: JsonRequired] ReportReason Reason, string? Details, Guid? CheerId);
 
     [HttpGet]
+    [Obsolete("The social API is deprecated and will be removed in part 2 of ORB-233.")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetFriends(CancellationToken cancellationToken)
@@ -33,6 +34,7 @@ public partial class FriendsController(IMediator mediator, ILogger<FriendsContro
     }
 
     [HttpGet("{userId:guid}/profile")]
+    [Obsolete("The social API is deprecated and will be removed in part 2 of ORB-233.")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -44,6 +46,7 @@ public partial class FriendsController(IMediator mediator, ILogger<FriendsContro
     }
 
     [HttpGet("invite-preview")]
+    [Obsolete("The social API is deprecated and will be removed in part 2 of ORB-233.")]
     [DistributedRateLimit("invite-preview")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -58,6 +61,7 @@ public partial class FriendsController(IMediator mediator, ILogger<FriendsContro
     }
 
     [HttpGet("feed")]
+    [Obsolete("The social API is deprecated and will be removed in part 2 of ORB-233.")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetFeed(
@@ -71,6 +75,7 @@ public partial class FriendsController(IMediator mediator, ILogger<FriendsContro
     }
 
     [HttpGet("cheers")]
+    [Obsolete("The social API is deprecated and will be removed in part 2 of ORB-233.")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetCheers(
@@ -83,6 +88,7 @@ public partial class FriendsController(IMediator mediator, ILogger<FriendsContro
     }
 
     [HttpPost("requests")]
+    [Obsolete("The social API is deprecated and will be removed in part 2 of ORB-233.")]
     [DistributedRateLimit("friend-requests")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -103,6 +109,7 @@ public partial class FriendsController(IMediator mediator, ILogger<FriendsContro
     }
 
     [HttpPost("requests/{friendshipId:guid}/accept")]
+    [Obsolete("The social API is deprecated and will be removed in part 2 of ORB-233.")]
     [DistributedRateLimit("friend-mutations")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -119,6 +126,7 @@ public partial class FriendsController(IMediator mediator, ILogger<FriendsContro
     }
 
     [HttpDelete("{friendUserId:guid}")]
+    [Obsolete("The social API is deprecated and will be removed in part 2 of ORB-233.")]
     [DistributedRateLimit("friend-mutations")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -130,6 +138,7 @@ public partial class FriendsController(IMediator mediator, ILogger<FriendsContro
     }
 
     [HttpPost("cheers")]
+    [Obsolete("The social API is deprecated and will be removed in part 2 of ORB-233.")]
     [DistributedRateLimit("cheers")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -149,6 +158,7 @@ public partial class FriendsController(IMediator mediator, ILogger<FriendsContro
     }
 
     [HttpPost("block")]
+    [Obsolete("The social API is deprecated and will be removed in part 2 of ORB-233.")]
     [DistributedRateLimit("block")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -167,6 +177,7 @@ public partial class FriendsController(IMediator mediator, ILogger<FriendsContro
     }
 
     [HttpDelete("block/{blockedUserId:guid}")]
+    [Obsolete("The social API is deprecated and will be removed in part 2 of ORB-233.")]
     [DistributedRateLimit("unblock")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -177,6 +188,7 @@ public partial class FriendsController(IMediator mediator, ILogger<FriendsContro
     }
 
     [HttpPost("report")]
+    [Obsolete("The social API is deprecated and will be removed in part 2 of ORB-233.")]
     [DistributedRateLimit("reports")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

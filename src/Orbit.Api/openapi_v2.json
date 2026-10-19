@@ -4775,7 +4775,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/friends/{userId}/profile": {
@@ -4846,7 +4847,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/friends/invite-preview": {
@@ -4915,7 +4917,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/friends/feed": {
@@ -4976,7 +4979,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/friends/cheers": {
@@ -5026,7 +5030,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       },
       "post": {
         "tags": [
@@ -5106,7 +5111,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/friends/requests": {
@@ -5208,7 +5214,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/friends/requests/{friendshipId}/accept": {
@@ -5279,7 +5286,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/friends/{friendUserId}": {
@@ -5330,7 +5338,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/friends/block": {
@@ -5412,7 +5421,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/friends/block/{blockedUserId}": {
@@ -5463,7 +5473,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/friends/report": {
@@ -5545,7 +5556,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/Gamification/profile": {
@@ -12836,7 +12848,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/Profile/social-opt-in": {
@@ -12918,7 +12931,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/Profile/marketing-consent": {
@@ -13082,7 +13096,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/Profile/reset": {
@@ -13276,7 +13291,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/referrals/code": {
@@ -18969,10 +18985,12 @@
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "deprecated": true
           },
           "socialOptIn": {
-            "type": "boolean"
+            "type": "boolean",
+            "deprecated": true
           },
           "uses24HourClock": {
             "type": "boolean",

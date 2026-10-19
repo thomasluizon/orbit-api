@@ -24,6 +24,7 @@ public class PublicProfileController(IMediator mediator, IDistributedCache cache
     };
 
     [HttpGet("{slug}")]
+    [Obsolete("The social API is deprecated and will be removed in part 2 of ORB-233.")]
     [AllowAnonymous]
     [DistributedRateLimit("public-profile")]
     [ProducesResponseType(StatusCodes.Status200OK)]
