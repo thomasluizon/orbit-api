@@ -105,6 +105,7 @@ public partial class ProfileController(
     }
 
     [HttpPut("ai-memory")]
+    [Obsolete("AI memory is deprecated and will be removed.")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
