@@ -162,9 +162,7 @@ public class QueryHabitsTool(
                 && (f.IsBadHabit == null || h.IsBadHabit == f.IsBadHabit.Value)
                 && (!f.FrequencyOneTime || h.FrequencyUnit == null)
                 && (f.Frequency == null || h.FrequencyUnit == f.Frequency.Value)
-                && (!f.Date.HasValue || !h.IsGeneral)
-                && (normalizedSearch == null || h.Title.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase))
-                && (normalizedTag == null || h.Tags.Any(t => t.Name.Contains(normalizedTag, StringComparison.OrdinalIgnoreCase))),
+                && (!f.Date.HasValue || !h.IsGeneral),
             q => includeMetrics
                 ? q.Include(h => h.Tags).Include(h => h.Logs).AsSplitQuery()
                 : q
@@ -172,6 +170,10 @@ public class QueryHabitsTool(
                     .Include(h => h.Logs.Where(l => !l.IsDeleted && l.Date == today && l.Value > 0))
                     .AsSplitQuery(),
             ct);
+
+        habits = habits.Where(habit => normalizedSearch is null || HabitNameMatcher.Matches(habit.Title, normalizedSearch))
+            .Where(habit => normalizedTag is null || habit.Tags.Any(tag => HabitNameMatcher.Matches(tag.Name, normalizedTag)))
+            .ToList();
 
         if (f.Date is DateOnly date)
         {
