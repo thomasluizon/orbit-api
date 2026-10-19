@@ -17,6 +17,26 @@ public class AgentCatalogServiceTests
 {
     private readonly AgentCatalogService _catalogService = new();
 
+    [Fact]
+    public void ProactiveAstraTool_UsesExistingProCapabilityAndAiSettingsScope()
+    {
+        var tool = (IAiTool)RuntimeHelpers.GetUninitializedObject(
+            typeof(Orbit.Application.Chat.Tools.Implementations.SetProactiveAstraTool));
+        var catalog = new AgentCatalogService([tool]);
+
+        var capability = catalog.GetCapabilityByChatTool("set_proactive_astra");
+        capability.Should().NotBeNull();
+        capability!.Id.Should().Be(AgentCapabilityIds.ProfileProactiveAstraWrite);
+        capability.PlanRequirement.Should().Be("Pro");
+        capability.Scope.Should().Be(AgentScopes.WriteAiSettings);
+        capability.ControllerActionKeys.Should().Contain("ProfileController.SetProactiveAstra");
+        var operation = catalog.GetOperation("set_proactive_astra");
+        operation.Should().NotBeNull();
+        operation!.CapabilityId.Should().Be(capability.Id);
+        operation.IsMutation.Should().BeTrue();
+        operation.IsAgentExecutable.Should().BeTrue();
+    }
+
     [Theory]
     [InlineData("bulk_create_habits", AgentRiskClass.Low, AgentConfirmationRequirement.None)]
     [InlineData("bulk_log_habits", AgentRiskClass.Low, AgentConfirmationRequirement.None)]

@@ -73,6 +73,7 @@ public class ChatToolMetadataTests
         AssertTool(deleteTagTool, "delete_tag", "tag", "tag_id");
         AssertTool(reorderGoalsTool, "reorder_goals", "position", "goal_id");
         AssertTool(getReferralCodeTool, "get_referral_code", "referral", "type");
+        AssertTool(new SetProactiveAstraTool(mediator), "set_proactive_astra", "proactive", "enabled");
         AssertTool(bulkUpdateHabitEmojisTool, "bulk_update_habit_emojis", "emojis", "infer_from_title");
         AssertTool(bulkUpdateHabitsTool, "bulk_update_habits", "complete", "updates");
         AssertTool(bulkRescheduleHabitsTool, "bulk_reschedule_habits", "reschedule", "due_date");
