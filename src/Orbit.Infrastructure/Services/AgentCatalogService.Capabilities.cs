@@ -1080,8 +1080,6 @@ public partial class AgentCatalogService
                     "AuthController.SendCodeOperation",
                     "AuthController.VerifyCode",
                     "AuthController.VerifyCodeOperation",
-                    "AuthController.GoogleAuth",
-                    "AuthController.GoogleAuthOperation",
                     "AuthController.GoogleCodeAuth",
                     "AuthController.GoogleCodeAuthOperation",
                     "AuthController.Refresh",

@@ -27,18 +27,8 @@ public static partial class ServiceCollectionExtensions
         return value;
     }
 
-    internal static void AddEmailAndSupabaseClients(WebApplicationBuilder builder, TimeSpan httpTimeout)
+    internal static void AddEmailAndStorageServices(WebApplicationBuilder builder, TimeSpan httpTimeout)
     {
-        var supabaseUrl = RequireConfigValue(builder, "Supabase:Url");
-        var supabaseAnonKey = RequireConfigValue(builder, "Supabase:AnonKey");
-
-        builder.Services.AddHttpClient("Supabase", client =>
-        {
-            client.BaseAddress = new Uri(supabaseUrl);
-            client.DefaultRequestHeaders.Add("apikey", supabaseAnonKey);
-            client.Timeout = httpTimeout;
-        });
-
         if (!BuildTimeDocumentGeneration.IsActive)
         {
             foreach (var key in new[]

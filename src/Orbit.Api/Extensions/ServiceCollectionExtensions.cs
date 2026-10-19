@@ -375,7 +375,7 @@ public static partial class ServiceCollectionExtensions
 
         var httpTimeout = GetDefaultHttpTimeout(builder);
 
-        AddEmailAndSupabaseClients(builder, httpTimeout);
+        AddEmailAndStorageServices(builder, httpTimeout);
 
         builder.Services.Configure<GoogleSettings>(
             builder.Configuration.GetSection(GoogleSettings.SectionName));
