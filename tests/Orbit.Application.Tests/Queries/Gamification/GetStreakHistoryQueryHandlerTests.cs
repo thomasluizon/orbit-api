@@ -2,7 +2,6 @@ using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Gamification.Queries;
 using Orbit.Application.Habits.Services;
-using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -295,7 +294,6 @@ public class GetStreakHistoryQueryHandlerTests
         var habitLogRepo = Substitute.For<IGenericRepository<HabitLog>>();
         var freezeRepo = Substitute.For<IGenericRepository<StreakFreeze>>();
         var userDateService = Substitute.For<IUserDateService>();
-        var feedEmitter = Substitute.For<IFriendFeedEventEmitter>();
         userRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
             Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
@@ -319,7 +317,6 @@ public class GetStreakHistoryQueryHandlerTests
         var service = new UserStreakService(
             new UserStreakRepositories(userRepo, habitLogRepo, freezeRepo),
             userDateService,
-            feedEmitter,
             new HabitScheduleSnapshotStore(habitRepo));
         var state = await service.RecalculateAsync(UserId, cancellationToken: CancellationToken.None);
         return state!.CurrentStreak;

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Orbit.Domain.Models;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Controllers;
@@ -16,14 +17,19 @@ public class SocialDeprecationTests
             .Select(type => type.Name);
         controllerNames.Should().NotContain("ChallengesController")
             .And.NotContain("AccountabilityController")
-            .And.Contain("FriendsController")
-            .And.Contain("PublicProfileController");
+            .And.NotContain("FriendsController")
+            .And.NotContain("PublicProfileController");
 
         var actions = new AgentCatalogService().GetCapabilities()
             .SelectMany(capability => capability.ControllerActionKeys ?? []);
         actions.Should().NotContain(action => action.StartsWith("ChallengesController.", StringComparison.Ordinal)
             || action.StartsWith("AccountabilityController.", StringComparison.Ordinal));
-        actions.Should().Contain("FriendsController.SendCheer");
+        actions.Should().NotContain(action => action.StartsWith("FriendsController.", StringComparison.Ordinal)
+            || action.StartsWith("PublicProfileController.", StringComparison.Ordinal));
+        foreach (var action in new[] { "SetHandle", "SetSocialOptIn", "UpdatePublicProfile" })
+            typeof(ProfileController).GetMethod(action).Should().BeNull();
+        new AgentCatalogService().GetCapabilities().Should().NotContain(capability => capability.Scope == "manage_social");
+        AgentScopes.All.Should().NotContain("manage_social");
     }
 
     public static TheoryData<string, string, string> RetiringRoutes()
@@ -57,19 +63,17 @@ public class SocialDeprecationTests
 
     [Theory]
     [MemberData(nameof(RetiringRoutes))]
-    public void GeneratedOpenApi_RetiringRouteRemainsAvailableAndDeprecated(string file, string path, string method)
+    public void GeneratedOpenApi_SocialRouteIsAbsent(string file, string path, string method)
     {
         using var document = ReadDocument(file);
-        var operation = document.RootElement.GetProperty("paths").GetProperty(path).GetProperty(method);
-
-        operation.TryGetProperty("deprecated", out var deprecated).Should().BeTrue();
-        deprecated.GetBoolean().Should().BeTrue();
+        document.RootElement.GetProperty("paths").TryGetProperty(path, out _).Should().BeFalse(
+            $"{method} {path} must be absent from {file}");
     }
 
     [Theory]
     [InlineData("openapi.json")]
     [InlineData("openapi_v2.json")]
-    public void GeneratedOpenApi_RequiredSocialProfileFieldsRemainAvailableAndDeprecated(string file)
+    public void GeneratedOpenApi_SocialProfileCompatibilityRemainsAvailable(string file)
     {
         using var document = ReadDocument(file);
         var paths = document.RootElement.GetProperty("paths");
@@ -81,8 +85,7 @@ public class SocialDeprecationTests
         foreach (var name in new[] { "handle", "socialOptIn" })
         {
             var property = properties.GetProperty(name);
-            property.TryGetProperty("deprecated", out var deprecated).Should().BeTrue();
-            deprecated.GetBoolean().Should().BeTrue();
+            property.TryGetProperty("deprecated", out _).Should().BeFalse();
         }
 
         properties.TryGetProperty("publicProfile", out _).Should().BeTrue();

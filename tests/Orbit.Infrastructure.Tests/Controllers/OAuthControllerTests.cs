@@ -200,8 +200,8 @@ public class OAuthControllerTests : IDisposable
         (await verify.Handle(new VerifyCodeCommand("email@example.com", "123456"), CancellationToken.None)).IsSuccess.Should().BeTrue();
 
         googleUser!.Language.Should().Be(emailUser!.Language).And.Be("en");
-        googleUser.Handle.Should().Be($"user_{googleUser.Id:N}"[..17]);
-        emailUser.Handle.Should().Be($"user_{emailUser.Id:N}"[..17]);
+        googleUser.Handle.Should().BeNull();
+        emailUser.Handle.Should().BeNull();
     }
 
     [Fact]

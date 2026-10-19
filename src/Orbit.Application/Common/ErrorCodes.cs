@@ -146,15 +146,6 @@ public static class ErrorCodes
     public const string AudioTranscriptionFailed = "AUDIO_TRANSCRIPTION_FAILED";
     public const string AudioTranscriptionEmpty = "AUDIO_TRANSCRIPTION_EMPTY";
     public const string UpgradeRequired = "UPGRADE_REQUIRED";
-    public const string SocialDisabled = "SOCIAL_DISABLED";
-    public const string HandleTaken = "HANDLE_TAKEN";
-    public const string FriendLimitReached = "FRIEND_LIMIT_REACHED";
-    public const string AlreadyFriends = "ALREADY_FRIENDS";
-    public const string Blocked = "BLOCKED";
-    public const string NotFriends = "NOT_FRIENDS";
-    public const string ContentRejected = "CONTENT_REJECTED";
-    public const string FriendRequestNotFound = "FRIEND_REQUEST_NOT_FOUND";
-    public const string CheerNotFound = "CHEER_NOT_FOUND";
     public const string StreakRepairUnavailable = "STREAK_REPAIR_UNAVAILABLE";
     public const string StreakGapRepairUnavailable = "STREAK_GAP_REPAIR_UNAVAILABLE";
 }

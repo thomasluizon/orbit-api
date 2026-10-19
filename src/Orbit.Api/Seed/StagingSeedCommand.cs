@@ -136,7 +136,6 @@ public sealed class StagingSeedService(OrbitDbContext db)
         {
             user = Require(User.Create("Staging Owner", normalizedEmail));
             user.SetLanguage("en");
-            user.SeedDefaultHandle();
             Require(user.SetTimeZone("America/Sao_Paulo"));
             db.Users.Add(user);
             await db.SaveChangesAsync(cancellationToken);

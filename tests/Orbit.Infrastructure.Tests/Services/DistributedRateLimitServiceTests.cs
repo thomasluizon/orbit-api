@@ -76,6 +76,15 @@ public class DistributedRateLimitServiceTests : IDisposable
     [InlineData("accountability-invites")]
     [InlineData("accountability-checkins")]
     [InlineData("accountability-mutations")]
+    [InlineData("cheers")]
+    [InlineData("friend-requests")]
+    [InlineData("friend-mutations")]
+    [InlineData("invite-preview")]
+    [InlineData("reports")]
+    [InlineData("set-handle")]
+    [InlineData("block")]
+    [InlineData("unblock")]
+    [InlineData("public-profile")]
     [InlineData("unknown-policy")]
     public async Task TryAcquireAsync_RemovedOrUnknownPolicy_ThrowsWithoutStoringBucket(string policyName)
     {
@@ -237,25 +246,9 @@ public class DistributedRateLimitServiceTests : IDisposable
     }
 
     [Theory]
-    [InlineData("block")]
-    [InlineData("unblock")]
-    public async Task TryAcquireAsync_ModerationPolicy_BlocksAfterPermitLimit(string policyName)
-    {
-        DistributedRateLimitDecision finalDecision = new(true, 0, 0, DateTime.UtcNow);
-
-        for (var attempt = 0; attempt < 51; attempt++)
-            finalDecision = await _service.TryAcquireAsync(policyName, "user:blocker");
-
-        finalDecision.Allowed.Should().BeFalse();
-        finalDecision.PermitLimit.Should().Be(50);
-        finalDecision.CurrentCount.Should().Be(50);
-    }
-
-    [Theory]
     [InlineData("tags", 60)]
     [InlineData("achievements", 30)]
     [InlineData("ai-operations", 15)]
-    [InlineData("friend-mutations", 50)]
     [InlineData("streak-repair", 10)]
     public async Task TryAcquireAsync_StateChangingSweepPolicy_BlocksAfterPermitLimit(string policyName, int permitLimit)
     {

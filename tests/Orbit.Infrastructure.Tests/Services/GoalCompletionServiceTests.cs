@@ -11,7 +11,6 @@ using Orbit.Application.Goals.Commands;
 using Orbit.Application.Goals.Queries;
 using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Commands;
-using Orbit.Application.Social.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -510,9 +509,7 @@ public class GoalCompletionServiceTests
             new FoundingAchievementReader(dbContext));
         return new GamificationService(
             repos,
-            new GamificationNotifiers(
-                Substitute.For<IPushNotificationService>(),
-                Substitute.For<IFriendFeedEventEmitter>()),
+            Substitute.For<IPushNotificationService>(),
             Substitute.For<IUserDateService>(),
             new XpAwarder(new GenericRepository<XpAwardLog>(dbContext)),
             unitOfWork,
