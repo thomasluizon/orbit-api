@@ -95,8 +95,17 @@ public partial class AccountDeletionService(
         {
             using var scope = scopeFactory.CreateScope();
             var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
+            var user = await dbContext.Users.IgnoreQueryFilters().AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, ct);
+            var nowAtUtc = DateTime.UtcNow;
+            if (user is not { IsDeactivated: true, ScheduledDeletionAt: not null } || user.ScheduledDeletionAt > nowAtUtc)
+                return;
+
+            await StopRenewalsBeforeErasureAsync(scope.ServiceProvider, user, nowAtUtc, ct);
+            unitOfWork.ResetTracking();
             var deleted = await unitOfWork.ExecuteInTransactionAsync(
-                transactionToken => DeleteLockedAccountAsync(scope.ServiceProvider, userId, transactionToken), ct);
+                transactionToken => DeleteLockedAccountAsync(scope.ServiceProvider, userId,
+                    user.StripeSubscriptionId, user.PlayPurchaseToken, transactionToken), ct);
 
             if (deleted && logger.IsEnabled(LogLevel.Information))
                 LogAccountDeleted(logger, userId);
@@ -108,7 +117,8 @@ public partial class AccountDeletionService(
         }
     }
 
-    private async Task<bool> DeleteLockedAccountAsync(IServiceProvider services, Guid userId, CancellationToken ct)
+    private async Task<bool> DeleteLockedAccountAsync(IServiceProvider services, Guid userId,
+        string? stripeSubscriptionId, string? playPurchaseToken, CancellationToken ct)
     {
         var dbContext = services.GetRequiredService<OrbitDbContext>();
         var unitOfWork = services.GetRequiredService<IUnitOfWork>();
@@ -117,19 +127,11 @@ public partial class AccountDeletionService(
         var nowAtUtc = DateTime.UtcNow;
         if (user is not { IsDeactivated: true, ScheduledDeletionAt: not null } || user.ScheduledDeletionAt > nowAtUtc)
             return false;
+        if (user.StripeSubscriptionId != stripeSubscriptionId || user.PlayPurchaseToken != playPurchaseToken)
+            return false;
 
         var contacts = services.GetRequiredService<IGenericRepository<MarketingContact>>();
         await MarketingContactOptOut.RecordAsync(user.Email, contacts, unitOfWork, ct);
-        try
-        {
-            await StopRenewalsBeforeErasureAsync(services, user, nowAtUtc, ct);
-        }
-        catch (BillingProviderException ex)
-        {
-            LogAccountDeletionFailed(logger, ex, userId);
-            return false;
-        }
-
         var stores = services.GetServices<IObjectStorageDeletionService>().ToArray();
         if (stores.Length == 0)
             throw new InvalidOperationException("No upload deletion providers are configured.");

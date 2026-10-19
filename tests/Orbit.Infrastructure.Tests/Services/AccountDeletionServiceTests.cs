@@ -13,6 +13,7 @@ using Orbit.Application.Common;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Persistence;
+using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Services;
 using Orbit.Infrastructure.Tests.Persistence;
 using FluentAssertions;
@@ -88,16 +89,7 @@ public class AccountDeletionServiceTests
         var services = new ServiceCollection();
         services.AddSingleton<IObjectStorageDeletionService>(objects);
         services.AddScoped(_ => factory.CreateContext());
-        services.AddScoped<IUnitOfWork>(sp =>
-        {
-            var context = sp.GetRequiredService<OrbitDbContext>();
-            var work = Substitute.For<IUnitOfWork>();
-            work.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<bool>>>(), Arg.Any<CancellationToken>())
-                .Returns(call => call.Arg<Func<CancellationToken, Task<bool>>>()(call.Arg<CancellationToken>()));
-            work.SaveChangesAsync(Arg.Any<CancellationToken>())
-                .Returns(call => context.SaveChangesAsync(call.Arg<CancellationToken>()));
-            return work;
-        });
+        services.AddScoped<IUnitOfWork>(sp => new UnitOfWork(sp.GetRequiredService<OrbitDbContext>(), new DatabaseConnectionSettings()));
         services.AddScoped<IGenericRepository<User>, GenericRepository<User>>();
         services.AddSingleton(Substitute.For<IGenericRepository<MarketingContact>>());
         services.AddSingleton(reset);

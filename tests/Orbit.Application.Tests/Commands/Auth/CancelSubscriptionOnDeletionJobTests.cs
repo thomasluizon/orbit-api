@@ -56,7 +56,12 @@ public class CancelSubscriptionOnDeletionJobTests
         {
             _unitOfWork.AcquireUserRowLockAsync(_user.Id, Arg.Any<CancellationToken>());
             _users.FindOneTrackedIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>());
+            _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>());
+            _unitOfWork.ResetTracking();
+            _unitOfWork.AcquireUserRowLockAsync(_user.Id, Arg.Any<CancellationToken>());
+            _users.FindOneTrackedIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>());
             _stripe.SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>());
+            _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>());
         });
     }
 
@@ -72,7 +77,10 @@ public class CancelSubscriptionOnDeletionJobTests
         Received.InOrder(() =>
         {
             _play.VerifyAsync("orbit_pro", "play-token", Arg.Any<CancellationToken>());
+            _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>());
+            _play.VerifyAsync("orbit_pro", "play-token", Arg.Any<CancellationToken>());
             _play.CancelAsync("play-token", Arg.Any<CancellationToken>());
+            _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>());
         });
         await _play.Received(1).CancelAsync("play-token", Arg.Any<CancellationToken>());
         _stripe.ReceivedCalls().Should().BeEmpty();
@@ -311,6 +319,7 @@ public class CancelSubscriptionOnDeletionJobTests
         _user.PlayRenewalStoppedByDeletion.Should().BeTrue();
         Received.InOrder(() =>
         {
+            _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>());
             _play.CancelAsync("play-token", Arg.Any<CancellationToken>());
             _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>());
         });

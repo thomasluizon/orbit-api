@@ -319,6 +319,10 @@ public partial class User : Entity
         PlayPurchaseToken = purchaseToken;
     }
 
+    /// <summary>
+    /// Claims a linked subscription observed renewing. Persist this intent before requesting
+    /// cancellation so provider acceptance remains attributable after a local rollback or lost response.
+    /// </summary>
     public void RecordDeletionStoppedRenewal(SubscriptionSource source, string providerIdentifier)
     {
         EnsureValidSubscriptionSource(source);
