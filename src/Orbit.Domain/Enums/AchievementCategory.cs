@@ -9,6 +9,5 @@ public enum AchievementCategory
     Perfection,
     Special,
     Social,
-    Sharing,
-    Together
+    Sharing
 }

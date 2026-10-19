@@ -142,24 +142,11 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IHabitScheduleLogReader, HabitScheduleLogReader>();
         builder.Services.AddScoped<IHabitSummaryLogReader, HabitSummaryLogReader>();
         builder.Services.AddScoped<IHabitSchedulePageLoader, HabitSchedulePageLoader>();
-        builder.Services.AddScoped<Orbit.Application.Challenges.Services.IChallengeProgressService, Orbit.Application.Challenges.Services.ChallengeProgressService>();
-        builder.Services.AddScoped<Orbit.Application.Challenges.Services.ChallengeProgressRepositories>(sp =>
-            new Orbit.Application.Challenges.Services.ChallengeProgressRepositories(
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Challenge>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.ChallengeParticipant>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.ChallengeParticipantHabit>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.HabitLog>>()));
         builder.Services.AddScoped<Orbit.Application.Social.Commands.SendCheerRepositories>(sp =>
             new Orbit.Application.Social.Commands.SendCheerRepositories(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Cheer>>()));
-        builder.Services.AddScoped<Orbit.Application.Accountability.Services.AccountabilityPairService>();
-        builder.Services.AddScoped<Orbit.Application.Accountability.Commands.AccountabilityRepositories>(sp =>
-            new Orbit.Application.Accountability.Commands.AccountabilityRepositories(
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.AccountabilityPair>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.AccountabilityCheckIn>>()));
         builder.Services.AddScoped<Orbit.Application.Goals.Commands.GoalRepositories>(sp =>
             new Orbit.Application.Goals.Commands.GoalRepositories(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Goal>>(),
@@ -185,11 +172,6 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Goal>>()));
-        builder.Services.AddScoped<Orbit.Application.Challenges.Commands.CreateChallengeRepositories>(sp =>
-            new Orbit.Application.Challenges.Commands.CreateChallengeRepositories(
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Challenge>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>()));
         builder.Services.AddScoped<Orbit.Application.Social.Queries.GetFriendProfileRepositories>(sp =>
             new Orbit.Application.Social.Queries.GetFriendProfileRepositories(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),

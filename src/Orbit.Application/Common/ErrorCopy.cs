@@ -204,7 +204,7 @@ public static partial class ErrorCopy
         (DomainErrors.InsufficientStreakFreezes.Code, "You do not have enough banked freezes to cover the whole gap.", "Você não tem congelamentos guardados suficientes para cobrir todo o intervalo."),
     ];
 
-    /// <summary>Friends, cheers, challenges and accountability pairs.</summary>
+    /// <summary>Friends and cheers.</summary>
     private static readonly (string Code, string En, string PtBr)[] Social =
     [
         (ErrorCodes.SocialDisabled, "Social features are off. Turn them on in settings to use this.", "Os recursos sociais estão desativados. Ative nas configurações para usar isto."),
@@ -216,16 +216,6 @@ public static partial class ErrorCopy
         (ErrorCodes.ContentRejected, "This note cannot be sent. Reword it and try again.", "Esta mensagem não pode ser enviada. Reescreva e tente de novo."),
         (ErrorCodes.FriendRequestNotFound, "That friend request is not here any more.", "Esse pedido de amizade não está mais aqui."),
         (ErrorCodes.CheerNotFound, "That cheer is not here any more.", "Essa torcida não está mais aqui."),
-        (ErrorCodes.ChallengeNotFound, "That challenge is not here any more.", "Esse desafio não está mais aqui."),
-        (ErrorCodes.ChallengeFull, "This challenge holds {0} people and is full.", "Este desafio comporta {0} pessoas e está cheio."),
-        (ErrorCodes.AlreadyJoinedChallenge, "You already joined this challenge.", "Você já entrou neste desafio."),
-        (ErrorCodes.NotChallengeParticipant, "You are not in this challenge.", "Você não está neste desafio."),
-        (ErrorCodes.InvalidJoinCode, "That join code is not valid. Check it and enter it again.", "Esse código de entrada não é válido. Confira e digite de novo."),
-        (ErrorCodes.ChallengeClosed, "This challenge is no longer open to new people.", "Este desafio não aceita mais participantes."),
-        (ErrorCodes.PairNotFound, "That accountability pair is not here any more.", "Essa dupla não está mais aqui."),
-        (ErrorCodes.PairLimitReached, "You have {0} accountability pairs, which is the limit. End one to start another.", "Você tem {0} duplas, que é o limite. Encerre uma para começar outra."),
-        (ErrorCodes.AlreadyPaired, "You already have an accountability pair with this person.", "Você já tem uma dupla com esta pessoa."),
-        (ErrorCodes.AlreadyCheckedIn, "You already checked in today.", "Você já fez check-in hoje."),
         (DomainErrors.InvalidHandle.Code, "A handle uses 3 to 20 letters, numbers or underscores.", "Um nome de usuário usa de 3 a 20 letras, números ou sublinhados."),
         (DomainErrors.CannotFriendSelf.Code, "You cannot send yourself a friend request.", "Você não pode enviar um pedido de amizade para você mesmo."),
         (DomainErrors.FriendshipNotPending.Code, "This friend request was already answered.", "Este pedido de amizade já foi respondido."),

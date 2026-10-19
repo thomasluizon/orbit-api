@@ -13,16 +13,12 @@ using Orbit.Application.Common;
 using Orbit.Application.Uploads.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
-using Orbit.Application.Accountability.Commands;
-using Orbit.Application.Accountability.Validators;
 using Orbit.Application.ApiKeys.Commands;
 using Orbit.Application.ApiKeys.Validators;
 using Orbit.Application.Auth.Commands;
 using Orbit.Application.Auth.Validators;
 using Orbit.Application.Calendar.Commands;
 using Orbit.Application.Calendar.Validators;
-using Orbit.Application.Challenges.Commands;
-using Orbit.Application.Challenges.Validators;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Validators;
 using Orbit.Application.Chat.Models;
@@ -64,11 +60,9 @@ namespace Orbit.Infrastructure.Tests.Middleware;
 public partial class ValidationLocalizationTests(ITestOutputHelper output)
 {
     [Theory]
-    [InlineData("Accountability")]
     [InlineData("ApiKeys")]
     [InlineData("Auth")]
     [InlineData("Calendar")]
-    [InlineData("Challenges")]
     [InlineData("Chat")]
     [InlineData("ChecklistTemplates")]
     [InlineData("Email")]
@@ -203,11 +197,9 @@ public partial class ValidationLocalizationTests(ITestOutputHelper output)
         var id = Guid.NewGuid();
         return family switch
         {
-            "Accountability" => Case(new SetAccountabilityHabitsCommandValidator(), new SetAccountabilityHabitsCommand(id, id, [Guid.Empty]), "HabitIds", ValidationErrorCodes.HabitIdsRequired, "Os IDs dos hábitos não podem estar vazios."),
             "ApiKeys" => Case(new CreateApiKeyValidator(), new CreateApiKeyCommand(id, ""), "Name", ValidationErrorCodes.ApiKeyNameRequired, "Dê um nome à chave de API"),
             "Auth" => Case(new VerifyCodeCommandValidator(), new VerifyCodeCommand("reader@example.com", "12345"), "Code", ValidationErrorCodes.VerificationCodeFormat, "Digite os 6 dígitos"),
             "Calendar" => Case(new SetSelectedCalendarsCommandValidator(), new SetSelectedCalendarsCommand(id, [""]), "CalendarIds[0]", ValidationErrorCodes.CalendarIdsRequired, "Os IDs das agendas não podem estar vazios."),
-            "Challenges" => Case(new SetChallengeHabitsCommandValidator(), new SetChallengeHabitsCommand(id, id, []), "HabitIds", ValidationErrorCodes.ChallengeHabitsRequired, "Vincule pelo menos um dos seus hábitos ao desafio."),
             "Chat" => Case(new TranscribeAudioCommandValidator(), new TranscribeAudioCommand(id, [1], "voice.xyz"), "FileName", ValidationErrorCodes.AudioFormat, "O formato de áudio '.xyz' não é suportado."),
             "ChecklistTemplates" => Case(new CreateChecklistTemplateCommandValidator(), new CreateChecklistTemplateCommand(id, "List", [""]), "Items[0]", ValidationErrorCodes.TemplateItemRequired, "Escreva o item do checklist"),
             "Email" => Case(new ProcessSesEventCommandValidator(), new ProcessSesEventCommand(""), "Payload", "NotEmptyValidator", "Preencha Payload."),

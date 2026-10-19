@@ -4,7 +4,6 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
-using Orbit.Application.Challenges.Services;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Commands;
@@ -30,7 +29,6 @@ public class LogHabitCommandHandlerTests
     private readonly IUserStreakService _userStreakService = Substitute.For<IUserStreakService>();
     private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
     private readonly IGoalCompletionService _goalCompletionService = Substitute.For<IGoalCompletionService>();
-    private readonly IChallengeProgressService _challengeProgressService = Substitute.For<IChallengeProgressService>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly MemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
@@ -50,7 +48,6 @@ public class LogHabitCommandHandlerTests
             _userStreakService,
             _gamificationService,
             _goalCompletionService,
-            _challengeProgressService,
             _mediator,
             _payGate);
         _handler = new LogHabitCommandHandler(
