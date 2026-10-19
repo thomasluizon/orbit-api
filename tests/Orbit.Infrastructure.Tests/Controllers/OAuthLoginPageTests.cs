@@ -57,8 +57,15 @@ public class OAuthLoginPageTests : IDisposable
     private string RenderThroughController(string acceptLanguage)
     {
         _controller.HttpContext.Request.Headers.AcceptLanguage = acceptLanguage;
-        return _controller.Authorize("client-123", "https://claude.ai/callback", "code",
-            "client-state", "mcp-challenge", "S256")
+        return _controller.Authorize(new OAuthController.AuthorizeRequest
+        {
+            ClientId = "client-123",
+            RedirectUri = "https://claude.ai/callback",
+            ResponseType = "code",
+            State = "client-state",
+            CodeChallenge = "mcp-challenge",
+            CodeChallengeMethod = "S256",
+        })
             .Should().BeOfType<ContentResult>().Subject.Content!;
     }
 

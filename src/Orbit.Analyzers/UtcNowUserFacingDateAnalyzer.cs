@@ -5,6 +5,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
+using Microsoft.CodeAnalysis.Operations;
 
 namespace Orbit.Analyzers;
 
@@ -16,11 +17,11 @@ public sealed class UtcNowUserFacingDateAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor InstantRule = new(
         DiagnosticId,
         "Raw DateTime.UtcNow for a user-facing date",
-        "Do not use DateTime.UtcNow here. User-facing dates MUST come from IUserDateService.GetUserTodayAsync(userId); DateTime.UtcNow is only acceptable for *AtUtc timestamps, cache keys, or as input to a TimeZoneInfo conversion into the user's timezone.",
+        "Do not use DateTime.UtcNow here. User-facing dates MUST come from IUserDateService.GetUserTodayAsync(userId); DateTime.UtcNow is only acceptable for *AtUtc timestamp parameters, fields or properties (including Add* arithmetic and locals used exclusively by those sinks), cache keys, or as input to a TimeZoneInfo conversion into the user's timezone.",
         "Reliability",
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "Raw DateTime.UtcNow reads outside timestamp, cache-key, and timezone-conversion contexts compute server-clock dates that are wrong for users in other timezones.");
+        description: "Raw DateTime.UtcNow reads outside timestamp, cache-key, and timezone-conversion contexts compute server-clock dates that are wrong for users in other timezones. Timestamp sinks include *AtUtc parameters, fields and properties, Add* arithmetic on the instant, and locals used only by those sinks. The analyzer trusts a callee's *AtUtc parameter name and cannot inspect the callee body.");
 
     private static readonly DiagnosticDescriptor DateOnlyRule = new(
         DiagnosticId,
@@ -98,8 +99,75 @@ public sealed class UtcNowUserFacingDateAnalyzer : DiagnosticAnalyzer
             return;
         if (LineNamesTimestampOrCacheKey(memberAccess, context.CancellationToken))
             return;
+        if (FlowsOnlyToUtcTimestamps(memberAccess, context.SemanticModel, context.CancellationToken))
+            return;
 
         context.ReportDiagnostic(Diagnostic.Create(InstantRule, memberAccess.GetLocation()));
+    }
+
+    private static bool FlowsOnlyToUtcTimestamps(
+        ExpressionSyntax expression, SemanticModel model, CancellationToken cancellationToken)
+    {
+        expression = UnwrapInstantArithmetic(expression, model, cancellationToken);
+        if (IsUtcTimestampSink(expression, model, cancellationToken))
+            return true;
+        if (expression.Parent is not EqualsValueClauseSyntax { Parent: VariableDeclaratorSyntax variable }
+            || model.GetDeclaredSymbol(variable, cancellationToken) is not ILocalSymbol local
+            || variable.FirstAncestorOrSelf<BlockSyntax>() is not { } block)
+            return false;
+
+        var hasUse = false;
+        foreach (var node in block.DescendantNodes())
+        {
+            if (node is not IdentifierNameSyntax reference
+                || !SymbolEqualityComparer.Default.Equals(model.GetSymbolInfo(reference, cancellationToken).Symbol, local))
+                continue;
+
+            hasUse = true;
+            if (!IsUtcTimestampSink(UnwrapInstantArithmetic(reference, model, cancellationToken), model, cancellationToken))
+                return false;
+        }
+        return hasUse;
+    }
+
+    private static ExpressionSyntax UnwrapInstantArithmetic(
+        ExpressionSyntax expression, SemanticModel model, CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            if (expression.Parent is ParenthesizedExpressionSyntax parenthesized)
+            {
+                expression = parenthesized;
+                continue;
+            }
+            if (expression.Parent is MemberAccessExpressionSyntax { Parent: InvocationExpressionSyntax invocation } access
+                && access.Expression == expression
+                && model.GetSymbolInfo(invocation, cancellationToken).Symbol is IMethodSymbol method
+                && method.ContainingType.SpecialType == SpecialType.System_DateTime
+                && method.ReturnType.SpecialType == SpecialType.System_DateTime
+                && method.Name.StartsWith("Add", StringComparison.Ordinal))
+            {
+                expression = invocation;
+                continue;
+            }
+            return expression;
+        }
+    }
+
+    private static bool IsUtcTimestampSink(
+        ExpressionSyntax expression, SemanticModel model, CancellationToken cancellationToken)
+    {
+        if (expression.Parent is ArgumentSyntax argument
+            && model.GetOperation(argument, cancellationToken) is IArgumentOperation { Parameter: { } parameter })
+            return parameter.Name.EndsWith("AtUtc", StringComparison.OrdinalIgnoreCase);
+
+        if (expression.Parent is AssignmentExpressionSyntax assignment && assignment.Right == expression)
+        {
+            var symbol = model.GetSymbolInfo(assignment.Left, cancellationToken).Symbol;
+            return (symbol is IPropertySymbol || symbol is IFieldSymbol)
+                && symbol.Name.EndsWith("AtUtc", StringComparison.OrdinalIgnoreCase);
+        }
+        return false;
     }
 
     private static bool IsDateTimeUtcNow(

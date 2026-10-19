@@ -364,7 +364,7 @@ public partial class BulkCreateHabitsCommandHandler(
             s => s.UserId == userId && eventIds.Contains(s.GoogleEventId) && s.ImportedAtUtc == null,
             cancellationToken);
 
-#pragma warning disable ORBIT0004
+#pragma warning disable ORBIT0004 // MarkImported records the same ImportedAtUtc audit instant for every matched calendar suggestion in this import. https://github.com/thomasluizon/orbit-tickets/issues/230
         var now = DateTime.UtcNow;
 #pragma warning restore ORBIT0004
         foreach (var suggestion in suggestions)

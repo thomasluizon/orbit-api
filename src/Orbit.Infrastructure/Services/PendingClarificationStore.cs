@@ -32,9 +32,7 @@ public class PendingClarificationStore(OrbitDbContext dbContext) : IPendingClari
             missingArgumentKey,
             question,
             quickActionsJson,
-#pragma warning disable ORBIT0004
             DateTime.UtcNow.AddMinutes(AppConstants.PendingClarificationTtlMinutes));
-#pragma warning restore ORBIT0004
 
         dbContext.PendingClarifications.Add(entity);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -47,7 +45,7 @@ public class PendingClarificationStore(OrbitDbContext dbContext) : IPendingClari
         Guid userId,
         CancellationToken cancellationToken = default)
     {
-#pragma warning disable ORBIT0004
+#pragma warning disable ORBIT0004 // GetForResolutionAsync compares ExpiresAtUtc with now to exclude expired clarification operations without selecting a user date. https://github.com/thomasluizon/orbit-tickets/issues/230
         var now = DateTime.UtcNow;
 #pragma warning restore ORBIT0004
         var entity = await dbContext.PendingClarifications

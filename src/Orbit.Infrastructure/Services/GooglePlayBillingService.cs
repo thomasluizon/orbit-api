@@ -44,7 +44,7 @@ public sealed class GooglePlayBillingService(
         var lineItem = purchase.LineItems?.FirstOrDefault(item => item.ExpiryTimeDateTimeOffset is not null)
             ?? purchase.LineItems?.FirstOrDefault();
 
-#pragma warning disable ORBIT0004
+#pragma warning disable ORBIT0004 // expiresAt falls back to the current UTC instant when Play provides no subscription expiry; it remains an absolute expiry value. https://github.com/thomasluizon/orbit-tickets/issues/230
         var expiresAt = lineItem?.ExpiryTimeDateTimeOffset?.UtcDateTime ?? DateTime.UtcNow;
 #pragma warning restore ORBIT0004
         var resolvedProductId = lineItem?.ProductId ?? productId;
@@ -52,7 +52,7 @@ public sealed class GooglePlayBillingService(
 
         var isActive = purchase.SubscriptionState is not null
             && EntitledStates.Contains(purchase.SubscriptionState)
-#pragma warning disable ORBIT0004
+#pragma warning disable ORBIT0004 // The isActive check compares the Play expiry instant with the current UTC instant, independently of calendar dates. https://github.com/thomasluizon/orbit-tickets/issues/230
             && expiresAt > DateTime.UtcNow;
 #pragma warning restore ORBIT0004
 

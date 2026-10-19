@@ -25,7 +25,7 @@ public class BackgroundServiceHealthCheck : IHealthCheck
 
     public static void RecordTick(string serviceName)
     {
-#pragma warning disable ORBIT0004
+#pragma warning disable ORBIT0004 // RecordTick stores a UTC liveness instant in LastSuccessfulTicks for background-service monitoring. https://github.com/thomasluizon/orbit-tickets/issues/230
         LastSuccessfulTicks[serviceName] = DateTime.UtcNow;
 #pragma warning restore ORBIT0004
     }
@@ -39,7 +39,7 @@ public class BackgroundServiceHealthCheck : IHealthCheck
         {
             if (LastSuccessfulTicks.TryGetValue(name, out var lastTick))
             {
-#pragma warning disable ORBIT0004
+#pragma warning disable ORBIT0004 // CheckHealthAsync subtracts the last liveness instant to report elapsed minutes and detect a stale service. https://github.com/thomasluizon/orbit-tickets/issues/230
                 var elapsed = DateTime.UtcNow - lastTick;
 #pragma warning restore ORBIT0004
                 serviceTickStatuses[name] = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Last tick: {elapsed.TotalMinutes:F0}m ago");

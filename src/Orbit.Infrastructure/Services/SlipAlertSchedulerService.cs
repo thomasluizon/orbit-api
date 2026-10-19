@@ -51,7 +51,7 @@ public partial class SlipAlertSchedulerService(
         var pushService = scope.ServiceProvider.GetRequiredService<IPushNotificationService>();
         var messageService = scope.ServiceProvider.GetRequiredService<ISlipAlertMessageService>();
 
-#pragma warning disable ORBIT0004
+#pragma warning disable ORBIT0004 // utcDate anchors widened end-date, sent-week and history prefetch floors; ProcessHabitSlipAlertAsync chooses the send day and dedupe week from converted userToday. https://github.com/thomasluizon/orbit-tickets/issues/230
         var utcDate = DateOnly.FromDateTime(DateTime.UtcNow);
 #pragma warning restore ORBIT0004
         var endDateFloor = utcDate.AddDays(-MaxTimeZoneSkewDays);

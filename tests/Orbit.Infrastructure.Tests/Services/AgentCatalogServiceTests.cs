@@ -167,15 +167,19 @@ public class AgentCatalogServiceTests
         prompt.Should().NotContain("Product Surface Snapshot");
     }
 
-    [Fact]
-    public void BuildDynamicSupplement_PreservesSafeContextTextUnderForeignCulture()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void BuildDynamicSupplement_PreservesSafeContextTextUnderForeignCulture(bool missingContext)
     {
         var snapshot = new Orbit.Domain.Models.AgentContextSnapshot(
-            "pro", "en", "America/Sao_Paulo", false, 0, "dark", true, false, "Idle",
+            "pro", missingContext ? null : "en", missingContext ? null : "America/Sao_Paulo",
+            false, 0, "dark", true, false, "Idle",
             FeatureFlags: ["api_keys"], TagNames: ["focus"], ChecklistTemplateNames: ["Morning Reset"],
             RecentHabitTitles: ["Morning Run"], RecentGoalTitles: ["Read books"],
             ClientContext: new Orbit.Domain.Models.AgentClientContext(
-                "android", "en-US", "12h", "today", ShowGeneralOnToday: true));
+                missingContext ? null : "android", missingContext ? null : "en-US",
+                missingContext ? null : "12h", missingContext ? null : "today", ShowGeneralOnToday: true));
         var previousCulture = CultureInfo.CurrentCulture;
 
         try
@@ -183,14 +187,30 @@ public class AgentCatalogServiceTests
             CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("ar-SA");
             var prompt = _catalogService.BuildDynamicSupplement(snapshot);
 
-            prompt.Should().Contain("Plan: pro\nLanguage: en\nTimezone: America/Sao_Paulo\n");
-            prompt.Should().Contain("AI summary: disabled\nWeek starts on: Sunday\nClock: 24-hour\n");
-            prompt.Should().Contain("Theme: dark\nGoogle Calendar connected: yes\n");
-            prompt.Should().Contain("Calendar auto-sync: disabled (Idle)\n");
-            prompt.Should().Contain("Feature flags: api_keys\nTags: focus\nChecklist templates: Morning Reset\n");
-            prompt.Should().Contain("Recent habits: Morning Run\nRecent goals: Read books\n");
-            prompt.Should().Contain("Platform: android\nLocale: en-US\nTime format: 12h\n");
-            prompt.Should().Contain("Current app area: today\nShow general on today: True\n");
+            prompt.Should().Be(($"""
+                ## Safe User Context
+                Plan: pro
+                Language: {(missingContext ? "unknown" : "en")}
+                Timezone: {(missingContext ? "unknown" : "America/Sao_Paulo")}
+                AI summary: disabled
+                Week starts on: Sunday
+                Clock: 24-hour
+                Theme: dark
+                Google Calendar connected: yes
+                Calendar auto-sync: disabled (Idle)
+                Feature flags: api_keys
+                Tags: focus
+                Checklist templates: Morning Reset
+                Recent habits: Morning Run
+                Recent goals: Read books
+
+                ## Untrusted Client Hints
+                Platform: {(missingContext ? "unknown" : "android")}
+                Locale: {(missingContext ? "unknown" : "en-US")}
+                Time format: {(missingContext ? "unknown" : "12h")}
+                Current app area: {(missingContext ? "unknown" : "today")}
+                Show general on today: True
+                """ + Environment.NewLine).ReplaceLineEndings(Environment.NewLine));
         }
         finally
         {

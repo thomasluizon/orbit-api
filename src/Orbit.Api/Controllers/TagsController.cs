@@ -7,8 +7,6 @@ using Orbit.Api.RateLimiting;
 using Orbit.Application.Tags.Commands;
 using Orbit.Application.Tags.Queries;
 
-#pragma warning disable CA1873
-
 namespace Orbit.Api.Controllers;
 
 [Authorize]
@@ -48,7 +46,8 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
 
         if (result.IsSuccess)
         {
-            LogTagCreated(logger, result.Value, HttpContext.GetUserId());
+            if (logger.IsEnabled(LogLevel.Information))
+                logger.LogTagCreated(result.Value, HttpContext.GetUserId());
             return Created($"/api/tags/{result.Value}", new { id = result.Value });
         }
         return result.ToErrorResult();
@@ -69,7 +68,8 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
 
         if (result.IsSuccess)
         {
-            LogTagUpdated(logger, id, HttpContext.GetUserId());
+            if (logger.IsEnabled(LogLevel.Information))
+                logger.LogTagUpdated(id, HttpContext.GetUserId());
             return NoContent();
         }
         return result.ToErrorResult();
@@ -87,7 +87,8 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
 
         if (result.IsSuccess)
         {
-            LogTagDeleted(logger, id, HttpContext.GetUserId());
+            if (logger.IsEnabled(LogLevel.Information))
+                logger.LogTagDeleted(id, HttpContext.GetUserId());
             return NoContent();
         }
         return result.ToErrorResult();
@@ -105,7 +106,8 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
         var result = await mediator.Send(command, cancellationToken);
         return result.ToPayGateAwareResult(() =>
         {
-            LogTagRestored(logger, id, HttpContext.GetUserId());
+            if (logger.IsEnabled(LogLevel.Information))
+                logger.LogTagRestored(id, HttpContext.GetUserId());
             return NoContent();
         });
     }
@@ -145,17 +147,19 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
 
         return result.ToPayGateAwareResult(v => Ok(v));
     }
+}
 
+internal static partial class TagsControllerLogging
+{
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Tag created {TagId} by user {UserId}")]
-    private static partial void LogTagCreated(ILogger logger, Guid tagId, Guid userId);
+    internal static partial void LogTagCreated(this ILogger logger, Guid tagId, Guid userId);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Tag updated {TagId} by user {UserId}")]
-    private static partial void LogTagUpdated(ILogger logger, Guid tagId, Guid userId);
+    internal static partial void LogTagUpdated(this ILogger logger, Guid tagId, Guid userId);
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Tag deleted {TagId} by user {UserId}")]
-    private static partial void LogTagDeleted(ILogger logger, Guid tagId, Guid userId);
+    internal static partial void LogTagDeleted(this ILogger logger, Guid tagId, Guid userId);
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Tag restored {TagId} by user {UserId}")]
-    private static partial void LogTagRestored(ILogger logger, Guid tagId, Guid userId);
-
+    internal static partial void LogTagRestored(this ILogger logger, Guid tagId, Guid userId);
 }

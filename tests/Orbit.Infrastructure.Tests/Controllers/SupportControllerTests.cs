@@ -42,6 +42,35 @@ public class SupportControllerTests
         result.Should().BeOfType<OkObjectResult>();
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SendSupport_LoggingLevel_PreservesResponseAndChecksLevel(bool enabled)
+    {
+        _logger.IsEnabled(LogLevel.Information).Returns(enabled);
+        _mediator.Send(Arg.Any<SendSupportCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success());
+
+        var request = new SupportController.SupportRequest("John", "john@example.com", "Bug Report", "Something broke");
+        var response = await _controller.SendSupport(request, CancellationToken.None);
+
+        var result = response.Should().BeOfType<OkObjectResult>().Subject;
+        System.Text.Json.JsonSerializer.Serialize(result.Value)
+            .Should().Be("""{"message":"Support request sent successfully"}""");
+        _logger.Received().IsEnabled(LogLevel.Information);
+        var logs = _logger.ReceivedCalls().Where(call => call.GetMethodInfo().Name == "Log").ToList();
+        logs.Should().HaveCount(enabled ? 1 : 0);
+        if (enabled)
+        {
+            var arguments = logs.Single().GetArguments();
+            arguments[0].Should().Be(LogLevel.Information);
+            arguments[1].Should().Be(new EventId(1, "LogSupportRequestSent"));
+            arguments[2]!.ToString().Should().Be($"Support request sent by user {UserId} subject Bug Report");
+        }
+        await _mediator.Received(1).Send(
+            Arg.Is<SendSupportCommand>(command => command.UserId == UserId), CancellationToken.None);
+    }
+
     [Fact]
     public async Task SendSupport_Failure_ReturnsBadRequest()
     {

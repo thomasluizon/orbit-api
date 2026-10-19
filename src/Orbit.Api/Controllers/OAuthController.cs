@@ -20,8 +20,7 @@ namespace Orbit.Api.Controllers;
 [ApiVersion(1.0)]
 [ApiVersion(2.0)]
 [AllowAnonymous]
-#pragma warning disable S6931 // OAuth/MCP well-known URLs follow protocol-mandated paths with no common prefix
-#pragma warning disable S107 // OAuth controller legitimately requires many DI dependencies
+#pragma warning disable S6931 // The absolute /.well-known metadata and /oauth authorization routes have protocol-defined paths that cannot share a controller prefix. https://github.com/thomasluizon/orbit-tickets/issues/230
 public partial class OAuthController(
     IMediator mediator,
     OAuthAuthorizationStore authStore,
@@ -43,7 +42,7 @@ public partial class OAuthController(
         .Get<string[]>()?.ToHashSet(StringComparer.OrdinalIgnoreCase)
         ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "claude.ai", "claude.com" };
 
-#pragma warning disable S6932 // Raw Request.Headers needed for reverse proxy X-Forwarded-Proto detection
+#pragma warning disable S6932 // GetMetadata reads X-Forwarded-Proto and Request.Host to publish the external authorization-server URLs behind the proxy. https://github.com/thomasluizon/orbit-tickets/issues/230
     [HttpGet("/.well-known/oauth-authorization-server")]
     public IActionResult GetMetadata()
     {
@@ -93,7 +92,7 @@ public partial class OAuthController(
         });
     }
 
-#pragma warning disable S6932 // Raw Request.Headers needed for reverse proxy X-Forwarded-Proto detection
+#pragma warning disable S6932 // GetProtectedResourceMetadata reads X-Forwarded-Proto and Request.Host to publish the external MCP resource and authorization-server URLs. https://github.com/thomasluizon/orbit-tickets/issues/230
     [HttpGet("/.well-known/oauth-protected-resource")]
     public IActionResult GetProtectedResourceMetadata()
     {
@@ -108,32 +107,51 @@ public partial class OAuthController(
     }
 #pragma warning restore S6932
 
+    public sealed class AuthorizeRequest
+    {
+        [FromQuery(Name = "client_id")]
+        public required string ClientId { get; init; }
+
+        [FromQuery(Name = "redirect_uri")]
+        public required string RedirectUri { get; init; }
+
+        [FromQuery(Name = "response_type")]
+        public required string ResponseType { get; init; }
+
+        [FromQuery(Name = "state")]
+        public required string State { get; init; }
+
+        [FromQuery(Name = "code_challenge")]
+        public required string CodeChallenge { get; init; }
+
+        [FromQuery(Name = "code_challenge_method")]
+        public required string CodeChallengeMethod { get; init; }
+
+        [FromQuery(Name = "nonce")]
+        public string? Nonce { get; init; }
+
+        [FromQuery(Name = "google_error")]
+        public string? GoogleError { get; init; }
+    }
+
     [HttpGet("/oauth/authorize")]
     [DistributedRateLimit("auth")]
-    public IActionResult Authorize(
-        [FromQuery] string client_id,
-        [FromQuery] string redirect_uri,
-        [FromQuery] string response_type,
-        [FromQuery] string state,
-        [FromQuery] string code_challenge,
-        [FromQuery] string code_challenge_method,
-        [FromQuery] string? nonce = null,
-        [FromQuery] string? google_error = null)
+    public IActionResult Authorize([FromQuery] AuthorizeRequest request)
     {
-        if (response_type != "code")
+        if (request.ResponseType != "code")
             return BadRequest(new { error = "unsupported_response_type" });
 
-        if (string.IsNullOrEmpty(code_challenge) || code_challenge_method != "S256")
+        if (string.IsNullOrEmpty(request.CodeChallenge) || request.CodeChallengeMethod != "S256")
             return BadRequest(new { error = "PKCE with S256 is required" });
 
-        if (!IsRedirectUriAllowed(redirect_uri))
+        if (!IsRedirectUriAllowed(request.RedirectUri))
             return BadRequest(new { error = InvalidRedirectUriError });
 
-        if (string.IsNullOrEmpty(state))
+        if (string.IsNullOrEmpty(request.State))
             return BadRequest(new { error = MissingStateError, error_description = "state is required for CSRF protection" });
 
         var language = ResolveLanguage();
-        var errorMessage = google_error switch
+        var errorMessage = request.GoogleError switch
         {
             "cancelled" => language == "pt-BR"
                 ? "O acesso com o Google foi cancelado. Tente novamente ou use seu e-mail."
@@ -149,8 +167,8 @@ public partial class OAuthController(
         var botProtection = configuration.GetSection(BotProtectionSettings.SectionName).Get<BotProtectionSettings>()
             ?? new BotProtectionSettings();
         var html = OAuthLoginPage.Render(
-            client_id, redirect_uri, state,
-            code_challenge, code_challenge_method, nonce, errorMessage, language,
+            request.ClientId, request.RedirectUri, request.State,
+            request.CodeChallenge, request.CodeChallengeMethod, request.Nonce, errorMessage, language,
             botProtection.Enabled, botProtection.SiteKey);
 
         return Content(html, "text/html");
@@ -320,7 +338,7 @@ public partial class OAuthController(
         Request.Headers.AcceptLanguage.ToString().StartsWith("pt", StringComparison.OrdinalIgnoreCase)
             ? "pt-BR" : "en";
 
-#pragma warning disable S6932 // Raw Request.Headers needed for reverse proxy X-Forwarded-Proto detection
+#pragma warning disable S6932 // BuildGoogleRedirectUri reads X-Forwarded-Proto and Request.Host for the externally reachable OAuth callback URI. https://github.com/thomasluizon/orbit-tickets/issues/230
     private string BuildGoogleRedirectUri()
     {
         var scheme = Request.Headers["X-Forwarded-Proto"].FirstOrDefault() ?? Request.Scheme;

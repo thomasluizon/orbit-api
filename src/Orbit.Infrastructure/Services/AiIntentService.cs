@@ -11,8 +11,6 @@ using Orbit.Domain.Models;
 using Orbit.Infrastructure.AI;
 using Orbit.Infrastructure.Services.Prompts;
 
-#pragma warning disable CA1873
-
 namespace Orbit.Infrastructure.Services;
 
 public sealed partial class AiIntentService(
@@ -99,28 +97,7 @@ public sealed partial class AiIntentService(
                 payload["entity_name"] = PromptDataSanitizer.SanitizeBlock(result.EntityName, AppConstants.MaxAiToolResultTextLength);
             if (result.Error is not null)
                 payload["error"] = PromptDataSanitizer.SanitizeInline(result.Error, AppConstants.MaxChatMessageLength);
-            if (result.Payload is not null)
-            {
-                var serializedPayload = JsonSerializer.Serialize(result.Payload, SerializeOptions);
-                if (serializedPayload.Length > AppConstants.MaxAiToolPayloadJsonLength)
-                {
-                    payload["payload"] = new Dictionary<string, object>
-                    {
-                        ["dropped"] = true,
-                        ["original_length"] = serializedPayload.Length,
-                        ["instruction"] = "Re-query with a narrower filter."
-                    };
-                    LogToolPayloadDropped(
-                        logger,
-                        result.Name,
-                        serializedPayload.Length,
-                        AppConstants.MaxAiToolPayloadJsonLength);
-                }
-                else
-                {
-                    payload["payload"] = JsonSerializer.Deserialize<JsonElement>(serializedPayload);
-                }
-            }
+            AddToolPayload(payload, result);
 
             messages.Add(new ToolChatMessage(result.Id, JsonSerializer.Serialize(payload)));
         }
@@ -133,6 +110,29 @@ public sealed partial class AiIntentService(
             cancellationToken);
     }
 
+    private void AddToolPayload(Dictionary<string, object> payload, AiToolCallResult result)
+    {
+        if (result.Payload is null)
+            return;
+
+        var serializedPayload = JsonSerializer.Serialize(result.Payload, SerializeOptions);
+        if (serializedPayload.Length > AppConstants.MaxAiToolPayloadJsonLength)
+        {
+            payload["payload"] = new Dictionary<string, object>
+            {
+                ["dropped"] = true,
+                ["original_length"] = serializedPayload.Length,
+                ["instruction"] = "Re-query with a narrower filter."
+            };
+            if (logger.IsEnabled(LogLevel.Warning))
+                LogToolPayloadDropped(logger, result.Name, serializedPayload.Length, AppConstants.MaxAiToolPayloadJsonLength);
+        }
+        else
+        {
+            payload["payload"] = JsonSerializer.Deserialize<JsonElement>(serializedPayload);
+        }
+    }
+
     private async Task<Result<AiResponse>> CallWithToolsAsync(
         List<ChatMessage> messages,
         ChatCompletionOptions options,
@@ -142,7 +142,8 @@ public sealed partial class AiIntentService(
     {
         try
         {
-            LogCallingAiWithTools(logger);
+            if (logger.IsEnabled(LogLevel.Debug))
+                LogCallingAiWithTools(logger);
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
             var round = streamSink is null
@@ -150,14 +151,18 @@ public sealed partial class AiIntentService(
                 : await CompleteStreamingRoundAsync(messages, options, userId, streamSink, stopwatch, cancellationToken);
 
             stopwatch.Stop();
-            LogAiApiResponded(logger, stopwatch.ElapsedMilliseconds);
+            if (logger.IsEnabled(LogLevel.Debug))
+                LogAiApiResponded(logger, stopwatch.ElapsedMilliseconds);
 
             if (round.ToolCalls.Count > 0)
             {
                 var toolCalls = ToAiToolCalls(round.ToolCalls);
 
-                LogAiReturnedToolCalls(logger, toolCalls.Count,
-                    string.Join(", ", toolCalls.Select(tc => tc.Name)));
+                if (logger.IsEnabled(LogLevel.Debug))
+                {
+                    var toolNames = string.Join(", ", toolCalls.Select(tc => tc.Name));
+                    LogAiReturnedToolCalls(logger, toolCalls.Count, toolNames);
+                }
 
                 var convCtx = new AiConversationContext
                 {
@@ -177,7 +182,8 @@ public sealed partial class AiIntentService(
             if (string.IsNullOrWhiteSpace(round.Text))
                 return Result.Failure<AiResponse>(ErrorMessages.AiNoOutput);
 
-            LogAiReturnedTextResponse(logger, round.Text.Length);
+            if (logger.IsEnabled(LogLevel.Debug))
+                LogAiReturnedTextResponse(logger, round.Text.Length);
             return Result.Success(new AiResponse
             {
                 TextMessage = round.Text,
@@ -187,12 +193,14 @@ public sealed partial class AiIntentService(
         }
         catch (JsonException ex)
         {
-            LogAiDeserializationFailed(logger, ex);
+            if (logger.IsEnabled(LogLevel.Error))
+                LogAiDeserializationFailed(logger, ex);
             return Result.Failure<AiResponse>(ErrorMessages.AiUnavailable);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            LogAiApiCallFailed(logger, ex);
+            if (logger.IsEnabled(LogLevel.Error))
+                LogAiApiCallFailed(logger, ex);
             return Result.Failure<AiResponse>(ErrorMessages.AiUnavailable);
         }
     }
@@ -215,7 +223,7 @@ public sealed partial class AiIntentService(
         if (result.FinishReason == ChatFinishReason.ToolCalls && result.ToolCalls.Count > 0)
             return new CompletedRound(null, result.ToolCalls, reportedTokenCount, IsTruncated: false);
 
-        if (result.FinishReason == ChatFinishReason.Length)
+        if (result.FinishReason == ChatFinishReason.Length && logger.IsEnabled(LogLevel.Warning))
             LogResponseTruncated(logger);
 
         return new CompletedRound(
@@ -267,7 +275,7 @@ public sealed partial class AiIntentService(
             return new CompletedRound(null, toolCalls, reportedTokenCount, IsTruncated: false);
         }
 
-        if (finishReason == ChatFinishReason.Length)
+        if (finishReason == ChatFinishReason.Length && logger.IsEnabled(LogLevel.Warning))
             LogResponseTruncated(logger);
 
         var text = contentBuilder.ToString();
@@ -289,7 +297,8 @@ public sealed partial class AiIntentService(
             if (!firstTokenLogged)
             {
                 firstTokenLogged = true;
-                LogFirstContentToken(logger, stopwatch.ElapsedMilliseconds);
+                if (logger.IsEnabled(LogLevel.Debug))
+                    LogFirstContentToken(logger, stopwatch.ElapsedMilliseconds);
             }
 
             contentBuilder.Append(text);
@@ -420,15 +429,13 @@ public sealed partial class AiIntentService(
             retainedCharacters += line.Length;
         }
 
-        if (retainedEntries.Count < sanitizedEntries.Count)
-        {
+        if (retainedEntries.Count < sanitizedEntries.Count && logger.IsEnabled(LogLevel.Warning))
             LogHistoryTranscriptTruncated(
                 logger,
                 sanitizedEntries.Count,
                 retainedEntries.Count,
                 prefix.Length + retainedCharacters + suffix.Length,
                 AppConstants.MaxAiHistoryTranscriptCharacters);
-        }
 
         retainedEntries.Reverse();
         return string.Concat(prefix, string.Concat(retainedEntries), suffix);
@@ -445,13 +452,14 @@ public sealed partial class AiIntentService(
         if (usage is null)
             return;
 
-        LogAiTokenUsage(
-            logger,
-            phase,
-            usage.InputTokenDetails?.CachedTokenCount ?? 0,
-            usage.InputTokenCount,
-            usage.OutputTokenCount,
-            usage.TotalTokenCount);
+        if (logger.IsEnabled(LogLevel.Debug))
+            LogAiTokenUsage(
+                logger,
+                phase,
+                usage.InputTokenDetails?.CachedTokenCount ?? 0,
+                usage.InputTokenCount,
+                usage.OutputTokenCount,
+                usage.TotalTokenCount);
     }
 
     private static int GetReportedTokenCount(ChatTokenUsage? usage) =>
@@ -465,7 +473,8 @@ public sealed partial class AiIntentService(
     {
         if (usage is null)
         {
-            LogChatUsageMissing(logger, phase);
+            if (logger.IsEnabled(LogLevel.Warning))
+                LogChatUsageMissing(logger, phase);
             return;
         }
 
@@ -483,7 +492,8 @@ public sealed partial class AiIntentService(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            LogChatUsageRecordFailed(logger, aiClient.ChatModel, phase, ex);
+            if (logger.IsEnabled(LogLevel.Warning))
+                LogChatUsageRecordFailed(logger, aiClient.ChatModel, phase, ex);
         }
     }
 

@@ -3,12 +3,16 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Infrastructure.Services;
 
-#pragma warning disable S107 // Declarative catalog builders mirror the record shapes they populate.
-#pragma warning disable S1192 // Catalog definitions intentionally reuse product vocabulary and JSON schema literals.
-#pragma warning disable CA1861 // Static catalog schemas are evaluated once at startup and are not hot-path allocations.
-
 public partial class AgentCatalogService
 {
+    private const string CatalogDomain = "catalog";
+    private const string HabitsDomain = "habits";
+    private const string GoalsDomain = "goals";
+    private const string ProfileDomain = "profile";
+    private const string NotificationsDomain = "notifications";
+    private const string GamificationDomain = "gamification";
+    private const string RecordListPageAction = "ChatController.GetRecordListPage";
+
     private static IReadOnlyList<AgentCapability> BuildCapabilities()
     {
         return
@@ -16,13 +20,13 @@ public partial class AgentCatalogService
             .. ChatCapabilities(),
             .. CatalogCapabilities(),
             .. ConfigCapabilities(),
-            CreateCapability(FeatureFlagActions.CapabilityId,
+            new AgentCapability(FeatureFlagActions.CapabilityId,
                 "Manage Feature Flags", "Administers feature flags and account targeting.", "admin",
                 FeatureFlagActions.Scope, AgentRiskClass.Low,
-                isMutation: true, isPhaseOneReadOnly: false, AgentConfirmationRequirement.None,
-                chatTools: [FeatureFlagActions.ToolName],
-                mcpTools: [FeatureFlagActions.ToolName],
-                equivalentControllerActions: ["AdminController.ListFeatureFlags", "AdminController.ManageFeatureFlags"]),
+                IsMutation: true, IsPhaseOneReadOnly: false, AgentConfirmationRequirement.None,
+                ChatToolNames: [FeatureFlagActions.ToolName],
+                McpToolNames: [FeatureFlagActions.ToolName],
+                ControllerActionKeys: ["AdminController.ListFeatureFlags", "AdminController.ManageFeatureFlags"]),
             .. HabitCoreCapabilities(),
             .. HabitBulkAndInsightCapabilities(),
             .. GoalCapabilities(),
@@ -45,18 +49,18 @@ public partial class AgentCatalogService
     {
         return
         [
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.ChatInteract,
                 "Chat Interaction",
                 "Accepts a user chat request and coordinates safe Orbit operations.",
                 "chat",
                 AgentScopes.ChatInteract,
                 AgentRiskClass.Low,
-                isMutation: false,
-                isPhaseOneReadOnly: false,
+                IsMutation: false,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                mcpTools: ["execute_agent_operation_v2", "confirm_agent_operation_v2", "step_up_agent_operation_v2", "verify_step_up_agent_operation_v2"],
-                equivalentControllerActions:
+                McpToolNames: ["execute_agent_operation_v2", "confirm_agent_operation_v2", "step_up_agent_operation_v2", "verify_step_up_agent_operation_v2"],
+                ControllerActionKeys:
                 [
                     "ChatController.ProcessChat",
                     "ChatController.ProcessChatStream",
@@ -76,57 +80,57 @@ public partial class AgentCatalogService
     {
         return
         [
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.CatalogCapabilitiesRead,
                 "Read Capability Catalog",
                 "Lists the Orbit capability catalog available to AI clients.",
-                "catalog",
+                CatalogDomain,
                 AgentScopes.CatalogRead,
                 AgentRiskClass.Low,
-                isMutation: false,
-                isPhaseOneReadOnly: false,
+                IsMutation: false,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                mcpTools: ["list_agent_capabilities_v2", "list_agent_operations_v2"],
-                equivalentControllerActions: ["AiController.GetCapabilitiesMetadata", "AiController.GetOperationsMetadata"]),
+                McpToolNames: ["list_agent_capabilities_v2", "list_agent_operations_v2"],
+                ControllerActionKeys: ["AiController.GetCapabilitiesMetadata", "AiController.GetOperationsMetadata"]),
 
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.CatalogDataRead,
                 "Read User Data Catalog",
                 "Lists the catalog of user-data classes, sensitivity, and AI mutability.",
-                "catalog",
+                CatalogDomain,
                 AgentScopes.CatalogRead,
                 AgentRiskClass.Low,
-                isMutation: false,
-                isPhaseOneReadOnly: false,
+                IsMutation: false,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                mcpTools: ["list_user_data_catalog_v2"],
-                equivalentControllerActions: ["AiController.GetUserDataCatalog"]),
+                McpToolNames: ["list_user_data_catalog_v2"],
+                ControllerActionKeys: ["AiController.GetUserDataCatalog"]),
 
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.CatalogSurfacesRead,
                 "Read App Surface Catalog",
                 "Lists Orbit product surfaces and how-to guidance.",
-                "catalog",
+                CatalogDomain,
                 AgentScopes.CatalogRead,
                 AgentRiskClass.Low,
-                isMutation: false,
-                isPhaseOneReadOnly: false,
+                IsMutation: false,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                mcpTools: ["list_app_surfaces_v2"],
-                equivalentControllerActions: ["AiController.GetAppSurfaces"]),
+                McpToolNames: ["list_app_surfaces_v2"],
+                ControllerActionKeys: ["AiController.GetAppSurfaces"]),
 
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.DescribeFeature,
                 "Describe Feature",
                 "Returns an authoritative explanation of an Orbit feature's mechanics.",
-                "catalog",
+                CatalogDomain,
                 AgentScopes.CatalogRead,
                 AgentRiskClass.Low,
-                isMutation: false,
-                isPhaseOneReadOnly: false,
+                IsMutation: false,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                chatTools: ["describe_feature"],
-                mcpTools: ["describe_feature"])
+                ChatToolNames: ["describe_feature"],
+                McpToolNames: ["describe_feature"])
         ];
     }
 
@@ -134,17 +138,17 @@ public partial class AgentCatalogService
     {
         return
         [
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.ConfigRead,
                 "Read App Config",
                 "Reads frontend-visible configuration needed by Orbit clients.",
                 "config",
                 AgentScopes.ReadConfig,
                 AgentRiskClass.Low,
-                isMutation: false,
-                isPhaseOneReadOnly: false,
+                IsMutation: false,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                equivalentControllerActions: ["ConfigController.GetConfig"])
+                ControllerActionKeys: ["ConfigController.GetConfig"])
         ];
     }
 
@@ -152,19 +156,19 @@ public partial class AgentCatalogService
     {
         return
         [
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.HabitsRead,
                 "Read Habits",
                 "Reads habits, logs, and schedule state.",
-                "habits",
+                HabitsDomain,
                 AgentScopes.ReadHabits,
                 AgentRiskClass.Low,
-                isMutation: false,
-                isPhaseOneReadOnly: false,
+                IsMutation: false,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                chatTools: ["query_habits"],
-                mcpTools: ["list_habits", "get_habit", "get_habit_logs", "get_all_habit_logs"],
-                equivalentControllerActions:
+                ChatToolNames: ["query_habits"],
+                McpToolNames: ["list_habits", "get_habit", "get_habit_logs", "get_all_habit_logs"],
+                ControllerActionKeys:
                 [
                     "HabitsController.GetHabits",
                     "HabitsController.GetHabitCount",
@@ -177,18 +181,18 @@ public partial class AgentCatalogService
                     "HabitsController.GetTrends"
                 ]),
 
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.HabitsWrite,
                 "Write Habits",
                 "Creates and updates habits, checklists, and hierarchy links.",
-                "habits",
+                HabitsDomain,
                 AgentScopes.WriteHabits,
                 AgentRiskClass.Low,
-                isMutation: true,
-                isPhaseOneReadOnly: false,
+                IsMutation: true,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                chatTools: ["create_habit", "update_habit", "bulk_update_habit_emojis", "create_sub_habit", "duplicate_habit", "move_habit", "move_habit_parent", "log_habit", "skip_habit", "undo_skip_habit", "suggest_breakdown", "update_checklist", "reorder_habits", "link_goals_to_habit"],
-                mcpTools:
+                ChatToolNames: ["create_habit", "update_habit", "bulk_update_habit_emojis", "create_sub_habit", "duplicate_habit", "move_habit", "move_habit_parent", "log_habit", "skip_habit", "undo_skip_habit", "suggest_breakdown", "update_checklist", "reorder_habits", "link_goals_to_habit"],
+                McpToolNames:
                 [
                     "create_habit",
                     "update_habit",
@@ -201,7 +205,7 @@ public partial class AgentCatalogService
                     "move_habit_parent",
                     "link_goals_to_habit"
                 ],
-                equivalentControllerActions:
+                ControllerActionKeys:
                 [
                     "HabitsController.CreateHabit",
                     "HabitsController.SuggestSetup",
@@ -218,19 +222,19 @@ public partial class AgentCatalogService
                     "HabitsController.RestoreHabit"
                 ]),
 
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.HabitsDelete,
                 "Delete Habits",
                 "Deletes individual habits.",
-                "habits",
+                HabitsDomain,
                 AgentScopes.DeleteHabits,
                 AgentRiskClass.Destructive,
-                isMutation: true,
-                isPhaseOneReadOnly: false,
+                IsMutation: true,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.FreshConfirmation,
-                chatTools: ["delete_habit"],
-                mcpTools: ["delete_habit"],
-                equivalentControllerActions: ["HabitsController.DeleteHabit"])
+                ChatToolNames: ["delete_habit"],
+                McpToolNames: ["delete_habit"],
+                ControllerActionKeys: ["HabitsController.DeleteHabit"])
         ];
     }
 
@@ -238,79 +242,79 @@ public partial class AgentCatalogService
     {
         return
         [
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.HabitsBulkWrite,
                 "Bulk Habit Updates",
                 "Runs reversible bulk create, log, skip, update, and reschedule habit operations.",
-                "habits",
+                HabitsDomain,
                 AgentScopes.WriteHabits,
                 AgentRiskClass.Low,
-                isMutation: true,
-                isPhaseOneReadOnly: false,
+                IsMutation: true,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                chatTools: ["bulk_update_habits", "bulk_reschedule_habits", "bulk_log_habits", "bulk_skip_habits", "bulk_create_habits"],
-                mcpTools: ["bulk_update_habits", "bulk_reschedule_habits", "bulk_create_habits", "bulk_log_habits", "bulk_skip_habits"],
-                equivalentControllerActions: ["HabitsController.BulkCreate", "HabitsController.BulkLog", "HabitsController.BulkSkip"]),
+                ChatToolNames: ["bulk_update_habits", "bulk_reschedule_habits", "bulk_log_habits", "bulk_skip_habits", "bulk_create_habits"],
+                McpToolNames: ["bulk_update_habits", "bulk_reschedule_habits", "bulk_create_habits", "bulk_log_habits", "bulk_skip_habits"],
+                ControllerActionKeys: ["HabitsController.BulkCreate", "HabitsController.BulkLog", "HabitsController.BulkSkip"]),
 
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.HabitsBulkDelete,
                 "Bulk Habit Delete",
                 "Deletes multiple habits in one operation.",
-                "habits",
+                HabitsDomain,
                 AgentScopes.DeleteHabits,
                 AgentRiskClass.Destructive,
-                isMutation: true,
-                isPhaseOneReadOnly: false,
+                IsMutation: true,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.FreshConfirmation,
-                chatTools: ["bulk_delete_habits"],
-                mcpTools: ["bulk_delete_habits"],
-                equivalentControllerActions: ["HabitsController.BulkDelete"]),
+                ChatToolNames: ["bulk_delete_habits"],
+                McpToolNames: ["bulk_delete_habits"],
+                ControllerActionKeys: ["HabitsController.BulkDelete"]),
 
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.HabitMetricsRead,
                 "Read Habit Metrics",
                 "Reads non-premium habit metrics.",
-                "habits",
+                HabitsDomain,
                 AgentScopes.ReadHabits,
                 AgentRiskClass.Low,
-                isMutation: false,
-                isPhaseOneReadOnly: false,
+                IsMutation: false,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                chatTools: ["get_habit_metrics"],
-                mcpTools: ["get_habit_metrics"],
-                equivalentControllerActions: ["HabitsController.GetMetrics"]),
+                ChatToolNames: ["get_habit_metrics"],
+                McpToolNames: ["get_habit_metrics"],
+                ControllerActionKeys: ["HabitsController.GetMetrics"]),
 
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.DailySummaryRead,
                 "Read Daily Summary",
                 "Reads the premium AI daily summary.",
-                "habits",
+                HabitsDomain,
                 AgentScopes.ReadHabits,
                 AgentRiskClass.Low,
-                isMutation: false,
-                isPhaseOneReadOnly: false,
+                IsMutation: false,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                planRequirement: "Pro",
-                featureFlagKeys: ["ai_summary"],
-                chatTools: ["get_daily_summary"],
-                mcpTools: ["get_daily_summary"],
-                equivalentControllerActions: ["HabitsController.GetDailySummary"]),
+                PlanRequirement: "Pro",
+                FeatureFlagKeys: ["ai_summary"],
+                ChatToolNames: ["get_daily_summary"],
+                McpToolNames: ["get_daily_summary"],
+                ControllerActionKeys: ["HabitsController.GetDailySummary"]),
 
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.RetrospectiveRead,
                 "Read Retrospective",
                 "Reads the Pro retrospective.",
-                "habits",
+                HabitsDomain,
                 AgentScopes.ReadHabits,
                 AgentRiskClass.Low,
-                isMutation: false,
-                isPhaseOneReadOnly: false,
+                IsMutation: false,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                planRequirement: "Pro",
-                featureFlagKeys: ["ai_retrospective"],
-                chatTools: ["get_retrospective"],
-                mcpTools: ["get_retrospective"],
-                equivalentControllerActions: ["HabitsController.GetRetrospective"])
+                PlanRequirement: "Pro",
+                FeatureFlagKeys: ["ai_retrospective"],
+                ChatToolNames: ["get_retrospective"],
+                McpToolNames: ["get_retrospective"],
+                ControllerActionKeys: ["HabitsController.GetRetrospective"])
         ];
     }
 
@@ -318,19 +322,19 @@ public partial class AgentCatalogService
     {
         return
         [
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.GoalsRead,
                 "Read Goals",
                 "Reads goals, reviews, metrics, and linked habit progress.",
-                "goals",
+                GoalsDomain,
                 AgentScopes.ReadGoals,
                 AgentRiskClass.Low,
-                isMutation: false,
-                isPhaseOneReadOnly: false,
+                IsMutation: false,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                chatTools: ["query_goals", "review_goals"],
-                mcpTools: ["list_goals", "get_goal", "get_goal_metrics", "get_goal_review"],
-                equivalentControllerActions:
+                ChatToolNames: ["query_goals", "review_goals"],
+                McpToolNames: ["list_goals", "get_goal", "get_goal_metrics", "get_goal_review"],
+                ControllerActionKeys:
                 [
                     "GoalsController.GetGoals",
                     "GoalsController.GetGoalById",
@@ -340,19 +344,19 @@ public partial class AgentCatalogService
                     "GoalsController.GetGoalProgressHistory"
                 ]),
 
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.GoalsWrite,
                 "Write Goals",
                 "Creates and updates goals, progress, ordering, and habit links.",
-                "goals",
+                GoalsDomain,
                 AgentScopes.WriteGoals,
                 AgentRiskClass.Low,
-                isMutation: true,
-                isPhaseOneReadOnly: false,
+                IsMutation: true,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                chatTools: ["create_goal", "update_goal", "update_goal_status", "update_goal_progress", "link_habits_to_goal", "reorder_goals"],
-                mcpTools: ["create_goal", "update_goal", "update_goal_progress", "update_goal_status", "reorder_goals", "link_habits_to_goal"],
-                equivalentControllerActions:
+                ChatToolNames: ["create_goal", "update_goal", "update_goal_status", "update_goal_progress", "link_habits_to_goal", "reorder_goals"],
+                McpToolNames: ["create_goal", "update_goal", "update_goal_progress", "update_goal_status", "reorder_goals", "link_habits_to_goal"],
+                ControllerActionKeys:
                 [
                     "GoalsController.CreateGoal",
                     "GoalsController.UpdateGoal",
@@ -363,19 +367,19 @@ public partial class AgentCatalogService
                     "GoalsController.RestoreGoal"
                 ]),
 
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.GoalsDelete,
                 "Delete Goals",
                 "Deletes goals.",
-                "goals",
+                GoalsDomain,
                 AgentScopes.DeleteGoals,
                 AgentRiskClass.Destructive,
-                isMutation: true,
-                isPhaseOneReadOnly: false,
+                IsMutation: true,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.FreshConfirmation,
-                chatTools: ["delete_goal"],
-                mcpTools: ["delete_goal"],
-                equivalentControllerActions: ["GoalsController.DeleteGoal"])
+                ChatToolNames: ["delete_goal"],
+                McpToolNames: ["delete_goal"],
+                ControllerActionKeys: ["GoalsController.DeleteGoal"])
         ];
     }
 
@@ -383,47 +387,47 @@ public partial class AgentCatalogService
     {
         return
         [
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.TagsRead,
                 "Read Tags",
                 "Reads user tags and habit tag assignments.",
                 "tags",
                 AgentScopes.ReadTags,
                 AgentRiskClass.Low,
-                isMutation: false,
-                isPhaseOneReadOnly: false,
+                IsMutation: false,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                chatTools: ["list_tags"],
-                mcpTools: ["list_tags", "get_tag_page"],
-                equivalentControllerActions: ["TagsController.GetTags", "ChatController.GetRecordListPage"]),
+                ChatToolNames: ["list_tags"],
+                McpToolNames: ["list_tags", "get_tag_page"],
+                ControllerActionKeys: ["TagsController.GetTags", RecordListPageAction]),
 
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.TagsWrite,
                 "Write Tags",
                 "Creates, updates, and assigns tags.",
                 "tags",
                 AgentScopes.WriteTags,
                 AgentRiskClass.Low,
-                isMutation: true,
-                isPhaseOneReadOnly: false,
+                IsMutation: true,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                chatTools: ["assign_tags", "create_tag", "update_tag"],
-                mcpTools: ["create_tag", "update_tag", "assign_tags"],
-                equivalentControllerActions: ["TagsController.CreateTag", "TagsController.UpdateTag", "TagsController.AssignTags", "TagsController.SuggestTags", "TagsController.RestoreTag"]),
+                ChatToolNames: ["assign_tags", "create_tag", "update_tag"],
+                McpToolNames: ["create_tag", "update_tag", "assign_tags"],
+                ControllerActionKeys: ["TagsController.CreateTag", "TagsController.UpdateTag", "TagsController.AssignTags", "TagsController.SuggestTags", "TagsController.RestoreTag"]),
 
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.TagsDelete,
                 "Delete Tags",
                 "Deletes tags.",
                 "tags",
                 AgentScopes.DeleteTags,
                 AgentRiskClass.Destructive,
-                isMutation: true,
-                isPhaseOneReadOnly: false,
+                IsMutation: true,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.FreshConfirmation,
-                chatTools: ["delete_tag"],
-                mcpTools: ["delete_tag"],
-                equivalentControllerActions: ["TagsController.DeleteTag"])
+                ChatToolNames: ["delete_tag"],
+                McpToolNames: ["delete_tag"],
+                ControllerActionKeys: ["TagsController.DeleteTag"])
         ];
     }
 
@@ -431,33 +435,33 @@ public partial class AgentCatalogService
     {
         return
         [
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.ProfileReadBasic,
                 "Read Profile",
                 "Reads user profile and preference state without exposing secrets.",
-                "profile",
+                ProfileDomain,
                 AgentScopes.ReadProfileBasic,
                 AgentRiskClass.Low,
-                isMutation: false,
-                isPhaseOneReadOnly: false,
+                IsMutation: false,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                chatTools: ["get_profile"],
-                mcpTools: ["get_profile"],
-                equivalentControllerActions: ["ProfileController.GetProfile"]),
+                ChatToolNames: ["get_profile"],
+                McpToolNames: ["get_profile"],
+                ControllerActionKeys: ["ProfileController.GetProfile"]),
 
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.ProfilePreferencesWrite,
                 "Write Preferences",
                 "Writes display name, timezone, language, clock format, light or dark mode, onboarding, and week-start preferences. Orbit uses one accent.",
-                "profile",
+                ProfileDomain,
                 AgentScopes.WriteProfilePreferences,
                 AgentRiskClass.Low,
-                isMutation: true,
-                isPhaseOneReadOnly: false,
+                IsMutation: true,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                chatTools: ["update_profile_preferences"],
-                mcpTools: ["set_timezone", "set_language", "set_week_start_day", "set_clock_format"],
-                equivalentControllerActions:
+                ChatToolNames: ["update_profile_preferences"],
+                McpToolNames: ["set_timezone", "set_language", "set_week_start_day", "set_clock_format"],
+                ControllerActionKeys:
                 [
                     "ProfileController.SetName",
                     "ProfileController.SetTimezone",
@@ -473,46 +477,46 @@ public partial class AgentCatalogService
                     "ProfileController.UpdateMarketingConsent"
                 ]),
 
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.ProfilePremiumAppearanceWrite,
                 "Legacy Color Scheme Write",
                 "Accepts legacy HTTP color scheme writes. Orbit uses one accent and offers light or dark mode.",
-                "profile",
+                ProfileDomain,
                 AgentScopes.WriteProfilePreferences,
                 AgentRiskClass.Low,
-                isMutation: true,
-                isPhaseOneReadOnly: false,
+                IsMutation: true,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                equivalentControllerActions: ["ProfileController.SetColorScheme"]),
+                ControllerActionKeys: ["ProfileController.SetColorScheme"]),
 
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.ProfileAiSummaryWrite,
                 "Write AI Summary Settings",
                 "Updates AI summary preferences.",
-                "profile",
+                ProfileDomain,
                 AgentScopes.WriteAiSettings,
                 AgentRiskClass.Low,
-                isMutation: true,
-                isPhaseOneReadOnly: false,
+                IsMutation: true,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                planRequirement: "Pro",
-                featureFlagKeys: ["ai_summary"],
-                chatTools: ["set_ai_summary"],
-                mcpTools: ["set_ai_summary"],
-                equivalentControllerActions: ["ProfileController.SetAiSummary"]),
+                PlanRequirement: "Pro",
+                FeatureFlagKeys: ["ai_summary"],
+                ChatToolNames: ["set_ai_summary"],
+                McpToolNames: ["set_ai_summary"],
+                ControllerActionKeys: ["ProfileController.SetAiSummary"]),
 
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.ProfileProactiveAstraWrite,
                 "Write Proactive Astra Settings",
                 "Updates whether Astra sends proactive check-in pushes when the user falls behind.",
-                "profile",
+                ProfileDomain,
                 AgentScopes.WriteAiSettings,
                 AgentRiskClass.Low,
-                isMutation: true,
-                isPhaseOneReadOnly: false,
+                IsMutation: true,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                planRequirement: "Pro",
-                equivalentControllerActions: ["ProfileController.SetProactiveAstra"])
+                PlanRequirement: "Pro",
+                ControllerActionKeys: ["ProfileController.SetProactiveAstra"])
         ];
     }
 
@@ -520,33 +524,33 @@ public partial class AgentCatalogService
     {
         return
         [
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.NotificationsRead,
                 "Read Notifications",
                 "Reads in-app notifications.",
-                "notifications",
+                NotificationsDomain,
                 AgentScopes.ReadNotifications,
                 AgentRiskClass.Low,
-                isMutation: false,
-                isPhaseOneReadOnly: false,
+                IsMutation: false,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                chatTools: ["get_notifications"],
-                mcpTools: ["get_notifications", "get_notification_page"],
-                equivalentControllerActions: ["NotificationController.GetNotifications", "NotificationController.GetSubscriptions", "ChatController.GetRecordListPage"]),
+                ChatToolNames: ["get_notifications"],
+                McpToolNames: ["get_notifications", "get_notification_page"],
+                ControllerActionKeys: ["NotificationController.GetNotifications", "NotificationController.GetSubscriptions", RecordListPageAction]),
 
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.NotificationsWrite,
                 "Write Notifications",
                 "Marks notifications as read and manages push subscriptions.",
-                "notifications",
+                NotificationsDomain,
                 AgentScopes.WriteNotifications,
                 AgentRiskClass.Low,
-                isMutation: true,
-                isPhaseOneReadOnly: false,
+                IsMutation: true,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                chatTools: ["update_notifications"],
-                mcpTools: ["mark_notification_read", "mark_all_notifications_read", "subscribe_push", "unsubscribe_push", "test_push"],
-                equivalentControllerActions:
+                ChatToolNames: ["update_notifications"],
+                McpToolNames: ["mark_notification_read", "mark_all_notifications_read", "subscribe_push", "unsubscribe_push", "test_push"],
+                ControllerActionKeys:
                 [
                     "NotificationController.MarkAsRead",
                     "NotificationController.MarkAllAsRead",
@@ -555,19 +559,19 @@ public partial class AgentCatalogService
                     "NotificationController.TestPush"
                 ]),
 
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.NotificationsDelete,
                 "Delete Notifications",
                 "Deletes one or all notifications.",
-                "notifications",
+                NotificationsDomain,
                 AgentScopes.DeleteNotifications,
                 AgentRiskClass.Destructive,
-                isMutation: true,
-                isPhaseOneReadOnly: false,
+                IsMutation: true,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.FreshConfirmation,
-                chatTools: ["delete_notifications"],
-                mcpTools: ["delete_notification"],
-                equivalentControllerActions: ["NotificationController.Delete", "NotificationController.DeleteAll"])
+                ChatToolNames: ["delete_notifications"],
+                McpToolNames: ["delete_notification"],
+                ControllerActionKeys: ["NotificationController.Delete", "NotificationController.DeleteAll"])
         ];
     }
 
@@ -575,40 +579,40 @@ public partial class AgentCatalogService
     {
         return
         [
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.CalendarRead,
                 "Read Calendar",
                 "Reads imported events and calendar sync suggestions.",
                 "calendar",
                 AgentScopes.ReadCalendar,
                 AgentRiskClass.Low,
-                isMutation: false,
-                isPhaseOneReadOnly: false,
+                IsMutation: false,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                featureFlagKeys: ["calendar_integration"],
-                chatTools: ["get_calendar_overview"],
-                mcpTools: ["get_calendar_events"],
-                equivalentControllerActions:
+                FeatureFlagKeys: ["calendar_integration"],
+                ChatToolNames: ["get_calendar_overview"],
+                McpToolNames: ["get_calendar_events"],
+                ControllerActionKeys:
                 [
                     "CalendarController.GetEvents",
                     "CalendarController.GetSuggestions",
                     "CalendarController.GetCalendars"
                 ]),
 
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.CalendarSyncManage,
                 "Manage Calendar Sync",
                 "Dismisses suggestions and manages Google Calendar sync state.",
                 "calendar",
                 AgentScopes.ManageCalendarSync,
                 AgentRiskClass.Destructive,
-                isMutation: true,
-                isPhaseOneReadOnly: false,
+                IsMutation: true,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.FreshConfirmation,
-                featureFlagKeys: ["calendar_integration"],
-                chatTools: ["manage_calendar_sync"],
-                mcpTools: ["manage_calendar_sync"],
-                equivalentControllerActions:
+                FeatureFlagKeys: ["calendar_integration"],
+                ChatToolNames: ["manage_calendar_sync"],
+                McpToolNames: ["manage_calendar_sync"],
+                ControllerActionKeys:
                 [
                     "CalendarController.GetAutoSyncState",
                     "CalendarController.DismissImport",
@@ -624,20 +628,20 @@ public partial class AgentCatalogService
     {
         return
         [
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.GamificationRead,
                 "Read Gamification",
                 "Reads streaks, levels, achievements, and referral rewards context.",
-                "gamification",
+                GamificationDomain,
                 AgentScopes.ReadGamification,
                 AgentRiskClass.Low,
-                isMutation: false,
-                isPhaseOneReadOnly: false,
+                IsMutation: false,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                planRequirement: "Pro",
-                chatTools: ["get_gamification_overview"],
-                mcpTools: ["get_gamification_profile", "get_achievements", "get_streak_info"],
-                equivalentControllerActions:
+                PlanRequirement: "Pro",
+                ChatToolNames: ["get_gamification_overview"],
+                McpToolNames: ["get_gamification_profile", "get_achievements", "get_streak_info"],
+                ControllerActionKeys:
                 [
                     "GamificationController.GetProfile",
                     "GamificationController.GetAchievements",
@@ -648,31 +652,31 @@ public partial class AgentCatalogService
                     "AchievementsController.ReportEvent"
                 ]),
 
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.GamificationRepair,
                 "Repair Streak",
                 "Spends one banked freeze to repair the eligible missed streak day.",
-                "gamification",
+                GamificationDomain,
                 AgentScopes.WriteGamification,
                 AgentRiskClass.Low,
-                isMutation: true,
-                isPhaseOneReadOnly: false,
+                IsMutation: true,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                planRequirement: "Pro",
-                equivalentControllerActions: ["GamificationController.RepairStreak"]),
+                PlanRequirement: "Pro",
+                ControllerActionKeys: ["GamificationController.RepairStreak"]),
 
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.GamificationRepairGap,
                 "Repair Streak Gap",
                 "Spends banked freezes to repair an entire contiguous streak gap atomically.",
-                "gamification",
+                GamificationDomain,
                 AgentScopes.WriteGamification,
                 AgentRiskClass.Low,
-                isMutation: true,
-                isPhaseOneReadOnly: false,
+                IsMutation: true,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                planRequirement: "Pro",
-                equivalentControllerActions: ["StreakGapController.RepairGap"])
+                PlanRequirement: "Pro",
+                ControllerActionKeys: ["StreakGapController.RepairGap"])
         ];
     }
 
@@ -680,35 +684,35 @@ public partial class AgentCatalogService
     {
         return
         [
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.ChecklistTemplatesRead,
                 "Read Checklist Templates",
                 "Reads reusable checklist templates.",
                 "checklists",
                 AgentScopes.ReadChecklistTemplates,
                 AgentRiskClass.Low,
-                isMutation: false,
-                isPhaseOneReadOnly: false,
+                IsMutation: false,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                featureFlagKeys: ["checklist_templates"],
-                chatTools: ["get_checklist_templates"],
-                mcpTools: ["get_checklist_templates", "get_template_page"],
-                equivalentControllerActions: ["ChecklistTemplatesController.GetTemplates", "ChatController.GetRecordListPage"]),
+                FeatureFlagKeys: ["checklist_templates"],
+                ChatToolNames: ["get_checklist_templates"],
+                McpToolNames: ["get_checklist_templates", "get_template_page"],
+                ControllerActionKeys: ["ChecklistTemplatesController.GetTemplates", RecordListPageAction]),
 
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.ChecklistTemplatesWrite,
                 "Write Checklist Templates",
                 "Creates and deletes checklist templates.",
                 "checklists",
                 AgentScopes.WriteChecklistTemplates,
                 AgentRiskClass.Low,
-                isMutation: true,
-                isPhaseOneReadOnly: false,
+                IsMutation: true,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                featureFlagKeys: ["checklist_templates"],
-                chatTools: ["create_checklist_template", "delete_checklist_template"],
-                mcpTools: ["create_checklist_template", "delete_checklist_template"],
-                equivalentControllerActions: ["ChecklistTemplatesController.CreateTemplate", "ChecklistTemplatesController.DeleteTemplate"])
+                FeatureFlagKeys: ["checklist_templates"],
+                ChatToolNames: ["create_checklist_template", "delete_checklist_template"],
+                McpToolNames: ["create_checklist_template", "delete_checklist_template"],
+                ControllerActionKeys: ["ChecklistTemplatesController.CreateTemplate", "ChecklistTemplatesController.DeleteTemplate"])
         ];
     }
 
@@ -716,37 +720,37 @@ public partial class AgentCatalogService
     {
         return
         [
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.ReferralsRead,
                 "Read Referrals",
                 "Reads referral code, stats, and dashboard state.",
                 "referrals",
                 AgentScopes.ReadReferrals,
                 AgentRiskClass.Low,
-                isMutation: false,
-                isPhaseOneReadOnly: false,
+                IsMutation: false,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                chatTools: ["get_referral_overview"],
-                mcpTools: ["get_referral_stats"],
-                equivalentControllerActions:
+                ChatToolNames: ["get_referral_overview"],
+                McpToolNames: ["get_referral_stats"],
+                ControllerActionKeys:
                 [
                     "ReferralController.GetStats",
                     "ReferralController.GetDashboard"
                 ]),
 
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.ReferralsWrite,
                 "Write Referrals",
                 "Generates the user's referral code on demand.",
                 "referrals",
                 AgentScopes.WriteReferrals,
                 AgentRiskClass.Low,
-                isMutation: true,
-                isPhaseOneReadOnly: false,
+                IsMutation: true,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                chatTools: ["get_referral_code"],
-                mcpTools: ["get_referral_code"],
-                equivalentControllerActions: ["ReferralController.GetOrCreateCode"])
+                ChatToolNames: ["get_referral_code"],
+                McpToolNames: ["get_referral_code"],
+                ControllerActionKeys: ["ReferralController.GetOrCreateCode"])
         ];
     }
 
@@ -754,38 +758,38 @@ public partial class AgentCatalogService
     {
         return
         [
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.SubscriptionsRead,
                 "Read Subscription State",
                 "Reads plans, billing status, and entitlement state.",
                 "subscriptions",
                 AgentScopes.ReadSubscriptions,
                 AgentRiskClass.Low,
-                isMutation: false,
-                isPhaseOneReadOnly: false,
+                IsMutation: false,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                chatTools: ["get_subscription_overview"],
-                mcpTools: ["get_subscription_status"],
-                equivalentControllerActions:
+                ChatToolNames: ["get_subscription_overview"],
+                McpToolNames: ["get_subscription_status"],
+                ControllerActionKeys:
                 [
                     "SubscriptionController.GetStatus",
                     "SubscriptionController.GetBillingDetails",
                     "SubscriptionController.GetPlans"
                 ]),
 
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.SubscriptionsManage,
                 "Manage Subscription",
                 "Creates checkout and billing portal sessions.",
                 "subscriptions",
                 AgentScopes.ManageSubscriptions,
                 AgentRiskClass.High,
-                isMutation: true,
-                isPhaseOneReadOnly: false,
+                IsMutation: true,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.StepUp,
-                chatTools: ["manage_subscription"],
-                mcpTools: ["manage_subscription"],
-                equivalentControllerActions:
+                ChatToolNames: ["manage_subscription"],
+                McpToolNames: ["manage_subscription"],
+                ControllerActionKeys:
                 [
                     "SubscriptionController.CreateCheckout",
                     "SubscriptionController.CreatePortal",
@@ -801,37 +805,37 @@ public partial class AgentCatalogService
     {
         return
         [
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.ApiKeysRead,
                 "Read API Keys",
                 "Reads API-key metadata without exposing key material.",
                 "api-keys",
                 AgentScopes.ReadApiKeys,
                 AgentRiskClass.Low,
-                isMutation: false,
-                isPhaseOneReadOnly: false,
+                IsMutation: false,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                planRequirement: "Pro",
-                featureFlagKeys: ["api_keys"],
-                chatTools: ["get_api_keys"],
-                mcpTools: ["get_api_keys", "get_api_key_page"],
-                equivalentControllerActions: ["ApiKeysController.GetApiKeys", "ChatController.GetRecordListPage"]),
+                PlanRequirement: "Pro",
+                FeatureFlagKeys: ["api_keys"],
+                ChatToolNames: ["get_api_keys"],
+                McpToolNames: ["get_api_keys", "get_api_key_page"],
+                ControllerActionKeys: ["ApiKeysController.GetApiKeys", RecordListPageAction]),
 
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.ApiKeysManage,
                 "Manage API Keys",
                 "Creates and revokes scoped API keys.",
                 "api-keys",
                 AgentScopes.ManageApiKeys,
                 AgentRiskClass.High,
-                isMutation: true,
-                isPhaseOneReadOnly: false,
+                IsMutation: true,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.StepUp,
-                planRequirement: "Pro",
-                featureFlagKeys: ["api_keys"],
-                chatTools: ["manage_api_keys"],
-                mcpTools: ["manage_api_keys"],
-                equivalentControllerActions:
+                PlanRequirement: "Pro",
+                FeatureFlagKeys: ["api_keys"],
+                ChatToolNames: ["manage_api_keys"],
+                McpToolNames: ["manage_api_keys"],
+                ControllerActionKeys:
                 [
                     "ApiKeysController.CreateApiKey",
                     "ApiKeysController.RequestCreationChallenge",
@@ -845,19 +849,19 @@ public partial class AgentCatalogService
     {
         return
         [
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.SupportWrite,
                 "Send Support Request",
                 "Submits a support request on behalf of the user.",
                 "support",
                 AgentScopes.WriteSupport,
                 AgentRiskClass.Low,
-                isMutation: true,
-                isPhaseOneReadOnly: false,
+                IsMutation: true,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                chatTools: ["send_support_request"],
-                mcpTools: ["send_support_request"],
-                equivalentControllerActions: ["SupportController.SendSupport"])
+                ChatToolNames: ["send_support_request"],
+                McpToolNames: ["send_support_request"],
+                ControllerActionKeys: ["SupportController.SendSupport"])
         ];
     }
 
@@ -865,29 +869,29 @@ public partial class AgentCatalogService
     {
         return
         [
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.SyncRead,
                 "Read Sync Data",
                 "Reads versioned sync payloads for first-party clients.",
                 "sync",
                 AgentScopes.ReadSync,
                 AgentRiskClass.Low,
-                isMutation: false,
-                isPhaseOneReadOnly: false,
+                IsMutation: false,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                equivalentControllerActions: ["SyncController.GetChangesV2", "EventsController.Stream", "EventsController.CreateTicket"]),
+                ControllerActionKeys: ["SyncController.GetChangesV2", "EventsController.Stream", "EventsController.CreateTicket"]),
 
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.SyncWrite,
                 "Write Sync Data",
                 "Processes sync mutations from first-party clients.",
                 "sync",
                 AgentScopes.WriteSync,
                 AgentRiskClass.Destructive,
-                isMutation: true,
-                isPhaseOneReadOnly: false,
+                IsMutation: true,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.FreshConfirmation,
-                equivalentControllerActions: ["SyncController.ProcessBatch"])
+                ControllerActionKeys: ["SyncController.ProcessBatch"])
         ];
     }
 
@@ -895,19 +899,19 @@ public partial class AgentCatalogService
     {
         return
         [
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.AccountManage,
                 "Manage Account",
                 "Resets account state or handles account deletion lifecycle.",
                 "account",
                 AgentScopes.ManageAccount,
                 AgentRiskClass.High,
-                isMutation: true,
-                isPhaseOneReadOnly: false,
+                IsMutation: true,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.StepUp,
-                chatTools: ["manage_account"],
-                mcpTools: ["manage_account"],
-                equivalentControllerActions:
+                ChatToolNames: ["manage_account"],
+                McpToolNames: ["manage_account"],
+                ControllerActionKeys:
                 [
                     "AuthController.RequestDeletion",
                     "AuthController.ConfirmDeletion",
@@ -915,17 +919,17 @@ public partial class AgentCatalogService
                     "ProfileController.ExportUserData"
                 ]),
 
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.AuthManage,
                 "Manage Authentication",
                 "Sends codes, verifies sessions, refreshes, logs out, and runs OAuth exchange.",
                 "auth",
                 AgentScopes.ManageAuth,
                 AgentRiskClass.Low,
-                isMutation: true,
-                isPhaseOneReadOnly: false,
+                IsMutation: true,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                equivalentControllerActions:
+                ControllerActionKeys:
                 [
                     "AuthController.SendCode",
                     "AuthController.SendCodeOperation",
@@ -952,29 +956,29 @@ public partial class AgentCatalogService
                     "WaitlistController.Confirm"
                 ]),
 
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.MediaUpload,
                 "Upload Media",
                 "Issues signed upload URLs and redirects public object reads to short-lived storage URLs.",
                 "media",
                 AgentScopes.UploadMedia,
                 AgentRiskClass.Low,
-                isMutation: true,
-                isPhaseOneReadOnly: false,
+                IsMutation: true,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                equivalentControllerActions: ["UploadsController.SignUpload", "UploadsController.ReadObject"]),
+                ControllerActionKeys: ["UploadsController.SignUpload", "UploadsController.ReadObject"]),
 
-            CreateCapability(
+            new AgentCapability(
                 AgentCapabilityIds.MarketingManage,
                 "Manage Marketing",
                 "Sends admin marketing broadcasts and handles public one-click unsubscribe. Operator/anonymous endpoints, not agent-invocable.",
                 "marketing",
                 AgentScopes.ManageMarketing,
                 AgentRiskClass.Low,
-                isMutation: true,
-                isPhaseOneReadOnly: false,
+                IsMutation: true,
+                IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                equivalentControllerActions:
+                ControllerActionKeys:
                 [
                     "AdminController.SendMarketingBroadcast",
                     "MarketingController.Unsubscribe",
@@ -985,6 +989,3 @@ public partial class AgentCatalogService
     }
 }
 
-#pragma warning restore CA1861
-#pragma warning restore S1192
-#pragma warning restore S107
