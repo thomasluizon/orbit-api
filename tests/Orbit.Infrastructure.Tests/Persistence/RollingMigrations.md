@@ -61,6 +61,11 @@ expand-to-deployed ancestry; review must verify the operational claims.
 The allowlist is an attestation, not an automatic deployment lookup. A barrier
 for one migration does not authorize any other migration.
 
+The entry for `20261019011031_ContractHabitLogSlip` records the production barrier
+attested in [API PR 764](https://github.com/thomasluizon/orbit-api/pull/764#issuecomment-6257602012).
+Its regression case runs the actual migration without evidence, then with the
+committed entry and real Git ancestry checks. No applied migration is modified.
+
 Column and table drops/renames, schema drops, column alterations and required
 columns without defaults need a barrier. Raw SQL containing drops, renames,
 truncation, column/type alterations, dynamic execution or replacement definitions

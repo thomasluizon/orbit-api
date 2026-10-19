@@ -38,6 +38,19 @@ public class RollingMigrationGateTests
     }
 
     [Fact]
+    public void MergedHabitLogContract_RequiresRecordedDeploymentBarrier()
+    {
+        const string id = "20261019011031_ContractHabitLogSlip";
+        var migration = new ContractHabitLogSlip { ActiveProvider = "Npgsql.EntityFrameworkCore.PostgreSQL" };
+        var root = RepositoryRoot();
+
+        RollingMigrationGate.Check(id, migration.UpOperations).Should().NotBeEmpty();
+        RollingMigrationGate.Check(id, migration.UpOperations, ReadBarriers(root),
+                (commit, descendant) => Git(root, "merge-base", "--is-ancestor", commit, descendant).ExitCode == 0, "HEAD")
+            .Should().BeEmpty();
+    }
+
+    [Fact]
     public void AdditiveExpandMigration_WithDestructiveDown_IsAccepted()
     {
         var migration = new RecordHabitLogSlip { ActiveProvider = "Npgsql.EntityFrameworkCore.PostgreSQL" };
@@ -184,10 +197,7 @@ public class RollingMigrationGateTests
             "src/Orbit.Infrastructure/Migrations/*.cs");
         changed.ExitCode.Should().Be(0, changed.Error);
         var ids = RollingMigrationGate.MigrationIds(changed.Output.Split('\0', StringSplitOptions.RemoveEmptyEntries));
-        var barriers = JsonSerializer.Deserialize<Dictionary<string, DeploymentBarrier>>(
-            File.ReadAllText(Path.Combine(root, ".github", "migration-contracts.json")),
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
-            ?? throw new InvalidOperationException("Migration contracts must be a JSON object.");
+        var barriers = ReadBarriers(root);
         var migrations = typeof(DailyAiQuotaByLocalDate).Assembly.GetTypes()
             .Where(type => typeof(Migration).IsAssignableFrom(type) && !type.IsAbstract)
             .ToDictionary(type => type.GetCustomAttribute<MigrationAttribute>()?.Id
@@ -207,6 +217,12 @@ public class RollingMigrationGateTests
     }
 
     private static Dictionary<string, DeploymentBarrier> Barriers(string id) => new() { [id] = CompleteBarrier() };
+
+    private static Dictionary<string, DeploymentBarrier> ReadBarriers(string root) =>
+        JsonSerializer.Deserialize<Dictionary<string, DeploymentBarrier>>(
+            File.ReadAllText(Path.Combine(root, ".github", "migration-contracts.json")),
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+        ?? throw new InvalidOperationException("Migration contracts must be a JSON object.");
 
     private static DeploymentBarrier CompleteBarrier() => new(
         ExpandCommit, DeployedCommit,
