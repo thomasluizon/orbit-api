@@ -108,7 +108,7 @@ public class OAuthControllerTests : IDisposable
         Job? enqueued = null;
         jobs.Create(Arg.Do<Job>(job => { if (job.Type == typeof(CancelSubscriptionOnDeletionJob)) enqueued = job; }), Arg.Any<IState>());
         var flow = new GoogleSignInFlow(users, _unitOfWork, sessions,
-            new SignupJobDispatcher(jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), jobs);
+            new SignupJobDispatcher(jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), jobs, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
         var exchange = Substitute.For<IGoogleAuthorizationCodeService>();
         exchange.ExchangeAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new GoogleCodeIdentity(user.Email, user.Name, "google-access", "google-refresh")));
@@ -166,7 +166,7 @@ public class OAuthControllerTests : IDisposable
             sessions.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
                 .Returns(_ => { calls.Add("session"); return Result.Success(new SessionTokens("access", "refresh")); });
             jobs.Create(Arg.Any<Job>(), Arg.Any<IState>()).Returns(_ => { calls.Add("enqueue"); return "job"; });
-            var flow = new GoogleSignInFlow(users, work, sessions, new SignupJobDispatcher(jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), jobs);
+            var flow = new GoogleSignInFlow(users, work, sessions, new SignupJobDispatcher(jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), jobs, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
             var completion = new CompleteGoogleSignInCommandHandler(flow);
             var codeHandler = new GoogleCodeAuthCommandHandler(exchange, _mediator);
             _mediator.Send(Arg.Any<CompleteGoogleSignInCommand>(), Arg.Any<CancellationToken>())
@@ -195,7 +195,7 @@ public class OAuthControllerTests : IDisposable
         var emailWork = Substitute.For<IUnitOfWork>();
         emailWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Result<LoginResponse>>>>(), Arg.Any<CancellationToken>())
             .Returns(call => call.Arg<Func<CancellationToken, Task<Result<LoginResponse>>>>()(call.Arg<CancellationToken>()));
-        var verify = new VerifyCodeCommandHandler(cache, emailStore, emailWork, emailSessions, new SignupJobDispatcher(Substitute.For<IBackgroundJobClient>(), new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), Substitute.For<IBackgroundJobClient>());
+        var verify = new VerifyCodeCommandHandler(cache, emailStore, emailWork, emailSessions, new SignupJobDispatcher(Substitute.For<IBackgroundJobClient>(), new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), Substitute.For<IBackgroundJobClient>(), new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
 
         (await verify.Handle(new VerifyCodeCommand("email@example.com", "123456"), CancellationToken.None)).IsSuccess.Should().BeTrue();
 

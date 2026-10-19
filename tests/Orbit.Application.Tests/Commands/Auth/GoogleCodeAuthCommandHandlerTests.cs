@@ -26,6 +26,7 @@ namespace Orbit.Application.Tests.Commands.Auth;
 
 public class GoogleCodeAuthCommandHandlerTests
 {
+
     private const string Email = "google@example.com";
     private readonly IGoogleAuthorizationCodeService _exchange = Substitute.For<IGoogleAuthorizationCodeService>();
     private readonly IGenericRepository<User> _users = Substitute.For<IGenericRepository<User>>();
@@ -41,7 +42,7 @@ public class GoogleCodeAuthCommandHandlerTests
         _work.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>(), Arg.Any<CancellationToken>())
             .Returns(call => call.Arg<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>()(call.Arg<CancellationToken>()));
         _store.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(call => call.Arg<User>());
-        var flow = new GoogleSignInFlow(_store, _work, _sessions, new SignupJobDispatcher(_jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _jobs);
+        var flow = new GoogleSignInFlow(_store, _work, _sessions, new SignupJobDispatcher(_jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _jobs, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
         _handler = new GoogleCodeAuthCommandHandler(_exchange, _signInMediator);
         _signInMediator.Send(Arg.Any<CompleteGoogleSignInCommand>(), Arg.Any<CancellationToken>())
             .Returns(call =>
@@ -72,6 +73,8 @@ public class GoogleCodeAuthCommandHandlerTests
             user.SetStripeSubscription("sub_paid", expiryAtUtc);
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
         user.Deactivate(DateTime.UtcNow.AddDays(7));
+        if (play)
+            user.RecordDeletionStoppedRenewal(SubscriptionSource.GooglePlay, "play-token");
         Job? enqueued = null;
         _jobs.Create(Arg.Do<Job>(job => { if (job.Type == typeof(CancelSubscriptionOnDeletionJob)) enqueued = job; }), Arg.Any<IState>());
 
@@ -81,11 +84,15 @@ public class GoogleCodeAuthCommandHandlerTests
         result.Value.WasReactivated.Should().BeTrue();
         user.IsDeactivated.Should().BeFalse();
         user.ScheduledDeletionAt.Should().BeNull();
+        user.PlayRenewalStoppedByDeletion.Should().BeFalse("reactivation must resolve deletion-owned Play renewal");
+        _jobs.Received(play ? 1 : 0).Create(Arg.Is<Job>(job => job.Type == typeof(NotifyPlayRenewalOnReactivationJob)
+            && (Guid)job.Args[0] == user.Id && (string)job.Args[1] == "play-token"
+            && (Guid)job.Args[2] != Guid.Empty), Arg.Any<IState>());
         user.HasProAccess.Should().Be(!expired);
         user.Plan.Should().Be(expired ? UserPlan.Free : UserPlan.Pro);
         _jobs.Received(1).Create(Arg.Is<Job>(job => job.Type == typeof(CompleteSignupJob)
             && (Guid)job.Args[0] == user.Id && !(bool)job.Args[1]), Arg.Any<IState>());
-        _jobs.Received(!expired && !play ? 2 : 1).Create(Arg.Any<Job>(), Arg.Any<IState>());
+        _jobs.Received(play || !expired ? 2 : 1).Create(Arg.Any<Job>(), Arg.Any<IState>());
         if (!expired && !play)
         {
             _jobs.Received(1).Create(Arg.Is<Job>(job => job.Type == typeof(CancelSubscriptionOnDeletionJob)), Arg.Any<IState>());
@@ -233,6 +240,7 @@ public class GoogleCodeAuthCommandHandlerTests
                 cfg.AddOpenBehavior(typeof(ConcurrencyRetryBehavior<,>));
             })
             .AddScoped<GoogleSignInFlow>()
+            .AddSingleton(new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()))
             .AddSingleton<ISignupJobDispatcher>(new SignupJobDispatcher(_jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance))
             .AddSingleton(_store)
             .AddSingleton(_jobs)

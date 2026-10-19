@@ -550,6 +550,7 @@ public partial class User : Entity
 
     public void CancelDeactivation()
     {
+        PlayRenewalStoppedByDeletion = false;
         if (!IsLifetimePro && PlanExpiresAt.HasValue && PlanExpiresAt.Value <= DateTime.UtcNow)
             Plan = UserPlan.Free;
 
