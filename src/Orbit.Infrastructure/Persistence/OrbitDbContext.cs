@@ -26,6 +26,7 @@ public class OrbitDbContext : DbContext
     /// </summary>
     public bool HasEncryptionService => _encryptionService is not null;
 
+    public DbSet<OwedSubscriptionCancellation> OwedSubscriptionCancellations => Set<OwedSubscriptionCancellation>();
     public DbSet<User> Users => Set<User>();
     public DbSet<MarketingContact> MarketingContacts => Set<MarketingContact>();
     public DbSet<Habit> Habits => Set<Habit>();
@@ -88,6 +89,13 @@ public class OrbitDbContext : DbContext
             encConverter = new EncryptionValueConverter(_encryptionService);
             nullableEncConverter = new NullableEncryptionValueConverter(_encryptionService);
         }
+        modelBuilder.Entity<OwedSubscriptionCancellation>(entity =>
+        {
+            entity.HasKey(record => record.Id);
+            entity.Property(record => record.ProviderIdentifier).IsRequired();
+            entity.HasIndex(record => record.NextAttemptAtUtc);
+            entity.HasIndex(record => new { record.Provider, record.ProviderIdentifier }).IsUnique();
+        });
         ConfigureUserEntity(modelBuilder, nullableEncConverter);
         ConfigureMarketingContactEntity(modelBuilder);
         ConfigureHabitEntity(modelBuilder, isPostgres, encConverter, nullableEncConverter);

@@ -361,7 +361,10 @@ public class ConfirmAccountDeletionCommandHandlerTests
         user.IsDeactivated.Should().BeTrue();
         enqueued.Should().NotBeNull();
         stripe.ReceivedCalls().Should().BeEmpty();
-        var job = new CancelSubscriptionOnDeletionJob(_userRepo, _unitOfWork, stripe, play, Options.Create(new GooglePlaySettings()));
+        var job = new CancelSubscriptionOnDeletionJob(_userRepo, _unitOfWork, stripe, play, Options.Create(new GooglePlaySettings()),
+            new OwedSubscriptionCancellationJob(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>(), _unitOfWork,
+                stripe, play, Options.Create(new GooglePlaySettings()),
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<OwedSubscriptionCancellationJob>.Instance, TimeProvider.System));
         var execute = () => job.ExecuteAsync((Guid)enqueued!.Args[0], (string?)enqueued.Args[1], (string?)enqueued.Args[2],
             (bool)enqueued.Args[3], CancellationToken.None);
         await execute.Should().ThrowAsync<BillingProviderException>();
