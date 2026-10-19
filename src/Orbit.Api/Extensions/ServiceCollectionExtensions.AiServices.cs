@@ -202,6 +202,9 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IProductAnalytics>(),
                 sp.GetRequiredService<IHabitScheduleLogReader>(),
                 sp.GetRequiredService<IIssuedAstraBlockStore>(),
-                sp.GetRequiredService<IPendingAgentOperationStore>()));
+                sp.GetRequiredService<IPendingAgentOperationStore>(),
+                sp.GetRequiredService<IPendingOperationChangePreviewer>(),
+                TimeSpan.FromSeconds(sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AiSettings>>().Value.NetworkTimeoutSeconds
+                    + DatabaseConnectionSettings.From(builder.Configuration).TransactionTimeoutSeconds)));
     }
 }

@@ -25,7 +25,7 @@ public sealed class IssuedAstraBlockStore(OrbitDbContext dbContext) : IIssuedAst
 
     public Task InvalidateOpenAsync(Guid userId, CancellationToken cancellationToken) =>
         dbContext.IssuedAstraBlocks
-            .Where(block => block.UserId == userId && block.AnsweredAtUtc == null && block.InvalidatedAtUtc == null)
+            .Where(block => block.UserId == userId && block.ResponseJson == null && block.InvalidatedAtUtc == null)
             .ExecuteUpdateAsync(setters => setters.SetProperty(block => block.InvalidatedAtUtc,
                 TimeProvider.System.GetUtcNow().UtcDateTime), cancellationToken);
 
@@ -46,8 +46,14 @@ public sealed class IssuedAstraBlockStore(OrbitDbContext dbContext) : IIssuedAst
         await UnfinishedAnswer(blockId, userId, answeredAtUtc)
             .ExecuteUpdateAsync(setters => setters.SetProperty(block => block.ResponseJson, responseJson), cancellationToken) == 1;
 
+    public async Task<bool> CheckpointAnswerAsync(Guid blockId, Guid userId, DateTime answeredAtUtc, string responseJson,
+        CancellationToken cancellationToken) =>
+        await UnfinishedAnswer(blockId, userId, answeredAtUtc)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(block => block.CommittedResponseJson, responseJson), cancellationToken) == 1;
+
     public async Task<bool> ReleaseAnswerAsync(Guid blockId, Guid userId, DateTime answeredAtUtc, CancellationToken cancellationToken) =>
         await UnfinishedAnswer(blockId, userId, answeredAtUtc)
+            .Where(block => block.CommittedResponseJson == null)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(block => block.AnsweredAtUtc, (DateTime?)null)
                 .SetProperty(block => block.AnswerJson, (string?)null)

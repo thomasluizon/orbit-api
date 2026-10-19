@@ -11,6 +11,8 @@ public interface IIssuedAstraBlockStore
         DateOnly? reservedAllowanceDate, string? responseJson, CancellationToken cancellationToken);
     Task<bool> CompleteAnswerAsync(Guid blockId, Guid userId, DateTime answeredAtUtc, string responseJson,
         CancellationToken cancellationToken);
+    Task<bool> CheckpointAnswerAsync(Guid blockId, Guid userId, DateTime answeredAtUtc, string responseJson,
+        CancellationToken cancellationToken);
     Task<bool> ReleaseAnswerAsync(Guid blockId, Guid userId, DateTime answeredAtUtc, CancellationToken cancellationToken);
     Task InvalidateOpenAsync(Guid userId, CancellationToken cancellationToken);
 }

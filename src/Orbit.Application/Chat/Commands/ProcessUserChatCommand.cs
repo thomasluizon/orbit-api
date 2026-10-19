@@ -144,7 +144,9 @@ public record ChatExecutionDependencies(
     IProductAnalytics ProductAnalytics,
     IHabitScheduleLogReader ScheduleLogReader,
     IIssuedAstraBlockStore BlockStore,
-    IPendingAgentOperationStore PendingOperationStore);
+    IPendingAgentOperationStore PendingOperationStore,
+    IPendingOperationChangePreviewer? PendingOperationPreviewer = null,
+    TimeSpan? BlockAnswerTimeout = null);
 
 public partial class ProcessUserChatCommandHandler(
     ChatDataDependencies data,
@@ -183,11 +185,11 @@ public partial class ProcessUserChatCommandHandler(
         {
             var answerService = new AstraBlockAnswerService(execution.BlockStore, execution.UnitOfWork,
                 execution.PayGateService, execution.OperationExecutor, data.UserRepository, execution.ProductAnalytics,
-                data.FeatureFlagService, execution.PendingOperationStore, logger);
+                data.FeatureFlagService, execution.PendingOperationStore, logger, execution.PendingOperationPreviewer, execution.BlockAnswerTimeout);
             return await answerService.ExecuteAsync(request, prepared =>
                 prepared.Crisis != CrisisLocales.None
                     ? HandleCrisisTurnAsync(request with { Message = prepared.Message }, prepared.Crisis)
-                    : HandleTurnAsync(request with { Message = prepared.Message }, cancellationToken), cancellationToken);
+                    : HandleTurnAsync(request with { Message = prepared.Message }, cancellationToken, prepared.AnsweredAtUtc), cancellationToken);
         }
         await execution.UnitOfWork.ExecuteInTransactionAsync(async token =>
         {
@@ -197,8 +199,22 @@ public partial class ProcessUserChatCommandHandler(
         return await HandleTurnAsync(request, cancellationToken);
     }
 
-    private async Task<Result<ChatResponse>> HandleTurnAsync(ProcessUserChatCommand request, CancellationToken cancellationToken)
+    private CancellationTokenSource CreateBlockTurnCancellation(CancellationToken token, DateTime? answeredAtUtc)
     {
+        var cancellation = CancellationTokenSource.CreateLinkedTokenSource(token);
+        if (answeredAtUtc is { } claim && execution.BlockAnswerTimeout is { } timeout)
+        {
+            var remaining = claim + timeout - TimeProvider.System.GetUtcNow().UtcDateTime;
+            cancellation.CancelAfter(remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero);
+        }
+        return cancellation;
+    }
+
+    private async Task<Result<ChatResponse>> HandleTurnAsync(ProcessUserChatCommand request, CancellationToken cancellationToken,
+        DateTime? answeredAtUtc = null)
+    {
+        using var turnCancellation = CreateBlockTurnCancellation(cancellationToken, answeredAtUtc);
+        cancellationToken = turnCancellation.Token;
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
         LogProcessingChatMessage(logger, request.Message);
         var detectedCrisisLocales = CrisisSupportGuard.Detect(request.Message);
@@ -241,7 +257,7 @@ public partial class ProcessUserChatCommandHandler(
         if (response.IsFailure)
             return response.PropagateError<ChatResponse>();
 
-        var executionResults = new ToolExecutionAccumulator();
+        var executionResults = new ToolExecutionAccumulator { AnsweredAtUtc = answeredAtUtc };
         var actionsStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var toolLoopResult = await RunToolCallLoopAsync(
             response.Value,

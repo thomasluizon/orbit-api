@@ -26,7 +26,9 @@ public sealed class AstraBlockAnswerService(
     IProductAnalytics analytics,
     IFeatureFlagService featureFlags,
     IPendingAgentOperationStore pendingOperations,
-    ILogger? logger = null)
+    ILogger? logger = null,
+    IPendingOperationChangePreviewer? previewer = null,
+    TimeSpan? claimLifetime = null)
 {
     public async Task<Result<ChatResponse>> ExecuteAsync(ProcessUserChatCommand request,
         Func<PreparedAstraBlockAnswer, Task<Result<ChatResponse>>> produceResponse, CancellationToken ct)
@@ -47,7 +49,11 @@ public sealed class AstraBlockAnswerService(
         {
             var result = await produceResponse(prepared);
             if (result.IsFailure)
-                return result;
+            {
+                var recovery = await CompleteCommittedAsync(request, prepared.AnsweredAtUtc!.Value);
+                completed = recovery is not null;
+                return recovery is null ? result : Result.Success(recovery);
+            }
             await unitOfWork.ExecuteInTransactionAsync(async token =>
             {
                 await unitOfWork.AcquireAdvisoryLockAsync($"astra-blocks:{request.UserId}", token);
@@ -59,11 +65,60 @@ public sealed class AstraBlockAnswerService(
             await CaptureAnsweredAsync(request, CancellationToken.None);
             return result;
         }
+        catch
+        {
+            var recovery = await TryCompleteCommittedAsync(request, prepared.AnsweredAtUtc!.Value);
+            if (recovery is not null)
+            {
+                completed = true;
+                return Result.Success(recovery);
+            }
+            throw;
+        }
         finally
         {
             if (!completed)
-                await ReleaseAsync(request, prepared);
+            {
+                try
+                {
+                    await ReleaseAsync(request, prepared);
+                }
+                catch (Exception exception)
+                {
+                    (logger ?? NullLogger.Instance).LogWarning(exception,
+                        "Block answer compensation failed for {BlockId}; recovery will retry after the claim expires", request.BlockAnswer!.BlockId);
+                }
+            }
         }
+    }
+
+    private async Task<ChatResponse?> TryCompleteCommittedAsync(ProcessUserChatCommand request, DateTime claim)
+    {
+        try
+        {
+            return await CompleteCommittedAsync(request, claim);
+        }
+        catch (Exception exception)
+        {
+            (logger ?? NullLogger.Instance).LogWarning(exception,
+                "Block answer recovery failed for {BlockId}", request.BlockAnswer!.BlockId);
+            return null;
+        }
+    }
+
+    private async Task<ChatResponse?> CompleteCommittedAsync(ProcessUserChatCommand request, DateTime claim)
+    {
+        unitOfWork.ResetTracking();
+        return await unitOfWork.ExecuteInTransactionAsync(async token =>
+        {
+            await unitOfWork.AcquireAdvisoryLockAsync($"astra-blocks:{request.UserId}", token);
+            var block = await store.GetAsync(request.BlockAnswer!.BlockId, request.UserId, token);
+            if (block?.AnsweredAtUtc != claim || block.CommittedResponseJson is null)
+                return null;
+            if (block.ResponseJson is null)
+                await store.CompleteAnswerAsync(block.Id, request.UserId, claim, block.CommittedResponseJson, token);
+            return await ReadReplayAsync(await store.GetAsync(block.Id, request.UserId, token), request.BlockAnswer, request.UserId, token);
+        }, CancellationToken.None);
     }
 
     private async Task ReleaseAsync(ProcessUserChatCommand request, PreparedAstraBlockAnswer prepared)
@@ -72,16 +127,18 @@ public sealed class AstraBlockAnswerService(
         await unitOfWork.ExecuteInTransactionAsync(async token =>
         {
             await unitOfWork.AcquireAdvisoryLockAsync($"astra-blocks:{request.UserId}", token);
-            if (!await store.ReleaseAnswerAsync(request.BlockAnswer!.BlockId, request.UserId,
-                    prepared.AnsweredAtUtc!.Value, token))
-                return;
-            if (prepared.ReservedAllowanceDate is { } reservedDate)
-            {
-                var refund = await payGate.RefundAiMessage(request.UserId, reservedDate, unitOfWork, token);
-                if (refund.IsFailure)
-                    throw new InvalidOperationException(refund.Error);
-            }
+            await ReleaseClaimAsync(request.BlockAnswer!.BlockId, request.UserId,
+                prepared.AnsweredAtUtc!.Value, prepared.ReservedAllowanceDate, token);
         }, CancellationToken.None);
+    }
+
+    private async Task ReleaseClaimAsync(Guid blockId, Guid userId, DateTime claim, DateOnly? reservedDate, CancellationToken token)
+    {
+        if (!await store.ReleaseAnswerAsync(blockId, userId, claim, token) || reservedDate is null)
+            return;
+        var refund = await payGate.RefundAiMessage(userId, reservedDate.Value, unitOfWork, token);
+        if (refund.IsFailure)
+            throw new InvalidOperationException(refund.Error);
     }
 
     public async Task<Result<PreparedAstraBlockAnswer>> PrepareAsync(ProcessUserChatCommand request, CancellationToken ct)
@@ -98,7 +155,16 @@ public sealed class AstraBlockAnswerService(
             {
                 await unitOfWork.AcquireAdvisoryLockAsync($"astra-blocks:{request.UserId}", token);
                 var block = await store.GetAsync(answer.BlockId, request.UserId, token);
-                if (ReadReplay(block, answer, request.UserId) is { } replay)
+                if (block is { AnsweredAtUtc: { } claim, ResponseJson: null }
+                    && claimLifetime is { } lifetime && claim + lifetime < TimeProvider.System.GetUtcNow().UtcDateTime)
+                {
+                    if (block.CommittedResponseJson is { } committed)
+                        await store.CompleteAnswerAsync(block.Id, request.UserId, claim, committed, token);
+                    else
+                        await ReleaseClaimAsync(block.Id, request.UserId, claim, block.ReservedAllowanceDate, token);
+                    block = await store.GetAsync(answer.BlockId, request.UserId, token);
+                }
+                if (await ReadReplayAsync(block, answer, request.UserId, token) is { } replay)
                     return Result.Success(new PreparedAstraBlockAnswer(string.Empty, replay, IsReplay: true));
                 var stateError = CheckState(block);
                 if (stateError is not null)
@@ -116,7 +182,8 @@ public sealed class AstraBlockAnswerService(
                     if (allowance.IsFailure)
                         return allowance.PropagateError<PreparedAstraBlockAnswer>();
                 }
-                var answeredAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
+                var now = TimeProvider.System.GetUtcNow().UtcDateTime;
+                var answeredAtUtc = now.AddTicks(-(now.Ticks % TimeSpan.TicksPerMicrosecond));
                 if (!await store.MarkAnsweredAsync(block.Id, request.UserId, answeredAtUtc, token))
                     return CheckState(await store.GetAsync(block.Id, request.UserId, token))
                         ?? Failure(ErrorCodes.AstraBlockAnswered);
@@ -166,19 +233,38 @@ public sealed class AstraBlockAnswerService(
             Parts: request.ClientContext?.SupportsParts == true ? [new ChatTextPart(line)] : null);
     }
 
-    private ChatResponse? ReadReplay(IssuedAstraBlock? block, AstraBlockAnswer answer, Guid userId)
+    private async Task<ChatResponse?> ReadReplayAsync(IssuedAstraBlock? block, AstraBlockAnswer answer, Guid userId, CancellationToken ct)
     {
         if (block is not { AnsweredAtUtc: not null, ResponseJson: not null } || !block.MatchesAnswer(answer))
             return null;
         var stored = JsonSerializer.Deserialize<ChatResponse>(block.ResponseJson, ChatStreamEvent.SerializerOptions)
             ?? throw new InvalidOperationException("Stored block has no response.");
-        return stored.PendingOperations is { Count: > 0 } pending
-            ? stored with
+        if (stored.PendingOperations is not { Count: > 0 } pending)
+            return stored;
+        var current = new List<PendingAgentOperation>();
+        foreach (var operation in pending)
+        {
+            if (!pendingOperations.IsAwaitingConfirmation(userId, operation.Id))
+                continue;
+            if (previewer is null)
             {
-                PendingOperations = pending.Where(operation =>
-                pendingOperations.IsAwaitingConfirmation(userId, operation.Id)).ToArray()
+                current.Add(operation);
+                continue;
             }
-            : stored;
+            var execution = pendingOperations.GetExecution(userId, operation.Id);
+            if (execution is null)
+                continue;
+            var preview = await previewer.PreviewAsync(userId, execution.OperationId, execution.Arguments, ct);
+            if (preview is not null)
+                current.Add(operation with
+                {
+                    Items = preview.Items,
+                    Changes = preview.Changes,
+                    ChangeTargetCount = preview.ChangeTargetCount,
+                    PreviewFingerprint = preview.PreviewFingerprint
+                });
+        }
+        return stored with { PendingOperations = current };
     }
 
     private static string BuildMessage(AstraBlockDefinition definition, AstraBlockAnswer answer)

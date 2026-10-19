@@ -97,6 +97,24 @@ public class IssuedAstraBlockStoreTests
         (await store.GetAsync(block.Id, user.Id, default))!.ResponseJson.Should().Be("{}");
     }
 
+    [Fact]
+    public async Task InFlightAnswer_InvalidatedByLaterTurn_DoesNotReopenOnRelease()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var user = User.Create("Blocks", "blocks@example.com").Value;
+        factory.Context.Users.Add(user);
+        await factory.Context.SaveChangesAsync();
+        var store = new IssuedAstraBlockStore(factory.Context);
+        var block = Block(user.Id);
+        await store.AddAsync(block, default);
+        var claim = block.CreatedAtUtc;
+        (await store.MarkAnsweredAsync(block.Id, user.Id, claim, default)).Should().BeTrue();
+        await store.InvalidateOpenAsync(user.Id, default);
+        (await store.ReleaseAnswerAsync(block.Id, user.Id, claim, default)).Should().BeTrue();
+        (await store.GetAsync(block.Id, user.Id, default))!.InvalidatedAtUtc.Should().NotBeNull();
+        (await store.MarkAnsweredAsync(block.Id, user.Id, claim.AddSeconds(1), default)).Should().BeFalse();
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

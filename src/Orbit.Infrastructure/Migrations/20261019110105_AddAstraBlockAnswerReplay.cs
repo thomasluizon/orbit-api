@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -17,6 +17,12 @@ namespace Orbit.Infrastructure.Migrations
                 type: "jsonb",
                 nullable: true);
 
+            migrationBuilder.AddColumn<string>(
+                name: "CommittedResponseJson",
+                table: "IssuedAstraBlocks",
+                type: "text",
+                nullable: true);
+
             migrationBuilder.AddColumn<DateOnly>(
                 name: "ReservedAllowanceDate",
                 table: "IssuedAstraBlocks",
@@ -26,7 +32,7 @@ namespace Orbit.Infrastructure.Migrations
             migrationBuilder.AddColumn<string>(
                 name: "ResponseJson",
                 table: "IssuedAstraBlocks",
-                type: "jsonb",
+                type: "text",
                 nullable: true);
         }
 
@@ -35,6 +41,10 @@ namespace Orbit.Infrastructure.Migrations
         {
             migrationBuilder.DropColumn(
                 name: "AnswerJson",
+                table: "IssuedAstraBlocks");
+
+            migrationBuilder.DropColumn(
+                name: "CommittedResponseJson",
                 table: "IssuedAstraBlocks");
 
             migrationBuilder.DropColumn(

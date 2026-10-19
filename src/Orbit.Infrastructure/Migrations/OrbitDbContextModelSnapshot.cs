@@ -1459,6 +1459,9 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<DateTime?>("AnsweredAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("CommittedResponseJson")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -1481,7 +1484,7 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("date");
 
                     b.Property<string>("ResponseJson")
-                        .HasColumnType("jsonb");
+                        .HasColumnType("text");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");

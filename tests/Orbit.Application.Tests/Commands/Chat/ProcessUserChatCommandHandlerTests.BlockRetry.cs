@@ -21,29 +21,125 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         var block = IssuedAstraBlock.Create(UserId, definition);
         _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
+        _unitOfWork.PassThroughTransactions<ChatResponse?>();
         _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
         _blockStore.MarkAnsweredAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
-                if (block.AnsweredAtUtc.HasValue)
+                var claim = call.Arg<DateTime>();
+                if (block.AnsweredAtUtc.HasValue || block.InvalidatedAtUtc.HasValue || block.ExpiresAtUtc <= claim)
                     return false;
-                block.MarkAnswered(call.Arg<DateTime>());
+                SetBlock(block, nameof(block.AnsweredAtUtc), claim);
                 return true;
             });
         _blockStore.RecordAnswerAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<string>(),
                 Arg.Any<DateOnly?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
-                block.RecordAnswer(System.Text.Json.JsonSerializer.Deserialize<AstraBlockAnswer>(call.ArgAt<string>(3))!, call.ArgAt<DateOnly?>(4));
-                if (call.ArgAt<string?>(5) is { } response)
-                    block.CompleteAnswer(response);
+                if (!UnfinishedBlock(block, call.ArgAt<DateTime>(2)))
+                    throw new InvalidOperationException("Block answer reservation was lost.");
+                SetBlock(block, nameof(block.AnswerJson), call.ArgAt<string>(3));
+                SetBlock(block, nameof(block.ReservedAllowanceDate), call.ArgAt<DateOnly?>(4));
+                SetBlock(block, nameof(block.ResponseJson), call.ArgAt<string?>(5));
                 return Task.CompletedTask;
             });
         _blockStore.CompleteAnswerAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(call => { block.CompleteAnswer(call.Arg<string>()); return true; });
+            .Returns(call =>
+            {
+                if (!UnfinishedBlock(block, call.Arg<DateTime>())) return false;
+                SetBlock(block, nameof(block.ResponseJson), call.Arg<string>());
+                return true;
+            });
+        _blockStore.CheckpointAnswerAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                if (!UnfinishedBlock(block, call.Arg<DateTime>())) return false;
+                SetBlock(block, nameof(block.CommittedResponseJson), call.Arg<string>());
+                return true;
+            });
         _blockStore.ReleaseAnswerAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
-            .Returns(_ => { block.ReleaseAnswer(); return true; });
+            .Returns(call =>
+            {
+                if (!UnfinishedBlock(block, call.Arg<DateTime>()) || block.CommittedResponseJson is not null) return false;
+                ClearBlockAnswer(block);
+                return true;
+            });
         return block;
+    }
+
+    private static bool UnfinishedBlock(IssuedAstraBlock block, DateTime claim) =>
+        block.AnsweredAtUtc == claim && block.ResponseJson is null;
+
+    private static void SetBlock(IssuedAstraBlock block, string name, object? value) =>
+        typeof(IssuedAstraBlock).GetProperty(name)!.SetValue(block, value);
+
+    private static void ClearBlockAnswer(IssuedAstraBlock block)
+    {
+        SetBlock(block, nameof(block.AnsweredAtUtc), null);
+        SetBlock(block, nameof(block.AnswerJson), null);
+        SetBlock(block, nameof(block.ReservedAllowanceDate), null);
+    }
+
+    [Theory]
+    [InlineData("continuation")]
+    [InlineData("cancel")]
+    [InlineData("budget")]
+    [InlineData("completion")]
+    [InlineData("serialization")]
+    public async Task ChoiceAnswer_CommittedHabitThenFailure_ReplaysWithoutCreatingAgain(string failure)
+    {
+        var user = User.Create("Alex", "retry@example.com").Value;
+        var quota = CreateRealPayGate(user);
+        var block = RetryChoice();
+        _payGate.CanCreateHabits(UserId, 1, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _unitOfWork.PassThroughTransactions<ToolResult>();
+        var createHabit = new Orbit.Application.Chat.Tools.Implementations.CreateHabitTool(
+            _habitRepo, _tagRepo, _goalRepo, _userDateService, _payGate, _unitOfWork);
+        IAiTool tool = createHabit;
+        if (failure == "serialization")
+        {
+            tool = Substitute.For<IAiTool>();
+            tool.Name.Returns("create_habit");
+            tool.ExecuteAsync(Arg.Any<System.Text.Json.JsonElement>(), UserId, Arg.Any<CancellationToken>())
+                .Returns(async call => (await createHabit.ExecuteAsync(call.Arg<System.Text.Json.JsonElement>(),
+                    UserId, call.Arg<CancellationToken>())) with
+                { Payload = typeof(Habit) });
+        }
+        if (failure == "completion")
+        {
+            var attempts = 0;
+            _blockStore.CompleteAnswerAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+                .Returns(call =>
+                {
+                    if (++attempts == 1) throw new InvalidOperationException("completion failed");
+                    if (!UnfinishedBlock(block, call.Arg<DateTime>())) return false;
+                    SetBlock(block, nameof(block.ResponseJson), call.Arg<string>());
+                    return true;
+                });
+        }
+        var handler = CreateHandler(quota, tool);
+        SetupAiResponse(ToolResponse("create_habit", "write", "{\"title\":\"Walk\",\"frequency_unit\":\"Day\"}"));
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(_ => failure == "cancel"
+                ? Task.FromException<Result<AiResponse>>(new OperationCanceledException())
+                : Task.FromResult(failure == "budget"
+                    ? Result.Success(new AiResponse { ReportedTokenCount = AppConstants.MaxAiRequestTotalTokens + 1 })
+                    : failure is "completion" or "serialization"
+                        ? Result.Success(new AiResponse { TextMessage = "Created." })
+                        : Result.Failure<AiResponse>(ErrorMessages.AiUnavailable)));
+        var request = new ProcessUserChatCommand(UserId, "Evening", BlockAnswer: new(block.Id, ["b"]));
+
+        var first = await handler.Handle(request, default);
+        await _habitRepo.Received(1).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+        var retry = await handler.Handle(request, default);
+
+        first.IsSuccess.Should().BeTrue();
+        first.Value.AiMessage.Should().Be(EnglishToolFailureMessage);
+        first.Value.Actions.Should().ContainSingle(action => action.Type == "CreateHabit" && action.Status == ActionStatus.Success);
+        retry.Value.Should().BeEquivalentTo(first.Value);
+        user.GetAiMessagesUsedToday(Today).Should().Be(1);
+        await _habitRepo.Received(1).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -183,6 +279,27 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
+    public async Task ChoiceAnswer_CompensationThrows_PreservesOriginalExceptionAndLogs()
+    {
+        var user = User.Create("Alex", "retry@example.com").Value;
+        var quota = CreateRealPayGate(user);
+        var block = RetryChoice();
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<Result<AiResponse>>(new InvalidOperationException("original failure")));
+        _blockStore.ReleaseAnswerAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<bool>(new InvalidOperationException("compensation failure")));
+        var handler = CreateHandler(quota);
+
+        var action = () => handler.Handle(new(UserId, "Evening", BlockAnswer: new(block.Id, ["b"])), default);
+
+        await action.Should().ThrowAsync<InvalidOperationException>().WithMessage("original failure");
+        _logger.ReceivedCalls().Where(call => call.GetMethodInfo().Name == "Log")
+            .SelectMany(call => call.GetArguments()).OfType<InvalidOperationException>()
+            .Should().ContainSingle(exception => exception.Message == "compensation failure");
+    }
+
+    [Fact]
     public async Task ChoiceAnswer_ConcurrentIdenticalAnswers_ChargeOnceAndReplayAfterCompletion()
     {
         var user = User.Create("Alex", "retry@example.com").Value;
@@ -234,7 +351,7 @@ public partial class ProcessUserChatCommandHandlerTests
                 }
                 catch
                 {
-                    block.ReleaseAnswer();
+                    ClearBlockAnswer(block);
                     throw;
                 }
             });
