@@ -11,6 +11,7 @@ using Orbit.Application.Referrals.Commands;
 using Orbit.Application.FeatureFlags;
 using Orbit.Application.FeatureFlags.Commands;
 using Orbit.Application.Common;
+using Orbit.Application.Notifications.Commands;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Common;
 using Orbit.Domain.Models;
@@ -19,6 +20,67 @@ namespace Orbit.Application.Tests.Commands.Chat;
 
 public partial class ProcessUserChatCommandHandlerTests
 {
+    [Theory]
+    [InlineData("subscribe_push", true, false)]
+    [InlineData("subscribe_push", true, true)]
+    [InlineData("subscribe_push", false, false)]
+    [InlineData("subscribe_push", false, true)]
+    [InlineData("unsubscribe_push", true, false)]
+    [InlineData("unsubscribe_push", true, true)]
+    public async Task Handle_EvalTrace_OmitsPushCredentialsFromRealNotificationTool(string action, bool execute, bool stream)
+    {
+        SetupUserAndPayGate();
+        _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new[] { "astra_eval_trace" });
+        _mediator.Send(Arg.Any<SubscribePushCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _mediator.Send(Arg.Any<UnsubscribePushCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        const string endpoint = "private-fcm-registration";
+        const string p256dh = "private-push-key";
+        const string auth = "private-push-auth";
+        var arguments = JsonSerializer.SerializeToElement(new { action, endpoint, p256dh, auth, release_other_account = true });
+        SetupReadToolReply("update_notifications", "Push subscription updated.");
+        SetupAiResponse(new AiResponse
+        {
+            ToolCalls = [new("update_notifications", "push-call", arguments)],
+            ConversationContext = TestConversationContext,
+            TextMessage = "Push subscription update requested.",
+            ReportedTokenCount = execute ? 0 : AppConstants.MaxAiRequestTotalTokens + 1
+        });
+
+        var result = await CreateHandler(new UpdateNotificationsTool(_mediator)).Handle(new ProcessUserChatCommand(UserId,
+            "Update push subscription", EvalTraceRequested: true, StreamSink: stream ? _ => Task.CompletedTask : null), default);
+
+        result.IsSuccess.Should().BeTrue();
+        var trace = EvalResponseJson(result.Value, stream).GetProperty("evalTrace");
+        var call = trace.GetProperty("toolCalls")[0];
+        call.GetProperty("status").GetString().Should().Be(execute ? "Succeeded" : "NotExecuted");
+        var tracedArguments = call.GetProperty("arguments");
+        tracedArguments.TryGetProperty("auth", out _).Should().BeFalse();
+        tracedArguments.TryGetProperty("p256dh", out _).Should().BeFalse();
+        tracedArguments.TryGetProperty("endpoint", out _).Should().BeFalse();
+        tracedArguments.GetProperty("action").GetString().Should().Be(action);
+        tracedArguments.GetProperty("release_other_account").GetBoolean().Should().BeTrue();
+        trace.GetRawText().Should().NotContain(endpoint).And.NotContain(p256dh).And.NotContain(auth);
+        if (execute)
+        {
+            var payload = call.GetProperty("result").GetProperty("payload");
+            payload.TryGetProperty("endpoint", out _).Should().BeFalse();
+            payload.GetProperty("action").GetString().Should().Be(action);
+            if (action == "subscribe_push")
+                await _mediator.Received(1).Send(Arg.Is<SubscribePushCommand>(command =>
+                    command.Endpoint == endpoint && command.P256dh == p256dh && command.Auth == auth), Arg.Any<CancellationToken>());
+            else
+                await _mediator.Received(1).Send(Arg.Is<UnsubscribePushCommand>(command =>
+                    command.Endpoint == endpoint && command.P256dh == p256dh && command.Auth == auth && command.ReleaseOtherAccount),
+                    Arg.Any<CancellationToken>());
+        }
+        else
+        {
+            await _mediator.DidNotReceive().Send(Arg.Any<SubscribePushCommand>(), Arg.Any<CancellationToken>());
+            result.Value.EvalTrace!.ToolCalls[0].Result.Should().BeNull();
+        }
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -147,7 +209,7 @@ public partial class ProcessUserChatCommandHandlerTests
         trace.GetRawText().Should().NotContain("credential-value").And.NotContain("private-token").And.NotContain("private-password");
         trace.GetProperty("toolCalls")[0].GetProperty("arguments").GetProperty("name").GetString().Should().Be("Eval key");
         var payload = trace.GetProperty("toolCalls")[0].GetProperty("result").GetProperty("payload");
-        payload.GetProperty("key").GetString().Should().Be("[redacted]");
+        payload.TryGetProperty("key", out _).Should().BeFalse();
         payload.GetProperty("keyPrefix").GetString().Should().Be("prefix");
     }
 
@@ -281,7 +343,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         var trace = result.Value.EvalTrace!;
-        trace.ToolCalls.Should().ContainSingle().Which.Arguments.GetProperty("code").GetString().Should().Be("[redacted]");
+        trace.ToolCalls.Should().ContainSingle().Which.Arguments.TryGetProperty("code", out _).Should().BeFalse();
         JsonSerializer.Serialize(trace).Should().NotContain("private-deletion-code");
         await _mediator.Received(1).Send(Arg.Is<ConfirmAccountDeletionCommand>(command =>
             command.Code == "private-deletion-code"), Arg.Any<CancellationToken>());

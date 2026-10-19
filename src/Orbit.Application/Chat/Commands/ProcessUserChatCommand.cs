@@ -192,7 +192,7 @@ public partial class ProcessUserChatCommandHandler(
         {
             var flags = await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, cancellationToken);
             if (flags.Contains(FeatureFlagKeys.AstraEvalTrace, StringComparer.Ordinal))
-                evalTrace = new ChatEvalTraceCollector(request.CorrelationId ?? Guid.NewGuid().ToString("N"));
+                evalTrace = new ChatEvalTraceCollector(request.CorrelationId ?? Guid.NewGuid().ToString("N"), ai.ToolRegistry);
         }
 
         var result = await HandleRequestAsync(request, evalTrace, cancellationToken);
