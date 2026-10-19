@@ -280,9 +280,6 @@ public static partial class ServiceCollectionExtensions
                 OnTokenValidated = async context =>
                 {
                     var sessionClaim = context.Principal?.FindFirst("orbit_session_id")?.Value;
-                    if (sessionClaim is null)
-                        return;
-
                     var userClaim = context.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                     if (!Guid.TryParse(sessionClaim, out var sessionId)
                         || !Guid.TryParse(userClaim, out var userId)
