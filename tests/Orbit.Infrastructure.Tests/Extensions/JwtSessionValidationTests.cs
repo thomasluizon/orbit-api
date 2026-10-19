@@ -100,7 +100,7 @@ public class JwtSessionValidationTests
     }
 
     [Fact]
-    public async Task ValidatedLegacyToken_WithoutSessionClaim_RemainsAccepted()
+    public async Task ValidatedToken_WithoutSessionClaim_IsRejected()
     {
         var context = CreateContext(Substitute.For<IAuthSessionService>());
         context.Principal = new ClaimsPrincipal(new ClaimsIdentity(
@@ -108,7 +108,8 @@ public class JwtSessionValidationTests
 
         await context.Options.Events.OnTokenValidated(context);
 
-        context.Result.Should().BeNull();
+        context.Result.Should().BeOfType<AuthenticateResult>()
+            .Which.Failure.Should().NotBeNull();
     }
 
     private static TokenValidatedContext CreateContext(IAuthSessionService sessions)
