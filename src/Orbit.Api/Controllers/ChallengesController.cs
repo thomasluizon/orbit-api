@@ -33,6 +33,7 @@ public partial class ChallengesController(IMediator mediator, ILogger<Challenges
     public record SetChallengeHabitsBody(IReadOnlyList<Guid>? HabitIds);
 
     [HttpPost]
+    [Obsolete("Challenges and accountability are being retired.")]
     [DistributedRateLimit("challenges")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -63,6 +64,7 @@ public partial class ChallengesController(IMediator mediator, ILogger<Challenges
     }
 
     [HttpPost("join")]
+    [Obsolete("Challenges and accountability are being retired.")]
     [DistributedRateLimit("challenges")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -84,6 +86,7 @@ public partial class ChallengesController(IMediator mediator, ILogger<Challenges
     }
 
     [HttpDelete("{challengeId:guid}/leave")]
+    [Obsolete("Challenges and accountability are being retired.")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -95,6 +98,7 @@ public partial class ChallengesController(IMediator mediator, ILogger<Challenges
     }
 
     [HttpPut("{challengeId:guid}/habits")]
+    [Obsolete("Challenges and accountability are being retired.")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -110,6 +114,7 @@ public partial class ChallengesController(IMediator mediator, ILogger<Challenges
     }
 
     [HttpGet]
+    [Obsolete("Challenges and accountability are being retired.")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetMine(CancellationToken cancellationToken)
     {
@@ -118,6 +123,7 @@ public partial class ChallengesController(IMediator mediator, ILogger<Challenges
     }
 
     [HttpGet("{challengeId:guid}")]
+    [Obsolete("Challenges and accountability are being retired.")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetDetail(Guid challengeId, CancellationToken cancellationToken)

@@ -43,7 +43,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       },
       "post": {
         "tags": [
@@ -162,7 +163,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/accountability/pairs/{pairId}/accept": {
@@ -272,7 +274,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/accountability/pairs/{pairId}": {
@@ -342,7 +345,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/accountability/pairs/{pairId}/habits": {
@@ -452,7 +456,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/accountability/pairs/{pairId}/check-ins": {
@@ -522,7 +527,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       },
       "post": {
         "tags": [
@@ -650,7 +656,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/achievements/report-event": {
@@ -3341,7 +3348,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       },
       "get": {
         "tags": [
@@ -3360,7 +3368,8 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/challenges/join": {
@@ -3481,7 +3490,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/challenges/{challengeId}/leave": {
@@ -3551,7 +3561,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/challenges/{challengeId}/habits": {
@@ -3661,7 +3672,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/challenges/{challengeId}": {
@@ -3711,7 +3723,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/Chat/records/{kind}": {
