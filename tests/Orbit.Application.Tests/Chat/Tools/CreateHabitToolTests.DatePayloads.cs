@@ -224,7 +224,7 @@ public partial class CreateHabitToolTests
     }
 
     [Fact]
-    public async Task RecurringChild_PreservesExistingUntimedRow()
+    public async Task RecurringChild_WithTimingFields_CreatesUntimedHabit()
     {
         (await Execute("""
         {"title":"Aulas","frequency_unit":"Day","days":["Wednesday"],

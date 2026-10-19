@@ -113,7 +113,6 @@ public sealed class CreateHabitToolPersistenceTests
         dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(Today);
         dates.GetUserWeekStartDayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(1);
         var quota = Substitute.For<IPayGateService>();
-        quota.CanSendAiMessage(user.Id, Arg.Any<CancellationToken>()).Returns(Result.Success());
         quota.TryConsumeAiMessage(user.Id, work, Arg.Any<CancellationToken>()).Returns(Result.Success());
         quota.CanCreateHabits(user.Id, 1, Arg.Any<CancellationToken>()).Returns(Result.Success());
         var tool = new CreateHabitTool(habits, tags, goals, dates, quota, work);
