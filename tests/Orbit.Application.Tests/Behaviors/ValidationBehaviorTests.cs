@@ -2,6 +2,8 @@ using FluentAssertions;
 using FluentValidation;
 using FluentValidation.Results;
 using MediatR;
+using MediatR.Wrappers;
+using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Orbit.Application.Behaviors;
 
@@ -45,6 +47,54 @@ public class ValidationBehaviorTests
 
         result.Should().Be("success");
         await _next.Received(1).Invoke();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_RequestToken_ReachesContinuation(bool hasValidator)
+    {
+        using var cancellation = new CancellationTokenSource();
+        var validator = Substitute.For<IValidator<ValidationTestRequest>>();
+        validator.ValidateAsync(Arg.Any<ValidationContext<ValidationTestRequest>>(), cancellation.Token)
+            .Returns(new ValidationResult());
+        var behavior = new ValidationBehavior<ValidationTestRequest, string>(hasValidator ? [validator] : []);
+        var observed = CancellationToken.None;
+        Task<string> Next(CancellationToken token)
+        {
+            observed = token;
+            return Task.FromResult("success");
+        }
+
+        var result = await behavior.Handle(new ValidationTestRequest("valid"), Next, cancellation.Token);
+
+        result.Should().Be("success");
+        observed.Should().Be(cancellation.Token);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_MediatRWrapper_PreservesHandlerTokenAndResult(bool hasValidator)
+    {
+        using var cancellation = new CancellationTokenSource();
+        var handler = Substitute.For<IRequestHandler<ValidationTestRequest, string>>();
+        handler.Handle(Arg.Any<ValidationTestRequest>(), cancellation.Token).Returns("success");
+        var validator = Substitute.For<IValidator<ValidationTestRequest>>();
+        validator.ValidateAsync(Arg.Any<ValidationContext<ValidationTestRequest>>(), cancellation.Token)
+            .Returns(new ValidationResult());
+        var services = new ServiceCollection();
+        services.AddSingleton(handler);
+        services.AddSingleton<IPipelineBehavior<ValidationTestRequest, string>>(
+            new ValidationBehavior<ValidationTestRequest, string>(hasValidator ? [validator] : []));
+        using var provider = services.BuildServiceProvider();
+        var request = new ValidationTestRequest("valid");
+
+        var result = await new RequestHandlerWrapperImpl<ValidationTestRequest, string>()
+            .Handle(request, provider, cancellation.Token);
+
+        result.Should().Be("success");
+        await handler.Received(1).Handle(request, cancellation.Token);
     }
 
     [Fact]

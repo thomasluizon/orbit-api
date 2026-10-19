@@ -21,7 +21,6 @@ namespace Orbit.Api.Controllers;
 [ApiVersion(2.0)]
 [AllowAnonymous]
 #pragma warning disable S6931 // OAuth/MCP well-known URLs follow protocol-mandated paths with no common prefix
-#pragma warning disable S107 // OAuth controller legitimately requires many DI dependencies
 public partial class OAuthController(
     IMediator mediator,
     OAuthAuthorizationStore authStore,

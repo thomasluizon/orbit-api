@@ -33,17 +33,7 @@
     }
   },
   "pragmas": {
-    "src/Orbit.Api/Authentication/ApiKeyAuthenticationHandler.cs": {
-      "S3267": {
-        "count": 1,
-        "reason": "BCrypt.Verify is expensive, so the early exit through foreach is deliberate rather than a LINQ simplification."
-      }
-    },
     "src/Orbit.Api/Controllers/OAuthController.cs": {
-      "S107": {
-        "count": 1,
-        "reason": "the OAuth controller legitimately requires many injected dependencies."
-      },
       "S6931": {
         "count": 1,
         "reason": "the OAuth and MCP well-known URLs follow protocol-mandated paths with no common prefix, so a shared route prefix is not available."
@@ -83,22 +73,10 @@
         "reason": "instant: the same VerificationEntry throttle and TTL instants for send-code, including the test-account and smoke-code paths."
       }
     },
-    "src/Orbit.Application/Behaviors/ValidationBehavior.cs": {
-      "CA2016": {
-        "count": 2,
-        "reason": "RequestHandlerDelegate<T> accepts no CancellationToken parameter, so it cannot be forwarded."
-      }
-    },
     "src/Orbit.Application/Calendar/Commands/DismissCalendarSuggestionCommand.cs": {
       "ORBIT0004": {
         "count": 1,
         "reason": "instant: the MarkDismissed(now) audit timestamp."
-      }
-    },
-    "src/Orbit.Application/Chat/Tools/Implementations/QueryHabitsTool.cs": {
-      "CA1859": {
-        "count": 2,
-        "reason": "IReadOnlyList<Habit> is deliberate: it matches the repository interface's return type."
       }
     },
     "src/Orbit.Application/Habits/Commands/BulkCreateHabitsCommand.cs": {
@@ -111,12 +89,6 @@
       "ORBIT0004": {
         "count": 1,
         "reason": "instant: the 60-second resend-throttle elapsed math against the cached last-sent instant."
-      }
-    },
-    "src/Orbit.Domain/Entities/Habit.cs": {
-      "S6964": {
-        "count": 1,
-        "reason": "a domain entity with private setters, not a model-bound DTO."
       }
     },
     "src/Orbit.Domain/Entities/PendingClarification.cs": {
