@@ -93,8 +93,6 @@ public static class ValidationErrorCodes
     public const string UploadContentTypeSupported = "VALIDATION_UPLOAD_CONTENT_TYPE_SUPPORTED";
     public const string UploadSizePositive = "VALIDATION_UPLOAD_SIZE_POSITIVE";
     public const string UploadSizeLimit = "VALIDATION_UPLOAD_SIZE_LIMIT";
-    public const string BulkDeleteFactLimit = "VALIDATION_BULK_DELETE_FACT_LIMIT";
-    public const string FactIdRequired = "VALIDATION_FACT_ID_REQUIRED";
     public const string WaitlistLanguageSupported = "VALIDATION_WAITLIST_LANGUAGE_SUPPORTED";
     public const string BulkLogLimit = "VALIDATION_BULK_LOG_LIMIT";
     public const string BulkSkipLimit = "VALIDATION_BULK_SKIP_LIMIT";

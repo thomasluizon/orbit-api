@@ -45,7 +45,7 @@ public class AiMemoryRemovalTests
     [Theory]
     [InlineData("openapi.json")]
     [InlineData("openapi_v2.json")]
-    public void GeneratedContractHasNoMemoryRoutesOrProfileSetting(string file)
+    public void GeneratedContractHasNoMemoryRoutesAndRetainsProfileCompatibility(string file)
     {
         var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
             "../../../../..", "src/Orbit.Api", file));
@@ -55,8 +55,9 @@ public class AiMemoryRemovalTests
             .Should().NotContain(route => route.StartsWith("/api/user-facts", StringComparison.OrdinalIgnoreCase)
                 || route.EndsWith("/ai-memory", StringComparison.OrdinalIgnoreCase));
         var profile = root.GetProperty("components").GetProperty("schemas").GetProperty("ProfileResponse");
-        profile.GetProperty("properties").TryGetProperty("aiMemoryEnabled", out _).Should().BeFalse();
+        profile.GetProperty("properties").GetProperty("aiMemoryEnabled")
+            .GetProperty("type").GetString().Should().Be("boolean");
         profile.GetProperty("required").EnumerateArray().Select(item => item.GetString())
-            .Should().NotContain("aiMemoryEnabled");
+            .Should().Contain("aiMemoryEnabled");
     }
 }

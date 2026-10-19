@@ -72,11 +72,12 @@ public class GetProfileQueryHandlerTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Handle_SerializedProfileOmitsMemorySetting(bool pro)
+    public async Task Handle_SerializedProfileRetainsDisabledMemorySetting(bool pro)
     {
         var user = pro ? CreateTestUser() : CreateFreeUser();
         if (pro)
             user.GrantLifetimePro();
+        user.AiMemoryEnabled.Should().BeTrue();
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
         StubFreezeRepoEmpty();
 
@@ -84,7 +85,7 @@ public class GetProfileQueryHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         var payload = JsonSerializer.SerializeToElement(result.Value, JsonSerializerOptions.Web);
-        payload.TryGetProperty("aiMemoryEnabled", out _).Should().BeFalse();
+        payload.GetProperty("aiMemoryEnabled").GetBoolean().Should().BeFalse();
         payload.GetProperty("hasProAccess").GetBoolean().Should().Be(pro);
         payload.GetProperty("aiSummaryEnabled").GetBoolean().Should().Be(user.AiSummaryEnabled);
     }

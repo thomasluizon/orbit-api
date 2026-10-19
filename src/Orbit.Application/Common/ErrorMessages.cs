@@ -50,7 +50,6 @@ public static class ErrorMessages
     public static readonly AppError InvalidStepUpCode = From(ErrorCodes.InvalidStepUpCode);
     public static readonly AppError DuplicateTagName = From(ErrorCodes.DuplicateTagName);
     public static readonly AppError MaxTagsPerHabit = From(ErrorCodes.MaxTagsPerHabit);
-    public static readonly AppError DuplicateFact = From(ErrorCodes.DuplicateFact);
     public static readonly AppError PaymentServiceUnavailable = From(ErrorCodes.PaymentServiceUnavailable);
     public static readonly AppError BillingDetailsUnavailable = From(ErrorCodes.BillingDetailsUnavailable);
     public static readonly AppError WebhookSecretNotConfigured = From(ErrorCodes.WebhookSecretNotConfigured);

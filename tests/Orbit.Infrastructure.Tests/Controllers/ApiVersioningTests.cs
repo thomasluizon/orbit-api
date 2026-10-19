@@ -66,7 +66,7 @@ public sealed class ApiVersioningTests : IAsyncLifetime
         _mediator.Send(Arg.Any<GetProfileQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new ProfileResponse(
                 UserId: _userId, Name: "Member", Email: "member@example.com", TimeZone: "America/Sao_Paulo",
-                AiSummaryEnabled: true,
+                AiMemoryEnabled: false, AiSummaryEnabled: true,
                 HasCompletedOnboarding: true, HasCompletedTour: true,
                 HasCreatedFirstHabit: true, HasLoggedFirstHabit: true, HasTriedAstra: false,
                 HasCompletedOnboardingChecklist: true, Language: "en", Plan: "Free",

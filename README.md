@@ -118,7 +118,7 @@ src/
 
   Orbit.Infrastructure/   # Infrastructure layer
     Persistence/          #   OrbitDbContext, GenericRepository<T>, UnitOfWork
-    Services/             #   AI (AiIntentService, AiSummaryService, OpenAiBatchPollerService, ...),
+    Services/             #   AI (AiIntentService, AiSummaryService, ...),
                           #   Agent/MCP (AgentCatalogService, AgentOperationExecutor, AgentPolicyEvaluator, ...),
                           #   billing (StripeBillingService, GooglePlayBillingService),
                           #   push + schedulers (PushNotificationService, ReminderSchedulerService, ...),

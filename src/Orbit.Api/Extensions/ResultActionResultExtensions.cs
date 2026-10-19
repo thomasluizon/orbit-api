@@ -34,7 +34,6 @@ public static class ResultActionResultExtensions
         [ErrorCodes.StepUpChallengeNotFound] = StatusCodes.Status404NotFound,
 
         [ErrorCodes.DuplicateTagName] = StatusCodes.Status409Conflict,
-        [ErrorCodes.DuplicateFact] = StatusCodes.Status409Conflict,
         [ErrorCodes.AlreadyReferred] = StatusCodes.Status409Conflict,
         [ErrorCodes.SkipUndoConflict] = StatusCodes.Status409Conflict,
         [ErrorCodes.ConcurrentUpdateConflict] = StatusCodes.Status409Conflict,

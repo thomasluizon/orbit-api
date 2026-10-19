@@ -17114,6 +17114,7 @@
           "name",
           "email",
           "timeZone",
+          "aiMemoryEnabled",
           "aiSummaryEnabled",
           "hasCompletedOnboarding",
           "hasCompletedTour",
@@ -17169,6 +17170,9 @@
               "null",
               "string"
             ]
+          },
+          "aiMemoryEnabled": {
+            "type": "boolean"
           },
           "aiSummaryEnabled": {
             "type": "boolean"

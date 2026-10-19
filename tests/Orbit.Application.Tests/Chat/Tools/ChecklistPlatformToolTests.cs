@@ -24,7 +24,7 @@ using Orbit.Domain.Common;
 
 namespace Orbit.Application.Tests.Chat.Tools;
 
-public class ChecklistUserFactPlatformToolTests
+public class ChecklistPlatformToolTests
 {
     private static readonly Guid UserId = Guid.NewGuid();
 
