@@ -28,6 +28,16 @@ public class FeatureFlagAccountsMigrationTests
 
         differences.Where(operation => operation is DropForeignKeyOperation || operation is AddForeignKeyOperation)
             .Should().HaveCount(4);
+        differences.OfType<AlterColumnOperation>().Should().ContainSingle(column =>
+            column.Table == "HabitLogs" && column.Name == "IsSlip"
+            && !column.IsNullable && column.OldColumn.IsNullable);
+        var renewalColumns = differences.OfType<AddColumnOperation>()
+            .Where(column => column.Table == "Users").ToArray();
+        renewalColumns.Should().HaveCount(2).And.OnlyContain(column =>
+            column.ClrType == typeof(bool) && !column.IsNullable
+            && Equals(column.DefaultValue, false));
+        renewalColumns.Select(column => column.Name).Should().BeEquivalentTo(
+            "StripeRenewalStoppedByDeletion", "PlayRenewalStoppedByDeletion");
         differences.OfType<DropForeignKeyOperation>().Select(operation => operation.Name).Should().BeEquivalentTo(
             "FK_AccountabilityPairs_Users_AddresseeId", "FK_AccountabilityPairs_Users_RequesterId");
         differences.OfType<AddForeignKeyOperation>().Should().HaveCount(2).And.OnlyContain(operation =>
@@ -62,7 +72,9 @@ public class FeatureFlagAccountsMigrationTests
             "20261017180536_AddNotionConnection",
             "20261017182405_TrackNotionOAuthStateConsumption",
             "20261018093533_CascadeAccountabilityPairsOnUserDeletion",
-            "20261018111350_AddDurableSignupWork");
+            "20261018111350_AddDurableSignupWork",
+            "20261018111711_RecordDeletionStoppedRenewals",
+            "20261019011031_ContractHabitLogSlip");
     }
 
     [Fact]

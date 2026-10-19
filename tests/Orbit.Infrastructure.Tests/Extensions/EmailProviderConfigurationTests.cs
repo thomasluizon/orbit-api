@@ -14,7 +14,7 @@ public sealed class EmailProviderConfigurationTests
     public void EmailAlwaysUsesSesWithoutProviderSetting()
     {
         var builder = Builder();
-        OrbitServiceCollectionExtensions.AddEmailAndSupabaseClients(builder, TimeSpan.FromSeconds(5));
+        OrbitServiceCollectionExtensions.AddEmailAndStorageServices(builder, TimeSpan.FromSeconds(5));
         builder.Services.Single(service => service.ServiceType == typeof(IEmailService))
             .ImplementationType.Should().Be(typeof(SesEmailService));
         using var services = builder.Services.BuildServiceProvider();
@@ -36,7 +36,7 @@ public sealed class EmailProviderConfigurationTests
     {
         var builder = Builder();
         builder.Configuration[key] = null;
-        var action = () => OrbitServiceCollectionExtensions.AddEmailAndSupabaseClients(builder, TimeSpan.FromSeconds(5));
+        var action = () => OrbitServiceCollectionExtensions.AddEmailAndStorageServices(builder, TimeSpan.FromSeconds(5));
         action.Should().Throw<InvalidOperationException>().WithMessage($"Configuration key '{key}' is missing or empty.");
     }
 
@@ -47,7 +47,7 @@ public sealed class EmailProviderConfigurationTests
     {
         var builder = Builder();
         builder.Configuration["Ses:SecretAccessKey"] = value;
-        var action = () => OrbitServiceCollectionExtensions.AddEmailAndSupabaseClients(builder, TimeSpan.FromSeconds(5));
+        var action = () => OrbitServiceCollectionExtensions.AddEmailAndStorageServices(builder, TimeSpan.FromSeconds(5));
         action.Should().Throw<InvalidOperationException>()
             .WithMessage("Configuration key 'Ses:SecretAccessKey' is missing or empty.");
     }
@@ -59,15 +59,13 @@ public sealed class EmailProviderConfigurationTests
         builder.Configuration.Sources.Clear();
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["Supabase:Url"] = "https://example.supabase.co",
-            ["Supabase:AnonKey"] = "anon",
             ["Storage:S3:Bucket"] = "uploads-test",
             ["Storage:S3:PublicBaseUrl"] = "https://api.example.com",
             ["Storage:S3:Region"] = "us-east-2",
             ["Storage:S3:AccessKeyId"] = "test-access-key",
             ["Storage:S3:SecretAccessKey"] = "test-secret",
         });
-        var action = () => OrbitServiceCollectionExtensions.AddEmailAndSupabaseClients(builder, TimeSpan.FromSeconds(5));
+        var action = () => OrbitServiceCollectionExtensions.AddEmailAndStorageServices(builder, TimeSpan.FromSeconds(5));
         action.Should().Throw<InvalidOperationException>()
             .WithMessage("Configuration key 'Ses:AccessKeyId' is missing or empty.");
     }
@@ -78,8 +76,6 @@ public sealed class EmailProviderConfigurationTests
         builder.Configuration.Sources.Clear();
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["Supabase:Url"] = "https://example.supabase.co",
-            ["Supabase:AnonKey"] = "anon",
             ["Storage:S3:Bucket"] = "uploads-test",
             ["Storage:S3:PublicBaseUrl"] = "https://api.example.com",
             ["Storage:S3:Region"] = "us-east-2",

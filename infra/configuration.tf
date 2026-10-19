@@ -13,7 +13,6 @@ locals {
     "Sentry__Dsn",
     "Stripe__SecretKey",
     "Stripe__WebhookSecret",
-    "Supabase__AnonKey",
     "TEST_ACCOUNTS",
     "Vapid__PrivateKey",
     "Waitlist__SigningKey",
@@ -63,7 +62,6 @@ locals {
     Stripe__SuccessUrl                  = "https://app.useorbit.org/profile?subscription=success"
     Stripe__YearlyPriceIdBrl            = "price_1U59lVGwWZvarDk3FBO8ci6L"
     Stripe__YearlyPriceIdUsd            = "price_1U59ncGwWZvarDk3Ydiw7jP7"
-    Supabase__Url                       = "https://wdscxamegetmhqldqsdg.supabase.co"
     Storage__S3__Bucket                 = aws_s3_bucket.uploads["production"].bucket
     Storage__S3__Region                 = "us-east-2"
     Storage__S3__PublicBaseUrl          = "https://api.useorbit.org"
@@ -91,7 +89,6 @@ locals {
     Sentry__Environment                = "staging"
     Stripe__CancelUrl                  = "https://app-staging.useorbit.org/upgrade"
     Stripe__SuccessUrl                 = "https://app-staging.useorbit.org/upgrade?subscription=success"
-    Supabase__Url                      = "https://staging-storage-disabled.invalid"
     Storage__S3__Bucket                = aws_s3_bucket.uploads["staging"].bucket
     Storage__S3__PublicBaseUrl         = "https://api-staging.useorbit.org"
     Waitlist__ApiBaseUrl               = "https://api-staging.useorbit.org"
@@ -116,9 +113,7 @@ locals {
 
   production_render_npgsql = "Host=${local.production_db_host};Port=5432;Database=${local.production_db_name};Username=${render_postgres.production.database_user};Password=\"${replace(render_postgres.production.connection_info.password, "\"", "\"\"")}\""
 
-  production_api_database_values = var.api_database == "supabase" ? {
-    for key in local.database_keys : key => data.aws_ssm_parameter.production_api_database[key].value
-    } : {
+  production_api_database_values = {
     for key in local.database_keys : key => local.production_render_npgsql
   }
 
@@ -141,11 +136,6 @@ data "aws_ssm_parameter" "staging_api" {
 data "aws_ssm_parameter" "staging_api_billing" {
   for_each = local.staging_api_billing_keys
   name     = "/orbit/staging/api/${each.key}"
-}
-
-data "aws_ssm_parameter" "production_api_database" {
-  for_each = var.api_database == "supabase" ? local.database_keys : toset([])
-  name     = "/orbit/production/api/${each.key}"
 }
 
 data "aws_ssm_parameter" "production_web_sentry" {

@@ -1,3 +1,6 @@
+using Orbit.Domain.Entities;
+using Hangfire;
+using Orbit.Application.Auth.Jobs;
 using Orbit.Application.Auth.Queries;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -9,13 +12,15 @@ public class GoogleSignInFlow(
     IAuthUserStore userStore,
     IUnitOfWork unitOfWork,
     IAuthSessionService authSessionService,
-    ISignupJobDispatcher signupJobDispatcher)
+    ISignupJobDispatcher signupJobDispatcher,
+    IBackgroundJobClient backgroundJobClient)
 {
     public async Task<Result<LoginResponse>> CompleteAsync(
         string rawEmail, string name, string language, string? referralCode,
         string? googleAccessToken, string? googleRefreshToken, CancellationToken cancellationToken)
     {
         var email = rawEmail.Trim().ToLowerInvariant();
+        User? reactivatedUser = null;
         var signupPending = false;
         var signupLanguage = language;
         var signupReferralCode = referralCode;
@@ -32,7 +37,10 @@ public class GoogleSignInFlow(
             signupReferralCode = user.SignupLanguage is not null ? user.SignupReferralCode : referralCode;
             var wasReactivated = user.IsDeactivated;
             if (wasReactivated)
+            {
                 user.CancelDeactivation();
+                reactivatedUser = user;
+            }
 
             if (googleAccessToken is not null)
                 user.SetGoogleTokens(googleAccessToken, googleRefreshToken);
@@ -50,6 +58,9 @@ public class GoogleSignInFlow(
 
         if (result.IsFailure)
             return result;
+
+        if (result.Value.WasReactivated && reactivatedUser is not null)
+            CancelSubscriptionOnDeletionJob.EnqueueRestoration(backgroundJobClient, reactivatedUser);
 
         signupJobDispatcher.Dispatch(result.Value.UserId, signupPending, signupLanguage, signupReferralCode);
 

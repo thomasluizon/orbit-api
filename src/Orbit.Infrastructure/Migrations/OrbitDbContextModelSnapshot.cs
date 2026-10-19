@@ -1377,7 +1377,7 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
-                    b.Property<bool?>("IsSlip")
+                    b.Property<bool>("IsSlip")
                         .HasColumnType("boolean");
 
                     b.Property<string>("Note")
@@ -2459,6 +2459,11 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<string>("PlayPurchaseToken")
                         .HasColumnType("text");
 
+                    b.Property<bool>("PlayRenewalStoppedByDeletion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<int?>("PreGapFreezeAwardStreak")
                         .HasColumnType("integer");
 
@@ -2526,6 +2531,11 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.Property<string>("StripeCustomerId")
                         .HasColumnType("text");
+
+                    b.Property<bool>("StripeRenewalStoppedByDeletion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
 
                     b.Property<DateTime?>("StripeSubscriptionEventCreatedAtUtc")
                         .HasColumnType("timestamp with time zone");

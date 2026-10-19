@@ -11,7 +11,6 @@ public static class ValidationErrorCodes
     public const string ApiKeyScopesRequired = "VALIDATION_API_KEY_SCOPES_REQUIRED";
     public const string ApiKeyScopeInvalid = "VALIDATION_API_KEY_SCOPE_INVALID";
     public const string ApiKeyExpiryFuture = "VALIDATION_API_KEY_EXPIRY_FUTURE";
-    public const string AccessTokenRequired = "VALIDATION_ACCESS_TOKEN_REQUIRED";
     public const string LanguageSupported = "VALIDATION_LANGUAGE_SUPPORTED";
     public const string RefreshTokenFormat = "VALIDATION_REFRESH_TOKEN_FORMAT";
     public const string CalendarSelectionLimit = "VALIDATION_CALENDAR_SELECTION_LIMIT";

@@ -146,6 +146,8 @@ public class FoundingAchievementResetRaceTests
         private readonly AsyncLocal<TransactionState?> _transaction = new();
         private int _lockRequestCount;
 
+        public bool HasActiveTransaction => _transaction.Value is not null;
+
         public TaskCompletionSource<bool> SecondLockRequested { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 

@@ -15,6 +15,9 @@ public interface IPlayBillingService
     /// </summary>
     Task<PlaySubscriptionState?> VerifyAsync(string productId, string purchaseToken, CancellationToken cancellationToken);
 
+    /// <summary>Stops renewal without revoking the current paid period.</summary>
+    Task CancelAsync(string purchaseToken, CancellationToken cancellationToken);
+
     /// <summary>Acknowledges a purchase within Google's 3-day auto-refund window. Caller must skip when already acknowledged.</summary>
     Task AcknowledgeAsync(string productId, string purchaseToken, CancellationToken cancellationToken);
 }
@@ -29,4 +32,5 @@ public sealed record PlaySubscriptionState(
     string? LinkedPurchaseToken,
     string? ObfuscatedAccountId,
     string? OfferId = null,
-    bool IsInGracePeriod = false);
+    bool IsInGracePeriod = false,
+    bool CanRenew = false);

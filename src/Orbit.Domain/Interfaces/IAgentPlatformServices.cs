@@ -14,7 +14,7 @@ public interface IAgentCatalogService
     AgentOperation? GetOperation(string operationId);
     AgentCapability? GetCapabilityByChatTool(string toolName);
     AgentCapability? GetCapabilityByMcpTool(string toolName);
-    bool IsMappedControllerAction(string actionKey);
+    bool HasEquivalentControllerAction(string actionKey);
 
     /// <summary>
     /// Builds the request-invariant supplement (agent policy + product-surface snapshot). Shared

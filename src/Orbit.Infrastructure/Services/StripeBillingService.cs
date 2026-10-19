@@ -152,13 +152,61 @@ public sealed partial class StripeBillingService(
                 interval,
                 item?.Price?.UnitAmount ?? 0,
                 subscription.Currency ?? "usd",
-                paymentMethod);
+                paymentMethod,
+                subscription.Metadata?.GetValueOrDefault(DeletionOwnerMetadataKey));
         }
-        catch (StripeException ex)
+        catch (StripeException ex) when (IsMissingSubscription(ex))
+        {
+            return null;
+        }
+        catch (Exception ex) when (IsProviderFailure(ex, cancellationToken))
         {
             throw new BillingProviderException("Failed to fetch subscription", ex);
         }
     }
+
+    public Task SetSubscriptionCancelAtPeriodEndAsync(
+        string subscriptionId, bool cancelAtPeriodEnd, CancellationToken cancellationToken,
+        string? deletionOwner = null) =>
+        UpdateSubscriptionRenewalAsync(subscriptionId, cancelAtPeriodEnd, deletionOwner, cancellationToken);
+
+    private const string DeletionOwnerMetadataKey = "orbit_deletion_user_id";
+
+    private async Task<Subscription?> UpdateSubscriptionRenewalAsync(
+        string subscriptionId, bool cancelAtPeriodEnd, string? deletionOwner, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await StripeRetryPolicy.ExecuteWithRetryAsync(
+                () => clients.Subscriptions.UpdateAsync(subscriptionId,
+                    new SubscriptionUpdateOptions
+                    {
+                        CancelAtPeriodEnd = cancelAtPeriodEnd,
+                        Metadata = new Dictionary<string, string>
+                        {
+                            [DeletionOwnerMetadataKey] = cancelAtPeriodEnd ? deletionOwner ?? "" : ""
+                        }
+                    },
+                    cancellationToken: cancellationToken),
+                cancellationToken);
+        }
+        catch (StripeException ex) when (IsMissingSubscription(ex))
+        {
+            return null;
+        }
+        catch (Exception ex) when (IsProviderFailure(ex, cancellationToken))
+        {
+            throw new BillingProviderException("Failed to update subscription renewal", ex);
+        }
+    }
+
+    private static bool IsMissingSubscription(StripeException exception) =>
+        exception.HttpStatusCode == System.Net.HttpStatusCode.NotFound
+        || exception.StripeError?.Code == "resource_missing";
+
+    private static bool IsProviderFailure(Exception exception, CancellationToken cancellationToken) =>
+        exception is StripeException or HttpRequestException or TimeoutException
+        || exception is OperationCanceledException && !cancellationToken.IsCancellationRequested;
 
     public async Task<IReadOnlyList<BillingInvoice>> ListInvoicesAsync(string customerId, int limit, CancellationToken cancellationToken)
     {

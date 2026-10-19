@@ -1,0 +1,10 @@
+{
+  "20261019011031_ContractHabitLogSlip": {
+    "expandCommit": "a2f546985e46387ad3ecb228cc93bd00d656a304",
+    "deployedCommit": "98016b262ab2b1b28bfe4d262fe5538fd12779a5",
+    "evidenceUrl": "https://dashboard.render.com/web/srv-dasotg8473hc739a5gjg/deploys/dep-dbam5ee1egvs73b8bt5g",
+    "condition": "Every active HabitLog writer supplies IsSlip explicitly. The contract backfills remaining NULL classifications before requiring the column and removing the compatibility trigger.",
+    "webDrainEvidence": "Render staging service srv-dasotg8473hc739a5gjg has live deploy dep-dbam5ee1egvs73b8bt5g on 98016b262ab2b1b28bfe4d262fe5538fd12779a5. Its prior successful deploy dep-dbajvpe1egvs73b0od50 on 7d85e55c1ac6c80f57febfd47e19ffb831394067 and every older successful deploy in the retrieved listing are deactivated. The live commit contains the expand migration and HabitLog.Create explicitly assigns IsSlip. Render lists one staging API instance, srv-dasotg8473hc739a5gjg-jdn7f.",
+    "backgroundDrainEvidence": "Hangfire servers and recurring jobs run inside the API host, as registered in ServiceCollectionExtensions.BackgroundJobs.cs. The earlier staging API deployments are deactivated, stopping their hosted services and Hangfire processes. The Render service listing contains no separate background worker. The contract release retains the compatible deployed commit as its rollback floor."
+  }
+}

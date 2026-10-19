@@ -22,7 +22,7 @@ public partial class AgentCatalogService : IAgentCatalogService
     private readonly Dictionary<string, AgentOperation> _operationsById;
     private readonly Dictionary<string, AgentCapability> _capabilitiesByChatTool;
     private readonly Dictionary<string, AgentCapability> _capabilitiesByMcpTool;
-    private readonly HashSet<string> _mappedControllerActions;
+    private readonly HashSet<string> _equivalentControllerActions;
 
     public AgentCatalogService(IEnumerable<IAiTool>? tools = null)
     {
@@ -38,7 +38,7 @@ public partial class AgentCatalogService : IAgentCatalogService
         _operationsById = _operations.ToDictionary(operation => operation.Id, StringComparer.OrdinalIgnoreCase);
         _surfaces = BuildSurfaces();
         _userDataCatalog = BuildUserDataCatalog();
-        _mappedControllerActions = _capabilities
+        _equivalentControllerActions = _capabilities
             .SelectMany(capability => capability.ControllerActionKeys ?? [])
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
@@ -63,7 +63,7 @@ public partial class AgentCatalogService : IAgentCatalogService
     public AgentCapability? GetCapabilityByMcpTool(string toolName)
         => _capabilitiesByMcpTool.GetValueOrDefault(toolName);
 
-    public bool IsMappedControllerAction(string actionKey) => _mappedControllerActions.Contains(actionKey);
+    public bool HasEquivalentControllerAction(string actionKey) => _equivalentControllerActions.Contains(actionKey);
 
     public string BuildStaticSupplement()
     {
@@ -154,7 +154,7 @@ public partial class AgentCatalogService : IAgentCatalogService
         IReadOnlyList<string>? featureFlagKeys = null,
         IReadOnlyList<string>? chatTools = null,
         IReadOnlyList<string>? mcpTools = null,
-        IReadOnlyList<string>? controllerActions = null)
+        IReadOnlyList<string>? equivalentControllerActions = null)
     {
         return new AgentCapability(
             id,
@@ -170,7 +170,7 @@ public partial class AgentCatalogService : IAgentCatalogService
             featureFlagKeys,
             chatTools,
             mcpTools,
-            controllerActions);
+            equivalentControllerActions);
     }
 
 
