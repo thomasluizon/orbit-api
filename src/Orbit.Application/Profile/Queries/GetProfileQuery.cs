@@ -1,5 +1,4 @@
 using MediatR;
-using Microsoft.Extensions.Options;
 using Orbit.Application.ApiKeys.Services;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification;
@@ -54,9 +53,9 @@ public record ProfileResponse(
     GoogleCalendarAutoSyncStatus GoogleCalendarAutoSyncStatus,
     DateTime? GoogleCalendarLastSyncedAt,
     bool CanViewGamification,
-    [property: Obsolete("The social profile field is deprecated and will be removed in part 2 of ORB-233.")]
+    /// <summary>Compatibility field retained until thomasluizon/orbit-tickets#685.</summary>
     string? Handle,
-    [property: Obsolete("The social profile field is deprecated and will be removed in part 2 of ORB-233.")]
+    /// <summary>Compatibility field retained until thomasluizon/orbit-tickets#685.</summary>
     bool SocialOptIn,
     bool Uses24HourClock = true,
     PublicProfileSettings? PublicProfile = null,
@@ -74,8 +73,7 @@ public class GetProfileQueryHandler(
     IHabitLogReader habitLogReader,
     IUserDateService userDateService,
     IFeatureFlagService featureFlagService,
-    IPayGateService payGate,
-    IOptions<FrontendSettings> frontendSettings) : IRequestHandler<GetProfileQuery, Result<ProfileResponse>>
+    IPayGateService payGate) : IRequestHandler<GetProfileQuery, Result<ProfileResponse>>
 {
     public async Task<Result<ProfileResponse>> Handle(GetProfileQuery request, CancellationToken cancellationToken)
     {
@@ -104,15 +102,6 @@ public class GetProfileQueryHandler(
         var activeApiKeyCount = await apiKeyRepository.CountAsync(
             ActiveApiKeyPredicate.ForUser(request.UserId, nowAtUtc),
             cancellationToken);
-
-        var publicProfile = new PublicProfileSettings(
-            user.PublicProfileSlug is not null,
-            user.PublicProfileSlug,
-            user.PublicProfileSlug is null ? null : $"{frontendSettings.Value.BaseUrl}/u/{user.PublicProfileSlug}",
-            user.PublicProfileShowStreak,
-            user.PublicProfileShowLevel,
-            user.PublicProfileShowAchievements,
-            user.PublicProfileShowTopHabits);
 
         return Result.Success(new ProfileResponse(
             user.Id,
@@ -157,10 +146,10 @@ public class GetProfileQueryHandler(
             user.GoogleCalendarAutoSyncStatus ?? GoogleCalendarAutoSyncStatus.Idle,
             user.GoogleCalendarLastSyncedAt,
             canViewGamification,
-            user.Handle,
-            user.SocialOptIn,
+            null,
+            false,
             TimeFormatResolver.Uses24HourClock(user.Uses24HourClockPreference, user.TimeZone),
-            publicProfile,
+            null,
             user.EffectiveProactivePushEnabled,
             user.MarketingEmailConsent,
             lastCompletionDate,

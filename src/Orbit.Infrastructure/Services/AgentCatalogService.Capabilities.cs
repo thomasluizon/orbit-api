@@ -40,7 +40,6 @@ public partial class AgentCatalogService
             .. SupportCapabilities(),
             .. SyncCapabilities(),
             .. AccountAndAuthCapabilities(),
-            .. SocialCapabilities()
         ];
     }
 
@@ -938,42 +937,6 @@ public partial class AgentCatalogService
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.FreshConfirmation,
                 equivalentControllerActions: ["SyncController.ProcessBatch"])
-        ];
-    }
-
-    private static AgentCapability[] SocialCapabilities()
-    {
-        return
-        [
-            CreateCapability(
-                AgentCapabilityIds.SocialManage,
-                "Manage Social",
-                "Manages friendships, cheers, the friend feed, handles, blocking, and reporting. Cataloged but not exposed to the agent in this phase.",
-                "social",
-                AgentScopes.ManageSocial,
-                AgentRiskClass.Low,
-                isMutation: true,
-                isPhaseOneReadOnly: false,
-                AgentConfirmationRequirement.None,
-                equivalentControllerActions:
-                [
-                    "FriendsController.GetFriends",
-                    "FriendsController.GetFriendProfile",
-                    "FriendsController.GetInvitePreview",
-                    "FriendsController.GetFeed",
-                    "FriendsController.GetCheers",
-                    "FriendsController.SendRequest",
-                    "FriendsController.AcceptRequest",
-                    "FriendsController.RemoveFriend",
-                    "FriendsController.SendCheer",
-                    "FriendsController.Block",
-                    "FriendsController.Unblock",
-                    "FriendsController.Report",
-                    "ProfileController.SetHandle",
-                    "ProfileController.SetSocialOptIn",
-                    "ProfileController.UpdatePublicProfile",
-                    "PublicProfileController.GetPublicProfile"
-                ])
         ];
     }
 

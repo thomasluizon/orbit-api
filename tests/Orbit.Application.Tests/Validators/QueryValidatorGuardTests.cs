@@ -194,14 +194,6 @@ public class QueryValidatorGuardTests
     }
 
     [Fact]
-    public void GetPublicProfile_GuardsSlug()
-    {
-        var validator = new GetPublicProfileQueryValidator();
-        RejectsProperty(validator, new GetPublicProfileQuery(string.Empty), "Slug");
-        Accepts(validator, new GetPublicProfileQuery("astra"));
-    }
-
-    [Fact]
     public void GetGoalById_GuardsUserIdAndGoalId()
     {
         var validator = new GetGoalByIdQueryValidator();

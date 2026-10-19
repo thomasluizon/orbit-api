@@ -1,5 +1,4 @@
 using FluentAssertions;
-using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Chat;
@@ -38,8 +37,7 @@ public class GetProfileQueryHandlerTests
             _habitLogReader,
             _userDateService,
             _featureFlagService,
-            _payGate,
-            Options.Create(new FrontendSettings()));
+            _payGate);
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
     }
 
@@ -67,6 +65,30 @@ public class GetProfileQueryHandlerTests
             Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
             Arg.Any<CancellationToken>())
             .Returns(new List<StreakFreeze>().AsReadOnly());
+    }
+
+    [Fact]
+    public async Task Handle_LegacySocialSettings_ReturnsNeutralCompatibilityFields()
+    {
+        var user = CreateTestUser();
+        typeof(User).GetProperty(nameof(User.Handle))!.SetValue(user, "old_handle");
+        typeof(User).GetProperty(nameof(User.SocialOptIn))!.SetValue(user, true);
+        typeof(User).GetProperty(nameof(User.PublicProfileSlug))!.SetValue(user, "OLDPUBLICSLUG");
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        StubFreezeRepoEmpty();
+
+        var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var payload = JsonSerializer.SerializeToElement(result.Value, JsonSerializerOptions.Web);
+        payload.GetProperty("handle").ValueKind.Should().Be(JsonValueKind.Null);
+        payload.GetProperty("socialOptIn").GetBoolean().Should().BeFalse();
+        payload.GetProperty("publicProfile").ValueKind.Should().Be(JsonValueKind.Null);
+        payload.GetProperty("name").GetString().Should().Be(user.Name);
+        payload.GetProperty("totalXp").GetInt32().Should().Be(user.TotalXp);
+        user.Handle.Should().Be("old_handle");
+        user.SocialOptIn.Should().BeTrue();
+        user.PublicProfileSlug.Should().Be("OLDPUBLICSLUG");
     }
 
     [Theory]
@@ -205,16 +227,7 @@ public class GetProfileQueryHandlerTests
             user.Handle,
             user.SocialOptIn,
             Uses24HourClock = true,
-            PublicProfile = new
-            {
-                Enabled = false,
-                Slug = (string?)null,
-                ShareUrl = (string?)null,
-                ShowStreak = true,
-                ShowLevel = true,
-                ShowAchievements = true,
-                ShowTopHabits = false
-            },
+            PublicProfile = (Orbit.Application.Profile.Commands.PublicProfileSettings?)null,
             ProactiveAstraEnabled = user.EffectiveProactivePushEnabled,
             user.MarketingEmailConsent,
             LastCompletionDate = (DateOnly?)null

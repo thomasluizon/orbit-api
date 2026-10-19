@@ -1,7 +1,6 @@
 using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Habits.Services;
-using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -17,7 +16,6 @@ public class UserStreakServiceTests
     private readonly IGenericRepository<HabitLog> _habitLogRepository = Substitute.For<IGenericRepository<HabitLog>>();
     private readonly IGenericRepository<StreakFreeze> _streakFreezeRepository = Substitute.For<IGenericRepository<StreakFreeze>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
-    private readonly IFriendFeedEventEmitter _feedEmitter = Substitute.For<IFriendFeedEventEmitter>();
     private readonly UserStreakService _sut;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -30,7 +28,6 @@ public class UserStreakServiceTests
                 _habitLogRepository,
                 _streakFreezeRepository),
             _userDateService,
-            _feedEmitter,
             new HabitScheduleSnapshotStore(_habitRepository));
     }
 
@@ -219,7 +216,7 @@ public class UserStreakServiceTests
     }
 
     [Fact]
-    public async Task CalculateAsync_DailyHabit_ReturnsFreshStateWithoutMutatingUserOrEmittingEvent()
+    public async Task CalculateAsync_DailyHabit_ReturnsFreshStateWithoutMutatingUser()
     {
         var user = User.Create("Alex", "alex@test.com").Value;
         user.SetStreakState(1, 9, new DateOnly(2026, 4, 1));
@@ -237,10 +234,6 @@ public class UserStreakServiceTests
         user.CurrentStreak.Should().Be(1);
         user.LongestStreak.Should().Be(9);
         user.LastActiveDate.Should().Be(new DateOnly(2026, 4, 1));
-        await _feedEmitter.DidNotReceive().EmitStreakMilestonesAsync(
-            Arg.Any<User>(),
-            Arg.Any<int>(),
-            Arg.Any<CancellationToken>());
         await _userRepository.DidNotReceive().FindOneTrackedAsync(
             Arg.Any<System.Linq.Expressions.Expression<Func<User, bool>>>(),
             Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),

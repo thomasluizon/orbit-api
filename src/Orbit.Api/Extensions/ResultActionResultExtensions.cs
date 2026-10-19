@@ -42,18 +42,12 @@ public static class ResultActionResultExtensions
         [ErrorCodes.AlreadyReferred] = StatusCodes.Status409Conflict,
         [ErrorCodes.SkipUndoConflict] = StatusCodes.Status409Conflict,
         [ErrorCodes.ConcurrentUpdateConflict] = StatusCodes.Status409Conflict,
-        [ErrorCodes.HandleTaken] = StatusCodes.Status409Conflict,
-        [ErrorCodes.AlreadyFriends] = StatusCodes.Status409Conflict,
-        [ErrorCodes.FriendLimitReached] = StatusCodes.Status409Conflict,
         [ErrorCodes.StreakRepairUnavailable] = StatusCodes.Status409Conflict,
         [ErrorCodes.StreakGapRepairUnavailable] = StatusCodes.Status409Conflict,
         [DomainErrors.InsufficientStreakFreezes.Code] = StatusCodes.Status409Conflict,
 
-        [ErrorCodes.SocialDisabled] = StatusCodes.Status403Forbidden,
-        [ErrorCodes.Blocked] = StatusCodes.Status403Forbidden,
         [ErrorCodes.ApiKeyCreationChallengeRequired] = StatusCodes.Status428PreconditionRequired,
 
-        [ErrorCodes.FriendRequestNotFound] = StatusCodes.Status404NotFound,
 
         [ErrorCodes.InternalServerError] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.PaymentServiceUnavailable] = StatusCodes.Status503ServiceUnavailable,

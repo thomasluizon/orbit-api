@@ -9,7 +9,6 @@ using Orbit.Application.Gamification.Services;
 using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Commands;
 using Orbit.Application.Habits.Services;
-using Orbit.Application.Social.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -602,9 +601,7 @@ public class BulkLogHabitsCommandHandlerTests
             new GamificationRepositories(
                 userRepo, habitRepo, habitLogRepo, goalRepo, achievementRepo, notificationRepo, xpAwardRepo,
                 Substitute.For<IFoundingAchievementReader>()),
-            new GamificationNotifiers(
-                Substitute.For<IPushNotificationService>(),
-                Substitute.For<IFriendFeedEventEmitter>()),
+            Substitute.For<IPushNotificationService>(),
             userDateService,
             new XpAwarder(xpAwardRepo),
             unitOfWork,

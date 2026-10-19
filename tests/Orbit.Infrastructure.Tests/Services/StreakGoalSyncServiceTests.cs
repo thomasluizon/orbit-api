@@ -8,7 +8,6 @@ using Orbit.Application.Common;
 using Orbit.Application.Gamification;
 using Orbit.Application.Gamification.Services;
 using Orbit.Application.Goals.Services;
-using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -423,9 +422,7 @@ public class StreakGoalSyncServiceTests
             new FoundingAchievementReader(dbContext));
         return new GamificationService(
             repos,
-            new GamificationNotifiers(
-                Substitute.For<IPushNotificationService>(),
-                Substitute.For<IFriendFeedEventEmitter>()),
+            Substitute.For<IPushNotificationService>(),
             Substitute.For<IUserDateService>(),
             new XpAwarder(new GenericRepository<XpAwardLog>(dbContext)),
             unitOfWork,

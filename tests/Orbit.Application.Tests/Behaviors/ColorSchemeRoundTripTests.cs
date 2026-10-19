@@ -1,5 +1,4 @@
 using FluentAssertions;
-using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Profile.Commands;
@@ -51,8 +50,7 @@ public class ColorSchemeRoundTripTests
             _habitLogReader,
             _userDateService,
             _featureFlagService,
-            _payGate,
-            Options.Create(new FrontendSettings()));
+            _payGate);
     }
 
     private User ArrangeUser()

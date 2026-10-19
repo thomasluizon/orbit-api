@@ -124,7 +124,7 @@ public class GoogleAuthFirstLoginRaceTests
         var user = database.Context.Users.Single();
         user.GoogleAccessToken.Should().Be("google-access");
         user.Language.Should().Be("pt-BR");
-        user.Handle.Should().NotBeNullOrEmpty();
+        user.Handle.Should().BeNull();
         jobs.Received(2).Create(Arg.Is<Job>(job => job.Type == typeof(CompleteSignupJob) && (bool)job.Args[1]), Arg.Any<IState>());
         jobs.DidNotReceive().Create(Arg.Is<Job>(job => job.Type == typeof(CompleteSignupJob) && !(bool)job.Args[1]), Arg.Any<IState>());
         await CompleteQueuedSignupAsync(database, jobs, queued);

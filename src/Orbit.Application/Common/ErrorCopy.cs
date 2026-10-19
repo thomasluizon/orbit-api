@@ -204,16 +204,6 @@ public static partial class ErrorCopy
     /// <summary>Friends and cheers.</summary>
     private static readonly (string Code, string En, string PtBr)[] Social =
     [
-        (ErrorCodes.SocialDisabled, "Social features are off. Turn them on in settings to use this.", "Os recursos sociais estão desativados. Ative nas configurações para usar isto."),
-        (ErrorCodes.HandleTaken, "Someone already uses that handle. Pick another one.", "Alguém já usa esse nome de usuário. Escolha outro."),
-        (ErrorCodes.FriendLimitReached, "You have {0} friends, which is the limit. Remove one to add another.", "Você tem {0} amigos, que é o limite. Remova um para adicionar outro."),
-        (ErrorCodes.AlreadyFriends, "You are already connected with this person.", "Você já está conectado com esta pessoa."),
-        (ErrorCodes.Blocked, "This is not available with this person.", "Isto não está disponível com esta pessoa."),
-        (ErrorCodes.NotFriends, "You can only do this with someone who accepted your request.", "Você só pode fazer isto com alguém que aceitou seu pedido."),
-        (ErrorCodes.ContentRejected, "This note cannot be sent. Reword it and try again.", "Esta mensagem não pode ser enviada. Reescreva e tente de novo."),
-        (ErrorCodes.FriendRequestNotFound, "That friend request is not here any more.", "Esse pedido de amizade não está mais aqui."),
-        (ErrorCodes.CheerNotFound, "That cheer is not here any more.", "Essa torcida não está mais aqui."),
-        (DomainErrors.InvalidHandle.Code, "A handle uses 3 to 20 letters, numbers or underscores.", "Um nome de usuário usa de 3 a 20 letras, números ou sublinhados."),
         (DomainErrors.CannotFriendSelf.Code, "You cannot send yourself a friend request.", "Você não pode enviar um pedido de amizade para você mesmo."),
         (DomainErrors.FriendshipNotPending.Code, "This friend request was already answered.", "Este pedido de amizade já foi respondido."),
         (DomainErrors.CannotCheerSelf.Code, "You can cheer a friend, not yourself.", "Você pode torcer por um amigo, não por você."),
