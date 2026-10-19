@@ -65,7 +65,7 @@ public class AccountDeletionServiceTests
         }
         if (failure)
         {
-            stripe.SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>())
+            stripe.SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>(), Arg.Any<string?>())
                 .ThrowsAsync(new BillingProviderException("unavailable"));
             playBilling.CancelAsync("play-token", Arg.Any<CancellationToken>())
                 .ThrowsAsync(new BillingProviderException("unavailable"));
@@ -78,7 +78,7 @@ public class AccountDeletionServiceTests
             if (play)
                 await playBilling.Received(expectedInlineCalls).CancelAsync("play-token", Arg.Any<CancellationToken>());
             else
-                await stripe.Received(expectedInlineCalls).SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>());
+                await stripe.Received(expectedInlineCalls).SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>(), Arg.Any<string?>());
             if (handedOff)
                 queued.Should().NotBeNull();
             using var beforeRemoval = factory.CreateContext();
@@ -121,7 +121,7 @@ public class AccountDeletionServiceTests
         if (play)
             await playBilling.Received(expectedInlineCalls).CancelAsync("play-token", Arg.Any<CancellationToken>());
         else
-            await stripe.Received(expectedInlineCalls).SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>());
+            await stripe.Received(expectedInlineCalls).SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>(), Arg.Any<string?>());
         if (handedOff && queueFailure == 0)
         {
             await stripe.DidNotReceive().GetSubscriptionDetailsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
@@ -131,7 +131,7 @@ public class AccountDeletionServiceTests
             logger.ReceivedCalls().Should().Contain(call => call.GetMethodInfo().Name == "Log"
                 && (LogLevel)call.GetArguments()[0]! == LogLevel.Error
                 && call.GetArguments()[2]!.ToString()!.Contains(user.Id.ToString()));
-            stripe.SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+            stripe.SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>(), Arg.Any<string?>()).Returns(Task.CompletedTask);
             playBilling.CancelAsync("play-token", Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
             using var retryScope = provider.CreateScope();
             var retryJob = retryScope.ServiceProvider.GetRequiredService<CancelSubscriptionOnDeletionJob>();
@@ -142,7 +142,7 @@ public class AccountDeletionServiceTests
             if (play)
                 await playBilling.Received(1).CancelAsync("play-token", Arg.Any<CancellationToken>());
             else
-                await stripe.Received(1).SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>());
+                await stripe.Received(1).SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>(), Arg.Any<string?>());
         }
         else if (queueFailure == 0)
             queued.Should().BeNull();

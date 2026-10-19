@@ -342,6 +342,14 @@ public partial class User : Entity
         ArgumentException.ThrowIfNullOrWhiteSpace(subscriptionId);
         if (IsDeactivated || StripeSubscriptionId != subscriptionId || !StripeRenewalStoppedByDeletion)
             throw new InvalidOperationException("Only deletion-owned Stripe cancellation can be restored on an active account.");
+        ReleaseStripeDeletionCancellation(subscriptionId);
+    }
+
+    public void ReleaseStripeDeletionCancellation(string subscriptionId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(subscriptionId);
+        if (StripeSubscriptionId != subscriptionId || !StripeRenewalStoppedByDeletion)
+            throw new InvalidOperationException("Only linked Stripe deletion cancellation ownership can be released.");
         StripeRenewalStoppedByDeletion = false;
     }
 

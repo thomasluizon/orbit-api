@@ -126,9 +126,15 @@ public partial class AccountDeletionService(
         var user = await dbContext.Users.IgnoreQueryFilters().FirstOrDefaultAsync(u => u.Id == userId, ct);
         var nowAtUtc = DateTime.UtcNow;
         if (user is not { IsDeactivated: true, ScheduledDeletionAt: not null } || user.ScheduledDeletionAt > nowAtUtc)
+        {
+            LogErasureRecheckSkipped(logger, userId, "account is no longer due for deletion");
             return false;
+        }
         if (user.StripeSubscriptionId != stripeSubscriptionId || user.PlayPurchaseToken != playPurchaseToken)
+        {
+            LogErasureRecheckSkipped(logger, userId, "subscription identifiers changed");
             return false;
+        }
 
         var contacts = services.GetRequiredService<IGenericRepository<MarketingContact>>();
         await MarketingContactOptOut.RecordAsync(user.Email, contacts, unitOfWork, ct);
@@ -240,5 +246,8 @@ public partial class AccountDeletionService(
 
     [LoggerMessage(EventId = 8, Level = LogLevel.Error, Message = "Billing cancellation for account {UserId} is unconfirmed past the erasure deferral limit; cancellation job {JobId} queued before erasure")]
     private static partial void LogCancellationDeferred(ILogger logger, Guid userId, string jobId);
+
+    [LoggerMessage(EventId = 10, Level = LogLevel.Warning, Message = "Skipped account erasure for user {UserId}: {Reason}")]
+    private static partial void LogErasureRecheckSkipped(ILogger logger, Guid userId, string reason);
 
 }
