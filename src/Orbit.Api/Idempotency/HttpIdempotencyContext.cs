@@ -11,6 +11,7 @@ namespace Orbit.Api.Idempotency;
 /// </summary>
 public sealed class HttpIdempotencyContext(IHttpContextAccessor httpContextAccessor) : IIdempotencyContext
 {
+    public const string McpRequestKey = "McpIdempotencyKey";
     private const string IdempotencyKeyHeaderName = "Idempotency-Key";
     private const int MaxKeyLength = 200;
     private readonly Dictionary<string, int> _nextOrdinalByType = new(StringComparer.Ordinal);
@@ -35,7 +36,10 @@ public sealed class HttpIdempotencyContext(IHttpContextAccessor httpContextAcces
         if (httpContext is null)
             return false;
 
-        var key = httpContext.Request.Headers[IdempotencyKeyHeaderName].ToString().Trim();
+        var key = httpContext.Items[McpRequestKey] as string
+            ?? httpContext.Request.Headers[IdempotencyKeyHeaderName].ToString().Trim();
+        if (httpContext.Items.ContainsKey(McpRequestKey))
+            key = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(key)));
         if (string.IsNullOrEmpty(key) || key.Length > MaxKeyLength)
             return false;
 

@@ -33,7 +33,7 @@ public partial class OAuthController(
     private const string InvalidRedirectUriError = "invalid_redirect_uri";
     private const string MissingStateError = "invalid_request";
     private static readonly string[] SupportedResponseTypes = ["code"];
-    private static readonly string[] SupportedGrantTypes = ["authorization_code"];
+    private static readonly string[] SupportedGrantTypes = ["authorization_code", "refresh_token"];
     private static readonly string[] SupportedCodeChallengeMethods = ["S256"];
     private static readonly string[] SupportedTokenEndpointAuthMethods = ["none"];
     private static readonly string[] SupportedBearerMethods = ["header"];
@@ -132,6 +132,9 @@ public partial class OAuthController(
 
         [FromQuery(Name = "google_error")]
         public string? GoogleError { get; init; }
+
+        [FromQuery(Name = "scope")]
+        public string? Scope { get; init; }
     }
 
     [HttpGet("/oauth/authorize")]
@@ -150,6 +153,8 @@ public partial class OAuthController(
         if (string.IsNullOrEmpty(request.State))
             return BadRequest(new { error = MissingStateError, error_description = "state is required for CSRF protection" });
 
+        if (RequestedScopes(request.Scope) is null)
+            return BadRequest(new { error = "invalid_scope" });
         var language = ResolveLanguage();
         var errorMessage = request.GoogleError switch
         {
@@ -169,7 +174,7 @@ public partial class OAuthController(
         var html = OAuthLoginPage.Render(
             request.ClientId, request.RedirectUri, request.State,
             request.CodeChallenge, request.CodeChallengeMethod, request.Nonce, errorMessage, language,
-            botProtection.Enabled, botProtection.SiteKey);
+            botProtection.Enabled, botProtection.SiteKey, request.Scope);
 
         return Content(html, "text/html");
     }
@@ -207,7 +212,7 @@ public partial class OAuthController(
     public record VerifyCodeRequest(
         string Email, string Code,
         string State, string CodeChallenge, string RedirectUri, string ClientId,
-        string? Nonce = null);
+        string? Nonce = null, string? Scope = null);
 
     [HttpPost("/oauth/verify-code")]
     [DistributedRateLimit("auth")]
@@ -225,14 +230,12 @@ public partial class OAuthController(
         if (result.IsFailure)
             return result.ToErrorResult();
 
-        var loginResponse = result.Value;
-        var authCode = authStore.CreateCode(
-            loginResponse.UserId, request.CodeChallenge, request.RedirectUri, request.ClientId, request.Nonce);
-
-        var separator = request.RedirectUri.Contains('?') ? "&" : "?";
-        var redirectUrl = $"{request.RedirectUri}{separator}code={Uri.EscapeDataString(authCode)}&state={Uri.EscapeDataString(request.State)}";
-
-        return Ok(new { redirectUrl });
+        var scopes = RequestedScopes(request.Scope);
+        if (scopes is null)
+            return BadRequest(new { error = "invalid_scope" });
+        var consent = authStore.CreatePendingConsent(new ConsentEntry(result.Value.UserId,
+            request.CodeChallenge, request.RedirectUri, request.ClientId, request.State, request.Nonce, ResolveLanguage(), scopes));
+        return Ok(new { redirectUrl = $"/oauth/consent?ticket={Uri.EscapeDataString(consent)}" });
     }
 
     /// <summary>
@@ -248,7 +251,8 @@ public partial class OAuthController(
         [FromQuery] string state,
         [FromQuery] string code_challenge,
         [FromQuery] string code_challenge_method,
-        [FromQuery] string? nonce = null)
+        [FromQuery] string? nonce = null,
+        [FromQuery] string? scope = null)
     {
         if (string.IsNullOrWhiteSpace(client_id)
             || string.IsNullOrEmpty(state)
@@ -257,13 +261,16 @@ public partial class OAuthController(
             || !IsRedirectUriAllowed(redirect_uri))
             return InvalidGoogleState();
 
+        var requestedScopes = RequestedScopes(scope);
+        if (requestedScopes is null)
+            return BadRequest(new { error = "invalid_scope" });
         var googleRedirectUri = BuildGoogleRedirectUri();
         if (string.IsNullOrWhiteSpace(googleSettings.Value.ClientId)
             || !googleSettings.Value.AllowedRedirectUris.Contains(googleRedirectUri, StringComparer.Ordinal))
             return RedirectToAuthorize(client_id, redirect_uri, state, code_challenge, nonce, "unavailable");
 
         var pending = authStore.TryCreateGoogleRequest(client_id, redirect_uri, state,
-            code_challenge, nonce, googleRedirectUri, ResolveLanguage());
+            code_challenge, nonce, googleRedirectUri, ResolveLanguage(), requestedScopes);
         if (pending is null)
             return RedirectToAuthorize(client_id, redirect_uri, state, code_challenge, nonce, "unavailable");
 
@@ -301,10 +308,9 @@ public partial class OAuthController(
         if (result.IsFailure)
             return RedirectToAuthorize(pending, "failed");
 
-        var authCode = authStore.CreateCode(result.Value.UserId, pending.CodeChallenge,
-            pending.RedirectUri, pending.ClientId, pending.Nonce);
-        var separator = pending.RedirectUri.Contains('?') ? "&" : "?";
-        return Redirect($"{pending.RedirectUri}{separator}code={Uri.EscapeDataString(authCode)}&state={Uri.EscapeDataString(pending.ClientState)}");
+        var consent = authStore.CreatePendingConsent(new ConsentEntry(result.Value.UserId, pending.CodeChallenge,
+            pending.RedirectUri, pending.ClientId, pending.ClientState, pending.Nonce, pending.Language, pending.Scopes));
+        return Redirect($"/oauth/consent?ticket={Uri.EscapeDataString(consent)}");
     }
 
     private static IActionResult InvalidGoogleState() => new ContentResult
@@ -351,17 +357,21 @@ public partial class OAuthController(
     [Consumes("application/x-www-form-urlencoded")]
     public async Task<IActionResult> Token(
         [FromForm] string grant_type,
-        [FromForm] string code,
-        [FromForm] string code_verifier,
-        [FromForm] string redirect_uri,
-        CancellationToken ct)
+        [FromForm] string? code,
+        [FromForm] string? code_verifier,
+        [FromForm] string? redirect_uri,
+        CancellationToken ct,
+        [FromForm] string? refresh_token = null)
     {
+        if (grant_type == "refresh_token")
+            return await RefreshAsync(refresh_token, ct);
         if (grant_type != "authorization_code")
             return BadRequest(new { error = "unsupported_grant_type" });
 
-        if (!IsRedirectUriAllowed(redirect_uri))
+        if (redirect_uri is null || !IsRedirectUriAllowed(redirect_uri))
             return BadRequest(new { error = InvalidRedirectUriError });
-
+        if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(code_verifier))
+            return BadRequest(new { error = "invalid_grant" });
         var entry = authStore.ExchangeCode(code, code_verifier, redirect_uri);
         if (entry is null)
             return BadRequest(new { error = "invalid_grant", error_description = "Invalid, expired, or already used authorization code" });
@@ -374,8 +384,9 @@ public partial class OAuthController(
         var keyResult = ApiKey.Create(
             entry.UserId,
             "Claude.ai",
-            AgentScopes.ClaudeDefaultScopes,
-            isReadOnly: false);
+            entry.Scopes ?? AgentScopes.ClaudeDefaultScopes,
+            isReadOnly: entry.IsReadOnly,
+            expiresAtUtc: DateTime.UtcNow.AddHours(1));
         if (keyResult.IsFailure)
         {
             if (logger.IsEnabled(LogLevel.Error))
@@ -394,12 +405,78 @@ public partial class OAuthController(
         {
             ["access_token"] = rawKey,
             ["token_type"] = "Bearer",
-            ["scope"] = string.Join(' ', AgentScopes.ClaudeDefaultScopes)
+            ["scope"] = string.Join(' ', apiKey.Scopes),
+            ["expires_in"] = 3600,
+            ["refresh_token"] = authStore.CreateRefreshToken(new RefreshEntry(entry.UserId, apiKey.Id, entry.ClientId))
         };
         if (!string.IsNullOrEmpty(entry.Nonce))
             response["nonce"] = entry.Nonce;
 
         return Ok(response);
+    }
+
+    [HttpGet("/oauth/consent")]
+    public IActionResult Consent([FromQuery] string ticket)
+    {
+        var entry = authStore.ReadPendingConsent(ticket);
+        if (entry is null)
+            return InvalidGoogleState();
+        return Content(OAuthConsentPage.Render(ticket, entry), "text/html");
+    }
+
+    [HttpPost("/oauth/consent")]
+    [Consumes("application/x-www-form-urlencoded")]
+    public IActionResult GrantConsent([FromForm] string ticket, [FromForm] string access)
+    {
+        if (access is not ("read_only" or "requested"))
+            return BadRequest(new { error = "invalid_request" });
+        var entry = authStore.ConsumePendingConsent(ticket);
+        if (entry is null || !IsRedirectUriAllowed(entry.RedirectUri))
+            return InvalidGoogleState();
+        var readOnly = access == "read_only";
+        var scopes = entry.Scopes ?? AgentScopes.ClaudeDefaultScopes;
+        if (readOnly)
+            scopes = scopes.Where(scope => scope.StartsWith("read_", StringComparison.Ordinal) || scope == AgentScopes.CatalogRead).ToArray();
+        var code = authStore.CreateCode(entry.UserId, entry.CodeChallenge, entry.RedirectUri,
+            entry.ClientId, entry.Nonce, scopes, readOnly);
+        var separator = entry.RedirectUri.Contains('?') ? "&" : "?";
+        return Redirect($"{entry.RedirectUri}{separator}code={Uri.EscapeDataString(code)}&state={Uri.EscapeDataString(entry.State)}");
+    }
+
+    private async Task<IActionResult> RefreshAsync(string? refreshToken, CancellationToken ct)
+    {
+        var grant = string.IsNullOrWhiteSpace(refreshToken) ? null : authStore.ConsumeRefreshToken(refreshToken);
+        if (grant is null)
+            return BadRequest(new { error = "invalid_grant" });
+        var previous = await apiKeyRepository.GetByIdAsync(grant.ApiKeyId, ct);
+        if (previous is null || previous.IsRevoked || previous.UserId != grant.UserId)
+            return BadRequest(new { error = "invalid_grant" });
+        var tracked = await apiKeyRepository.FindOneTrackedAsync(key => key.Id == previous.Id, cancellationToken: ct);
+        if (tracked is null || tracked.IsRevoked)
+            return BadRequest(new { error = "invalid_grant" });
+        var created = ApiKey.Create(grant.UserId, "Claude.ai", previous.Scopes, previous.IsReadOnly,
+            expiresAtUtc: DateTime.UtcNow.AddHours(1));
+        if (created.IsFailure)
+            return StatusCode(500, new { error = "server_error" });
+        tracked.Revoke();
+        var (key, raw) = created.Value;
+        await apiKeyRepository.AddAsync(key, ct);
+        await unitOfWork.SaveChangesAsync(ct);
+        return Ok(new
+        {
+            access_token = raw,
+            token_type = "Bearer",
+            scope = string.Join(' ', key.Scopes),
+            expires_in = 3600,
+            refresh_token = authStore.CreateRefreshToken(new RefreshEntry(grant.UserId, key.Id, grant.ClientId))
+        });
+    }
+
+    private static IReadOnlyList<string>? RequestedScopes(string? scope)
+    {
+        var requested = string.IsNullOrWhiteSpace(scope) ? AgentScopes.ClaudeDefaultScopes
+            : scope.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct(StringComparer.Ordinal).ToArray();
+        return requested.All(item => AgentScopes.ClaudeDefaultScopes.Contains(item, StringComparer.Ordinal)) ? requested : null;
     }
 
     private bool IsRedirectUriAllowed(string redirectUri)

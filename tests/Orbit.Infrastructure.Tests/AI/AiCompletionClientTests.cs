@@ -87,7 +87,7 @@ public class AiCompletionClientTests
     {
         var client = new AiCompletionClient(BuildChatClient(new WaitingHandler()), NullLogger<AiCompletionClient>.Instance,
             Substitute.For<IAiUsageRecorder>(), TimeSpan.FromMilliseconds(50));
-        var intent = new AiIntentService(client, Substitute.For<IAiUsageRecorder>(), NullLogger<AiIntentService>.Instance);
+        var intent = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(client), Substitute.For<IAiUsageRecorder>(), NullLogger<AiIntentService>.Instance);
         Func<Task> call = kind switch
         {
             "json" => async () => await client.CompleteJsonAsync<Probe>("system", "user"),

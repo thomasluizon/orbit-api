@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 using Orbit.Domain.Common;
 
 namespace Orbit.Domain.Entities;
@@ -48,7 +49,7 @@ public class ApiKey : Entity
             return Result.Failure<(ApiKey, string)>(DomainErrors.ApiKeyScopesInvalid);
 
         var rawKey = GenerateKey();
-        var keyHash = BCrypt.Net.BCrypt.HashPassword(rawKey);
+        var keyHash = Hash(rawKey);
         var keyPrefix = rawKey[..12];
         var apiKey = new ApiKey
         {
@@ -65,6 +66,22 @@ public class ApiKey : Entity
 
         return Result.Success((apiKey, rawKey));
     }
+
+    public bool Verify(string rawKey)
+    {
+        if (KeyHash.Length != 64 || !KeyHash.All(Uri.IsHexDigit))
+            return false;
+        return CryptographicOperations.FixedTimeEquals(Convert.FromHexString(KeyHash), SHA256.HashData(Encoding.UTF8.GetBytes(rawKey)));
+    }
+
+    public void UpgradeHash(string rawKey)
+    {
+        if (!rawKey.StartsWith(KeyPrefix, StringComparison.Ordinal))
+            throw new ArgumentException("Key prefix does not match.", nameof(rawKey));
+        KeyHash = Hash(rawKey);
+    }
+
+    private static string Hash(string rawKey) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawKey)));
 
     public void Revoke() => IsRevoked = true;
 

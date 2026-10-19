@@ -1,137 +1,86 @@
-using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.Extensions.Logging;
+using System.Text.Json;
+using Orbit.Domain.Interfaces;
 
 namespace Orbit.Api.OAuth;
 
-public sealed partial class OAuthAuthorizationStore : IDisposable
+public sealed class OAuthAuthorizationStore(IOAuthStateStore states, TimeProvider timeProvider)
 {
-    private readonly ConcurrentDictionary<string, AuthorizationEntry> _codes = new();
-    private readonly ConcurrentDictionary<string, GoogleAuthorizationRequest> _googleRequests = new();
-    private readonly Timer _cleanupTimer;
-    private readonly TimeProvider _timeProvider;
     private static readonly TimeSpan CodeExpiry = TimeSpan.FromMinutes(5);
-
-    /// <summary>
-    /// Hard ceiling on pending Google sign-in requests held in memory. An entry is only allocated once a person
-    /// starts Google sign-in and it lives at most <see cref="CodeExpiry"/>, so this cap bounds the store's
-    /// footprint while leaving far more headroom than real concurrent sign-in traffic needs.
-    /// </summary>
     internal const int MaxPendingGoogleRequests = 1_000;
 
-    public OAuthAuthorizationStore(ILogger<OAuthAuthorizationStore> logger) : this(logger, TimeProvider.System) { }
-
-    public OAuthAuthorizationStore(ILogger<OAuthAuthorizationStore> logger, TimeProvider timeProvider)
-    {
-        _timeProvider = timeProvider;
-        _cleanupTimer = new Timer(_ =>
-        {
-            try { Cleanup(); }
-            catch (Exception ex) { LogCleanupFailed(logger, ex); }
-        }, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
-    }
-
-    /// <summary>
-    /// Allocates a single-use Google sign-in request, or returns <c>null</c> when the store already holds
-    /// <see cref="MaxPendingGoogleRequests"/> live entries. Expired entries are evicted first, so the cap only
-    /// refuses genuine pressure. The count is re-read after the insert and the new entry is withdrawn when it
-    /// crossed the cap, so concurrent callers can never leave the store above its ceiling.
-    /// </summary>
     public GoogleAuthorizationRequest? TryCreateGoogleRequest(string clientId, string redirectUri, string clientState,
-        string codeChallenge, string? nonce, string googleRedirectUri, string language)
+        string codeChallenge, string? nonce, string googleRedirectUri, string language, IReadOnlyList<string>? scopes = null)
     {
-        EvictExpiredGoogleRequests();
-        if (_googleRequests.Count >= MaxPendingGoogleRequests)
-            return null;
-
-        var state = NewSecret();
+        Cleanup();
         var verifier = NewSecret();
-        var challenge = Convert.ToBase64String(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)))
-            .Replace("+", "-").Replace("/", "_").TrimEnd('=');
-        var request = new GoogleAuthorizationRequest(state, clientId, redirectUri, clientState,
-            codeChallenge, nonce, googleRedirectUri, language, verifier, challenge, _timeProvider.GetUtcNow());
-        _googleRequests[state] = request;
-
-        if (_googleRequests.Count > MaxPendingGoogleRequests)
-        {
-            _googleRequests.TryRemove(state, out _);
-            return null;
-        }
-
-        return request;
+        var challenge = Challenge(verifier);
+        var request = new GoogleAuthorizationRequest(NewSecret(), clientId, redirectUri, clientState,
+            codeChallenge, nonce, googleRedirectUri, language, verifier, challenge, timeProvider.GetUtcNow(), scopes);
+        return states.Put(request.GoogleState, "google", JsonSerializer.Serialize(request),
+            timeProvider.GetUtcNow().UtcDateTime.Add(CodeExpiry), MaxPendingGoogleRequests) ? request : null;
     }
 
     public GoogleAuthorizationRequest? ConsumeGoogleRequest(string state) =>
-        _googleRequests.TryRemove(state, out var request) && !IsExpired(request.CreatedAtUtc) ? request : null;
+        Deserialize<GoogleAuthorizationRequest>(states.Take(state, "google", timeProvider.GetUtcNow().UtcDateTime));
 
-    private bool IsExpired(DateTimeOffset createdAtUtc) => _timeProvider.GetUtcNow() - createdAtUtc > CodeExpiry;
-
-    private static string NewSecret() => Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
-        .Replace("+", "-").Replace("/", "_").TrimEnd('=');
-
-    public string CreateCode(Guid userId, string codeChallenge, string redirectUri, string clientId, string? nonce = null)
+    public string CreateCode(Guid userId, string codeChallenge, string redirectUri, string clientId, string? nonce = null,
+        IReadOnlyList<string>? scopes = null, bool isReadOnly = false)
     {
-        var code = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
-            .Replace("+", "-").Replace("/", "_").TrimEnd('=');
-
+        Cleanup();
+        var code = NewSecret();
 #pragma warning disable ORBIT0004 // CreateCode stamps AuthorizationEntry.CreatedAt for the authorization code TTL, independently of the user timezone. https://github.com/thomasluizon/orbit-tickets/issues/230
-        var entry = new AuthorizationEntry(userId, codeChallenge, redirectUri, clientId, nonce, DateTime.UtcNow);
+        var entry = new AuthorizationEntry(userId, codeChallenge, redirectUri, clientId, nonce, DateTime.UtcNow, scopes, isReadOnly);
 #pragma warning restore ORBIT0004
-        _codes[code] = entry;
+        states.Put(code, "code", JsonSerializer.Serialize(entry), timeProvider.GetUtcNow().UtcDateTime.Add(CodeExpiry));
         return code;
     }
 
     public AuthorizationEntry? ExchangeCode(string code, string codeVerifier, string redirectUri)
     {
-        if (!_codes.TryRemove(code, out var entry))
+        var entry = Deserialize<AuthorizationEntry>(states.Take(code, "code", timeProvider.GetUtcNow().UtcDateTime));
+        if (entry is null)
             return null;
-
 #pragma warning disable ORBIT0004 // ExchangeCode compares elapsed time since AuthorizationEntry.CreatedAt with CodeExpiry before accepting a code. https://github.com/thomasluizon/orbit-tickets/issues/230
         if (DateTime.UtcNow - entry.CreatedAt > CodeExpiry)
 #pragma warning restore ORBIT0004
             return null;
+        return entry.RedirectUri == redirectUri && CryptographicOperations.FixedTimeEquals(
+            Encoding.ASCII.GetBytes(Challenge(codeVerifier)), Encoding.ASCII.GetBytes(entry.CodeChallenge)) ? entry : null;
+    }
 
-        if (entry.RedirectUri != redirectUri)
-            return null;
+    public string CreatePendingConsent(ConsentEntry entry) => Put("consent", entry, CodeExpiry);
+    public ConsentEntry? ReadPendingConsent(string secret) => Deserialize<ConsentEntry>(states.Read(secret, "consent", timeProvider.GetUtcNow().UtcDateTime));
+    public ConsentEntry? ConsumePendingConsent(string secret) => Deserialize<ConsentEntry>(states.Take(secret, "consent", timeProvider.GetUtcNow().UtcDateTime));
+    public string CreateRefreshToken(RefreshEntry entry) => Put("refresh", entry, TimeSpan.FromDays(30));
+    public RefreshEntry? ConsumeRefreshToken(string secret) => Deserialize<RefreshEntry>(states.Take(secret, "refresh", timeProvider.GetUtcNow().UtcDateTime));
 
-        var hash = SHA256.HashData(Encoding.ASCII.GetBytes(codeVerifier));
-        var computed = Convert.ToBase64String(hash)
-            .Replace("+", "-").Replace("/", "_").TrimEnd('=');
-
-        if (computed != entry.CodeChallenge)
-            return null;
-
-        return entry;
+    private string Put<T>(string kind, T entry, TimeSpan lifetime)
+    {
+        Cleanup();
+        var secret = NewSecret();
+        states.Put(secret, kind, JsonSerializer.Serialize(entry), timeProvider.GetUtcNow().UtcDateTime.Add(lifetime));
+        return secret;
     }
 
     private void Cleanup()
     {
 #pragma warning disable ORBIT0004 // Cleanup evicts authorization codes whose CreatedAt instant precedes the CodeExpiry cutoff. https://github.com/thomasluizon/orbit-tickets/issues/230
-        var cutoff = DateTime.UtcNow - CodeExpiry;
+        states.RemoveExpired(DateTime.UtcNow);
 #pragma warning restore ORBIT0004
-        foreach (var kvp in _codes)
-        {
-            if (kvp.Value.CreatedAt < cutoff)
-                _codes.TryRemove(kvp.Key, out _);
-        }
-        EvictExpiredGoogleRequests();
     }
 
-    private void EvictExpiredGoogleRequests()
-    {
-        foreach (var kvp in _googleRequests)
-        {
-            if (IsExpired(kvp.Value.CreatedAtUtc))
-                _googleRequests.TryRemove(kvp.Key, out _);
-        }
-    }
-
-    public void Dispose() => _cleanupTimer.Dispose();
-
-    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "OAuth authorization store cleanup failed")]
-    private static partial void LogCleanupFailed(ILogger logger, Exception ex);
+    private static T? Deserialize<T>(string? payload) => payload is null ? default : JsonSerializer.Deserialize<T>(payload);
+    private static string NewSecret() => Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+        .Replace("+", "-").Replace("/", "_").TrimEnd('=');
+    private static string Challenge(string verifier) => Convert.ToBase64String(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)))
+        .Replace("+", "-").Replace("/", "_").TrimEnd('=');
 }
+
+public record ConsentEntry(Guid UserId, string CodeChallenge, string RedirectUri, string ClientId,
+    string State, string? Nonce, string Language, IReadOnlyList<string>? Scopes = null);
+public record RefreshEntry(Guid UserId, Guid ApiKeyId, string ClientId);
 
 public record AuthorizationEntry(
     Guid UserId,
@@ -139,7 +88,9 @@ public record AuthorizationEntry(
     string RedirectUri,
     string ClientId,
     string? Nonce,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    IReadOnlyList<string>? Scopes = null,
+    bool IsReadOnly = false);
 
 public record GoogleAuthorizationRequest(
     string GoogleState,
@@ -152,4 +103,5 @@ public record GoogleAuthorizationRequest(
     string Language,
     string GoogleCodeVerifier,
     string GoogleCodeChallenge,
-    DateTimeOffset CreatedAtUtc);
+    DateTimeOffset CreatedAtUtc,
+    IReadOnlyList<string>? Scopes = null);

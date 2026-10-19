@@ -19,7 +19,7 @@ public partial class AgentOperationExecutor(
     IPendingOperationChangePreviewer changePreviewer,
     IPendingAgentOperationStore pendingOperationStore,
     IUnitOfWork unitOfWork,
-    ILogger<AgentOperationExecutor> logger) : IAgentOperationExecutor
+    ILogger<AgentOperationExecutor> logger) : IAgentOperationExecutor, Orbit.Application.Chat.Commands.IAgentMutationRunner
 {
     private const int MaxToolConcurrencyAttempts = 3;
     private const string UnknownOperationCapabilityId = "unknown";

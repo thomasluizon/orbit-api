@@ -14,7 +14,7 @@ using Orbit.Infrastructure.Services.Prompts;
 namespace Orbit.Infrastructure.Services;
 
 public sealed partial class AiIntentService(
-    AiCompletionClient aiClient,
+    BudgetedAiCompletionClient aiClient,
     IAiUsageRecorder usageRecorder,
     ILogger<AiIntentService> logger) : IAiIntentService
 {
@@ -148,9 +148,9 @@ public sealed partial class AiIntentService(
                 LogCallingAiWithTools(logger);
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-            var round = streamSink is null
-                ? await CompleteBufferedRoundAsync(messages, options, userId, cancellationToken)
-                : await CompleteStreamingRoundAsync(messages, options, userId, streamSink, stopwatch, cancellationToken);
+            var round = await aiClient.RunAsync(userId, client => streamSink is null
+                ? CompleteBufferedRoundAsync(client, messages, options, userId, cancellationToken)
+                : CompleteStreamingRoundAsync(client, messages, options, userId, streamSink, stopwatch, cancellationToken), cancellationToken);
 
             stopwatch.Stop();
             if (logger.IsEnabled(LogLevel.Debug))
@@ -193,6 +193,10 @@ public sealed partial class AiIntentService(
                 IsTruncated = round.IsTruncated
             });
         }
+        catch (AiBudgetExceededException)
+        {
+            return Result.Failure<AiResponse>(AiBudgetExceededException.Error);
+        }
         catch (JsonException ex)
         {
             if (logger.IsEnabled(LogLevel.Error))
@@ -208,12 +212,13 @@ public sealed partial class AiIntentService(
     }
 
     private async Task<CompletedRound> CompleteBufferedRoundAsync(
+        AiCompletionClient client,
         List<ChatMessage> messages,
         ChatCompletionOptions options,
         Guid? userId,
         CancellationToken cancellationToken)
     {
-        var completion = await aiClient.ChatClient.CompleteChatAsync(messages, options, cancellationToken);
+        var completion = await client.ChatClient.CompleteChatAsync(messages, options, cancellationToken);
         var result = completion.Value;
 
         LogChatUsage(result.Usage, "buffered");
@@ -236,6 +241,7 @@ public sealed partial class AiIntentService(
     }
 
     private async Task<CompletedRound> CompleteStreamingRoundAsync(
+        AiCompletionClient client,
         List<ChatMessage> messages,
         ChatCompletionOptions options,
         Guid? userId,
@@ -249,7 +255,7 @@ public sealed partial class AiIntentService(
         var firstTokenLogged = false;
         ChatTokenUsage? streamedUsage = null;
 
-        await foreach (var update in aiClient.ChatClient.CompleteChatStreamingAsync(messages, options, cancellationToken))
+        await foreach (var update in client.ChatClient.CompleteChatStreamingAsync(messages, options, cancellationToken))
         {
             if (update.Usage is not null)
                 streamedUsage = update.Usage;

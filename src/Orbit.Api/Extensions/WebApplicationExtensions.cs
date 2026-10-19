@@ -168,9 +168,27 @@ public static partial class WebApplicationExtensions
 
         if (!isToolCall)
         {
-            await next();
+            if (root is { ValueKind: JsonValueKind.Object } discovery
+                && discovery.TryGetProperty("method", out var method)
+                && method.ValueKind == JsonValueKind.String && method.GetString() == "tools/list")
+                await next();
+            else
+                await WriteMcpPolicyErrorAsync(context, requestId, "unsupported_by_policy", null);
             return;
         }
+
+        var moderation = context.RequestServices.GetRequiredService<IContentModerationService>();
+        var check = await moderation.CheckTextAsync(body, context.RequestAborted);
+        if (check.Flagged || check.Unavailable)
+        {
+            await WriteMcpPolicyErrorAsync(context, requestId,
+                check.Unavailable ? "content_moderation_unavailable" : "content_moderation_refused", null);
+            return;
+        }
+
+        var replayFingerprint = AgentOperationFingerprint.Compute(toolName!, root!.Value.GetProperty("params").GetRawText());
+        context.Items[Orbit.Api.Idempotency.HttpIdempotencyContext.McpRequestKey] =
+            $"mcp:{context.User.FindFirstValue("api_key_id")}:{requestId?.GetRawText()}:{replayFingerprint}";
 
         await HandleMcpToolCallAsync(
             context,
@@ -467,7 +485,7 @@ public static partial class WebApplicationExtensions
     internal static bool IsMcpUnauthenticatedMethod(JsonElement? root)
     {
         if (root is not { ValueKind: JsonValueKind.Object } element ||
-            !element.TryGetProperty("method", out var methodProp))
+            !element.TryGetProperty("method", out var methodProp) || methodProp.ValueKind != JsonValueKind.String)
         {
             return false;
         }
@@ -506,7 +524,7 @@ public static partial class WebApplicationExtensions
             return false;
 
         requestId = JsonSerializer.SerializeToElement(request.Id, McpJsonUtilities.DefaultOptions);
-        if (!string.Equals(request.Method, RequestMethods.ToolsCall, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(request.Method, RequestMethods.ToolsCall, StringComparison.Ordinal))
             return false;
 
         CallToolRequestParams? callParams;

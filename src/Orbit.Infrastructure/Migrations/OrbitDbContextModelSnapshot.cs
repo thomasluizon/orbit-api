@@ -275,6 +275,31 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("AgentStepUpChallenges");
                 });
 
+            modelBuilder.Entity("Orbit.Domain.Entities.AiBudgetCall", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("ChargedTokens")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("IsSettled")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateOnly>("LocalDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "LocalDate");
+
+                    b.ToTable("AiBudgetCalls");
+                });
+
             modelBuilder.Entity("Orbit.Domain.Entities.AiFactExtractionBatch", b =>
                 {
                     b.Property<Guid>("Id")
@@ -479,6 +504,30 @@ namespace Orbit.Infrastructure.Migrations
                             Key = "MinSupportedVersion",
                             Description = "Minimum supported client app version; clients below this receive HTTP 426",
                             Value = "1.3.11"
+                        },
+                        new
+                        {
+                            Key = "FreeAiCallsPerDay",
+                            Description = "Daily AI call safety budget for Free users",
+                            Value = "45"
+                        },
+                        new
+                        {
+                            Key = "ProAiCallsPerDay",
+                            Description = "Daily AI call safety budget for Pro users",
+                            Value = "450"
+                        },
+                        new
+                        {
+                            Key = "FreeAiTokensPerDay",
+                            Description = "Daily AI token safety budget for Free users",
+                            Value = "900000"
+                        },
+                        new
+                        {
+                            Key = "ProAiTokensPerDay",
+                            Description = "Daily AI token safety budget for Pro users",
+                            Value = "9000000"
                         },
                         new
                         {
@@ -1737,6 +1786,39 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("NotionTasks");
                 });
 
+            modelBuilder.Entity("Orbit.Domain.Entities.OAuthState", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SecretHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SecretHash")
+                        .IsUnique();
+
+                    b.HasIndex("Kind", "ExpiresAtUtc");
+
+                    b.ToTable("OAuthStates");
+                });
+
             modelBuilder.Entity("Orbit.Domain.Entities.OwedSubscriptionCancellation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2891,6 +2973,15 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasOne("Orbit.Domain.Entities.AccountabilityPair", null)
                         .WithMany()
                         .HasForeignKey("PairId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Orbit.Domain.Entities.AiBudgetCall", b =>
+                {
+                    b.HasOne("Orbit.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

@@ -125,7 +125,7 @@ public class AiRescheduleSuggestionServiceGenerationTests
             });
         var aiClient = new AiCompletionClient(
             chatClient, NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
-        return new AiRescheduleSuggestionService(aiClient, NullLogger<AiRescheduleSuggestionService>.Instance);
+        return new AiRescheduleSuggestionService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(aiClient), NullLogger<AiRescheduleSuggestionService>.Instance);
     }
 
     private sealed class CannedChatHandler(string content, HttpStatusCode status) : HttpMessageHandler

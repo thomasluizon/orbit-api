@@ -342,7 +342,11 @@ public static partial class ServiceCollectionExtensions
         builder.Services.Configure<GoogleSettings>(
             builder.Configuration.GetSection(GoogleSettings.SectionName));
 
-        builder.Services.AddSingleton<OAuthAuthorizationStore>();
+        builder.Services.AddScoped<IOAuthStateStore, Orbit.Infrastructure.Persistence.OAuthStateStore>();
+        builder.Services.AddScoped<OAuthAuthorizationStore>();
+        builder.Services.AddScoped<IApiKeyUsageTracker, Orbit.Infrastructure.Persistence.ApiKeyUsageTracker>();
+        if (!BuildTimeDocumentGeneration.IsActive)
+            builder.Services.AddHostedService<Orbit.Api.Authentication.LegacyApiKeyInventory>();
         builder.Services.AddHttpClient(GoogleTokenService.HttpClientName, client => client.Timeout = httpTimeout);
         builder.Services.AddHttpClient(GoogleAuthorizationCodeService.HttpClientName, client => client.Timeout = httpTimeout);
 

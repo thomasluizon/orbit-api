@@ -10,6 +10,15 @@ public static class AppConfigKeys
     public const string SubHabitsProOnly = "SubHabitsProOnly";
     public const string FreeAiMessagesPerDay = "FreeAiMessagesPerDay";
     public const string ProAiMessagesPerDay = "ProAiMessagesPerDay";
+    public const string FreeAiCallsPerDay = "FreeAiCallsPerDay";
+    public const string ProAiCallsPerDay = "ProAiCallsPerDay";
+    public const string FreeAiTokensPerDay = "FreeAiTokensPerDay";
+    public const string ProAiTokensPerDay = "ProAiTokensPerDay";
+    /// <summary>Calls = daily messages * (ChatTurnLimits.MaxToolIterations + 1) * 1.5; tokens = daily messages * AppConstants.MaxAiRequestTotalTokens * 1.5.</summary>
+    public const int DefaultFreeAiCallsPerDay = 45;
+    public const int DefaultProAiCallsPerDay = 450;
+    public const long DefaultFreeAiTokensPerDay = 900_000;
+    public const long DefaultProAiTokensPerDay = 9_000_000;
     public const string DailySummaryProOnly = "DailySummaryProOnly";
     public const string SmartRescheduleProOnly = "SmartRescheduleProOnly";
     public const string RetrospectiveProOnly = "RetrospectiveProOnly";

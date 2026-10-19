@@ -43,6 +43,39 @@ public class FeatureFlagAndAgentSupportTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
+    [Theory]
+    [InlineData("tag_id", false)]
+    [InlineData("tag_ids", true)]
+    public async Task Ownership_RefusesForeignTags(string argument, bool array)
+    {
+        var owner = Guid.NewGuid();
+        var tag = Tag.Create(owner, "Private", "#ffffff").Value;
+        _dbContext.Tags.Add(tag);
+        await _dbContext.SaveChangesAsync();
+        var args = JsonSerializer.SerializeToElement(new Dictionary<string, object>
+        {
+            [argument] = array ? new[] { tag.Id } : (object)tag.Id
+        });
+        var service = new AgentTargetOwnershipService(_dbContext);
+        (await service.GetDenialReasonAsync("assign_tags", Guid.NewGuid(), args))
+            .Should().Be("target_not_owned:assign_tags:tag");
+        (await service.GetDenialReasonAsync("assign_tags", owner, args)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Ownership_RefusesForeignCalendarSuggestion()
+    {
+        var suggestion = GoogleCalendarSyncSuggestion.Create(Guid.NewGuid(), "event", "Private",
+            DateTime.UtcNow, "{}", DateTime.UtcNow);
+        _dbContext.GoogleCalendarSyncSuggestions.Add(suggestion);
+        await _dbContext.SaveChangesAsync();
+        var args = JsonSerializer.SerializeToElement(new { suggestion_id = suggestion.Id });
+        var service = new AgentTargetOwnershipService(_dbContext);
+        (await service.GetDenialReasonAsync("import_calendar_event", Guid.NewGuid(), args))
+            .Should().Be("target_not_owned:import_calendar_event:calendar_suggestion");
+        (await service.GetDenialReasonAsync("import_calendar_event", suggestion.UserId, args)).Should().BeNull();
+    }
+
     [Fact]
     public async Task FeatureFlagService_ResolvesTargetsAndPlansAndInvalidatesWrites()
     {

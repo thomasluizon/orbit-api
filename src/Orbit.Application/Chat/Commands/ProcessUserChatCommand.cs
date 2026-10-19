@@ -157,7 +157,8 @@ public partial class ProcessUserChatCommandHandler(
     ChatAiDependencies ai,
     ChatExecutionDependencies execution,
     ILogger<ProcessUserChatCommandHandler> logger,
-    IAppConfigService appConfig) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
+    IAppConfigService appConfig,
+    IContentModerationService moderation) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
 {
     private static class PartKinds
     {
@@ -185,6 +186,13 @@ public partial class ProcessUserChatCommandHandler(
         ProcessUserChatCommand request,
         CancellationToken cancellationToken)
     {
+        var input = JsonSerializer.Serialize(new { request.Message, request.History, request.BlockAnswer });
+        var check = await moderation.CheckTextAsync(input, cancellationToken);
+        if (check.Unavailable)
+            return Result.Failure<ChatResponse>(ErrorMessages.AiUnavailable);
+        if (check.Flagged)
+            return Result.Failure<ChatResponse>("This input was refused by content moderation.");
+
         if (request.BlockAnswer is not null)
         {
             var answerService = new AstraBlockAnswerService(execution.BlockStore, execution.UnitOfWork,
@@ -273,8 +281,8 @@ public partial class ProcessUserChatCommandHandler(
             cancellationToken);
         var aiResponse = toolLoopResult.FinalResponse;
         var iterations = toolLoopResult.Iterations;
-        if (request.BlockAnswer is not null && (toolLoopResult.HadToolFailure || aiResponse.HasToolCalls))
-            return Result.Failure<ChatResponse>(ErrorMessages.AiUnavailable);
+        if (MustFailToolTurn(request, toolLoopResult))
+            return Result.Failure<ChatResponse>(toolLoopResult.ProviderError ?? ErrorMessages.AiUnavailable);
         if (toolLoopResult.HadToolFailure)
             executionResults.SanitizeFailedActions(ToolFailureMessage(userLanguage));
         if (aiStreamFilter is not null)

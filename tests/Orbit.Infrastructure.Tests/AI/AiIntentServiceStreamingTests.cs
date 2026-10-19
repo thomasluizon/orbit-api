@@ -295,7 +295,7 @@ public class AiIntentServiceStreamingTests
         var handler = new JsonHandler(BufferedCompletion);
         var usageRecorder = Substitute.For<IAiUsageRecorder>();
         var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
-        var service = new AiIntentService(aiClient, usageRecorder, NullLogger<AiIntentService>.Instance);
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(aiClient), usageRecorder, NullLogger<AiIntentService>.Instance);
         var userId = Guid.NewGuid();
 
         await service.SendWithToolsAsync(new AiToolRequest("hello", "system", [], userId));
@@ -309,7 +309,7 @@ public class AiIntentServiceStreamingTests
         var handler = new CountingJsonHandler(BufferedCompletion);
         var usageRecorder = Substitute.For<IAiUsageRecorder>();
         var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
-        var service = new AiIntentService(aiClient, usageRecorder, NullLogger<AiIntentService>.Instance);
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(aiClient), usageRecorder, NullLogger<AiIntentService>.Instance);
 
         await service.SendWithToolsAsync(new AiToolRequest("hello", "system", [], Guid.NewGuid(), History: BuildHistory(40)));
 
@@ -322,7 +322,7 @@ public class AiIntentServiceStreamingTests
         var handler = new CountingJsonHandler(BufferedCompletion);
         var usageRecorder = Substitute.For<IAiUsageRecorder>();
         var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
-        var service = new AiIntentService(aiClient, usageRecorder, NullLogger<AiIntentService>.Instance);
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(aiClient), usageRecorder, NullLogger<AiIntentService>.Instance);
 
         await service.SendWithToolsAsync(new AiToolRequest("hello", "system", [], Guid.NewGuid(), History: BuildHistory(50)));
 
@@ -361,7 +361,7 @@ public class AiIntentServiceStreamingTests
     {
         usageRecorder ??= Substitute.For<IAiUsageRecorder>();
         var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
-        var service = new AiIntentService(aiClient, usageRecorder, NullLogger<AiIntentService>.Instance);
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(aiClient), usageRecorder, NullLogger<AiIntentService>.Instance);
         return (service, new CollectingSink());
     }
 
@@ -372,7 +372,7 @@ public class AiIntentServiceStreamingTests
         usageRecorder ??= Substitute.For<IAiUsageRecorder>();
         var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
         var logger = new RecordingLogger();
-        var service = new AiIntentService(aiClient, usageRecorder, logger);
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(aiClient), usageRecorder, logger);
         return (service, logger);
     }
 

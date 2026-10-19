@@ -137,6 +137,7 @@ public partial class SlipAlertSchedulerService(
         if (!IsWithinSendWindow(userTimeNow, alertTime)) return;
 
         var lang = user.Language ?? "en";
+        using var aiUser = Orbit.Infrastructure.AI.AiCallContext.Begin(user.Id);
         var messageResult = await ctx.MessageService.GenerateMessageAsync(
             habit.Title, pattern.DayOfWeek, pattern.PeakHour, lang, ct);
 

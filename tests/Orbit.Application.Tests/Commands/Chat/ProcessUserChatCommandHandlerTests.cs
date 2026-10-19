@@ -80,6 +80,38 @@ public partial class ProcessUserChatCommandHandlerTests
         {"title":"Perspirex Strong - Semana 2 em diante (Manutenção)","description":"Passe apenas DOMINGO À NOITE e QUARTA À NOITE. Hora e jeito: à noite, axila 100% seca, 2 passadas pra cima e 2 pra baixo. Acordou: Lave a axila com água e sabão no banho da manhã.","emoji":"🧴","frequency_unit":"Week","frequency_quantity":1,"days":["Sunday","Wednesday"],"due_date":"2026-09-15"}
         """;
 
+    private readonly IContentModerationService _moderation = Substitute.For<IContentModerationService>();
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task Moderation_RefusesBeforeCallingModel(bool flagged, bool unavailable)
+    {
+        _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult(flagged, unavailable, []));
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(User.Create("Test", "test@example.com").Value);
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Allowed" }));
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(UserId, "screen this input"), CancellationToken.None);
+        result.IsFailure.Should().BeTrue();
+        await _aiIntentService.DidNotReceive().SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ContinuationProviderFailure_FailsTurnExplicitly()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(ToolResponse("get_habits", "call_1", "{}"));
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure<AiResponse>(ErrorMessages.AiUnavailable));
+        var tool = ReadTool("get_habits", new ToolResult(true, Payload: new { habits = Array.Empty<object>() }));
+        var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(UserId, "Show my habits"), default);
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(ErrorMessages.AiUnavailable.Message);
+    }
+
     private static Habit CreateHabit(string title, bool isCompleted = false)
     {
         var habit = Habit.Create(new HabitCreateParams(
@@ -123,11 +155,12 @@ public partial class ProcessUserChatCommandHandlerTests
             _scheduleLogReader, _blockStore, _pendingOperationStore);
 
         return new ProcessUserChatCommandHandler(
-            dataDeps, aiDeps, executionDeps, _logger, _appConfig);
+            dataDeps, aiDeps, executionDeps, _logger, _appConfig, _moderation);
     }
 
     public ProcessUserChatCommandHandlerTests()
     {
+        _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(new ModerationResult(false, false, []));
         _scheduleLogReader.ReadDaysAsync(
             Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(),
             Arg.Any<CancellationToken>()).Returns(Array.Empty<HabitScheduleLogDay>());
