@@ -9,8 +9,10 @@ namespace Orbit.Infrastructure.AI;
 
 public sealed class AiDailyBudget(IServiceScopeFactory scopes) : IAiDailyBudget
 {
-    public async Task<Guid> ReserveAsync(Guid userId, CancellationToken cancellationToken)
+    public async Task<Guid> ReserveAsync(Guid userId, long reservedTokens, CancellationToken cancellationToken)
     {
+        if (reservedTokens <= 0)
+            throw new ArgumentOutOfRangeException(nameof(reservedTokens));
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
         var work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
@@ -23,15 +25,16 @@ public sealed class AiDailyBudget(IServiceScopeFactory scopes) : IAiDailyBudget
             pro ? AppConfigKeys.DefaultProAiCallsPerDay : AppConfigKeys.DefaultFreeAiCallsPerDay, cancellationToken);
         var tokenLimit = await config.GetAsync(pro ? AppConfigKeys.ProAiTokensPerDay : AppConfigKeys.FreeAiTokensPerDay,
             pro ? AppConfigKeys.DefaultProAiTokensPerDay : AppConfigKeys.DefaultFreeAiTokensPerDay, cancellationToken);
+        tokenLimit = Math.Min(tokenLimit, pro ? AppConfigKeys.DefaultProAiTokensPerDay : AppConfigKeys.DefaultFreeAiTokensPerDay);
         return await work.ExecuteInTransactionAsync(async token =>
         {
             await work.AcquireAdvisoryLockAsync($"ai-budget:{userId}:{localDate:yyyy-MM-dd}", token);
             var query = db.AiBudgetCalls.Where(call => call.UserId == userId && call.LocalDate == localDate);
             var totals = await query.GroupBy(call => call.UserId)
                 .Select(group => new { Calls = group.Count(), Tokens = group.Sum(call => call.ChargedTokens) }).SingleOrDefaultAsync(token);
-            if ((totals?.Calls ?? 0) >= callLimit || (totals?.Tokens ?? 0) + AppConstants.MaxAiRequestTotalTokens > tokenLimit)
+            if ((totals?.Calls ?? 0) >= callLimit || reservedTokens > tokenLimit - (totals?.Tokens ?? 0))
                 throw new AiBudgetExceededException();
-            var call = AiBudgetCall.Reserve(userId, localDate, AppConstants.MaxAiRequestTotalTokens);
+            var call = AiBudgetCall.Reserve(userId, localDate, reservedTokens);
             db.AiBudgetCalls.Add(call);
             await work.SaveChangesAsync(token);
             return call.Id;

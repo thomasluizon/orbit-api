@@ -100,6 +100,52 @@ public class AiCompletionClientTests
         await boundedCall.Should().ThrowAsync<OperationCanceledException>();
     }
 
+    [Theory]
+    [InlineData("text")]
+    [InlineData("json")]
+    [InlineData("chat")]
+    public async Task BudgetReservation_CoversSerializedRequestAndBoundedOutput(string kind)
+    {
+        var handler = new CapturingHandler();
+        var raw = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance,
+            Substitute.For<IAiUsageRecorder>());
+        var budget = Substitute.For<IAiDailyBudget>();
+        long reserved = 0;
+        budget.ReserveAsync(Arg.Any<Guid>(), Arg.Do<long>(value => reserved = value), Arg.Any<CancellationToken>())
+            .Returns(Guid.NewGuid());
+        var userId = Guid.NewGuid();
+        var http = new Microsoft.AspNetCore.Http.HttpContextAccessor { HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext() };
+        http.HttpContext.User = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(
+            [new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, userId.ToString())], "Test"));
+        var client = new BudgetedAiCompletionClient(raw, budget, http, NullLogger<BudgetedAiCompletionClient>.Instance);
+        const string prompt = "Plan a caminhada 🏃";
+        if (kind == "text")
+            await client.CompleteTextAsync("system", prompt);
+        else if (kind == "json")
+            await client.CompleteJsonAsync<Probe>("system", prompt);
+        else
+        {
+            var intent = new AiIntentService(client, Substitute.For<IAiUsageRecorder>(), NullLogger<AiIntentService>.Instance);
+            await intent.SendWithToolsAsync(new AiToolRequest(prompt, "system", [], userId));
+        }
+
+        using var request = System.Text.Json.JsonDocument.Parse(handler.LastRequestBody!);
+        var outputLimit = request.RootElement.GetProperty("max_completion_tokens").GetInt32();
+        outputLimit.Should().Be(AiTokenReservation.DefaultMaxOutputTokens);
+        reserved.Should().BeGreaterThanOrEqualTo(Encoding.UTF8.GetByteCount(handler.LastRequestBody!) + outputLimit);
+        reserved.Should().BeLessThan(Orbit.Application.Common.AppConfigKeys.DefaultFreeAiTokensPerDay);
+    }
+
+    [Fact]
+    public void BudgetReservation_MediaRetainsWorstCaseInsteadOfTreatingCompressedBytesAsTokens()
+    {
+        var message = new UserChatMessage(ChatMessageContentPart.CreateImagePart(BinaryData.FromBytes(new byte[16]), "image/png"));
+
+        var tokens = AiTokenReservation.Estimate([message], new ChatCompletionOptions());
+
+        tokens.Should().BeGreaterThan(Orbit.Application.Common.AppConstants.MaxAiRequestTotalTokens);
+    }
+
     private sealed class WaitingHandler : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)

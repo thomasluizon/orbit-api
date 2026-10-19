@@ -158,6 +158,36 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Theory]
+    [InlineData("I want to hurt myself", "988", true, false)]
+    [InlineData("I want to hurt myself", "988", false, true)]
+    [InlineData("Quero me machucar", "188", true, false)]
+    [InlineData("Quero me machucar", "188", false, true)]
+    [InlineData("I want to hurt myself", "988", false, false)]
+    [InlineData("Quero me machucar", "188", false, false)]
+    public async Task PickListAnswer_CrisisDisclosure_ReturnsResourcesWithoutModerationModelOrTools(
+        string message, string resource, bool flagged, bool unavailable)
+    {
+        SetupUserAndPayGate(payGatePass: false);
+        _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
+        var item = new AstraBlockItem("a", message, ParseArguments("{\"title\":\"Walk\"}"));
+        var block = IssuedAstraBlock.Create(UserId, new("pickList", "Choose", [], [item], true, Action: "create_habits"));
+        _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
+        _blockStore.MarkAnsweredAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
+        _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult(flagged, unavailable, []));
+
+        var result = await CreateHandler().Handle(new(UserId, "My answer", BlockAnswer: new(block.Id, ["a"])), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessage.Should().Contain(resource);
+        await _moderation.DidNotReceiveWithAnyArgs().CheckTextAsync(default!, default);
+        await _payGate.DidNotReceiveWithAnyArgs().CanSendAiMessage(default, default);
+        await _payGate.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
+        await _aiIntentService.DidNotReceiveWithAnyArgs().SendWithToolsAsync(default!, default, default);
+        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+    }
+
+    [Theory]
     [InlineData(true, false)]
     [InlineData(false, true)]
     public async Task ChoiceAnswer_ModerationRefusal_DoesNotReserveOrDispatch(bool flagged, bool unavailable)
@@ -174,6 +204,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsFailure.Should().BeTrue();
         await _blockStore.DidNotReceiveWithAnyArgs().MarkAnsweredAsync(default, default, default, default);
+        await _payGate.DidNotReceiveWithAnyArgs().CanSendAiMessage(default, default);
         await _payGate.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
         await _aiIntentService.DidNotReceiveWithAnyArgs().SendWithToolsAsync(default!, default, default);
         await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);

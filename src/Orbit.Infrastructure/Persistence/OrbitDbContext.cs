@@ -576,8 +576,8 @@ public class OrbitDbContext : DbContext
                 AppConfig.Create("MinSupportedVersion", "1.3.11", "Minimum supported client app version; clients below this receive HTTP 426"),
                 AppConfig.Create("FreeAiCallsPerDay", "45", "Daily AI call safety budget for Free users"),
                 AppConfig.Create("ProAiCallsPerDay", "450", "Daily AI call safety budget for Pro users"),
-                AppConfig.Create("FreeAiTokensPerDay", "900000", "Daily AI token safety budget for Free users"),
-                AppConfig.Create("ProAiTokensPerDay", "9000000", "Daily AI token safety budget for Pro users"),
+                AppConfig.Create("FreeAiTokensPerDay", "40000", "Daily AI token safety budget for Free users"),
+                AppConfig.Create("ProAiTokensPerDay", "240000", "Daily AI token safety budget for Pro users"),
                 AppConfig.Create("RequireApiKeyCreationStepUp", "false", "Turn on once a client build carrying the API key creation challenge flow is live in the Play fleet"));
         });
     }

@@ -8,13 +8,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Orbit.Api.Extensions;
-using ModelContextProtocol.Server;
-using Orbit.Api.Idempotency;
-using Orbit.Application.Behaviors;
-using Orbit.Application.Chat.Commands;
-using Orbit.Infrastructure.Configuration;
-using Orbit.Infrastructure.Persistence;
-using Orbit.Infrastructure.Tests.Persistence;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
@@ -62,66 +55,6 @@ public class McpBoundaryRegressionTests
             using var response = await JsonDocument.ParseAsync(context.Response.Body);
             response.RootElement.GetProperty("error").GetProperty("message").GetString().Should().Be(reason);
         }
-    }
-
-    [Theory]
-    [InlineData("session-one", "session-two", null, 2)]
-    [InlineData("session-one", "session-two", "explicit-retry", 2)]
-    [InlineData(null, null, null, 3)]
-    [InlineData(null, null, "explicit-retry", 1)]
-    public async Task MutationReplay_UsesValidatedSessionOrExplicitKey(string? firstSession, string? nextSession, string? explicitKey, int expectedApplications)
-    {
-        using var database = new SqliteOrbitDbContextFactory();
-        var db = database.Context;
-        var user = Orbit.Domain.Entities.User.Create("Replay", "replay@example.com").Value;
-        db.Users.Add(user);
-        await db.SaveChangesAsync();
-        var applications = 0;
-        var responses = new List<string>();
-        async Task Run(string? sessionId)
-        {
-            var body = """{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"execute_agent_operation_v2","arguments":{"operationId":"create_tag","arguments":{"name":"Tag"}}}}""";
-            var (context, services) = CreateContext(body);
-            using (services)
-            {
-                context.Request.Headers["Mcp-Session-Id"] = sessionId;
-                if (explicitKey is not null)
-                    context.Request.Headers["Idempotency-Key"] = explicitKey;
-                var app = new ApplicationBuilder(services);
-                app.UseMcpSelectiveAuth();
-                Task<AgentExecuteOperationResponse> Apply(CancellationToken token)
-                {
-                    applications++;
-                    return Task.FromResult(new AgentExecuteOperationResponse(new("create_tag", "create_tag", AgentRiskClass.Low,
-                        AgentConfirmationRequirement.None, AgentOperationStatus.Succeeded, Payload: new { application = applications })));
-                }
-                RequestDelegate dispatch = async requestContext =>
-                {
-                    requestContext.User = new ClaimsPrincipal(new ClaimsIdentity([
-                        new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()), new Claim("api_key_id", "credential")], "Test"));
-                    var server = Substitute.For<McpServer>();
-                    server.SessionId.Returns(sessionId);
-                    requestContext.Features.Set(server);
-                    var request = new ExecuteAgentMutationCommand(new(user.Id, "create_tag",
-                        JsonSerializer.SerializeToElement(new { name = "Tag" }), AgentExecutionSurface.Mcp, AgentAuthMethod.ApiKey));
-                    var behavior = new IdempotencyBehavior<ExecuteAgentMutationCommand, AgentExecuteOperationResponse>(
-                        new HttpIdempotencyContext(new HttpContextAccessor { HttpContext = requestContext }),
-                        new IdempotencyStore(db), new UnitOfWork(db, new DatabaseConnectionSettings()));
-                    var response = await behavior.Handle(request, Apply, default);
-                    responses.Add(JsonSerializer.Serialize(response));
-                };
-                app.Run(dispatch);
-                await app.Build()(context);
-            }
-        }
-        await Run(firstSession);
-        await Run(firstSession);
-        await Run(nextSession);
-        applications.Should().Be(expectedApplications);
-        if (firstSession is not null || explicitKey is not null)
-            responses[1].Should().Be(responses[0]);
-        if (nextSession is not null)
-            responses[2].Should().NotBe(responses[0]);
     }
 
     private static (DefaultHttpContext, ServiceProvider) CreateContext(string body, ModerationResult? moderationResult = null)

@@ -14,11 +14,11 @@ public static class AppConfigKeys
     public const string ProAiCallsPerDay = "ProAiCallsPerDay";
     public const string FreeAiTokensPerDay = "FreeAiTokensPerDay";
     public const string ProAiTokensPerDay = "ProAiTokensPerDay";
-    /// <summary>Calls = daily messages * (ChatTurnLimits.MaxToolIterations + 1) * 1.5; tokens = daily messages * AppConstants.MaxAiRequestTotalTokens * 1.5.</summary>
+    /// <summary>Calls allow tool iterations; token ceilings price every token at the maximum gpt-6-luna rate of $0.50 per million.</summary>
     public const int DefaultFreeAiCallsPerDay = 45;
     public const int DefaultProAiCallsPerDay = 450;
-    public const long DefaultFreeAiTokensPerDay = 900_000;
-    public const long DefaultProAiTokensPerDay = 9_000_000;
+    public const long DefaultFreeAiTokensPerDay = 40_000;
+    public const long DefaultProAiTokensPerDay = 240_000;
     public const string DailySummaryProOnly = "DailySummaryProOnly";
     public const string SmartRescheduleProOnly = "SmartRescheduleProOnly";
     public const string RetrospectiveProOnly = "RetrospectiveProOnly";

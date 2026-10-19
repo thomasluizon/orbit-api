@@ -177,7 +177,7 @@ public sealed class AstraBlockAnswerService(
                     return answerError;
                 var isChoice = definition.Form == AstraBlockKinds.Choice;
                 var message = BuildMessage(definition, answer);
-                var crisis = isChoice ? await DetectCrisisTurnAsync(request.UserId, message, token) : CrisisLocales.None;
+                var crisis = await DetectCrisisTurnAsync(request.UserId, message, token);
                 if (crisis == CrisisLocales.None && checkInput is not null)
                 {
                     var inputCheck = await checkInput(message, token);
@@ -199,7 +199,7 @@ public sealed class AstraBlockAnswerService(
                 var user = await users.GetByIdAsync(request.UserId, token);
                 ChatResponse? response = null;
                 DateOnly? reservedAllowanceDate = null;
-                if (definition.Form == AstraBlockKinds.PickList)
+                if (definition.Form == AstraBlockKinds.PickList && crisis == CrisisLocales.None)
                 {
                     response = await BuildPickListResponseAsync(request, definition, answer, user, token);
                 }

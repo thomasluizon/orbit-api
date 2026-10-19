@@ -9,6 +9,8 @@ namespace Orbit.Api.Idempotency;
 /// <summary>
 /// Uses an explicit <c>Idempotency-Key</c> or a validated MCP session and JSON-RPC request id,
 /// together with the authenticated user. Sessionless MCP requests require an explicit key.
+/// The SDK sets the server feature after session ownership validation:
+/// https://github.com/modelcontextprotocol/csharp-sdk/blob/2b7fd35fbe58dfb9f00eae8b3393e1a7361b5e01/src/ModelContextProtocol.AspNetCore/StreamableHttpHandler.cs#L268
 /// </summary>
 public sealed class HttpIdempotencyContext(IHttpContextAccessor httpContextAccessor) : IIdempotencyContext
 {

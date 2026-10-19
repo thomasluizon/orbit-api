@@ -95,6 +95,8 @@ public partial class ProcessUserChatCommandHandlerTests
             .Returns(Result.Success(new AiResponse { TextMessage = "Allowed" }));
         var result = await CreateHandler().Handle(new ProcessUserChatCommand(UserId, "screen this input"), CancellationToken.None);
         result.IsFailure.Should().BeTrue();
+        await _blockStore.DidNotReceiveWithAnyArgs().InvalidateOpenAsync(default, default);
+        await _unitOfWork.DidNotReceiveWithAnyArgs().AcquireAdvisoryLockAsync(default!, default);
         await _aiIntentService.DidNotReceive().SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 

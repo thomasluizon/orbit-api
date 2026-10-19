@@ -527,13 +527,13 @@ namespace Orbit.Infrastructure.Migrations
                         {
                             Key = "FreeAiTokensPerDay",
                             Description = "Daily AI token safety budget for Free users",
-                            Value = "900000"
+                            Value = "40000"
                         },
                         new
                         {
                             Key = "ProAiTokensPerDay",
                             Description = "Daily AI token safety budget for Pro users",
-                            Value = "9000000"
+                            Value = "240000"
                         },
                         new
                         {

@@ -197,11 +197,6 @@ public partial class ProcessUserChatCommandHandler(
                     : HandleTurnAsync(request with { Message = prepared.Message }, cancellationToken, prepared.AnsweredAtUtc), cancellationToken,
                 (_, token) => ModerateInputAsync(request, token));
         }
-        await execution.UnitOfWork.ExecuteInTransactionAsync(async token =>
-        {
-            await execution.UnitOfWork.AcquireAdvisoryLockAsync($"astra-blocks:{request.UserId}", token);
-            await execution.BlockStore.InvalidateOpenAsync(request.UserId, token);
-        }, cancellationToken);
         var crisis = CrisisSupportGuard.Detect(request.Message);
         if (crisis != CrisisLocales.None && CrisisSupportGuard.IsEnabled(crisis,
             await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, cancellationToken)))
@@ -209,6 +204,11 @@ public partial class ProcessUserChatCommandHandler(
         var inputCheck = await ModerateInputAsync(request, cancellationToken);
         if (inputCheck.IsFailure)
             return inputCheck.PropagateError<ChatResponse>();
+        await execution.UnitOfWork.ExecuteInTransactionAsync(async token =>
+        {
+            await execution.UnitOfWork.AcquireAdvisoryLockAsync($"astra-blocks:{request.UserId}", token);
+            await execution.BlockStore.InvalidateOpenAsync(request.UserId, token);
+        }, cancellationToken);
         return await HandleTurnAsync(request, cancellationToken);
     }
 

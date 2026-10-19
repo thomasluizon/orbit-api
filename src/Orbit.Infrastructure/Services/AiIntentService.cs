@@ -150,7 +150,8 @@ public sealed partial class AiIntentService(
 
             var round = await aiClient.RunAsync(userId, client => streamSink is null
                 ? CompleteBufferedRoundAsync(client, messages, options, userId, cancellationToken)
-                : CompleteStreamingRoundAsync(client, messages, options, userId, streamSink, stopwatch, cancellationToken), cancellationToken);
+                : CompleteStreamingRoundAsync(client, messages, options, userId, streamSink, stopwatch, cancellationToken), cancellationToken,
+                AiTokenReservation.Estimate(messages, options));
 
             stopwatch.Stop();
             if (logger.IsEnabled(LogLevel.Debug))
