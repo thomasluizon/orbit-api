@@ -18,7 +18,7 @@ public class QueryHabitsTool(
     public bool IsReadOnly => true;
 
     public string Description =>
-        "Read current-turn habit facts for listings, schedules, metrics, streaks, completion percentages, descriptions, checklist items, and filtered searches by text, date, frequency, tag, or status. Call this before answering habit listing or schedule questions; prompt indexes alone do not ground the reply.";
+        "Read current-turn facts for habits: listings, schedules, metrics, streaks, completion percentages, descriptions, checklist items, and filtered searches by text, date, frequency, tag, or status. Call this before answering habit listing or schedule questions; prompt indexes alone do not ground the reply.";
 
     public object GetParameterSchema() => new
     {
