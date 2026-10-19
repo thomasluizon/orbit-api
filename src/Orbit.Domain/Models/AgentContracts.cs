@@ -47,6 +47,11 @@ public enum AgentExecutionSurface
     Metadata = 2
 }
 
+/// <summary>Describes an agent capability and cross-references equivalent REST actions.</summary>
+/// <param name="ControllerActionKeys">
+/// Cross-referenced REST routes are not gated by this capability's ConfirmationRequirement because
+/// the REST caller is a person acting directly, whereas an agent acts on the person's behalf.
+/// </param>
 public record AgentCapability(
     string Id,
     string DisplayName,
