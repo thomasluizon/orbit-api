@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Orbit.Application.Chat;
 using Orbit.Infrastructure.Configuration;
+using System.Text.RegularExpressions;
 
 namespace Orbit.Infrastructure.Tests.Configuration;
 
@@ -31,7 +32,24 @@ public class AiSettingsTests
         var settings = new AiSettings();
 
         settings.NetworkTimeoutSeconds.Should().Be(15);
-        settings.CompletionTimeout.Should().Be(TimeSpan.FromSeconds(450));
+        settings.BufferedNetworkTimeoutSeconds.Should().Be(90);
+        settings.CompletionTimeout.Should().Be(TimeSpan.FromSeconds(185));
+        settings.StreamingCompletionTimeout.Should().Be(TimeSpan.FromSeconds(75));
+    }
+
+    [Theory]
+    [InlineData(15, 90, 0)]
+    [InlineData(30, 120, 5)]
+    public void CompletionTimeout_IsIndependentOfNetworkTimeoutsAndRetryCount(int streamingSeconds, int bufferedSeconds, int retries)
+    {
+        var settings = new AiSettings
+        {
+            NetworkTimeoutSeconds = streamingSeconds,
+            BufferedNetworkTimeoutSeconds = bufferedSeconds,
+            MaxRetries = retries
+        };
+
+        settings.CompletionTimeout.Should().Be(TimeSpan.FromSeconds(185));
     }
 
     [Fact]
@@ -43,9 +61,14 @@ public class AiSettingsTests
         directory.Should().NotBeNull();
         var terraform = File.ReadAllText(Path.Combine(directory!.FullName, "infra", "configuration.tf"));
 
-        terraform.Should().MatchRegex("AI__Model\\s*=\\s*\"gpt-6.1-sol\"");
-        terraform.Should().MatchRegex("AI__SubTaskModel\\s*=\\s*\"gpt-6-luna\"");
-        terraform.Should().Contain("staging_api_values = merge(local.production_api_values, {");
+        var production = Regex.Match(terraform, @"(?ms)^  production_api_values\s*=\s*\{(?<values>.*?)^  \}");
+        production.Success.Should().BeTrue();
+        production.Groups["values"].Value.Should().MatchRegex("(?m)^\\s*AI__Model\\s*=\\s*\"gpt-6\\.1-sol\"\\s*$");
+        production.Groups["values"].Value.Should().MatchRegex("(?m)^\\s*AI__SubTaskModel\\s*=\\s*\"gpt-6-luna\"\\s*$");
+
+        var staging = Regex.Match(terraform, @"(?ms)^  staging_api_values\s*=\s*merge\(local\.production_api_values,\s*\{(?<overrides>.*?)^  \}\)");
+        staging.Success.Should().BeTrue();
+        staging.Groups["overrides"].Value.Should().NotMatchRegex(@"(?m)^\s*AI__(Model|SubTaskModel)\s*=");
     }
     [Fact]
     public void ConfiguredAndDefaultModels_HavePricingRows()

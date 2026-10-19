@@ -13,11 +13,12 @@ public sealed class AiSettings
     public int MaxRetries { get; init; } = 2;
 
     /// <summary>
-    /// Bounds the whole completion, including every network attempt and retry wait.
-    /// Each retry has one network-timeout allowance for its request and one for its wait.
+    /// Bounds buffered calls independently of per-attempt timeouts and retry count.
+    /// Allows a 90-second failed attempt, a 90-second successful retry and five seconds for
+    /// retry wait and processing. Longer server-directed retry waits consume this same deadline.
     /// </summary>
-    public TimeSpan CompletionTimeout => TimeSpan.FromSeconds(
-        (long)Math.Max(BufferedNetworkTimeoutSeconds, NetworkTimeoutSeconds) * (2L * MaxRetries + 1));
+    public int CompletionTimeoutSeconds { get; init; } = 185;
+    public TimeSpan CompletionTimeout => TimeSpan.FromSeconds(CompletionTimeoutSeconds);
     public TimeSpan StreamingCompletionTimeout => TimeSpan.FromSeconds((long)NetworkTimeoutSeconds * (2L * MaxRetries + 1));
     public Dictionary<string, AiModelPrice> Pricing { get; init; } = new();
 }

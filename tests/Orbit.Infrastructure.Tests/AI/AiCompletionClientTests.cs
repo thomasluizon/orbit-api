@@ -120,6 +120,35 @@ public class AiCompletionClientTests
     }
 
     [Theory]
+    [InlineData("json")]
+    [InlineData("text")]
+    [InlineData("chat")]
+    public async Task CompletionDeadline_ConfiguredBound_CancelsBufferedCallsDuringRetryWait(string kind)
+    {
+        var settings = new AiSettings
+        {
+            ApiKey = "test-key",
+            BaseUrl = "https://orbit.test/v1",
+            CompletionTimeoutSeconds = 1
+        };
+        var usage = Substitute.For<IAiUsageRecorder>();
+        var client = new AiCompletionClient(Options.Create(settings), NullLogger<AiCompletionClient>.Instance,
+            usage, new HttpClientPipelineTransport(new HttpClient(new WaitingHandler())));
+        var service = new AiIntentService(client, usage, NullLogger<AiIntentService>.Instance);
+        Func<Task> call = kind switch
+        {
+            "json" => async () => await client.CompleteJsonAsync<Probe>("system", "user"),
+            "text" => async () => await client.CompleteTextAsync("system", "user"),
+            _ => async () => await service.SendWithToolsAsync(new AiToolRequest("user", "system", []))
+        };
+
+        Func<Task> boundedCall = () => call().WaitAsync(TimeSpan.FromSeconds(5));
+        await boundedCall.Should().ThrowAsync<OperationCanceledException>();
+        client.CompletionTimeout.Should().Be(TimeSpan.FromSeconds(1));
+        client.StreamingCompletionTimeout.Should().Be(TimeSpan.FromSeconds(75));
+    }
+
+    [Theory]
     [InlineData("gpt-6.1-sol", "gpt-6-luna", AiModelTier.Primary, "gpt-6.1-sol", false)]
     [InlineData("gpt-6.1-sol", "gpt-6-luna", AiModelTier.SubTask, "gpt-6-luna", false)]
     [InlineData("gpt-4.1-mini", "gpt-6-luna", AiModelTier.Primary, "gpt-4.1-mini", true)]
