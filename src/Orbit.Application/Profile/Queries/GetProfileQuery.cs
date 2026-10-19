@@ -66,12 +66,15 @@ public record ProfileResponse(
 
 public record GetProfileQuery(Guid UserId) : IRequest<Result<ProfileResponse>>;
 
+/// <summary>Groups the services used to resolve streaks as of the user's local day.</summary>
+public record ProfileStreakServices(IUserDateService UserDateService, IUserStreakService UserStreakService);
+
 public class GetProfileQueryHandler(
     IGenericRepository<User> userRepository,
     IGenericRepository<ApiKey> apiKeyRepository,
     IGenericRepository<StreakFreeze> streakFreezeRepository,
     IHabitLogReader habitLogReader,
-    IUserDateService userDateService,
+    ProfileStreakServices streakServices,
     IFeatureFlagService featureFlagService,
     IPayGateService payGate) : IRequestHandler<GetProfileQuery, Result<ProfileResponse>>
 {
@@ -90,7 +93,10 @@ public class GetProfileQueryHandler(
         var enabledFlags = await featureFlagService.GetEnabledKeysForUserAsync(request.UserId, cancellationToken);
         var canViewGamification = user.HasProAccess || enabledFlags.Contains(FeatureFlagKeys.GamificationFreeTier);
 
-        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var today = await streakServices.UserDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var currentStreak = user.LastActiveDate < today.AddDays(-1)
+            ? (await streakServices.UserStreakService.CalculateAsync(request.UserId, cancellationToken))?.CurrentStreak ?? 0
+            : user.CurrentStreak;
         var windowStart = today.AddDays(-29);
         var recentFreezes = await streakFreezeRepository.FindAsync(
             sf => sf.UserId == request.UserId && sf.UsedOnDate >= windowStart,
@@ -137,7 +143,7 @@ public class GetProfileQueryHandler(
             user.LastAdRewardLocalDate == today
                 ? user.AdRewardsClaimedToday
                 : 0,
-            user.CurrentStreak,
+            currentStreak,
             user.LongestStreak,
             freezesAvailable,
             user.ThemePreference,

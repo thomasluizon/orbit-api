@@ -7,6 +7,7 @@ using Orbit.Application.Tests.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using System.Linq.Expressions;
 using System.Text.Json;
 
@@ -19,6 +20,7 @@ public class GetProfileQueryHandlerTests
     private readonly IGenericRepository<StreakFreeze> _streakFreezeRepo = Substitute.For<IGenericRepository<StreakFreeze>>();
     private readonly IHabitLogReader _habitLogReader = Substitute.For<IHabitLogReader>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
+    private readonly IUserStreakService _userStreakService = Substitute.For<IUserStreakService>();
     private readonly IFeatureFlagService _featureFlagService = Substitute.For<IFeatureFlagService>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly GetProfileQueryHandler _handler;
@@ -35,7 +37,7 @@ public class GetProfileQueryHandlerTests
             _apiKeyRepo,
             _streakFreezeRepo,
             _habitLogReader,
-            _userDateService,
+            new ProfileStreakServices(_userDateService, _userStreakService),
             _featureFlagService,
             _payGate);
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
@@ -65,6 +67,45 @@ public class GetProfileQueryHandlerTests
             Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
             Arg.Any<CancellationToken>())
             .Returns(new List<StreakFreeze>().AsReadOnly());
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(2)]
+    public async Task Handle_StaleStreak_ReturnsCalculatedValueIncludingFreezes(int calculatedStreak)
+    {
+        var user = CreateTestUser();
+        user.SetStreakState(2, 9, Today.AddDays(-3));
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        StubFreezeRepoEmpty();
+        _userStreakService.CalculateAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new UserStreakState(calculatedStreak, 2, calculatedStreak == 0 ? null : Today.AddDays(-1)));
+
+        var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.CurrentStreak.Should().Be(calculatedStreak);
+        result.Value.LongestStreak.Should().Be(9);
+        user.CurrentStreak.Should().Be(2);
+        await _userStreakService.Received(1).CalculateAsync(UserId, Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(null)]
+    public async Task Handle_RecentOrMissingActivity_DoesNotCalculateStreak(int? daysSinceActive)
+    {
+        var user = CreateTestUser();
+        user.SetStreakState(2, 9, daysSinceActive.HasValue ? Today.AddDays(-daysSinceActive.Value) : null);
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        StubFreezeRepoEmpty();
+
+        var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.CurrentStreak.Should().Be(2);
+        await _userStreakService.DidNotReceive().CalculateAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

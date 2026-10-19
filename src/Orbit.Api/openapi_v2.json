@@ -7095,7 +7095,24 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogHabitResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogHabitResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogHabitResponse"
+                }
+              }
+            }
           },
           "400": {
             "description": "Bad Request",
@@ -16458,6 +16475,40 @@
           }
         }
       },
+      "LinkedGoalUpdate": {
+        "required": [
+          "goalId",
+          "title",
+          "newProgress",
+          "targetValue"
+        ],
+        "type": "object",
+        "properties": {
+          "goalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "newProgress": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "targetValue": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          }
+        }
+      },
       "LinkGoalsRequest": {
         "required": [
           "goalIds"
@@ -16497,6 +16548,67 @@
               "string"
             ],
             "format": "date"
+          }
+        }
+      },
+      "LogHabitResponse": {
+        "required": [
+          "logId",
+          "isFirstCompletionToday",
+          "currentStreak"
+        ],
+        "type": "object",
+        "properties": {
+          "logId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "isFirstCompletionToday": {
+            "type": "boolean"
+          },
+          "currentStreak": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "linkedGoalUpdates": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/LinkedGoalUpdate"
+            }
+          },
+          "xpEarned": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "newAchievementIds": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "previousStreak": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },

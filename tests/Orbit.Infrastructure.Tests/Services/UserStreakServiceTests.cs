@@ -1,6 +1,7 @@
 using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Habits.Services;
+using Orbit.Application.Profile.Queries;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -96,6 +97,39 @@ public class UserStreakServiceTests
             Arg.Any<System.Linq.Expressions.Expression<Func<StreakFreeze, bool>>>(),
             Arg.Any<CancellationToken>())
             .Returns(freezes);
+    }
+
+    [Theory]
+    [InlineData(false, 0)]
+    [InlineData(true, 2)]
+    public async Task Profile_AfterLocalDayGap_UsesStreakEngineAndRespectsRepairs(bool repaired, int expectedStreak)
+    {
+        var today = new DateOnly(2026, 4, 3);
+        var user = User.Create("Alex", "alex@test.com").Value;
+        user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
+        user.SetStreakState(2, 9, today.AddDays(-3));
+        var habit = CreateDailyHabitLoggedOn([today.AddDays(-4), today.AddDays(-3)], today.AddDays(-4));
+        SetupUser(user, today);
+        SetupHabits([habit]);
+        SetupFreezes(repaired
+            ? [StreakFreeze.Create(UserId, today.AddDays(-2), StreakFreezeOrigin.Manual),
+               StreakFreeze.Create(UserId, today.AddDays(-1), StreakFreezeOrigin.Manual)]
+            : []);
+        _userRepository.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        var flags = Substitute.For<IFeatureFlagService>();
+        flags.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>()).Returns(Array.Empty<string>());
+        var profile = new GetProfileQueryHandler(
+            _userRepository, Substitute.For<IGenericRepository<ApiKey>>(), _streakFreezeRepository,
+            Substitute.For<IHabitLogReader>(), new ProfileStreakServices(_userDateService, _sut),
+            flags, Substitute.For<IPayGateService>());
+
+        var result = await profile.Handle(new GetProfileQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.CurrentStreak.Should().Be(expectedStreak);
+        result.Value.LongestStreak.Should().Be(9);
+        user.CurrentStreak.Should().Be(2);
+        user.LastActiveDate.Should().Be(today.AddDays(-3));
     }
 
     [Theory]
