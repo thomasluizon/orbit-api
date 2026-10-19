@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.ValueObjects;
 
@@ -816,6 +817,8 @@ public class OrbitDbContext : DbContext
 
             entity.Property(h => h.GoogleEventId).HasMaxLength(1024);
             entity.Property(h => h.IntervalWeeks).HasColumnType("integer");
+            entity.Property(h => h.Schedule).HasConversion<int>().HasDefaultValue(HabitSchedule.OneTime);
+            entity.Property(h => h.StartDate).HasDefaultValueSql("'0001-01-01'");
             entity.HasIndex(h => new { h.UserId, h.GoogleEventId })
                 .HasFilter("\"GoogleEventId\" IS NOT NULL AND \"IsDeleted\" = FALSE")
                 .IsUnique();

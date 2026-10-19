@@ -26,7 +26,7 @@ public class FeatureFlagAccountsMigrationTests
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
 
-        differences.Should().HaveCount(10).And.OnlyContain(operation =>
+        differences.Should().HaveCount(12).And.OnlyContain(operation =>
             operation is DropForeignKeyOperation || operation is AddForeignKeyOperation
             || operation is AddColumnOperation || operation is AlterColumnOperation
             || operation is CreateTableOperation || operation is CreateIndexOperation);
@@ -43,12 +43,13 @@ public class FeatureFlagAccountsMigrationTests
         differences.OfType<AlterColumnOperation>().Should().ContainSingle().Which
             .Should().Match<AlterColumnOperation>(column => column.Table == "HabitLogs"
                 && column.Name == "IsSlip" && !column.IsNullable && column.OldColumn.IsNullable);
-        var renewalColumns = differences.OfType<AddColumnOperation>().ToArray();
+        var renewalColumns = differences.OfType<AddColumnOperation>().Where(column => column.Table == "Users").ToArray();
         renewalColumns.Should().HaveCount(2).And.OnlyContain(column =>
             column.Table == "Users" && column.ClrType == typeof(bool) && !column.IsNullable
             && Equals(column.DefaultValue, false));
         renewalColumns.Select(column => column.Name).Should().BeEquivalentTo(
             "StripeRenewalStoppedByDeletion", "PlayRenewalStoppedByDeletion");
+        AssertHabitExpandColumns(differences);
         differences.OfType<DropForeignKeyOperation>().Select(operation => operation.Name).Should().BeEquivalentTo(
             "FK_AccountabilityPairs_Users_AddresseeId", "FK_AccountabilityPairs_Users_RequesterId");
         differences.OfType<AddForeignKeyOperation>().Should().HaveCount(2).And.OnlyContain(operation =>
@@ -75,11 +76,21 @@ public class FeatureFlagAccountsMigrationTests
             "SignupLanguage", "SignupReferralCode", "SignupCompletedAtUtc",
             "SignupReferralCompletedAtUtc", "SignupAnalyticsCompletedAtUtc", "SignupWelcomeCompletedAtUtc");
         context.Database.HasPendingModelChanges().Should().BeFalse();
-        context.Database.GetMigrations().TakeLast(7).Should().Equal(
+        context.Database.GetMigrations().TakeLast(8).Should().Equal(
             "20261001074038_AddHabitSkipUndo", "20261017011939_AddFeatureFlagAccounts",
             "20261018093533_CascadeAccountabilityPairsOnUserDeletion", "20261018111350_AddDurableSignupWork",
             "20261018111711_RecordDeletionStoppedRenewals", "20261019011031_ContractHabitLogSlip",
-            "20261019091925_AddOwedSubscriptionCancellations");
+            "20261019091925_AddOwedSubscriptionCancellations", "20261019165331_ExpandHabitScheduleAndStartDate");
+    }
+
+    private static void AssertHabitExpandColumns(IReadOnlyList<MigrationOperation> differences)
+    {
+        var habitColumns = differences.OfType<AddColumnOperation>().Where(column => column.Table == "Habits").ToArray();
+        habitColumns.Should().HaveCount(2);
+        habitColumns.Should().ContainSingle(column => column.Name == "Schedule"
+            && column.ClrType == typeof(int) && !column.IsNullable && Equals(column.DefaultValue, 0));
+        habitColumns.Should().ContainSingle(column => column.Name == "StartDate"
+            && column.ClrType == typeof(DateOnly) && !column.IsNullable && column.DefaultValueSql == "'0001-01-01'");
     }
 
     [Fact]

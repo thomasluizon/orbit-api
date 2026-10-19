@@ -98,6 +98,36 @@ public class UserStreakServiceTests
             .Returns(freezes);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public async Task RecalculateAsync_CharacterizesFourScheduleTypesAtTimezoneBoundary(int type)
+    {
+        var today = new DateOnly(2026, 4, 3);
+        var user = User.Create("Alex", "alex@test.com").Value;
+        user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Habit", type is 1 or 2 ? FrequencyUnit.Day : null,
+            type is 1 or 2 ? 1 : null, today.AddDays(-1),
+            IsFlexible: type == 2, IsGeneral: type == 3,
+            CreatedAtUtc: today.ToDateTime(new TimeOnly(1, 0), DateTimeKind.Utc))).Value;
+        habit.Log(today.AddDays(-1), advanceDueDate: false).IsSuccess.Should().BeTrue();
+        if (type != 0)
+            habit.Log(today, advanceDueDate: false).IsSuccess.Should().BeTrue();
+        SetupUser(user, today);
+        SetupHabits([habit]);
+        SetupFreezes([]);
+
+        var state = await _sut.RecalculateAsync(UserId, cancellationToken: CancellationToken.None);
+
+        state.Should().NotBeNull();
+        state!.CurrentStreak.Should().Be(type == 0 ? 1 : 2);
+        state.LongestStreak.Should().Be(type == 0 ? 1 : 2);
+        state.LastActiveDate.Should().Be(type == 0 ? today.AddDays(-1) : today);
+    }
+
     [Fact]
     public async Task RecalculateAsync_UserNotFound_ReturnsNull()
     {

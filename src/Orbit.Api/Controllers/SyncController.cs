@@ -63,7 +63,11 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
         DateTime UpdatedAtUtc,
         string? Emoji = null,
         int? IntervalWeeks = null,
-        IReadOnlyList<Orbit.Domain.ValueObjects.RelativeReminderTime>? RelativeReminders = null);
+        IReadOnlyList<Orbit.Domain.ValueObjects.RelativeReminderTime>? RelativeReminders = null,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        HabitSchedule? Schedule = null,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        DateOnly? StartDate = null);
 
     public record SyncHabitLogDto(Guid Id, Guid HabitId, DateOnly Date, decimal Value, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
 
@@ -135,7 +139,7 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
     /// dedicated DTOs and never serializes EF entities directly. Returns 410 Gone if since &gt; 30 days old.
     /// </summary>
     [HttpGet("v2/changes")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(SyncChangesV2Response), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status410Gone)]
@@ -353,7 +357,9 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
             habit.UpdatedAtUtc,
             Emoji: habit.Emoji,
             IntervalWeeks: habit.IntervalWeeks,
-            RelativeReminders: habit.RelativeReminders);
+            RelativeReminders: habit.RelativeReminders,
+            Schedule: habit.Schedule,
+            StartDate: habit.StartDate);
     }
 
     private static SyncHabitLogDto MapHabitLog(HabitLog habitLog)

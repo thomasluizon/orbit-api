@@ -1304,6 +1304,11 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("jsonb")
                         .HasDefaultValueSql("'[15]'::jsonb");
 
+                    b.Property<int>("Schedule")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
                     b.Property<string>("ScheduledReminders")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -1315,6 +1320,11 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.Property<bool>("SlipAlertEnabled")
                         .HasColumnType("boolean");
+
+                    b.Property<DateOnly>("StartDate")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("date")
+                        .HasDefaultValueSql("'0001-01-01'");
 
                     b.Property<string>("Title")
                         .IsRequired()

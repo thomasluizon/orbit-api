@@ -321,7 +321,9 @@ internal static class HabitScheduleFilters
             ComputeSearchMatches(h, ctx),
             Emoji: h.Emoji,
             IntervalWeeks: h.IntervalWeeks,
-            RelativeReminders: h.RelativeReminders);
+            RelativeReminders: h.RelativeReminders,
+            Schedule: h.Schedule,
+            StartDate: h.StartDate);
     }
 
     private static (int? Target, int? Completed) CalculateFlexibleProgress(
@@ -513,7 +515,9 @@ internal static class HabitScheduleFilters
             ComputeSearchMatches(c, ctx, isChild: true),
             Emoji: c.Emoji,
             IntervalWeeks: c.IntervalWeeks,
-            CreatedAtUtc: c.CreatedAtUtc);
+            CreatedAtUtc: c.CreatedAtUtc,
+            Schedule: c.Schedule,
+            StartDate: c.StartDate);
     }
 
     private static bool GetResponseCompletion(Habit habit, DateOnly? userToday)

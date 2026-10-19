@@ -5896,7 +5896,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponseOfHabitScheduleItem"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponseOfHabitScheduleItem"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponseOfHabitScheduleItem"
+                }
+              }
+            }
           },
           "400": {
             "description": "Bad Request",
@@ -6074,7 +6091,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarMonthResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarMonthResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarMonthResponse"
+                }
+              }
+            }
           },
           "400": {
             "description": "Bad Request",
@@ -6446,7 +6480,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/HabitDetailResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HabitDetailResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HabitDetailResponse"
+                }
+              }
+            }
           },
           "401": {
             "description": "Unauthorized",
@@ -6675,7 +6726,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/HabitFullDetailResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HabitFullDetailResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HabitFullDetailResponse"
+                }
+              }
+            }
           },
           "401": {
             "description": "Unauthorized",
@@ -12040,7 +12108,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncChangesV2Response"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncChangesV2Response"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncChangesV2Response"
+                }
+              }
+            }
           },
           "400": {
             "description": "Bad Request",
@@ -14109,6 +14194,30 @@
           }
         }
       },
+      "CalendarMonthResponse": {
+        "required": [
+          "habits",
+          "logs"
+        ],
+        "type": "object",
+        "properties": {
+          "habits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HabitScheduleItem"
+            }
+          },
+          "logs": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/HabitLogResponse"
+              }
+            }
+          }
+        }
+      },
       "ChatResponse": {
         "required": [
           "aiMessage",
@@ -15195,6 +15304,419 @@
           }
         }
       },
+      "HabitChildResponse": {
+        "required": [
+          "id",
+          "title",
+          "description",
+          "frequencyUnit",
+          "frequencyQuantity",
+          "isBadHabit",
+          "isCompleted",
+          "isGeneral",
+          "isFlexible",
+          "days",
+          "dueDate",
+          "dueTime",
+          "dueEndTime",
+          "endDate",
+          "position",
+          "checklistItems",
+          "isOverdue",
+          "children"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "frequencyUnit": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FrequencyUnit"
+              }
+            ]
+          },
+          "frequencyQuantity": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "isBadHabit": {
+            "type": "boolean"
+          },
+          "isCompleted": {
+            "type": "boolean"
+          },
+          "isGeneral": {
+            "type": "boolean"
+          },
+          "isFlexible": {
+            "type": "boolean"
+          },
+          "days": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DayOfWeek"
+            }
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "dueTime": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "time"
+          },
+          "dueEndTime": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "time"
+          },
+          "endDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "position": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "checklistItems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChecklistItem"
+            }
+          },
+          "isOverdue": {
+            "type": "boolean"
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HabitChildResponse"
+            }
+          },
+          "emoji": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "intervalWeeks": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "createdAtUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "schedule": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/HabitSchedule"
+              }
+            ]
+          },
+          "startDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          }
+        }
+      },
+      "HabitDetailResponse": {
+        "required": [
+          "id",
+          "title",
+          "description",
+          "frequencyUnit",
+          "frequencyQuantity",
+          "isBadHabit",
+          "isCompleted",
+          "isGeneral",
+          "isFlexible",
+          "dueDate",
+          "dueTime",
+          "dueEndTime",
+          "endDate",
+          "days",
+          "position",
+          "reminderEnabled",
+          "reminderTimes",
+          "scheduledReminders",
+          "checklistItems",
+          "createdAtUtc",
+          "children"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "frequencyUnit": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FrequencyUnit"
+              }
+            ]
+          },
+          "frequencyQuantity": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "isBadHabit": {
+            "type": "boolean"
+          },
+          "isCompleted": {
+            "type": "boolean"
+          },
+          "isGeneral": {
+            "type": "boolean"
+          },
+          "isFlexible": {
+            "type": "boolean"
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "dueTime": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "time"
+          },
+          "dueEndTime": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "time"
+          },
+          "endDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "days": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DayOfWeek"
+            }
+          },
+          "position": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "reminderEnabled": {
+            "type": "boolean"
+          },
+          "reminderTimes": {
+            "type": "array",
+            "items": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          "scheduledReminders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScheduledReminderTime"
+            }
+          },
+          "checklistItems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChecklistItem"
+            }
+          },
+          "createdAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HabitChildResponse"
+            }
+          },
+          "emoji": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "intervalWeeks": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "linkedGoals": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/LinkedGoalDto"
+            }
+          },
+          "slipAlertEnabled": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "relativeReminders": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/RelativeReminderTime"
+            }
+          },
+          "schedule": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/HabitSchedule"
+              }
+            ]
+          },
+          "startDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          }
+        }
+      },
+      "HabitFullDetailResponse": {
+        "required": [
+          "habit",
+          "metrics",
+          "logs"
+        ],
+        "type": "object",
+        "properties": {
+          "habit": {
+            "$ref": "#/components/schemas/HabitDetailResponse"
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/HabitMetrics"
+          },
+          "logs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HabitLogResponse"
+            }
+          }
+        }
+      },
+      "HabitInstanceItem": {
+        "required": [
+          "date",
+          "status",
+          "logId"
+        ],
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "status": {
+            "$ref": "#/components/schemas/InstanceStatus"
+          },
+          "logId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
       "HabitListCard": {
         "required": [
           "scope",
@@ -15252,6 +15774,110 @@
           }
         }
       },
+      "HabitLogResponse": {
+        "required": [
+          "id",
+          "date",
+          "value",
+          "createdAtUtc"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "value": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "createdAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "HabitMetrics": {
+        "required": [
+          "currentStreak",
+          "longestStreak",
+          "weeklyCompletionRate",
+          "monthlyCompletionRate",
+          "totalCompletions",
+          "lastCompletedDate"
+        ],
+        "type": "object",
+        "properties": {
+          "currentStreak": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "longestStreak": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "weeklyCompletionRate": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "monthlyCompletionRate": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "totalCompletions": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "lastCompletedDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "habitId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "habitTitle": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "HabitPositionRequest": {
         "required": [
           "habitId",
@@ -15273,9 +15899,526 @@
           }
         }
       },
+      "HabitSchedule": {
+        "enum": [
+          "OneTime",
+          "Recurring",
+          "Flexible",
+          "General"
+        ],
+        "type": "string"
+      },
+      "HabitScheduleChildItem": {
+        "required": [
+          "id",
+          "title",
+          "description",
+          "frequencyUnit",
+          "frequencyQuantity",
+          "isBadHabit",
+          "isCompleted",
+          "isGeneral",
+          "isFlexible",
+          "days",
+          "dueDate",
+          "dueTime",
+          "dueEndTime",
+          "endDate",
+          "scheduledDates",
+          "isOverdue",
+          "position",
+          "checklistItems",
+          "tags",
+          "children",
+          "hasSubHabits",
+          "flexibleTarget",
+          "flexibleCompleted",
+          "isLoggedInRange",
+          "instances"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "frequencyUnit": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FrequencyUnit"
+              }
+            ]
+          },
+          "frequencyQuantity": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "isBadHabit": {
+            "type": "boolean"
+          },
+          "isCompleted": {
+            "type": "boolean"
+          },
+          "isGeneral": {
+            "type": "boolean"
+          },
+          "isFlexible": {
+            "type": "boolean"
+          },
+          "days": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DayOfWeek"
+            }
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "dueTime": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "time"
+          },
+          "dueEndTime": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "time"
+          },
+          "endDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "scheduledDates": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          "isOverdue": {
+            "type": "boolean"
+          },
+          "position": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "checklistItems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChecklistItem"
+            }
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HabitTagItem"
+            }
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HabitScheduleChildItem"
+            }
+          },
+          "hasSubHabits": {
+            "type": "boolean"
+          },
+          "flexibleTarget": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "flexibleCompleted": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "isLoggedInRange": {
+            "type": "boolean"
+          },
+          "instances": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HabitInstanceItem"
+            }
+          },
+          "searchMatches": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/SearchMatchField"
+            }
+          },
+          "emoji": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "intervalWeeks": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "createdAtUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "schedule": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/HabitSchedule"
+              }
+            ]
+          },
+          "startDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          }
+        }
+      },
+      "HabitScheduleItem": {
+        "required": [
+          "id",
+          "title",
+          "description",
+          "frequencyUnit",
+          "frequencyQuantity",
+          "isBadHabit",
+          "isCompleted",
+          "isGeneral",
+          "isFlexible",
+          "days",
+          "position",
+          "createdAtUtc",
+          "dueDate",
+          "dueTime",
+          "dueEndTime",
+          "endDate",
+          "scheduledDates",
+          "isOverdue",
+          "reminderEnabled",
+          "reminderTimes",
+          "scheduledReminders",
+          "slipAlertEnabled",
+          "checklistItems",
+          "tags",
+          "linkedGoals",
+          "children",
+          "hasSubHabits",
+          "flexibleTarget",
+          "flexibleCompleted",
+          "isLoggedInRange",
+          "instances"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "frequencyUnit": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FrequencyUnit"
+              }
+            ]
+          },
+          "frequencyQuantity": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "isBadHabit": {
+            "type": "boolean"
+          },
+          "isCompleted": {
+            "type": "boolean"
+          },
+          "isGeneral": {
+            "type": "boolean"
+          },
+          "isFlexible": {
+            "type": "boolean"
+          },
+          "days": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DayOfWeek"
+            }
+          },
+          "position": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "createdAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "dueTime": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "time"
+          },
+          "dueEndTime": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "time"
+          },
+          "endDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "scheduledDates": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          "isOverdue": {
+            "type": "boolean"
+          },
+          "reminderEnabled": {
+            "type": "boolean"
+          },
+          "reminderTimes": {
+            "type": "array",
+            "items": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          "scheduledReminders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScheduledReminderTime"
+            }
+          },
+          "slipAlertEnabled": {
+            "type": "boolean"
+          },
+          "checklistItems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChecklistItem"
+            }
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HabitTagItem"
+            }
+          },
+          "linkedGoals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LinkedGoalDto"
+            }
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HabitScheduleChildItem"
+            }
+          },
+          "hasSubHabits": {
+            "type": "boolean"
+          },
+          "flexibleTarget": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "flexibleCompleted": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "isLoggedInRange": {
+            "type": "boolean"
+          },
+          "instances": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HabitInstanceItem"
+            }
+          },
+          "searchMatches": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/SearchMatchField"
+            }
+          },
+          "emoji": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "intervalWeeks": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "relativeReminders": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/RelativeReminderTime"
+            }
+          },
+          "schedule": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/HabitSchedule"
+              }
+            ]
+          },
+          "startDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          }
+        }
+      },
+      "HabitTagItem": {
+        "required": [
+          "id",
+          "name",
+          "color"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "color": {
+            "type": "string"
+          }
+        }
+      },
       "IFormFile": {
         "type": "string",
         "format": "binary"
+      },
+      "InstanceStatus": {
+        "type": "integer"
       },
       "JoinWaitlistRequest": {
         "required": [
@@ -15299,6 +16442,22 @@
         }
       },
       "JsonElement": { },
+      "LinkedGoalDto": {
+        "required": [
+          "id",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
       "LinkGoalsRequest": {
         "required": [
           "goalIds"
@@ -15508,6 +16667,56 @@
               "string"
             ],
             "format": "uuid"
+          }
+        }
+      },
+      "PaginatedResponseOfHabitScheduleItem": {
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "totalCount",
+          "totalPages"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HabitScheduleItem"
+            }
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -16655,6 +17864,24 @@
           "day_before"
         ]
       },
+      "SearchMatchField": {
+        "required": [
+          "field",
+          "value"
+        ],
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "value": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "SendCodeOperationRequest": {
         "required": [
           "email"
@@ -17282,6 +18509,639 @@
           }
         }
       },
+      "SyncChangesV2Response": {
+        "required": [
+          "habits",
+          "habitLogs",
+          "goals",
+          "goalProgressLogs",
+          "tags",
+          "notifications",
+          "checklistTemplates",
+          "serverTimestamp"
+        ],
+        "type": "object",
+        "properties": {
+          "habits": {
+            "$ref": "#/components/schemas/SyncEntitySetV2OfSyncHabitDto"
+          },
+          "habitLogs": {
+            "$ref": "#/components/schemas/SyncEntitySetV2OfSyncHabitLogDto"
+          },
+          "goals": {
+            "$ref": "#/components/schemas/SyncEntitySetV2OfSyncGoalDto"
+          },
+          "goalProgressLogs": {
+            "$ref": "#/components/schemas/SyncEntitySetV2OfSyncGoalProgressLogDto"
+          },
+          "tags": {
+            "$ref": "#/components/schemas/SyncEntitySetV2OfSyncTagDto"
+          },
+          "notifications": {
+            "$ref": "#/components/schemas/SyncEntitySetV2OfSyncNotificationDto"
+          },
+          "checklistTemplates": {
+            "$ref": "#/components/schemas/SyncEntitySetV2OfSyncChecklistTemplateDto"
+          },
+          "serverTimestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32",
+            "default": 2
+          }
+        }
+      },
+      "SyncChecklistTemplateDto": {
+        "required": [
+          "id",
+          "name",
+          "items",
+          "createdAtUtc",
+          "updatedAtUtc"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SyncDeletedRef": {
+        "required": [
+          "id",
+          "deletedAtUtc"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "deletedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SyncEntitySetV2OfSyncChecklistTemplateDto": {
+        "required": [
+          "updated",
+          "deleted"
+        ],
+        "type": "object",
+        "properties": {
+          "updated": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncChecklistTemplateDto"
+            }
+          },
+          "deleted": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncDeletedRef"
+            }
+          }
+        }
+      },
+      "SyncEntitySetV2OfSyncGoalDto": {
+        "required": [
+          "updated",
+          "deleted"
+        ],
+        "type": "object",
+        "properties": {
+          "updated": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncGoalDto"
+            }
+          },
+          "deleted": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncDeletedRef"
+            }
+          }
+        }
+      },
+      "SyncEntitySetV2OfSyncGoalProgressLogDto": {
+        "required": [
+          "updated",
+          "deleted"
+        ],
+        "type": "object",
+        "properties": {
+          "updated": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncGoalProgressLogDto"
+            }
+          },
+          "deleted": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncDeletedRef"
+            }
+          }
+        }
+      },
+      "SyncEntitySetV2OfSyncHabitDto": {
+        "required": [
+          "updated",
+          "deleted"
+        ],
+        "type": "object",
+        "properties": {
+          "updated": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncHabitDto"
+            }
+          },
+          "deleted": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncDeletedRef"
+            }
+          }
+        }
+      },
+      "SyncEntitySetV2OfSyncHabitLogDto": {
+        "required": [
+          "updated",
+          "deleted"
+        ],
+        "type": "object",
+        "properties": {
+          "updated": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncHabitLogDto"
+            }
+          },
+          "deleted": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncDeletedRef"
+            }
+          }
+        }
+      },
+      "SyncEntitySetV2OfSyncNotificationDto": {
+        "required": [
+          "updated",
+          "deleted"
+        ],
+        "type": "object",
+        "properties": {
+          "updated": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncNotificationDto"
+            }
+          },
+          "deleted": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncDeletedRef"
+            }
+          }
+        }
+      },
+      "SyncEntitySetV2OfSyncTagDto": {
+        "required": [
+          "updated",
+          "deleted"
+        ],
+        "type": "object",
+        "properties": {
+          "updated": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncTagDto"
+            }
+          },
+          "deleted": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncDeletedRef"
+            }
+          }
+        }
+      },
+      "SyncGoalDto": {
+        "required": [
+          "id",
+          "title",
+          "description",
+          "targetValue",
+          "currentValue",
+          "unit",
+          "status",
+          "type",
+          "deadline",
+          "position",
+          "createdAtUtc",
+          "updatedAtUtc",
+          "completedAtUtc",
+          "streakSyncedAtUtc"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "targetValue": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "currentValue": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/GoalStatus"
+          },
+          "type": {
+            "$ref": "#/components/schemas/GoalType"
+          },
+          "deadline": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "position": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "createdAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAtUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "streakSyncedAtUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "isProgressDerived": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          }
+        }
+      },
+      "SyncGoalProgressLogDto": {
+        "required": [
+          "id",
+          "goalId",
+          "value",
+          "previousValue",
+          "note",
+          "createdAtUtc",
+          "updatedAtUtc"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "goalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "value": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "previousValue": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SyncHabitDto": {
+        "required": [
+          "id",
+          "title",
+          "description",
+          "frequencyUnit",
+          "frequencyQuantity",
+          "isBadHabit",
+          "isCompleted",
+          "dueDate",
+          "dueTime",
+          "dueEndTime",
+          "reminderEnabled",
+          "reminderTimes",
+          "isGeneral",
+          "isFlexible",
+          "slipAlertEnabled",
+          "checklistItems",
+          "scheduledReminders",
+          "endDate",
+          "position",
+          "parentHabitId",
+          "createdAtUtc",
+          "updatedAtUtc"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "frequencyUnit": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FrequencyUnit"
+              }
+            ]
+          },
+          "frequencyQuantity": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "isBadHabit": {
+            "type": "boolean"
+          },
+          "isCompleted": {
+            "type": "boolean"
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "dueTime": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "time"
+          },
+          "dueEndTime": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "time"
+          },
+          "reminderEnabled": {
+            "type": "boolean"
+          },
+          "reminderTimes": {
+            "type": "array",
+            "items": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          "isGeneral": {
+            "type": "boolean"
+          },
+          "isFlexible": {
+            "type": "boolean"
+          },
+          "slipAlertEnabled": {
+            "type": "boolean"
+          },
+          "checklistItems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChecklistItem"
+            }
+          },
+          "scheduledReminders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScheduledReminderTime"
+            }
+          },
+          "endDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "position": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "parentHabitId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "createdAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "emoji": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "intervalWeeks": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "relativeReminders": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/RelativeReminderTime"
+            }
+          },
+          "schedule": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/HabitSchedule"
+              }
+            ]
+          },
+          "startDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          }
+        }
+      },
+      "SyncHabitLogDto": {
+        "required": [
+          "id",
+          "habitId",
+          "date",
+          "value",
+          "createdAtUtc",
+          "updatedAtUtc"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "habitId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "value": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "createdAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "SyncMutation": {
         "required": [
           "entity",
@@ -17312,6 +19172,55 @@
           }
         }
       },
+      "SyncNotificationDto": {
+        "required": [
+          "id",
+          "title",
+          "body",
+          "url",
+          "habitId",
+          "isRead",
+          "createdAtUtc",
+          "updatedAtUtc"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "url": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "habitId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "isRead": {
+            "type": "boolean"
+          },
+          "createdAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "SyncSettingsResponse": {
         "required": [
           "syncIntervalSeconds",
@@ -17334,6 +19243,36 @@
               "string"
             ],
             "format": "int32"
+          }
+        }
+      },
+      "SyncTagDto": {
+        "required": [
+          "id",
+          "name",
+          "color",
+          "createdAtUtc",
+          "updatedAtUtc"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "color": {
+            "type": "string"
+          },
+          "createdAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAtUtc": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

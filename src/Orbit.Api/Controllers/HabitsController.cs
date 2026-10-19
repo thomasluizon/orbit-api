@@ -42,7 +42,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
     }
 
     [HttpGet]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(PaginatedResponse<HabitScheduleItem>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetHabits(
@@ -67,7 +67,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
     }
 
     [HttpGet("calendar-month")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CalendarMonthResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetCalendarMonth(
@@ -146,7 +146,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
     }
 
     [HttpGet("{id:guid}")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(HabitDetailResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetHabitById(Guid id, CancellationToken cancellationToken)
@@ -157,7 +157,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
     }
 
     [HttpGet("{id:guid}/detail")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(HabitFullDetailResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetHabitDetail(Guid id, CancellationToken cancellationToken)
