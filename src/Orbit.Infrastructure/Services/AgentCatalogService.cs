@@ -8,9 +8,6 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Infrastructure.Services;
 
-#pragma warning disable S107 // Declarative catalog builders mirror the record shapes they populate.
-#pragma warning disable S1192 // Catalog definitions intentionally reuse product vocabulary and JSON schema literals.
-#pragma warning disable CA1861 // Static catalog schemas are evaluated once at startup and are not hot-path allocations.
 
 public partial class AgentCatalogService : IAgentCatalogService
 {
@@ -139,40 +136,6 @@ public partial class AgentCatalogService : IAgentCatalogService
         }
     }
 
-    private static AgentCapability CreateCapability(
-        string id,
-        string displayName,
-        string description,
-        string domain,
-        string scope,
-        AgentRiskClass riskClass,
-        bool isMutation,
-        bool isPhaseOneReadOnly,
-        AgentConfirmationRequirement confirmationRequirement,
-        string? planRequirement = null,
-        IReadOnlyList<string>? featureFlagKeys = null,
-        IReadOnlyList<string>? chatTools = null,
-        IReadOnlyList<string>? mcpTools = null,
-        IReadOnlyList<string>? equivalentControllerActions = null)
-    {
-        return new AgentCapability(
-            id,
-            displayName,
-            description,
-            domain,
-            scope,
-            riskClass,
-            isMutation,
-            isPhaseOneReadOnly,
-            confirmationRequirement,
-            planRequirement,
-            featureFlagKeys,
-            chatTools,
-            mcpTools,
-            equivalentControllerActions);
-    }
-
-
     private static JsonElement CloneJson(object value)
     {
         using var document = JsonDocument.Parse(JsonSerializer.Serialize(value));
@@ -185,6 +148,3 @@ public partial class AgentCatalogService : IAgentCatalogService
     }
 }
 
-#pragma warning restore CA1861
-#pragma warning restore S1192
-#pragma warning restore S107
