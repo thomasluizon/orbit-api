@@ -52,6 +52,110 @@ public class UpdateHabitCommandHandlerTests
             DueDate: Today)).Value;
     }
 
+    private static Habit CreateCompletedRecurringHabit()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Completed recurring habit", FrequencyUnit.Day, 1,
+            DueDate: Today, EndDate: Today)).Value;
+        habit.Log(Today).IsSuccess.Should().BeTrue();
+        habit.IsCompleted.Should().BeTrue();
+        return habit;
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Handle_EndDateReactivation_AllowanceRefused_LeavesHabitUnchanged(bool clearEndDate)
+    {
+        var habit = CreateCompletedRecurringHabit();
+        var originalDueDate = habit.DueDate;
+        var originalUpdatedAtUtc = habit.UpdatedAtUtc;
+        _habitRepo.FindOneTrackedAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(habit);
+        var refusal = Result.Failure("Reactivation refused.", ErrorCodes.HabitLimitReached);
+        _payGate.CanCreateHabits(UserId, 1, Arg.Any<CancellationToken>())
+            .Returns(refusal);
+        DateOnly? endDate = clearEndDate ? null : Today.AddDays(7);
+        var command = new UpdateHabitCommand(
+            UserId, habit.Id, "Updated title", "Updated description", FrequencyUnit.Day, 1,
+            ClearEndDate: clearEndDate,
+            Options: new UpdateHabitCommandOptions(EndDate: endDate));
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Should().BeSameAs(refusal);
+        result.ErrorCode.Should().Be(ErrorCodes.HabitLimitReached);
+        habit.IsCompleted.Should().BeTrue();
+        habit.EndDate.Should().Be(Today);
+        habit.DueDate.Should().Be(originalDueDate);
+        habit.Title.Should().Be("Completed recurring habit");
+        habit.Description.Should().BeNull();
+        habit.UpdatedAtUtc.Should().Be(originalUpdatedAtUtc);
+        await _payGate.Received(1).CanCreateHabits(UserId, 1, Arg.Any<CancellationToken>());
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Handle_EndDateReactivation_AllowanceGranted_UpdatesAndSaves(bool clearEndDate)
+    {
+        var habit = CreateCompletedRecurringHabit();
+        var originalDueDate = habit.DueDate;
+        _habitRepo.FindOneTrackedAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(habit);
+        _payGate.CanCreateHabits(UserId, 1, Arg.Any<CancellationToken>())
+            .Returns(Result.Success());
+        DateOnly? endDate = clearEndDate ? null : Today.AddDays(7);
+        var command = new UpdateHabitCommand(
+            UserId, habit.Id, "Updated title", "Updated description", FrequencyUnit.Day, 1,
+            ClearEndDate: clearEndDate,
+            Options: new UpdateHabitCommandOptions(EndDate: endDate));
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        habit.IsCompleted.Should().BeFalse();
+        habit.EndDate.Should().Be(endDate);
+        habit.DueDate.Should().Be(originalDueDate);
+        habit.Title.Should().Be("Updated title");
+        habit.Description.Should().Be("Updated description");
+        await _payGate.Received(1).CanCreateHabits(UserId, 1, Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_TitleUpdateWithoutReactivation_DoesNotAskForAllowance()
+    {
+        var habit = CreateTestHabit();
+        _habitRepo.FindOneTrackedAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(habit);
+        _payGate.CanCreateHabits(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure("Reactivation refused.", ErrorCodes.HabitLimitReached));
+        var command = new UpdateHabitCommand(
+            UserId, habit.Id, "Updated title", habit.Description, FrequencyUnit.Day, 1);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        habit.Title.Should().Be("Updated title");
+        habit.IsCompleted.Should().BeFalse();
+        habit.EndDate.Should().BeNull();
+        await _payGate.DidNotReceive().CanCreateHabits(
+            Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task Handle_IsGeneralReactivationAtCeiling_IsRefusedWithoutMutation()
     {
