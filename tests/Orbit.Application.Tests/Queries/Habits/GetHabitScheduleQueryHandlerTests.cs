@@ -119,6 +119,35 @@ public class GetHabitScheduleQueryHandlerTests
             });
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public async Task Handle_CharacterizesFourScheduleTypes(int type)
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Habit", type is 1 or 2 ? FrequencyUnit.Day : null,
+            type is 1 or 2 ? 1 : null, Today,
+            IsFlexible: type == 2, IsGeneral: type == 3)).Value;
+        SetupHabits(habit);
+
+        var result = await _handler.Handle(
+            new GetHabitScheduleQuery(UserId, Today, Today, IsGeneral: type == 3 ? true : null), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var item = result.Value.Items.Should().ContainSingle().Subject;
+        item.Id.Should().Be(habit.Id);
+        item.DueDate.Should().Be(Today);
+        item.IsGeneral.Should().Be(type == 3);
+        item.IsFlexible.Should().Be(type == 2);
+        item.IsCompleted.Should().BeFalse();
+        item.IsOverdue.Should().BeFalse();
+        item.ScheduledDates.Should().Equal(type == 3 ? Array.Empty<DateOnly>() : [Today]);
+        item.FlexibleTarget.Should().Be(type == 2 ? 1 : null);
+        item.FlexibleCompleted.Should().Be(type == 2 ? 0 : null);
+    }
+
     [Fact]
     public async Task Handle_NoHabits_ReturnsEmptyPaginatedResponse()
     {

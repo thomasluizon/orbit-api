@@ -29,7 +29,7 @@ public class JwtTokenService(IOptions<JwtSettings> options) : ITokenService
         var descriptor = new SecurityTokenDescriptor
         {
             Subject = new ClaimsIdentity(claims),
-#pragma warning disable ORBIT0004
+#pragma warning disable ORBIT0004 // SecurityTokenDescriptor.Expires is the JWT absolute expiry instant computed from the configured token lifetime. https://github.com/thomasluizon/orbit-tickets/issues/230
             Expires = DateTime.UtcNow.Add(
 #pragma warning restore ORBIT0004
                 _settings.ExpiryMinutes > 0

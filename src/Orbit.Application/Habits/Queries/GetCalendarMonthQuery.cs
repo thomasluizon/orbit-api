@@ -213,7 +213,9 @@ public class GetCalendarMonthQueryHandler(
             flexibleTarget, flexibleCompleted, isLoggedInRange, instances,
             Emoji: habit.Emoji,
             IntervalWeeks: habit.IntervalWeeks,
-            RelativeReminders: habit.RelativeReminders);
+            RelativeReminders: habit.RelativeReminders,
+            Schedule: habit.Schedule,
+            StartDate: habit.StartDate);
     }
 
     private static (int? Target, int? Completed) CalculateFlexibleProgress(
@@ -279,7 +281,9 @@ public class GetCalendarMonthQueryHandler(
             flexTarget, flexCompleted, isLoggedInRange, instances,
             Emoji: child.Emoji,
             IntervalWeeks: child.IntervalWeeks,
-            CreatedAtUtc: child.CreatedAtUtc);
+            CreatedAtUtc: child.CreatedAtUtc,
+            Schedule: child.Schedule,
+            StartDate: child.StartDate);
     }
 
     private static bool HasAnyDescendantDue(

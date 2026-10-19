@@ -82,7 +82,7 @@ public partial class AccountDeletionService(
 
         return await dbContext.Users
             .IgnoreQueryFilters()
-#pragma warning disable ORBIT0004
+#pragma warning disable ORBIT0004 // GetUsersScheduledForDeletionAsync compares ScheduledDeletionAt with the current instant to find expired deletion grace periods. https://github.com/thomasluizon/orbit-tickets/issues/230
             .Where(u => u.IsDeactivated && u.ScheduledDeletionAt.HasValue && u.ScheduledDeletionAt.Value <= DateTime.UtcNow)
 #pragma warning restore ORBIT0004
             .Select(u => u.Id)
@@ -202,7 +202,7 @@ public partial class AccountDeletionService(
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
 
-#pragma warning disable ORBIT0004
+#pragma warning disable ORBIT0004 // CleanupStaleSentRecords uses a 90-day UTC retention boundary for old reminder and slip-alert dedupe rows, not notification scheduling. https://github.com/thomasluizon/orbit-tickets/issues/230
         var cutoff = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-90));
 #pragma warning restore ORBIT0004
 
@@ -214,7 +214,7 @@ public partial class AccountDeletionService(
             .Where(a => a.WeekStart < cutoff)
             .ExecuteDeleteAsync(ct);
 
-#pragma warning disable ORBIT0004
+#pragma warning disable ORBIT0004 // processedRequestCutoff expires ProcessedRequests by elapsed retention days against CreatedAtUtc. https://github.com/thomasluizon/orbit-tickets/issues/230
         var processedRequestCutoff = DateTime.UtcNow.AddDays(-ProcessedRequestRetentionDays);
 #pragma warning restore ORBIT0004
         var deletedProcessedRequests = await dbContext.ProcessedRequests

@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using NSubstitute;
@@ -5,6 +6,7 @@ using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using Orbit.Domain.ValueObjects;
 using Orbit.Infrastructure.Persistence;
 using Xunit.Abstractions;
@@ -25,6 +27,49 @@ public class HabitScheduleReadShapeTests(ITestOutputHelper output)
             .Options;
         using var postgres = new OrbitDbContext(options);
         postgres.Database.ProviderName.Should().Be("Npgsql.EntityFrameworkCore.PostgreSQL");
+    }
+
+    [Fact]
+    public async Task ScheduleQuery_DivergentProjectionDoesNotOverwriteTrackedStartDateOrSchedule()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var user = User.Create("Schedule User", "schedule-anchor@example.com").Value;
+        var habit = Habit.Create(new HabitCreateParams(
+            user.Id, "Morning plan", FrequencyUnit.Day, 1, Today)).Value;
+        factory.Context.Users.Add(user);
+        factory.Context.Habits.Add(habit);
+        await factory.Context.SaveChangesAsync();
+        var candidate = Habit.FromScheduleSnapshot(HabitScheduleSnapshot.FromHabit(habit) with
+        {
+            StartDate = Today.AddDays(-7),
+            Schedule = HabitSchedule.OneTime
+        }, user.Id);
+        var repository = Substitute.For<IGenericRepository<Habit>>();
+        repository.ProjectAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<HabitScheduleCandidate>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<IQueryable<Habit>, IQueryable<HabitScheduleCandidate>>>(1)(
+                new[] { candidate }.AsQueryable()).ToArray());
+        repository.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { habit });
+        var dates = Substitute.For<IUserDateService>();
+        dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(Today);
+        var handler = new GetHabitScheduleQueryHandler(repository,
+            new HabitScheduleLogReader(factory.Context), new HabitSchedulePageLoader(factory.Context),
+            dates, Substitute.For<IUnitOfWork>());
+
+        var result = await handler.Handle(new GetHabitScheduleQuery(user.Id, Today, Today), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var item = result.Value.Items.Should().ContainSingle().Subject;
+        item.StartDate.Should().Be(Today);
+        item.Schedule.Should().Be(HabitSchedule.Recurring);
+        habit.StartDate.Should().Be(Today);
+        habit.Schedule.Should().Be(HabitSchedule.Recurring);
+        factory.Context.ChangeTracker.DetectChanges();
+        factory.Context.Entry(habit).Property(h => h.StartDate).IsModified.Should().BeFalse();
+        factory.Context.Entry(habit).Property(h => h.Schedule).IsModified.Should().BeFalse();
     }
 
     [Fact]

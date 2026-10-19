@@ -56,7 +56,7 @@ public partial class AiUsageSummaryService(
 
     internal async Task SummarizeYesterdayAsync(CancellationToken cancellationToken)
     {
-#pragma warning disable ORBIT0004
+#pragma warning disable ORBIT0004 // yesterday selects the UTC AiUsageDaily accounting partition and operator quota summary log; user scheduling and quota enforcement do not consume it. https://github.com/thomasluizon/orbit-tickets/issues/230
         var yesterday = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1);
 #pragma warning restore ORBIT0004
         if (_lastSummarizedDate == yesterday)

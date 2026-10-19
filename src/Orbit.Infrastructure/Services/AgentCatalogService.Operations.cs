@@ -5,26 +5,36 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Infrastructure.Services;
 
-#pragma warning disable S107 // Declarative catalog builders mirror the record shapes they populate.
-#pragma warning disable S1192 // Catalog definitions intentionally reuse product vocabulary and JSON schema literals.
-#pragma warning disable CA1861 // Static catalog schemas are evaluated once at startup and are not hot-path allocations.
-
 public partial class AgentCatalogService
 {
+    private const string SchemaObject = "object";
+    private const string SchemaString = "string";
+    private const string SchemaBoolean = "boolean";
+    private const string SuccessField = "success";
+    private const string AccessTokenField = "access_token";
+    private const string RefreshTokenField = "refresh_token";
+    private static readonly string[] RequiredSuccess = [SuccessField];
+    private static readonly string[] RequiredEmail = ["email"];
+    private static readonly string[] RequiredEmailCode = ["email", "code"];
+    private static readonly string[] RequiredAuthTokens = [AccessTokenField, RefreshTokenField, "user_id"];
+    private static readonly string[] RequiredGoogleCode = ["code", "code_verifier", "redirect_uri"];
+    private static readonly string[] RequiredRefreshToken = [RefreshTokenField];
+    private static readonly string[] RequiredSessionTokens = [AccessTokenField, RefreshTokenField];
+
     private List<AgentOperation> BuildOperations(IEnumerable<IAiTool> tools)
     {
         var responseSchema = CloneJson(new
         {
-            type = "object",
+            type = SchemaObject,
             properties = new
             {
-                success = new { type = "boolean" },
-                entity_id = new { type = "string", nullable = true },
-                entity_name = new { type = "string", nullable = true },
-                error = new { type = "string", nullable = true },
-                payload = new { type = "object", nullable = true }
+                success = new { type = SchemaBoolean },
+                entity_id = new { type = SchemaString, nullable = true },
+                entity_name = new { type = SchemaString, nullable = true },
+                error = new { type = SchemaString, nullable = true },
+                payload = new { type = SchemaObject, nullable = true }
             },
-            required = new[] { "success" }
+            required = RequiredSuccess
         });
 
         return tools
@@ -76,22 +86,22 @@ public partial class AgentCatalogService
                 false,
                 CloneJson(new
                 {
-                    type = "object",
+                    type = SchemaObject,
                     properties = new
                     {
-                        email = new { type = "string" },
-                        language = new { type = "string", nullable = true }
+                        email = new { type = SchemaString },
+                        language = new { type = SchemaString, nullable = true }
                     },
-                    required = new[] { "email" }
+                    required = RequiredEmail
                 }),
                 CloneJson(new
                 {
-                    type = "object",
+                    type = SchemaObject,
                     properties = new
                     {
-                        success = new { type = "boolean" }
+                        success = new { type = SchemaBoolean }
                     },
-                    required = new[] { "success" }
+                    required = RequiredSuccess
                 })),
             new AgentOperation(
                 "verify_auth_code",
@@ -104,26 +114,26 @@ public partial class AgentCatalogService
                 false,
                 CloneJson(new
                 {
-                    type = "object",
+                    type = SchemaObject,
                     properties = new
                     {
-                        email = new { type = "string" },
-                        code = new { type = "string" },
-                        language = new { type = "string", nullable = true },
-                        referral_code = new { type = "string", nullable = true }
+                        email = new { type = SchemaString },
+                        code = new { type = SchemaString },
+                        language = new { type = SchemaString, nullable = true },
+                        referral_code = new { type = SchemaString, nullable = true }
                     },
-                    required = new[] { "email", "code" }
+                    required = RequiredEmailCode
                 }),
                 CloneJson(new
                 {
-                    type = "object",
+                    type = SchemaObject,
                     properties = new
                     {
-                        access_token = new { type = "string" },
-                        refresh_token = new { type = "string" },
-                        user_id = new { type = "string" }
+                        access_token = new { type = SchemaString },
+                        refresh_token = new { type = SchemaString },
+                        user_id = new { type = SchemaString }
                     },
-                    required = new[] { "access_token", "refresh_token", "user_id" }
+                    required = RequiredAuthTokens
                 }))
         ];
     }
@@ -143,27 +153,27 @@ public partial class AgentCatalogService
                 false,
                 CloneJson(new
                 {
-                    type = "object",
+                    type = SchemaObject,
                     properties = new
                     {
-                        code = new { type = "string" },
-                        code_verifier = new { type = "string" },
-                        redirect_uri = new { type = "string" },
-                        language = new { type = "string", nullable = true },
-                        referral_code = new { type = "string", nullable = true }
+                        code = new { type = SchemaString },
+                        code_verifier = new { type = SchemaString },
+                        redirect_uri = new { type = SchemaString },
+                        language = new { type = SchemaString, nullable = true },
+                        referral_code = new { type = SchemaString, nullable = true }
                     },
-                    required = new[] { "code", "code_verifier", "redirect_uri" }
+                    required = RequiredGoogleCode
                 }),
                 CloneJson(new
                 {
-                    type = "object",
+                    type = SchemaObject,
                     properties = new
                     {
-                        access_token = new { type = "string" },
-                        refresh_token = new { type = "string" },
-                        user_id = new { type = "string" }
+                        access_token = new { type = SchemaString },
+                        refresh_token = new { type = SchemaString },
+                        user_id = new { type = SchemaString }
                     },
-                    required = new[] { "access_token", "refresh_token", "user_id" }
+                    required = RequiredAuthTokens
                 })),
             new AgentOperation(
                 "refresh_auth_session",
@@ -176,22 +186,22 @@ public partial class AgentCatalogService
                 false,
                 CloneJson(new
                 {
-                    type = "object",
+                    type = SchemaObject,
                     properties = new
                     {
-                        refresh_token = new { type = "string" }
+                        refresh_token = new { type = SchemaString }
                     },
-                    required = new[] { "refresh_token" }
+                    required = RequiredRefreshToken
                 }),
                 CloneJson(new
                 {
-                    type = "object",
+                    type = SchemaObject,
                     properties = new
                     {
-                        access_token = new { type = "string" },
-                        refresh_token = new { type = "string" }
+                        access_token = new { type = SchemaString },
+                        refresh_token = new { type = SchemaString }
                     },
-                    required = new[] { "access_token", "refresh_token" }
+                    required = RequiredSessionTokens
                 })),
             new AgentOperation(
                 "logout_auth_session",
@@ -204,26 +214,22 @@ public partial class AgentCatalogService
                 false,
                 CloneJson(new
                 {
-                    type = "object",
+                    type = SchemaObject,
                     properties = new
                     {
-                        refresh_token = new { type = "string" }
+                        refresh_token = new { type = SchemaString }
                     },
-                    required = new[] { "refresh_token" }
+                    required = RequiredRefreshToken
                 }),
                 CloneJson(new
                 {
-                    type = "object",
+                    type = SchemaObject,
                     properties = new
                     {
-                        success = new { type = "boolean" }
+                        success = new { type = SchemaBoolean }
                     },
-                    required = new[] { "success" }
+                    required = RequiredSuccess
                 }))
         ];
     }
 }
-
-#pragma warning restore CA1861
-#pragma warning restore S1192
-#pragma warning restore S107

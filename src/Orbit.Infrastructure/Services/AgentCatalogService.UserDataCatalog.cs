@@ -2,12 +2,10 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Infrastructure.Services;
 
-#pragma warning disable S107 // Declarative catalog builders mirror the record shapes they populate.
-#pragma warning disable S1192 // Catalog definitions intentionally reuse product vocabulary and JSON schema literals.
-#pragma warning disable CA1861 // Static catalog schemas are evaluated once at startup and are not hot-path allocations.
-
 public partial class AgentCatalogService
 {
+    private const string ModerateSensitivity = "moderate";
+
     private static IReadOnlyList<UserDataCatalogEntry> BuildUserDataCatalog()
     {
         return
@@ -27,7 +25,7 @@ public partial class AgentCatalogService
                 "profile",
                 "Profile Identity",
                 "Name, email, language, timezone, onboarding, and preference state.",
-                "moderate",
+                ModerateSensitivity,
                 "Retained for the lifetime of the account unless the account is deleted.",
                 AiReadable: true,
                 AiMutableInPhaseOne: true,
@@ -45,7 +43,7 @@ public partial class AgentCatalogService
                 "habits",
                 "Habits, Logs, Tags, And Checklist Templates",
                 "Recurring habits, one-time tasks, logs, tags, checklist templates, and related schedule state.",
-                "moderate",
+                ModerateSensitivity,
                 "Retained until deleted by the user; logs remain part of progress history.",
                 AiReadable: true,
                 AiMutableInPhaseOne: true,
@@ -62,7 +60,7 @@ public partial class AgentCatalogService
                 "goals",
                 "Goals And Progress",
                 "Goal titles, descriptions, target values, status, linked habits, and progress logs.",
-                "moderate",
+                ModerateSensitivity,
                 "Retained until deleted by the user.",
                 AiReadable: true,
                 AiMutableInPhaseOne: true,
@@ -126,7 +124,7 @@ public partial class AgentCatalogService
                 "gamification",
                 "Gamification",
                 "Streaks, streak freezes, XP, levels, and achievement progress.",
-                "moderate",
+                ModerateSensitivity,
                 "Retained while the account exists so long-term streak and progress history can be calculated.",
                 AiReadable: true,
                 AiMutableInPhaseOne: true,
@@ -143,7 +141,7 @@ public partial class AgentCatalogService
                 "referrals",
                 "Referrals",
                 "Referral code, referral dashboard metrics, and earned reward state.",
-                "moderate",
+                ModerateSensitivity,
                 "Retained for reward attribution and growth reporting until the account is deleted.",
                 AiReadable: true,
                 AiMutableInPhaseOne: false,
@@ -198,7 +196,7 @@ public partial class AgentCatalogService
                 "sync",
                 "Offline Sync State",
                 "Versioned sync exports, deleted references, and client replay state for first-party apps.",
-                "moderate",
+                ModerateSensitivity,
                 "Retained while sync clients are active and according to cleanup policies for offline state.",
                 AiReadable: true,
                 AiMutableInPhaseOne: false,
@@ -228,7 +226,3 @@ public partial class AgentCatalogService
         ];
     }
 }
-
-#pragma warning restore CA1861
-#pragma warning restore S1192
-#pragma warning restore S107

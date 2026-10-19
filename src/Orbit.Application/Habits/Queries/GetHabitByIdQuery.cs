@@ -32,7 +32,11 @@ public record HabitChildResponse(
     string? Emoji = null,
     int? IntervalWeeks = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    DateTime? CreatedAtUtc = null);
+    DateTime? CreatedAtUtc = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    Domain.Enums.HabitSchedule? Schedule = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    DateOnly? StartDate = null);
 
 public record HabitDetailResponse(
     Guid Id,
@@ -62,7 +66,11 @@ public record HabitDetailResponse(
     IReadOnlyList<LinkedGoalDto>? LinkedGoals = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     bool? SlipAlertEnabled = null,
-    IReadOnlyList<RelativeReminderTime>? RelativeReminders = null);
+    IReadOnlyList<RelativeReminderTime>? RelativeReminders = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    Domain.Enums.HabitSchedule? Schedule = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    DateOnly? StartDate = null);
 
 public record GetHabitByIdQuery(Guid UserId, Guid HabitId) : IRequest<Result<HabitDetailResponse>>;
 
@@ -126,7 +134,9 @@ public class GetHabitByIdQueryHandler(
             children,
             Emoji: habit.Emoji,
             IntervalWeeks: habit.IntervalWeeks,
-            RelativeReminders: habit.RelativeReminders));
+            RelativeReminders: habit.RelativeReminders,
+            Schedule: habit.Schedule,
+            StartDate: habit.StartDate));
     }
 }
 
@@ -204,7 +214,9 @@ internal static class HabitDetailChildMapper
         MapChildren(child, userToday, weekStartDay, descendantLogsByHabitId),
         Emoji: child.Emoji,
         IntervalWeeks: child.IntervalWeeks,
-        CreatedAtUtc: child.CreatedAtUtc);
+        CreatedAtUtc: child.CreatedAtUtc,
+        Schedule: child.Schedule,
+        StartDate: child.StartDate);
 
     private static bool GetResponseCompletion(
         Habit habit,

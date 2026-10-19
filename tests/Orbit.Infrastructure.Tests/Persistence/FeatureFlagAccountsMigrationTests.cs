@@ -26,6 +26,7 @@ public class FeatureFlagAccountsMigrationTests
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
 
+        differences.Should().HaveCount(31);
         var owedCancellations = differences.OfType<CreateTableOperation>()
             .Should().ContainSingle(table => table.Name == "OwedSubscriptionCancellations").Subject;
         owedCancellations.Name.Should().Be("OwedSubscriptionCancellations");
@@ -50,6 +51,7 @@ public class FeatureFlagAccountsMigrationTests
             && Equals(column.DefaultValue, false));
         renewalColumns.Select(column => column.Name).Should().BeEquivalentTo(
             "StripeRenewalStoppedByDeletion", "PlayRenewalStoppedByDeletion");
+        AssertHabitExpandColumns(differences);
         differences.OfType<DropForeignKeyOperation>().Select(operation => operation.Name).Should().BeEquivalentTo(
             "FK_AccountabilityPairs_Users_AddresseeId", "FK_AccountabilityPairs_Users_RequesterId");
         differences.OfType<AddForeignKeyOperation>().Should().HaveCount(2).And.OnlyContain(operation =>
@@ -87,7 +89,19 @@ public class FeatureFlagAccountsMigrationTests
             "20261018111350_AddDurableSignupWork",
             "20261018111711_RecordDeletionStoppedRenewals",
             "20261019011031_ContractHabitLogSlip",
-            "20261019091925_AddOwedSubscriptionCancellations");
+            "20261019091925_AddOwedSubscriptionCancellations",
+            "20261019124138_AddAstraBlockAnswerReplay",
+            "20261019165331_ExpandHabitScheduleAndStartDate");
+    }
+
+    private static void AssertHabitExpandColumns(IReadOnlyList<MigrationOperation> differences)
+    {
+        var habitColumns = differences.OfType<AddColumnOperation>().Where(column => column.Table == "Habits").ToArray();
+        habitColumns.Should().HaveCount(2);
+        habitColumns.Should().ContainSingle(column => column.Name == "Schedule"
+            && column.ClrType == typeof(int) && !column.IsNullable && Equals(column.DefaultValue, 0));
+        habitColumns.Should().ContainSingle(column => column.Name == "StartDate"
+            && column.ClrType == typeof(DateOnly) && !column.IsNullable && column.DefaultValueSql == "'0001-01-01'");
     }
 
     [Fact]
