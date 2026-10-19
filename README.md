@@ -1,6 +1,6 @@
 # Orbit API
 
-The backend for **Orbit** -- an AI-powered habit tracker. Provides a REST API for habit management, an AI agent (chat + MCP tools), gamification, goals, calendar sync, social/accountability, push notifications, and subscription billing. Built with Clean Architecture and CQRS.
+The backend for **Orbit** -- an AI-powered habit tracker. Provides a REST API for habit management, an AI agent (chat + MCP tools), gamification, goals, calendar sync, social features, push notifications, and subscription billing. Built with Clean Architecture and CQRS.
 
 **Live:** [api.useorbit.org](https://api.useorbit.org) | **App:** [app.useorbit.org](https://app.useorbit.org) | **Landing:** [useorbit.org](https://useorbit.org)
 
@@ -35,7 +35,7 @@ The backend for **Orbit** -- an AI-powered habit tracker. Provides a REST API fo
 - **Gamification** -- XP, levels, streaks, streak freezes, and achievements
 - **Goals** -- Goal tracking with deadlines and AI-assisted review
 - **Calendar** -- Google Calendar auto-sync of scheduled habits
-- **Social & Accountability** -- Friends, public profiles, accountability partners, challenges, and referrals
+- **Social** -- Friends, public profiles, and referrals
 - **Checklist Templates** -- Reusable habit/checklist templates
 - **Tags** -- Colored tags for habit organization
 - **User Facts** -- Personal context facts that enhance AI responses (soft-deleted)
@@ -98,7 +98,7 @@ Clean Architecture with four layers:
 ```
 src/
   Orbit.Api/              # Presentation layer
-    Controllers/          #   26 controllers (see below)
+    Controllers/          #   Controllers (see below)
     Extensions/           #   PayGate-aware IActionResult helpers
     Middleware/           #   Security headers, unhandled/validation exception handlers
     Program.cs            #   DI configuration, middleware pipeline
@@ -109,7 +109,7 @@ src/
     Chat/                 #   AI chat orchestration
     Goals/ Gamification/  #   Goals, XP/streaks/achievements
     Calendar/             #   Google Calendar sync
-    Accountability/ Social/ Challenges/ Referrals/   # Social graph
+    Social/ Referrals/    #   Social graph
     ChecklistTemplates/ Tags/ UserFacts/ Uploads/    # Content
     Auth/ Profile/ ApiKeys/ Subscriptions/ Support/ Notifications/ Waitlist/
     Behaviors/            #   MediatR pipeline (ValidationBehavior, ...)
@@ -134,7 +134,7 @@ tests/
 
 ### Controllers
 
-`Accountability`, `Achievements`, `Ai`, `ApiKeys`, `Auth`, `Calendar`, `Challenges`, `Chat`, `ChecklistTemplates`, `Config`, `Friends`, `Gamification`, `Goals`, `Habits`, `Notification`, `OAuth`, `Profile`, `PublicProfile`, `Referral`, `Subscription`, `Support`, `Sync`, `Tags`, `Uploads`, `UserFacts`, `Waitlist`.
+`Achievements`, `Ai`, `ApiKeys`, `Auth`, `Calendar`, `Chat`, `ChecklistTemplates`, `Config`, `Friends`, `Gamification`, `Goals`, `Habits`, `Notification`, `OAuth`, `Profile`, `PublicProfile`, `Referral`, `Subscription`, `Support`, `Sync`, `Tags`, `Uploads`, `UserFacts`, `Waitlist`.
 
 ### Key Patterns
 

@@ -6,8 +6,6 @@ public static partial class ErrorCopy
 {
     private static (string Code, string En, string PtBr)[] Validation =>
     [
-        (ValidationErrorCodes.HabitIdsRequired, "Habit ids must not be empty.", "Os IDs dos hábitos não podem estar vazios."),
-        (ValidationErrorCodes.HabitIdsUnique, "Habit ids must not contain duplicates.", "Os IDs dos hábitos não podem se repetir."),
         (ValidationErrorCodes.VerificationCodeFormat, "Enter all 6 digits", "Digite os 6 dígitos"),
         (ValidationErrorCodes.ApiKeyNameRequired, "Give the API key a name", "Dê um nome à chave de API"),
         (ValidationErrorCodes.ApiKeyNameLength, "Shorten the API key name to 50 characters or fewer", "Encurte o nome da chave de API para até 50 caracteres"),
