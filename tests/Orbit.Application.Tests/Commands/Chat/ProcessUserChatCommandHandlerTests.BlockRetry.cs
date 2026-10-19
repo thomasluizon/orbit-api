@@ -81,14 +81,16 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Theory]
-    [InlineData("continuation")]
-    [InlineData("cancel")]
-    [InlineData("budget")]
-    [InlineData("completion")]
-    [InlineData("serialization")]
-    public async Task ChoiceAnswer_CommittedHabitThenFailure_ReplaysWithoutCreatingAgain(string failure)
+    [InlineData("continuation", "en")]
+    [InlineData("cancel", "en")]
+    [InlineData("budget", "en")]
+    [InlineData("completion", "en")]
+    [InlineData("serialization", "en")]
+    [InlineData("continuation", "pt-BR")]
+    public async Task ChoiceAnswer_CommittedHabitThenFailure_ReplaysWithoutCreatingAgain(string failure, string language)
     {
         var user = User.Create("Alex", "retry@example.com").Value;
+        user.SetLanguage(language);
         var quota = CreateRealPayGate(user);
         var block = RetryChoice();
         _payGate.CanCreateHabits(UserId, 1, Arg.Any<CancellationToken>()).Returns(Result.Success());
@@ -135,11 +137,46 @@ public partial class ProcessUserChatCommandHandlerTests
         var retry = await handler.Handle(request, default);
 
         first.IsSuccess.Should().BeTrue();
-        first.Value.AiMessage.Should().Be(EnglishToolFailureMessage);
+        first.Value.AiMessage.Should().Be(language == "pt-BR"
+            ? "As alterações listadas foram salvas, mas o restante da resposta não foi concluído."
+            : "The listed changes were saved, but the rest of the reply did not finish.");
         first.Value.Actions.Should().ContainSingle(action => action.Type == "CreateHabit" && action.Status == ActionStatus.Success);
         retry.Value.Should().BeEquivalentTo(first.Value);
         user.GetAiMessagesUsedToday(Today).Should().Be(1);
         await _habitRepo.Received(1).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("en", "Nothing has been saved, and the rest of the reply did not finish.")]
+    [InlineData("pt-BR", "Nada foi salvo, e o restante da resposta não foi concluído.")]
+    public async Task ChoiceAnswer_PendingWriteThenFailure_ReplaysWithoutClaimingChangesWereSaved(string language, string message)
+    {
+        var user = User.Create("Alex", "retry@example.com").Value;
+        user.SetLanguage(language);
+        var quota = CreateRealPayGate(user);
+        var block = RetryChoice();
+        var tool = FakeTool("delete_habit");
+        tool.IsReadOnly.Returns(false);
+        var handler = CreateHandler(quota, tool);
+        var pending = new PendingAgentOperation(Guid.NewGuid(), "habits", "Habits", "Delete",
+            AgentRiskClass.Low, AgentConfirmationRequirement.FreshConfirmation, block.ExpiresAtUtc);
+        _operationExecutor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new AgentExecuteOperationResponse(new("delete_habit", "delete_habit", AgentRiskClass.Low,
+                AgentConfirmationRequirement.FreshConfirmation, AgentOperationStatus.PendingConfirmation), pending));
+        _pendingOperationStore.IsAwaitingConfirmation(UserId, pending.Id).Returns(true);
+        SetupAiResponse(ToolResponse("delete_habit", "write", "{}"));
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>()).Returns(Result.Failure<AiResponse>(ErrorMessages.AiUnavailable));
+        var request = new ProcessUserChatCommand(UserId, "Evening", BlockAnswer: new(block.Id, ["b"]));
+
+        var first = await handler.Handle(request, default);
+        var replay = await handler.Handle(request, default);
+
+        first.IsSuccess.Should().BeTrue();
+        first.Value.AiMessage.Should().Be(message);
+        first.Value.Actions.Should().BeEmpty();
+        replay.Value.Should().BeEquivalentTo(first.Value);
+        replay.Value.PendingOperations.Should().ContainSingle().Which.Id.Should().Be(pending.Id);
     }
 
     [Fact]

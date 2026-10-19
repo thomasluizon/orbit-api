@@ -1,6 +1,7 @@
 ﻿using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Orbit.Application.Chat;
 using Orbit.Application.Chat.Tools;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
@@ -210,16 +211,8 @@ public partial class AgentOperationExecutor(
         if (pending is not null && execution.Request.Surface == AgentExecutionSurface.Chat
             && execution.Request.IncludeChangePreview)
         {
-            PendingOperationChangePreview? preview = null;
-            try
-            {
-                preview = await changePreviewer.PreviewAsync(
-                    execution.Request.UserId, execution.Operation.Id, execution.Arguments, cancellationToken);
-            }
-            catch (Exception exception)
-            {
-                logger.LogWarning(exception, "Pending operation change preview failed for {OperationId}", execution.Operation.Id);
-            }
+            var preview = await changePreviewer.PreviewSafelyAsync(
+                execution.Request.UserId, execution.Operation.Id, execution.Arguments, logger, cancellationToken);
 
             if (preview is not null)
             {

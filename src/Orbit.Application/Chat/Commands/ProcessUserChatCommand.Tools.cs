@@ -33,7 +33,7 @@ public partial class ProcessUserChatCommandHandler
                 iteration);
         }
 
-        while (aiResponse.HasToolCalls && iteration < MaxToolIterations && !tokenBudgetExceeded)
+        while (aiResponse.HasToolCalls && iteration < ChatTurnLimits.MaxToolIterations && !tokenBudgetExceeded)
         {
             iteration++;
             if (request.StreamSink is not null)
@@ -158,6 +158,15 @@ public partial class ProcessUserChatCommandHandler
             ? PortugueseToolFailureMessage
             : EnglishToolFailureMessage;
 
+    private static string CommittedWriteMessage(string? language, bool hasSavedActions) =>
+        LocaleHelper.IsPortuguese(language)
+            ? hasSavedActions
+                ? "As alterações listadas foram salvas, mas o restante da resposta não foi concluído."
+                : "Nada foi salvo, e o restante da resposta não foi concluído."
+            : hasSavedActions
+                ? "The listed changes were saved, but the rest of the reply did not finish."
+                : "Nothing has been saved, and the rest of the reply did not finish.";
+
     /// <summary>
     /// Executes a round's tool calls, dispatching the read-only subset concurrently (each on its
     /// own DI scope for DbContext isolation) and the write subset sequentially on the ambient
@@ -209,9 +218,11 @@ public partial class ProcessUserChatCommandHandler
         ToolExecutionAccumulator results, DateTime claim, CancellationToken cancellationToken)
     {
         ToolCallOutcome? outcome = null;
+        ActionResult[] actions = [];
+        PendingAgentOperation[] pending = [];
         try
         {
-            await execution.UnitOfWork.ExecuteInTransactionAsync(async token =>
+            await execution.UnitOfWork.ExecuteOnceInTransactionAsync(async token =>
             {
                 await execution.UnitOfWork.AcquireAdvisoryLockAsync($"astra-blocks:{request.UserId}", token);
                 var block = await execution.BlockStore.GetAsync(request.BlockAnswer!.BlockId, request.UserId, token);
@@ -222,31 +233,32 @@ public partial class ProcessUserChatCommandHandler
                 if (outcome.OperationResult?.Status is AgentOperationStatus.Failed or AgentOperationStatus.Denied
                     or AgentOperationStatus.UnsupportedByPolicy)
                     throw new BlockWriteRejectedException(outcome);
-                if (outcome.ActionResult is not { Status: ActionStatus.Success } && outcome.PendingOperation is null)
-                    return;
-                await execution.UnitOfWork.SaveChangesAsync(token);
-                var actions = results.CommittedActions.Concat(outcome.ActionResult is { Status: ActionStatus.Success } action
+                actions = results.CommittedActions.Concat(outcome.ActionResult is { Status: ActionStatus.Success } action
                     ? new[] { action } : []).ToArray();
-                var pending = results.CommittedPendingOperations.Concat(outcome.PendingOperation is { } operation
+                pending = results.CommittedPendingOperations.Concat(outcome.PendingOperation is { } operation
                     ? new[] { operation } : []).ToArray();
-                var user = await data.UserRepository.GetByIdAsync(request.UserId, token);
-                var line = ToolFailureMessage(GetUserLanguage(user));
-                var recovery = new ChatResponse(line, actions, PendingOperations: pending, CorrelationId: request.CorrelationId,
-                    Parts: request.ClientContext?.SupportsParts == true ? [new ChatTextPart(line)] : null);
-                if (!await execution.BlockStore.CheckpointAnswerAsync(block.Id, request.UserId, claim,
-                    JsonSerializer.Serialize(recovery, ChatStreamEvent.SerializerOptions), token))
-                    throw new InvalidOperationException("Block answer reservation was lost.");
-                results.CommittedActions.Clear();
-                results.CommittedActions.AddRange(actions);
-                results.CommittedPendingOperations.Clear();
-                results.CommittedPendingOperations.AddRange(pending);
+                if (outcome.ActionResult is { Status: ActionStatus.Success } || outcome.PendingOperation is not null)
+                {
+                    await execution.UnitOfWork.SaveChangesAsync(token);
+                    var user = await data.UserRepository.GetByIdAsync(request.UserId, token);
+                    var line = CommittedWriteMessage(GetUserLanguage(user), actions.Length > 0);
+                    var recovery = new ChatResponse(line, actions, PendingOperations: pending, CorrelationId: request.CorrelationId,
+                        Parts: request.ClientContext?.SupportsParts == true ? [new ChatTextPart(line)] : null);
+                    if (!await execution.BlockStore.CheckpointAnswerAsync(block.Id, request.UserId, claim,
+                        JsonSerializer.Serialize(recovery, ChatStreamEvent.SerializerOptions), token))
+                        throw new InvalidOperationException("Block answer reservation was lost.");
+                }
             }, cancellationToken);
+            results.CommittedActions.Clear();
+            results.CommittedActions.AddRange(actions);
+            results.CommittedPendingOperations.Clear();
+            results.CommittedPendingOperations.AddRange(pending);
+            return outcome ?? throw new InvalidOperationException("Tool execution did not complete.");
         }
         catch (BlockWriteRejectedException exception)
         {
             return exception.Outcome;
         }
-        return outcome ?? throw new InvalidOperationException("Tool execution did not complete.");
     }
 
     private sealed class BlockWriteRejectedException(ToolCallOutcome outcome) : Exception

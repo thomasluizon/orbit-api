@@ -109,6 +109,8 @@ public class IssuedAstraBlockStoreTests
         await store.AddAsync(block, default);
         var claim = block.CreatedAtUtc;
         (await store.MarkAnsweredAsync(block.Id, user.Id, claim, default)).Should().BeTrue();
+        await store.RecordAnswerAsync(block.Id, user.Id, claim,
+            IssuedAstraBlock.SerializeAnswer(new(block.Id, ["a"])), null, null, default);
         await store.InvalidateOpenAsync(user.Id, default);
         (await store.ReleaseAnswerAsync(block.Id, user.Id, claim, default)).Should().BeTrue();
         (await store.GetAsync(block.Id, user.Id, default))!.InvalidatedAtUtc.Should().NotBeNull();
@@ -131,4 +133,20 @@ public class IssuedAstraBlockStoreTests
             await factory.Context.Users.Where(item => item.Id == user.Id).ExecuteDeleteAsync();
         (await factory.Context.IssuedAstraBlocks.CountAsync()).Should().Be(0);
     }
+    [Fact]
+    public async Task LegacyAnsweredBlock_WithoutRecordedAnswer_CannotBeReleased()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var user = User.Create("Blocks", "blocks@example.com").Value;
+        factory.Context.Users.Add(user);
+        var block = Block(user.Id);
+        block.MarkAnswered(block.CreatedAtUtc);
+        factory.Context.IssuedAstraBlocks.Add(block);
+        await factory.Context.SaveChangesAsync();
+        var store = new IssuedAstraBlockStore(factory.Context);
+
+        (await store.ReleaseAnswerAsync(block.Id, user.Id, block.CreatedAtUtc, default)).Should().BeFalse();
+        (await store.GetAsync(block.Id, user.Id, default))!.AnsweredAtUtc.Should().Be(block.CreatedAtUtc);
+    }
+
 }

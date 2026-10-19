@@ -13,6 +13,7 @@ namespace Orbit.Infrastructure.AI;
 public sealed partial class AiCompletionClient
 {
     private readonly ChatClient _chatClient;
+    internal TimeSpan CompletionTimeout { get; }
     private readonly ChatClient _subTaskChatClient;
     private readonly string _primaryModel;
     private readonly string _subTaskModel;
@@ -33,6 +34,7 @@ public sealed partial class AiCompletionClient
         _logger = logger;
         _usageRecorder = usageRecorder;
         var settings = options.Value;
+        CompletionTimeout = settings.CompletionTimeout;
 
         var clientOptions = new OpenAIClientOptions
         {
@@ -65,8 +67,10 @@ public sealed partial class AiCompletionClient
     internal AiCompletionClient(
         ChatClient chatClient,
         ILogger<AiCompletionClient> logger,
-        IAiUsageRecorder usageRecorder)
+        IAiUsageRecorder usageRecorder,
+        TimeSpan? completionTimeout = null)
     {
+        CompletionTimeout = completionTimeout ?? new AiSettings().CompletionTimeout;
         _chatClient = chatClient;
         _subTaskChatClient = chatClient;
         _primaryModel = "primary-test";
@@ -91,6 +95,8 @@ public sealed partial class AiCompletionClient
         AiModelTier tier = AiModelTier.Primary,
         CancellationToken cancellationToken = default)
     {
+        using var completionCancellation = CreateCompletionCancellation(cancellationToken);
+        cancellationToken = completionCancellation.Token;
         var messages = new List<ChatMessage>
         {
             new SystemChatMessage(systemPrompt),
@@ -128,6 +134,8 @@ public sealed partial class AiCompletionClient
         Guid? userId = null,
         CancellationToken cancellationToken = default)
     {
+        using var completionCancellation = CreateCompletionCancellation(cancellationToken);
+        cancellationToken = completionCancellation.Token;
         var messages = new List<ChatMessage>
         {
             new SystemChatMessage(systemPrompt),
@@ -161,6 +169,13 @@ public sealed partial class AiCompletionClient
         LogJsonCompletionSuccessful(_logger, text.Length);
 
         return JsonSerializer.Deserialize<T>(text, JsonOptions);
+    }
+
+    internal CancellationTokenSource CreateCompletionCancellation(CancellationToken cancellationToken)
+    {
+        var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cancellation.CancelAfter(CompletionTimeout);
+        return cancellation;
     }
 
     private async Task RecordUsageAsync(

@@ -13,6 +13,14 @@ public interface IUnitOfWork : IDisposable
         Func<CancellationToken, Task<T>> operation,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Retries opening the transaction, then executes the operation and commits once.
+    /// Use for operations with side effects that cannot be repeated by an execution strategy.
+    /// </summary>
+    Task ExecuteOnceInTransactionAsync(
+        Func<CancellationToken, Task> operation,
+        CancellationToken cancellationToken = default);
+
     Task AcquireAdvisoryLockAsync(string key, CancellationToken cancellationToken = default);
 
     /// <summary>

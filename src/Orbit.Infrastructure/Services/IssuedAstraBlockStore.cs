@@ -53,7 +53,7 @@ public sealed class IssuedAstraBlockStore(OrbitDbContext dbContext) : IIssuedAst
 
     public async Task<bool> ReleaseAnswerAsync(Guid blockId, Guid userId, DateTime answeredAtUtc, CancellationToken cancellationToken) =>
         await UnfinishedAnswer(blockId, userId, answeredAtUtc)
-            .Where(block => block.CommittedResponseJson == null)
+            .Where(block => block.AnswerJson != null && block.CommittedResponseJson == null)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(block => block.AnsweredAtUtc, (DateTime?)null)
                 .SetProperty(block => block.AnswerJson, (string?)null)

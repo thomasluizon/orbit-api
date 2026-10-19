@@ -155,7 +155,7 @@ public sealed class AstraBlockAnswerService(
             {
                 await unitOfWork.AcquireAdvisoryLockAsync($"astra-blocks:{request.UserId}", token);
                 var block = await store.GetAsync(answer.BlockId, request.UserId, token);
-                if (block is { AnsweredAtUtc: { } claim, ResponseJson: null }
+                if (block is { AnsweredAtUtc: { } claim, AnswerJson: not null, ResponseJson: null }
                     && claimLifetime is { } lifetime && claim + lifetime < TimeProvider.System.GetUtcNow().UtcDateTime)
                 {
                     if (block.CommittedResponseJson is { } committed)
@@ -252,17 +252,15 @@ public sealed class AstraBlockAnswerService(
                 continue;
             }
             var execution = pendingOperations.GetExecution(userId, operation.Id);
-            if (execution is null)
-                continue;
-            var preview = await previewer.PreviewAsync(userId, execution.OperationId, execution.Arguments, ct);
-            if (preview is not null)
-                current.Add(operation with
-                {
-                    Items = preview.Items,
-                    Changes = preview.Changes,
-                    ChangeTargetCount = preview.ChangeTargetCount,
-                    PreviewFingerprint = preview.PreviewFingerprint
-                });
+            var preview = execution is null ? null : await previewer.PreviewSafelyAsync(
+                userId, execution.OperationId, execution.Arguments, logger ?? NullLogger.Instance, ct);
+            current.Add(preview is null ? operation : operation with
+            {
+                Items = preview.Items,
+                Changes = preview.Changes,
+                ChangeTargetCount = preview.ChangeTargetCount,
+                PreviewFingerprint = preview.PreviewFingerprint
+            });
         }
         return stored with { PendingOperations = current };
     }

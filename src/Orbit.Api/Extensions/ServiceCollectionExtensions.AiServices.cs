@@ -204,7 +204,8 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IIssuedAstraBlockStore>(),
                 sp.GetRequiredService<IPendingAgentOperationStore>(),
                 sp.GetRequiredService<IPendingOperationChangePreviewer>(),
-                TimeSpan.FromSeconds(sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AiSettings>>().Value.NetworkTimeoutSeconds
-                    + DatabaseConnectionSettings.From(builder.Configuration).TransactionTimeoutSeconds)));
+                ChatTurnLimits.BlockAnswerTimeout(
+                    sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AiSettings>>().Value.CompletionTimeout,
+                    TimeSpan.FromSeconds(DatabaseConnectionSettings.From(builder.Configuration).TransactionTimeoutSeconds))));
     }
 }

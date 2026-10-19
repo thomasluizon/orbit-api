@@ -167,7 +167,6 @@ public partial class ProcessUserChatCommandHandler(
         public const string AccountRows = "accountRows";
     }
 
-    private const int MaxToolIterations = 5;
     private const string UnsupportedByPolicyReason = "unsupported_by_policy";
     private const string DescribeFeatureToolName = "describe_feature";
     private const string EnglishToolFailureMessage = "I couldn't complete that. Please try again.";
