@@ -13,7 +13,7 @@ derived_from:
 
 # XP, Levels, and Achievements
 
-Gamification rewards consistency with experience points (XP), levels, and achievements. Achievements are available on both free and Pro plans.
+Gamification rewards consistency with experience points (XP), levels, and achievements. XP, levels, and achievements are part of Orbit Pro. Some free accounts have them too.
 
 ## Earning XP
 

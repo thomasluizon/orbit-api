@@ -5,6 +5,7 @@ using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Npgsql;
 using Orbit.Application.Common;
+using Orbit.Application.Chat.FeatureExplanations;
 using Orbit.Application.Tests.Notifications;
 using Orbit.Application.Gamification;
 using Orbit.Application.Gamification.Models;
@@ -1341,6 +1342,14 @@ public class GamificationServiceTests
             Arg.Is<UserAchievement>(a => a.AchievementId == AchievementDefinitions.Liftoff),
             Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+
+        user.HasProAccess.Should().BeFalse();
+        var features = new FeatureExplanationService();
+        features.Get("gamification")!.Body.Should().Contain(
+            "XP, levels, and achievements are part of Orbit Pro. Some free accounts have them too.",
+            "gamification.md must describe the access condition that allowed this free user to earn XP and an achievement");
+        features.Get("paygate")!.Body.Split("## What Pro unlocks")[1].Should()
+            .NotContain("Gamification", "paygate.md must not sell this free user's XP, levels, or achievements as Pro-only");
     }
 
     [Fact]

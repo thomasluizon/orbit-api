@@ -34,6 +34,6 @@ If you have no recurring habits at all yet, the streak falls back to simple **ca
 
 ## Lookback limit
 
-Streak calculation looks back at most **365** days (`MaxStreakLookbackDays`). Activity older than a year does not extend the current streak.
+Streak calculation looks back at most **365** days. Activity older than a year does not extend the current streak.
 
 The longest streak is tracked separately by scanning your full scheduled-day history for the longest unbroken run; it never decreases when the current streak resets.
