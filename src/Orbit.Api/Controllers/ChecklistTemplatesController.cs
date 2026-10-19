@@ -6,8 +6,6 @@ using Orbit.Api.Extensions;
 using Orbit.Application.ChecklistTemplates.Commands;
 using Orbit.Application.ChecklistTemplates.Queries;
 
-#pragma warning disable CA1873
-
 namespace Orbit.Api.Controllers;
 
 [Authorize]
@@ -43,7 +41,8 @@ public partial class ChecklistTemplatesController(IMediator mediator, ILogger<Ch
 
         if (result.IsSuccess)
         {
-            LogChecklistTemplateCreated(logger, result.Value, HttpContext.GetUserId());
+            if (logger.IsEnabled(LogLevel.Information))
+                logger.LogChecklistTemplateCreated(result.Value, HttpContext.GetUserId());
             return Created($"/api/checklist-templates/{result.Value}", new { id = result.Value });
         }
         return result.ToErrorResult();
@@ -60,15 +59,19 @@ public partial class ChecklistTemplatesController(IMediator mediator, ILogger<Ch
 
         if (result.IsSuccess)
         {
-            LogChecklistTemplateDeleted(logger, id, HttpContext.GetUserId());
+            if (logger.IsEnabled(LogLevel.Information))
+                logger.LogChecklistTemplateDeleted(id, HttpContext.GetUserId());
             return NoContent();
         }
         return result.ToErrorResult();
     }
+}
 
+internal static partial class ChecklistTemplatesControllerLogging
+{
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "ChecklistTemplate created {TemplateId} by user {UserId}")]
-    private static partial void LogChecklistTemplateCreated(ILogger logger, Guid templateId, Guid userId);
+    internal static partial void LogChecklistTemplateCreated(this ILogger logger, Guid templateId, Guid userId);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "ChecklistTemplate deleted {TemplateId} by user {UserId}")]
-    private static partial void LogChecklistTemplateDeleted(ILogger logger, Guid templateId, Guid userId);
+    internal static partial void LogChecklistTemplateDeleted(this ILogger logger, Guid templateId, Guid userId);
 }

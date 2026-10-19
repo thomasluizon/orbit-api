@@ -10,8 +10,6 @@ using Orbit.Application.Profile.Commands;
 using Orbit.Application.Profile.Queries;
 using Orbit.Domain.Interfaces;
 
-#pragma warning disable CA1873
-
 namespace Orbit.Api.Controllers;
 
 [Authorize]
@@ -70,8 +68,8 @@ public partial class ProfileController(
         var command = new SetTimezoneCommand(HttpContext.GetUserId(), request.TimeZone);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
-            LogTimezoneChanged(logger, request.TimeZone, HttpContext.GetUserId());
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
+            logger.LogTimezoneChanged(request.TimeZone, HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
     }
@@ -87,8 +85,8 @@ public partial class ProfileController(
         var command = new SetNameCommand(HttpContext.GetUserId(), request.Name);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
-            LogNameChanged(logger, HttpContext.GetUserId());
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
+            logger.LogNameChanged(HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
     }
@@ -104,8 +102,8 @@ public partial class ProfileController(
         var command = new SetAiSummaryCommand(HttpContext.GetUserId(), request.Enabled);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
-            LogAiSummaryToggled(logger, ToggleLabel(request.Enabled), HttpContext.GetUserId());
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
+            logger.LogAiSummaryToggled(ToggleLabel(request.Enabled), HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
     }
@@ -121,8 +119,8 @@ public partial class ProfileController(
         var command = new SetProactiveAstraEnabledCommand(HttpContext.GetUserId(), request.Enabled);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
-            LogProactiveAstraToggled(logger, ToggleLabel(request.Enabled), HttpContext.GetUserId());
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
+            logger.LogProactiveAstraToggled(ToggleLabel(request.Enabled), HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
     }
@@ -138,8 +136,8 @@ public partial class ProfileController(
         var command = new SetLanguageCommand(HttpContext.GetUserId(), request.Language);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
-            LogLanguageChanged(logger, request.Language, HttpContext.GetUserId());
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
+            logger.LogLanguageChanged(request.Language, HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
     }
@@ -155,8 +153,8 @@ public partial class ProfileController(
         var command = new SetWeekStartDayCommand(HttpContext.GetUserId(), request.WeekStartDay);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
-            LogWeekStartDayChanged(logger, request.WeekStartDay, HttpContext.GetUserId());
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
+            logger.LogWeekStartDayChanged(request.WeekStartDay, HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
     }
@@ -172,8 +170,8 @@ public partial class ProfileController(
         var command = new SetClockFormatCommand(HttpContext.GetUserId(), request.Uses24HourClock);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
-            LogClockFormatChanged(logger, request.Uses24HourClock ? "24-hour" : "12-hour", HttpContext.GetUserId());
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
+            logger.LogClockFormatChanged(request.Uses24HourClock ? "24-hour" : "12-hour", HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
     }
@@ -189,8 +187,8 @@ public partial class ProfileController(
         var command = new SetThemePreferenceCommand(HttpContext.GetUserId(), request.ThemePreference);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
-            LogThemePreferenceChanged(logger, request.ThemePreference, HttpContext.GetUserId());
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
+            logger.LogThemePreferenceChanged(request.ThemePreference, HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
     }
@@ -206,8 +204,8 @@ public partial class ProfileController(
         var command = new SetColorSchemeCommand(HttpContext.GetUserId(), request.ColorScheme);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
-            LogColorSchemeChanged(logger, request.ColorScheme, HttpContext.GetUserId());
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
+            logger.LogColorSchemeChanged(request.ColorScheme, HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
     }
@@ -286,8 +284,8 @@ public partial class ProfileController(
         var command = new UpdateMarketingConsentCommand(HttpContext.GetUserId(), request.Enabled);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
-            LogMarketingConsentChanged(logger, ToggleLabel(request.Enabled), HttpContext.GetUserId());
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
+            logger.LogMarketingConsentChanged(ToggleLabel(request.Enabled), HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
     }
@@ -301,8 +299,8 @@ public partial class ProfileController(
         var command = new ResetAccountCommand(HttpContext.GetUserId());
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
-            LogAccountReset(logger, HttpContext.GetUserId());
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
+            logger.LogAccountReset(HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult();
     }
@@ -324,38 +322,40 @@ public partial class ProfileController(
         var json = JsonSerializer.SerializeToUtf8Bytes(result.Value, ExportJsonOptions);
         return File(json, "application/json", fileName);
     }
+}
 
+internal static partial class ProfileControllerLogging
+{
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Timezone changed to {Timezone} for user {UserId}")]
-    private static partial void LogTimezoneChanged(ILogger logger, string timezone, Guid userId);
+    internal static partial void LogTimezoneChanged(this ILogger logger, string timezone, Guid userId);
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "AI summary {State} for user {UserId}")]
-    private static partial void LogAiSummaryToggled(ILogger logger, string state, Guid userId);
+    internal static partial void LogAiSummaryToggled(this ILogger logger, string state, Guid userId);
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Language changed to {Language} for user {UserId}")]
-    private static partial void LogLanguageChanged(ILogger logger, string language, Guid userId);
+    internal static partial void LogLanguageChanged(this ILogger logger, string language, Guid userId);
 
     [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Week start day changed to {WeekStartDay} for user {UserId}")]
-    private static partial void LogWeekStartDayChanged(ILogger logger, int weekStartDay, Guid userId);
+    internal static partial void LogWeekStartDayChanged(this ILogger logger, int weekStartDay, Guid userId);
 
     [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Theme preference changed to {ThemePreference} for user {UserId}")]
-    private static partial void LogThemePreferenceChanged(ILogger logger, string? themePreference, Guid userId);
+    internal static partial void LogThemePreferenceChanged(this ILogger logger, string? themePreference, Guid userId);
 
     [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Color scheme changed to {ColorScheme} for user {UserId}")]
-    private static partial void LogColorSchemeChanged(ILogger logger, string? colorScheme, Guid userId);
+    internal static partial void LogColorSchemeChanged(this ILogger logger, string? colorScheme, Guid userId);
 
     [LoggerMessage(EventId = 8, Level = LogLevel.Information, Message = "Account reset for user {UserId}")]
-    private static partial void LogAccountReset(ILogger logger, Guid userId);
+    internal static partial void LogAccountReset(this ILogger logger, Guid userId);
 
     [LoggerMessage(EventId = 9, Level = LogLevel.Information, Message = "Display name changed for user {UserId}")]
-    private static partial void LogNameChanged(ILogger logger, Guid userId);
+    internal static partial void LogNameChanged(this ILogger logger, Guid userId);
 
     [LoggerMessage(EventId = 14, Level = LogLevel.Information, Message = "Marketing email consent {State} for user {UserId}")]
-    private static partial void LogMarketingConsentChanged(ILogger logger, string state, Guid userId);
+    internal static partial void LogMarketingConsentChanged(this ILogger logger, string state, Guid userId);
 
     [LoggerMessage(EventId = 15, Level = LogLevel.Information, Message = "Clock format changed to {Format} for user {UserId}")]
-    private static partial void LogClockFormatChanged(ILogger logger, string format, Guid userId);
+    internal static partial void LogClockFormatChanged(this ILogger logger, string format, Guid userId);
 
     [LoggerMessage(EventId = 13, Level = LogLevel.Information, Message = "Proactive Astra check-ins {State} for user {UserId}")]
-    private static partial void LogProactiveAstraToggled(ILogger logger, string state, Guid userId);
-
+    internal static partial void LogProactiveAstraToggled(this ILogger logger, string state, Guid userId);
 }

@@ -57,7 +57,7 @@ public partial class HabitDueDateAdvancementService(
     }
 
     internal static DateOnly ConservativeCutoffUtc() =>
-#pragma warning disable ORBIT0004
+#pragma warning disable ORBIT0004 // ConservativeCutoffUtc is the widened stale-habit prefetch floor; ShouldAdvanceForUserToday checks the separately converted userToday before mutation. https://github.com/thomasluizon/orbit-tickets/issues/230
         DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
 #pragma warning restore ORBIT0004
 

@@ -170,7 +170,7 @@ public class PendingAgentOperationStore(
             .OrderByDescending(item => item.CreatedAtUtc)
             .FirstOrDefault();
 
-#pragma warning disable ORBIT0004
+#pragma warning disable ORBIT0004 // TryConsumeFreshConfirmation passes the current instant to IsUsable to check confirmation and step-up TTLs before consumption. https://github.com/thomasluizon/orbit-tickets/issues/230
         if (entity is null || !entity.IsUsable(capabilityId, operationFingerprint, requireStepUp, DateTime.UtcNow))
 #pragma warning restore ORBIT0004
             return false;

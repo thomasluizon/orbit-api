@@ -8,8 +8,6 @@ using Orbit.Application.Goals.Commands;
 using Orbit.Application.Goals.Queries;
 using Orbit.Domain.Enums;
 
-#pragma warning disable CA1873
-
 namespace Orbit.Api.Controllers;
 
 [Authorize]
@@ -64,7 +62,8 @@ public partial class GoalsController(IMediator mediator, ILogger<GoalsController
         var result = await mediator.Send(command, cancellationToken);
         return result.ToPayGateAwareResult(value =>
         {
-            LogGoalCreated(logger, value, HttpContext.GetUserId());
+            if (logger.IsEnabled(LogLevel.Information))
+                logger.LogGoalCreated(value, HttpContext.GetUserId());
             return CreatedAtAction(nameof(GetGoalById), new { id = value }, new { id = value });
         });
     }
@@ -132,7 +131,8 @@ public partial class GoalsController(IMediator mediator, ILogger<GoalsController
         var result = await mediator.Send(command, cancellationToken);
         return result.ToPayGateAwareResult(() =>
         {
-            LogLinkedHabitsToGoal(logger, request.HabitIds.Count, goalId, HttpContext.GetUserId());
+            if (logger.IsEnabled(LogLevel.Information))
+                logger.LogLinkedHabitsToGoal(request.HabitIds.Count, goalId, HttpContext.GetUserId());
             return NoContent();
         });
     }
@@ -203,7 +203,8 @@ public partial class GoalsController(IMediator mediator, ILogger<GoalsController
         var result = await mediator.Send(command, cancellationToken);
         return result.ToPayGateAwareResult(() =>
         {
-            LogGoalDeleted(logger, id, HttpContext.GetUserId());
+            if (logger.IsEnabled(LogLevel.Information))
+                logger.LogGoalDeleted(id, HttpContext.GetUserId());
             return NoContent();
         });
     }
@@ -219,21 +220,24 @@ public partial class GoalsController(IMediator mediator, ILogger<GoalsController
         var result = await mediator.Send(command, cancellationToken);
         return result.ToPayGateAwareResult(() =>
         {
-            LogGoalRestored(logger, id, HttpContext.GetUserId());
+            if (logger.IsEnabled(LogLevel.Information))
+                logger.LogGoalRestored(id, HttpContext.GetUserId());
             return NoContent();
         });
     }
+}
 
+internal static partial class GoalsControllerLogging
+{
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Goal created {GoalId} by user {UserId}")]
-    private static partial void LogGoalCreated(ILogger logger, Guid goalId, Guid userId);
+    internal static partial void LogGoalCreated(this ILogger logger, Guid goalId, Guid userId);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Linked {Count} habits to goal {GoalId} by user {UserId}")]
-    private static partial void LogLinkedHabitsToGoal(ILogger logger, int count, Guid goalId, Guid userId);
+    internal static partial void LogLinkedHabitsToGoal(this ILogger logger, int count, Guid goalId, Guid userId);
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Goal deleted {GoalId} by user {UserId}")]
-    private static partial void LogGoalDeleted(ILogger logger, Guid goalId, Guid userId);
+    internal static partial void LogGoalDeleted(this ILogger logger, Guid goalId, Guid userId);
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Goal restored {GoalId} by user {UserId}")]
-    private static partial void LogGoalRestored(ILogger logger, Guid goalId, Guid userId);
-
+    internal static partial void LogGoalRestored(this ILogger logger, Guid goalId, Guid userId);
 }

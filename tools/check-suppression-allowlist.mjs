@@ -12,11 +12,12 @@ const USAGE = `usage: check-suppression-allowlist.mjs [--root <path>] [--print]
   --print        print the observed inventory as allowlist-shaped JSON and exit 0, for reseeding
   --help, -h     print this usage and exit 0
 
-  Four ways to fail, all of them a data change away from passing:
+  Five ways to fail, all of them a data change away from passing:
     1. a suppression in a file the allowlist does not declare
     2. a rule the allowlist does not declare for that file
     3. a site count that does not match the declared one, in either direction
     4. a declared file or rule that no longer carries any suppression
+    5. two declarations with the same reason
 
 exit codes: 0 every suppression is declared, 1 the closed set was breached, 2 usage or data error`
 
@@ -192,6 +193,14 @@ if (printOnly) {
 
 const problems = [...uninventoriable, ...undeclaredInGenerated]
 let declaredSites = 0
+const reasonOwners = new Map()
+const checkUniqueReason = (reason, owner) => {
+  const normalized = reason.trim().replace(/\s+/g, " ").toLowerCase()
+  const previous = reasonOwners.get(normalized)
+  if (previous) problems.push(`duplicate reason shared by ${previous} and ${owner}; write a reason specific to each site`)
+  else reasonOwners.set(normalized, owner)
+}
+for (const entry of allowlist.generatedDirectories) checkUniqueReason(entry.reason, entry.path)
 
 for (const kind of ["pragmas", "suppressMessage"]) {
   const label = kind === "pragmas" ? "#pragma warning disable" : "[SuppressMessage]"
@@ -215,6 +224,7 @@ for (const kind of ["pragmas", "suppressMessage"]) {
   for (const [path, declaredRules] of Object.entries(allowlist[kind])) {
     const rules = observed[kind][path]
     for (const rule of Object.keys(declaredRules)) {
+      checkUniqueReason(declaredRules[rule].reason, `${kind}.${path}.${rule}`)
       declaredSites += declaredRules[rule].count
       if (!rules?.[rule]) problems.push(`the allowlist declares ${rule} for ${path} via ${label}, and no such suppression exists any more; delete the entry`)
     }

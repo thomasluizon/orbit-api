@@ -3,8 +3,6 @@ using Orbit.Domain.Enums;
 using Orbit.Domain.ValueObjects;
 using Orbit.Domain.Models;
 
-#pragma warning disable S6964 // Domain entity with private setters - not a model-bound DTO
-
 namespace Orbit.Domain.Entities;
 
 public record HabitCreateParams(
