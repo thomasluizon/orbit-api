@@ -263,35 +263,8 @@ public class BulkCreateHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_FromSyncReview_MarksMatchingSuggestionsImported()
     {
-        var addedHabits = new List<Habit>();
-        var suggestionEvent = new CalendarEventItem("evt_sync", "Imported Event", null, "2026-03-20", "09:00", "09:30", false, null, []);
-        var suggestion = GoogleCalendarSyncSuggestion.Create(
-            UserId,
-            "evt_sync",
-            "Imported Event",
-            DateTime.SpecifyKind(new DateTime(2026, 3, 20, 0, 0, 0), DateTimeKind.Utc),
-            JsonSerializer.Serialize(suggestionEvent),
-            DateTime.SpecifyKind(new DateTime(2026, 3, 19, 12, 0, 0), DateTimeKind.Utc));
-        var suggestions = new List<GoogleCalendarSyncSuggestion> { suggestion };
-
-        _habitRepo.AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>())
-            .Returns(call =>
-            {
-                addedHabits.Add(call.Arg<Habit>());
-                return Task.CompletedTask;
-            });
-        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(call =>
-            {
-                var predicate = call.Arg<Expression<Func<Habit, bool>>>().Compile();
-                return addedHabits.Where(predicate).ToList().AsReadOnly();
-            });
-        _suggestionRepo.FindAsync(Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(call =>
-            {
-                var predicate = call.Arg<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>().Compile();
-                return suggestions.Where(predicate).ToList().AsReadOnly();
-            });
+        var suggestion = CreateCalendarSuggestion(UserId, "evt_sync");
+        var addedHabits = StubCalendarImportRepositories(suggestion);
 
         var items = new List<BulkHabitItem>
         {
@@ -309,6 +282,118 @@ public class BulkCreateHabitsCommandHandlerTests
         addedHabits[0].GoogleEventId.Should().Be("evt_sync");
         suggestion.ImportedAtUtc.Should().NotBeNull();
         suggestion.ImportedHabitId.Should().Be(addedHabits[0].Id);
+    }
+
+    [Fact]
+    public async Task Handle_FromSyncReview_LeavesNonMatchingSuggestionPending()
+    {
+        var matching = CreateCalendarSuggestion(UserId, "evt_a");
+        var unrelated = CreateCalendarSuggestion(UserId, "evt_b");
+        var addedHabits = StubCalendarImportRepositories(matching, unrelated);
+
+        var result = await _handler.Handle(
+            new BulkCreateHabitsCommand(UserId,
+                [new("Imported Event", null, FrequencyUnit.Day, 1, GoogleEventId: "evt_a")],
+                FromSyncReview: true), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        addedHabits.Should().ContainSingle();
+        matching.ImportedAtUtc.Should().NotBeNull();
+        matching.ImportedHabitId.Should().Be(addedHabits[0].Id);
+        unrelated.ImportedAtUtc.Should().BeNull();
+        unrelated.ImportedHabitId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_FromSyncReview_LeavesAlreadyImportedSuggestionUnchanged()
+    {
+        var pending = CreateCalendarSuggestion(UserId, "evt_a");
+        var imported = CreateCalendarSuggestion(UserId, "evt_a");
+        var originalHabitId = Guid.NewGuid();
+        var originalImportedAtUtc = new DateTime(2026, 3, 19, 12, 0, 0, DateTimeKind.Utc);
+        imported.MarkImported(originalHabitId, originalImportedAtUtc);
+        var addedHabits = StubCalendarImportRepositories(pending, imported);
+
+        var result = await _handler.Handle(
+            new BulkCreateHabitsCommand(UserId,
+                [new("Imported Event", null, FrequencyUnit.Day, 1, GoogleEventId: "evt_a")],
+                FromSyncReview: true), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        addedHabits.Should().ContainSingle();
+        pending.ImportedAtUtc.Should().NotBeNull();
+        pending.ImportedHabitId.Should().Be(addedHabits[0].Id);
+        imported.ImportedAtUtc.Should().Be(originalImportedAtUtc);
+        imported.ImportedHabitId.Should().Be(originalHabitId);
+    }
+
+    [Fact]
+    public async Task Handle_FromSyncReviewWithoutGoogleEventIds_CreatesHabitsWithoutSuggestionLookup()
+    {
+        var suggestion = CreateCalendarSuggestion(UserId, "evt_a");
+        var addedHabits = StubCalendarImportRepositories(suggestion);
+
+        var result = await _handler.Handle(
+            new BulkCreateHabitsCommand(UserId,
+                [new("Read", null, FrequencyUnit.Day, 1), new("Exercise", null, FrequencyUnit.Day, 1)],
+                FromSyncReview: true), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Results.Should().HaveCount(2)
+            .And.OnlyContain(item => item.Status == BulkItemStatus.Success);
+        addedHabits.Should().HaveCount(2).And.OnlyContain(habit => habit.GoogleEventId == null);
+        await _suggestionRepo.DidNotReceive().FindAsync(
+            Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(), Arg.Any<CancellationToken>());
+        suggestion.ImportedAtUtc.Should().BeNull();
+        suggestion.ImportedHabitId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_FromSyncReview_LeavesOtherUsersSuggestionUntouched()
+    {
+        var matching = CreateCalendarSuggestion(UserId, "evt_a");
+        var otherUsersSuggestion = CreateCalendarSuggestion(Guid.NewGuid(), "evt_a");
+        var addedHabits = StubCalendarImportRepositories(matching, otherUsersSuggestion);
+
+        var result = await _handler.Handle(
+            new BulkCreateHabitsCommand(UserId,
+                [new("Imported Event", null, FrequencyUnit.Day, 1, GoogleEventId: "evt_a")],
+                FromSyncReview: true), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        addedHabits.Should().ContainSingle();
+        matching.ImportedAtUtc.Should().NotBeNull();
+        matching.ImportedHabitId.Should().Be(addedHabits[0].Id);
+        otherUsersSuggestion.ImportedAtUtc.Should().BeNull();
+        otherUsersSuggestion.ImportedHabitId.Should().BeNull();
+    }
+
+    private List<Habit> StubCalendarImportRepositories(params GoogleCalendarSyncSuggestion[] suggestions)
+    {
+        var addedHabits = new List<Habit>();
+        _habitRepo.AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                addedHabits.Add(call.Arg<Habit>());
+                return Task.CompletedTask;
+            });
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => addedHabits
+                .Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).ToList().AsReadOnly());
+        _suggestionRepo.FindAsync(Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => suggestions
+                .Where(call.Arg<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>().Compile()).ToList().AsReadOnly());
+        return addedHabits;
+    }
+
+    private static GoogleCalendarSyncSuggestion CreateCalendarSuggestion(Guid userId, string eventId)
+    {
+        var suggestionEvent = new CalendarEventItem(eventId, "Imported Event", null, "2026-03-20", "09:00", "09:30", false, null, []);
+        return GoogleCalendarSyncSuggestion.Create(
+            userId, eventId, "Imported Event",
+            new DateTime(2026, 3, 20, 0, 0, 0, DateTimeKind.Utc),
+            JsonSerializer.Serialize(suggestionEvent),
+            new DateTime(2026, 3, 19, 12, 0, 0, DateTimeKind.Utc));
     }
 
     [Fact]
