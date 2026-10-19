@@ -60,6 +60,7 @@ public static class PendingOperationActionKeys
             "update_profile_preferences" => "updateProfilePreferences",
             "set_ai_memory" => "setAiMemory",
             "set_ai_summary" => "setAiSummary",
+            "set_proactive_astra" => "setProactiveAstra",
             "update_notifications" => action switch
             {
                 "mark_read" => "markNotificationRead",

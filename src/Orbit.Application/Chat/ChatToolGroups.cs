@@ -12,6 +12,8 @@ public static class ChatToolGroups
 
     private static readonly IReadOnlyList<ExtendedGroup> Groups =
     [
+        new("proactive_astra", ["set_proactive_astra"],
+            ["proactive", "proativa", "proativo"]),
         new("calendar", ["get_calendar_overview", "manage_calendar_sync"],
             ["calendar", "agenda", "google cal", "calendario", "event", "evento"]),
         new("notion", ["get_notion_tasks"], ["notion"]),

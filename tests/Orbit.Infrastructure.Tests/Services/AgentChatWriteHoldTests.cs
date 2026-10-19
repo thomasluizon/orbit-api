@@ -115,6 +115,8 @@ public class AgentChatWriteHoldTests : IDisposable
         response.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation, operationId);
         response.PendingOperation.Should().NotBeNull(operationId);
         response.PendingOperation!.ActionKey.Should().NotBeNullOrWhiteSpace(operationId);
+        if (operationId == "set_proactive_astra")
+            response.PendingOperation.ActionKey.Should().Be("setProactiveAstra");
         if (operationId is "bulk_create_habits" or "bulk_log_habits" or "bulk_skip_habits"
             or "bulk_update_habits" or "bulk_reschedule_habits")
         {

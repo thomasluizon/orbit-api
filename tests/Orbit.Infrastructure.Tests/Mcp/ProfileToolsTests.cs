@@ -26,6 +26,34 @@ public class ProfileToolsTests
         _user = new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"));
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SetProactiveAstra_RoutesBooleanToExecutor(bool enabled)
+    {
+        StubExecutor(AgentOperationStatus.Succeeded);
+        string result = string.Empty;
+
+        var request = await CapturedRequestAsync(async () =>
+            result = await _tools.SetProactiveAstra(_user, enabled));
+
+        request.OperationId.Should().Be("set_proactive_astra");
+        request.Arguments.GetProperty("enabled").GetBoolean().Should().Be(enabled);
+        request.Surface.Should().Be(AgentExecutionSurface.Mcp);
+        result.Should().Be(enabled ? "Proactive Astra enabled" : "Proactive Astra disabled");
+        _mediator.ReceivedCalls().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SetProactiveAstra_Denied_ReturnsExecutorFailure()
+    {
+        StubExecutor(AgentOperationStatus.Denied, policyReason: "pro_required");
+
+        var result = await _tools.SetProactiveAstra(_user, false);
+
+        result.Should().Be("Error: pro_required");
+    }
+
     private void StubExecutor(AgentOperationStatus status, string? policyReason = null)
     {
         var response = new AgentExecuteOperationResponse(new AgentOperationResult(
