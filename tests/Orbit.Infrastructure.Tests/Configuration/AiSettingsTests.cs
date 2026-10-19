@@ -13,17 +13,36 @@ public class AiSettingsTests
 
         settings.NetworkTimeoutSeconds.Should().Be(15);
         settings.MaxRetries.Should().Be(2);
-        settings.Model.Should().Be("gpt-4.1-mini");
+        settings.Model.Should().Be("gpt-6.1-sol");
         settings.BaseUrl.Should().Be("https://api.openai.com/v1");
     }
 
     [Fact]
-    public void Defaults_RouteMechanicalSubTasksToNano_WhenConfigOmitsThem()
+    public void Defaults_RouteMechanicalSubTasksToLuna_WhenConfigOmitsThem()
     {
         var settings = new AiSettings();
 
-        settings.SubTaskModel.Should().Be("gpt-5.4-nano");
+        settings.SubTaskModel.Should().Be("gpt-6-luna");
     }
+    [Fact]
+    public void ConfiguredAndDefaultModels_HavePricingRows()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Orbit.slnx")))
+            directory = directory.Parent;
+        directory.Should().NotBeNull();
+        using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(
+            Path.Combine(directory!.FullName, "src", "Orbit.Api", "appsettings.json")));
+        var ai = document.RootElement.GetProperty("AI");
+        var defaults = new AiSettings();
+        foreach (var model in new[] { defaults.Model, defaults.SubTaskModel, ai.GetProperty("Model").GetString(), ai.GetProperty("SubTaskModel").GetString() })
+        {
+            ai.GetProperty("Pricing").TryGetProperty(model!, out var price).Should().BeTrue($"{model} must record a nonzero cost");
+            price.GetProperty("InputPerMillionUsd").GetDecimal().Should().BeGreaterThan(0);
+            price.GetProperty("OutputPerMillionUsd").GetDecimal().Should().BeGreaterThan(0);
+        }
+    }
+
     [Theory]
     [InlineData(15, 120)]
     [InlineData(90, 120)]

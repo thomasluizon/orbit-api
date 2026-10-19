@@ -1,3 +1,5 @@
+#pragma warning disable OPENAI001
+
 using System.ClientModel;
 using System.ClientModel.Primitives;
 using System.Net;
@@ -5,11 +7,12 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
-using OpenAI;
-using OpenAI.Chat;
+using OpenAI.Responses;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.AI;
 using Orbit.Infrastructure.Services;
+
+using Orbit.Infrastructure.Tests.AI;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
@@ -89,10 +92,9 @@ internal sealed class PromptCaptureHandler : HttpMessageHandler
 
     public static AiCompletionClient CreateClient(PromptCaptureHandler capture)
     {
-        var chatClient = new ChatClient(
-            model: "gpt-test",
+        var chatClient = new ResponsesClient(
             credential: new ApiKeyCredential("test-key"),
-            options: new OpenAIClientOptions
+            options: new ResponsesClientOptions
             {
                 Endpoint = new Uri("https://orbit.test/v1"),
                 Transport = new HttpClientPipelineTransport(new HttpClient(capture)),
