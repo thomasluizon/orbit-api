@@ -95,7 +95,7 @@ public class ErrorCopyTests
     [Fact]
     public void TheDaysRequireQuantityOneLeakResolvesToWrittenCopyInBothLanguages()
     {
-        const string developerSentence = "Days can only be set when frequency quantity is 1.";
+        const string developerSentence = "Specific weekdays require frequency unit Day and frequency quantity 1.";
         DomainErrors.DaysRequireQuantityOne.Message.Should().Be(developerSentence);
 
         ErrorCopy.TryResolve(DomainErrors.DaysRequireQuantityOne.Code, isPtBr: false, [], out var english)

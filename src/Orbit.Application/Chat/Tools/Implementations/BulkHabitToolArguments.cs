@@ -178,6 +178,7 @@ internal static class BulkHabitToolArguments
             ?? ParseNullableDate(fields, "due_date", allowNull: false).Error
             ?? ParseNullableDate(fields, "end_date", allowNull: true).Error
             ?? ParseNullableTime(fields, "due_time").Error
+            ?? ParseNullableTime(fields, "due_end_time").Error
             ?? ParseFrequency(fields).Error;
 
     public static object FilterSchema() => new
