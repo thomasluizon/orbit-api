@@ -2,12 +2,12 @@ const chat = "src/Orbit.Application/Chat/Tools/Implementations/"
 
 // Semantic bindings connect parameters and output projections; verdicts and source lines are generated.
 export const entities = {
-  Habit: { model: "Habit", tools: {
+  Habit: { model: "Habit", editableRecord: "HabitUpdateParams", tools: {
     create: ["create_habit"], read: ["query_habits", "get_habit", "list_habits"],
     update: ["update_habit", "update_checklist", "assign_tags", "move_habit", "move_habit_parent", "link_goals_to_habit", "reorder_habits"],
     delete: ["delete_habit"], bulk: ["bulk_create_habits", "bulk_delete_habits", "bulk_update_habits", "bulk_reschedule_habits", "bulk_update_habit_emojis", "reorder_habits"],
     filterKeyedBulk: ["bulk_update_habits", "bulk_reschedule_habits", "bulk_delete_habits", "bulk_log_habits", "bulk_skip_habits", "bulk_update_habit_emojis"] } },
-  SubHabit: { model: "Habit", tools: {
+  SubHabit: { model: "Habit", editableRecord: "HabitUpdateParams", tools: {
     create: ["create_sub_habit"], read: ["query_habits", "get_habit", "list_habits"],
     update: ["update_habit", "update_checklist", "assign_tags", "move_habit_parent", "link_goals_to_habit", "reorder_habits"],
     delete: ["delete_habit"], bulk: ["bulk_create_habits", "bulk_delete_habits", "bulk_update_habits", "bulk_reschedule_habits", "reorder_habits"],
@@ -19,11 +19,11 @@ export const entities = {
   ChecklistTemplate: { model: "ChecklistTemplate", tools: { create: ["create_checklist_template"], read: ["get_checklist_templates", "get_template_page"], delete: ["delete_checklist_template"] } },
   Notification: { model: "Notification", tools: { read: ["get_notifications", "get_notification_page"], update: ["update_notifications", "mark_notification_read", "mark_all_notifications_read"], delete: ["delete_notifications", "delete_notification"], bulk: ["update_notifications", "delete_notifications", "mark_all_notifications_read"] }, aliases: { IsRead: ["action"] } },
   PushSubscription: { model: "PushSubscription", tools: { create: ["update_notifications", "subscribe_push"], delete: ["update_notifications", "unsubscribe_push"] } },
-  Profile: { model: "User", tools: { read: ["get_profile"], update: ["update_profile_preferences", "set_timezone", "set_language", "set_week_start_day", "set_clock_format", "set_ai_summary", "set_proactive_astra"], delete: ["manage_account"] }, aliases: { TimeZone: ["timezone"], Uses24HourClockPreference: ["uses_24_hour_clock", "uses24HourClock"], AiSummaryEnabled: ["enabled"], ProactiveAstraEnabled: ["enabled"], HasCompletedOnboarding: ["action"], HasCompletedTour: ["action"] } },
+  Profile: { model: "User", editableMethods: { Name: "SetName", Email: "UpdateProfile", MarketingEmailConsent: "SetMarketingConsent" }, tools: { read: ["get_profile"], update: ["update_profile_preferences", "set_timezone", "set_language", "set_week_start_day", "set_clock_format", "set_ai_summary", "set_proactive_astra"], delete: ["manage_account"] }, aliases: { TimeZone: ["timezone"], Uses24HourClockPreference: ["uses_24_hour_clock", "uses24HourClock"], AiSummaryEnabled: ["enabled"], ProactiveAstraEnabled: ["enabled"], HasCompletedOnboarding: ["action"], HasCompletedTour: ["action"] } },
   Subscription: { model: "User", select: /^(Plan|Trial|IsLifetimePro|Subscription|Stripe|Play|AiMessages)/, tools: { read: ["get_subscription_overview", "get_subscription_status"], create: ["manage_subscription"], update: ["manage_subscription"] }, aliases: { SubscriptionInterval: ["interval"] } },
   Referral: { model: "Referral", tools: { read: ["get_referral_overview", "get_referral_stats", "get_referral_code"], create: ["get_referral_code"] } },
   ApiKey: { model: "ApiKey", tools: { create: ["manage_api_keys"], read: ["get_api_keys", "get_api_key_page"], delete: ["manage_api_keys"] } },
-  CalendarSync: { model: "User", select: /^(Google|HasImportedCalendar|HasSeenImportPrompt)/, tools: { read: ["get_calendar_overview", "get_profile"], update: ["manage_calendar_sync"] }, aliases: { GoogleCalendarAutoSyncEnabled: ["enabled"], HasSeenImportPrompt: ["action"] } },
+  CalendarSync: { model: "User", editableMethods: { GoogleCalendarSelectedIds: "SetSelectedCalendars" }, select: /^(Google|HasImportedCalendar|HasSeenImportPrompt)/, tools: { read: ["get_calendar_overview", "get_profile"], update: ["manage_calendar_sync"] }, aliases: { GoogleCalendarAutoSyncEnabled: ["enabled"], HasSeenImportPrompt: ["action"] } },
   CalendarSyncSuggestion: { model: "GoogleCalendarSyncSuggestion", tools: { read: ["get_calendar_overview"], update: ["manage_calendar_sync"] } },
   UserFact: { model: "UserFact", deliberate: "Memory tools were removed by thomasluizon/orbit-tickets#235. Stored compatibility data is not an AI management capability.", tools: {} },
   Gamification: { model: "User", select: /^(TotalXp|Level|CurrentStreak|LongestStreak|LastActiveDate|LastPurgedCompletionDate|StreakFreezes|LastFreeze|PreGap)/, deliberate: "Rewards, streaks and XP are earned through domain operations, not arbitrary AI writes.", tools: { read: ["get_gamification_overview", "get_gamification_profile", "get_streak_info", "get_profile"] } },
@@ -68,6 +68,7 @@ export const payloads = {
 
 export const outputAliases = {
   Id: ["UserId"],
+  SubscriptionSource: ["Source"], SubscriptionLapseReason: ["LapseReason"],
   Uses24HourClockPreference: ["Uses24HourClock"], AiMessagesUsedToday: ["AiMessagesUsed"],
   GoogleCalendarAutoSyncEnabled: ["Enabled"], GoogleCalendarAutoSyncStatus: ["Status"], GoogleCalendarLastSyncedAt: ["LastSyncedAt"],
   AchievementId: ["Id"], EarnedAtUtc: ["EarnedAt"], UsedOnDate: ["RecentFreezeDates"],

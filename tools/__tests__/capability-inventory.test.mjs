@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { createHash } from "node:crypto"
 import { test } from "node:test"
-import { buildInventory, checkBaseline } from "../capability-inventory.mjs"
+import { buildInventory, checkBaseline, gapReport } from "../capability-inventory.mjs"
 
 const root = resolve(import.meta.dirname, "../..")
 const inventory = buildInventory(root)
@@ -41,6 +41,7 @@ test("both real registries, all scoped entity views and inherited fields have so
   }
   assert.ok(inventory.capabilities.length > 0)
   assert.ok(inventory.capabilities.every(row => row.surfaces.chat && row.surfaces.mcp))
+  assert.equal(field(inventory, "Profile", "xmin").shadow, true)
 })
 
 test("generated output is deterministic and the accepted baseline passes", () => {
@@ -57,6 +58,10 @@ test("creation without update and partial readback are gaps", () => {
   assert.equal(checklist.operations.read.status, "partial")
   assert.equal(checklist.verdict, "gap")
   assert.equal(field(inventory, "Habit", "Description").surfaces.chat.operations.read.status, "absent")
+  assert.ok(field(inventory, "Profile", "Name").surfaces.chat.problems.includes("domain-edit-without-tool-update"))
+  assert.ok(field(inventory, "Habit", "RelativeReminders").surfaces.chat.problems.includes("domain-edit-without-tool-update"))
+  assert.match(gapReport(inventory), /## Gaps to file/)
+  assert.match(gapReport(inventory), /### Profile.Name/)
 })
 
 test("MCP gateway coverage retains direct differences, known tickets and deliberate memory removal", () => {
@@ -77,6 +82,7 @@ test("nested writable fields and filter predicates have distinct parameter paths
   assert.equal(general.direct.length, 0, "A selector must not be counted as a write")
   const mcp = inventory.registries.mcp.find(row => row.name === "bulk_update_habits")
   assert.ok(mcp.parameters.some(row => row.name === "updatesJson.emoji"))
+  assert.ok(inventory.registries.chat.find(row => row.name === "bulk_create_habits").parameters.some(row => row.name === "habits[].sub_habits[].emoji"))
 })
 
 test("removing a real registration removes coverage and fails the drift gate", () => {
