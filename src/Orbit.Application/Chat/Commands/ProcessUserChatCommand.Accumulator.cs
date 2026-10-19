@@ -70,7 +70,12 @@ public partial class ProcessUserChatCommandHandler
             for (var index = 0; index < ActionResults.Count; index++)
             {
                 if (ActionResults[index].Status == ActionStatus.Failed)
-                    ActionResults[index] = ActionResults[index] with { Error = error };
+                    ActionResults[index] = ActionResults[index] with
+                    {
+                        Error = error,
+                        MessageKey = "chat.toolResult.toolFailure",
+                        Params = new()
+                    };
             }
         }
 
