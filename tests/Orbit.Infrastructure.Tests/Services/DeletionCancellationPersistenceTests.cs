@@ -1,3 +1,4 @@
+using System.Data.Common;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -16,14 +17,18 @@ namespace Orbit.Infrastructure.Tests.Services;
 public class DeletionCancellationPersistenceTests
 {
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(false, true)]
-    [InlineData(true, false)]
-    [InlineData(true, true)]
-    public async Task ExecuteAsync_AcceptedCancellationSurvivesRollbackOrLostResponse(bool playSubscription, bool lostResponse)
+    [InlineData(false, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, false, false)]
+    [InlineData(true, true, false)]
+    [InlineData(false, false, true)]
+    [InlineData(true, false, true)]
+    public async Task ExecuteAsync_AcceptedCancellationSurvivesRollbackOrLostResponse(
+        bool playSubscription, bool lostResponse, bool failCommit)
     {
         var saveFailure = new FailNextSaveInterceptor();
-        using var factory = new SqliteOrbitDbContextFactory(saveFailure);
+        var commitFailure = new FailNextCommitInterceptor();
+        using var factory = new SqliteOrbitDbContextFactory(saveFailure, commitFailure);
         var user = User.Create("Paid", "paid@example.com").Value;
         var expiry = DateTime.UtcNow.AddDays(20);
         if (playSubscription)
@@ -45,7 +50,10 @@ public class DeletionCancellationPersistenceTests
                 failAfterAcceptance = false;
                 if (lostResponse)
                     throw new BillingProviderException("Cancellation response lost");
-                saveFailure.Enabled = true;
+                if (failCommit)
+                    commitFailure.Enabled = true;
+                else
+                    saveFailure.Enabled = true;
             }
             return Task.CompletedTask;
         }
@@ -99,6 +107,77 @@ public class DeletionCancellationPersistenceTests
             restoredUser.StripeRenewalStoppedByDeletion.Should().BeFalse();
         }
         restoredUser.PlanExpiresAt.Should().Be(expiry);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteAsync_IntentCannotCommit_DoesNotMutateProvider(bool failCommit)
+    {
+        var saveFailure = new FailNextSaveInterceptor();
+        var commitFailure = new FailNextCommitInterceptor();
+        using var factory = new SqliteOrbitDbContextFactory(saveFailure, commitFailure);
+        var user = User.Create("Paid", "paid@example.com").Value;
+        var expiry = DateTime.UtcNow.AddDays(20);
+        user.SetStripeSubscription("sub_paid", expiry);
+        user.Deactivate(DateTime.UtcNow.AddDays(27));
+        factory.Context.Users.Add(user);
+        await factory.Context.SaveChangesAsync();
+        var stripe = Substitute.For<IBillingService>();
+        stripe.GetSubscriptionDetailsAsync("sub_paid", Arg.Any<CancellationToken>())
+            .Returns(new BillingSubscriptionDetails("active", expiry, false, SubscriptionInterval.Monthly, 1000, "usd", null));
+        saveFailure.Enabled = !failCommit;
+        commitFailure.Enabled = failCommit;
+        using (var attempt = factory.CreateContext())
+        {
+            var run = () => CreateJob(attempt, stripe, Substitute.For<IPlayBillingService>())
+                .ExecuteAsync(user.Id, "sub_paid", null, true, CancellationToken.None);
+
+            await run.Should().ThrowAsync<DbUpdateException>();
+        }
+
+        await stripe.DidNotReceive().SetSubscriptionCancelAtPeriodEndAsync(
+            Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+        using var persisted = factory.CreateContext();
+        (await persisted.Users.IgnoreQueryFilters().SingleAsync()).StripeRenewalStoppedByDeletion.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteAsync_AccountChangedAfterIntentCommit_DoesNotCancelStaleSubscription(bool reactivate)
+    {
+        var afterCommit = new AfterCommitInterceptor();
+        using var factory = new SqliteOrbitDbContextFactory(
+            Path.Combine(Path.GetTempPath(), $"orbit-deletion-{Guid.NewGuid():N}.db"), afterCommit);
+        var user = User.Create("Paid", "paid@example.com").Value;
+        var expiry = DateTime.UtcNow.AddDays(20);
+        user.SetStripeSubscription("sub_paid", expiry);
+        user.Deactivate(DateTime.UtcNow.AddDays(27));
+        factory.Context.Users.Add(user);
+        await factory.Context.SaveChangesAsync();
+        var stripe = Substitute.For<IBillingService>();
+        stripe.GetSubscriptionDetailsAsync("sub_paid", Arg.Any<CancellationToken>())
+            .Returns(new BillingSubscriptionDetails("active", expiry, false, SubscriptionInterval.Monthly, 1000, "usd", null));
+        afterCommit.Once = async () =>
+        {
+            using var changed = factory.CreateContext();
+            var currentUser = await changed.Users.IgnoreQueryFilters().SingleAsync();
+            currentUser.StripeRenewalStoppedByDeletion.Should().BeTrue();
+            if (reactivate)
+                currentUser.CancelDeactivation();
+            else
+                currentUser.SetStripeSubscription("sub_new", expiry);
+            await changed.SaveChangesAsync();
+        };
+        using var attempt = factory.CreateContext();
+
+        await CreateJob(attempt, stripe, Substitute.For<IPlayBillingService>())
+            .ExecuteAsync(user.Id, "sub_paid", null, true, CancellationToken.None);
+
+        afterCommit.Once.Should().BeNull();
+        await stripe.DidNotReceive().SetSubscriptionCancelAtPeriodEndAsync(
+            Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
     }
 
     [Theory]
@@ -195,6 +274,38 @@ public class DeletionCancellationPersistenceTests
                 throw new DbUpdateException("Cancellation save failed");
             }
             return ValueTask.FromResult(result);
+        }
+    }
+
+    private sealed class FailNextCommitInterceptor : DbTransactionInterceptor
+    {
+        public bool Enabled { get; set; }
+
+        public override ValueTask<InterceptionResult> TransactionCommittingAsync(
+            DbTransaction transaction, TransactionEventData eventData, InterceptionResult result,
+            CancellationToken cancellationToken = default)
+        {
+            if (Enabled)
+            {
+                Enabled = false;
+                throw new DbUpdateException("Cancellation commit failed");
+            }
+            return ValueTask.FromResult(result);
+        }
+    }
+
+    private sealed class AfterCommitInterceptor : DbTransactionInterceptor
+    {
+        public Func<Task>? Once { get; set; }
+
+        public override async Task TransactionCommittedAsync(
+            DbTransaction transaction, TransactionEndEventData eventData, CancellationToken cancellationToken = default)
+        {
+            if (Once is { } callback)
+            {
+                Once = null;
+                await callback();
+            }
         }
     }
 }

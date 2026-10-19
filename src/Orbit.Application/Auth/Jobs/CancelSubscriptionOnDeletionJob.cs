@@ -153,12 +153,11 @@ public sealed class CancelSubscriptionOnDeletionJob(
         Task.WhenAll(CancelStripeAsync(stripeSubscriptionId, cancellationToken),
             CancelPlayAsync(playPurchaseToken, cancellationToken));
 
-    private async Task<bool> CancelStripeAsync(string? stripeSubscriptionId, CancellationToken cancellationToken)
+    private async Task CancelStripeAsync(string? stripeSubscriptionId, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(stripeSubscriptionId) || !await StripeCanRenewAsync(stripeSubscriptionId, cancellationToken))
-            return false;
+            return;
         await billingService.SetSubscriptionCancelAtPeriodEndAsync(stripeSubscriptionId, true, cancellationToken);
-        return true;
     }
 
     private async Task<bool> StripeCanRenewAsync(string stripeSubscriptionId, CancellationToken cancellationToken)
@@ -167,12 +166,11 @@ public sealed class CancelSubscriptionOnDeletionJob(
         return subscription is not null && subscription.Status is not ("canceled" or "incomplete_expired") && !subscription.CancelAtPeriodEnd;
     }
 
-    private async Task<bool> CancelPlayAsync(string? playPurchaseToken, CancellationToken cancellationToken)
+    private async Task CancelPlayAsync(string? playPurchaseToken, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(playPurchaseToken) || !await PlayCanRenewAsync(playPurchaseToken, cancellationToken))
-            return false;
+            return;
         await playBillingService.CancelAsync(playPurchaseToken, cancellationToken);
-        return true;
     }
 
     private async Task<bool> PlayCanRenewAsync(string playPurchaseToken, CancellationToken cancellationToken)
