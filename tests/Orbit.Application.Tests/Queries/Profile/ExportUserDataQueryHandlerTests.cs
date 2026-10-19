@@ -174,7 +174,8 @@ public class ExportUserDataQueryHandlerTests
         payload.EnumerateObject().Select(property => property.Name).Should().BeEquivalentTo(
             "exportedAtUtc", "account", "settings", "subscription", "habits", "goals", "tags",
             "notifications", "checklistTemplates", "achievements", "streakFreezes", "referrals",
-            "apiKeys", "friendships", "cheers", "blockedUsers", "reports", "friendFeedEvents");
+            "apiKeys", "friendships", "cheers", "blockedUsers", "reports", "friendFeedEvents",
+            "proactiveItems", "notionConnection", "notionTasks");
     }
 
     [Fact]
