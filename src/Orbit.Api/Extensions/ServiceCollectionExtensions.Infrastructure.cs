@@ -342,6 +342,12 @@ public static partial class ServiceCollectionExtensions
                 operation.Deprecated = true;
             return Task.CompletedTask;
         });
+        options.AddSchemaTransformer((schema, context, _) =>
+        {
+            if (context.JsonPropertyInfo?.AttributeProvider?.IsDefined(typeof(ObsoleteAttribute), false) == true)
+                schema.Deprecated = true;
+            return Task.CompletedTask;
+        });
     }
 
     private static void AddResponseCompression(WebApplicationBuilder builder)
