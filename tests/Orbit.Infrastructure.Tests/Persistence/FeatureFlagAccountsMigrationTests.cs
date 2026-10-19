@@ -26,7 +26,7 @@ public class FeatureFlagAccountsMigrationTests
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
 
-        differences.Should().HaveCount(9).And.OnlyContain(operation =>
+        differences.Should().HaveCount(10).And.OnlyContain(operation =>
             operation is DropForeignKeyOperation || operation is AddForeignKeyOperation
             || operation is AddColumnOperation || operation is AlterColumnOperation
             || operation is CreateTableOperation || operation is CreateIndexOperation);
@@ -36,9 +36,10 @@ public class FeatureFlagAccountsMigrationTests
         owedCancellations.Columns.Select(column => column.Name).Should().BeEquivalentTo(
             "Id", "Provider", "ProviderIdentifier", "Attempts", "CreatedAtUtc", "LastAttemptAtUtc",
             "NextAttemptAtUtc", "ExhaustedAtUtc");
-        var retryIndex = differences.OfType<CreateIndexOperation>().Should().ContainSingle().Subject;
-        retryIndex.Table.Should().Be("OwedSubscriptionCancellations");
-        retryIndex.Columns.Should().Equal("NextAttemptAtUtc");
+        var cancellationIndexes = differences.OfType<CreateIndexOperation>().ToArray();
+        cancellationIndexes.Should().HaveCount(2).And.OnlyContain(index => index.Table == "OwedSubscriptionCancellations");
+        cancellationIndexes.Should().ContainSingle(index => index.Columns.SequenceEqual(new[] { "NextAttemptAtUtc" }) && !index.IsUnique);
+        cancellationIndexes.Should().ContainSingle(index => index.Columns.SequenceEqual(new[] { "Provider", "ProviderIdentifier" }) && index.IsUnique);
         differences.OfType<AlterColumnOperation>().Should().ContainSingle().Which
             .Should().Match<AlterColumnOperation>(column => column.Table == "HabitLogs"
                 && column.Name == "IsSlip" && !column.IsNullable && column.OldColumn.IsNullable);

@@ -1,4 +1,6 @@
+using System.Linq.Expressions;
 using FluentAssertions;
+using Npgsql;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -72,7 +74,7 @@ public class OwedSubscriptionCancellationTests
         await fixture.ScanAsync();
         await fixture.ScanAsync();
 
-        await fixture.AssertCancellationCallsAsync(googlePlay, OwedSubscriptionCancellation.MaxAttempts);
+        await fixture.AssertCancellationCallsAsync(googlePlay, OwedSubscriptionCancellation.MaxAttempts + 1);
         fixture.Errors().Should().HaveCount(2);
         using var final = fixture.Factory.CreateContext();
         var exhausted = await final.OwedSubscriptionCancellations.SingleAsync();
@@ -141,6 +143,159 @@ public class OwedSubscriptionCancellationTests
         await fixture.AssertCancellationCallsAsync(googlePlay, 0);
         using var final = fixture.Factory.CreateContext();
         (await final.OwedSubscriptionCancellations.AnyAsync()).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteAsync_SlowProvider_ClaimsBeforeIoWithoutHoldingTransaction(bool googlePlay)
+    {
+        using var fixture = new Fixture();
+        var record = await fixture.SeedAsync(googlePlay);
+        using var context = fixture.Factory.CreateContext();
+        var unitOfWork = new UnitOfWork(context, new DatabaseConnectionSettings { TransactionTimeoutSeconds = 1 });
+        bool? transactionDuringIo = null;
+        int? persistedAttemptsDuringIo = null;
+        async Task FailSlowly(CancellationToken ct)
+        {
+            transactionDuringIo = unitOfWork.HasActiveTransaction;
+            using var observer = fixture.Factory.CreateContext();
+            persistedAttemptsDuringIo = (await observer.OwedSubscriptionCancellations.SingleAsync()).Attempts;
+            await Task.Delay(TimeSpan.FromMilliseconds(1500), ct);
+            throw new BillingProviderException("provider timeout");
+        }
+        fixture.Stripe.SetSubscriptionCancelAtPeriodEndAsync("sub_owed", true, Arg.Any<CancellationToken>(), Arg.Any<string?>())
+            .Returns(call => FailSlowly(call.Arg<CancellationToken>()));
+        fixture.Play.CancelAsync("token", Arg.Any<CancellationToken>())
+            .Returns(call => FailSlowly(call.Arg<CancellationToken>()));
+
+        await fixture.CreateJob(context, unitOfWork).ExecuteAsync(record.Id, CancellationToken.None);
+
+        transactionDuringIo.Should().BeFalse();
+        persistedAttemptsDuringIo.Should().Be(1);
+        using var final = fixture.Factory.CreateContext();
+        var pending = await final.OwedSubscriptionCancellations.SingleAsync();
+        pending.Attempts.Should().Be(1);
+        pending.NextAttemptAtUtc.Should().BeAfter(fixture.Clock.UtcNow.UtcDateTime);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_InterruptedProvider_LeavesClaimDueForRetry()
+    {
+        using var fixture = new Fixture();
+        var record = await fixture.SeedAsync(false);
+        using var context = fixture.Factory.CreateContext();
+        using var shutdown = new CancellationTokenSource();
+        fixture.Stripe.SetSubscriptionCancelAtPeriodEndAsync("sub_owed", true, Arg.Any<CancellationToken>(), Arg.Any<string?>())
+            .Returns(_ =>
+            {
+                shutdown.Cancel();
+                return Task.FromCanceled(shutdown.Token);
+            });
+        var attempt = () => fixture.CreateJob(context).ExecuteAsync(record.Id, shutdown.Token);
+
+        await attempt.Should().ThrowAsync<OperationCanceledException>();
+
+        using var observer = fixture.Factory.CreateContext();
+        var pending = await observer.OwedSubscriptionCancellations.SingleAsync();
+        pending.Attempts.Should().Be(1);
+        fixture.Clock.UtcNow = new DateTimeOffset(pending.NextAttemptAtUtc);
+        fixture.Stripe.SetSubscriptionCancelAtPeriodEndAsync("sub_owed", true, Arg.Any<CancellationToken>(), Arg.Any<string?>())
+            .Returns(Task.CompletedTask);
+        await fixture.ScanAsync();
+        using var final = fixture.Factory.CreateContext();
+        (await final.OwedSubscriptionCancellations.AnyAsync()).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Scanner_ProviderRecoversAfterExhaustion_RemovesDebtAndStopsAlerts(bool googlePlay)
+    {
+        using var fixture = new Fixture();
+        await fixture.SeedAsync(googlePlay);
+        fixture.FailProviders();
+        for (var attempt = 0; attempt < OwedSubscriptionCancellation.MaxAttempts; attempt++)
+        {
+            await fixture.ScanAsync();
+            using var context = fixture.Factory.CreateContext();
+            fixture.Clock.UtcNow = new DateTimeOffset((await context.OwedSubscriptionCancellations.SingleAsync()).NextAttemptAtUtc);
+        }
+        fixture.Stripe.SetSubscriptionCancelAtPeriodEndAsync("sub_owed", true, Arg.Any<CancellationToken>(), Arg.Any<string?>())
+            .Returns(Task.CompletedTask);
+        fixture.Play.CancelAsync("token", Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+
+        await fixture.ScanAsync();
+
+        using var final = fixture.Factory.CreateContext();
+        (await final.OwedSubscriptionCancellations.AnyAsync()).Should().BeFalse();
+        await fixture.AssertCancellationCallsAsync(googlePlay, OwedSubscriptionCancellation.MaxAttempts + 1);
+        var alerts = fixture.Errors().Count;
+        fixture.Clock.UtcNow = fixture.Clock.UtcNow.AddDays(2);
+        await fixture.ScanAsync();
+        fixture.Errors().Should().HaveCount(alerts);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteAsync_ActiveTransaction_RejectsBeforeDoingWork(bool legacyJob)
+    {
+        using var fixture = new Fixture();
+        using var context = fixture.Factory.CreateContext();
+        var unitOfWork = new UnitOfWork(context, new DatabaseConnectionSettings());
+        await using var transaction = await context.Database.BeginTransactionAsync();
+        var owed = fixture.CreateJob(context, unitOfWork);
+        var legacy = new CancelSubscriptionOnDeletionJob(new GenericRepository<User>(context), unitOfWork,
+            fixture.Stripe, fixture.Play, fixture.Options, owed);
+        var attempt = () => legacyJob
+            ? legacy.ExecuteAsync(Guid.NewGuid(), "sub_owed", "token", true, CancellationToken.None)
+            : owed.ExecuteAsync(Guid.NewGuid(), CancellationToken.None);
+
+        await attempt.Should().ThrowAsync<InvalidOperationException>();
+
+        (await context.OwedSubscriptionCancellations.AnyAsync()).Should().BeFalse();
+        await fixture.Stripe.DidNotReceive().GetSubscriptionDetailsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await fixture.Play.DidNotReceive().VerifyAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Database_RejectsDuplicateProviderObligation()
+    {
+        using var fixture = new Fixture();
+        await fixture.SeedAsync(false);
+        using var context = fixture.Factory.CreateContext();
+        context.OwedSubscriptionCancellations.Add(OwedSubscriptionCancellation.Create(SubscriptionSource.Stripe, "sub_owed"));
+
+        var insert = () => context.SaveChangesAsync();
+
+        await insert.Should().ThrowAsync<DbUpdateException>();
+    }
+
+    [Fact]
+    public async Task RecordAsync_UniqueViolation_ReturnsExistingRecordWithoutResettingErasureChanges()
+    {
+        using var fixture = new Fixture();
+        var existing = OwedSubscriptionCancellation.Create(SubscriptionSource.Stripe, "sub_owed");
+        var repository = Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>();
+        repository.FindOneTrackedAsync(Arg.Any<Expression<Func<OwedSubscriptionCancellation, bool>>>(),
+            cancellationToken: Arg.Any<CancellationToken>()).Returns((OwedSubscriptionCancellation?)null, existing);
+        var unitOfWork = Substitute.For<IUnitOfWork>();
+        unitOfWork.HasActiveTransaction.Returns(true);
+        unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Guid>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<Guid>>>()(call.Arg<CancellationToken>()));
+        unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DbUpdateException("duplicate obligation",
+                new PostgresException("duplicate key", "ERROR", "ERROR", PostgresErrorCodes.UniqueViolation)));
+        var job = new OwedSubscriptionCancellationJob(repository, unitOfWork, fixture.Stripe, fixture.Play,
+            fixture.Options, Microsoft.Extensions.Logging.Abstractions.NullLogger<OwedSubscriptionCancellationJob>.Instance, fixture.Clock);
+
+        var id = await job.RecordAsync(SubscriptionSource.Stripe, "sub_owed", CancellationToken.None);
+
+        id.Should().Be(existing.Id);
+        repository.Received(1).Remove(Arg.Is<OwedSubscriptionCancellation>(record => record.Id != existing.Id));
+        unitOfWork.DidNotReceive().ResetTracking();
+        unitOfWork.DidNotReceive().DiscardChanges();
     }
 
     private sealed class MutableClock : TimeProvider

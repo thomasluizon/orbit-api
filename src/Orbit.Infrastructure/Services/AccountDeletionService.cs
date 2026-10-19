@@ -103,13 +103,14 @@ public partial class AccountDeletionService(
 
             await StopRenewalsBeforeErasureAsync(scope.ServiceProvider, user, nowAtUtc, ct);
             unitOfWork.ResetTracking();
+            var owedRecords = new List<(Guid Id, SubscriptionSource Provider)>();
             var deleted = await unitOfWork.ExecuteInTransactionAsync(
                 transactionToken => DeleteLockedAccountAsync(scope.ServiceProvider, userId,
-                    user.StripeSubscriptionId, user.PlayPurchaseToken, transactionToken), ct);
+                    user.StripeSubscriptionId, user.PlayPurchaseToken, owedRecords, transactionToken), ct);
 
-            if (deleted && nowAtUtc - user.ScheduledDeletionAt.Value >= MaxBillingDeferral
-                && (!string.IsNullOrWhiteSpace(user.StripeSubscriptionId) || !string.IsNullOrWhiteSpace(user.PlayPurchaseToken)))
-                LogCancellationDeferred(logger, userId);
+            if (deleted)
+                foreach (var (id, provider) in owedRecords)
+                    LogCancellationDeferred(logger, id, provider);
             if (deleted && logger.IsEnabled(LogLevel.Information))
                 LogAccountDeleted(logger, userId);
         }
@@ -121,8 +122,10 @@ public partial class AccountDeletionService(
     }
 
     private async Task<bool> DeleteLockedAccountAsync(IServiceProvider services, Guid userId,
-        string? stripeSubscriptionId, string? playPurchaseToken, CancellationToken ct)
+        string? stripeSubscriptionId, string? playPurchaseToken,
+        List<(Guid Id, SubscriptionSource Provider)> owedRecords, CancellationToken ct)
     {
+        owedRecords.Clear();
         var dbContext = services.GetRequiredService<OrbitDbContext>();
         var unitOfWork = services.GetRequiredService<IUnitOfWork>();
         await unitOfWork.AcquireUserRowLockAsync(userId, ct);
@@ -144,9 +147,9 @@ public partial class AccountDeletionService(
         {
             var cancellations = services.GetRequiredService<OwedSubscriptionCancellationJob>();
             if (!string.IsNullOrWhiteSpace(user.StripeSubscriptionId))
-                await cancellations.RecordAsync(SubscriptionSource.Stripe, user.StripeSubscriptionId, ct);
+                owedRecords.Add((await cancellations.RecordAsync(SubscriptionSource.Stripe, user.StripeSubscriptionId, ct), SubscriptionSource.Stripe));
             if (!string.IsNullOrWhiteSpace(user.PlayPurchaseToken))
-                await cancellations.RecordAsync(SubscriptionSource.GooglePlay, user.PlayPurchaseToken, ct);
+                owedRecords.Add((await cancellations.RecordAsync(SubscriptionSource.GooglePlay, user.PlayPurchaseToken, ct), SubscriptionSource.GooglePlay));
         }
 
         var contacts = services.GetRequiredService<IGenericRepository<MarketingContact>>();
@@ -249,8 +252,8 @@ public partial class AccountDeletionService(
     [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Cleaned up {Reminders} stale SentReminders and {SlipAlerts} stale SentSlipAlerts older than 90 days, plus {ProcessedRequests} ProcessedRequests older than 30 days")]
     private static partial void LogStaleRecordsCleaned(ILogger logger, int reminders, int slipAlerts, int processedRequests);
 
-    [LoggerMessage(EventId = 8, Level = LogLevel.Error, Message = "Erased account {UserId} has unconfirmed provider renewals tracked in durable cancellation records")]
-    private static partial void LogCancellationDeferred(ILogger logger, Guid userId);
+    [LoggerMessage(EventId = 8, Level = LogLevel.Error, Message = "Unconfirmed renewal after erasure is tracked by cancellation {CancellationId} for {Provider}")]
+    private static partial void LogCancellationDeferred(ILogger logger, Guid cancellationId, SubscriptionSource provider);
 
     [LoggerMessage(EventId = 10, Level = LogLevel.Warning, Message = "Skipped account erasure for user {UserId}: {Reason}")]
     private static partial void LogErasureRecheckSkipped(ILogger logger, Guid userId, string reason);

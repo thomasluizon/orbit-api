@@ -32,28 +32,27 @@ public sealed class OwedSubscriptionCancellation : Entity
         };
     }
 
-    public void RecordExhaustionAlert(DateTime alertedAtUtc)
+    public void RecordAttempt(DateTime attemptedAtUtc)
     {
-        if (!ExhaustedAtUtc.HasValue)
-            throw new InvalidOperationException("Cancellation retries are not exhausted.");
-        if (alertedAtUtc.Kind != DateTimeKind.Utc || alertedAtUtc < NextAttemptAtUtc)
-            throw new ArgumentOutOfRangeException(nameof(alertedAtUtc));
-        NextAttemptAtUtc = alertedAtUtc.AddDays(1);
-    }
-
-    public void RecordFailure(DateTime attemptedAtUtc)
-    {
-        if (ExhaustedAtUtc.HasValue)
-            throw new InvalidOperationException("Cancellation retries are exhausted.");
         if (attemptedAtUtc.Kind != DateTimeKind.Utc || attemptedAtUtc < NextAttemptAtUtc)
             throw new ArgumentOutOfRangeException(nameof(attemptedAtUtc));
         Attempts++;
         LastAttemptAtUtc = attemptedAtUtc;
-        NextAttemptAtUtc = attemptedAtUtc.AddSeconds(Attempts switch { 1 => 60, 2 => 300, _ => 3600 });
         if (Attempts >= MaxAttempts)
-        {
-            ExhaustedAtUtc = attemptedAtUtc;
-            NextAttemptAtUtc = attemptedAtUtc.AddDays(1);
-        }
+            ExhaustedAtUtc ??= attemptedAtUtc;
+        NextAttemptAtUtc = attemptedAtUtc.Add(RetryDelay);
     }
+
+    public void RecordFailure(DateTime failedAtUtc)
+    {
+        if (!LastAttemptAtUtc.HasValue)
+            throw new InvalidOperationException("Cancellation has not been attempted.");
+        if (failedAtUtc.Kind != DateTimeKind.Utc || failedAtUtc < LastAttemptAtUtc)
+            throw new ArgumentOutOfRangeException(nameof(failedAtUtc));
+        NextAttemptAtUtc = failedAtUtc.Add(RetryDelay);
+    }
+
+    private TimeSpan RetryDelay => ExhaustedAtUtc.HasValue
+        ? TimeSpan.FromDays(1)
+        : TimeSpan.FromSeconds(Attempts switch { 1 => 60, 2 => 300, _ => 3600 });
 }

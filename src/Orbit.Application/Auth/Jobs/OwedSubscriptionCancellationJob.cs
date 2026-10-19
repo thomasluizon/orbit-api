@@ -1,4 +1,5 @@
 using FluentValidation;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orbit.Application.Auth.Validators;
@@ -30,8 +31,20 @@ public sealed class OwedSubscriptionCancellationJob(
                 return existing.Id;
             var record = OwedSubscriptionCancellation.Create(provider, identifier);
             await cancellations.AddAsync(record, token);
-            await unitOfWork.SaveChangesAsync(token);
-            return record.Id;
+            try
+            {
+                await unitOfWork.SaveChangesAsync(token);
+                return record.Id;
+            }
+            catch (DbUpdateException ex) when (DbUniqueViolation.IsUniqueViolation(ex))
+            {
+                cancellations.Remove(record);
+                existing = await cancellations.FindOneTrackedAsync(
+                    item => item.Provider == provider && item.ProviderIdentifier == identifier, cancellationToken: token);
+                if (existing is null)
+                    throw;
+                return existing.Id;
+            }
         }, ct);
     }
 
@@ -40,36 +53,47 @@ public sealed class OwedSubscriptionCancellationJob(
         if (unitOfWork.HasActiveTransaction)
             throw new InvalidOperationException("Owed cancellation attempts require an independent transaction.");
         unitOfWork.ResetTracking();
+        var claimed = await unitOfWork.ExecuteInTransactionAsync(async token =>
+        {
+            await unitOfWork.AcquireAdvisoryLockAsync($"owed-cancellation-attempt:{recordId}", token);
+            var record = await cancellations.FindOneTrackedAsync(record => record.Id == recordId, cancellationToken: token);
+            var attemptedAtUtc = clock.GetUtcNow().UtcDateTime;
+            if (record is null || record.NextAttemptAtUtc > attemptedAtUtc)
+                return null;
+            record.RecordAttempt(attemptedAtUtc);
+            await unitOfWork.SaveChangesAsync(token);
+            return record;
+        }, ct);
+        if (claimed is null)
+            return;
+        var attempt = claimed.Attempts;
+        if (claimed.ExhaustedAtUtc.HasValue)
+            AlertExhaustion(claimed);
+
+        var succeeded = false;
+        try
+        {
+            await CancelProviderAsync(claimed, ct);
+            succeeded = true;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            if (!claimed.ExhaustedAtUtc.HasValue)
+                logger.LogWarning("Provider cancellation {CancellationId} for {Provider} failed on attempt {Attempt}",
+                    claimed.Id, claimed.Provider, attempt);
+        }
+
+        unitOfWork.ResetTracking();
         await unitOfWork.ExecuteInTransactionAsync(async token =>
         {
             await unitOfWork.AcquireAdvisoryLockAsync($"owed-cancellation-attempt:{recordId}", token);
             var record = await cancellations.FindOneTrackedAsync(record => record.Id == recordId, cancellationToken: token);
             if (record is null)
                 return;
-            var attemptedAtUtc = clock.GetUtcNow().UtcDateTime;
-            if (record.NextAttemptAtUtc > attemptedAtUtc)
-                return;
-            if (record.ExhaustedAtUtc.HasValue)
-            {
-                AlertExhaustion(record);
-                record.RecordExhaustionAlert(attemptedAtUtc);
-                await unitOfWork.SaveChangesAsync(token);
-                return;
-            }
-            try
-            {
-                await CancelProviderAsync(record, token);
+            if (succeeded)
                 cancellations.Remove(record);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException || !token.IsCancellationRequested)
-            {
-                record.RecordFailure(attemptedAtUtc);
-                if (record.ExhaustedAtUtc.HasValue)
-                    AlertExhaustion(record);
-                else
-                    logger.LogWarning("Provider cancellation {CancellationId} for {Provider} failed on attempt {Attempt}",
-                        record.Id, record.Provider, record.Attempts);
-            }
+            else if (record.Attempts == attempt)
+                record.RecordFailure(clock.GetUtcNow().UtcDateTime);
             await unitOfWork.SaveChangesAsync(token);
         }, ct);
     }

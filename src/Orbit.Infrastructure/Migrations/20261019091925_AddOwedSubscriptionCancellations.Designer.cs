@@ -1574,6 +1574,9 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasIndex("NextAttemptAtUtc");
 
+                    b.HasIndex("Provider", "ProviderIdentifier")
+                        .IsUnique();
+
                     b.ToTable("OwedSubscriptionCancellations");
                 });
 

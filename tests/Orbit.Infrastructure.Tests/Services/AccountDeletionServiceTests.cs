@@ -2,9 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Hangfire;
-using Hangfire.Common;
-using Hangfire.States;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -41,7 +38,7 @@ public class AccountDeletionServiceTests
     [InlineData(true, false, 8, false, 0, true)]
     [InlineData(false, true, 8, false, 3, false)]
     [InlineData(true, true, 8, false, 3, false)]
-    public async Task RunAsync_DuePaidAccount_CancelsBeforeRemovingAndRetainsRowOnFailure(bool play, bool failure, int overdueDays, bool missing, int queueFailure, bool paused)
+    public async Task RunAsync_DuePaidAccount_CancelsBeforeRemovingAndRetainsRowOnFailure(bool play, bool failure, int overdueDays, bool missing, int storageFailures, bool paused)
     {
         using var factory = new SqliteOrbitDbContextFactory();
         var user = CreateUser();
@@ -83,9 +80,7 @@ public class AccountDeletionServiceTests
             using var beforeRemoval = factory.CreateContext();
             (await beforeRemoval.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == user.Id)).Should().BeTrue();
         });
-        var objects = new FakeObjectStore();
-        if (queueFailure == 3)
-            objects.FailuresRemaining = 3;
+        var objects = new FakeObjectStore { FailuresRemaining = storageFailures };
         objects.Keys.Add($"{user.Id}/one.png");
         var services = new ServiceCollection();
         services.AddSingleton<IObjectStorageDeletionService>(objects);
@@ -103,12 +98,6 @@ public class AccountDeletionServiceTests
         services.AddSingleton<ILogger<OwedSubscriptionCancellationJob>>(Microsoft.Extensions.Logging.Abstractions.NullLogger<OwedSubscriptionCancellationJob>.Instance);
         var clock = new MutableClock();
         services.AddSingleton<TimeProvider>(clock);
-        var jobs = Substitute.For<IBackgroundJobClient>();
-        if (queueFailure == 1)
-            jobs.Create(Arg.Any<Job>(), Arg.Any<IState>()).Throws(new InvalidOperationException("queue unavailable"));
-        else if (queueFailure == 2)
-            jobs.Create(Arg.Any<Job>(), Arg.Any<IState>()).Returns((string?)null);
-        services.AddSingleton(jobs);
         var logger = Substitute.For<ILogger<AccountDeletionService>>();
         logger.IsEnabled(LogLevel.Error).Returns(true);
         using var provider = services.BuildServiceProvider();
@@ -118,9 +107,9 @@ public class AccountDeletionServiceTests
         await service.RunAsync(CancellationToken.None);
 
         using var afterRemoval = factory.CreateContext();
-        var retained = failure && overdueDays < 7 || queueFailure == 3;
+        var retained = failure && overdueDays < 7 || storageFailures == 3;
         (await afterRemoval.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == user.Id)).Should().Be(retained);
-        objects.Attempts.Should().Be(queueFailure == 3 ? 3 : retained ? 0 : 1);
+        objects.Attempts.Should().Be(retained && storageFailures == 0 ? 0 : Math.Min(storageFailures + 1, 3));
         objects.Keys.Should().HaveCount(retained ? 1 : 0);
         await reset.Received(retained ? 0 : 1).DeleteAllUserDataAsync(user.Id, Arg.Any<CancellationToken>());
         if (play)
@@ -137,6 +126,11 @@ public class AccountDeletionServiceTests
             record.Provider.Should().Be(play ? SubscriptionSource.GooglePlay : SubscriptionSource.Stripe);
             record.ProviderIdentifier.Should().Be(play ? "play-token" : "sub_paid");
             record.Attempts.Should().Be(0);
+            var alerts = logger.ReceivedCalls()
+                .Where(call => call.GetMethodInfo().Name == "Log" && (LogLevel)call.GetArguments()[0]! == LogLevel.Error)
+                .Select(call => call.GetArguments()[2]!.ToString()!).ToList();
+            alerts.Should().ContainSingle().Which.Should().Contain(record.Id.ToString()).And.Contain(record.Provider.ToString())
+                .And.NotContain(user.Id.ToString()).And.NotContain(record.ProviderIdentifier);
             clock.UtcNow = new DateTimeOffset(record.NextAttemptAtUtc);
             using (var retryScope = provider.CreateScope())
                 await retryScope.ServiceProvider.GetRequiredService<OwedSubscriptionCancellationJob>()

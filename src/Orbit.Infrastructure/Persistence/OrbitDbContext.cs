@@ -94,6 +94,7 @@ public class OrbitDbContext : DbContext
             entity.HasKey(record => record.Id);
             entity.Property(record => record.ProviderIdentifier).IsRequired();
             entity.HasIndex(record => record.NextAttemptAtUtc);
+            entity.HasIndex(record => new { record.Provider, record.ProviderIdentifier }).IsUnique();
         });
         ConfigureUserEntity(modelBuilder, nullableEncConverter);
         ConfigureMarketingContactEntity(modelBuilder);

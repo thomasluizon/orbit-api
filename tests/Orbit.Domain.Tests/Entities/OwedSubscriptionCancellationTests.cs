@@ -38,13 +38,13 @@ public class OwedSubscriptionCancellationTests
     }
 
     [Fact]
-    public void RecordFailure_BacksOffAndRetainsExhaustedDebt()
+    public void RecordAttempt_BacksOffAndContinuesDailyAfterExhaustion()
     {
         var record = OwedSubscriptionCancellation.Create(SubscriptionSource.Stripe, "sub_owed");
         for (var attempt = 1; attempt <= OwedSubscriptionCancellation.MaxAttempts; attempt++)
         {
             var attemptedAtUtc = record.NextAttemptAtUtc;
-            record.RecordFailure(attemptedAtUtc);
+            record.RecordAttempt(attemptedAtUtc);
             record.Attempts.Should().Be(attempt);
             record.LastAttemptAtUtc.Should().Be(attemptedAtUtc);
             if (attempt < OwedSubscriptionCancellation.MaxAttempts)
@@ -52,22 +52,31 @@ public class OwedSubscriptionCancellationTests
         }
         record.ExhaustedAtUtc.Should().NotBeNull();
         record.ProviderIdentifier.Should().Be("sub_owed");
-        var retry = () => record.RecordFailure(record.NextAttemptAtUtc);
-        retry.Should().Throw<InvalidOperationException>();
-        var alertAtUtc = record.NextAttemptAtUtc;
-        record.RecordExhaustionAlert(alertAtUtc);
-        record.NextAttemptAtUtc.Should().Be(alertAtUtc.AddDays(1));
+        var exhaustedAtUtc = record.ExhaustedAtUtc;
+        var retryAtUtc = record.NextAttemptAtUtc;
+        record.RecordAttempt(retryAtUtc);
+        record.Attempts.Should().Be(OwedSubscriptionCancellation.MaxAttempts + 1);
+        record.ExhaustedAtUtc.Should().Be(exhaustedAtUtc);
+        record.NextAttemptAtUtc.Should().Be(retryAtUtc.AddDays(1));
+        record.RecordFailure(retryAtUtc.AddMinutes(2));
+        record.NextAttemptAtUtc.Should().Be(retryAtUtc.AddDays(1).AddMinutes(2));
     }
 
     [Fact]
-    public void StateChanges_RejectEarlyOrNonUtcAttemptsAndPrematureExhaustionAlerts()
+    public void StateChanges_RejectEarlyOrNonUtcAttemptsAndUnclaimedFailures()
     {
         var record = OwedSubscriptionCancellation.Create(SubscriptionSource.Stripe, "sub_owed");
-        var early = () => record.RecordFailure(record.NextAttemptAtUtc.AddSeconds(-1));
+        var early = () => record.RecordAttempt(record.NextAttemptAtUtc.AddSeconds(-1));
         early.Should().Throw<ArgumentOutOfRangeException>();
-        var nonUtc = () => record.RecordFailure(DateTime.SpecifyKind(record.NextAttemptAtUtc, DateTimeKind.Unspecified));
+        var nonUtc = () => record.RecordAttempt(DateTime.SpecifyKind(record.NextAttemptAtUtc, DateTimeKind.Unspecified));
         nonUtc.Should().Throw<ArgumentOutOfRangeException>();
-        var alert = () => record.RecordExhaustionAlert(record.NextAttemptAtUtc);
-        alert.Should().Throw<InvalidOperationException>();
+        var unclaimed = () => record.RecordFailure(record.NextAttemptAtUtc);
+        unclaimed.Should().Throw<InvalidOperationException>();
+        var attemptedAtUtc = record.NextAttemptAtUtc;
+        record.RecordAttempt(attemptedAtUtc);
+        var prematureFailure = () => record.RecordFailure(attemptedAtUtc.AddTicks(-1));
+        prematureFailure.Should().Throw<ArgumentOutOfRangeException>();
+        var nonUtcFailure = () => record.RecordFailure(DateTime.SpecifyKind(attemptedAtUtc, DateTimeKind.Local));
+        nonUtcFailure.Should().Throw<ArgumentOutOfRangeException>();
     }
 }

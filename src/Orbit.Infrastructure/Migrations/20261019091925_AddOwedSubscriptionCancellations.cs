@@ -33,6 +33,12 @@ namespace Orbit.Infrastructure.Migrations
                 name: "IX_OwedSubscriptionCancellations_NextAttemptAtUtc",
                 table: "OwedSubscriptionCancellations",
                 column: "NextAttemptAtUtc");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_OwedSubscriptionCancellations_Provider_ProviderIdentifier",
+                table: "OwedSubscriptionCancellations",
+                columns: new[] { "Provider", "ProviderIdentifier" },
+                unique: true);
         }
 
         /// <inheritdoc />

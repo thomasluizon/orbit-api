@@ -223,9 +223,9 @@ After the seven-day billing deferral, erasure commits each retained provider ide
 cancellation obligation in the same transaction that deletes the account. An error alert
 reports erasure with unconfirmed renewals. The cancellation worker scans every minute in
 both scheduler modes, independently of the erased account and any original queued job.
-It makes up to 27 attempts, backing off for one minute, five minutes, then one hour between
-attempts. A successful cancellation, an already stopped renewal, or a provider-confirmed
-missing subscription removes the record immediately. A failed provider does not prevent
+It backs off for one minute, five minutes, then one hour between attempts. After 27
+attempts it continues attempting cancellation daily. A successful cancellation, an already
+stopped renewal, or a provider-confirmed missing subscription removes the record immediately. A failed provider does not prevent
 another provider's obligation from being processed.
 
 Exhausted obligations remain until billing reconciliation confirms renewal has stopped;
@@ -233,5 +233,7 @@ there is no time-based expiry that could forget an active charge. Exhaustion emi
 alert with the record ID and provider, repeated daily while unresolved. Billing operators
 must locate that record, verify and stop renewal with the named provider, and remove the
 record only after confirming cancellation or that the subscription no longer exists.
-The next attempt time also schedules these daily exhaustion reminders. Provider cancellation
+The next attempt time schedules both daily cancellation attempts and exhaustion reminders.
+Each attempt is committed before provider calls, which run outside database transactions.
+Interrupted attempts remain due for a retry after backoff. Provider cancellation
 that succeeds before a database failure is safe to verify again on the next scan.
