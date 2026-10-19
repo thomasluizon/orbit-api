@@ -27,7 +27,7 @@ public class GetDailySummaryQueryHandlerTests
 
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly DateOnly Today = new(2026, 4, 3);
-    private static readonly string[] ExpectedHabitTitles = new[] { "Read" };
+    private static readonly string[] ExpectedHabitTitles = new[] { "Read", "Flexible workout" };
 
     public GetDailySummaryQueryHandlerTests()
     {
@@ -134,7 +134,7 @@ public class GetDailySummaryQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ExcludesHabitsSkippedInRequestedRange()
+    public async Task Handle_KeepsHabitsSkippedInRequestedRange()
     {
         var user = CreateTestUser();
         _payGate.CanUseDailySummary(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
@@ -166,11 +166,49 @@ public class GetDailySummaryQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
+        await _summaryLogReader.Received(1).ReadAsync(
+            Arg.Is<IReadOnlyCollection<HabitSummaryLogWindow>>(windows =>
+                windows.Any(w => w.HabitId == active.Id && w.From <= Today.AddDays(-13) && w.To >= Today)),
+            Arg.Any<CancellationToken>());
         await _summaryService.Received(1).GenerateSummaryAsync(
             Arg.Is<IEnumerable<Habit>>(habits =>
                 habits.Select(h => h.Title).SequenceEqual(ExpectedHabitTitles)),
             Arg.Is<DailySummaryContext>(c => c.DateFrom == Today && c.DateTo == Today && c.Language == "en"),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_HistoryRead_LoadsRecentDoneAndSkipWithoutFullLogs()
+    {
+        var user = CreateTestUser();
+        _payGate.CanUseDailySummary(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Gym", FrequencyUnit.Day, 1,
+            DueDate: Today.AddDays(-13))).Value;
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { habit }.AsReadOnly());
+        var facts = new HabitSummaryLogFact[]
+        {
+            new(habit.Id, Today.AddDays(-14), 1),
+            new(habit.Id, Today.AddDays(-13), 0),
+            new(habit.Id, Today.AddDays(-1), 1),
+            new(habit.Id, Today.AddDays(1), 1)
+        };
+        _summaryLogReader.ReadAsync(Arg.Any<IReadOnlyCollection<HabitSummaryLogWindow>>(),
+            Arg.Any<CancellationToken>()).Returns(call =>
+            {
+                var windows = call.Arg<IReadOnlyCollection<HabitSummaryLogWindow>>();
+                return facts.Where(fact => windows.Any(window => window.HabitId == fact.HabitId
+                    && fact.Date >= window.From && fact.Date <= window.To)).ToArray();
+            });
+        _summaryService.GenerateSummaryAsync(Arg.Any<IEnumerable<Habit>>(), Arg.Any<DailySummaryContext>(),
+            Arg.Any<CancellationToken>()).Returns(Result.Success(new DailySummaryContent("Summary", "")));
+
+        await _handler.Handle(new GetDailySummaryQuery(UserId, Today, Today, "en"), CancellationToken.None);
+
+        habit.Logs.Select(log => (log.Date, log.Value)).Should().BeEquivalentTo(
+            [(Today.AddDays(-13), 0m), (Today.AddDays(-1), 1m)]);
     }
 
     [Fact]

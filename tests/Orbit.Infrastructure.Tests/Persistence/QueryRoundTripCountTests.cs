@@ -89,7 +89,7 @@ public class QueryRoundTripCountTests
 
         result.Value.Summary.Should().Be("Pinned summary");
         receivedHabits!.Select(habit => habit.Title).Should().BeEquivalentTo(
-            ["Overdue", "Skipped earlier", "Bad habit", "Old resolved"]);
+            ["Overdue", "Skipped today", "Skipped earlier", "Bad habit", "Old resolved"]);
         receivedHabits!.Single(habit => habit.Id == overdue.Id).Logs.Select(log => (log.Date, log.Value))
             .Should().Contain((today.AddDays(-10), 1));
         receivedContext!.ResolvedDueDateHabitIds.Should().Contain(overdue.Id);
@@ -103,9 +103,7 @@ public class QueryRoundTripCountTests
                     log.Date >= today.AddDays(-366) && log.Date <= today))
                 .Include(habit => habit.Goals)
                 .AsSplitQuery(), CancellationToken.None);
-        var legacyIncluded = legacyHabits
-            .Where(habit => !habit.Logs.Any(log => log.Date == today && log.Value == 0))
-            .ToList();
+        var legacyIncluded = legacyHabits.ToList();
         var legacyResolution = legacyIncluded
             .Where(habit => habit.Logs.Any(log => log.Date == habit.DueDate && log.Value >= 0))
             .Select(habit => habit.Id).ToHashSet();
@@ -127,7 +125,7 @@ public class QueryRoundTripCountTests
         prompt.Should().Contain("Overdue (pending, overdue)");
         prompt.Should().Contain("Skipped earlier (pending)");
         prompt.Should().Contain("Bad habit (bad habit, clean, 5 days since last slip)");
-        prompt.Should().NotContain("Skipped today");
+        prompt.Should().Contain("Skipped today (skipped)");
         prompt.Should().NotContain("Old resolved");
     }
 

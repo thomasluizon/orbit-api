@@ -42,7 +42,7 @@ public sealed partial class AiSummaryService(
             var content = await aiClient.CompleteJsonAsync<DailySummaryJson>(
                 SystemPrompt,
                 prompt,
-                temperature: 0.7,
+                temperature: 0.3,
                 cancellationToken: cancellationToken,
                 maxOutputTokens: 240,
                 purpose: "daily_summary");
@@ -77,7 +77,6 @@ public sealed partial class AiSummaryService(
 
         var scheduledTopLevel = habitList
             .Where(h => h.ParentHabitId is null
-                          && !HasSkipLogInRange(h, dateFrom, dateTo)
                           && IsRelevant(
                               h,
                               dateFrom,
@@ -92,7 +91,6 @@ public sealed partial class AiSummaryService(
         var children = habitList
             .Where(h => h.ParentHabitId is not null
                         && scheduledTopLevelIds.Contains(h.ParentHabitId.Value)
-                        && !HasSkipLogInRange(h, dateFrom, dateTo)
                         && IsRelevant(
                             h,
                             dateFrom,
@@ -138,13 +136,17 @@ public sealed partial class AiSummaryService(
 
             Rules:
             - LEAD with a specific, genuine acknowledgment of what they have ALREADY completed today. Name the activity naturally, and never settle for "good job"
-            - THEN, gently point at ONE still-pending habit as an easy next move. Never list everything, never frame it as a checklist, never guilt-trip
+            - If a habit is marked pending, gently point at at most ONE as an easy next move. Only nudge pending habits in the supplied list; never suggest an unlisted or skipped habit
             - Lines marked "overdue" are the most worth a gentle nudge, but raise at most one and never with guilt
             - A line tagged "bad habit, slipped" is a slip on something they are trying to QUIT: never congratulate it, never count it as a win; acknowledge it briefly and kindly, or simply focus elsewhere
             - A line tagged "bad habit, clean" means they have stayed away from something they are trying to quit: THAT is the real win worth naming warmly; for these, fewer slips and longer clean streaks are the progress
-            - If EVERYTHING is already done (nothing is pending), simply celebrate the full day warmly and leave it there. Do NOT invent, imply, or suggest any remaining task
+            - If nothing is pending, do NOT invent, imply, or suggest any remaining task. Celebrate only recorded completions; if no habits are scheduled or all were skipped, stay warm without claiming a full completed day
+            - A habit marked skipped is not completed and is not pending. Never praise a skip or nudge it again
             - If nothing is done yet, stay warm and forward-looking. Do NOT imply they are behind or failing
-            - If a current streak or streak freezes are noted above, you MAY reference that momentum naturally, but never turn it into pressure
+            - Never attribute the app-wide streak to a single habit. It measures active days across the app, not consecutive completions of any one habit; omit it or explicitly call it app-wide
+            - Consistency claims require at least two completed scheduled occurrences in that habit's multi-day history. Never extend a claim beyond the supplied window. Never praise consistency when skipped or missed is nonzero, or history is unavailable. A habit streak counts scheduled occurrences within this history window, not calendar days or a lifetime record
+            - History ends on the earlier of the requested end date and the user's today. Today's unresolved occurrence is pending, never missed. Flexible quotas have no inferred daily misses or streak; do not praise their consistency
+            - You may reference banked streak freezes without turning them into pressure
             - Describe the ACTIVITY naturally, don't just parrot the exact habit title
             - BAD: "You have Yoga, Morning Routine, and Guitar Playing left."
             - GOOD: "Nice work getting your run in. Some guitar later could be an easy one to land."
@@ -169,7 +171,7 @@ public sealed partial class AiSummaryService(
         var lines = new List<string> { $"Current part of day: {BuildTimeContext(currentLocalTime)}" };
 
         if (currentStreak > 0)
-            lines.Add(string.Create(CultureInfo.InvariantCulture, $"Current streak: {currentStreak} days"));
+            lines.Add(string.Create(CultureInfo.InvariantCulture, $"App-wide active-day streak: {currentStreak} days"));
         if (streakFreezesAccumulated > 0)
             lines.Add(string.Create(CultureInfo.InvariantCulture, $"Streak freezes banked: {streakFreezesAccumulated}"));
         if (badHabitSlips > 0)
@@ -196,8 +198,8 @@ public sealed partial class AiSummaryService(
             if (children.Count > 0)
             {
                 var doneCount = children.Count(c => IsDoneInRange(c, dateFrom, dateTo));
-                var status = IsDoneInRange(habit, dateFrom, dateTo) ? "done" : "pending";
-                habitLines.Add(string.Create(CultureInfo.InvariantCulture, $"- {habit.Title} ({status}, {doneCount}/{children.Count} sub-tasks done) [{DescribeTiming(habit)}]"));
+                var subTasks = string.Create(CultureInfo.InvariantCulture, $", {doneCount}/{children.Count} sub-tasks done");
+                habitLines.Add($"- {DescribeHabitLine(habit, dateFrom, dateTo, userToday, lastBadHabitSlipDates, weekStartDay, resolvedDueDateHabitIds, subTasks)}");
                 foreach (var child in children)
                     habitLines.Add($"  - {DescribeHabitLine(child, dateFrom, dateTo, userToday, lastBadHabitSlipDates, weekStartDay, resolvedDueDateHabitIds)}");
             }
@@ -216,13 +218,16 @@ public sealed partial class AiSummaryService(
         Habit habit, DateOnly dateFrom, DateOnly dateTo, DateOnly userToday,
         IReadOnlyDictionary<Guid, DateOnly> lastBadHabitSlipDates,
         int weekStartDay,
-        IReadOnlySet<Guid>? resolvedDueDateHabitIds)
+        IReadOnlySet<Guid>? resolvedDueDateHabitIds,
+        string subTasks = "")
     {
         if (habit.IsBadHabit)
-            return $"{habit.Title} ({DescribeBadHabitState(habit, dateFrom, dateTo, userToday, lastBadHabitSlipDates)}) [{DescribeTiming(habit)}]";
+            return $"{habit.Title} ({DescribeBadHabitState(habit, dateFrom, dateTo, userToday, lastBadHabitSlipDates)}{subTasks}) [{DescribeTiming(habit)}] {DescribeHistory(habit, dateTo, userToday, weekStartDay)}";
 
         string status;
-        if (IsDoneInRange(habit, dateFrom, dateTo))
+        if (HasSkipLogInRange(habit, dateFrom, dateTo))
+            status = "skipped";
+        else if (IsDoneInRange(habit, dateFrom, dateTo))
             status = "done";
         else
             status = HabitScheduleService.IsOverdueOnDate(
@@ -232,7 +237,42 @@ public sealed partial class AiSummaryService(
                 resolvedDueDateHabitIds?.Contains(habit.Id) == true)
                 ? "pending, overdue"
                 : "pending";
-        return $"{habit.Title} ({status}) [{DescribeTiming(habit)}]";
+        return $"{habit.Title} ({status}{subTasks}) [{DescribeTiming(habit)}] {DescribeHistory(habit, dateTo, userToday, weekStartDay)}";
+    }
+
+    private static string DescribeHistory(Habit habit, DateOnly dateTo, DateOnly userToday, int weekStartDay)
+    {
+        var to = dateTo < userToday ? dateTo : userToday;
+        var from = to.AddDays(-Math.Min(AppConstants.DailySummaryHistoryDays - 1, to.DayNumber));
+        var logs = habit.Logs.Where(log => !log.IsDeleted && log.Date >= from && log.Date <= to).ToList();
+        var doneDates = logs.Where(log => log.Value > 0).Select(log => log.Date).ToHashSet();
+        var skipDates = logs.Where(log => log.Value == 0).Select(log => log.Date).ToHashSet();
+        if (habit.IsBadHabit)
+            return string.Create(CultureInfo.InvariantCulture,
+                $"[{AppConstants.DailySummaryHistoryDays}-day history: slips={logs.Count(log => log.Value > 0)}, skipped={skipDates.Count}]");
+        if (habit.IsFlexible)
+            return string.Create(CultureInfo.InvariantCulture,
+                $"[{AppConstants.DailySummaryHistoryDays}-day history: done={logs.Count(log => log.Value > 0)}, skipped={logs.Count(log => log.Value == 0)}, missed=unknown, habit streak=unknown (flexible quota)]");
+
+        var missed = 0;
+        var streak = 0;
+        for (var date = from; date <= to; date = date.AddDays(1))
+        {
+            if (!HabitScheduleService.WasScheduledOnDate(habit, date, weekStartDay))
+                continue;
+            if (skipDates.Contains(date))
+                streak = 0;
+            else if (doneDates.Contains(date))
+                streak++;
+            else if (date < userToday)
+            {
+                missed++;
+                streak = 0;
+            }
+        }
+
+        return string.Create(CultureInfo.InvariantCulture,
+            $"[{AppConstants.DailySummaryHistoryDays}-day history: done={doneDates.Count}, skipped={skipDates.Count}, missed={missed}, habit streak={streak} scheduled occurrences]");
     }
 
     private static string DescribeBadHabitState(
@@ -259,7 +299,7 @@ public sealed partial class AiSummaryService(
     }
 
     private static bool HasSkipLogInRange(Habit habit, DateOnly dateFrom, DateOnly dateTo) =>
-        habit.Logs.Any(l => l.Date >= dateFrom && l.Date <= dateTo && l.Value == 0);
+        habit.Logs.Any(l => !l.IsDeleted && l.Date >= dateFrom && l.Date <= dateTo && l.Value == 0);
 
     private static bool IsDoneInRange(Habit habit, DateOnly dateFrom, DateOnly dateTo) =>
         HabitScheduleService.HasCompletedLogInRange(habit, dateFrom, dateTo);
@@ -272,8 +312,10 @@ public sealed partial class AiSummaryService(
         int weekStartDay,
         IReadOnlySet<Guid>? resolvedDueDateHabitIds) =>
         IsDoneInRange(habit, dateFrom, dateTo)
+        || HasSkipLogInRange(habit, dateFrom, dateTo)
         || (!habit.IsCompleted
-            && (HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo, weekStartDay).Count > 0
+            && (HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo, weekStartDay)
+                .Any(date => !habit.IsFlexible || HabitScheduleService.IsFlexibleHabitDueOnDate(habit, date, habit.Logs, weekStartDay))
                 || HabitScheduleService.IsOverdueOnDate(
                     habit,
                     userToday,

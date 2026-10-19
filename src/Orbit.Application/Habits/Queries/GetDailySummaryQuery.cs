@@ -89,9 +89,7 @@ public class GetDailySummaryQueryHandler(
         foreach (var habit in habits)
             habit.LoadScheduleLogsForRead(logsByHabit.GetValueOrDefault(habit.Id) ?? []);
 
-        var summaryHabits = habits
-            .Where(h => !HasSkipLogInRange(h, request.DateFrom, request.DateTo))
-            .ToList();
+        var summaryHabits = habits.ToList();
         var dueDateResolution = summaryHabits
             .Where(habit => habit.Logs.Any(log => log.Date == habit.DueDate && log.Value >= 0))
             .Select(habit => habit.Id)
@@ -133,9 +131,6 @@ public class GetDailySummaryQueryHandler(
             summaryResult.Value.Summary, string.Empty, FromCache: false));
     }
 
-    private static bool HasSkipLogInRange(Habit habit, DateOnly dateFrom, DateOnly dateTo) =>
-        habit.Logs.Any(l => l.Date >= dateFrom && l.Date <= dateTo && l.Value == 0);
-
     private static IReadOnlyList<HabitSummaryLogWindow> BuildLogWindows(
         IEnumerable<Habit> habits, DateOnly dateFrom, DateOnly dateTo, DateOnly userToday, int weekStartDay)
     {
@@ -146,6 +141,15 @@ public class GetDailySummaryQueryHandler(
             {
                 new(habit.Id, dateFrom, dateTo)
             };
+            var historyTo = dateTo < userToday ? dateTo : userToday;
+            var historyFrom = historyTo.AddDays(-Math.Min(AppConstants.DailySummaryHistoryDays - 1, historyTo.DayNumber));
+            windows.Add(new HabitSummaryLogWindow(habit.Id, historyFrom, historyTo));
+            if (habit.IsFlexible && habit.FrequencyUnit is not null)
+            {
+                windows.Add(new HabitSummaryLogWindow(habit.Id,
+                    HabitScheduleService.GetWindowStart(habit, dateFrom, weekStartDay),
+                    HabitScheduleService.GetWindowEnd(habit, dateTo, weekStartDay)));
+            }
             if (!habit.IsBadHabit && !habit.IsFlexible && !habit.IsCompleted
                 && habit.FrequencyUnit is not null && habit.DueDate < userToday
                 && !HabitScheduleService.IsHabitDueOnDate(habit, userToday, weekStartDay))
