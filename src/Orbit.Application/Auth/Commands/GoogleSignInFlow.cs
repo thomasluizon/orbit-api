@@ -22,6 +22,7 @@ public class GoogleSignInFlow(
     {
         var email = rawEmail.Trim().ToLowerInvariant();
         User? reactivatedUser = null;
+        string? reactivatedPlayToken = null;
         var signupPending = false;
         var signupLanguage = language;
         var signupReferralCode = referralCode;
@@ -39,7 +40,7 @@ public class GoogleSignInFlow(
             var wasReactivated = user.IsDeactivated;
             if (wasReactivated)
             {
-                await accountReactivation.ReactivateAsync(user, transactionToken);
+                reactivatedPlayToken = await accountReactivation.ReactivateAsync(user, transactionToken);
                 reactivatedUser = user;
             }
 
@@ -61,7 +62,10 @@ public class GoogleSignInFlow(
             return result;
 
         if (result.Value.WasReactivated && reactivatedUser is not null)
+        {
             CancelSubscriptionOnDeletionJob.EnqueueRestoration(backgroundJobClient, reactivatedUser);
+            NotifyPlayRenewalOnReactivationJob.Enqueue(backgroundJobClient, reactivatedUser.Id, reactivatedPlayToken);
+        }
 
         signupJobDispatcher.Dispatch(result.Value.UserId, signupPending, signupLanguage, signupReferralCode);
 

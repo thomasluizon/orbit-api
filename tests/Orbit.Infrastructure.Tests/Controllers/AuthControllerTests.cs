@@ -72,7 +72,7 @@ public class AuthControllerTests
                     new MemoryCacheEntryOptions { AbsoluteExpiration = DateTimeOffset.UtcNow.AddMinutes(-1) });
             if (mode == "throttled")
                 cache.Set("verify-attempts:person@example.com", 3);
-            var handler = new VerifyCodeCommandHandler(cache, store, work, sessions, new SignupJobDispatcher(jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), jobs, new AccountReactivation(Substitute.For<IGenericRepository<Notification>>(), Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
+            var handler = new VerifyCodeCommandHandler(cache, store, work, sessions, new SignupJobDispatcher(jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), jobs, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
             _mediator.Send(Arg.Any<VerifyCodeCommand>(), Arg.Any<CancellationToken>())
                 .Returns(call => handler.Handle(call.Arg<VerifyCodeCommand>(), call.Arg<CancellationToken>()));
 

@@ -108,11 +108,11 @@ public class AuthSignupDispatchTests
         public Task<Result<LoginResponse>> SignInAsync(bool google, string language, string referral)
         {
             if (google)
-                return new GoogleSignInFlow(_users, _work, _sessions, new SignupJobDispatcher(_jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _jobs, new AccountReactivation(Substitute.For<IGenericRepository<Notification>>(), Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>())).CompleteAsync(
+                return new GoogleSignInFlow(_users, _work, _sessions, new SignupJobDispatcher(_jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _jobs, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>())).CompleteAsync(
                     "person@example.com", "Person", language, referral, null, null, CancellationToken.None);
 
             Cache.Set("verify:person@example.com", new VerificationEntry("123456", 0, DateTime.UtcNow));
-            return new VerifyCodeCommandHandler(Cache, _users, _work, _sessions, new SignupJobDispatcher(_jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _jobs, new AccountReactivation(Substitute.For<IGenericRepository<Notification>>(), Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>())).Handle(
+            return new VerifyCodeCommandHandler(Cache, _users, _work, _sessions, new SignupJobDispatcher(_jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _jobs, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>())).Handle(
                 new VerifyCodeCommand("person@example.com", "123456", language, referral), CancellationToken.None);
         }
 

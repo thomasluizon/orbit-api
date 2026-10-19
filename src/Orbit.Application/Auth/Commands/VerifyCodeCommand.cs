@@ -32,6 +32,7 @@ public class VerifyCodeCommandHandler(
             return codeValidation.PropagateError<LoginResponse>();
 
         User? reactivatedUser = null;
+        string? reactivatedPlayToken = null;
         var signupPending = false;
         var signupLanguage = request.Language;
         var signupReferralCode = request.ReferralCode;
@@ -49,7 +50,7 @@ public class VerifyCodeCommandHandler(
             var wasReactivated = user.IsDeactivated;
             if (wasReactivated)
             {
-                await accountReactivation.ReactivateAsync(user, transactionToken);
+                reactivatedPlayToken = await accountReactivation.ReactivateAsync(user, transactionToken);
                 reactivatedUser = user;
             }
             await unitOfWork.SaveChangesAsync(transactionToken);
@@ -71,7 +72,10 @@ public class VerifyCodeCommandHandler(
             return result;
 
         if (result.Value.WasReactivated && reactivatedUser is not null)
+        {
             CancelSubscriptionOnDeletionJob.EnqueueRestoration(backgroundJobClient, reactivatedUser);
+            NotifyPlayRenewalOnReactivationJob.Enqueue(backgroundJobClient, reactivatedUser.Id, reactivatedPlayToken);
+        }
 
         signupJobDispatcher.Dispatch(result.Value.UserId, signupPending, signupLanguage, signupReferralCode);
 
