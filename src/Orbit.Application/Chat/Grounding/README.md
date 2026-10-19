@@ -13,7 +13,7 @@ The harness can also call `TurnFactSet.FromToolResults` and `GroundednessChecker
 ## Mode switch
 
 The `AppConfigs` key `AstraGroundingEnforce` defaults to `false` when absent. This is log-only
-mode. To enable enforcement, run this in the Supabase SQL Editor for the API database:
+mode. To enable enforcement, run this against the API's Render PostgreSQL database:
 
 ```sql
 INSERT INTO "AppConfigs" ("Key", "Value")
