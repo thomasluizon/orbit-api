@@ -347,7 +347,7 @@ public static partial class ServiceCollectionExtensions
         options.AddSchemaTransformer((schema, context, _) =>
         {
             var type = Nullable.GetUnderlyingType(context.JsonTypeInfo.Type) ?? context.JsonTypeInfo.Type;
-            if (type == typeof(HabitSchedule) || type == typeof(FrequencyUnit))
+            if (type == typeof(HabitSchedule))
             {
                 schema.Type = JsonSchemaType.String;
                 schema.Enum = Enum.GetNames(type).Select(name => (JsonNode)JsonValue.Create(name)).ToList();

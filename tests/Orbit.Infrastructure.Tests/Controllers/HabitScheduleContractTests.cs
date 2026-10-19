@@ -119,21 +119,22 @@ public class HabitScheduleContractTests
     }
 
     [Theory]
-    [InlineData("openapi.json", "HabitSchedule")]
-    [InlineData("openapi_v2.json", "HabitSchedule")]
-    [InlineData("openapi.json", "FrequencyUnit")]
-    [InlineData("openapi_v2.json", "FrequencyUnit")]
-    public void OpenApi_ScheduleEnumsMatchSerializedNames(string file, string name)
+    [InlineData("openapi.json")]
+    [InlineData("openapi_v2.json")]
+    public void OpenApi_HabitScheduleMatchesSerializedNamesAndFrequencyUnitPreservesMainSchema(string file)
     {
         var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
             "../../../../..", "src/Orbit.Api", file));
         using var document = JsonDocument.Parse(File.ReadAllText(path));
-        var schema = document.RootElement.GetProperty("components").GetProperty("schemas").GetProperty(name);
+        var schemas = document.RootElement.GetProperty("components").GetProperty("schemas");
+        var schema = schemas.GetProperty("HabitSchedule");
         schema.GetProperty("type").GetString().Should().Be("string");
         schema.GetProperty("enum").EnumerateArray().Select(value => value.GetString())
-            .Should().Equal(name == "HabitSchedule"
-                ? ["OneTime", "Recurring", "Flexible", "General"]
-                : ["Day", "Week", "Month", "Year"]);
+            .Should().Equal("OneTime", "Recurring", "Flexible", "General");
+
+        using var mainFrequencyUnit = JsonDocument.Parse("""{"type":"integer"}""");
+        JsonElement.DeepEquals(schemas.GetProperty("FrequencyUnit"), mainFrequencyUnit.RootElement)
+            .Should().BeTrue("FrequencyUnit must preserve the complete schema from main");
     }
 
     private static Habit Create(Guid userId, HabitSchedule type, Guid? parentId = null) =>

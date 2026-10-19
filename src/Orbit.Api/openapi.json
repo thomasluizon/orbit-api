@@ -14934,13 +14934,7 @@
         }
       },
       "FrequencyUnit": {
-        "enum": [
-          "Day",
-          "Week",
-          "Month",
-          "Year"
-        ],
-        "type": "string"
+        "type": "integer"
       },
       "GetPushSubscriptionsResponse": {
         "required": [
