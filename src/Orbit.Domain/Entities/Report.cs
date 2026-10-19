@@ -13,7 +13,7 @@ public class Report : Entity
     public ReportStatus Status { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
 
-#pragma warning disable CS0649, S3459 // EF writes this backing field via reflection on materialization and at the SQL layer; there is no C# writer, so both CS0649 (never-assigned) and Sonar S3459 (unassigned field) are false positives here. https://github.com/thomasluizon/orbit-api/pull/390
+#pragma warning disable CS0649, S3459 // EF materializes retained report _reviewedAtUtc through the configured ReviewedAtUtc backing field; the persisted review stamp has no C# assignment. The retained Report.ReviewedAtUtc property reads _reviewedAtUtc from EF materialization, so the private field cannot be removed as unassigned. https://github.com/thomasluizon/orbit-tickets/issues/230
     private DateTime? _reviewedAtUtc;
 #pragma warning restore CS0649, S3459
 

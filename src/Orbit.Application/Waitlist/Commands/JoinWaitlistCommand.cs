@@ -26,7 +26,7 @@ public class JoinWaitlistCommandHandler(
         var cacheKey = $"waitlist:{email}";
 
         if (cache.TryGetValue(cacheKey, out DateTime lastSentAt) &&
-#pragma warning disable ORBIT0004
+#pragma warning disable ORBIT0004 // The lastSentAt comparison enforces a 60-second waitlist email resend interval against a cached UTC instant. https://github.com/thomasluizon/orbit-tickets/issues/230
             (DateTime.UtcNow - lastSentAt).TotalSeconds < 60)
 #pragma warning restore ORBIT0004
             return Result.Success();

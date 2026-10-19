@@ -159,8 +159,10 @@ public sealed partial class AiIntentService(
                 var toolCalls = ToAiToolCalls(round.ToolCalls);
 
                 if (logger.IsEnabled(LogLevel.Debug))
-                    LogAiReturnedToolCalls(logger, toolCalls.Count,
-                        string.Join(", ", toolCalls.Select(tc => tc.Name)));
+                {
+                    var toolNames = string.Join(", ", toolCalls.Select(tc => tc.Name));
+                    LogAiReturnedToolCalls(logger, toolCalls.Count, toolNames);
+                }
 
                 var convCtx = new AiConversationContext
                 {

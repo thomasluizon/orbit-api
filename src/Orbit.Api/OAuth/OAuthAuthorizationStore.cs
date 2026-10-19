@@ -75,7 +75,7 @@ public sealed partial class OAuthAuthorizationStore : IDisposable
         var code = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
             .Replace("+", "-").Replace("/", "_").TrimEnd('=');
 
-#pragma warning disable ORBIT0004
+#pragma warning disable ORBIT0004 // CreateCode stamps AuthorizationEntry.CreatedAt for the authorization code TTL, independently of the user timezone. https://github.com/thomasluizon/orbit-tickets/issues/230
         var entry = new AuthorizationEntry(userId, codeChallenge, redirectUri, clientId, nonce, DateTime.UtcNow);
 #pragma warning restore ORBIT0004
         _codes[code] = entry;
@@ -87,7 +87,7 @@ public sealed partial class OAuthAuthorizationStore : IDisposable
         if (!_codes.TryRemove(code, out var entry))
             return null;
 
-#pragma warning disable ORBIT0004
+#pragma warning disable ORBIT0004 // ExchangeCode compares elapsed time since AuthorizationEntry.CreatedAt with CodeExpiry before accepting a code. https://github.com/thomasluizon/orbit-tickets/issues/230
         if (DateTime.UtcNow - entry.CreatedAt > CodeExpiry)
 #pragma warning restore ORBIT0004
             return null;
@@ -107,7 +107,7 @@ public sealed partial class OAuthAuthorizationStore : IDisposable
 
     private void Cleanup()
     {
-#pragma warning disable ORBIT0004
+#pragma warning disable ORBIT0004 // Cleanup evicts authorization codes whose CreatedAt instant precedes the CodeExpiry cutoff. https://github.com/thomasluizon/orbit-tickets/issues/230
         var cutoff = DateTime.UtcNow - CodeExpiry;
 #pragma warning restore ORBIT0004
         foreach (var kvp in _codes)

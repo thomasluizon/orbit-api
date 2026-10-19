@@ -44,7 +44,7 @@ public class AgentStepUpService(
         if (user is null)
             return Result.Failure<AgentStepUpChallenge>(ErrorMessages.UserNotFound);
 
-#pragma warning disable ORBIT0004
+#pragma warning disable ORBIT0004 // cooldownBoundary bounds CreatedAtUtc by StepUpChallengeCooldownSeconds to throttle issuance of another step-up challenge. https://github.com/thomasluizon/orbit-tickets/issues/230
         var cooldownBoundary = DateTime.UtcNow.AddSeconds(-Math.Max(1, _settings.StepUpChallengeCooldownSeconds));
 #pragma warning restore ORBIT0004
         var recentChallenge = await dbContext.AgentStepUpChallenges
@@ -98,7 +98,7 @@ public class AgentStepUpService(
                     item.PendingOperationId == pendingOperationId,
                 cancellationToken);
 
-#pragma warning disable ORBIT0004
+#pragma warning disable ORBIT0004 // CanVerify checks the step-up challenge ExpiresAtUtc TTL and attempt limit against the current instant. https://github.com/thomasluizon/orbit-tickets/issues/230
         if (challenge is null || !challenge.CanVerify(_settings.StepUpMaxAttempts, DateTime.UtcNow))
 #pragma warning restore ORBIT0004
             return Result.Failure<PendingAgentOperation>(ErrorMessages.StepUpChallengeNotFound);

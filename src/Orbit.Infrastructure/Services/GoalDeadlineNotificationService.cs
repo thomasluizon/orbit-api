@@ -96,7 +96,7 @@ public partial class GoalDeadlineNotificationService(
 
     private async Task<Dictionary<Guid, int>> ComputeFreshDerivedValuesAsync(OrbitDbContext dbContext, CancellationToken ct)
     {
-#pragma warning disable ORBIT0004
+#pragma warning disable ORBIT0004 // streakWindowStart widens the batched log prefetch by a timezone-skew day; ComputeReadValue receives the separately converted userToday. https://github.com/thomasluizon/orbit-tickets/issues/230
         var streakWindowStart = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-AppConstants.MaxStreakLookbackDays - 1);
 #pragma warning restore ORBIT0004
         var candidates = await dbContext.Goals

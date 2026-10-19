@@ -235,7 +235,8 @@ public sealed class UtcNowUserFacingDateAnalyzerTests
             public sealed class Challenge
             {
                 public Challenge(int attempts, DateTime expiresAtUtc) { }
-                public static Challenge Create() => new(expiresAtUtc: DateTime.UtcNow.AddMinutes(5), attempts: 0);
+                public static Challenge Create() => new(expiresAtUtc:
+                    DateTime.UtcNow.AddMinutes(5), attempts: 0);
             }
             """;
         return VerifyAnalyzerAsync(source, "Orbit.Infrastructure");

@@ -93,7 +93,7 @@ public partial class ProactiveCheckinSchedulerService(
         CancellationToken ct)
     {
         var userIds = candidates.Select(u => u.Id).ToList();
-#pragma warning disable ORBIT0004
+#pragma warning disable ORBIT0004 // utcToday anchors widened habit, log and sent-checkin prefetch windows; ProcessUserCheckinAsync schedules and deduplicates with converted userToday. https://github.com/thomasluizon/orbit-tickets/issues/230
         var utcToday = DateOnly.FromDateTime(DateTime.UtcNow);
 #pragma warning restore ORBIT0004
         var windowFloor = utcToday.AddDays(-MaxTimeZoneSkewDays);

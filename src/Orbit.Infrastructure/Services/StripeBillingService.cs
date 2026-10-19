@@ -154,7 +154,7 @@ public sealed partial class StripeBillingService(
 
             return new BillingSubscriptionDetails(
                 subscription.Status,
-#pragma warning disable ORBIT0004
+#pragma warning disable ORBIT0004 // BillingSubscriptionDetails.CurrentPeriodEnd falls back to the current instant when the Stripe item is missing; it is an expiry timestamp. https://github.com/thomasluizon/orbit-tickets/issues/230
                 item?.CurrentPeriodEnd ?? DateTime.UtcNow,
 #pragma warning restore ORBIT0004
                 subscription.CancelAtPeriodEnd,

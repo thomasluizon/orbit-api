@@ -20,7 +20,7 @@ namespace Orbit.Api.Controllers;
 [ApiVersion(1.0)]
 [ApiVersion(2.0)]
 [AllowAnonymous]
-#pragma warning disable S6931 // OAuth/MCP well-known URLs follow protocol-mandated paths with no common prefix
+#pragma warning disable S6931 // The absolute /.well-known metadata and /oauth authorization routes have protocol-defined paths that cannot share a controller prefix. https://github.com/thomasluizon/orbit-tickets/issues/230
 public partial class OAuthController(
     IMediator mediator,
     OAuthAuthorizationStore authStore,
@@ -42,7 +42,7 @@ public partial class OAuthController(
         .Get<string[]>()?.ToHashSet(StringComparer.OrdinalIgnoreCase)
         ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "claude.ai", "claude.com" };
 
-#pragma warning disable S6932 // Raw Request.Headers needed for reverse proxy X-Forwarded-Proto detection
+#pragma warning disable S6932 // GetMetadata reads X-Forwarded-Proto and Request.Host to publish the external authorization-server URLs behind the proxy. https://github.com/thomasluizon/orbit-tickets/issues/230
     [HttpGet("/.well-known/oauth-authorization-server")]
     public IActionResult GetMetadata()
     {
@@ -92,7 +92,7 @@ public partial class OAuthController(
         });
     }
 
-#pragma warning disable S6932 // Raw Request.Headers needed for reverse proxy X-Forwarded-Proto detection
+#pragma warning disable S6932 // GetProtectedResourceMetadata reads X-Forwarded-Proto and Request.Host to publish the external MCP resource and authorization-server URLs. https://github.com/thomasluizon/orbit-tickets/issues/230
     [HttpGet("/.well-known/oauth-protected-resource")]
     public IActionResult GetProtectedResourceMetadata()
     {
@@ -319,7 +319,7 @@ public partial class OAuthController(
         Request.Headers.AcceptLanguage.ToString().StartsWith("pt", StringComparison.OrdinalIgnoreCase)
             ? "pt-BR" : "en";
 
-#pragma warning disable S6932 // Raw Request.Headers needed for reverse proxy X-Forwarded-Proto detection
+#pragma warning disable S6932 // BuildGoogleRedirectUri reads X-Forwarded-Proto and Request.Host for the externally reachable OAuth callback URI. https://github.com/thomasluizon/orbit-tickets/issues/230
     private string BuildGoogleRedirectUri()
     {
         var scheme = Request.Headers["X-Forwarded-Proto"].FirstOrDefault() ?? Request.Scheme;

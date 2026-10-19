@@ -101,7 +101,7 @@ public partial class SubscriptionController(
         return result.ToPayGateAwareResult(v => Ok(v));
     }
 
-#pragma warning disable S6932 // Raw Request.Body and Request.Headers needed for Stripe webhook signature verification
+#pragma warning disable S6932 // HandleWebhook preserves the raw Stripe body and Stripe-Signature header for webhook signature verification before dispatch. https://github.com/thomasluizon/orbit-tickets/issues/230
     [HttpPost("webhook")]
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -134,7 +134,7 @@ public partial class SubscriptionController(
         return result.ToPayGateAwareResult(v => Ok(v));
     }
 
-#pragma warning disable S6932 // Raw Request.Body and Request.Headers needed for Play RTDN push verification
+#pragma warning disable S6932 // HandlePlayNotification validates the Authorization push token before forwarding the raw RTDN body to the handler. https://github.com/thomasluizon/orbit-tickets/issues/230
     [HttpPost("play/rtdn")]
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]

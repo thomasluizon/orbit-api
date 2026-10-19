@@ -28,7 +28,7 @@ public sealed partial class AiUsageRecorder(
         Guid? userId = null)
     {
         var costUsd = ComputeCostUsd(_pricing.GetValueOrDefault(model), cachedTokens, promptTokens, completionTokens);
-#pragma warning disable ORBIT0004
+#pragma warning disable ORBIT0004 // AiUsageDaily.Date partitions model cost counters by UTC accounting day; it is not the user quota or schedule date. https://github.com/thomasluizon/orbit-tickets/issues/230
         var date = DateOnly.FromDateTime(DateTime.UtcNow);
 #pragma warning restore ORBIT0004
 

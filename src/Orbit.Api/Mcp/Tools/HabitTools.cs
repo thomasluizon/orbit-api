@@ -20,7 +20,8 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
     private const string DateFromDescription = "Start date in YYYY-MM-DD format";
     private const string DateToDescription = "End date in YYYY-MM-DD format";
     [McpServerTool(Name = "list_habits"), Description("List habits for a date range with schedule info. Returns paginated results with scheduled dates and overdue status.")]
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "MCP SDK requires individual [Description]-annotated parameters for tool schema generation")]
+    // ListHabits preserves flat dateFrom, dateTo, includeOverdue, search, page and pageSize schema properties. https://github.com/thomasluizon/orbit-tickets/issues/230
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "ListHabits preserves flat dateFrom, dateTo, includeOverdue, search, page and pageSize schema properties. MCP schema generation requires these separate parameters.")]
     public async Task<string> ListHabits(
         ClaimsPrincipal user,
         [Description(DateFromDescription)] string dateFrom,
@@ -94,7 +95,8 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
     }
 
     [McpServerTool(Name = "create_habit"), Description("Create a new habit or one-time task.")]
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "MCP SDK requires individual [Description]-annotated parameters for tool schema generation")]
+    // CreateHabit preserves eleven flat habit creation schema properties, including intervalWeeks and emoji. https://github.com/thomasluizon/orbit-tickets/issues/230
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "CreateHabit preserves eleven flat habit creation schema properties, including intervalWeeks and emoji. MCP schema generation requires these separate parameters.")]
     public async Task<string> CreateHabit(
         ClaimsPrincipal user,
         [Description("Name of the habit")] string title,
@@ -134,7 +136,8 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
     }
 
     [McpServerTool(Name = "update_habit"), Description("Update an existing habit's properties. Title is required (pass current title if unchanged). Only change fields you need to modify.")]
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "MCP SDK requires individual [Description]-annotated parameters for tool schema generation")]
+    // UpdateHabit preserves nine flat habit update schema properties, including intervalWeeks and emoji. https://github.com/thomasluizon/orbit-tickets/issues/230
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "UpdateHabit preserves nine flat habit update schema properties, including intervalWeeks and emoji. MCP schema generation requires these separate parameters.")]
     public async Task<string> UpdateHabit(
         ClaimsPrincipal user,
         [Description(HabitIdDescription)] string habitId,
@@ -327,7 +330,8 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
     }
 
     [McpServerTool(Name = "create_sub_habit"), Description("Create a sub-habit under an existing parent habit. Requires Pro subscription.")]
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "MCP SDK requires individual [Description]-annotated parameters for tool schema generation")]
+    // CreateSubHabit preserves nine flat child-habit schema properties, including parentHabitId and isFlexible. https://github.com/thomasluizon/orbit-tickets/issues/230
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "CreateSubHabit preserves nine flat child-habit schema properties, including parentHabitId and isFlexible. MCP schema generation requires these separate parameters.")]
     public async Task<string> CreateSubHabit(
         ClaimsPrincipal user,
         [Description("The parent habit ID (GUID)")] string parentHabitId,
