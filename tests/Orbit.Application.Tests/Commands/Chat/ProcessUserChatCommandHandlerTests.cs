@@ -30,7 +30,7 @@ using Orbit.Application.Tests.Common;
 
 namespace Orbit.Application.Tests.Commands.Chat;
 
-public class ProcessUserChatCommandHandlerTests
+public partial class ProcessUserChatCommandHandlerTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();

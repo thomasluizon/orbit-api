@@ -192,7 +192,7 @@ public class GlobalRulesSectionTests
         var result = new GlobalRulesSection().Build(ctx);
 
         result.Should().Contain("list EVERY matching entry");
-        result.Should().Contain("your list must match them");
+        result.Should().Contain("The tool's counts are authoritative; your list must match them");
         result.Should().Contain("Conciseness applies to prose, never to lists");
     }
 
