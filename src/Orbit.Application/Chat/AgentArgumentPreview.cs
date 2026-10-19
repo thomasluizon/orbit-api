@@ -46,6 +46,7 @@ public static class AgentArgumentPreview
         var entityId = target?.EntityId ?? Guid.Empty;
         var entityName = target?.EntityName ?? ReadName(arguments) ?? string.Empty;
         var fields = arguments.EnumerateObject()
+            .OrderBy(property => property.Name, StringComparer.Ordinal)
             .Select(property => new PendingOperationChange(
                 entityId,
                 entityName,
@@ -77,6 +78,7 @@ public static class AgentArgumentPreview
     {
         JsonValueKind.Null or JsonValueKind.Undefined => null,
         JsonValueKind.String => value.GetString(),
+        JsonValueKind.Object or JsonValueKind.Array => AgentOperationFingerprint.Canonicalize(value.GetRawText()),
         _ => value.ToString()
     };
 

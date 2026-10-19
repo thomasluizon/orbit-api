@@ -397,8 +397,9 @@ public sealed class PendingOperationChangePreviewer(
                 && habit.TryGetProperty("title", out var title) ? title.ToString() : string.Empty;
             var fields = habit.ValueKind == JsonValueKind.Object
                 ? habit.EnumerateObject().Where(property => CreateFields.Contains(property.Name))
+                    .OrderBy(property => property.Name, StringComparer.Ordinal)
                     .Select(property => new PendingOperationChange(
-                    Guid.Empty, name, property.Name, null, property.Value.ToString(), "text",
+                    Guid.Empty, name, property.Name, null, AgentArgumentPreview.FormatValue(property.Value), "text",
                     property.Value.Clone(), true)).ToList()
                 : [];
             foreach (var error in errors.Where(error => CreateFields.Contains(error.Field)))
@@ -415,9 +416,11 @@ public sealed class PendingOperationChangePreviewer(
         return BuildPreview("bulk_create_habits", [], items);
     }
 
-    private static PendingOperationChangePreview BuildPreview(
+    private static PendingOperationChangePreview? BuildPreview(
         string operationId, IReadOnlyList<PendingOperationChange> changes, IReadOnlyList<PendingOperationItem> items)
     {
+        if (items.Count == 0)
+            return null;
         var fingerprint = AgentOperationFingerprint.Compute(operationId, JsonSerializer.Serialize(items));
         return new PendingOperationChangePreview(changes, items.Count, items, fingerprint);
     }

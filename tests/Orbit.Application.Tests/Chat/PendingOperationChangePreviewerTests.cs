@@ -28,6 +28,25 @@ public sealed class PendingOperationChangePreviewerTests
             .Returns(new DateOnly(2026, 9, 25));
 
     [Fact]
+    public async Task PreviewAsync_Create_JsonPropertyOrderDoesNotChangeApproval()
+    {
+        var first = await Preview("bulk_create_habits", """{"habits":[{"title":"Academia","frequency_unit":"Day","sub_habits":[{"title":"Treino"}]}]}""");
+        var stored = await Preview("bulk_create_habits", """{"habits":[{"sub_habits":[{"title":"Treino"}],"frequency_unit":"Day","title":"Academia"}]}""");
+
+        stored!.PreviewFingerprint.Should().Be(first!.PreviewFingerprint);
+    }
+
+    [Fact]
+    public async Task PreviewAsync_NoMatches_DoesNotOfferEmptyPreview()
+    {
+        Setup([]);
+
+        var preview = await Preview("bulk_log_habits", """{"filter":{"search":"meditação"}}""");
+
+        preview.Should().BeNull();
+    }
+
+    [Fact]
     public async Task PreviewAsync_ThreeMatches_UsesEachRealOldEmoji()
     {
         var habits = new[] { CreateHabit("One", "🔴"), CreateHabit("Two", "🟡"), CreateHabit("Three", "🔵") };
@@ -169,7 +188,7 @@ public sealed class PendingOperationChangePreviewerTests
         item.ValidationErrors.Should().BeNull();
         preview.Changes.Should().BeEmpty();
         preview.ChangeTargetCount.Should().Be(1);
-        item.Fields.Select(field => field.Field).Should().Equal("title", "frequency_unit", "frequency_quantity");
+        item.Fields.Select(field => field.Field).Should().Equal("frequency_quantity", "frequency_unit", "title");
         var legacyItemJson = JsonSerializer.SerializeToElement(item);
         legacyItemJson.EnumerateObject().Select(property => property.Name).Should().Equal(
             "ItemId", "EntityId", "EntityName", "Fields", "StateFingerprint", "RemovesData");
@@ -247,14 +266,13 @@ public sealed class PendingOperationChangePreviewerTests
     }
 
     [Fact]
-    public async Task PreviewAsync_ZeroMatches_ReturnsEmptyRowsAndZeroTotal()
+    public async Task PreviewAsync_ZeroMatches_OffersNoPreview()
     {
         Setup([]);
 
         var preview = await Preview("bulk_update_habits", """{"filter":{"all":true},"updates":{"emoji":"✅"}}""");
 
-        preview!.ChangeTargetCount.Should().Be(0);
-        preview.Changes.Should().BeEmpty();
+        preview.Should().BeNull();
     }
 
     [Fact]
