@@ -24,6 +24,7 @@ public partial class AccountabilityController(IMediator mediator, ILogger<Accoun
     public record CheckInAccountabilityBody(string? Note);
 
     [HttpGet("pairs")]
+    [Obsolete("Challenges and accountability are being retired.")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetPairs(CancellationToken cancellationToken)
@@ -33,6 +34,7 @@ public partial class AccountabilityController(IMediator mediator, ILogger<Accoun
     }
 
     [HttpPost("pairs")]
+    [Obsolete("Challenges and accountability are being retired.")]
     [DistributedRateLimit("accountability-invites")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -54,6 +56,7 @@ public partial class AccountabilityController(IMediator mediator, ILogger<Accoun
     }
 
     [HttpPost("pairs/{pairId:guid}/accept")]
+    [Obsolete("Challenges and accountability are being retired.")]
     [DistributedRateLimit("accountability-mutations")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -75,6 +78,7 @@ public partial class AccountabilityController(IMediator mediator, ILogger<Accoun
     }
 
     [HttpDelete("pairs/{pairId:guid}")]
+    [Obsolete("Challenges and accountability are being retired.")]
     [DistributedRateLimit("accountability-mutations")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -91,6 +95,7 @@ public partial class AccountabilityController(IMediator mediator, ILogger<Accoun
     }
 
     [HttpPut("pairs/{pairId:guid}/habits")]
+    [Obsolete("Challenges and accountability are being retired.")]
     [DistributedRateLimit("accountability-mutations")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -107,6 +112,7 @@ public partial class AccountabilityController(IMediator mediator, ILogger<Accoun
     }
 
     [HttpGet("pairs/{pairId:guid}/check-ins")]
+    [Obsolete("Challenges and accountability are being retired.")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -118,6 +124,7 @@ public partial class AccountabilityController(IMediator mediator, ILogger<Accoun
     }
 
     [HttpPost("pairs/{pairId:guid}/check-ins")]
+    [Obsolete("Challenges and accountability are being retired.")]
     [DistributedRateLimit("accountability-checkins")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

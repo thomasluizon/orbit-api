@@ -17,7 +17,8 @@ public sealed class CancelSubscriptionOnDeletionJob(
     IUnitOfWork unitOfWork,
     IBillingService billingService,
     IPlayBillingService playBillingService,
-    IOptions<GooglePlaySettings> playSettings)
+    IOptions<GooglePlaySettings> playSettings,
+    OwedSubscriptionCancellationJob owedCancellations)
 {
     public static void EnqueueCancellation(IBackgroundJobClient jobs, User user)
     {
@@ -74,7 +75,18 @@ public sealed class CancelSubscriptionOnDeletionJob(
         }, cancellationToken);
 
         if (!accountExists && cancelAtPeriodEnd)
-            await CancelProvidersAsync(userId, stripeSubscriptionId, playPurchaseToken, cancellationToken);
+        {
+            var recordIds = new List<Guid>();
+            foreach (var (provider, identifier) in new[]
+                { (SubscriptionSource.Stripe, stripeSubscriptionId), (SubscriptionSource.GooglePlay, playPurchaseToken) })
+            {
+                if (string.IsNullOrWhiteSpace(identifier))
+                    continue;
+                recordIds.Add(await owedCancellations.RecordAsync(provider, identifier, cancellationToken));
+            }
+            foreach (var recordId in recordIds)
+                await owedCancellations.ExecuteAsync(recordId, cancellationToken);
+        }
 
         ThrowProviderFailure(failures);
     }
@@ -159,18 +171,6 @@ public sealed class CancelSubscriptionOnDeletionJob(
     {
         var nowAtUtc = DateTime.UtcNow;
         return user.IsPro && user.PlanExpiresAt > nowAtUtc;
-    }
-
-    private Task CancelProvidersAsync(Guid userId, string? stripeSubscriptionId, string? playPurchaseToken,
-        CancellationToken cancellationToken) =>
-        Task.WhenAll(CancelStripeAsync(userId, stripeSubscriptionId, cancellationToken),
-            CancelPlayAsync(playPurchaseToken, cancellationToken));
-
-    private async Task CancelStripeAsync(Guid userId, string? stripeSubscriptionId, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(stripeSubscriptionId) || !await StripeCanRenewAsync(stripeSubscriptionId, cancellationToken))
-            return;
-        await billingService.SetSubscriptionCancelAtPeriodEndAsync(stripeSubscriptionId, true, cancellationToken, userId.ToString());
     }
 
     private async Task<bool> StripeCanRenewAsync(string stripeSubscriptionId, CancellationToken cancellationToken)

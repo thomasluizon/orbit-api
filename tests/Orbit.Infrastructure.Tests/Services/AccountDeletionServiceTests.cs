@@ -2,9 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Hangfire;
-using Hangfire.Common;
-using Hangfire.States;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -39,7 +36,9 @@ public class AccountDeletionServiceTests
     [InlineData(false, true, 8, false, 2, false)]
     [InlineData(true, false, 1, false, 0, true)]
     [InlineData(true, false, 8, false, 0, true)]
-    public async Task RunAsync_DuePaidAccount_CancelsBeforeRemovingAndRetainsRowOnFailure(bool play, bool failure, int overdueDays, bool missing, int queueFailure, bool paused)
+    [InlineData(false, true, 8, false, 3, false)]
+    [InlineData(true, true, 8, false, 3, false)]
+    public async Task RunAsync_DuePaidAccount_CancelsBeforeRemovingAndRetainsRowOnFailure(bool play, bool failure, int overdueDays, bool missing, int storageFailures, bool paused)
     {
         using var factory = new SqliteOrbitDbContextFactory();
         var user = CreateUser();
@@ -70,7 +69,6 @@ public class AccountDeletionServiceTests
             playBilling.CancelAsync("play-token", Arg.Any<CancellationToken>())
                 .ThrowsAsync(new BillingProviderException("unavailable"));
         }
-        Job? queued = null;
         var handedOff = overdueDays >= 7;
         var expectedInlineCalls = missing || handedOff ? 0 : 1;
         reset.DeleteAllUserDataAsync(user.Id, Arg.Any<CancellationToken>()).Returns(async _ =>
@@ -79,12 +77,10 @@ public class AccountDeletionServiceTests
                 await playBilling.Received(expectedInlineCalls).CancelAsync("play-token", Arg.Any<CancellationToken>());
             else
                 await stripe.Received(expectedInlineCalls).SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>(), Arg.Any<string?>());
-            if (handedOff)
-                queued.Should().NotBeNull();
             using var beforeRemoval = factory.CreateContext();
             (await beforeRemoval.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == user.Id)).Should().BeTrue();
         });
-        var objects = new FakeObjectStore();
+        var objects = new FakeObjectStore { FailuresRemaining = storageFailures };
         objects.Keys.Add($"{user.Id}/one.png");
         var services = new ServiceCollection();
         services.AddSingleton<IObjectStorageDeletionService>(objects);
@@ -97,13 +93,11 @@ public class AccountDeletionServiceTests
         services.AddSingleton(playBilling);
         services.AddSingleton(Options.Create(new GooglePlaySettings { ProductId = "orbit_pro" }));
         services.AddScoped<CancelSubscriptionOnDeletionJob>();
-        var jobs = Substitute.For<IBackgroundJobClient>();
-        jobs.Create(Arg.Do<Job>(job => queued = job), Arg.Any<IState>()).Returns("cancellation-job");
-        if (queueFailure == 1)
-            jobs.Create(Arg.Any<Job>(), Arg.Any<IState>()).Throws(new InvalidOperationException("queue unavailable"));
-        else if (queueFailure == 2)
-            jobs.Create(Arg.Any<Job>(), Arg.Any<IState>()).Returns((string?)null);
-        services.AddSingleton(jobs);
+        services.AddScoped<OwedSubscriptionCancellationJob>();
+        services.AddScoped<IGenericRepository<OwedSubscriptionCancellation>, GenericRepository<OwedSubscriptionCancellation>>();
+        services.AddSingleton<ILogger<OwedSubscriptionCancellationJob>>(Microsoft.Extensions.Logging.Abstractions.NullLogger<OwedSubscriptionCancellationJob>.Instance);
+        var clock = new MutableClock();
+        services.AddSingleton<TimeProvider>(clock);
         var logger = Substitute.For<ILogger<AccountDeletionService>>();
         logger.IsEnabled(LogLevel.Error).Returns(true);
         using var provider = services.BuildServiceProvider();
@@ -113,39 +107,57 @@ public class AccountDeletionServiceTests
         await service.RunAsync(CancellationToken.None);
 
         using var afterRemoval = factory.CreateContext();
-        var retained = failure && overdueDays < 7 || queueFailure != 0;
+        var retained = failure && overdueDays < 7 || storageFailures == 3;
         (await afterRemoval.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == user.Id)).Should().Be(retained);
-        objects.Attempts.Should().Be(retained ? 0 : 1);
+        objects.Attempts.Should().Be(retained && storageFailures == 0 ? 0 : Math.Min(storageFailures + 1, 3));
         objects.Keys.Should().HaveCount(retained ? 1 : 0);
         await reset.Received(retained ? 0 : 1).DeleteAllUserDataAsync(user.Id, Arg.Any<CancellationToken>());
         if (play)
             await playBilling.Received(expectedInlineCalls).CancelAsync("play-token", Arg.Any<CancellationToken>());
         else
             await stripe.Received(expectedInlineCalls).SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>(), Arg.Any<string?>());
-        if (handedOff && queueFailure == 0)
+        if (handedOff && !retained)
         {
+            logger.ReceivedCalls().Should().Contain(call => call.GetMethodInfo().Name == "Log"
+                && (LogLevel)call.GetArguments()[0]! == LogLevel.Error);
             await stripe.DidNotReceive().GetSubscriptionDetailsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
             await playBilling.DidNotReceive().VerifyAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
-            queued.Should().NotBeNull();
-            queued!.Args.Should().Equal(user.Id, play ? null : "sub_paid", play ? "play-token" : null, true, CancellationToken.None);
-            logger.ReceivedCalls().Should().Contain(call => call.GetMethodInfo().Name == "Log"
-                && (LogLevel)call.GetArguments()[0]! == LogLevel.Error
-                && call.GetArguments()[2]!.ToString()!.Contains(user.Id.ToString()));
-            stripe.SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>(), Arg.Any<string?>()).Returns(Task.CompletedTask);
-            playBilling.CancelAsync("play-token", Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
-            using var retryScope = provider.CreateScope();
-            var retryJob = retryScope.ServiceProvider.GetRequiredService<CancelSubscriptionOnDeletionJob>();
-
-            await retryJob.ExecuteAsync((Guid)queued.Args[0], (string?)queued.Args[1], (string?)queued.Args[2],
-                (bool)queued.Args[3], CancellationToken.None);
-
-            if (play)
-                await playBilling.Received(1).CancelAsync("play-token", Arg.Any<CancellationToken>());
-            else
-                await stripe.Received(1).SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>(), Arg.Any<string?>());
+            var record = await afterRemoval.OwedSubscriptionCancellations.SingleAsync();
+            record.Provider.Should().Be(play ? SubscriptionSource.GooglePlay : SubscriptionSource.Stripe);
+            record.ProviderIdentifier.Should().Be(play ? "play-token" : "sub_paid");
+            record.Attempts.Should().Be(0);
+            var alerts = logger.ReceivedCalls()
+                .Where(call => call.GetMethodInfo().Name == "Log" && (LogLevel)call.GetArguments()[0]! == LogLevel.Error)
+                .Select(call => call.GetArguments()[2]!.ToString()!).ToList();
+            alerts.Should().ContainSingle().Which.Should().Contain(record.Id.ToString()).And.Contain(record.Provider.ToString())
+                .And.NotContain(user.Id.ToString()).And.NotContain(record.ProviderIdentifier);
+            clock.UtcNow = new DateTimeOffset(record.NextAttemptAtUtc);
+            using (var retryScope = provider.CreateScope())
+                await retryScope.ServiceProvider.GetRequiredService<OwedSubscriptionCancellationJob>()
+                    .ExecuteAsync(record.Id, CancellationToken.None);
+            using var afterAttempt = factory.CreateContext();
+            if (failure)
+            {
+                (await afterAttempt.OwedSubscriptionCancellations.SingleAsync()).Attempts.Should().Be(1);
+                stripe.SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>(), Arg.Any<string?>()).Returns(Task.CompletedTask);
+                playBilling.CancelAsync("play-token", Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+                var pending = await afterAttempt.OwedSubscriptionCancellations.SingleAsync();
+                clock.UtcNow = new DateTimeOffset(pending.NextAttemptAtUtc);
+                using var successScope = provider.CreateScope();
+                await successScope.ServiceProvider.GetRequiredService<OwedSubscriptionCancellationJob>()
+                    .ExecuteAsync(record.Id, CancellationToken.None);
+            }
+            using var afterSuccess = factory.CreateContext();
+            (await afterSuccess.OwedSubscriptionCancellations.AnyAsync()).Should().BeFalse();
         }
-        else if (queueFailure == 0)
-            queued.Should().BeNull();
+        else
+            (await afterRemoval.OwedSubscriptionCancellations.AnyAsync()).Should().BeFalse();
+    }
+
+    private sealed class MutableClock : TimeProvider
+    {
+        public DateTimeOffset UtcNow { get; set; } = DateTimeOffset.UtcNow;
+        public override DateTimeOffset GetUtcNow() => UtcNow;
     }
 
     private static User CreateUser()

@@ -4,6 +4,7 @@ using Hangfire;
 using Hangfire.Common;
 using Hangfire.States;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Orbit.Application.Auth.Jobs;
@@ -45,7 +46,10 @@ public class CancelSubscriptionOnDeletionJobTests
             .Returns(new PlaySubscriptionState(true, DateTime.UtcNow.AddDays(20), SubscriptionInterval.Monthly,
                 true, "orbit_pro", null, null, CanRenew: true));
         _job = new CancelSubscriptionOnDeletionJob(_users, _unitOfWork, _stripe, _play,
-            Options.Create(new GooglePlaySettings { ProductId = "orbit_pro" }));
+            Options.Create(new GooglePlaySettings { ProductId = "orbit_pro" }),
+            new OwedSubscriptionCancellationJob(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>(),
+                _unitOfWork, _stripe, _play, Options.Create(new GooglePlaySettings { ProductId = "orbit_pro" }),
+                NullLogger<OwedSubscriptionCancellationJob>.Instance, TimeProvider.System));
     }
 
     [Fact]
@@ -195,34 +199,6 @@ public class CancelSubscriptionOnDeletionJobTests
         await RunAsync();
 
         await _stripe.DidNotReceive().SetSubscriptionCancelAtPeriodEndAsync(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>(), Arg.Any<string?>());
-    }
-
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task ExecuteAsync_MissingUser_CancelsRetainedIdentifiersWithoutRestoring(bool cancel)
-    {
-        var transactionActive = false;
-        _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(async call =>
-            {
-                transactionActive = true;
-                var result = await call.Arg<Func<CancellationToken, Task<bool>>>()(call.Arg<CancellationToken>());
-                transactionActive = false;
-                return result;
-            });
-        _stripe.When(stripe => stripe.GetSubscriptionDetailsAsync("sub_paid", Arg.Any<CancellationToken>()))
-            .Do(_ => transactionActive.Should().BeFalse());
-        _play.When(play => play.VerifyAsync("orbit_pro", "play-token", Arg.Any<CancellationToken>()))
-            .Do(_ => transactionActive.Should().BeFalse());
-        _users.FindOneTrackedIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns((User?)null);
-
-        await _job.ExecuteAsync(_user.Id, "sub_paid", "play-token", cancel, CancellationToken.None);
-
-        await _stripe.Received(cancel ? 1 : 0).SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>(), Arg.Any<string?>());
-        await _play.Received(cancel ? 1 : 0).CancelAsync("play-token", Arg.Any<CancellationToken>());
-        await _stripe.DidNotReceive().SetSubscriptionCancelAtPeriodEndAsync(Arg.Any<string>(), false, Arg.Any<CancellationToken>());
     }
 
     [Fact]

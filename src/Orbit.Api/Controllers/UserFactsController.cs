@@ -20,6 +20,7 @@ public partial class UserFactsController(IMediator mediator, ILogger<UserFactsCo
     public record BulkDeleteUserFactsRequest(IReadOnlyList<Guid> FactIds);
 
     [HttpGet]
+    [Obsolete("AI memory is deprecated and will be removed.")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -31,6 +32,7 @@ public partial class UserFactsController(IMediator mediator, ILogger<UserFactsCo
     }
 
     [HttpDelete("{id:guid}")]
+    [Obsolete("AI memory is deprecated and will be removed.")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -46,6 +48,7 @@ public partial class UserFactsController(IMediator mediator, ILogger<UserFactsCo
     }
 
     [HttpDelete("bulk")]
+    [Obsolete("AI memory is deprecated and will be removed.")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
