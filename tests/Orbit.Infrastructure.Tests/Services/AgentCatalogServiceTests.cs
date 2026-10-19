@@ -4,8 +4,10 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Routing;
 using ModelContextProtocol.Server;
 using Orbit.Application.Chat.Tools;
+using Orbit.Application.FeatureFlags;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.Services;
 
@@ -68,7 +70,7 @@ public class AgentCatalogServiceTests
         mcpToolNames.Should().NotContain("set_color_scheme");
         _catalogService.GetCapabilityByChatTool("set_color_scheme").Should().BeNull();
         _catalogService.GetCapabilityByMcpTool("set_color_scheme").Should().BeNull();
-        _catalogService.IsMappedControllerAction("ProfileController.SetColorScheme").Should().BeTrue();
+        _catalogService.HasEquivalentControllerAction("ProfileController.SetColorScheme").Should().BeTrue();
         var legacyWrite = _catalogService.GetCapability(Orbit.Domain.Models.AgentCapabilityIds.ProfilePremiumAppearanceWrite);
         legacyWrite.Should().NotBeNull();
         legacyWrite!.ChatToolNames.Should().BeNullOrEmpty();
@@ -77,7 +79,7 @@ public class AgentCatalogServiceTests
     }
 
     [Fact]
-    public void EveryControllerAction_IsMappedToTheCatalog()
+    public void ControllerActionCrossReferences_CoverAllActionsAndResolveToExistingActions()
     {
         var controllerActionKeys = typeof(Orbit.Api.Controllers.ChatController).Assembly
             .GetTypes()
@@ -89,9 +91,19 @@ public class AgentCatalogServiceTests
             .ToList();
 
         var missing = controllerActionKeys
-            .Where(actionKey => !_catalogService.IsMappedControllerAction(actionKey))
+            .Where(actionKey => !_catalogService.HasEquivalentControllerAction(actionKey))
             .ToList();
 
+        var adminCapability = _catalogService.GetCapability(FeatureFlagActions.CapabilityId)
+            ?? throw new InvalidOperationException("The internal feature flag capability must exist.");
+        var danglingReferences = _catalogService.GetCapabilities()
+            .Append(adminCapability)
+            .SelectMany(capability => capability.ControllerActionKeys ?? [])
+            .Except(controllerActionKeys, StringComparer.Ordinal)
+            .OrderBy(key => key, StringComparer.Ordinal)
+            .ToList();
+
+        danglingReferences.Should().BeEmpty("catalog cross-references must name existing controller actions");
         missing.Should().BeEmpty();
     }
 
@@ -395,12 +407,7 @@ public class AgentCatalogServiceTests
 
     private static bool IsControllerAction(MethodInfo methodInfo)
     {
-        var returnType = methodInfo.ReturnType;
-        if (typeof(IActionResult).IsAssignableFrom(returnType))
-            return true;
-
-        return returnType.IsGenericType &&
-               returnType.GetGenericTypeDefinition() == typeof(Task<>) &&
-               typeof(IActionResult).IsAssignableFrom(returnType.GetGenericArguments()[0]);
+        return methodInfo.GetCustomAttribute<NonActionAttribute>() is null &&
+               methodInfo.GetCustomAttributes<HttpMethodAttribute>().Any();
     }
 }

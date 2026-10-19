@@ -22,7 +22,7 @@ public partial class AgentCatalogService
                 isMutation: true, isPhaseOneReadOnly: false, AgentConfirmationRequirement.None,
                 chatTools: [FeatureFlagActions.ToolName],
                 mcpTools: [FeatureFlagActions.ToolName],
-                controllerActions: ["AdminController.ListFeatureFlags", "AdminController.ManageFeatureFlags"]),
+                equivalentControllerActions: ["AdminController.ListFeatureFlags", "AdminController.ManageFeatureFlags"]),
             .. HabitCoreCapabilities(),
             .. HabitBulkAndInsightCapabilities(),
             .. GoalCapabilities(),
@@ -60,7 +60,7 @@ public partial class AgentCatalogService
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
                 mcpTools: ["execute_agent_operation_v2", "confirm_agent_operation_v2", "step_up_agent_operation_v2", "verify_step_up_agent_operation_v2"],
-                controllerActions:
+                equivalentControllerActions:
                 [
                     "ChatController.ProcessChat",
                     "ChatController.ProcessChatStream",
@@ -91,7 +91,7 @@ public partial class AgentCatalogService
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
                 mcpTools: ["list_agent_capabilities_v2", "list_agent_operations_v2"],
-                controllerActions: ["AiController.GetCapabilitiesMetadata", "AiController.GetOperationsMetadata"]),
+                equivalentControllerActions: ["AiController.GetCapabilitiesMetadata", "AiController.GetOperationsMetadata"]),
 
             CreateCapability(
                 AgentCapabilityIds.CatalogDataRead,
@@ -104,7 +104,7 @@ public partial class AgentCatalogService
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
                 mcpTools: ["list_user_data_catalog_v2"],
-                controllerActions: ["AiController.GetUserDataCatalog"]),
+                equivalentControllerActions: ["AiController.GetUserDataCatalog"]),
 
             CreateCapability(
                 AgentCapabilityIds.CatalogSurfacesRead,
@@ -117,7 +117,7 @@ public partial class AgentCatalogService
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
                 mcpTools: ["list_app_surfaces_v2"],
-                controllerActions: ["AiController.GetAppSurfaces"]),
+                equivalentControllerActions: ["AiController.GetAppSurfaces"]),
 
             CreateCapability(
                 AgentCapabilityIds.DescribeFeature,
@@ -148,7 +148,7 @@ public partial class AgentCatalogService
                 isMutation: false,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                controllerActions: ["ConfigController.GetConfig"])
+                equivalentControllerActions: ["ConfigController.GetConfig"])
         ];
     }
 
@@ -168,7 +168,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.None,
                 chatTools: ["query_habits"],
                 mcpTools: ["list_habits", "get_habit", "get_habit_logs", "get_all_habit_logs"],
-                controllerActions:
+                equivalentControllerActions:
                 [
                     "HabitsController.GetHabits",
                     "HabitsController.GetHabitCount",
@@ -205,7 +205,7 @@ public partial class AgentCatalogService
                     "move_habit_parent",
                     "link_goals_to_habit"
                 ],
-                controllerActions:
+                equivalentControllerActions:
                 [
                     "HabitsController.CreateHabit",
                     "HabitsController.SuggestSetup",
@@ -234,7 +234,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.FreshConfirmation,
                 chatTools: ["delete_habit"],
                 mcpTools: ["delete_habit"],
-                controllerActions: ["HabitsController.DeleteHabit"])
+                equivalentControllerActions: ["HabitsController.DeleteHabit"])
         ];
     }
 
@@ -254,7 +254,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.None,
                 chatTools: ["bulk_update_habits", "bulk_reschedule_habits", "bulk_log_habits", "bulk_skip_habits", "bulk_create_habits"],
                 mcpTools: ["bulk_update_habits", "bulk_reschedule_habits", "bulk_create_habits", "bulk_log_habits", "bulk_skip_habits"],
-                controllerActions: ["HabitsController.BulkCreate", "HabitsController.BulkLog", "HabitsController.BulkSkip"]),
+                equivalentControllerActions: ["HabitsController.BulkCreate", "HabitsController.BulkLog", "HabitsController.BulkSkip"]),
 
             CreateCapability(
                 AgentCapabilityIds.HabitsBulkDelete,
@@ -268,7 +268,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.FreshConfirmation,
                 chatTools: ["bulk_delete_habits"],
                 mcpTools: ["bulk_delete_habits"],
-                controllerActions: ["HabitsController.BulkDelete"]),
+                equivalentControllerActions: ["HabitsController.BulkDelete"]),
 
             CreateCapability(
                 AgentCapabilityIds.HabitMetricsRead,
@@ -282,7 +282,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.None,
                 chatTools: ["get_habit_metrics"],
                 mcpTools: ["get_habit_metrics"],
-                controllerActions: ["HabitsController.GetMetrics"]),
+                equivalentControllerActions: ["HabitsController.GetMetrics"]),
 
             CreateCapability(
                 AgentCapabilityIds.DailySummaryRead,
@@ -298,7 +298,7 @@ public partial class AgentCatalogService
                 featureFlagKeys: ["ai_summary"],
                 chatTools: ["get_daily_summary"],
                 mcpTools: ["get_daily_summary"],
-                controllerActions: ["HabitsController.GetDailySummary"]),
+                equivalentControllerActions: ["HabitsController.GetDailySummary"]),
 
             CreateCapability(
                 AgentCapabilityIds.RetrospectiveRead,
@@ -314,7 +314,7 @@ public partial class AgentCatalogService
                 featureFlagKeys: ["ai_retrospective"],
                 chatTools: ["get_retrospective"],
                 mcpTools: ["get_retrospective"],
-                controllerActions: ["HabitsController.GetRetrospective"])
+                equivalentControllerActions: ["HabitsController.GetRetrospective"])
         ];
     }
 
@@ -334,7 +334,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.None,
                 chatTools: ["query_goals", "review_goals"],
                 mcpTools: ["list_goals", "get_goal", "get_goal_metrics", "get_goal_review"],
-                controllerActions:
+                equivalentControllerActions:
                 [
                     "GoalsController.GetGoals",
                     "GoalsController.GetGoalById",
@@ -356,7 +356,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.None,
                 chatTools: ["create_goal", "update_goal", "update_goal_status", "update_goal_progress", "link_habits_to_goal", "reorder_goals"],
                 mcpTools: ["create_goal", "update_goal", "update_goal_progress", "update_goal_status", "reorder_goals", "link_habits_to_goal"],
-                controllerActions:
+                equivalentControllerActions:
                 [
                     "GoalsController.CreateGoal",
                     "GoalsController.UpdateGoal",
@@ -379,7 +379,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.FreshConfirmation,
                 chatTools: ["delete_goal"],
                 mcpTools: ["delete_goal"],
-                controllerActions: ["GoalsController.DeleteGoal"])
+                equivalentControllerActions: ["GoalsController.DeleteGoal"])
         ];
     }
 
@@ -399,7 +399,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.None,
                 chatTools: ["list_tags"],
                 mcpTools: ["list_tags", "get_tag_page"],
-                controllerActions: ["TagsController.GetTags", "ChatController.GetRecordListPage"]),
+                equivalentControllerActions: ["TagsController.GetTags", "ChatController.GetRecordListPage"]),
 
             CreateCapability(
                 AgentCapabilityIds.TagsWrite,
@@ -413,7 +413,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.None,
                 chatTools: ["assign_tags", "create_tag", "update_tag"],
                 mcpTools: ["create_tag", "update_tag", "assign_tags"],
-                controllerActions: ["TagsController.CreateTag", "TagsController.UpdateTag", "TagsController.AssignTags", "TagsController.SuggestTags", "TagsController.RestoreTag"]),
+                equivalentControllerActions: ["TagsController.CreateTag", "TagsController.UpdateTag", "TagsController.AssignTags", "TagsController.SuggestTags", "TagsController.RestoreTag"]),
 
             CreateCapability(
                 AgentCapabilityIds.TagsDelete,
@@ -427,7 +427,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.FreshConfirmation,
                 chatTools: ["delete_tag"],
                 mcpTools: ["delete_tag"],
-                controllerActions: ["TagsController.DeleteTag"])
+                equivalentControllerActions: ["TagsController.DeleteTag"])
         ];
     }
 
@@ -447,7 +447,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.None,
                 chatTools: ["get_profile"],
                 mcpTools: ["get_profile"],
-                controllerActions: ["ProfileController.GetProfile"]),
+                equivalentControllerActions: ["ProfileController.GetProfile"]),
 
             CreateCapability(
                 AgentCapabilityIds.ProfilePreferencesWrite,
@@ -461,7 +461,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.None,
                 chatTools: ["update_profile_preferences"],
                 mcpTools: ["set_timezone", "set_language", "set_week_start_day", "set_clock_format"],
-                controllerActions:
+                equivalentControllerActions:
                 [
                     "ProfileController.SetName",
                     "ProfileController.SetTimezone",
@@ -487,7 +487,7 @@ public partial class AgentCatalogService
                 isMutation: true,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                controllerActions: ["ProfileController.SetColorScheme"]),
+                equivalentControllerActions: ["ProfileController.SetColorScheme"]),
 
             CreateCapability(
                 AgentCapabilityIds.ProfileAiMemoryWrite,
@@ -502,7 +502,7 @@ public partial class AgentCatalogService
                 planRequirement: "Pro",
                 chatTools: ["set_ai_memory"],
                 mcpTools: ["set_ai_memory"],
-                controllerActions: ["ProfileController.SetAiMemory"]),
+                equivalentControllerActions: ["ProfileController.SetAiMemory"]),
 
             CreateCapability(
                 AgentCapabilityIds.ProfileAiSummaryWrite,
@@ -518,7 +518,7 @@ public partial class AgentCatalogService
                 featureFlagKeys: ["ai_summary"],
                 chatTools: ["set_ai_summary"],
                 mcpTools: ["set_ai_summary"],
-                controllerActions: ["ProfileController.SetAiSummary"]),
+                equivalentControllerActions: ["ProfileController.SetAiSummary"]),
 
             CreateCapability(
                 AgentCapabilityIds.ProfileProactiveAstraWrite,
@@ -531,7 +531,7 @@ public partial class AgentCatalogService
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
                 planRequirement: "Pro",
-                controllerActions: ["ProfileController.SetProactiveAstra"])
+                equivalentControllerActions: ["ProfileController.SetProactiveAstra"])
         ];
     }
 
@@ -583,7 +583,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.None,
                 chatTools: ["get_notifications"],
                 mcpTools: ["get_notifications", "get_notification_page"],
-                controllerActions: ["NotificationController.GetNotifications", "NotificationController.GetSubscriptions", "ChatController.GetRecordListPage"]),
+                equivalentControllerActions: ["NotificationController.GetNotifications", "NotificationController.GetSubscriptions", "ChatController.GetRecordListPage"]),
 
             CreateCapability(
                 AgentCapabilityIds.NotificationsWrite,
@@ -597,7 +597,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.None,
                 chatTools: ["update_notifications"],
                 mcpTools: ["mark_notification_read", "mark_all_notifications_read", "subscribe_push", "unsubscribe_push", "test_push"],
-                controllerActions:
+                equivalentControllerActions:
                 [
                     "NotificationController.MarkAsRead",
                     "NotificationController.MarkAllAsRead",
@@ -618,7 +618,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.FreshConfirmation,
                 chatTools: ["delete_notifications"],
                 mcpTools: ["delete_notification"],
-                controllerActions: ["NotificationController.Delete", "NotificationController.DeleteAll"])
+                equivalentControllerActions: ["NotificationController.Delete", "NotificationController.DeleteAll"])
         ];
     }
 
@@ -639,7 +639,7 @@ public partial class AgentCatalogService
                 featureFlagKeys: ["calendar_integration"],
                 chatTools: ["get_calendar_overview"],
                 mcpTools: ["get_calendar_events"],
-                controllerActions:
+                equivalentControllerActions:
                 [
                     "CalendarController.GetEvents",
                     "CalendarController.GetSuggestions",
@@ -659,7 +659,7 @@ public partial class AgentCatalogService
                 featureFlagKeys: ["calendar_integration"],
                 chatTools: ["manage_calendar_sync"],
                 mcpTools: ["manage_calendar_sync"],
-                controllerActions:
+                equivalentControllerActions:
                 [
                     "CalendarController.GetAutoSyncState",
                     "CalendarController.DismissImport",
@@ -701,7 +701,7 @@ public partial class AgentCatalogService
                 planRequirement: "Pro",
                 chatTools: ["get_gamification_overview"],
                 mcpTools: ["get_gamification_profile", "get_achievements", "get_streak_info"],
-                controllerActions:
+                equivalentControllerActions:
                 [
                     "GamificationController.GetProfile",
                     "GamificationController.GetAchievements",
@@ -723,7 +723,7 @@ public partial class AgentCatalogService
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
                 planRequirement: "Pro",
-                controllerActions: ["GamificationController.RepairStreak"]),
+                equivalentControllerActions: ["GamificationController.RepairStreak"]),
 
             CreateCapability(
                 AgentCapabilityIds.GamificationRepairGap,
@@ -736,7 +736,7 @@ public partial class AgentCatalogService
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
                 planRequirement: "Pro",
-                controllerActions: ["StreakGapController.RepairGap"])
+                equivalentControllerActions: ["StreakGapController.RepairGap"])
         ];
     }
 
@@ -757,7 +757,7 @@ public partial class AgentCatalogService
                 featureFlagKeys: ["checklist_templates"],
                 chatTools: ["get_checklist_templates"],
                 mcpTools: ["get_checklist_templates", "get_template_page"],
-                controllerActions: ["ChecklistTemplatesController.GetTemplates", "ChatController.GetRecordListPage"]),
+                equivalentControllerActions: ["ChecklistTemplatesController.GetTemplates", "ChatController.GetRecordListPage"]),
 
             CreateCapability(
                 AgentCapabilityIds.ChecklistTemplatesWrite,
@@ -772,7 +772,7 @@ public partial class AgentCatalogService
                 featureFlagKeys: ["checklist_templates"],
                 chatTools: ["create_checklist_template", "delete_checklist_template"],
                 mcpTools: ["create_checklist_template", "delete_checklist_template"],
-                controllerActions: ["ChecklistTemplatesController.CreateTemplate", "ChecklistTemplatesController.DeleteTemplate"])
+                equivalentControllerActions: ["ChecklistTemplatesController.CreateTemplate", "ChecklistTemplatesController.DeleteTemplate"])
         ];
     }
 
@@ -793,7 +793,7 @@ public partial class AgentCatalogService
                 planRequirement: "Pro",
                 chatTools: ["get_user_facts"],
                 mcpTools: ["get_user_facts"],
-                controllerActions: ["UserFactsController.GetUserFacts"]),
+                equivalentControllerActions: ["UserFactsController.GetUserFacts"]),
 
             CreateCapability(
                 AgentCapabilityIds.UserFactsDelete,
@@ -808,7 +808,7 @@ public partial class AgentCatalogService
                 planRequirement: "Pro",
                 chatTools: ["delete_user_facts"],
                 mcpTools: ["delete_user_fact"],
-                controllerActions: ["UserFactsController.DeleteUserFact", "UserFactsController.BulkDeleteUserFacts"])
+                equivalentControllerActions: ["UserFactsController.DeleteUserFact", "UserFactsController.BulkDeleteUserFacts"])
         ];
     }
 
@@ -828,7 +828,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.None,
                 chatTools: ["get_referral_overview"],
                 mcpTools: ["get_referral_stats"],
-                controllerActions:
+                equivalentControllerActions:
                 [
                     "ReferralController.GetStats",
                     "ReferralController.GetDashboard"
@@ -846,7 +846,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.None,
                 chatTools: ["get_referral_code"],
                 mcpTools: ["get_referral_code"],
-                controllerActions: ["ReferralController.GetOrCreateCode"])
+                equivalentControllerActions: ["ReferralController.GetOrCreateCode"])
         ];
     }
 
@@ -866,7 +866,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.None,
                 chatTools: ["get_subscription_overview"],
                 mcpTools: ["get_subscription_status"],
-                controllerActions:
+                equivalentControllerActions:
                 [
                     "SubscriptionController.GetStatus",
                     "SubscriptionController.GetBillingDetails",
@@ -885,7 +885,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.StepUp,
                 chatTools: ["manage_subscription"],
                 mcpTools: ["manage_subscription"],
-                controllerActions:
+                equivalentControllerActions:
                 [
                     "SubscriptionController.CreateCheckout",
                     "SubscriptionController.CreatePortal",
@@ -915,7 +915,7 @@ public partial class AgentCatalogService
                 featureFlagKeys: ["api_keys"],
                 chatTools: ["get_api_keys"],
                 mcpTools: ["get_api_keys", "get_api_key_page"],
-                controllerActions: ["ApiKeysController.GetApiKeys", "ChatController.GetRecordListPage"]),
+                equivalentControllerActions: ["ApiKeysController.GetApiKeys", "ChatController.GetRecordListPage"]),
 
             CreateCapability(
                 AgentCapabilityIds.ApiKeysManage,
@@ -931,7 +931,7 @@ public partial class AgentCatalogService
                 featureFlagKeys: ["api_keys"],
                 chatTools: ["manage_api_keys"],
                 mcpTools: ["manage_api_keys"],
-                controllerActions:
+                equivalentControllerActions:
                 [
                     "ApiKeysController.CreateApiKey",
                     "ApiKeysController.RequestCreationChallenge",
@@ -957,7 +957,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.None,
                 chatTools: ["send_support_request"],
                 mcpTools: ["send_support_request"],
-                controllerActions: ["SupportController.SendSupport"])
+                equivalentControllerActions: ["SupportController.SendSupport"])
         ];
     }
 
@@ -975,7 +975,7 @@ public partial class AgentCatalogService
                 isMutation: false,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                controllerActions: ["SyncController.GetChangesV2", "EventsController.Stream", "EventsController.CreateTicket"]),
+                equivalentControllerActions: ["SyncController.GetChangesV2", "EventsController.Stream", "EventsController.CreateTicket"]),
 
             CreateCapability(
                 AgentCapabilityIds.SyncWrite,
@@ -987,7 +987,7 @@ public partial class AgentCatalogService
                 isMutation: true,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.FreshConfirmation,
-                controllerActions: ["SyncController.ProcessBatch"])
+                equivalentControllerActions: ["SyncController.ProcessBatch"])
         ];
     }
 
@@ -1005,7 +1005,7 @@ public partial class AgentCatalogService
                 isMutation: true,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                controllerActions:
+                equivalentControllerActions:
                 [
                     "FriendsController.GetFriends",
                     "FriendsController.GetFriendProfile",
@@ -1056,7 +1056,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.StepUp,
                 chatTools: ["manage_account"],
                 mcpTools: ["manage_account"],
-                controllerActions:
+                equivalentControllerActions:
                 [
                     "AuthController.RequestDeletion",
                     "AuthController.ConfirmDeletion",
@@ -1074,7 +1074,7 @@ public partial class AgentCatalogService
                 isMutation: true,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                controllerActions:
+                equivalentControllerActions:
                 [
                     "AuthController.SendCode",
                     "AuthController.SendCodeOperation",
@@ -1113,7 +1113,7 @@ public partial class AgentCatalogService
                 isMutation: true,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                controllerActions: ["UploadsController.SignUpload", "UploadsController.ReadObject"]),
+                equivalentControllerActions: ["UploadsController.SignUpload", "UploadsController.ReadObject"]),
 
             CreateCapability(
                 AgentCapabilityIds.MarketingManage,
@@ -1125,7 +1125,7 @@ public partial class AgentCatalogService
                 isMutation: true,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                controllerActions:
+                equivalentControllerActions:
                 [
                     "AdminController.SendMarketingBroadcast",
                     "MarketingController.Unsubscribe",
