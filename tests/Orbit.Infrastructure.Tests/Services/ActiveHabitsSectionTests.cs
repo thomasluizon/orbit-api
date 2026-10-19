@@ -56,7 +56,6 @@ public class ActiveHabitsSectionTests
     {
         return new PromptContext(
             ActiveHabits: habits ?? [],
-            UserFacts: [],
             HasImage: false,
             RoutinePatterns: null,
             UserTags: null,
@@ -152,7 +151,7 @@ public class ActiveHabitsSectionTests
             ValidUserId, "Filed taxes", null, null, DueDate: Today.AddDays(-1))).Value;
         task.Log(Today).IsSuccess.Should().BeTrue();
         var context = new PromptContext(
-            ActiveHabits: [task], UserFacts: [], HasImage: false, RoutinePatterns: null,
+            ActiveHabits: [task], HasImage: false, RoutinePatterns: null,
             UserTags: null, UserToday: Today, HabitMetrics: null,
             TodayHabitIds: new HashSet<Guid> { task.Id },
             DoneTodayHabitIds: new HashSet<Guid> { task.Id });
@@ -279,25 +278,28 @@ public class ActiveHabitsSectionTests
     }
 
     [Fact]
-    public void Build_WithUserToday_IncludesExhaustiveTodayListingInstruction()
+    public void Build_WithUserToday_RequiresToolResultsBeforeScheduleClaims()
     {
         var context = CreateContext(habits: [CreateHabit("Test")], userToday: Today);
 
         var result = _sut.Build(context);
 
-        result.Should().Contain("every entry labeled TODAY or OVERDUE");
-        result.Should().Contain("Verify your list matches those counts");
-        result.Should().Contain("When asked what remains, exclude DONE TODAY");
+        result.Should().Contain("Fetch current-turn tool results before answering schedule questions");
+        result.Should().Contain("preserve the returned entries and counts");
+        result.Should().Contain("Today's full schedule includes DONE TODAY entries");
+        result.Should().Contain("query_habits(date: 'today') without is_completed");
+        result.Should().Contain("Only for remaining work, use is_completed: false");
+        result.Should().NotContain("Verify your list matches those counts");
     }
 
     [Fact]
-    public void Build_NullUserToday_OmitsExhaustiveTodayListingInstruction()
+    public void Build_NullUserToday_OmitsTodayScheduleInstruction()
     {
         var context = CreateContext(habits: [CreateHabit("Test")], userToday: null, useDefaultToday: false);
 
         var result = _sut.Build(context);
 
-        result.Should().NotContain("enumerate EVERY entry");
+        result.Should().NotContain("TODAY and OVERDUE labels help resolve tool arguments");
     }
 
     [Fact]

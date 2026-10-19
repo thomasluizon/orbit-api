@@ -32,7 +32,6 @@ public static class PendingOperationActionKeys
                 "run_sync" => "syncCalendar",
                 _ => "manageCalendarSync"
             },
-            "delete_user_facts" => "deleteUserFacts",
             "bulk_update_habit_emojis" => "updateHabitEmojis",
             "create_habit" => "createHabit",
             "create_sub_habit" => "createSubHabit",
@@ -58,7 +57,6 @@ public static class PendingOperationActionKeys
             "create_checklist_template" => "createChecklistTemplate",
             "delete_checklist_template" => "deleteChecklistTemplate",
             "update_profile_preferences" => "updateProfilePreferences",
-            "set_ai_memory" => "setAiMemory",
             "set_ai_summary" => "setAiSummary",
             "set_proactive_astra" => "setProactiveAstra",
             "update_notifications" => action switch

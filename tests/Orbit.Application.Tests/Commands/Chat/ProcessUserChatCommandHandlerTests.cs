@@ -36,7 +36,6 @@ public partial class ProcessUserChatCommandHandlerTests
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
-    private readonly IGenericRepository<UserFact> _userFactRepo = Substitute.For<IGenericRepository<UserFact>>();
     private readonly IGenericRepository<Tag> _tagRepo = Substitute.For<IGenericRepository<Tag>>();
     private readonly IGenericRepository<ChecklistTemplate> _checklistTemplateRepo = Substitute.For<IGenericRepository<ChecklistTemplate>>();
     private readonly IFeatureFlagService _featureFlagService = Substitute.For<IFeatureFlagService>();
@@ -57,6 +56,7 @@ public partial class ProcessUserChatCommandHandlerTests
     private readonly IMediator _mediator = Substitute.For<IMediator>();
     private readonly IProductAnalytics _productAnalytics = Substitute.For<IProductAnalytics>();
     private readonly IHabitScheduleLogReader _scheduleLogReader = Substitute.For<IHabitScheduleLogReader>();
+    private readonly IAppConfigService _appConfig = Substitute.For<IAppConfigService>();
     private readonly ILogger<ProcessUserChatCommandHandler> _logger = Substitute.For<ILogger<ProcessUserChatCommandHandler>>();
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -116,14 +116,14 @@ public partial class ProcessUserChatCommandHandlerTests
         var toolRegistry = new AiToolRegistry(tools);
         SetupOperationExecutor(toolRegistry);
         var aiDeps = new ChatAiDependencies(_aiIntentService, toolRegistry, _promptBuilder, _catalogService);
-        var dataDeps = new ChatDataDependencies(_habitRepo, _goalRepo, userRepository, _userFactRepo, _tagRepo, _checklistTemplateRepo, _featureFlagService);
+        var dataDeps = new ChatDataDependencies(_habitRepo, _goalRepo, userRepository, _tagRepo, _checklistTemplateRepo, _featureFlagService);
         var executionDeps = new ChatExecutionDependencies(
             _userDateService, _userStreakService, payGate, unitOfWork, _scopeFactory, _operationExecutor,
             _pendingClarificationStore, _goalProgressReadSyncer, _gamificationService, _mediator, _productAnalytics,
             _scheduleLogReader, _blockStore, _pendingOperationStore);
 
         return new ProcessUserChatCommandHandler(
-            dataDeps, aiDeps, executionDeps, _logger);
+            dataDeps, aiDeps, executionDeps, _logger, _appConfig);
     }
 
     public ProcessUserChatCommandHandlerTests()
@@ -158,10 +158,6 @@ public partial class ProcessUserChatCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(new List<Habit>().AsReadOnly());
 
-        _userFactRepo.FindAsync(
-            Arg.Any<Expression<Func<UserFact, bool>>>(),
-            Arg.Any<CancellationToken>())
-            .Returns(new List<UserFact>().AsReadOnly());
 
         _goalRepo.FindAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),
@@ -4203,25 +4199,6 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_AiMemoryDisabled_DoesNotLoadFacts()
-    {
-        var user = User.Create("Alex", "alex@test.com").Value;
-        user.SetAiMemory(false);
-        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-        _payGate.TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>()).Returns(Result.Success());
-        SetupAiResponse(new AiResponse { TextMessage = "Hi!", ToolCalls = null });
-        var handler = CreateHandler();
-
-        var command = new ProcessUserChatCommand(UserId, "Hello");
-        var result = await handler.Handle(command, CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        await _userFactRepo.DidNotReceive().FindAsync(
-            Arg.Any<Expression<Func<UserFact, bool>>>(),
-            Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
     public async Task Handle_InvalidJsonWrapper_ReturnsTextAsIs()
     {
         SetupUserAndPayGate();
@@ -4405,6 +4382,23 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Actions[0].SuggestedSubHabits.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_InventedStreak_LogsGroundingViolationBeforeReturningText()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "You are on a 12-day streak." });
+
+        var result = await CreateHandler().Handle(
+            new ProcessUserChatCommand(UserId, "How am I doing?"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessage.Should().Be("You are on a 12-day streak.");
+        _logger.ReceivedCalls().Should().Contain(call =>
+            call.GetMethodInfo().Name == "Log"
+            && (LogLevel)call.GetArguments()[0]! == LogLevel.Warning
+            && call.GetArguments()[2]!.ToString()!.Contains("Grounding violation"));
     }
 
     [Fact]

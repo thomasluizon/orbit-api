@@ -20,7 +20,7 @@ public class RoutinePatternsSectionTests
             ConsistencyScore = 0.85m,
             TimeBlocks = []
         };
-        var context = new PromptContext([], [], false, [pattern], null, null, null);
+        var context = new PromptContext([], false, [pattern], null, null, null);
         var previousCulture = CultureInfo.CurrentCulture;
 
         try

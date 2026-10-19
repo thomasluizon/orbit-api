@@ -15,7 +15,6 @@ public static class ErrorMessages
     public static readonly AppError ParentHabitNotFound = From(ErrorCodes.ParentHabitNotFound);
     public static readonly AppError TargetParentNotFound = From(ErrorCodes.TargetParentNotFound);
     public static readonly AppError TagNotFound = From(ErrorCodes.TagNotFound);
-    public static readonly AppError FactNotFound = From(ErrorCodes.FactNotFound);
     public static readonly AppError NoPermission = From(ErrorCodes.NoPermission);
     public static readonly AppError HabitNotOwned = From(ErrorCodes.HabitNotOwned);
     public static readonly AppError GoalNotFound = From(ErrorCodes.GoalNotFound);
@@ -52,8 +51,6 @@ public static class ErrorMessages
     public static readonly AppError InvalidStepUpCode = From(ErrorCodes.InvalidStepUpCode);
     public static readonly AppError DuplicateTagName = From(ErrorCodes.DuplicateTagName);
     public static readonly AppError MaxTagsPerHabit = From(ErrorCodes.MaxTagsPerHabit);
-    public static readonly AppError UserFactsLimitReached = From(ErrorCodes.UserFactsLimitReached);
-    public static readonly AppError DuplicateFact = From(ErrorCodes.DuplicateFact);
     public static readonly AppError PaymentServiceUnavailable = From(ErrorCodes.PaymentServiceUnavailable);
     public static readonly AppError BillingDetailsUnavailable = From(ErrorCodes.BillingDetailsUnavailable);
     public static readonly AppError WebhookSecretNotConfigured = From(ErrorCodes.WebhookSecretNotConfigured);

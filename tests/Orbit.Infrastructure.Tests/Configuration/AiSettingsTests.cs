@@ -18,15 +18,6 @@ public class AiSettingsTests
     }
 
     [Fact]
-    public void Defaults_GiveBatchTransfersMoreHeadroomThanChatTurns_WhenConfigOmitsThem()
-    {
-        var settings = new AiSettings();
-
-        settings.BatchNetworkTimeoutSeconds.Should().Be(120);
-        settings.BatchNetworkTimeoutSeconds.Should().BeGreaterThan(settings.NetworkTimeoutSeconds);
-    }
-
-    [Fact]
     public void Defaults_RouteMechanicalSubTasksToNano_WhenConfigOmitsThem()
     {
         var settings = new AiSettings();

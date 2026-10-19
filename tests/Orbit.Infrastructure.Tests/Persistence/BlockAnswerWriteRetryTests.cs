@@ -83,12 +83,12 @@ public class BlockAnswerWriteRetryTests
         var pending = Substitute.For<IPendingAgentOperationStore>();
         var handler = new ProcessUserChatCommandHandler(
             new(new GenericRepository<Habit>(db), new GenericRepository<Goal>(db), new GenericRepository<User>(db),
-                new GenericRepository<UserFact>(db), new GenericRepository<Tag>(db), new GenericRepository<ChecklistTemplate>(db), flags),
+                new GenericRepository<Tag>(db), new GenericRepository<ChecklistTemplate>(db), flags),
             new(ai, new AiToolRegistry([tool]), Substitute.For<ISystemPromptBuilder>(), catalog),
             new(dates, Substitute.For<IUserStreakService>(), quota, work, Substitute.For<IServiceScopeFactory>(), executor,
                 Substitute.For<IPendingClarificationStore>(), Substitute.For<IGoalProgressReadSyncer>(), Substitute.For<IGamificationService>(),
                 Substitute.For<IMediator>(), analytics, Substitute.For<IHabitScheduleLogReader>(), new IssuedAstraBlockStore(db), pending),
-            NullLogger<ProcessUserChatCommandHandler>.Instance);
+            NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>());
         var request = new ProcessUserChatCommand(user.Id, "Evening", BlockAnswer: new(block.Id, ["b"]));
 
         var first = await handler.Handle(request, default);

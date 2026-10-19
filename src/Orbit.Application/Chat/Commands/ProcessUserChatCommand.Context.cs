@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
 using Orbit.Application.Chat;
-using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -26,33 +25,8 @@ public partial class ProcessUserChatCommandHandler
         var activeHabits = userHabits.Where(habit => !habit.IsCompleted).ToList();
         var userToday = await execution.UserDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var weekStartDay = await execution.UserDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
-        var logFrom = userToday.AddDays(-AppConstants.MaxRangeDays);
-        var activeIds = userHabits.Where(habit => !habit.IsCompleted
-            || habit.FrequencyUnit is null && !habit.IsGeneral).Select(habit => habit.Id).ToArray();
-        var logDays = await execution.ScheduleLogReader.ReadDaysAsync(
-            activeIds, logFrom, userToday, cancellationToken);
-        var logFacts = new HabitScheduleLogFacts(logDays);
-        var dueDateResolution = activeHabits
-            .Where(habit => habit.DueDate >= logFrom
-                && habit.DueDate <= userToday
-                && logFacts.ResolvedDates(habit.Id).Contains(habit.DueDate))
-            .Select(habit => habit.Id)
-            .ToHashSet();
-        var oldDueDateIds = activeHabits
-            .Where(habit => habit.FrequencyUnit is not null
-                && !habit.IsFlexible
-                && !habit.IsBadHabit
-                && habit.DueDate < logFrom)
-            .Select(habit => habit.Id)
-            .ToArray();
-        if (oldDueDateIds.Length > 0)
-        {
-            var olderResolutions = await execution.ScheduleLogReader.ReadResolvedDueDateIdsAsync(
-                oldDueDateIds, cancellationToken);
-            dueDateResolution.UnionWith(olderResolutions);
-        }
-        var todayFacts = HabitTodaySnapshot.Build(
-            userHabits, userToday, weekStartDay, logDays, dueDateResolution);
+        var todayFacts = await HabitTodaySnapshot.ReadAsync(
+            userHabits, userToday, weekStartDay, execution.ScheduleLogReader, cancellationToken);
         var todayHabits = userHabits.Where(habit => !habit.IsCompleted
             || habit.FrequencyUnit is null && todayFacts.DoneTodayIds.Contains(habit.Id)).ToList();
         var promptHabitIndex = BuildPromptHabitIndex(userHabits, userToday, todayFacts);
@@ -66,7 +40,6 @@ public partial class ProcessUserChatCommandHandler
         }
         var user = await data.UserRepository.GetByIdAsync(request.UserId, cancellationToken);
         var hasProAccess = user?.HasProAccess ?? false;
-        var aiMemoryEnabled = user is { HasProAccess: true, AiMemoryEnabled: true };
 
         var freshProgressValues = await execution.GoalProgressReadSyncer.ComputeFreshValuesAsync(request.UserId, userToday, cancellationToken);
         var loadedGoals = await data.GoalRepository.FindAsync(
@@ -79,14 +52,6 @@ public partial class ProcessUserChatCommandHandler
                 GoalProgressSyncService.ApplyReadValue(goal, fresh);
         }
         IReadOnlyList<Goal> activeGoals = loadedGoals;
-
-        IReadOnlyList<UserFact> userFacts = [];
-        if (aiMemoryEnabled)
-        {
-            userFacts = await data.UserFactRepository.FindAsync(
-                f => f.UserId == request.UserId,
-                cancellationToken);
-        }
 
         var userTags = await data.TagRepository.FindAsync(
             t => t.UserId == request.UserId,
@@ -101,7 +66,7 @@ public partial class ProcessUserChatCommandHandler
             cancellationToken);
 
         dbStopwatch.Stop();
-        LogContextLoaded(logger, dbStopwatch.ElapsedMilliseconds, activeHabits.Count, userFacts.Count);
+        LogContextLoaded(logger, dbStopwatch.ElapsedMilliseconds, activeHabits.Count);
 
         return Result.Success(new ChatContext(
             activeHabits,
@@ -110,9 +75,7 @@ public partial class ProcessUserChatCommandHandler
             promptHabitIndex.IsPartial,
             user,
             hasProAccess,
-            aiMemoryEnabled,
             activeGoals,
-            userFacts,
             userTags,
             checklistTemplates,
             enabledFeatureFlags,
@@ -232,9 +195,7 @@ public partial class ProcessUserChatCommandHandler
         bool IsPromptHabitIndexPartial,
         User? User,
         bool HasProAccess,
-        bool AiMemoryEnabled,
         IReadOnlyList<Goal> ActiveGoals,
-        IReadOnlyList<UserFact> UserFacts,
         IReadOnlyList<Tag> UserTags,
         IReadOnlyList<ChecklistTemplate> ChecklistTemplates,
         IReadOnlyList<string> EnabledFeatureFlags,

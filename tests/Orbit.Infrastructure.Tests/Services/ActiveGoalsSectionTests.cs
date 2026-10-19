@@ -13,7 +13,7 @@ public class ActiveGoalsSectionTests
     {
         var goal = Goal.Create(Guid.NewGuid(), "Run", 10.5m, "miles").Value;
         goal.UpdateProgress(3.5m);
-        var context = new PromptContext([], [], false, null, null, null, null, [goal]);
+        var context = new PromptContext([], false, null, null, null, null, [goal]);
         var previousCulture = CultureInfo.CurrentCulture;
 
         try
@@ -39,7 +39,7 @@ public class ActiveGoalsSectionTests
             userId, "Morning run", Orbit.Domain.Enums.FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2026, 1, 1))).Value;
         goal.AddHabit(habit);
-        var context = new PromptContext([], [], false, null, null, null, null, [goal]);
+        var context = new PromptContext([], false, null, null, null, null, [goal]);
         var previousCulture = CultureInfo.CurrentCulture;
 
         try

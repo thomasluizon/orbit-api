@@ -13,7 +13,6 @@ public class DescribeFeatureToolTests
 
     private static readonly string[] FeatureKeyEnum =
     [
-        "ai-memory",
         "freezes",
         "frequencies",
         "gamification",
@@ -49,7 +48,6 @@ public class DescribeFeatureToolTests
     }
 
     [Theory]
-    [InlineData("ai-memory")]
     [InlineData("freezes")]
     [InlineData("frequencies")]
     [InlineData("gamification")]

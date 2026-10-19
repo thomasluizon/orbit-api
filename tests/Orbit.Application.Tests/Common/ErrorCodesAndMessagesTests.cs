@@ -120,7 +120,6 @@ public class ErrorCodesAndMessagesTests
         AppConstants.MaxChecklistItemTextLength.Should().BePositive();
         AppConstants.MaxHabitDepth.Should().BePositive();
         AppConstants.MaxTagsPerHabit.Should().BePositive();
-        AppConstants.MaxUserFacts.Should().BePositive();
         AppConstants.MaxRangeDays.Should().BePositive();
         AppConstants.MaxBulkOperationSize.Should().BePositive();
         AppConstants.MaxGoalsPerHabit.Should().BePositive();

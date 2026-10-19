@@ -2,7 +2,6 @@ namespace Orbit.Application.Common;
 
 public static class AppConfigKeys
 {
-    public const string MaxUserFacts = "MaxUserFacts";
     public const string MaxHabitDepth = "MaxHabitDepth";
     public const string MaxTagsPerHabit = "MaxTagsPerHabit";
     public const string ReferralRewardDays = "ReferralRewardDays";
@@ -16,4 +15,5 @@ public static class AppConfigKeys
     public const string RetrospectiveProOnly = "RetrospectiveProOnly";
     public const string MinSupportedVersion = "MinSupportedVersion";
     public const string RequireApiKeyCreationStepUp = "RequireApiKeyCreationStepUp";
+    public const string AstraGroundingEnforce = "AstraGroundingEnforce";
 }

@@ -15,7 +15,6 @@ public sealed record UserDataExport(
     IReadOnlyList<ExportedHabit> Habits,
     IReadOnlyList<ExportedGoal> Goals,
     IReadOnlyList<ExportedTag> Tags,
-    IReadOnlyList<ExportedUserFact> Facts,
     IReadOnlyList<ExportedNotification> Notifications,
     IReadOnlyList<ExportedChecklistTemplate> ChecklistTemplates,
     IReadOnlyList<ExportedAchievement> Achievements,
@@ -45,7 +44,6 @@ public sealed record ExportedSettings(
     int WeekStartDay,
     string? ThemePreference,
     string? ColorScheme,
-    bool AiMemoryEnabled,
     bool AiSummaryEnabled,
     bool ProactiveAstraEnabled,
     bool? Uses24HourClock,
@@ -99,11 +97,6 @@ public sealed record ExportedTag(
     string Name,
     string Color,
     DateTime CreatedAtUtc);
-
-public sealed record ExportedUserFact(
-    string FactText,
-    string? Category,
-    DateTime ExtractedAtUtc);
 
 public sealed record ExportedSubscription(
     string Plan,

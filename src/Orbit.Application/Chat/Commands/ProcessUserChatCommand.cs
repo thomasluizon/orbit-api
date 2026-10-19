@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Models;
+using Orbit.Application.Chat.Grounding;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.ApiKeys.Queries;
@@ -64,7 +65,11 @@ public record ChatResponse(
     IReadOnlyList<RecordListCard>? RecordLists = null,
     AccountRowsCard? AccountRows = null,
     IReadOnlyList<string>? FollowUps = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ChatResponsePart>? Parts = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ChatResponsePart>? Parts = null)
+{
+    [JsonIgnore]
+    public TurnFactSet GroundingFacts { get; init; } = TurnFactSet.Empty;
+}
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
 [JsonDerivedType(typeof(ChatTextPart), "text")]
@@ -122,7 +127,6 @@ public record ChatDataDependencies(
     IGenericRepository<Habit> HabitRepository,
     IGenericRepository<Goal> GoalRepository,
     IGenericRepository<User> UserRepository,
-    IGenericRepository<UserFact> UserFactRepository,
     IGenericRepository<Tag> TagRepository,
     IGenericRepository<ChecklistTemplate> ChecklistTemplateRepository,
     IFeatureFlagService FeatureFlagService);
@@ -152,7 +156,8 @@ public partial class ProcessUserChatCommandHandler(
     ChatDataDependencies data,
     ChatAiDependencies ai,
     ChatExecutionDependencies execution,
-    ILogger<ProcessUserChatCommandHandler> logger) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
+    ILogger<ProcessUserChatCommandHandler> logger,
+    IAppConfigService appConfig) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
 {
     private static class PartKinds
     {
@@ -231,13 +236,14 @@ public partial class ProcessUserChatCommandHandler(
         CaptureFollowUpSentEvent(request, context.User);
 
         var userLanguage = GetUserLanguage(context.User);
-        var aiStreamFilter = BuildAiStreamFilter(request.StreamSink);
+        var groundingTurn = await LoadGroundingTurnAsync(context, cancellationToken);
+        var aiStreamFilter = BuildAiStreamFilter(groundingTurn.Enforce ? null : request.StreamSink);
         Func<AiStreamEvent, Task>? aiStreamSink = aiStreamFilter is null
             ? null
             : aiStreamFilter.HandleAsync;
 
         var faqMatch = ChatFaqCache.TryMatchFaqKey(request.Message);
-        var cachedFaqAnswer = request.BlockAnswer is null ? TryGetCachedFaqAnswer(faqMatch) : null;
+        var cachedFaqAnswer = await GetGroundedCachedFaqAnswerAsync(faqMatch, groundingTurn, request);
         if (cachedFaqAnswer is not null)
             return Result.Success(new ChatResponse(cachedFaqAnswer, [], CorrelationId: request.CorrelationId));
 
@@ -297,9 +303,12 @@ public partial class ProcessUserChatCommandHandler(
                 request, context, executionResults, cancellationToken)
             : await TryBuildResponseCardsAsync(
                 responseText, request, context, executionResults, cancellationToken);
+        var groundedReply = await ApplyGroundingAsync(cards.AiMessage, followUps, executionResults, request, groundingTurn);
+        var aiMessage = groundedReply.Message;
+        followUps = groundedReply.FollowUps;
+        cards = ApplyGroundingToCards(cards, aiMessage);
         if (executionResults.AskBlock is { } askBlock)
             cards = cards with { Parts = (cards.Parts ?? []).Concat(new[] { askBlock }).ToArray() };
-        var aiMessage = cards.AiMessage;
 
         if (GetShareableFaqAnswer(faqMatch, aiMessage, executionResults, cards) is { } faqToCache)
         {
@@ -310,13 +319,6 @@ public partial class ProcessUserChatCommandHandler(
 
         CaptureChangePreviewEvents(request, context.User, executionResults.PendingOperations);
         CaptureFollowUpsEmittedEvent(request, context.User, followUps);
-
-        RunBackgroundPostResponseWork(
-            request.UserId,
-            request.Message,
-            aiMessage,
-            shouldExtractFacts: ShouldExtractFacts(context),
-            existingFacts: context.UserFacts);
 
         totalStopwatch.Stop();
         LogTotalRequestProcessingTime(logger, totalStopwatch.ElapsedMilliseconds);
@@ -343,7 +345,8 @@ public partial class ProcessUserChatCommandHandler(
             cards.RecordLists,
             cards.AccountRows,
             followUps,
-            cards.Parts));
+            cards.Parts)
+        { GroundingFacts = groundedReply.Facts });
     }
 
     private static string? GetUserLanguage(User? user) => user?.Language;
@@ -460,9 +463,6 @@ public partial class ProcessUserChatCommandHandler(
 
         return (match.Value.Key, match.Value.Locale, aiMessage);
     }
-
-    private static bool ShouldExtractFacts(ChatContext context) =>
-        context.AiMemoryEnabled && context.User is { HasProAccess: true };
 
     private void CaptureCardEvent(
         ProcessUserChatCommand request, ChatContext context, string eventName, string kind,
@@ -936,8 +936,8 @@ public partial class ProcessUserChatCommandHandler(
     [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Processing chat message: '{Message}'")]
     private static partial void LogProcessingChatMessage(ILogger logger, string message);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Context loaded in {ElapsedMs}ms (Habits: {HabitCount}, Facts: {FactCount})")]
-    private static partial void LogContextLoaded(ILogger logger, long elapsedMs, int habitCount, int factCount);
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Context loaded in {ElapsedMs}ms (Habits: {HabitCount})")]
+    private static partial void LogContextLoaded(ILogger logger, long elapsedMs, int habitCount);
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "Calling AI intent service with {ToolCount} tools...")]
     private static partial void LogCallingAiIntentService(ILogger logger, int toolCount);
@@ -998,9 +998,6 @@ public partial class ProcessUserChatCommandHandler(
 
     [LoggerMessage(EventId = 26, Level = LogLevel.Warning, Message = "Tool {Name} requested clarification with oversized partial args ({Length} chars) — dropped without stashing")]
     private static partial void LogClarificationArgsTooLarge(ILogger logger, string name, int length);
-
-    [LoggerMessage(EventId = 23, Level = LogLevel.Warning, Message = "Background post-response work failed")]
-    private static partial void LogBackgroundPostResponseFailed(ILogger logger, Exception ex);
 
     [LoggerMessage(EventId = 27, Level = LogLevel.Warning, Message = "Prompt habit index truncated. OriginalEntryCount={OriginalEntryCount} RetainedEntryCount={RetainedEntryCount} MaxEntries={MaxEntries}")]
     private static partial void LogPromptHabitIndexTruncated(

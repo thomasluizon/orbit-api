@@ -4,7 +4,7 @@ MediatR commands/queries, validators, application services. The business glue be
 
 ## Feature folder layout
 
-One folder per resource (`Habits/`, `Notifications/`, `Auth/`, `Profile/`, `Tags/`, `Chat/`, `UserFacts/`, `Goals/`, `Gamification/`, `Calendar/`, `Subscriptions/`, `Support/`, `ApiKeys/`, `ChecklistTemplates/`, `Referrals/`):
+One folder per resource (`Habits/`, `Notifications/`, `Auth/`, `Profile/`, `Tags/`, `Chat/`, `Goals/`, `Gamification/`, `Calendar/`, `Subscriptions/`, `Support/`, `ApiKeys/`, `ChecklistTemplates/`, `Referrals/`):
 
 ```
 Habits/
@@ -35,7 +35,7 @@ Every handler returns `Result<T>` from `Orbit.Domain/Common/`. Never throw for e
 | Need | Use |
 |---|---|
 | "Not found" error | `ErrorMessages.UserNotFound`, `ErrorMessages.HabitNotFound`, etc. from `Common/ErrorMessages.cs` |
-| Numeric limit | `AppConstants.MaxSubHabits`, `AppConstants.MaxUserFacts`, etc. from `Common/AppConstants.cs` |
+| Numeric limit | `AppConstants.MaxSubHabits`, etc. from `Common/AppConstants.cs` |
 | Cache invalidation after habit mutation | `CacheInvalidationHelper.InvalidateSummaryCache(cache, userId)` |
 | PayGate failure propagation | `result.PropagateError<T>()` |
 | Shared habit Create/Update rules | `SharedHabitRules.AddTitleRules()` / `AddDaysRules()` |
@@ -52,7 +52,7 @@ ALL frequency/days/interval logic lives in `Habits/Services/HabitScheduleService
 
 ## PayGate
 
-`PayGateService` in `Common/` checks subscription limits (max habits, max sub-habits, max user facts, etc.). Call it in handlers BEFORE the mutation. If it fails, the handler returns a `Result<T>.Failure(...)` with error code `"PAY_GATE"`.
+`PayGateService` in `Common/` checks subscription limits (max habits, max sub-habits, etc.). Call it in handlers BEFORE the mutation. If it fails, the handler returns a `Result<T>.Failure(...)` with error code `"PAY_GATE"`.
 
 ## Caching
 

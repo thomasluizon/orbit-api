@@ -34,7 +34,6 @@ public partial class AgentCatalogService
             .. NotionCapabilities(),
             .. GamificationCapabilities(),
             .. ChecklistTemplateCapabilities(),
-            .. UserFactCapabilities(),
             .. ReferralCapabilities(),
             .. SubscriptionCapabilities(),
             .. ApiKeyCapabilities(),
@@ -490,21 +489,6 @@ public partial class AgentCatalogService
                 equivalentControllerActions: ["ProfileController.SetColorScheme"]),
 
             CreateCapability(
-                AgentCapabilityIds.ProfileAiMemoryWrite,
-                "Write AI Memory Settings",
-                "Updates AI memory preferences.",
-                "profile",
-                AgentScopes.WriteAiSettings,
-                AgentRiskClass.Low,
-                isMutation: true,
-                isPhaseOneReadOnly: false,
-                AgentConfirmationRequirement.None,
-                planRequirement: "Pro",
-                chatTools: ["set_ai_memory"],
-                mcpTools: ["set_ai_memory"],
-                equivalentControllerActions: ["ProfileController.SetAiMemory"]),
-
-            CreateCapability(
                 AgentCapabilityIds.ProfileAiSummaryWrite,
                 "Write AI Summary Settings",
                 "Updates AI summary preferences.",
@@ -775,42 +759,6 @@ public partial class AgentCatalogService
                 chatTools: ["create_checklist_template", "delete_checklist_template"],
                 mcpTools: ["create_checklist_template", "delete_checklist_template"],
                 equivalentControllerActions: ["ChecklistTemplatesController.CreateTemplate", "ChecklistTemplatesController.DeleteTemplate"])
-        ];
-    }
-
-    private static AgentCapability[] UserFactCapabilities()
-    {
-        return
-        [
-            CreateCapability(
-                AgentCapabilityIds.UserFactsRead,
-                "Read User Facts",
-                "Reads AI memory facts saved for the user.",
-                "memory",
-                AgentScopes.ReadUserFacts,
-                AgentRiskClass.Low,
-                isMutation: false,
-                isPhaseOneReadOnly: false,
-                AgentConfirmationRequirement.None,
-                planRequirement: "Pro",
-                chatTools: ["get_user_facts"],
-                mcpTools: ["get_user_facts"],
-                equivalentControllerActions: ["UserFactsController.GetUserFacts"]),
-
-            CreateCapability(
-                AgentCapabilityIds.UserFactsDelete,
-                "Delete User Facts",
-                "Deletes saved AI memory facts.",
-                "memory",
-                AgentScopes.DeleteUserFacts,
-                AgentRiskClass.Destructive,
-                isMutation: true,
-                isPhaseOneReadOnly: false,
-                AgentConfirmationRequirement.FreshConfirmation,
-                planRequirement: "Pro",
-                chatTools: ["delete_user_facts"],
-                mcpTools: ["delete_user_fact"],
-                equivalentControllerActions: ["UserFactsController.DeleteUserFact", "UserFactsController.BulkDeleteUserFacts"])
         ];
     }
 

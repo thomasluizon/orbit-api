@@ -26,6 +26,7 @@ public partial class ProcessUserChatCommandHandler
         public List<AgentOperationResult> OperationResults { get; } = [];
         public List<PendingAgentOperation> PendingOperations { get; } = [];
         public List<AgentPolicyDenial> PolicyDenials { get; } = [];
+        public List<AiToolCallResult> ToolResults { get; } = [];
 
         /// <summary>
         /// Distinct names of every tool invoked this turn, used to decide whether the turn is safe to

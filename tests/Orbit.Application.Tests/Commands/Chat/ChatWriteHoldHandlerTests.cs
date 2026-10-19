@@ -41,7 +41,6 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
-    private readonly IGenericRepository<UserFact> _userFactRepo = Substitute.For<IGenericRepository<UserFact>>();
     private readonly IGenericRepository<Tag> _tagRepo = Substitute.For<IGenericRepository<Tag>>();
     private readonly IGenericRepository<ChecklistTemplate> _templateRepo = Substitute.For<IGenericRepository<ChecklistTemplate>>();
     private readonly IFeatureFlagService _featureFlagService = Substitute.For<IFeatureFlagService>();
@@ -230,7 +229,7 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
     {
         var aiDeps = new ChatAiDependencies(_aiIntentService, new AiToolRegistry([_createHabitTool]),
             _promptBuilder, _catalogService);
-        var dataDeps = new ChatDataDependencies(_habitRepo, _goalRepo, _userRepo, _userFactRepo,
+        var dataDeps = new ChatDataDependencies(_habitRepo, _goalRepo, _userRepo,
             _tagRepo, _templateRepo, _featureFlagService);
         var executionDeps = new ChatExecutionDependencies(
             _userDateService, _userStreakService, _payGate, _unitOfWork, _scopeFactory, _executor,
@@ -239,7 +238,7 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
             Substitute.For<IPendingAgentOperationStore>());
 
         return new ProcessUserChatCommandHandler(dataDeps, aiDeps, executionDeps,
-            Substitute.For<ILogger<ProcessUserChatCommandHandler>>());
+            Substitute.For<ILogger<ProcessUserChatCommandHandler>>(), Substitute.For<IAppConfigService>());
     }
 
     private void ScriptToolCall(string arguments)
