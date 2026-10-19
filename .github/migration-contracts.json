@@ -1,0 +1,10 @@
+{
+  "20261019011031_ContractHabitLogSlip": {
+    "expandCommit": "a1c666f1eac4c6544cb2a896345fd1a69cbe88fa",
+    "deployedCommit": "7472203c7450bdd914c68282fefa905d9b432653",
+    "evidenceUrl": "https://github.com/thomasluizon/orbit-api/pull/764#issuecomment-6257602012",
+    "condition": "Every active HabitLog writer supplies IsSlip explicitly. The contract backfills remaining NULL classifications before requiring the column and removing the compatibility trigger.",
+    "webDrainEvidence": "Render service srv-d6tc2isr85hc739bf75g has live deploy dep-dba7ls5g1s2s73b3lhog on 7472203c7450bdd914c68282fefa905d9b432653. Previous deploy dep-db9uiv3ncjis73ang7b0 is deactivated, as confirmed in the linked deployment attestation and retained deploy listing.",
+    "backgroundDrainEvidence": "Hangfire servers and recurring jobs run inside the API host, as registered in ServiceCollectionExtensions.BackgroundJobs.cs. The linked orchestrator attestation confirms every running writer is compatible and the previous Render deploy is deactivated, stopping its hosted services and Hangfire process. The contract release retains the compatible deployed commit as its rollback floor."
+  }
+}
