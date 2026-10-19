@@ -3,8 +3,20 @@ import { readFileSync } from "node:fs";
 const shards = [
   {
     project: "domain",
-    shard: "domain-habit-freeze",
-    mutate: ["**/Entities/Habit.cs", "**/Entities/StreakFreeze.cs"],
+    shard: "domain-habit-create-log",
+    // https://github.com/stryker-mutator/stryker-net/blob/f9109e24c615a7030a3b33e5532c665c974e4ec5/src/Stryker.Configuration/FilePattern.cs
+    // Stryker matches fully contained character spans. Prefix exclusions keep boundary-crossing mutants in the next shard.
+    mutate: ["**/Entities/Habit.cs{0..15181}"],
+  },
+  {
+    project: "domain",
+    shard: "domain-habit-schedule",
+    mutate: ["**/Entities/Habit.cs{0..25215}", "!**/Entities/Habit.cs{0..15181}"],
+  },
+  {
+    project: "domain",
+    shard: "domain-habit-update-freeze",
+    mutate: ["**/Entities/Habit.cs", "!**/Entities/Habit.cs{0..25215}", "**/Entities/StreakFreeze.cs"],
   },
   {
     project: "domain",
