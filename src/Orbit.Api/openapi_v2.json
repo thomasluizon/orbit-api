@@ -13920,6 +13920,22 @@
                 "$ref": "#/components/schemas/ClarificationRequest"
               }
             ]
+          },
+          "messageKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "params": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ToolResultMessageParams"
+              }
+            ]
           }
         }
       },
@@ -20600,6 +20616,86 @@
           "updatedAtUtc": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "ToolResultMessageParams": {
+        "type": "object",
+        "properties": {
+          "entityName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "skippedCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "partial": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "value": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "weekStartDay": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "hours": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "toolName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "bulkTool": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
