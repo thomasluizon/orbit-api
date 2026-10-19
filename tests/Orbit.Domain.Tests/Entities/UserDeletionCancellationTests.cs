@@ -104,6 +104,41 @@ public class UserDeletionCancellationTests
         restore.Should().Throw<InvalidOperationException>();
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ReleaseStripeDeletionCancellation_ClearsIntentOnActiveOrDeactivatedAccount(bool reactivate)
+    {
+        var user = CreatePaidUser();
+        user.RecordDeletionStoppedRenewal(SubscriptionSource.Stripe, "sub_paid");
+        if (reactivate)
+            user.CancelDeactivation();
+
+        user.ReleaseStripeDeletionCancellation("sub_paid");
+
+        user.StripeRenewalStoppedByDeletion.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData(" ", true)]
+    [InlineData("other", true)]
+    [InlineData("sub_paid", false)]
+    public void ReleaseStripeDeletionCancellation_RejectsInvalidOrUnownedSubscription(string? identifier, bool owned)
+    {
+        var user = CreatePaidUser();
+        if (owned)
+            user.RecordDeletionStoppedRenewal(SubscriptionSource.Stripe, "sub_paid");
+
+        var release = () => user.ReleaseStripeDeletionCancellation(identifier!);
+
+        if (string.IsNullOrWhiteSpace(identifier))
+            release.Should().Throw<ArgumentException>();
+        else
+            release.Should().Throw<InvalidOperationException>();
+        user.StripeRenewalStoppedByDeletion.Should().Be(owned);
+    }
+
     private static User CreatePaidUser()
     {
         var user = User.Create("Paid", "paid@example.com").Value;

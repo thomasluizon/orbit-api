@@ -13,6 +13,8 @@ public sealed class UnitOfWork(
     HabitScheduleSnapshotStore? scheduleSnapshots = null)
     : IUnitOfWork, IAsyncDisposable
 {
+    public bool HasActiveTransaction => context.Database.CurrentTransaction is not null;
+
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         return context.SaveChangesAsync(cancellationToken);

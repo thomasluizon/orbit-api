@@ -349,7 +349,7 @@ public class ConfirmAccountDeletionCommandHandlerTests
         var play = Substitute.For<IPlayBillingService>();
         stripe.GetSubscriptionDetailsAsync("sub_paid", Arg.Any<CancellationToken>())
             .Returns(new BillingSubscriptionDetails("active", user.PlanExpiresAt!.Value, false, SubscriptionInterval.Monthly, 1000, "usd", null));
-        stripe.SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>())
+        stripe.SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>(), Arg.Any<string?>())
             .ThrowsAsync(new BillingProviderException("unavailable"));
         _userRepo.FindOneTrackedIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>()).Returns(user);
         _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<bool>>>(), Arg.Any<CancellationToken>())

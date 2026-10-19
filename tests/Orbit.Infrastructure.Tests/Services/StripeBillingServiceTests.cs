@@ -133,6 +133,39 @@ public class StripeBillingServiceTests
             Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SetSubscriptionCancelAtPeriodEndAsync_UpdatesDeletionMarkerWithRenewal(bool cancel)
+    {
+        await _service.SetSubscriptionCancelAtPeriodEndAsync("sub_paid", cancel, CancellationToken.None, UserId.ToString());
+
+        await _subscriptions.Received(1).UpdateAsync("sub_paid",
+            Arg.Is<SubscriptionUpdateOptions>(options => options.CancelAtPeriodEnd == cancel
+                && options.Metadata.Count == 1
+                && options.Metadata["orbit_deletion_user_id"] == (cancel ? UserId.ToString() : "")),
+            Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("deletion-owner")]
+    public async Task GetSubscriptionDetailsAsync_ReadsDeletionMarker(string? owner)
+    {
+        _subscriptions.GetAsync("sub_paid", Arg.Any<SubscriptionGetOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .Returns(new Subscription
+            {
+                Status = "active",
+                CancelAtPeriodEnd = true,
+                Metadata = owner is null ? [] : new() { ["orbit_deletion_user_id"] = owner }
+            });
+
+        var details = await _service.GetSubscriptionDetailsAsync("sub_paid", CancellationToken.None);
+
+        details.Should().NotBeNull();
+        details!.DeletionOwner.Should().Be(owner);
+    }
+
     [Fact]
     public async Task SetSubscriptionCancelAtPeriodEndAsync_StripeFailure_WrapsProviderError()
     {

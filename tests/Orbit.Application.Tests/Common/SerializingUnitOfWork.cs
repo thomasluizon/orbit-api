@@ -11,6 +11,8 @@ internal sealed class SerializingUnitOfWork : IUnitOfWork
     private readonly List<string> _order = [];
     private int _lockRequestCount;
 
+    public bool HasActiveTransaction => _transaction.Value is not null;
+
     public TaskCompletionSource<bool> SecondLockRequested { get; } =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 

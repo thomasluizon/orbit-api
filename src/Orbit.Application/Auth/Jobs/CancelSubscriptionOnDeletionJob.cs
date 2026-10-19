@@ -9,8 +9,8 @@ using Orbit.Domain.Interfaces;
 namespace Orbit.Application.Auth.Jobs;
 
 /// <summary>
-/// Persists renewal changes as primitive Hangfire arguments. Retries reconcile the current account
-/// state under its row lock so delayed cancellation and restoration cannot reverse a later sign-in or deletion.
+/// Commits cancellation ownership before mutating providers. Both phases reload the account under
+/// its row lock so delayed cancellation and restoration respect the current account state.
 /// </summary>
 public sealed class CancelSubscriptionOnDeletionJob(
     IGenericRepository<User> userRepository,
@@ -39,37 +39,68 @@ public sealed class CancelSubscriptionOnDeletionJob(
     public async Task ExecuteAsync(Guid userId, string? stripeSubscriptionId, string? playPurchaseToken,
         bool cancelAtPeriodEnd, CancellationToken cancellationToken)
     {
+        if (cancelAtPeriodEnd && unitOfWork.HasActiveTransaction)
+            throw new InvalidOperationException("Deletion cancellation requires independently committed transactions.");
         var failures = new List<BillingProviderException>();
+        if (cancelAtPeriodEnd)
+        {
+            await unitOfWork.ExecuteInTransactionAsync(async ct =>
+            {
+                await unitOfWork.AcquireUserRowLockAsync(userId, ct);
+                var user = await userRepository.FindOneTrackedIgnoringFiltersAsync(u => u.Id == userId, ct);
+                if (user is not { IsDeactivated: true })
+                    return false;
+
+                await PrepareCancellationAsync(user, stripeSubscriptionId, playPurchaseToken, failures, ct);
+                await unitOfWork.SaveChangesAsync(ct);
+                return true;
+            }, cancellationToken);
+            unitOfWork.ResetTracking();
+        }
+
         var accountExists = await unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
             await unitOfWork.AcquireUserRowLockAsync(userId, ct);
             var user = await userRepository.FindOneTrackedIgnoringFiltersAsync(u => u.Id == userId, ct);
             if (user is null)
                 return false;
-            if (user.IsDeactivated != cancelAtPeriodEnd)
+            if (user.IsDeactivated && !cancelAtPeriodEnd)
                 return true;
 
-            await ReconcileProvidersAsync(user, stripeSubscriptionId, playPurchaseToken, cancelAtPeriodEnd, failures, ct);
+            await ReconcileProvidersAsync(user, stripeSubscriptionId, playPurchaseToken,
+                user.IsDeactivated, failures, ct);
             await unitOfWork.SaveChangesAsync(ct);
             return true;
         }, cancellationToken);
 
         if (!accountExists && cancelAtPeriodEnd)
-            await CancelProvidersAsync(stripeSubscriptionId, playPurchaseToken, cancellationToken);
+            await CancelProvidersAsync(userId, stripeSubscriptionId, playPurchaseToken, cancellationToken);
 
         ThrowProviderFailure(failures);
     }
 
     /// <summary>
-    /// The hard-delete backstop checks both retained provider identifiers. The executor commits
-    /// successful cancellation ownership even if another provider fails and erasure must wait.
+    /// Runs the durable cancellation phases before the caller opens its account erasure transaction.
     /// </summary>
-    public async Task CancelBeforeDeletionAsync(User user, CancellationToken cancellationToken)
+    public Task CancelBeforeDeletionAsync(User user, CancellationToken cancellationToken) =>
+        ExecuteAsync(user.Id, user.StripeSubscriptionId, user.PlayPurchaseToken, true, cancellationToken);
+
+    private async Task PrepareCancellationAsync(User user, string? stripeId, string? playToken,
+        List<BillingProviderException> failures, CancellationToken cancellationToken)
     {
-        var failures = new List<BillingProviderException>();
-        await ReconcileProvidersAsync(user, user.StripeSubscriptionId, user.PlayPurchaseToken, true, failures, cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-        ThrowProviderFailure(failures);
+        if (!string.IsNullOrWhiteSpace(stripeId) && user.StripeSubscriptionId == stripeId && !user.StripeRenewalStoppedByDeletion)
+            await CaptureProviderFailureAsync(async () =>
+            {
+                if (await StripeCanRenewAsync(stripeId, cancellationToken))
+                    user.RecordDeletionStoppedRenewal(SubscriptionSource.Stripe, stripeId);
+            }, failures);
+
+        if (!string.IsNullOrWhiteSpace(playToken) && user.PlayPurchaseToken == playToken && !user.PlayRenewalStoppedByDeletion)
+            await CaptureProviderFailureAsync(async () =>
+            {
+                if (await PlayCanRenewAsync(playToken, cancellationToken))
+                    user.RecordDeletionStoppedRenewal(SubscriptionSource.GooglePlay, playToken);
+            }, failures);
     }
 
     private async Task ReconcileProvidersAsync(User user, string? stripeId, string? playToken,
@@ -78,22 +109,28 @@ public sealed class CancelSubscriptionOnDeletionJob(
         if (!string.IsNullOrWhiteSpace(stripeId) && user.StripeSubscriptionId == stripeId)
             await CaptureProviderFailureAsync(() => ReconcileStripeAsync(user, stripeId, cancel, cancellationToken), failures);
 
-        if (cancel && !string.IsNullOrWhiteSpace(playToken) && user.PlayPurchaseToken == playToken)
-            await CaptureProviderFailureAsync(async () =>
-            {
-                if (await CancelPlayAsync(playToken, cancellationToken))
-                    user.RecordDeletionStoppedRenewal(SubscriptionSource.GooglePlay, playToken);
-            }, failures);
+        if (cancel && !string.IsNullOrWhiteSpace(playToken) && user.PlayPurchaseToken == playToken && user.PlayRenewalStoppedByDeletion)
+            await CaptureProviderFailureAsync(() => CancelPlayAsync(playToken, cancellationToken), failures);
     }
 
     private async Task ReconcileStripeAsync(User user, string stripeId, bool cancel, CancellationToken cancellationToken)
     {
-        if (cancel)
+        if (!user.StripeRenewalStoppedByDeletion)
+            return;
+
+        var subscription = await billingService.GetSubscriptionDetailsAsync(stripeId, cancellationToken);
+        if (subscription is null || subscription.Status is "canceled" or "incomplete_expired"
+            || subscription.CancelAtPeriodEnd && subscription.DeletionOwner != user.Id.ToString())
         {
-            if (await CancelStripeAsync(stripeId, cancellationToken))
-                user.RecordDeletionStoppedRenewal(SubscriptionSource.Stripe, stripeId);
+            user.ReleaseStripeDeletionCancellation(stripeId);
+            return;
         }
-        else if (user.StripeRenewalStoppedByDeletion && HasUnexpiredPaidPeriod(user))
+
+        if (cancel && !subscription.CancelAtPeriodEnd)
+            await billingService.SetSubscriptionCancelAtPeriodEndAsync(stripeId, true, cancellationToken, user.Id.ToString());
+        else if (!cancel && !subscription.CancelAtPeriodEnd)
+            user.ReleaseStripeDeletionCancellation(stripeId);
+        else if (!cancel && HasUnexpiredPaidPeriod(user))
         {
             await billingService.SetSubscriptionCancelAtPeriodEndAsync(stripeId, false, cancellationToken);
             user.RecordStripeRenewalRestored(stripeId);
@@ -124,32 +161,34 @@ public sealed class CancelSubscriptionOnDeletionJob(
         return user.IsPro && user.PlanExpiresAt > nowAtUtc;
     }
 
-    private Task CancelProvidersAsync(string? stripeSubscriptionId, string? playPurchaseToken,
+    private Task CancelProvidersAsync(Guid userId, string? stripeSubscriptionId, string? playPurchaseToken,
         CancellationToken cancellationToken) =>
-        Task.WhenAll(CancelStripeAsync(stripeSubscriptionId, cancellationToken),
+        Task.WhenAll(CancelStripeAsync(userId, stripeSubscriptionId, cancellationToken),
             CancelPlayAsync(playPurchaseToken, cancellationToken));
 
-    private async Task<bool> CancelStripeAsync(string? stripeSubscriptionId, CancellationToken cancellationToken)
+    private async Task CancelStripeAsync(Guid userId, string? stripeSubscriptionId, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(stripeSubscriptionId))
-            return false;
-        var subscription = await billingService.GetSubscriptionDetailsAsync(stripeSubscriptionId, cancellationToken);
-        if (subscription is null || subscription.Status is "canceled" or "incomplete_expired" || subscription.CancelAtPeriodEnd)
-            return false;
-
-        await billingService.SetSubscriptionCancelAtPeriodEndAsync(stripeSubscriptionId, true, cancellationToken);
-        return true;
+        if (string.IsNullOrWhiteSpace(stripeSubscriptionId) || !await StripeCanRenewAsync(stripeSubscriptionId, cancellationToken))
+            return;
+        await billingService.SetSubscriptionCancelAtPeriodEndAsync(stripeSubscriptionId, true, cancellationToken, userId.ToString());
     }
 
-    private async Task<bool> CancelPlayAsync(string? playPurchaseToken, CancellationToken cancellationToken)
+    private async Task<bool> StripeCanRenewAsync(string stripeSubscriptionId, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(playPurchaseToken))
-            return false;
-        var purchase = await playBillingService.VerifyAsync(playSettings.Value.ProductId, playPurchaseToken, cancellationToken);
-        if (purchase is not { CanRenew: true })
-            return false;
+        var subscription = await billingService.GetSubscriptionDetailsAsync(stripeSubscriptionId, cancellationToken);
+        return subscription is not null && subscription.Status is not ("canceled" or "incomplete_expired") && !subscription.CancelAtPeriodEnd;
+    }
 
+    private async Task CancelPlayAsync(string? playPurchaseToken, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(playPurchaseToken) || !await PlayCanRenewAsync(playPurchaseToken, cancellationToken))
+            return;
         await playBillingService.CancelAsync(playPurchaseToken, cancellationToken);
-        return true;
+    }
+
+    private async Task<bool> PlayCanRenewAsync(string playPurchaseToken, CancellationToken cancellationToken)
+    {
+        var purchase = await playBillingService.VerifyAsync(playSettings.Value.ProductId, playPurchaseToken, cancellationToken);
+        return purchase is { CanRenew: true };
     }
 }
