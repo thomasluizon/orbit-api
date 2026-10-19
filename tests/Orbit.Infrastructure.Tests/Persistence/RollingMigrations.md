@@ -1,8 +1,9 @@
 # Rolling schema migrations
 
 `RollingMigrationGate.cs` is enforced by the existing **Guard Migrations** CI job.
-It evaluates compiled PostgreSQL `UpOperations` only for migrations the PR adds
-or changes relative to its base. Designer changes select the same migration;
+It evaluates compiled PostgreSQL `UpOperations` for migrations the PR adds
+or changes relative to its base, plus every recorded deployment contract.
+Designer changes select the same migration;
 snapshots do not select historical migrations. The existing append-only gate
 also rejects edits to applied migrations. Never repair applied history.
 
@@ -12,9 +13,10 @@ Run the gate locally after committing the migration:
 ORBIT_MIGRATION_GUARD_BASE=origin/main dotnet test tests/Orbit.Infrastructure.Tests --filter FullyQualifiedName~RollingMigrationGateTests
 ```
 
-Without that variable, the unit cases still run, but the repository diff case is
-inactive. CI sets it explicitly. A missing base or unrecognized migration fails
-the repository case instead of silently skipping inspection.
+Without that variable, the unit cases still run, but the repository ancestry case is
+inactive. Guard Migrations sets it explicitly and checks every recorded contract
+against real Git ancestry using its full-history checkout. A missing base or
+unrecognized migration fails the repository case instead of silently skipping inspection.
 
 ## Expand, deploy, contract
 
@@ -63,8 +65,10 @@ for one migration does not authorize any other migration.
 
 The entry for `20261019011031_ContractHabitLogSlip` records the production barrier
 attested in [API PR 764](https://github.com/thomasluizon/orbit-api/pull/764#issuecomment-6257602012).
-Its regression case runs the actual migration without evidence, then with the
-committed entry and real Git ancestry checks. No applied migration is modified.
+Its unit regression runs the actual migration without evidence, then validates the
+committed entry's shape using injected ancestry, independently of checkout depth.
+The repository case checks that same contract with real Git ancestry in Guard
+Migrations, even when its migration is unchanged. No applied migration is modified.
 
 Column and table drops/renames, schema drops, column alterations and required
 columns without defaults need a barrier. Raw SQL containing drops, renames,

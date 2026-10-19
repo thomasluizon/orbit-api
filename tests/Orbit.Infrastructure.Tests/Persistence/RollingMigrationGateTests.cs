@@ -46,7 +46,7 @@ public class RollingMigrationGateTests
 
         RollingMigrationGate.Check(id, migration.UpOperations).Should().NotBeEmpty();
         RollingMigrationGate.Check(id, migration.UpOperations, ReadBarriers(root),
-                (commit, descendant) => Git(root, "merge-base", "--is-ancestor", commit, descendant).ExitCode == 0, "HEAD")
+                (_, _) => true)
             .Should().BeEmpty();
     }
 
@@ -231,7 +231,7 @@ public class RollingMigrationGateTests
     }
 
     [Fact]
-    public void ChangedMigrations_HaveDeploymentBarriers()
+    public void ChangedMigrationsAndRecordedContracts_HaveDeploymentBarriers()
     {
         var baseRef = Environment.GetEnvironmentVariable("ORBIT_MIGRATION_GUARD_BASE");
         if (string.IsNullOrWhiteSpace(baseRef))
@@ -241,8 +241,9 @@ public class RollingMigrationGateTests
         var changed = Git(root, "diff", "--name-only", "--diff-filter=ACMR", "-z", $"{baseRef}...HEAD", "--",
             "src/Orbit.Infrastructure/Migrations/*.cs");
         changed.ExitCode.Should().Be(0, changed.Error);
-        var ids = RollingMigrationGate.MigrationIds(changed.Output.Split('\0', StringSplitOptions.RemoveEmptyEntries));
         var barriers = ReadBarriers(root);
+        var ids = RollingMigrationGate.MigrationIds(changed.Output.Split('\0', StringSplitOptions.RemoveEmptyEntries))
+            .Union(barriers.Keys, StringComparer.Ordinal);
         var migrations = typeof(DailyAiQuotaByLocalDate).Assembly.GetTypes()
             .Where(type => typeof(Migration).IsAssignableFrom(type) && !type.IsAbstract)
             .ToDictionary(type => type.GetCustomAttribute<MigrationAttribute>()?.Id
