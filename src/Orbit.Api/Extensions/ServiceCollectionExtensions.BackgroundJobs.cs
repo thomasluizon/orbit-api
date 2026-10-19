@@ -47,6 +47,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddHostedService<SlipAlertSchedulerService>();
         builder.Services.AddHostedService<ProactiveCheckinSchedulerService>();
         builder.Services.AddHostedService<AccountDeletionService>();
+        builder.Services.AddHostedService<OwedSubscriptionCancellationService>();
         builder.Services.AddHostedService<HabitDueDateAdvancementService>();
         if (IsStreakFreezeAutoActivationEnabled(builder.Configuration))
             builder.Services.AddHostedService<StreakFreezeAutoActivationService>();
@@ -82,6 +83,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<SendWelcomeEmailJob>();
         builder.Services.AddScoped<SendAccountDeletionCodeEmailJob>();
         builder.Services.AddScoped<CancelSubscriptionOnDeletionJob>();
+        builder.Services.AddScoped<OwedSubscriptionCancellationJob>();
         builder.Services.AddScoped<SendMarketingEmailJob>();
     }
 
@@ -95,6 +97,7 @@ public static partial class ServiceCollectionExtensions
         AddScheduledJob<SlipAlertSchedulerService>(builder);
         AddScheduledJob<ProactiveCheckinSchedulerService>(builder);
         AddScheduledJob<AccountDeletionService>(builder);
+        AddScheduledJob<OwedSubscriptionCancellationService>(builder);
         AddScheduledJob<HabitDueDateAdvancementService>(builder);
         if (IsStreakFreezeAutoActivationEnabled(builder.Configuration))
             AddScheduledJob<StreakFreezeAutoActivationService>(builder);

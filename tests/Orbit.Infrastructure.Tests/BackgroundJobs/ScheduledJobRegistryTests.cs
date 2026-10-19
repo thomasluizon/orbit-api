@@ -55,9 +55,29 @@ public class ScheduledJobRegistryTests
     }
 
     [Fact]
-    public void AllFifteenRecurringSchedulers_AreRegisteredAsJobs()
+    public void AllRecurringSchedulers_AreRegisteredAsJobs()
     {
-        BuildAll().Should().HaveCount(15);
+        BuildAll().Should().HaveCount(16);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void OwedCancellationWorker_IsRegisteredInBothSchedulerModes(bool durable)
+    {
+        var builder = WebApplication.CreateBuilder();
+        if (durable)
+        {
+            OrbitServiceCollectionExtensions.AddDurableRecurringJobs(builder);
+            builder.Services.Any(descriptor => descriptor.ServiceType == typeof(OwedSubscriptionCancellationService))
+                .Should().BeTrue();
+        }
+        else
+        {
+            OrbitServiceCollectionExtensions.AddInProcessSchedulers(builder);
+            builder.Services.Any(descriptor => descriptor.ServiceType == typeof(IHostedService)
+                && descriptor.ImplementationType == typeof(OwedSubscriptionCancellationService)).Should().BeTrue();
+        }
     }
 
     [Theory]
@@ -159,6 +179,7 @@ public class ScheduledJobRegistryTests
         new SlipAlertSchedulerService(ScopeFactory(), NullLogger<SlipAlertSchedulerService>.Instance, EmptyConfiguration),
         new ProactiveCheckinSchedulerService(ScopeFactory(), NullLogger<ProactiveCheckinSchedulerService>.Instance, EmptyConfiguration),
         new AccountDeletionService(AccountDeletionScopeFactory(), NullLogger<AccountDeletionService>.Instance, EmptyConfiguration),
+        new OwedSubscriptionCancellationService(ScopeFactory(), NullLogger<OwedSubscriptionCancellationService>.Instance, TimeProvider.System),
         new HabitDueDateAdvancementService(ScopeFactory(), NullLogger<HabitDueDateAdvancementService>.Instance, EmptyConfiguration),
         new StreakFreezeAutoActivationService(
             ScopeFactory(),

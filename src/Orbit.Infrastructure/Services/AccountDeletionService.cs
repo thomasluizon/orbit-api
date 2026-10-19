@@ -1,4 +1,3 @@
-using Hangfire;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -8,6 +7,7 @@ using Orbit.Application.Marketing.Services;
 using Orbit.Application.Auth.Jobs;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Persistence;
@@ -107,6 +107,9 @@ public partial class AccountDeletionService(
                 transactionToken => DeleteLockedAccountAsync(scope.ServiceProvider, userId,
                     user.StripeSubscriptionId, user.PlayPurchaseToken, transactionToken), ct);
 
+            if (deleted && nowAtUtc - user.ScheduledDeletionAt.Value >= MaxBillingDeferral
+                && (!string.IsNullOrWhiteSpace(user.StripeSubscriptionId) || !string.IsNullOrWhiteSpace(user.PlayPurchaseToken)))
+                LogCancellationDeferred(logger, userId);
             if (deleted && logger.IsEnabled(LogLevel.Information))
                 LogAccountDeleted(logger, userId);
         }
@@ -136,6 +139,15 @@ public partial class AccountDeletionService(
             return false;
         }
 
+        if (nowAtUtc - user.ScheduledDeletionAt.Value >= MaxBillingDeferral)
+        {
+            var cancellations = services.GetRequiredService<OwedSubscriptionCancellationJob>();
+            if (!string.IsNullOrWhiteSpace(user.StripeSubscriptionId))
+                await cancellations.RecordAsync(SubscriptionSource.Stripe, user.StripeSubscriptionId, ct);
+            if (!string.IsNullOrWhiteSpace(user.PlayPurchaseToken))
+                await cancellations.RecordAsync(SubscriptionSource.GooglePlay, user.PlayPurchaseToken, ct);
+        }
+
         var contacts = services.GetRequiredService<IGenericRepository<MarketingContact>>();
         await MarketingContactOptOut.RecordAsync(user.Email, contacts, unitOfWork, ct);
         var stores = services.GetServices<IObjectStorageDeletionService>().ToArray();
@@ -160,15 +172,7 @@ public partial class AccountDeletionService(
         if (nowAtUtc - user.ScheduledDeletionAt!.Value < MaxBillingDeferral)
         {
             await services.GetRequiredService<CancelSubscriptionOnDeletionJob>().CancelBeforeDeletionAsync(user, ct);
-            return;
         }
-
-        var jobs = services.GetRequiredService<IBackgroundJobClient>();
-        var jobId = jobs.Enqueue<CancelSubscriptionOnDeletionJob>(job => job.ExecuteAsync(user.Id,
-            user.StripeSubscriptionId, user.PlayPurchaseToken, true, CancellationToken.None));
-        if (jobId is null)
-            throw new InvalidOperationException("Billing cancellation job was not created.");
-        LogCancellationDeferred(logger, user.Id, jobId);
     }
 
     private async Task DeleteObjectsWithRetryAsync(
@@ -244,8 +248,8 @@ public partial class AccountDeletionService(
     [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Cleaned up {Reminders} stale SentReminders and {SlipAlerts} stale SentSlipAlerts older than 90 days, plus {ProcessedRequests} ProcessedRequests older than 30 days")]
     private static partial void LogStaleRecordsCleaned(ILogger logger, int reminders, int slipAlerts, int processedRequests);
 
-    [LoggerMessage(EventId = 8, Level = LogLevel.Error, Message = "Billing cancellation for account {UserId} is unconfirmed past the erasure deferral limit; cancellation job {JobId} queued before erasure")]
-    private static partial void LogCancellationDeferred(ILogger logger, Guid userId, string jobId);
+    [LoggerMessage(EventId = 8, Level = LogLevel.Error, Message = "Erased account {UserId} has unconfirmed provider renewals tracked in durable cancellation records")]
+    private static partial void LogCancellationDeferred(ILogger logger, Guid userId);
 
     [LoggerMessage(EventId = 10, Level = LogLevel.Warning, Message = "Skipped account erasure for user {UserId}: {Reason}")]
     private static partial void LogErasureRecheckSkipped(ILogger logger, Guid userId, string reason);
