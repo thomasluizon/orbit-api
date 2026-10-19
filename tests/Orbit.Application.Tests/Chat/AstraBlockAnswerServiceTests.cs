@@ -31,7 +31,8 @@ public class AstraBlockAnswerServiceTests
         _store.MarkAnsweredAsync(Arg.Any<Guid>(), UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
     }
 
-    private AstraBlockAnswerService Service => new(_store, _work, _quota, _executor, _users, _analytics, _featureFlags);
+    private AstraBlockAnswerService Service => new(_store, _work, _quota, _executor, _users, _analytics, _featureFlags,
+        Substitute.For<IPendingAgentOperationStore>());
     private IssuedAstraBlock Choice(bool multi = false, bool free = false)
     {
         var block = IssuedAstraBlock.Create(UserId, new("choice", "Which time?", [new("a", "Morning"), new("b", "Evening")], [], multi, free));

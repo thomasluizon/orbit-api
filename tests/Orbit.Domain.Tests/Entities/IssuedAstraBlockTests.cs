@@ -70,4 +70,46 @@ public class IssuedAstraBlockTests
         var expired = IssuedAstraBlock.Create(Guid.NewGuid(), Choice());
         ((Action)(() => expired.MarkAnswered(expired.ExpiresAtUtc))).Should().Throw<InvalidOperationException>();
     }
+
+    [Fact]
+    public void Answer_MatchesSelectionAsSetAndExactFreeText()
+    {
+        var block = IssuedAstraBlock.Create(Guid.NewGuid(), Choice() with { MultiSelect = true, AllowFreeText = true });
+        block.MarkAnswered(block.CreatedAtUtc);
+        block.RecordAnswer(new(block.Id, ["1", "0"], "After dinner"), new(2026, 4, 3));
+
+        block.MatchesAnswer(new(block.Id, ["0", "1"], "After dinner")).Should().BeTrue();
+        block.MatchesAnswer(new(block.Id, ["0"], "After dinner")).Should().BeFalse();
+        block.MatchesAnswer(new(block.Id, ["0", "1"], "Before dinner")).Should().BeFalse();
+        block.MatchesAnswer(new(Guid.NewGuid(), ["0", "1"], "After dinner")).Should().BeFalse();
+    }
+
+    [Fact]
+    public void ReleaseAnswer_ClearsReservationAndAllowsAnotherAnswer()
+    {
+        var block = IssuedAstraBlock.Create(Guid.NewGuid(), Choice());
+        block.MarkAnswered(block.CreatedAtUtc);
+        block.RecordAnswer(new(block.Id, ["0"]), new(2026, 4, 3));
+        block.ReleaseAnswer();
+        block.AnsweredAtUtc.Should().BeNull();
+        block.AnswerJson.Should().BeNull();
+        block.ReservedAllowanceDate.Should().BeNull();
+        block.MarkAnswered(block.CreatedAtUtc.AddSeconds(1));
+    }
+
+    [Fact]
+    public void CompleteAnswer_RequiresReservationAndPreventsReleaseOrReplacement()
+    {
+        var block = IssuedAstraBlock.Create(Guid.NewGuid(), Choice());
+        ((Action)(() => block.CompleteAnswer("{}"))).Should().Throw<InvalidOperationException>();
+        ((Action)(() => block.RecordAnswer(new(block.Id, ["0"]), null))).Should().Throw<InvalidOperationException>();
+        block.MarkAnswered(block.CreatedAtUtc);
+        ((Action)(() => block.RecordAnswer(new(Guid.NewGuid(), ["0"]), null))).Should().Throw<InvalidOperationException>();
+        block.RecordAnswer(new(block.Id, ["0"]), null);
+        ((Action)(() => block.RecordAnswer(new(block.Id, ["1"]), null))).Should().Throw<InvalidOperationException>();
+        ((Action)(() => block.CompleteAnswer(" "))).Should().Throw<ArgumentException>();
+        block.CompleteAnswer("{}");
+        ((Action)(() => block.ReleaseAnswer())).Should().Throw<InvalidOperationException>();
+        ((Action)(() => block.CompleteAnswer("{}"))).Should().Throw<InvalidOperationException>();
+    }
 }

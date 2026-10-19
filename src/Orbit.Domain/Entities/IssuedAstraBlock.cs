@@ -13,6 +13,9 @@ public sealed class IssuedAstraBlock : Entity
     public DateTime ExpiresAtUtc { get; private set; }
     public DateTime? AnsweredAtUtc { get; private set; }
     public DateTime? InvalidatedAtUtc { get; private set; }
+    public string? AnswerJson { get; private set; }
+    public string? ResponseJson { get; private set; }
+    public DateOnly? ReservedAllowanceDate { get; private set; }
 
     private IssuedAstraBlock() { }
 
@@ -75,5 +78,42 @@ public sealed class IssuedAstraBlock : Entity
             || answeredAtUtc < CreatedAtUtc)
             throw new InvalidOperationException("Block is not open.");
         AnsweredAtUtc = answeredAtUtc;
+    }
+
+    public static string SerializeAnswer(AstraBlockAnswer answer) =>
+        JsonSerializer.Serialize(answer with { SelectedIds = answer.SelectedIds.Order(StringComparer.Ordinal).ToArray() });
+
+    public bool MatchesAnswer(AstraBlockAnswer answer)
+    {
+        var stored = AnswerJson is null ? null : JsonSerializer.Deserialize<AstraBlockAnswer>(AnswerJson);
+        return stored is not null && stored.BlockId == answer.BlockId && stored.FreeText == answer.FreeText
+            && stored.SelectedIds.Order(StringComparer.Ordinal).SequenceEqual(answer.SelectedIds.Order(StringComparer.Ordinal));
+    }
+
+    public void RecordAnswer(AstraBlockAnswer answer, DateOnly? reservedAllowanceDate)
+    {
+        if (!AnsweredAtUtc.HasValue || AnswerJson is not null || answer.BlockId != Id)
+            throw new InvalidOperationException("Block has no answer reservation.");
+        if (Form != AstraBlockKinds.Choice && reservedAllowanceDate.HasValue)
+            throw new ArgumentException("Only a choice can reserve allowance.", nameof(reservedAllowanceDate));
+        AnswerJson = SerializeAnswer(answer);
+        ReservedAllowanceDate = reservedAllowanceDate;
+    }
+
+    public void CompleteAnswer(string responseJson)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(responseJson);
+        if (AnswerJson is null || !AnsweredAtUtc.HasValue || ResponseJson is not null)
+            throw new InvalidOperationException("Block has no unfinished answer.");
+        ResponseJson = responseJson;
+    }
+
+    public void ReleaseAnswer()
+    {
+        if (!AnsweredAtUtc.HasValue || ResponseJson is not null)
+            throw new InvalidOperationException("Block has no unfinished answer.");
+        AnsweredAtUtc = null;
+        AnswerJson = null;
+        ReservedAllowanceDate = null;
     }
 }

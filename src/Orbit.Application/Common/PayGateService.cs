@@ -103,6 +103,19 @@ public class PayGateService(
         return consumption.IsSuccess ? Result.Success() : consumption.PropagateError();
     }
 
+    public async Task<Result> RefundAiMessage(Guid userId, DateOnly reservedDate, IUnitOfWork unitOfWork,
+        CancellationToken ct = default)
+    {
+        var refund = await ConcurrencyRetry.ExecuteAsync(userRepository, unitOfWork,
+            token => userRepository.FindOneTrackedAsync(user => user.Id == userId, cancellationToken: token),
+            user =>
+            {
+                user.RefundAiMessage(reservedDate);
+                return Task.FromResult(Result.Success());
+            }, ErrorMessages.UserNotFound, ct);
+        return refund.IsSuccess ? Result.Success() : refund.PropagateError();
+    }
+
     public async Task<Result> CanUseDailySummary(Guid userId, CancellationToken ct = default)
     {
         var user = await userRepository.GetByIdAsync(userId, ct);

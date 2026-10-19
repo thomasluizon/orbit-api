@@ -140,6 +140,8 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(block => block.ExpiresAtUtc);
             entity.Property(block => block.Form).HasMaxLength(16);
             entity.Property(block => block.DefinitionJson).HasColumnType(JsonbColumnType);
+            entity.Property(block => block.AnswerJson).HasColumnType(JsonbColumnType);
+            entity.Property(block => block.ResponseJson).HasColumnType(JsonbColumnType);
             entity.HasOne<User>().WithMany().HasForeignKey(block => block.UserId).OnDelete(DeleteBehavior.Cascade);
         });
         ConfigureAgentAuditLogEntity(modelBuilder);

@@ -201,6 +201,7 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<MediatR.IMediator>(),
                 sp.GetRequiredService<IProductAnalytics>(),
                 sp.GetRequiredService<IHabitScheduleLogReader>(),
-                sp.GetRequiredService<IIssuedAstraBlockStore>()));
+                sp.GetRequiredService<IIssuedAstraBlockStore>(),
+                sp.GetRequiredService<IPendingAgentOperationStore>()));
     }
 }

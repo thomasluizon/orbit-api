@@ -27,6 +27,9 @@ public interface IPayGateService
         IUnitOfWork unitOfWork,
         CancellationToken ct = default);
 
+    Task<Result> RefundAiMessage(Guid userId, DateOnly reservedDate, IUnitOfWork unitOfWork,
+        CancellationToken ct = default);
+
     /// <summary>
     /// Checks if the user can use daily AI summaries (Pro-only feature).
     /// </summary>
