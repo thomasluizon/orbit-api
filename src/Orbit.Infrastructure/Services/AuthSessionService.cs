@@ -121,9 +121,7 @@ public class AuthSessionService(
             if (session is null)
                 return Result.Failure(ErrorMessages.InvalidSession);
 
-#pragma warning disable ORBIT0004
             session.Revoke(DateTime.UtcNow);
-#pragma warning restore ORBIT0004
             try
             {
                 await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -143,9 +141,7 @@ public class AuthSessionService(
         if (userId == Guid.Empty)
             return Result.Failure(DomainErrors.UserIdRequired);
 
-#pragma warning disable ORBIT0004
         var nowUtc = DateTime.UtcNow;
-#pragma warning restore ORBIT0004
 
         for (var attempt = 0; attempt < MaxRevokeAllAttempts; attempt++)
         {

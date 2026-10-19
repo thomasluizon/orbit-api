@@ -154,6 +154,107 @@ public sealed class UtcNowUserFacingDateAnalyzerTests
         return VerifyAnalyzerAsync(source, "Orbit.Benchmarks");
     }
 
+    [Fact]
+    public Task Exempts_Instant_Passed_To_AtUtc_Parameter()
+    {
+        const string source = """
+            using System;
+            public sealed class Sessions
+            {
+                private static void Revoke(DateTime revokedAtUtc) { }
+                public void Run() => Revoke(DateTime.UtcNow);
+            }
+            """;
+        return VerifyAnalyzerAsync(source, "Orbit.Infrastructure");
+    }
+
+    [Fact]
+    public Task Exempts_Local_Used_Only_By_AtUtc_Sinks()
+    {
+        const string source = """
+            using System;
+            public sealed class Sessions
+            {
+                public DateTime UpdatedAtUtc { get; private set; }
+                private static void Revoke(DateTime revokedAtUtc) { }
+                public void Run()
+                {
+                    var nowUtc = DateTime.UtcNow;
+                    UpdatedAtUtc = nowUtc;
+                    Revoke(nowUtc);
+                }
+            }
+            """;
+        return VerifyAnalyzerAsync(source, "Orbit.Infrastructure");
+    }
+
+    [Fact]
+    public Task Flags_Local_With_Additional_Calendar_Use()
+    {
+        const string source = """
+            using System;
+            public sealed class Sessions
+            {
+                private static void Revoke(DateTime revokedAtUtc) { }
+                public DateOnly Run()
+                {
+                    var nowUtc = {|ORBIT0004:DateTime.UtcNow|};
+                    Revoke(nowUtc);
+                    return DateOnly.FromDateTime(nowUtc);
+                }
+            }
+            """;
+        return VerifyAnalyzerAsync(source, "Orbit.Infrastructure");
+    }
+
+    [Fact]
+    public Task Flags_Unused_Or_Reassigned_Utc_Local()
+    {
+        const string source = """
+            using System;
+            public sealed class Sessions
+            {
+                private static void Revoke(DateTime revokedAtUtc) { }
+                public void Run()
+                {
+                    var unusedUtc = {|ORBIT0004:DateTime.UtcNow|};
+                    var nowUtc = {|ORBIT0004:DateTime.UtcNow|};
+                    nowUtc = DateTime.MinValue;
+                    Revoke(nowUtc);
+                }
+            }
+            """;
+        return VerifyAnalyzerAsync(source, "Orbit.Infrastructure");
+    }
+
+    [Fact]
+    public Task Exempts_Expiry_Arithmetic_In_Constructor_Named_Argument()
+    {
+        const string source = """
+            using System;
+            public sealed class Challenge
+            {
+                public Challenge(int attempts, DateTime expiresAtUtc) { }
+                public static Challenge Create() => new(expiresAtUtc: DateTime.UtcNow.AddMinutes(5), attempts: 0);
+            }
+            """;
+        return VerifyAnalyzerAsync(source, "Orbit.Infrastructure");
+    }
+
+    [Fact]
+    public Task Flags_Date_Truncation_Even_When_Consumed_By_AtUtc_Parameter()
+    {
+        const string source = """
+            using System;
+            public sealed class Sessions
+            {
+                private static void Revoke(DateTime revokedAtUtc) { }
+                public void Run() => Revoke({|ORBIT0004:DateTime.UtcNow|}.Date);
+            }
+            """;
+        return VerifyAnalyzerAsync(source, "Orbit.Infrastructure");
+    }
+
     private static Task VerifyAnalyzerAsync(string source, string assemblyName)
     {
         var test = new CSharpAnalyzerTest<UtcNowUserFacingDateAnalyzer, DefaultVerifier>

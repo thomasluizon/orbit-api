@@ -24,8 +24,8 @@
       "evidence": "ControllerAuthorizationAnalyzer ships at Error and zero suppressions of it exist under src/. The sanctioned escape is `[AllowAnonymous]` on the controller, which is a visible attribute rather than a pragma, so the rule already has an in-language exemption and needs no allowlist entry."
     },
     "ORBIT0004": {
-      "verdict": "Review whether the analyzer can recognize UTC instants passed to *AtUtc parameters before narrowing the rule.",
-      "evidence": "The current analyzer recognizes *AtUtc names, cache keys, and TimeZoneInfo conversion on the source line. A local nowUtc passed to an *AtUtc parameter can require a targeted suppression because the analyzer does not follow dataflow. Review each site before changing the rule."
+      "verdict": "Narrow the rule for direct *AtUtc arguments and locals used exclusively by UTC timestamp sinks; keep explicit exemptions for other instant and bucket contexts.",
+      "evidence": "UtcNowUserFacingDateAnalyzerTests reproduces a direct Revoke(DateTime.UtcNow) and a local nowUtc used only by timestamp sinks. Every local use must qualify; calendar conversion, reassignment, unused locals and .Date truncation remain diagnostic. AuthSessionService locals also feed GetRefreshExpiry(nowUtc) and CanUse(nowUtc), so the hypothesis does not justify a blanket *Utc-name exemption."
     },
     "ORBIT0005": {
       "verdict": "keep the rule as it stands; no site is suppressed.",
@@ -199,12 +199,6 @@
         "reason": "bucket: the UTC-day key for the AiUsageDaily cost-aggregation row."
       }
     },
-    "src/Orbit.Infrastructure/Persistence/OrbitDbContext.cs": {
-      "ORBIT0004": {
-        "count": 1,
-        "reason": "instant: UpdatedAtUtc stamping for every tracked ITimestamped entity in SaveChangesAsync."
-      }
-    },
     "src/Orbit.Infrastructure/Services/AccountDeletionService.cs": {
       "ORBIT0004": {
         "count": 3,
@@ -283,8 +277,8 @@
     },
     "src/Orbit.Infrastructure/Services/AgentStepUpService.cs": {
       "ORBIT0004": {
-        "count": 3,
-        "reason": "instant: the step-up challenge cooldown boundary, the challenge TTL, and the CanVerify expiry check."
+        "count": 2,
+        "reason": "cooldownBoundary limits challenge issuance by elapsed seconds; CanVerify compares the challenge TTL with the current instant. Neither read selects a user calendar day."
       }
     },
     "src/Orbit.Infrastructure/Services/AiIntentService.cs": {
@@ -301,8 +295,8 @@
     },
     "src/Orbit.Infrastructure/Services/AuthSessionService.cs": {
       "ORBIT0004": {
-        "count": 5,
-        "reason": "instant: the session issue, refresh and revoke instants, and the refresh-token expiry math."
+        "count": 3,
+        "reason": "CreateSessionAsync computes the refresh expiry; RefreshSessionAsync compares and rotates token validity; HasSessionForTokenAsync checks ExpiresAtUtc. All three reads measure session instants, with no calendar-date conversion."
       }
     },
     "src/Orbit.Infrastructure/Services/BackgroundServiceHealthCheck.cs": {
@@ -343,8 +337,8 @@
     },
     "src/Orbit.Infrastructure/Services/PendingClarificationStore.cs": {
       "ORBIT0004": {
-        "count": 2,
-        "reason": "instant: the clarification TTL stamp and its expiry sweep."
+        "count": 1,
+        "reason": "GetAsync uses now to exclude rows whose ExpiresAtUtc has passed; clarification TTLs are absolute instants shared across timezones."
       }
     },
     "src/Orbit.Infrastructure/Services/PlayNotificationCleanupService.cs": {

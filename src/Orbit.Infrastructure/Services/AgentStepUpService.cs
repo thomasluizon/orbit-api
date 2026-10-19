@@ -66,9 +66,7 @@ public class AgentStepUpService(
             userId,
             pendingOperationId,
             HashToken(code),
-#pragma warning disable ORBIT0004
             DateTime.UtcNow.AddMinutes(Math.Max(1, _settings.StepUpChallengeTtlMinutes)));
-#pragma warning restore ORBIT0004
 
         await emailService.SendVerificationCodeAsync(
             user.Email,

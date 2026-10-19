@@ -32,9 +32,7 @@ public class PendingClarificationStore(OrbitDbContext dbContext) : IPendingClari
             missingArgumentKey,
             question,
             quickActionsJson,
-#pragma warning disable ORBIT0004
             DateTime.UtcNow.AddMinutes(AppConstants.PendingClarificationTtlMinutes));
-#pragma warning restore ORBIT0004
 
         dbContext.PendingClarifications.Add(entity);
         await dbContext.SaveChangesAsync(cancellationToken);
