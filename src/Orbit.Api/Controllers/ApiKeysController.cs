@@ -7,8 +7,6 @@ using Orbit.Api.RateLimiting;
 using Orbit.Application.ApiKeys.Commands;
 using Orbit.Application.ApiKeys.Queries;
 
-#pragma warning disable CA1873
-
 namespace Orbit.Api.Controllers;
 
 [Authorize]
@@ -45,7 +43,8 @@ public partial class ApiKeysController(IMediator mediator, ILogger<ApiKeysContro
 
         return result.ToPayGateAwareResult(value =>
         {
-            LogApiKeyCreated(logger, value.Id, HttpContext.GetUserId());
+            if (logger.IsEnabled(LogLevel.Information))
+                logger.LogApiKeyCreated(value.Id, HttpContext.GetUserId());
             return Created($"/api/api-keys/{value.Id}", value);
         });
     }
@@ -104,15 +103,19 @@ public partial class ApiKeysController(IMediator mediator, ILogger<ApiKeysContro
 
         if (result.IsSuccess)
         {
-            LogApiKeyRevoked(logger, id, HttpContext.GetUserId());
+            if (logger.IsEnabled(LogLevel.Information))
+                logger.LogApiKeyRevoked(id, HttpContext.GetUserId());
             return NoContent();
         }
         return result.ToErrorResult();
     }
+}
 
+internal static partial class ApiKeysControllerLogging
+{
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "API key created {KeyId} by user {UserId}")]
-    private static partial void LogApiKeyCreated(ILogger logger, Guid keyId, Guid userId);
+    internal static partial void LogApiKeyCreated(this ILogger logger, Guid keyId, Guid userId);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "API key revoked {KeyId} by user {UserId}")]
-    private static partial void LogApiKeyRevoked(ILogger logger, Guid keyId, Guid userId);
+    internal static partial void LogApiKeyRevoked(this ILogger logger, Guid keyId, Guid userId);
 }

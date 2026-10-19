@@ -10,8 +10,6 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
-#pragma warning disable CA1873
-
 namespace Orbit.Api.Controllers;
 
 [ApiController]
@@ -47,11 +45,13 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
         if (result.IsSuccess)
         {
-            LogVerificationCodeSent(logger, HttpContext.GetRequestId());
+            if (logger.IsEnabled(LogLevel.Information))
+                logger.LogVerificationCodeSent(HttpContext.GetRequestId());
             return Ok(new { message = "Verification code sent" });
         }
 
-        LogFailedToSendCode(logger, result.Error, HttpContext.GetRequestId());
+        if (logger.IsEnabled(LogLevel.Warning))
+            logger.LogFailedToSendCode(result.Error, HttpContext.GetRequestId());
         return result.ToErrorResult();
     }
 
@@ -99,11 +99,13 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
         if (result.IsSuccess)
         {
-            LogUserLoggedInViaCode(logger, result.Value.UserId, HttpContext.GetRequestId());
+            if (logger.IsEnabled(LogLevel.Information))
+                logger.LogUserLoggedInViaCode(result.Value.UserId, HttpContext.GetRequestId());
             return Ok(result.Value);
         }
 
-        LogCodeVerificationFailed(logger, result.Error, HttpContext.GetRequestId());
+        if (logger.IsEnabled(LogLevel.Warning))
+            logger.LogCodeVerificationFailed(result.Error, HttpContext.GetRequestId());
         return result.ToErrorResult(StatusCodes.Status401Unauthorized);
     }
 
@@ -135,11 +137,13 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
             request.Code, request.CodeVerifier, request.RedirectUri, request.Language, request.ReferralCode), cancellationToken);
         if (result.IsSuccess)
         {
-            LogUserLoggedInViaGoogle(logger, HttpContext.GetRequestId());
+            if (logger.IsEnabled(LogLevel.Information))
+                logger.LogUserLoggedInViaGoogle(HttpContext.GetRequestId());
             return Ok(result.Value);
         }
 
-        LogGoogleAuthFailed(logger, result.Error, HttpContext.GetRequestId());
+        if (logger.IsEnabled(LogLevel.Warning))
+            logger.LogGoogleAuthFailed(result.Error, HttpContext.GetRequestId());
         return result.ToErrorResult(StatusCodes.Status401Unauthorized);
     }
 
@@ -169,11 +173,13 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
         if (result.IsSuccess)
         {
-            LogSessionRefreshed(logger, HttpContext.GetRequestId());
+            if (logger.IsEnabled(LogLevel.Information))
+                logger.LogSessionRefreshed(HttpContext.GetRequestId());
             return Ok(result.Value);
         }
 
-        LogSessionRefreshFailed(logger, result.Error, HttpContext.GetRequestId());
+        if (logger.IsEnabled(LogLevel.Warning))
+            logger.LogSessionRefreshFailed(result.Error, HttpContext.GetRequestId());
         return result.ToErrorResult(StatusCodes.Status401Unauthorized);
     }
 
@@ -223,11 +229,13 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
         if (result.IsSuccess)
         {
-            LogSessionRevoked(logger, HttpContext.GetRequestId());
+            if (logger.IsEnabled(LogLevel.Information))
+                logger.LogSessionRevoked(HttpContext.GetRequestId());
             return Ok(new { message = "Logged out" });
         }
 
-        LogSessionRevocationFailed(logger, result.Error, HttpContext.GetRequestId());
+        if (logger.IsEnabled(LogLevel.Warning))
+            logger.LogSessionRevocationFailed(result.Error, HttpContext.GetRequestId());
         return result.ToErrorResult(StatusCodes.Status401Unauthorized);
     }
 
@@ -271,11 +279,13 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
         if (result.IsSuccess)
         {
-            LogAllSessionsRevoked(logger, HttpContext.GetUserId(), HttpContext.GetRequestId());
+            if (logger.IsEnabled(LogLevel.Information))
+                logger.LogAllSessionsRevoked(HttpContext.GetUserId(), HttpContext.GetRequestId());
             return Ok(new { message = "Logged out of all sessions" });
         }
 
-        LogSessionRevocationFailed(logger, result.Error, HttpContext.GetRequestId());
+        if (logger.IsEnabled(LogLevel.Warning))
+            logger.LogSessionRevocationFailed(result.Error, HttpContext.GetRequestId());
         return result.ToErrorResult();
     }
 
@@ -292,11 +302,13 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
         if (result.IsSuccess)
         {
-            LogAccountDeletionRequested(logger, HttpContext.GetUserId());
+            if (logger.IsEnabled(LogLevel.Information))
+                logger.LogAccountDeletionRequested(HttpContext.GetUserId());
             return Ok(new { message = "Deletion code sent" });
         }
 
-        LogDeletionRequestFailed(logger, HttpContext.GetUserId(), result.Error);
+        if (logger.IsEnabled(LogLevel.Warning))
+            logger.LogDeletionRequestFailed(HttpContext.GetUserId(), result.Error);
         return result.ToErrorResult();
     }
 
@@ -315,58 +327,15 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
         if (result.IsSuccess)
         {
-            LogAccountDeactivated(logger, HttpContext.GetUserId(), result.Value);
+            if (logger.IsEnabled(LogLevel.Information))
+                logger.LogAccountDeactivated(HttpContext.GetUserId(), result.Value);
             return Ok(new { message = "Account deactivated", scheduledDeletionAt = result.Value });
         }
 
-        LogDeletionConfirmationFailed(logger, HttpContext.GetUserId(), result.Error);
+        if (logger.IsEnabled(LogLevel.Warning))
+            logger.LogDeletionConfirmationFailed(HttpContext.GetUserId(), result.Error);
         return result.ToErrorResult();
     }
-
-    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Verification code sent. RequestId={RequestId}")]
-    private static partial void LogVerificationCodeSent(ILogger logger, string requestId);
-
-    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Failed to send code: {Error}. RequestId={RequestId}")]
-    private static partial void LogFailedToSendCode(ILogger logger, string? error, string requestId);
-
-    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "User logged in via code. UserId={UserId} RequestId={RequestId}")]
-    private static partial void LogUserLoggedInViaCode(ILogger logger, Guid userId, string requestId);
-
-    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Code verification failed: {Error}. RequestId={RequestId}")]
-    private static partial void LogCodeVerificationFailed(ILogger logger, string? error, string requestId);
-
-    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Google auth failed: {Error}. RequestId={RequestId}")]
-    private static partial void LogGoogleAuthFailed(ILogger logger, string? error, string requestId);
-
-    [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Account deletion requested by {UserId}")]
-    private static partial void LogAccountDeletionRequested(ILogger logger, Guid userId);
-
-    [LoggerMessage(EventId = 7, Level = LogLevel.Warning, Message = "Deletion request failed for {UserId}: {Error}")]
-    private static partial void LogDeletionRequestFailed(ILogger logger, Guid userId, string? error);
-
-    [LoggerMessage(EventId = 8, Level = LogLevel.Information, Message = "Account deactivated for {UserId}, scheduled deletion at {ScheduledAt}")]
-    private static partial void LogAccountDeactivated(ILogger logger, Guid userId, DateTime scheduledAt);
-
-    [LoggerMessage(EventId = 9, Level = LogLevel.Warning, Message = "Deletion confirmation failed for {UserId}: {Error}")]
-    private static partial void LogDeletionConfirmationFailed(ILogger logger, Guid userId, string? error);
-
-    [LoggerMessage(EventId = 10, Level = LogLevel.Information, Message = "User logged in via Google. RequestId={RequestId}")]
-    private static partial void LogUserLoggedInViaGoogle(ILogger logger, string requestId);
-
-    [LoggerMessage(EventId = 11, Level = LogLevel.Information, Message = "Session refreshed. RequestId={RequestId}")]
-    private static partial void LogSessionRefreshed(ILogger logger, string requestId);
-
-    [LoggerMessage(EventId = 12, Level = LogLevel.Warning, Message = "Session refresh failed: {Error}. RequestId={RequestId}")]
-    private static partial void LogSessionRefreshFailed(ILogger logger, string? error, string requestId);
-
-    [LoggerMessage(EventId = 13, Level = LogLevel.Information, Message = "Session revoked. RequestId={RequestId}")]
-    private static partial void LogSessionRevoked(ILogger logger, string requestId);
-
-    [LoggerMessage(EventId = 14, Level = LogLevel.Warning, Message = "Session revocation failed: {Error}. RequestId={RequestId}")]
-    private static partial void LogSessionRevocationFailed(ILogger logger, string? error, string requestId);
-
-    [LoggerMessage(EventId = 15, Level = LogLevel.Information, Message = "All sessions revoked for {UserId}. RequestId={RequestId}")]
-    private static partial void LogAllSessionsRevoked(ILogger logger, Guid userId, string requestId);
 
     private static AgentExecuteOperationResponse BuildOperationResponse(
         string operationId,
@@ -448,5 +417,52 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
             TargetId: targetId,
             Error: error), cancellationToken);
     }
+}
 
+internal static partial class AuthControllerLogging
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Verification code sent. RequestId={RequestId}")]
+    internal static partial void LogVerificationCodeSent(this ILogger logger, string requestId);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Failed to send code: {Error}. RequestId={RequestId}")]
+    internal static partial void LogFailedToSendCode(this ILogger logger, string? error, string requestId);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "User logged in via code. UserId={UserId} RequestId={RequestId}")]
+    internal static partial void LogUserLoggedInViaCode(this ILogger logger, Guid userId, string requestId);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Code verification failed: {Error}. RequestId={RequestId}")]
+    internal static partial void LogCodeVerificationFailed(this ILogger logger, string? error, string requestId);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Google auth failed: {Error}. RequestId={RequestId}")]
+    internal static partial void LogGoogleAuthFailed(this ILogger logger, string? error, string requestId);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Account deletion requested by {UserId}")]
+    internal static partial void LogAccountDeletionRequested(this ILogger logger, Guid userId);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Warning, Message = "Deletion request failed for {UserId}: {Error}")]
+    internal static partial void LogDeletionRequestFailed(this ILogger logger, Guid userId, string? error);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Information, Message = "Account deactivated for {UserId}, scheduled deletion at {ScheduledAt}")]
+    internal static partial void LogAccountDeactivated(this ILogger logger, Guid userId, DateTime scheduledAt);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Warning, Message = "Deletion confirmation failed for {UserId}: {Error}")]
+    internal static partial void LogDeletionConfirmationFailed(this ILogger logger, Guid userId, string? error);
+
+    [LoggerMessage(EventId = 10, Level = LogLevel.Information, Message = "User logged in via Google. RequestId={RequestId}")]
+    internal static partial void LogUserLoggedInViaGoogle(this ILogger logger, string requestId);
+
+    [LoggerMessage(EventId = 11, Level = LogLevel.Information, Message = "Session refreshed. RequestId={RequestId}")]
+    internal static partial void LogSessionRefreshed(this ILogger logger, string requestId);
+
+    [LoggerMessage(EventId = 12, Level = LogLevel.Warning, Message = "Session refresh failed: {Error}. RequestId={RequestId}")]
+    internal static partial void LogSessionRefreshFailed(this ILogger logger, string? error, string requestId);
+
+    [LoggerMessage(EventId = 13, Level = LogLevel.Information, Message = "Session revoked. RequestId={RequestId}")]
+    internal static partial void LogSessionRevoked(this ILogger logger, string requestId);
+
+    [LoggerMessage(EventId = 14, Level = LogLevel.Warning, Message = "Session revocation failed: {Error}. RequestId={RequestId}")]
+    internal static partial void LogSessionRevocationFailed(this ILogger logger, string? error, string requestId);
+
+    [LoggerMessage(EventId = 15, Level = LogLevel.Information, Message = "All sessions revoked for {UserId}. RequestId={RequestId}")]
+    internal static partial void LogAllSessionsRevoked(this ILogger logger, Guid userId, string requestId);
 }

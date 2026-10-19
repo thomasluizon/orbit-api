@@ -1,10 +1,19 @@
 ﻿using System.Text.Json;
 using FluentAssertions;
+using MediatR;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
+using Orbit.Api.Controllers;
+using Orbit.Application.Auth.Commands;
+using Orbit.Application.Auth.Models;
 using Orbit.Application.Chat.Tools;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -21,6 +30,101 @@ public class AgentExecutionAndSanitizerTests
 {
     private static readonly JsonElement EmptySchema = JsonDocument.Parse("{}").RootElement.Clone();
     private static readonly Guid UserId = Guid.NewGuid();
+
+    [Theory]
+    [InlineData(AgentOperationStatus.Succeeded)]
+    [InlineData(AgentOperationStatus.Failed)]
+    public async Task AgentAuditService_PersistsWithoutSavingInvalidPendingEntities(AgentOperationStatus outcome)
+    {
+        using var services = CreateAuditServices();
+        using var requestScope = services.CreateScope();
+        var requestContext = requestScope.ServiceProvider.GetRequiredService<OrbitDbContext>();
+        var pending = AddInvalidPendingEntity(requestContext);
+        var audit = requestScope.ServiceProvider.GetRequiredService<IAgentAuditService>();
+
+        await audit.RecordAsync(new AgentAuditEntry(
+            UserId, AgentCapabilityIds.HabitsWrite, "log_habit", AgentExecutionSurface.Chat,
+            AgentAuthMethod.Jwt, AgentRiskClass.Low, AgentPolicyDecisionStatus.Allowed, outcome));
+
+        using var verificationScope = services.CreateScope();
+        var verificationContext = verificationScope.ServiceProvider.GetRequiredService<OrbitDbContext>();
+        var persisted = await verificationContext.AgentAuditLogs.SingleAsync();
+        persisted.OutcomeStatus.Should().Be(outcome);
+        persisted.SourceName.Should().Be("log_habit");
+        (await verificationContext.AppConfigs.AnyAsync()).Should().BeFalse();
+        requestContext.Entry(pending).State.Should().Be(EntityState.Added);
+        pending.Value.Should().BeNull();
+        requestContext.ChangeTracker.Entries<AgentAuditLog>().Should().BeEmpty();
+
+        var savePending = async () => await requestContext.SaveChangesAsync();
+        await savePending.Should().ThrowAsync<DbUpdateException>();
+    }
+
+    [Fact]
+    public async Task AuthController_FailedRefreshAuditDoesNotSaveUnrelatedPendingEntities()
+    {
+        using var services = CreateAuditServices();
+        using var requestScope = services.CreateScope();
+        var requestContext = requestScope.ServiceProvider.GetRequiredService<OrbitDbContext>();
+        var pending = AddInvalidPendingEntity(requestContext);
+        var mediator = Substitute.For<IMediator>();
+        mediator.Send(Arg.Any<RefreshSessionCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure<RefreshSessionResponse>("invalid_session"));
+        var controller = new AuthController(mediator,
+            requestScope.ServiceProvider.GetRequiredService<IAgentAuditService>(),
+            NullLogger<AuthController>.Instance)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+        };
+
+        var response = await controller.RefreshOperation(new AuthController.RefreshSessionOperationRequest("invalid"), CancellationToken.None);
+
+        response.Should().BeOfType<UnauthorizedObjectResult>();
+        using var verificationScope = services.CreateScope();
+        var verificationContext = verificationScope.ServiceProvider.GetRequiredService<OrbitDbContext>();
+        var persisted = await verificationContext.AgentAuditLogs.SingleAsync();
+        persisted.SourceName.Should().Be("refresh_auth_session");
+        persisted.OutcomeStatus.Should().Be(AgentOperationStatus.Failed);
+        (await verificationContext.AppConfigs.AnyAsync()).Should().BeFalse();
+        requestContext.Entry(pending).State.Should().Be(EntityState.Added);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AgentOperationExecutor_LogsAndSwallowsChildScopeAuditFailure(bool toolSucceeds)
+    {
+        using var services = CreateAuditServices(new FailingAuditSaveInterceptor());
+        using var requestScope = services.CreateScope();
+        var catalog = Substitute.For<IAgentCatalogService>();
+        var capability = CreateCapability(AgentCapabilityIds.HabitsRead, AgentScopes.ReadHabits,
+            AgentRiskClass.Low, AgentConfirmationRequirement.None, isMutation: false);
+        var operation = CreateOperation("query_habits", capability.Id, isMutation: false,
+            isAgentExecutable: true, AgentConfirmationRequirement.None, AgentRiskClass.Low);
+        catalog.GetOperation(operation.Id).Returns(operation);
+        catalog.GetCapability(capability.Id).Returns(capability);
+        var policy = Substitute.For<IAgentPolicyEvaluator>();
+        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+            .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability));
+        var logger = Substitute.For<ILogger<AgentOperationExecutor>>();
+        logger.IsEnabled(LogLevel.Error).Returns(true);
+        var executor = CreateExecutor(catalog, policyEvaluator: policy,
+            auditService: requestScope.ServiceProvider.GetRequiredService<IAgentAuditService>(),
+            toolRegistry: new AiToolRegistry([new StubTool(operation.Id,
+                (_, _, _) => Task.FromResult(new ToolResult(toolSucceeds, Error: toolSucceeds ? null : "tool_failed")),
+                isReadOnly: true)]), logger: logger);
+
+        var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
+            UserId, operation.Id, Parse("{}"), AgentExecutionSurface.Mcp, AgentAuthMethod.Jwt));
+
+        response.Operation.Status.Should().Be(toolSucceeds ? AgentOperationStatus.Succeeded : AgentOperationStatus.Failed);
+        response.Operation.PolicyReason.Should().Be(toolSucceeds ? null : "tool_failed");
+        logger.Received(1).Log(LogLevel.Error, Arg.Is<EventId>(id => id.Id == 1),
+            Arg.Any<Arg.AnyType>(), Arg.Is<Exception>(ex => ex is DbUpdateException),
+            Arg.Any<Func<Arg.AnyType, Exception?, string>>());
+        using var verificationScope = services.CreateScope();
+        (await verificationScope.ServiceProvider.GetRequiredService<OrbitDbContext>().AgentAuditLogs.AnyAsync()).Should().BeFalse();
+    }
 
     [Fact]
     public void PromptDataSanitizer_SanitizeInline_CollapsesWhitespace()
@@ -608,9 +712,15 @@ public class AgentExecutionAndSanitizerTests
         response.PolicyDenial!.Reason.Should().Be("Sub-habits are a Pro feature. Upgrade to unlock!");
     }
 
-    [Fact]
-    public async Task AgentOperationExecutor_MapsUnexpectedExceptions()
+    [Theory]
+    [InlineData(AgentExecutionSurface.Chat)]
+    [InlineData(AgentExecutionSurface.Mcp)]
+    public async Task AgentOperationExecutor_MapsUnexpectedExceptions(AgentExecutionSurface surface)
     {
+        using var services = CreateAuditServices();
+        using var requestScope = services.CreateScope();
+        var requestContext = requestScope.ServiceProvider.GetRequiredService<OrbitDbContext>();
+        AppConfig? pending = null;
         var catalog = Substitute.For<IAgentCatalogService>();
         var capability = CreateCapability(AgentCapabilityIds.HabitsWrite, AgentScopes.WriteHabits, AgentRiskClass.Low, AgentConfirmationRequirement.None, isMutation: true);
         var operation = CreateOperation("create_habit", capability.Id, isMutation: true, isAgentExecutable: true, AgentConfirmationRequirement.None, AgentRiskClass.Low);
@@ -622,17 +732,31 @@ public class AgentExecutionAndSanitizerTests
         var executor = CreateExecutor(
             catalog,
             policyEvaluator: policy,
-            toolRegistry: new AiToolRegistry([new StubTool(operation.Id, (_, _, _) => throw new InvalidOperationException("boom"))]));
+            auditService: requestScope.ServiceProvider.GetRequiredService<IAgentAuditService>(),
+            toolRegistry: new AiToolRegistry([new StubTool(operation.Id, (_, _, _) =>
+            {
+                pending = AddInvalidPendingEntity(requestContext);
+                throw new InvalidOperationException("boom");
+            })]));
 
         var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
             UserId,
             operation.Id,
             Parse("""{"title":"Test"}"""),
-            AgentExecutionSurface.Chat,
+            surface,
             AgentAuthMethod.Jwt));
 
         response.Operation.Status.Should().Be(AgentOperationStatus.Failed);
         response.Operation.PolicyReason.Should().Be("unexpected_error");
+        using var verificationScope = services.CreateScope();
+        var verificationContext = verificationScope.ServiceProvider.GetRequiredService<OrbitDbContext>();
+        var persisted = await verificationContext.AgentAuditLogs.SingleAsync();
+        persisted.OutcomeStatus.Should().Be(AgentOperationStatus.Failed);
+        persisted.Surface.Should().Be(surface);
+        persisted.Error.Should().Be("boom");
+        (await verificationContext.AppConfigs.AnyAsync()).Should().BeFalse();
+        pending.Should().NotBeNull();
+        requestContext.Entry(pending!).State.Should().Be(EntityState.Added);
     }
 
     [Fact]
@@ -823,7 +947,8 @@ public class AgentExecutionAndSanitizerTests
         AiToolRegistry? toolRegistry = null,
         IUnitOfWork? unitOfWork = null,
         IAgentStepUpAuthorizationBridge? stepUpAuthorizationBridge = null,
-        IPendingOperationChangePreviewer? changePreviewer = null)
+        IPendingOperationChangePreviewer? changePreviewer = null,
+        ILogger<AgentOperationExecutor>? logger = null)
     {
         if (stepUpAuthorizationBridge is null)
         {
@@ -849,7 +974,31 @@ public class AgentExecutionAndSanitizerTests
             changePreviewer ?? Substitute.For<IPendingOperationChangePreviewer>(),
             Substitute.For<IPendingAgentOperationStore>(),
             unitOfWork ?? Substitute.For<IUnitOfWork>(),
-            NullLogger<AgentOperationExecutor>.Instance);
+            logger ?? NullLogger<AgentOperationExecutor>.Instance);
+    }
+
+    private static ServiceProvider CreateAuditServices(params IInterceptor[] interceptors)
+    {
+        var databaseName = $"AgentAudit_{Guid.NewGuid()}";
+        return new ServiceCollection()
+            .AddDbContext<OrbitDbContext>(options => options.UseInMemoryDatabase(databaseName).AddInterceptors(interceptors))
+            .AddScoped<IAgentAuditService, AgentAuditService>()
+            .BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+    }
+
+    private static AppConfig AddInvalidPendingEntity(OrbitDbContext context)
+    {
+        var pending = AppConfig.Create("pending", "valid");
+        context.AppConfigs.Add(pending);
+        context.Entry(pending).Property<string?>(nameof(AppConfig.Value)).CurrentValue = null;
+        return pending;
+    }
+
+    private sealed class FailingAuditSaveInterceptor : SaveChangesInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+            => throw new DbUpdateException("audit_store_unavailable");
     }
 
     private static AgentCapability CreateCapability(

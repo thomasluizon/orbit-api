@@ -1,16 +1,19 @@
 using Asp.Versioning;
 using Orbit.Api.Mcp;
 using System.IO.Compression;
+using System.Text.Json.Nodes;
 using Amazon;
 using Amazon.Runtime;
 using Amazon.S3;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.Extensions.Options;
+using Microsoft.OpenApi;
 using Orbit.Api.Mcp.Tools;
 using Orbit.Api.Middleware;
 using Orbit.Api.OpenApi;
 using Orbit.Application.Common;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Services;
@@ -344,6 +347,12 @@ public static partial class ServiceCollectionExtensions
         });
         options.AddSchemaTransformer((schema, context, _) =>
         {
+            var type = Nullable.GetUnderlyingType(context.JsonTypeInfo.Type) ?? context.JsonTypeInfo.Type;
+            if (type == typeof(HabitSchedule))
+            {
+                schema.Type = JsonSchemaType.String;
+                schema.Enum = Enum.GetNames(type).Select(name => (JsonNode)JsonValue.Create(name)).ToList();
+            }
             if (context.JsonPropertyInfo?.AttributeProvider?.IsDefined(typeof(ObsoleteAttribute), false) == true)
                 schema.Deprecated = true;
             return Task.CompletedTask;

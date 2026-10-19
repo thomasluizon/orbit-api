@@ -32,7 +32,7 @@ public class AuthSessionService(
     public async Task<Result<SessionTokens>> CreateSessionAsync(Guid userId, string email, CancellationToken cancellationToken = default)
     {
         var refreshToken = GenerateRefreshToken();
-#pragma warning disable ORBIT0004
+#pragma warning disable ORBIT0004 // CreateSessionAsync computes the refresh-token ExpiresAtUtc instant through GetRefreshExpiry; no calendar date is derived. https://github.com/thomasluizon/orbit-tickets/issues/230
         var nowUtc = DateTime.UtcNow;
 #pragma warning restore ORBIT0004
         var sessionResult = UserSession.Create(
@@ -53,7 +53,7 @@ public class AuthSessionService(
 
     public async Task<Result<SessionTokens>> RefreshSessionAsync(string refreshToken, CancellationToken cancellationToken = default)
     {
-#pragma warning disable ORBIT0004
+#pragma warning disable ORBIT0004 // RefreshSessionAsync uses nowUtc for CanUse validity, refresh expiry and Rotate audit stamps, all session instants. https://github.com/thomasluizon/orbit-tickets/issues/230
         var nowUtc = DateTime.UtcNow;
 #pragma warning restore ORBIT0004
         var tokenHash = HashToken(refreshToken);
@@ -121,9 +121,7 @@ public class AuthSessionService(
             if (session is null)
                 return Result.Failure(ErrorMessages.InvalidSession);
 
-#pragma warning disable ORBIT0004
             session.Revoke(DateTime.UtcNow);
-#pragma warning restore ORBIT0004
             try
             {
                 await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -143,9 +141,7 @@ public class AuthSessionService(
         if (userId == Guid.Empty)
             return Result.Failure(DomainErrors.UserIdRequired);
 
-#pragma warning disable ORBIT0004
         var nowUtc = DateTime.UtcNow;
-#pragma warning restore ORBIT0004
 
         for (var attempt = 0; attempt < MaxRevokeAllAttempts; attempt++)
         {
@@ -175,7 +171,7 @@ public class AuthSessionService(
 
     public async Task<bool> HasSessionForTokenAsync(string refreshToken, CancellationToken cancellationToken = default)
     {
-#pragma warning disable ORBIT0004
+#pragma warning disable ORBIT0004 // HasSessionForTokenAsync compares ExpiresAtUtc with nowUtc to reject expired refresh tokens. https://github.com/thomasluizon/orbit-tickets/issues/230
         var nowUtc = DateTime.UtcNow;
 #pragma warning restore ORBIT0004
         var tokenHash = HashToken(refreshToken);

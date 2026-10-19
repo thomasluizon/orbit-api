@@ -20,7 +20,9 @@ public sealed record HabitScheduleSnapshot(
     bool IsCompleted,
     bool IsGeneral,
     bool IsFlexible,
-    IReadOnlyList<DayOfWeek> Days)
+    IReadOnlyList<DayOfWeek> Days,
+    HabitSchedule Schedule,
+    DateOnly StartDate)
 {
     public static HabitScheduleSnapshot FromHabit(Habit habit) => new(
         habit.Id,
@@ -39,5 +41,7 @@ public sealed record HabitScheduleSnapshot(
         habit.IsCompleted,
         habit.IsGeneral,
         habit.IsFlexible,
-        habit.Days.ToList());
+        habit.Days.ToList(),
+        habit.Schedule,
+        habit.StartDate);
 }

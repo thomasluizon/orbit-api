@@ -24,8 +24,8 @@
       "evidence": "ControllerAuthorizationAnalyzer ships at Error and zero suppressions of it exist under src/. The sanctioned escape is `[AllowAnonymous]` on the controller, which is a visible attribute rather than a pragma, so the rule already has an in-language exemption and needs no allowlist entry."
     },
     "ORBIT0004": {
-      "verdict": "Review whether the analyzer can recognize UTC instants passed to *AtUtc parameters before narrowing the rule.",
-      "evidence": "The current analyzer recognizes *AtUtc names, cache keys, and TimeZoneInfo conversion on the source line. A local nowUtc passed to an *AtUtc parameter can require a targeted suppression because the analyzer does not follow dataflow. Review each site before changing the rule."
+      "verdict": "Narrow the rule for direct *AtUtc arguments and locals used exclusively by UTC timestamp sinks; keep explicit exemptions for other instant and bucket contexts.",
+      "evidence": "UtcNowUserFacingDateAnalyzerTests reproduces a direct Revoke(DateTime.UtcNow) and a local nowUtc used only by timestamp sinks. Every local use must qualify; calendar conversion, reassignment, unused locals and .Date truncation remain diagnostic. The exemption includes *AtUtc fields and properties and Add* arithmetic on the instant. It trusts a callee's *AtUtc parameter name and cannot inspect the callee body. AuthSessionService locals also feed GetRefreshExpiry(nowUtc) and CanUse(nowUtc), so the hypothesis does not justify a blanket *Utc-name exemption."
     },
     "ORBIT0005": {
       "verdict": "keep the rule as it stands; no site is suppressed.",
@@ -33,342 +33,178 @@
     }
   },
   "pragmas": {
-    "src/Orbit.Api/Authentication/ApiKeyAuthenticationHandler.cs": {
-      "S3267": {
-        "count": 1,
-        "reason": "BCrypt.Verify is expensive, so the early exit through foreach is deliberate rather than a LINQ simplification."
-      }
-    },
-    "src/Orbit.Api/Controllers/ApiKeysController.cs": {
-      "CA1873": {
-        "count": 1,
-        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
-      }
-    },
-    "src/Orbit.Api/Controllers/AuthController.cs": {
-      "CA1873": {
-        "count": 1,
-        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
-      }
-    },
-    "src/Orbit.Api/Controllers/ChecklistTemplatesController.cs": {
-      "CA1873": {
-        "count": 1,
-        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
-      }
-    },
-    "src/Orbit.Api/Controllers/GoalsController.cs": {
-      "CA1873": {
-        "count": 1,
-        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
-      }
-    },
-    "src/Orbit.Api/Controllers/HabitsController.cs": {
-      "CA1873": {
-        "count": 1,
-        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
-      }
-    },
-    "src/Orbit.Api/Controllers/NotificationController.cs": {
-      "CA1873": {
-        "count": 1,
-        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
-      }
-    },
     "src/Orbit.Api/Controllers/OAuthController.cs": {
-      "S107": {
-        "count": 1,
-        "reason": "the OAuth controller legitimately requires many injected dependencies."
-      },
       "S6931": {
         "count": 1,
-        "reason": "the OAuth and MCP well-known URLs follow protocol-mandated paths with no common prefix, so a shared route prefix is not available."
+        "reason": "The absolute /.well-known metadata and /oauth authorization routes have protocol-defined paths that cannot share a controller prefix."
       },
       "S6932": {
         "count": 3,
-        "reason": "the raw Request.Body and Request.Headers are needed for signature verification: Play RTDN push, the Stripe webhook, and reverse-proxy X-Forwarded-Proto detection."
-      }
-    },
-    "src/Orbit.Api/Controllers/ProfileController.cs": {
-      "CA1873": {
-        "count": 1,
-        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
+        "reason": "GetMetadata reads X-Forwarded-Proto and Request.Host to publish the external authorization-server URLs behind the proxy. GetProtectedResourceMetadata reads X-Forwarded-Proto and Request.Host to publish the external MCP resource and authorization-server URLs. BuildGoogleRedirectUri reads X-Forwarded-Proto and Request.Host for the externally reachable OAuth callback URI."
       }
     },
     "src/Orbit.Api/Controllers/SubscriptionController.cs": {
       "S6932": {
         "count": 2,
-        "reason": "the raw Request.Body and Request.Headers are needed for signature verification: Play RTDN push, the Stripe webhook, and reverse-proxy X-Forwarded-Proto detection."
-      }
-    },
-    "src/Orbit.Api/Controllers/SupportController.cs": {
-      "CA1873": {
-        "count": 1,
-        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
+        "reason": "HandleWebhook preserves the raw Stripe body and Stripe-Signature header for webhook signature verification before dispatch. HandlePlayNotification validates the Authorization push token before forwarding the raw RTDN body to the handler."
       }
     },
     "src/Orbit.Api/Controllers/SyncController.cs": {
       "ORBIT0004": {
         "count": 2,
-        "reason": "instant: the sync-window guard against `since`, and the ServerTimestamp field of the sync envelope. Both are wire-protocol UTC instants."
-      }
-    },
-    "src/Orbit.Api/Controllers/TagsController.cs": {
-      "CA1873": {
-        "count": 1,
-        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
+        "reason": "The since guard measures the elapsed MaxSyncWindow against the UTC sync cursor; it does not choose a calendar day. SyncChangesV2Response.ServerTimestamp is the UTC synchronization cursor used for subsequent incremental reads."
       }
     },
     "src/Orbit.Api/OAuth/OAuthAuthorizationStore.cs": {
       "ORBIT0004": {
         "count": 3,
-        "reason": "instant: the OAuth authorization-code CreatedAt stamp, its expiry check, and the expired-entry sweep cutoff."
+        "reason": "CreateCode stamps AuthorizationEntry.CreatedAt for the authorization code TTL, independently of the user timezone. ExchangeCode compares elapsed time since AuthorizationEntry.CreatedAt with CodeExpiry before accepting a code. Cleanup evicts authorization codes whose CreatedAt instant precedes the CodeExpiry cutoff."
       }
     },
     "src/Orbit.Api/RateLimiting/DistributedRateLimitAttribute.cs": {
       "S107": {
         "count": 1,
-        "reason": "an S107 false positive: [LoggerMessage] source generation binds each parameter to a named placeholder in the template, so folding them into a parameter object would drop the structured-log fields."
+        "reason": "LogRateLimitRejected maps each policy, partition, count, retry, method, path and request id to its own generated structured-log placeholder."
       }
     },
     "src/Orbit.Application/Auth/Commands/SendCodeCommand.cs": {
       "ORBIT0004": {
         "count": 4,
-        "reason": "instant: the same VerificationEntry throttle and TTL instants for send-code, including the test-account and smoke-code paths."
-      }
-    },
-    "src/Orbit.Application/Behaviors/ValidationBehavior.cs": {
-      "CA2016": {
-        "count": 2,
-        "reason": "RequestHandlerDelegate<T> accepts no CancellationToken parameter, so it cannot be forwarded."
+        "reason": "Handle compares elapsed seconds since VerificationEntry.CreatedAt to enforce the 60-second code resend cooldown. Handle stamps the randomized verification code issuance instant for cooldown checks; the cache TTL is separate. TrySeedTestAccountCode stamps the configured test code issuance instant, with a separate 30-minute cache TTL. TrySeedProductionSmokeCode stamps the smoke code issuance instant, with a separate 30-minute cache TTL."
       }
     },
     "src/Orbit.Application/Calendar/Commands/DismissCalendarSuggestionCommand.cs": {
       "ORBIT0004": {
         "count": 1,
-        "reason": "instant: the MarkDismissed(now) audit timestamp."
-      }
-    },
-    "src/Orbit.Application/Chat/Tools/Implementations/QueryHabitsTool.cs": {
-      "CA1859": {
-        "count": 2,
-        "reason": "IReadOnlyList<Habit> is deliberate: it matches the repository interface's return type."
+        "reason": "MarkDismissed records DismissedAtUtc as an audit instant; the suggestion has no dismissal calendar-date policy."
       }
     },
     "src/Orbit.Application/Habits/Commands/BulkCreateHabitsCommand.cs": {
       "ORBIT0004": {
         "count": 1,
-        "reason": "instant: the MarkImported(habitId, now) ImportedAtUtc audit timestamp for a calendar suggestion."
+        "reason": "MarkImported records the same ImportedAtUtc audit instant for every matched calendar suggestion in this import."
       }
     },
     "src/Orbit.Application/Waitlist/Commands/JoinWaitlistCommand.cs": {
       "ORBIT0004": {
         "count": 1,
-        "reason": "instant: the 60-second resend-throttle elapsed math against the cached last-sent instant."
-      }
-    },
-    "src/Orbit.Domain/Entities/Habit.cs": {
-      "S6964": {
-        "count": 1,
-        "reason": "a domain entity with private setters, not a model-bound DTO."
+        "reason": "The lastSentAt comparison enforces a 60-second waitlist email resend interval against a cached UTC instant."
       }
     },
     "src/Orbit.Domain/Entities/PendingClarification.cs": {
       "CS0649": {
         "count": 1,
-        "reason": "EF writes this backing field through reflection on materialization and at the SQL layer, so there is no C# writer and never-assigned is a false positive."
+        "reason": "EF materializes _resolvedAtUtc through the configured ResolvedAtUtc backing field; SQL ExecuteUpdate resolves the row without a C# field assignment."
       },
       "S3459": {
         "count": 1,
-        "reason": "the same field: EF writes it through reflection and at the SQL layer, so unassigned-field is a false positive."
+        "reason": "The _resolvedAtUtc field must remain mapped and writable by EF for atomic clarification resolution; absence of a C# assignment does not mean it is unused."
       }
     },
     "src/Orbit.Domain/Entities/Report.cs": {
       "CS0649": {
         "count": 1,
-        "reason": "EF writes this backing field through reflection on materialization and at the SQL layer, so there is no C# writer and never-assigned is a false positive."
+        "reason": "EF materializes retained report _reviewedAtUtc through the configured ReviewedAtUtc backing field; the persisted review stamp has no C# assignment."
       },
       "S3459": {
         "count": 1,
-        "reason": "the same field: EF writes it through reflection and at the SQL layer, so unassigned-field is a false positive."
+        "reason": "The retained Report.ReviewedAtUtc property reads _reviewedAtUtc from EF materialization, so the private field cannot be removed as unassigned."
       }
     },
     "src/Orbit.Infrastructure/AI/AiUsageRecorder.cs": {
       "ORBIT0004": {
         "count": 1,
-        "reason": "bucket: the UTC-day key for the AiUsageDaily cost-aggregation row."
-      }
-    },
-    "src/Orbit.Infrastructure/Persistence/OrbitDbContext.cs": {
-      "ORBIT0004": {
-        "count": 1,
-        "reason": "instant: UpdatedAtUtc stamping for every tracked ITimestamped entity in SaveChangesAsync."
+        "reason": "AiUsageDaily.Date partitions model cost counters by UTC accounting day; it is not the user quota or schedule date."
       }
     },
     "src/Orbit.Infrastructure/Services/AccountDeletionService.cs": {
       "ORBIT0004": {
         "count": 3,
-        "reason": "two instants and one bucket: the scheduled-deletion due check, the ProcessedRequest retention cutoff, and the 90-day UTC-date purge cutoff."
-      }
-    },
-    "src/Orbit.Infrastructure/Services/AgentCatalogService.Capabilities.cs": {
-      "CA1861": {
-        "count": 1,
-        "reason": "the static catalog schemas are evaluated once at startup and are not hot-path allocations."
-      },
-      "S107": {
-        "count": 1,
-        "reason": "the declarative catalog builders mirror the record shapes they populate."
-      },
-      "S1192": {
-        "count": 1,
-        "reason": "the catalog definitions deliberately reuse product vocabulary and JSON schema literals."
-      }
-    },
-    "src/Orbit.Infrastructure/Services/AgentCatalogService.Operations.cs": {
-      "CA1861": {
-        "count": 1,
-        "reason": "the static catalog schemas are evaluated once at startup and are not hot-path allocations."
-      },
-      "S107": {
-        "count": 1,
-        "reason": "the declarative catalog builders mirror the record shapes they populate."
-      },
-      "S1192": {
-        "count": 1,
-        "reason": "the catalog definitions deliberately reuse product vocabulary and JSON schema literals."
-      }
-    },
-    "src/Orbit.Infrastructure/Services/AgentCatalogService.Surfaces.cs": {
-      "CA1861": {
-        "count": 1,
-        "reason": "the static catalog schemas are evaluated once at startup and are not hot-path allocations."
-      },
-      "S107": {
-        "count": 1,
-        "reason": "the declarative catalog builders mirror the record shapes they populate."
-      },
-      "S1192": {
-        "count": 1,
-        "reason": "the catalog definitions deliberately reuse product vocabulary and JSON schema literals."
-      }
-    },
-    "src/Orbit.Infrastructure/Services/AgentCatalogService.UserDataCatalog.cs": {
-      "CA1861": {
-        "count": 1,
-        "reason": "the static catalog schemas are evaluated once at startup and are not hot-path allocations."
-      },
-      "S107": {
-        "count": 1,
-        "reason": "the declarative catalog builders mirror the record shapes they populate."
-      },
-      "S1192": {
-        "count": 1,
-        "reason": "the catalog definitions deliberately reuse product vocabulary and JSON schema literals."
-      }
-    },
-    "src/Orbit.Infrastructure/Services/AgentCatalogService.cs": {
-      "CA1861": {
-        "count": 1,
-        "reason": "the static catalog schemas are evaluated once at startup and are not hot-path allocations."
-      },
-      "S107": {
-        "count": 1,
-        "reason": "the declarative catalog builders mirror the record shapes they populate."
-      },
-      "S1192": {
-        "count": 1,
-        "reason": "the catalog definitions deliberately reuse product vocabulary and JSON schema literals."
+        "reason": "GetUsersScheduledForDeletionAsync compares ScheduledDeletionAt with the current instant to find expired deletion grace periods. CleanupStaleSentRecords uses a 90-day UTC retention boundary for old reminder and slip-alert dedupe rows, not notification scheduling. processedRequestCutoff expires ProcessedRequests by elapsed retention days against CreatedAtUtc."
       }
     },
     "src/Orbit.Infrastructure/Services/AgentStepUpService.cs": {
       "ORBIT0004": {
-        "count": 3,
-        "reason": "instant: the step-up challenge cooldown boundary, the challenge TTL, and the CanVerify expiry check."
-      }
-    },
-    "src/Orbit.Infrastructure/Services/AiIntentService.cs": {
-      "CA1873": {
-        "count": 1,
-        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
+        "count": 2,
+        "reason": "cooldownBoundary bounds CreatedAtUtc by StepUpChallengeCooldownSeconds to throttle issuance of another step-up challenge. CanVerify checks the step-up challenge ExpiresAtUtc TTL and attempt limit against the current instant."
       }
     },
     "src/Orbit.Infrastructure/Services/AiUsageSummaryService.cs": {
       "ORBIT0004": {
         "count": 1,
-        "reason": "bucket: the UTC yesterday key for the daily AI-cost summary log."
+        "reason": "yesterday selects the UTC AiUsageDaily accounting partition and operator quota summary log; user scheduling and quota enforcement do not consume it."
       }
     },
     "src/Orbit.Infrastructure/Services/AuthSessionService.cs": {
       "ORBIT0004": {
-        "count": 5,
-        "reason": "instant: the session issue, refresh and revoke instants, and the refresh-token expiry math."
+        "count": 3,
+        "reason": "CreateSessionAsync computes the refresh-token ExpiresAtUtc instant through GetRefreshExpiry; no calendar date is derived. RefreshSessionAsync uses nowUtc for CanUse validity, refresh expiry and Rotate audit stamps, all session instants. HasSessionForTokenAsync compares ExpiresAtUtc with nowUtc to reject expired refresh tokens."
       }
     },
     "src/Orbit.Infrastructure/Services/BackgroundServiceHealthCheck.cs": {
       "ORBIT0004": {
         "count": 2,
-        "reason": "instant: the liveness tick stamp and the elapsed-since-last-tick math."
+        "reason": "RecordTick stores a UTC liveness instant in LastSuccessfulTicks for background-service monitoring. CheckHealthAsync subtracts the last liveness instant to report elapsed minutes and detect a stale service."
       }
     },
     "src/Orbit.Infrastructure/Services/GoalDeadlineNotificationService.cs": {
       "ORBIT0004": {
         "count": 1,
-        "reason": "bucket: a widened UTC streak-lookback prefetch window; per-user today comes from TimeZoneInfo.ConvertTimeFromUtc afterwards."
+        "reason": "streakWindowStart widens the batched log prefetch by a timezone-skew day; ComputeReadValue receives the separately converted userToday."
       }
     },
     "src/Orbit.Infrastructure/Services/GooglePlayBillingService.cs": {
       "ORBIT0004": {
         "count": 2,
-        "reason": "instant: the Play subscription expiry fallback and the validity comparison."
+        "reason": "expiresAt falls back to the current UTC instant when Play provides no subscription expiry; it remains an absolute expiry value. The isActive check compares the Play expiry instant with the current UTC instant, independently of calendar dates."
       }
     },
     "src/Orbit.Infrastructure/Services/HabitDueDateAdvancementService.cs": {
       "ORBIT0004": {
         "count": 1,
-        "reason": "bucket: a widened UTC yesterday prefetch window; per-user advancement uses the converted user clock."
+        "reason": "ConservativeCutoffUtc is the widened stale-habit prefetch floor; ShouldAdvanceForUserToday checks the separately converted userToday before mutation."
       }
     },
     "src/Orbit.Infrastructure/Services/JwtTokenService.cs": {
       "ORBIT0004": {
         "count": 1,
-        "reason": "instant: the JWT Expires claim."
+        "reason": "SecurityTokenDescriptor.Expires is the JWT absolute expiry instant computed from the configured token lifetime."
       }
     },
     "src/Orbit.Infrastructure/Services/PendingAgentOperationStore.cs": {
       "ORBIT0004": {
         "count": 1,
-        "reason": "instant: the pending-operation usability and expiry check."
+        "reason": "TryConsumeFreshConfirmation passes the current instant to IsUsable to check confirmation and step-up TTLs before consumption."
       }
     },
     "src/Orbit.Infrastructure/Services/PendingClarificationStore.cs": {
       "ORBIT0004": {
-        "count": 2,
-        "reason": "instant: the clarification TTL stamp and its expiry sweep."
+        "count": 1,
+        "reason": "GetForResolutionAsync compares ExpiresAtUtc with now to exclude expired clarification operations without selecting a user date."
       }
     },
     "src/Orbit.Infrastructure/Services/PlayNotificationCleanupService.cs": {
       "ORBIT0004": {
         "count": 2,
-        "reason": "instant: the Play and Stripe processed-event retention cutoffs."
+        "reason": "playCutoff removes processed Play notification dedupe entries by ProcessedAtUtc retention age. stripeCutoff removes processed Stripe event dedupe entries by ProcessedAtUtc retention age."
       }
     },
     "src/Orbit.Infrastructure/Services/SlipAlertSchedulerService.cs": {
       "ORBIT0004": {
         "count": 1,
-        "reason": "bucket: the UTC-date week key for SentSlipAlert dedupe."
+        "reason": "utcDate anchors widened end-date, sent-week and history prefetch floors; ProcessHabitSlipAlertAsync chooses the send day and dedupe week from converted userToday."
       }
     },
     "src/Orbit.Infrastructure/Services/StripeBillingService.cs": {
       "ORBIT0004": {
         "count": 1,
-        "reason": "instant: the CurrentPeriodEnd fallback instant."
+        "reason": "BillingSubscriptionDetails.CurrentPeriodEnd falls back to the current instant when the Stripe item is missing; it is an expiry timestamp."
       }
     },
     "src/Orbit.Infrastructure/Services/SyncCleanupService.cs": {
       "ORBIT0004": {
         "count": 2,
-        "reason": "instant: the tombstone and suggestion retention cutoffs."
+        "reason": "cutoff removes sync tombstones by elapsed RetentionPeriod against DeletedAtUtc, independently of user calendar dates. suggestionCutoff removes unimported calendar suggestions by DiscoveredAtUtc age after SuggestionRetentionPeriod."
       }
     }
   },
@@ -376,19 +212,19 @@
     "src/Orbit.Api/Mcp/Tools/ApiKeyTools.cs": {
       "S107": {
         "count": 1,
-        "reason": "the MCP SDK requires individual [Description]-annotated parameters for tool schema generation, so an MCP tool method cannot fold its parameters into an object without losing the tool schema."
+        "reason": "ManageApiKeys preserves flat action, keyId, name, scopes, isReadOnly, expiresAtUtc and confirmationToken schema properties. The installed MCP SDK derives this flat schema from method parameters; grouping them would change the public tool contract."
       }
     },
     "src/Orbit.Api/Mcp/Tools/GoalTools.cs": {
       "S107": {
         "count": 2,
-        "reason": "the MCP SDK requires individual [Description]-annotated parameters for tool schema generation, so an MCP tool method cannot fold its parameters into an object without losing the tool schema."
+        "reason": "CreateGoal preserves flat title, targetValue, unit, description, deadline and type schema properties. UpdateGoal preserves flat goalId, title, targetValue, unit, description and deadline schema properties. The installed MCP SDK derives this flat schema from method parameters; grouping them would change the public tool contract."
       }
     },
     "src/Orbit.Api/Mcp/Tools/HabitTools.cs": {
       "S107": {
         "count": 4,
-        "reason": "the MCP SDK requires individual [Description]-annotated parameters for tool schema generation, so an MCP tool method cannot fold its parameters into an object without losing the tool schema."
+        "reason": "ListHabits preserves flat dateFrom, dateTo, includeOverdue, search, page and pageSize schema properties. CreateHabit preserves eleven flat habit creation schema properties, including intervalWeeks and emoji. UpdateHabit preserves nine flat habit update schema properties, including intervalWeeks and emoji. CreateSubHabit preserves nine flat child-habit schema properties, including parentHabitId and isFlexible. The installed MCP SDK derives this flat schema from method parameters; grouping them would change the public tool contract."
       }
     }
   }

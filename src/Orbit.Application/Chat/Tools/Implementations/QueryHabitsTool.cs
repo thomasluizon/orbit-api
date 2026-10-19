@@ -198,7 +198,6 @@ public class QueryHabitsTool(
         return value.Trim().ToLowerInvariant();
     }
 
-#pragma warning disable CA1859 // IReadOnlyList<Habit> is intentional -- matches repository interface return type
     private static string BuildOutput(
         List<Habit> results,
         IReadOnlyList<Habit> allHabits,
@@ -207,7 +206,6 @@ public class QueryHabitsTool(
         bool includeMetrics,
         bool includeSubs,
         ScheduleContext? schedule)
-#pragma warning restore CA1859
     {
         var sb = new StringBuilder();
         sb.AppendLine(CultureInfo.InvariantCulture, $"Found {results.Count} habit(s):");
@@ -316,9 +314,7 @@ public class QueryHabitsTool(
             : $"Every {habit.FrequencyQuantity} {unitName}s";
     }
 
-#pragma warning disable CA1859 // IReadOnlyList<Habit> is intentional -- matches repository interface return type
     private static void AppendChildren(StringBuilder sb, IReadOnlyList<Habit> allHabits, Guid parentId, DateOnly today, bool includeMetrics, int depth, ScheduleContext? schedule)
-#pragma warning restore CA1859
     {
         var indent = new string(' ', depth * 2);
         var children = allHabits

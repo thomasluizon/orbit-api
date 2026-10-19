@@ -531,3 +531,22 @@ test("--help exits 0 and an unknown flag exits 2", () => {
   assert.equal(unknown.status, 2)
   assert.match(unknown.stderr, /invalid arguments/)
 })
+
+for (const variant of ["identical", "case and whitespace"]) {
+  test(`duplicate reasons across pragma and attribute entries are refused (${variant})`, () => {
+    const reason = "A shared reason cannot explain two different sites."
+    const attributeReason = variant === "identical" ? reason : "  a SHARED\t reason\n cannot explain   two different sites.  "
+    const result = run(stage(`duplicate-reasons-${variant.replaceAll(" ", "-")}`, {
+      pragmas: { "src/Orbit.Infrastructure/Services/AuthSessionService.cs": { ORBIT0004: { count: 1, reason } } },
+      suppressMessage: { "src/Orbit.Api/Mcp/Tools/SchemaTools.cs": { S107: { count: 1, reason: attributeReason } } },
+      sources: {
+        "src/Orbit.Infrastructure/Services/AuthSessionService.cs": AUTH_SESSION_SOURCE,
+        "src/Orbit.Api/Mcp/Tools/SchemaTools.cs": '[System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "S107:Parameters")]\nclass SchemaTools { }\n',
+      },
+    }))
+    assert.equal(result.status, 1, result.stdout)
+    assert.match(result.stderr, /duplicate reason/)
+    assert.match(result.stderr, /AuthSessionService\.cs/)
+    assert.match(result.stderr, /SchemaTools\.cs/)
+  })
+}

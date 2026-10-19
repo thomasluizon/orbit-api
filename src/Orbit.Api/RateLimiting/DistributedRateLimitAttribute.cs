@@ -250,7 +250,7 @@ public sealed partial class DistributedRateLimitFilter(
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(refreshToken)));
 
     // S107 false positive: [LoggerMessage] source-gen binds each parameter to a named {placeholder} in the template, so folding these into a parameter object would drop the structured-log fields. https://learn.microsoft.com/dotnet/core/extensions/logger-message-generator
-#pragma warning disable S107
+#pragma warning disable S107 // LogRateLimitRejected maps each policy, partition, count, retry, method, path and request id to its own generated structured-log placeholder. https://github.com/thomasluizon/orbit-tickets/issues/230
     [LoggerMessage(
         EventId = 1,
         Level = LogLevel.Warning,

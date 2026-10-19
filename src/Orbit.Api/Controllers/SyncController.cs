@@ -63,7 +63,11 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
         DateTime UpdatedAtUtc,
         string? Emoji = null,
         int? IntervalWeeks = null,
-        IReadOnlyList<Orbit.Domain.ValueObjects.RelativeReminderTime>? RelativeReminders = null);
+        IReadOnlyList<Orbit.Domain.ValueObjects.RelativeReminderTime>? RelativeReminders = null,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        HabitSchedule? Schedule = null,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        DateOnly? StartDate = null);
 
     public record SyncHabitLogDto(Guid Id, Guid HabitId, DateOnly Date, decimal Value, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
 
@@ -135,7 +139,7 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
     /// dedicated DTOs and never serializes EF entities directly. Returns 410 Gone if since &gt; 30 days old.
     /// </summary>
     [HttpGet("v2/changes")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(SyncChangesV2Response), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status410Gone)]
@@ -145,7 +149,7 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
     {
         var userId = HttpContext.GetUserId();
 
-#pragma warning disable ORBIT0004
+#pragma warning disable ORBIT0004 // The since guard measures the elapsed MaxSyncWindow against the UTC sync cursor; it does not choose a calendar day. https://github.com/thomasluizon/orbit-tickets/issues/230
         if (DateTime.UtcNow - since > MaxSyncWindow)
 #pragma warning restore ORBIT0004
             return StatusCode(StatusCodes.Status410Gone, ErrorMessages.SyncWindowExceeded.ToErrorBody());
@@ -221,7 +225,7 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
             ChecklistTemplates: new SyncEntitySetV2<SyncChecklistTemplateDto>(
                 checklistTemplates.Where(ct => !ct.IsDeleted).Select(MapChecklistTemplate).ToList(),
                 checklistTemplates.Where(ct => ct.IsDeleted).Select(ct => new SyncDeletedRef(ct.Id, ct.DeletedAtUtc!.Value)).ToList()),
-#pragma warning disable ORBIT0004
+#pragma warning disable ORBIT0004 // SyncChangesV2Response.ServerTimestamp is the UTC synchronization cursor used for subsequent incremental reads. https://github.com/thomasluizon/orbit-tickets/issues/230
             ServerTimestamp: DateTime.UtcNow);
 #pragma warning restore ORBIT0004
 
@@ -353,7 +357,9 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
             habit.UpdatedAtUtc,
             Emoji: habit.Emoji,
             IntervalWeeks: habit.IntervalWeeks,
-            RelativeReminders: habit.RelativeReminders);
+            RelativeReminders: habit.RelativeReminders,
+            Schedule: habit.Schedule,
+            StartDate: habit.StartDate);
     }
 
     private static SyncHabitLogDto MapHabitLog(HabitLog habitLog)

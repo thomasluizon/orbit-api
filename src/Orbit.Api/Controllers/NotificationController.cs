@@ -7,8 +7,6 @@ using Orbit.Application.Common;
 using Orbit.Application.Notifications.Commands;
 using Orbit.Application.Notifications.Queries;
 
-#pragma warning disable CA1873
-
 namespace Orbit.Api.Controllers;
 
 [Authorize]
@@ -110,7 +108,8 @@ public partial class NotificationController(
 
         if (result.IsSuccess)
         {
-            LogPushSubscriptionRegistered(logger, HttpContext.GetUserId());
+            if (logger.IsEnabled(LogLevel.Information))
+                logger.LogPushSubscriptionRegistered(HttpContext.GetUserId());
             return Ok();
         }
 
@@ -133,8 +132,8 @@ public partial class NotificationController(
             request.ReleaseOtherAccount);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
-            LogPushSubscriptionRemoved(logger, HttpContext.GetUserId());
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
+            logger.LogPushSubscriptionRemoved(HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult();
     }
@@ -151,18 +150,21 @@ public partial class NotificationController(
         if (result.IsFailure)
             return result.ToErrorResult();
 
-        if (result.Value.Status == "failed")
-            LogTestPushFailed(logger, HttpContext.GetUserId());
+        if (result.Value.Status == "failed" && logger.IsEnabled(LogLevel.Warning))
+            logger.LogTestPushFailed(HttpContext.GetUserId());
 
         return Ok(result.Value);
     }
+}
 
+internal static partial class NotificationControllerLogging
+{
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Push subscription registered for user {UserId}")]
-    private static partial void LogPushSubscriptionRegistered(ILogger logger, Guid userId);
+    internal static partial void LogPushSubscriptionRegistered(this ILogger logger, Guid userId);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Push subscription removed for user {UserId}")]
-    private static partial void LogPushSubscriptionRemoved(ILogger logger, Guid userId);
+    internal static partial void LogPushSubscriptionRemoved(this ILogger logger, Guid userId);
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Test push failed for user {UserId}")]
-    private static partial void LogTestPushFailed(ILogger logger, Guid userId);
+    internal static partial void LogTestPushFailed(this ILogger logger, Guid userId);
 }

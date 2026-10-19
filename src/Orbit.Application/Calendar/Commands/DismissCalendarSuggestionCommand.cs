@@ -26,7 +26,7 @@ public class DismissCalendarSuggestionCommandHandler(
         if (suggestion is null)
             return Result.Failure(ErrorMessages.SuggestionNotFound);
 
-#pragma warning disable ORBIT0004
+#pragma warning disable ORBIT0004 // MarkDismissed records DismissedAtUtc as an audit instant; the suggestion has no dismissal calendar-date policy. https://github.com/thomasluizon/orbit-tickets/issues/230
         suggestion.MarkDismissed(DateTime.UtcNow);
 #pragma warning restore ORBIT0004
         await unitOfWork.SaveChangesAsync(cancellationToken);
