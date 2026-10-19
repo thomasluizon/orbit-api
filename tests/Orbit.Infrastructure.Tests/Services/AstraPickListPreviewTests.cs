@@ -110,7 +110,7 @@ public class AstraPickListPreviewTests
                 return executionResponse with { PendingOperation = null };
             });
         var quota = Substitute.For<IPayGateService>();
-        quota.CanSendAiMessage(user.Id, Arg.Any<CancellationToken>()).Returns(Result.PayGateFailure("Daily limit"));
+        quota.TryConsumeAiMessage(user.Id, Arg.Any<IUnitOfWork>(), Arg.Any<CancellationToken>()).Returns(Result.PayGateFailure("Daily limit"));
         var service = new AstraBlockAnswerService(store, work, quota, recordingExecutor, new GenericRepository<User>(db),
             Substitute.For<IProductAnalytics>(), Substitute.For<IFeatureFlagService>(), pending);
         if (failPreviewFirst)
@@ -187,7 +187,6 @@ public class AstraPickListPreviewTests
         await store.AddAsync(block, default);
         var quota = Substitute.For<IPayGateService>();
         var work = new UnitOfWork(db, new DatabaseConnectionSettings());
-        quota.CanSendAiMessage(user.Id, Arg.Any<CancellationToken>()).Returns(Result.Success());
         quota.TryConsumeAiMessage(user.Id, work, Arg.Any<CancellationToken>()).Returns(Result.PayGateFailure("Daily limit"));
         var service = new AstraBlockAnswerService(store, work, quota, Substitute.For<IAgentOperationExecutor>(),
             new GenericRepository<User>(db), Substitute.For<IProductAnalytics>(), Substitute.For<IFeatureFlagService>(),
