@@ -11,6 +11,7 @@ using Orbit.Application.Notifications;
 using Orbit.Application.Tests.Commands.Calendar;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Tests.Queries.Calendar;
@@ -276,6 +277,54 @@ public class CalendarFeedAgreementTests
         _writtenSuggestions.Should().ContainSingle();
         legacy.RawEventJson.Should().Be(legacyJson);
         legacy.Title.Should().Be(first.Title);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("09:00")]
+    public async Task LegacyHabit_IsHiddenByReaderAndLinkedByWriter(string? startTime)
+    {
+        var user = CreateSyncingUser("UTC");
+        var fetched = new CalendarEventItem(
+            "legacy-event", "  dAiLy STANDUP  ", null,
+            "2027-01-07", startTime, null, false, null, []);
+        StubFetch(user, fetched);
+
+        var initialSync = await _autoSync.Handle(new RunCalendarAutoSyncCommand(user.Id), CancellationToken.None);
+        initialSync.IsSuccess.Should().BeTrue();
+        initialSync.Value.NewSuggestions.Should().Be(1);
+        initialSync.Value.ReconciledHabits.Should().Be(0);
+        _writtenSuggestions.Should().ContainSingle();
+
+        var beforeImport = await _suggestions.Handle(
+            new GetCalendarSyncSuggestionsQuery(user.Id), CancellationToken.None);
+        beforeImport.IsSuccess.Should().BeTrue();
+        beforeImport.Value.Should().ContainSingle().Which.GoogleEventId.Should().Be(fetched.Id);
+
+        var habit = Habit.Create(new HabitCreateParams(
+            user.Id, "Daily Standup", FrequencyUnit.Day, 1,
+            DueDate: new DateOnly(2027, 1, 7),
+            DueTime: startTime is null ? null : new TimeOnly(9, 0))).Value;
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => new List<Habit> { habit }
+                .Where(call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile()).ToList().AsReadOnly());
+        _habitRepo.FindTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => new List<Habit> { habit }
+                .Where(call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile()).ToList().AsReadOnly());
+
+        habit.GoogleEventId.Should().BeNull();
+        var afterImport = await _suggestions.Handle(
+            new GetCalendarSyncSuggestionsQuery(user.Id), CancellationToken.None);
+        afterImport.IsSuccess.Should().BeTrue();
+        afterImport.Value.Should().BeEmpty("the reader must match the legacy habit before the writer links its event id");
+
+        var reconciliation = await _autoSync.Handle(
+            new RunCalendarAutoSyncCommand(user.Id, IsOpportunistic: true), CancellationToken.None);
+        reconciliation.IsSuccess.Should().BeTrue();
+        reconciliation.Value.ReconciledHabits.Should().Be(1, "the writer must recognise the same legacy match as the reader");
+        reconciliation.Value.NewSuggestions.Should().Be(0);
+        habit.GoogleEventId.Should().Be(fetched.Id);
+        _writtenSuggestions.Should().ContainSingle();
     }
 
     private static CalendarEventItem LisbonThursdayStandup()

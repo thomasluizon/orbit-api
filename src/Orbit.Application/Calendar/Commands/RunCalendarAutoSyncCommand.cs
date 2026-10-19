@@ -178,7 +178,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
         var eventsByKey = fetched
             .Where(ev => !assignedEventIds.Contains(ev.Id))
             .Select(ev => ev.ProjectTo(timeZone))
-            .GroupBy(ev => BuildLegacyMatchKey(ev.Title, ev.StartDate, ev.StartTime), StringComparer.Ordinal)
+            .GroupBy(ev => LegacyCalendarMatchKey.BuildLegacyMatchKey(ev.Title, ev.StartDate, ev.StartTime), StringComparer.Ordinal)
             .Where(group => group.Count() == 1)
             .ToDictionary(group => group.Key, group => group.Single().Id, StringComparer.Ordinal);
 
@@ -192,7 +192,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
             h => h.UserId == user.Id && h.GoogleEventId == null, ct);
 
         var habitsByKey = existingHabits
-            .GroupBy(habit => BuildLegacyMatchKey(
+            .GroupBy(habit => LegacyCalendarMatchKey.BuildLegacyMatchKey(
                 habit.Title,
                 habit.DueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                 habit.DueTime?.ToString("HH:mm", CultureInfo.InvariantCulture)), StringComparer.Ordinal)
@@ -344,11 +344,6 @@ public partial class RunCalendarAutoSyncCommandHandler(
             return DateTime.SpecifyKind(startUtc, DateTimeKind.Utc);
 
         return DateTime.SpecifyKind(DateTime.MinValue, DateTimeKind.Utc);
-    }
-
-    private static string BuildLegacyMatchKey(string title, string? startDate, string? startTime)
-    {
-        return $"{title.Trim().ToLowerInvariant()}|{startDate ?? ""}|{startTime ?? ""}";
     }
 
     private List<CalendarEventItem> NormalizeFetchedEvents(Guid userId, List<CalendarEventItem> fetched)
