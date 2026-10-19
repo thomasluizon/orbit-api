@@ -7,6 +7,7 @@ using Amazon.S3;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.Extensions.Options;
+using Microsoft.OpenApi;
 using Orbit.Api.Mcp.Tools;
 using Orbit.Api.Middleware;
 using Orbit.Api.OpenApi;
@@ -340,6 +341,17 @@ public static partial class ServiceCollectionExtensions
             if (context.Description.ActionDescriptor is ControllerActionDescriptor action &&
                 action.MethodInfo.IsDefined(typeof(ObsoleteAttribute), false))
                 operation.Deprecated = true;
+            return Task.CompletedTask;
+        });
+        options.AddSchemaTransformer((schema, context, _) =>
+        {
+            foreach (var property in context.JsonTypeInfo.Properties)
+            {
+                if (property.AttributeProvider?.IsDefined(typeof(ObsoleteAttribute), false) == true &&
+                    schema.Properties?.TryGetValue(property.Name, out var propertySchema) == true &&
+                    propertySchema is OpenApiSchema deprecatedProperty)
+                    deprecatedProperty.Deprecated = true;
+            }
             return Task.CompletedTask;
         });
     }
