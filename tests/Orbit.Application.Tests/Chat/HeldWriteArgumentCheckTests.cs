@@ -41,7 +41,6 @@ public sealed class HeldWriteArgumentCheckTests
 
     [Theory]
     [InlineData("delete_checklist_template")]
-    [InlineData("delete_user_facts")]
     [InlineData("delete_notifications")]
     [InlineData("update_notifications")]
     public async Task FixedRecordActions_CheckOwnershipWithoutWriting(string name)
@@ -129,14 +128,12 @@ public sealed class HeldWriteArgumentCheckTests
     private static Orbit.Domain.Common.Entity CreateRecord(string name, Guid userId) => name switch
     {
         "delete_checklist_template" => ChecklistTemplate.Create(userId, "Read", ["Read"]).Value,
-        "delete_user_facts" => UserFact.Create(userId, "Enjoys reading", null).Value,
         _ => Notification.Create(userId, "Read", "Read")
     };
 
     private static JsonElement Arguments(string name, Guid id) => name switch
     {
         "delete_checklist_template" => JsonSerializer.SerializeToElement(new { template_id = id }),
-        "delete_user_facts" => JsonSerializer.SerializeToElement(new { fact_id = id }),
         "delete_notifications" => JsonSerializer.SerializeToElement(new { action = "delete_one", notification_id = id }),
         _ => JsonSerializer.SerializeToElement(new { action = "mark_read", notification_id = id })
     };

@@ -104,7 +104,6 @@ public partial class AgentCatalogService : IAgentCatalogService
         sb.AppendLine(CultureInfo.InvariantCulture, $"Plan: {snapshot.Plan}");
         sb.AppendLine(CultureInfo.InvariantCulture, $"Language: {snapshot.Language ?? "unknown"}");
         sb.AppendLine(CultureInfo.InvariantCulture, $"Timezone: {snapshot.TimeZone ?? "unknown"}");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"AI memory: {(snapshot.AiMemoryEnabled ? "enabled" : "disabled")}");
         sb.AppendLine(CultureInfo.InvariantCulture, $"AI summary: {(snapshot.AiSummaryEnabled ? "enabled" : "disabled")}");
         sb.AppendLine(CultureInfo.InvariantCulture, $"Week starts on: {(snapshot.WeekStartDay == 0 ? "Sunday" : "Monday")}");
         sb.AppendLine(CultureInfo.InvariantCulture, $"Clock: {(snapshot.Uses24HourClock ? "24-hour" : "12-hour")}");

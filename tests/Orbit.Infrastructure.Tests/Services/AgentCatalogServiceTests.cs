@@ -158,7 +158,7 @@ public class AgentCatalogServiceTests
     public void BuildDynamicSupplement_ExcludesStaticPolicyAndSurfaces()
     {
         var prompt = _catalogService.BuildDynamicSupplement(new Orbit.Domain.Models.AgentContextSnapshot(
-            "pro", "en", "America/Sao_Paulo", true, true, 1, "dark", true, true, "Idle",
+            "pro", "en", "America/Sao_Paulo", true, 1, "dark", true, true, "Idle",
             TagNames: ["focus"]));
 
         prompt.Should().Contain("Safe User Context");
@@ -171,7 +171,7 @@ public class AgentCatalogServiceTests
     public void BuildDynamicSupplement_PreservesSafeContextTextUnderForeignCulture()
     {
         var snapshot = new Orbit.Domain.Models.AgentContextSnapshot(
-            "pro", "en", "America/Sao_Paulo", true, false, 0, "dark", true, false, "Idle",
+            "pro", "en", "America/Sao_Paulo", false, 0, "dark", true, false, "Idle",
             FeatureFlags: ["api_keys"], TagNames: ["focus"], ChecklistTemplateNames: ["Morning Reset"],
             RecentHabitTitles: ["Morning Run"], RecentGoalTitles: ["Read books"],
             ClientContext: new Orbit.Domain.Models.AgentClientContext(
@@ -184,7 +184,7 @@ public class AgentCatalogServiceTests
             var prompt = _catalogService.BuildDynamicSupplement(snapshot);
 
             prompt.Should().Contain("Plan: pro\nLanguage: en\nTimezone: America/Sao_Paulo\n");
-            prompt.Should().Contain("AI memory: enabled\nAI summary: disabled\nWeek starts on: Sunday\nClock: 24-hour\n");
+            prompt.Should().Contain("AI summary: disabled\nWeek starts on: Sunday\nClock: 24-hour\n");
             prompt.Should().Contain("Theme: dark\nGoogle Calendar connected: yes\n");
             prompt.Should().Contain("Calendar auto-sync: disabled (Idle)\n");
             prompt.Should().Contain("Feature flags: api_keys\nTags: focus\nChecklist templates: Morning Reset\n");
@@ -271,7 +271,6 @@ public class AgentCatalogServiceTests
             "profile",
             "habits",
             "goals",
-            "user-facts",
             "calendar",
             "notifications",
             "gamification",
@@ -290,7 +289,6 @@ public class AgentCatalogServiceTests
             "pro",
             "en",
             "America/Sao_Paulo",
-            true,
             true,
             1,
             "dark",

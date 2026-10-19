@@ -11,7 +11,6 @@ public static class AppConstants
     public const int MaxChecklistItemTextLength = 500;
     public const int MaxHabitDepth = 5;
     public const int MaxTagsPerHabit = 5;
-    public const int MaxUserFacts = 50;
     public const int MaxRangeDays = 366;
     public const int MaxInstanceHorizonDays = 90;
     public const int HabitLogsLookbackDays = 365;

@@ -73,7 +73,7 @@ public class NotificationVoiceTests
     {
         var builder = new SystemPromptBuilder();
         var request = new PromptBuildRequest(
-            [], [], HasImage: true, UserToday: new DateOnly(2026, 9, 18));
+            [], HasImage: true, UserToday: new DateOnly(2026, 9, 18));
 
         return builder.BuildStatic(request) + builder.BuildDynamic(request);
     }

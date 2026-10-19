@@ -56,7 +56,6 @@ public class ActiveHabitsSectionTests
     {
         return new PromptContext(
             ActiveHabits: habits ?? [],
-            UserFacts: [],
             HasImage: false,
             RoutinePatterns: null,
             UserTags: null,
@@ -152,7 +151,7 @@ public class ActiveHabitsSectionTests
             ValidUserId, "Filed taxes", null, null, DueDate: Today.AddDays(-1))).Value;
         task.Log(Today).IsSuccess.Should().BeTrue();
         var context = new PromptContext(
-            ActiveHabits: [task], UserFacts: [], HasImage: false, RoutinePatterns: null,
+            ActiveHabits: [task], HasImage: false, RoutinePatterns: null,
             UserTags: null, UserToday: Today, HabitMetrics: null,
             TodayHabitIds: new HashSet<Guid> { task.Id },
             DoneTodayHabitIds: new HashSet<Guid> { task.Id });

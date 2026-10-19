@@ -22,7 +22,6 @@ public static class ResultActionResultExtensions
         [ErrorCodes.ParentHabitNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.TargetParentNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.TagNotFound] = StatusCodes.Status404NotFound,
-        [ErrorCodes.FactNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.GoalNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.ApiKeyNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.NotificationNotFound] = StatusCodes.Status404NotFound,

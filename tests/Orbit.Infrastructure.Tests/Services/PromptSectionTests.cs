@@ -18,14 +18,14 @@ public class CoreIdentitySectionTests
     [Fact]
     public void ShouldInclude_AlwaysTrue()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
         new CoreIdentitySection().ShouldInclude(ctx).Should().BeTrue();
     }
 
     [Fact]
     public void Build_ContainsOrbitIdentity()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
         var result = new CoreIdentitySection().Build(ctx);
 
         result.Should().Contain("Orbit AI");
@@ -35,7 +35,7 @@ public class CoreIdentitySectionTests
     [Fact]
     public void Build_SoftenedGuidance_RoutesEveryWriteAndAmbiguityThroughCards()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
         var result = new CoreIdentitySection().Build(ctx);
 
         result.Should().Contain("Call the tool right away");
@@ -56,7 +56,7 @@ public class CoreIdentitySectionTests
     [Fact]
     public void Build_NoLongerActsWithoutConfirmationOnDestructiveTools()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
         var result = new CoreIdentitySection().Build(ctx);
 
         result.Should().NotContain("without asking for unnecessary confirmation");
@@ -74,14 +74,14 @@ public class EncouragingToneSectionTests
     [Fact]
     public void ShouldInclude_AlwaysTrue()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
         new EncouragingToneSection().ShouldInclude(ctx).Should().BeTrue();
     }
 
     [Fact]
     public void Build_ContainsWarmEncouragingTone()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
         var result = new EncouragingToneSection().Build(ctx);
 
         result.Should().Contain("warm");
@@ -93,7 +93,7 @@ public class EncouragingToneSectionTests
     [Fact]
     public void Build_KeepsAcknowledgementCalmAndSpecific()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
         var result = new EncouragingToneSection().Build(ctx);
 
         result.Should().Contain("calmly");
@@ -105,7 +105,7 @@ public class EncouragingToneSectionTests
     [Fact]
     public void Build_ContainsNoEmOrEnDashes()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
         var result = new EncouragingToneSection().Build(ctx);
 
         result.Should().NotContain("—");
@@ -124,14 +124,14 @@ public class GlobalRulesSectionTests
     [Fact]
     public void ShouldInclude_AlwaysTrue()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
         new GlobalRulesSection().ShouldInclude(ctx).Should().BeTrue();
     }
 
     [Fact]
     public void Build_ContainsCoreRules()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
         var result = new GlobalRulesSection().Build(ctx);
 
         result.Should().Contain("Core Rules");
@@ -142,7 +142,7 @@ public class GlobalRulesSectionTests
     [Fact]
     public void Build_ActionOrientedRule_AllowsOneClarifyingQuestion()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
         var result = new GlobalRulesSection().Build(ctx);
 
         result.Should().Contain("ONE targeted question");
@@ -152,7 +152,7 @@ public class GlobalRulesSectionTests
     [Fact]
     public void Build_ContainsHabitEmojiRule()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
         var result = new GlobalRulesSection().Build(ctx);
 
         result.Should().Contain("HABIT EMOJIS");
@@ -164,7 +164,7 @@ public class GlobalRulesSectionTests
     [Fact]
     public void Build_ContainsNoSubstitutionRule()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
         var result = new GlobalRulesSection().Build(ctx);
 
         result.Should().Contain("NO HABIT SUBSTITUTION FOR LOG / SKIP");
@@ -179,7 +179,7 @@ public class GlobalRulesSectionTests
     [Fact]
     public void Build_ContainsDescribeFeaturePointer()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
         var result = new GlobalRulesSection().Build(ctx);
 
         result.Should().Contain("describe_feature");
@@ -188,7 +188,7 @@ public class GlobalRulesSectionTests
     [Fact]
     public void Build_ContainsExhaustiveListingRules()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
         var result = new GlobalRulesSection().Build(ctx);
 
         result.Should().Contain("list EVERY matching entry");
@@ -199,7 +199,7 @@ public class GlobalRulesSectionTests
     [Fact]
     public void Build_RequiresBulkCallsAndHonestCompletionClaims()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
         var result = new GlobalRulesSection().Build(ctx);
 
         result.Should().Contain("bulk_update_habits");
@@ -221,14 +221,14 @@ public class StructuringStrategySectionTests
     [Fact]
     public void ShouldInclude_AlwaysTrue()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
         new StructuringStrategySection().ShouldInclude(ctx).Should().BeTrue();
     }
 
     [Fact]
     public void Build_ExplainsChecklistVsSubHabits()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
         var result = new StructuringStrategySection().Build(ctx);
 
         result.Should().Contain("Structuring Strategy");
@@ -239,7 +239,7 @@ public class StructuringStrategySectionTests
     [Fact]
     public void Build_TeachesClarifyingQuestionPolicy()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
         var result = new StructuringStrategySection().Build(ctx);
 
         result.Should().Contain("Ask ONE targeted clarifying question");
@@ -249,7 +249,7 @@ public class StructuringStrategySectionTests
     [Fact]
     public void Build_ListsAntiPatterns()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
         var result = new StructuringStrategySection().Build(ctx);
 
         result.Should().Contain("Anti-patterns to avoid");
@@ -258,7 +258,7 @@ public class StructuringStrategySectionTests
     [Fact]
     public void Build_PreservesFlexibleWeeklyShortcut()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
         var result = new StructuringStrategySection().Build(ctx);
 
         result.Should().Contain("NEVER ask a question");
@@ -278,7 +278,7 @@ public class ToolFailureSectionTests
     [Fact]
     public void ShouldInclude_AlwaysTrue()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
 
         new ToolFailureSection().ShouldInclude(ctx).Should().BeTrue();
     }
@@ -286,7 +286,7 @@ public class ToolFailureSectionTests
     [Fact]
     public void Build_DefinesTerminalFailureRules()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
 
         var result = new ToolFailureSection().Build(ctx);
 
@@ -301,7 +301,7 @@ public class ToolFailureSectionTests
     [Fact]
     public void Build_RetriesDroppedPayloadWithoutExposingInternalLimits()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
 
         var result = new ToolFailureSection().Build(ctx);
 
@@ -315,7 +315,7 @@ public class ToolFailureSectionTests
     [Fact]
     public void Build_PreservesClarificationForAmbiguousRequests()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
 
         var result = new ToolFailureSection().Build(ctx);
 
@@ -335,14 +335,14 @@ public class TodayDateSectionTests
     [Fact]
     public void ShouldInclude_AlwaysTrue()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
         new TodayDateSection().ShouldInclude(ctx).Should().BeTrue();
     }
 
     [Fact]
     public void Build_WithUserToday_UsesProvidedDate()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, new DateOnly(2026, 6, 15), null);
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, new DateOnly(2026, 6, 15), null);
         var result = new TodayDateSection().Build(ctx);
 
         result.Should().Contain("2026-06-15");
@@ -351,7 +351,7 @@ public class TodayDateSectionTests
     [Fact]
     public void Build_WithoutUserToday_Throws()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
 
         var act = () => new TodayDateSection().Build(ctx);
 
@@ -375,7 +375,7 @@ public class HabitCountSectionTests
             Habit.Create(new HabitCreateParams(Guid.NewGuid(), "H1", null, null, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value,
             Habit.Create(new HabitCreateParams(Guid.NewGuid(), "H2", null, null, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value,
         };
-        var ctx = new PromptContext(habits, new List<UserFact>(), false, null, null, null, null);
+        var ctx = new PromptContext(habits, false, null, null, null, null);
         var result = new HabitCountSection().Build(ctx);
 
         result.Should().Contain("2 active habits");
@@ -384,7 +384,7 @@ public class HabitCountSectionTests
     [Fact]
     public void Build_EmptyHabits_ShowsZero()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
         var result = new HabitCountSection().Build(ctx);
 
         result.Should().Contain("0 active habits");
@@ -402,21 +402,21 @@ public class ImageInstructionsSectionTests
     [Fact]
     public void ShouldInclude_HasImageTrue_ReturnsTrue()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), true, null, null, null, null);
+        var ctx = new PromptContext(new List<Habit>(), true, null, null, null, null);
         new ImageInstructionsSection().ShouldInclude(ctx).Should().BeTrue();
     }
 
     [Fact]
     public void ShouldInclude_HasImageFalse_ReturnsFalse()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
         new ImageInstructionsSection().ShouldInclude(ctx).Should().BeFalse();
     }
 
     [Fact]
     public void Build_ContainsImageAnalysisInstructions()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), true, null, null, new DateOnly(2026, 4, 10), null);
+        var ctx = new PromptContext(new List<Habit>(), true, null, null, new DateOnly(2026, 4, 10), null);
         var result = new ImageInstructionsSection().Build(ctx);
 
         result.Should().Contain("Image Analysis Instructions");
@@ -427,7 +427,7 @@ public class ImageInstructionsSectionTests
     [Fact]
     public void Build_WithoutUserToday_Throws()
     {
-        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), true, null, null, null, null);
+        var ctx = new PromptContext(new List<Habit>(), true, null, null, null, null);
 
         var act = () => new ImageInstructionsSection().Build(ctx);
 

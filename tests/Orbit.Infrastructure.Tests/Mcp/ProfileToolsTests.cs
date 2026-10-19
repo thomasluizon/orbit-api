@@ -52,7 +52,7 @@ public class ProfileToolsTests
         var profile = new ProfileResponse(
             Guid.NewGuid(),
             "Alex", "alex@example.com", "America/Sao_Paulo",
-            true, true, true, true, true, true, true, true, "pt-BR", "Pro", true, false, null, null,
+            true, true, true, true, true, true, true, "pt-BR", "Pro", true, false, null, null,
             5, 100, false, false, false, null, null, false, 1, 500, 5, "Achiever",
             0, 10, 12, 2, null, null,
             false, GoogleCalendarAutoSyncStatus.Idle, null, true, null, false);
@@ -122,38 +122,6 @@ public class ProfileToolsTests
         StubExecutor(AgentOperationStatus.Failed, policyReason: "Invalid language");
 
         var result = await _tools.SetLanguage(_user, "xx");
-
-        result.Should().StartWith("Error: ");
-    }
-
-    [Fact]
-    public async Task SetAiMemory_Enabled_RoutesThroughExecutorAndReturnsEnabledMessage()
-    {
-        StubExecutor(AgentOperationStatus.Succeeded);
-
-        string result = string.Empty;
-        var request = await CapturedRequestAsync(async () => result = await _tools.SetAiMemory(_user, true));
-
-        request.OperationId.Should().Be("set_ai_memory");
-        result.Should().Be("AI memory enabled");
-    }
-
-    [Fact]
-    public async Task SetAiMemory_Disabled_ReturnsDisabledMessage()
-    {
-        StubExecutor(AgentOperationStatus.Succeeded);
-
-        var result = await _tools.SetAiMemory(_user, false);
-
-        result.Should().Be("AI memory disabled");
-    }
-
-    [Fact]
-    public async Task SetAiMemory_Failure_ReturnsError()
-    {
-        StubExecutor(AgentOperationStatus.Failed, policyReason: "Not found");
-
-        var result = await _tools.SetAiMemory(_user, true);
 
         result.Should().StartWith("Error: ");
     }

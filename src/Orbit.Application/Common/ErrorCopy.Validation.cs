@@ -97,7 +97,6 @@ public static partial class ErrorCopy
         (ValidationErrorCodes.UploadContentTypeSupported, $"Content type must be one of: {string.Join(", ", UploadContentTypes.Allowed)}.", $"O tipo de conteúdo deve ser um destes: {string.Join(", ", UploadContentTypes.Allowed)}."),
         (ValidationErrorCodes.UploadSizePositive, "File size must be greater than zero.", "O tamanho do arquivo deve ser maior que zero."),
         (ValidationErrorCodes.UploadSizeLimit, $"File size must be {UploadContentTypes.MaxSizeBytes} bytes or less.", $"O arquivo deve ter no máximo {UploadContentTypes.MaxSizeBytes} bytes."),
-        (ValidationErrorCodes.FactIdsRequired, "FactIds list must not be empty", "A lista de IDs dos fatos não pode estar vazia"),
         (ValidationErrorCodes.BulkDeleteFactLimit, $"Cannot delete more than {AppConstants.MaxBulkOperationSize} facts at once", $"Não é possível excluir mais de {AppConstants.MaxBulkOperationSize} fatos de uma vez"),
         (ValidationErrorCodes.FactIdRequired, "Fact ID must not be empty", "O ID do fato não pode estar vazio"),
         (ValidationErrorCodes.WaitlistLanguageSupported, "Language must be one of: en, pt-BR.", "O idioma deve ser um destes: en, pt-BR."),

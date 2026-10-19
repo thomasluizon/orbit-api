@@ -15,7 +15,6 @@ using Orbit.Application.Profile.Commands;
 using Orbit.Application.Subscriptions.Commands;
 using Orbit.Application.Support.Commands;
 using Orbit.Application.Tags.Commands;
-using Orbit.Application.UserFacts.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -140,7 +139,7 @@ public sealed class CheckChatCommandQueryHandler(IServiceProvider services) : IR
         SetClockFormatCommand => Result.Success(),
         SetThemePreferenceCommand theme => theme.Preference is null or "light" or "dark"
             ? Result.Success() : Result.Failure("Invalid theme preference."),
-        SetAiMemoryCommand or SetAiSummaryCommand or CompleteOnboardingCommand or CompleteTourCommand or ResetTourCommand => Result.Success(),
+        SetAiSummaryCommand or CompleteOnboardingCommand or CompleteTourCommand or ResetTourCommand => Result.Success(),
         _ => await Task.FromResult<Result?>(null)
     };
 
@@ -187,8 +186,6 @@ public sealed class CheckChatCommandQueryHandler(IServiceProvider services) : IR
     {
         CreateApiKeyCommand create => ApiKey.Create(create.UserId, create.Name, create.Scopes, create.IsReadOnly, create.ExpiresAtUtc),
         RevokeApiKeyCommand revoke => await ExistsAsync<ApiKey>(k => k.Id == revoke.KeyId && k.UserId == revoke.UserId, ct),
-        DeleteUserFactCommand delete => await ExistsAsync<UserFact>(f => f.Id == delete.FactId && f.UserId == delete.UserId, ct),
-        BulkDeleteUserFactsCommand delete => await CheckFactIdsAsync(delete, ct),
         DismissCalendarSuggestionCommand dismiss => await ExistsAsync<GoogleCalendarSyncSuggestion>(s => s.Id == dismiss.SuggestionId && s.UserId == dismiss.UserId, ct),
         ConfirmAccountDeletionCommand confirm => await CheckDeletionCodeAsync(confirm, ct),
         CreateCheckoutCommand checkout => checkout.Interval is "monthly" or "yearly" ? Result.Success() : Result.Failure("Invalid interval."),
@@ -196,12 +193,6 @@ public sealed class CheckChatCommandQueryHandler(IServiceProvider services) : IR
             or SetCalendarAutoSyncCommand or RunCalendarAutoSyncCommand or DismissCalendarImportCommand => Result.Success(),
         _ => null
     };
-
-    private async Task<Result> CheckFactIdsAsync(BulkDeleteUserFactsCommand command, CancellationToken ct)
-    {
-        var facts = await Repository<UserFact>().FindAsync(f => f.UserId == command.UserId && command.FactIds.Contains(f.Id), ct);
-        return OwnershipValidation.AllResolved(command.FactIds, facts, f => f.Id, ErrorMessages.FactNotFound);
-    }
 
     private async Task<Result> CheckDeletionCodeAsync(ConfirmAccountDeletionCommand command, CancellationToken ct)
     {

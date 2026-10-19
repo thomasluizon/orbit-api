@@ -17,6 +17,8 @@ public sealed partial class HangfireRecurringJobRegistrar(
 {
     public Task StartAsync(CancellationToken cancellationToken)
     {
+        recurringJobManager.RemoveIfExists("openai-batch-poller");
+
         foreach (var job in jobs)
         {
             recurringJobManager.AddOrUpdate<ScheduledJobRunner>(

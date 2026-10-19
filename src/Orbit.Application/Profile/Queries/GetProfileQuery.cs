@@ -16,8 +16,6 @@ public record ProfileResponse(
     string Name,
     string Email,
     string? TimeZone,
-    [property: Obsolete("AI memory is deprecated and will be removed.")]
-    bool AiMemoryEnabled,
     bool AiSummaryEnabled,
     bool HasCompletedOnboarding,
     bool HasCompletedTour,
@@ -119,7 +117,6 @@ public class GetProfileQueryHandler(
             user.Name,
             user.Email,
             user.TimeZone,
-            user.AiMemoryEnabled,
             user.AiSummaryEnabled,
             user.HasCompletedOnboarding,
             user.HasCompletedTour,
