@@ -1,3 +1,5 @@
+#pragma warning disable OPENAI001
+
 using System.ClientModel;
 using System.ClientModel.Primitives;
 using System.Net;
@@ -6,8 +8,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
-using OpenAI;
-using OpenAI.Chat;
+using OpenAI.Responses;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.AI;
 
@@ -67,10 +68,9 @@ public class AiCompletionErrorTests
     private static AiCompletionClient BuildClient(
         HttpMessageHandler handler, ILogger retryLogger, IAiUsageRecorder usageRecorder, int maxRetries)
     {
-        var chatClient = new ChatClient(
-            model: "gpt-test",
+        var chatClient = new ResponsesClient(
             credential: new ApiKeyCredential("test-key"),
-            options: new OpenAIClientOptions
+            options: new ResponsesClientOptions
             {
                 Endpoint = new Uri("https://orbit.test/v1"),
                 Transport = new HttpClientPipelineTransport(new HttpClient(handler)),
