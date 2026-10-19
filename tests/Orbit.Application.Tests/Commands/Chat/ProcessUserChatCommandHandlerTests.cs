@@ -4198,7 +4198,7 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ContinueWithToolResultsFails_StopsAndReturnsPartialResult()
+    public async Task Handle_ContinueWithToolResultsFails_ReturnsExplicitFailure()
     {
         SetupUserAndPayGate();
 
@@ -4227,8 +4227,8 @@ public partial class ProcessUserChatCommandHandlerTests
         var command = new ProcessUserChatCommand(UserId, "Create habit");
         var result = await handler.Handle(command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeTrue();
-        result.Value.Actions.Should().HaveCount(1);
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be("Connection lost");
     }
 
     [Fact]

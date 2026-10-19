@@ -253,10 +253,13 @@ public partial class AgentOperationExecutor(
 
         try
         {
-            return tool is ITransactionalAiTool
-                ? await unitOfWork.ExecuteInTransactionAsync(
+            if (tool is not ITransactionalAiTool)
+                return await ExecutePolicyAndToolAsync(execution, tool, policyState, cancellationToken);
+            return unitOfWork.HasActiveTransaction
+                ? await unitOfWork.ExecuteInSavepointAsync(
                     ct => ExecutePolicyAndToolAsync(execution, tool, policyState, ct), cancellationToken)
-                : await ExecutePolicyAndToolAsync(execution, tool, policyState, cancellationToken);
+                : await unitOfWork.ExecuteInTransactionAsync(
+                    ct => ExecutePolicyAndToolAsync(execution, tool, policyState, ct), cancellationToken);
         }
         catch (ToolOutcomeRollbackException ex)
         {

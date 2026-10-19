@@ -22,9 +22,14 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
             .Initialize(Migration.TargetModel, designTime: true);
         var current = context.GetService<IDesignTimeModel>().Model;
 
-        context.GetService<IMigrationsModelDiffer>()
-            .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel())
-            .Should().BeEmpty();
+        var differences = context.GetService<IMigrationsModelDiffer>()
+            .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
+        differences.Should().HaveCount(6);
+        differences.OfType<CreateTableOperation>().Select(table => table.Name)
+            .Should().BeEquivalentTo("OAuthStates", "AiBudgetCalls");
+        differences.OfType<CreateIndexOperation>().Should().HaveCount(3);
+        differences.OfType<InsertDataOperation>().Should().ContainSingle().Which.Table.Should().Be("AppConfigs");
+        context.Database.HasPendingModelChanges().Should().BeFalse();
     }
 
     [Fact]

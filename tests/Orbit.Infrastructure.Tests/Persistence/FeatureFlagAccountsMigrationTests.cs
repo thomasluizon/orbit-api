@@ -26,7 +26,9 @@ public class FeatureFlagAccountsMigrationTests
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
 
-        differences.Should().HaveCount(31);
+        differences.Should().HaveCount(37);
+        differences.OfType<CreateTableOperation>().Should().Contain(table => table.Name == "OAuthStates")
+            .And.Contain(table => table.Name == "AiBudgetCalls");
         var owedCancellations = differences.OfType<CreateTableOperation>()
             .Should().ContainSingle(table => table.Name == "OwedSubscriptionCancellations").Subject;
         owedCancellations.Name.Should().Be("OwedSubscriptionCancellations");
