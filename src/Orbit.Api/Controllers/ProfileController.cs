@@ -33,17 +33,7 @@ public partial class ProfileController(
     public record SetClockFormatRequest([property: JsonRequired] bool Uses24HourClock);
     public record SetThemePreferenceRequest(string? ThemePreference);
     public record SetColorSchemeRequest(string? ColorScheme);
-    public record SetHandleRequest(string Handle);
-    public record SetSocialOptInRequest([property: JsonRequired] bool Enabled);
     public record UpdateMarketingConsentRequest([property: JsonRequired] bool Enabled);
-    public record UpdatePublicProfileRequest(
-        [property: JsonRequired] bool Enabled,
-        [property: JsonRequired] bool ShowStreak,
-        [property: JsonRequired] bool ShowLevel,
-        [property: JsonRequired] bool ShowAchievements,
-        [property: JsonRequired] bool ShowTopHabits,
-        [property: JsonRequired] bool Regenerate);
-
     public record ApplyOnboardingRequest(
         IReadOnlyList<ApplyHabitInput>? Habits,
         ApplyLogInput? FirstLog,
@@ -285,44 +275,6 @@ public partial class ProfileController(
         return result.ToPayGateAwareResult(() => NoContent());
     }
 
-    [HttpPut("handle")]
-    [Obsolete("The social API is deprecated and will be removed in part 2 of ORB-233.")]
-    [DistributedRateLimit("set-handle")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> SetHandle(
-        [FromBody] SetHandleRequest request,
-        CancellationToken cancellationToken)
-    {
-        var command = new SetHandleCommand(HttpContext.GetUserId(), request.Handle);
-        var result = await mediator.Send(command, cancellationToken);
-
-        if (result.IsSuccess)
-            LogHandleChanged(logger, HttpContext.GetUserId());
-
-        return result.ToPayGateAwareResult(() => NoContent());
-    }
-
-    [HttpPut("social-opt-in")]
-    [Obsolete("The social API is deprecated and will be removed in part 2 of ORB-233.")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> SetSocialOptIn(
-        [FromBody] SetSocialOptInRequest request,
-        CancellationToken cancellationToken)
-    {
-        var command = new SetSocialOptInCommand(HttpContext.GetUserId(), request.Enabled);
-        var result = await mediator.Send(command, cancellationToken);
-
-        if (result.IsSuccess)
-            LogSocialOptInChanged(logger, ToggleLabel(request.Enabled), HttpContext.GetUserId());
-
-        return result.ToPayGateAwareResult(() => NoContent());
-    }
-
     [HttpPut("marketing-consent")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -338,31 +290,6 @@ public partial class ProfileController(
             LogMarketingConsentChanged(logger, ToggleLabel(request.Enabled), HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
-    }
-
-    [HttpPut("public")]
-    [Obsolete("The social API is deprecated and will be removed in part 2 of ORB-233.")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> UpdatePublicProfile(
-        [FromBody] UpdatePublicProfileRequest request,
-        CancellationToken cancellationToken)
-    {
-        var command = new UpdatePublicProfileCommand(
-            HttpContext.GetUserId(),
-            request.Enabled,
-            request.ShowStreak,
-            request.ShowLevel,
-            request.ShowAchievements,
-            request.ShowTopHabits,
-            request.Regenerate);
-        var result = await mediator.Send(command, cancellationToken);
-
-        if (result.IsSuccess)
-            LogPublicProfileUpdated(logger, ToggleLabel(request.Enabled), HttpContext.GetUserId());
-
-        return result.ToPayGateAwareResult(value => Ok(value));
     }
 
     [HttpPost("reset")]
@@ -421,15 +348,6 @@ public partial class ProfileController(
 
     [LoggerMessage(EventId = 9, Level = LogLevel.Information, Message = "Display name changed for user {UserId}")]
     private static partial void LogNameChanged(ILogger logger, Guid userId);
-
-    [LoggerMessage(EventId = 10, Level = LogLevel.Information, Message = "Handle changed for user {UserId}")]
-    private static partial void LogHandleChanged(ILogger logger, Guid userId);
-
-    [LoggerMessage(EventId = 11, Level = LogLevel.Information, Message = "Social opt-in {State} for user {UserId}")]
-    private static partial void LogSocialOptInChanged(ILogger logger, string state, Guid userId);
-
-    [LoggerMessage(EventId = 12, Level = LogLevel.Information, Message = "Public profile {State} for user {UserId}")]
-    private static partial void LogPublicProfileUpdated(ILogger logger, string state, Guid userId);
 
     [LoggerMessage(EventId = 14, Level = LogLevel.Information, Message = "Marketing email consent {State} for user {UserId}")]
     private static partial void LogMarketingConsentChanged(ILogger logger, string state, Guid userId);

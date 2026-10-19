@@ -9,7 +9,6 @@ public static class DomainConstants
     public const int MaxHabitEmojiLength = 32;
     public const int MaxIntervalWeeks = 52;
     public const int MaxUserNameLength = 50;
-    public const int HandleMinLength = 3;
     public const int HandleMaxLength = 20;
     public const int MaxCheerNoteLength = 200;
     public const int MaxReportDetailsLength = 500;

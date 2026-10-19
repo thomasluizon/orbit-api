@@ -149,15 +149,6 @@ public static class ErrorMessages
     public static readonly AppError MutationFailed = From(ErrorCodes.MutationFailed);
     public static readonly AppError BulkLogItemFailed = From(ErrorCodes.MutationFailed);
     public static readonly AppError UpgradeRequired = From(ErrorCodes.UpgradeRequired);
-    public static readonly AppError SocialDisabled = From(ErrorCodes.SocialDisabled);
-    public static readonly AppError HandleTaken = From(ErrorCodes.HandleTaken);
-    public static readonly AppError FriendLimitReached = From(ErrorCodes.FriendLimitReached);
-    public static readonly AppError AlreadyFriends = From(ErrorCodes.AlreadyFriends);
-    public static readonly AppError Blocked = From(ErrorCodes.Blocked);
-    public static readonly AppError NotFriends = From(ErrorCodes.NotFriends);
-    public static readonly AppError ContentRejected = From(ErrorCodes.ContentRejected);
-    public static readonly AppError FriendRequestNotFound = From(ErrorCodes.FriendRequestNotFound);
-    public static readonly AppError CheerNotFound = From(ErrorCodes.CheerNotFound);
     public static readonly AppError StreakRepairUnavailable = From(ErrorCodes.StreakRepairUnavailable);
     public static readonly AppError StreakGapRepairUnavailable = From(ErrorCodes.StreakGapRepairUnavailable);
 }

@@ -11,7 +11,6 @@ public static class DomainErrors
     public static readonly AppError SessionNotActive = new("SESSION_NOT_ACTIVE", "Session is no longer active.");
 
     public static readonly AppError NameRequired = new("NAME_REQUIRED", "Name is required");
-    public static readonly AppError InvalidHandle = new("INVALID_HANDLE", "Handle must be 3-20 characters using only letters, numbers, or underscores.");
     public static readonly AppError CannotFriendSelf = new("CANNOT_FRIEND_SELF", "You cannot send a friend request to yourself.");
     public static readonly AppError FriendshipNotPending = new("FRIENDSHIP_NOT_PENDING", "This friend request is no longer pending.");
     public static readonly AppError CannotCheerSelf = new("CANNOT_CHEER_SELF", "You cannot cheer yourself.");

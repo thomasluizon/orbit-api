@@ -4,7 +4,6 @@ using Orbit.Application.Common;
 using Orbit.Application.Gamification.Models;
 using Orbit.Application.Habits.Services;
 using Orbit.Application.Notifications;
-using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -24,14 +23,9 @@ public record GamificationRepositories(
     IGenericRepository<XpAwardLog> XpAwardLogRepository,
     IFoundingAchievementReader FoundingAchievementReader);
 
-/// <summary>Groups the outbound notification channels gamification emits through to keep the service constructor small.</summary>
-public record GamificationNotifiers(
-    IPushNotificationService PushService,
-    IFriendFeedEventEmitter FriendFeedEventEmitter);
-
 public partial class GamificationService(
     GamificationRepositories repos,
-    GamificationNotifiers notifiers,
+    IPushNotificationService pushService,
     IUserDateService userDateService,
     IXpAwarder xpAwarder,
     IUnitOfWork unitOfWork,
@@ -694,22 +688,7 @@ public partial class GamificationService(
         {
             await repos.AchievementRepository.AddAsync(entity, ct);
             await AwardXpAsync(user, definition.XpReward, XpAwardSource.Achievement, entity.Id, awardedAtUtc: DateTime.UtcNow, ct);
-            await EmitAchievementFeedEventAsync(user, entity, definition, ct);
         }
-    }
-
-    /// <summary>
-    /// Streams a non-streak achievement into friends' feeds. Consistency (streak-tier) achievements are
-    /// skipped because the streak hook already emits a StreakMilestone for the same moment, so emitting
-    /// here too would double the feed row.
-    /// </summary>
-    private async Task EmitAchievementFeedEventAsync(
-        User user, UserAchievement entity, AchievementDefinition definition, CancellationToken ct)
-    {
-        if (definition.Category == AchievementCategory.Consistency)
-            return;
-
-        await notifiers.FriendFeedEventEmitter.EmitAchievementEventAsync(user, entity.AchievementId, definition.Category, ct);
     }
 
     private static readonly Dictionary<string, (string Name, string Description)> AchievementTranslationsPt = new()
@@ -816,7 +795,7 @@ public partial class GamificationService(
         {
             try
             {
-                await notifiers.PushService.SendToUserAsync(push.UserId, push.Title, push.Body, push.Url, ct);
+                await pushService.SendToUserAsync(push.UserId, push.Title, push.Body, push.Url, ct);
             }
             catch (Exception ex)
             {

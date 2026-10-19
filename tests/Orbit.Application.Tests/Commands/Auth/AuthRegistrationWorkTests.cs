@@ -49,6 +49,8 @@ public class AuthRegistrationWorkTests
             .Returns(call =>
             {
                 calls.Add("upsert");
+                call.Arg<User>().Handle.Should().BeNull();
+                call.Arg<User>().SocialOptIn.Should().BeFalse();
                 return exists ? User.Create("Existing", "person@example.com").Value : call.Arg<User>();
             });
         jobs.Create(Arg.Any<Job>(), Arg.Any<IState>())

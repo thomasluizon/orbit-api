@@ -11,7 +11,6 @@ public class UserDeactivationQueryFilterTests
     private static User ActiveUser(string name, string email)
     {
         var user = User.Create(name, email).Value;
-        user.SeedDefaultHandle();
         return user;
     }
 
@@ -58,7 +57,7 @@ public class UserDeactivationQueryFilterTests
     public async Task FindAsync_ByPublicProfileSlug_ReturnsNothingForDeactivatedOwner()
     {
         var deactivated = DeactivatedUser("Gone", "slug@example.com");
-        deactivated.SetPublicProfileSlug("PUBLICSLUG123456");
+        typeof(User).GetProperty(nameof(User.PublicProfileSlug))!.SetValue(deactivated, "PUBLICSLUG123456");
         var (context, repository) = await SeedAsync(deactivated);
         using var _ = context;
 

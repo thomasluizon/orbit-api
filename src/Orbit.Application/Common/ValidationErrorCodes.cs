@@ -80,12 +80,8 @@ public static class ValidationErrorCodes
     public const string CalendarDateValid = "VALIDATION_CALENDAR_DATE_VALID";
     public const string ChecklistItemLimit = "VALIDATION_CHECKLIST_ITEM_LIMIT";
     public const string WeekStartOnboarding = "VALIDATION_WEEK_START_ONBOARDING";
-    public const string HandleFormat = "VALIDATION_HANDLE_FORMAT";
     public const string ProfileNameLength = "VALIDATION_PROFILE_NAME_LENGTH";
     public const string WeekStartDay = "VALIDATION_WEEK_START_DAY";
-    public const string CheersDirection = "VALIDATION_CHEERS_DIRECTION";
-    public const string FeedCursorFormat = "VALIDATION_FEED_CURSOR_FORMAT";
-    public const string FriendIdentifierExclusive = "VALIDATION_FRIEND_IDENTIFIER_EXCLUSIVE";
     public const string BillingIntervalRequired = "VALIDATION_BILLING_INTERVAL_REQUIRED";
     public const string BillingIntervalSupported = "VALIDATION_BILLING_INTERVAL_SUPPORTED";
     public const string TagColorFormat = "VALIDATION_TAG_COLOR_FORMAT";

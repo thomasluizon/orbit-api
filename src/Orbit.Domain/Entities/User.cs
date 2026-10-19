@@ -12,9 +12,6 @@ public partial class User : Entity
     [GeneratedRegex(@"^[^@\s]+@[^@\s]+\.[^@\s]+$", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]
     private static partial Regex EmailRegex();
 
-    [GeneratedRegex(@"^[A-Za-z0-9_]{3,20}$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
-    private static partial Regex HandleRegex();
-
     public string Name { get; private set; } = null!;
     public string Email { get; private set; } = null!;
     public string? TimeZone { get; private set; }
@@ -63,6 +60,7 @@ public partial class User : Entity
     public int ReminderPreferencesVersion { get; private set; }
     public string? ReferralCode { get; private set; }
     public Guid? ReferredByUserId { get; private set; }
+    /// <summary>Social storage retained until https://github.com/thomasluizon/orbit-tickets/issues/1555 contracts the schema.</summary>
     public string? Handle { get; private set; }
     public bool SocialOptIn { get; private set; }
     public bool IsAdmin { get; private set; }
@@ -90,6 +88,7 @@ public partial class User : Entity
     /// and the data export still reports it truthfully.
     /// </summary>
     public string? ColorScheme { get; private set; }
+    /// <summary>Public-profile storage retained until https://github.com/thomasluizon/orbit-tickets/issues/1555 contracts the schema.</summary>
     public string? PublicProfileSlug { get; private set; }
     public bool PublicProfileShowStreak { get; private set; } = true;
     public bool PublicProfileShowLevel { get; private set; } = true;
@@ -572,24 +571,6 @@ public partial class User : Entity
 
     public void SetReferralCode(string code) => ReferralCode = code;
 
-    public Result SetHandle(string handle)
-    {
-        if (string.IsNullOrWhiteSpace(handle) || !HandleRegex().IsMatch(handle))
-            return Result.Failure(DomainErrors.InvalidHandle);
-
-        Handle = handle;
-        return Result.Success();
-    }
-
-    /// <summary>
-    /// Assigns the deterministic, collision-free default handle (<c>user_</c> + the first 12 hex of
-    /// the user's id) for a freshly created account. Bypasses format validation because the result is
-    /// provably valid (17 chars, alphanumeric + underscore); the same formula backfills existing rows.
-    /// </summary>
-    public void SeedDefaultHandle() => Handle = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"user_{Id:N}")[..17];
-
-    public void SetSocialOptIn(bool enabled) => SocialOptIn = enabled;
-
     /// <summary>
     /// Grants this user the single administrative role — the only code path that sets IsAdmin, which
     /// mints the JWT admin claim the "Admin" policy gates admin-only endpoints on. Idempotent. The
@@ -615,24 +596,6 @@ public partial class User : Entity
     {
         MarketingEmailConsent = consented;
         MarketingConsentUpdatedAtUtc = DateTime.UtcNow;
-    }
-
-    /// <summary>
-    /// Sets (or clears, when null) the opaque token that addresses the user's public shareable
-    /// profile at <c>/u/{slug}</c>. A null slug means the public profile is disabled.
-    /// </summary>
-    public void SetPublicProfileSlug(string? slug) => PublicProfileSlug = slug;
-
-    /// <summary>
-    /// Sets which fields the public profile exposes. Each flag gates one section of the no-auth
-    /// projection; a field whose flag is false is omitted server-side, never just hidden client-side.
-    /// </summary>
-    public void SetPublicProfileVisibility(bool showStreak, bool showLevel, bool showAchievements, bool showTopHabits)
-    {
-        PublicProfileShowStreak = showStreak;
-        PublicProfileShowLevel = showLevel;
-        PublicProfileShowAchievements = showAchievements;
-        PublicProfileShowTopHabits = showTopHabits;
     }
 
     public void SetReferredBy(Guid referrerUserId) => ReferredByUserId = referrerUserId;

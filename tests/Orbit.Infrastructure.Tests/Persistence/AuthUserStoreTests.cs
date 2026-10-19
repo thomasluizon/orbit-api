@@ -82,7 +82,6 @@ public class AuthUserStoreTests
     {
         var user = User.Create(name, "person@example.com").Value;
         user.SetLanguage(language);
-        user.SeedDefaultHandle();
         user.BeginSignup(language, name);
         return user;
     }
