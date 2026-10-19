@@ -1,10 +1,10 @@
 {
   "20261019011031_ContractHabitLogSlip": {
-    "expandCommit": "a1c666f1eac4c6544cb2a896345fd1a69cbe88fa",
-    "deployedCommit": "7472203c7450bdd914c68282fefa905d9b432653",
-    "evidenceUrl": "https://github.com/thomasluizon/orbit-api/pull/764#issuecomment-6257602012",
+    "expandCommit": "a2f546985e46387ad3ecb228cc93bd00d656a304",
+    "deployedCommit": "98016b262ab2b1b28bfe4d262fe5538fd12779a5",
+    "evidenceUrl": "https://dashboard.render.com/web/srv-dasotg8473hc739a5gjg/deploys/dep-dbam5ee1egvs73b8bt5g",
     "condition": "Every active HabitLog writer supplies IsSlip explicitly. The contract backfills remaining NULL classifications before requiring the column and removing the compatibility trigger.",
-    "webDrainEvidence": "Render service srv-d6tc2isr85hc739bf75g has live deploy dep-dba7ls5g1s2s73b3lhog on 7472203c7450bdd914c68282fefa905d9b432653. Previous deploy dep-db9uiv3ncjis73ang7b0 is deactivated, as confirmed in the linked deployment attestation and retained deploy listing.",
-    "backgroundDrainEvidence": "Hangfire servers and recurring jobs run inside the API host, as registered in ServiceCollectionExtensions.BackgroundJobs.cs. The linked orchestrator attestation confirms every running writer is compatible and the previous Render deploy is deactivated, stopping its hosted services and Hangfire process. The contract release retains the compatible deployed commit as its rollback floor."
+    "webDrainEvidence": "Render staging service srv-dasotg8473hc739a5gjg has live deploy dep-dbam5ee1egvs73b8bt5g on 98016b262ab2b1b28bfe4d262fe5538fd12779a5. Its prior successful deploy dep-dbajvpe1egvs73b0od50 on 7d85e55c1ac6c80f57febfd47e19ffb831394067 and every older successful deploy in the retrieved listing are deactivated. The live commit contains the expand migration and HabitLog.Create explicitly assigns IsSlip. Render lists one staging API instance, srv-dasotg8473hc739a5gjg-jdn7f.",
+    "backgroundDrainEvidence": "Hangfire servers and recurring jobs run inside the API host, as registered in ServiceCollectionExtensions.BackgroundJobs.cs. The earlier staging API deployments are deactivated, stopping their hosted services and Hangfire processes. The Render service listing contains no separate background worker. The contract release retains the compatible deployed commit as its rollback floor."
   }
 }
