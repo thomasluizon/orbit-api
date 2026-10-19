@@ -28,7 +28,11 @@ public sealed record UserDataExport(
     IReadOnlyList<ExportedFriendFeedEvent> FriendFeedEvents,
     IReadOnlyList<ExportedProactiveItem>? ProactiveItems = null,
     ExportedNotionConnection? NotionConnection = null,
-    IReadOnlyList<Orbit.Application.Connections.NotionTaskResponse>? NotionTasks = null);
+    IReadOnlyList<Orbit.Application.Connections.NotionTaskResponse>? NotionTasks = null,
+    IReadOnlyList<ExportedConversationTurn>? Conversations = null);
+
+public sealed record ExportedConversationTurn(Guid TurnId, string Role, DateTime CreatedAtUtc,
+    string? Model, string? Content, IReadOnlyList<Orbit.Application.Chat.ConversationToolCall> ToolCalls);
 
 public sealed record ExportedNotionConnection(string? WorkspaceName, string Status, DateTime CreatedAtUtc, DateTime? LastPollAtUtc);
 

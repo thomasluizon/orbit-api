@@ -157,7 +157,8 @@ public partial class ProcessUserChatCommandHandler(
     ChatAiDependencies ai,
     ChatExecutionDependencies execution,
     ILogger<ProcessUserChatCommandHandler> logger,
-    IAppConfigService appConfig) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
+    IAppConfigService appConfig,
+    IConversationTurnRecorder? conversationRecorder = null) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
 {
     private static class PartKinds
     {
@@ -185,22 +186,44 @@ public partial class ProcessUserChatCommandHandler(
         ProcessUserChatCommand request,
         CancellationToken cancellationToken)
     {
+        var recording = new ConversationRecordingState();
+        Result<ChatResponse>? response = null;
+        try
+        {
+            response = await HandleCoreAsync(request, recording, cancellationToken);
+            return response;
+        }
+        finally
+        {
+            RecordConversationSafely(request, recording, response);
+        }
+    }
+
+    private async Task<Result<ChatResponse>> HandleCoreAsync(ProcessUserChatCommand request,
+        ConversationRecordingState recording, CancellationToken cancellationToken)
+    {
         if (request.BlockAnswer is not null)
         {
+            recording.Enabled = true;
             var answerService = new AstraBlockAnswerService(execution.BlockStore, execution.UnitOfWork,
                 execution.PayGateService, execution.OperationExecutor, data.UserRepository, execution.ProductAnalytics,
-                data.FeatureFlagService, execution.PendingOperationStore, logger, execution.PendingOperationPreviewer, execution.BlockAnswerTimeout);
+                data.FeatureFlagService, execution.PendingOperationStore, logger, execution.PendingOperationPreviewer, execution.BlockAnswerTimeout,
+                prepared =>
+                {
+                    recording.UserContent = prepared.Message;
+                    recording.Enabled = !prepared.IsReplay;
+                }, recording.ToolCalls.Add);
             return await answerService.ExecuteAsync(request, prepared =>
                 prepared.Crisis != CrisisLocales.None
                     ? HandleCrisisTurnAsync(request with { Message = prepared.Message }, prepared.Crisis)
-                    : HandleTurnAsync(request with { Message = prepared.Message }, cancellationToken, prepared.AnsweredAtUtc), cancellationToken);
+                    : HandleTurnAsync(request with { Message = prepared.Message }, recording, cancellationToken, prepared.AnsweredAtUtc), cancellationToken);
         }
         await execution.UnitOfWork.ExecuteInTransactionAsync(async token =>
         {
             await execution.UnitOfWork.AcquireAdvisoryLockAsync($"astra-blocks:{request.UserId}", token);
             await execution.BlockStore.InvalidateOpenAsync(request.UserId, token);
         }, cancellationToken);
-        return await HandleTurnAsync(request, cancellationToken);
+        return await HandleTurnAsync(request, recording, cancellationToken);
     }
 
     private CancellationTokenSource CreateBlockTurnCancellation(CancellationToken token, DateTime? answeredAtUtc)
@@ -214,7 +237,7 @@ public partial class ProcessUserChatCommandHandler(
         return cancellation;
     }
 
-    private async Task<Result<ChatResponse>> HandleTurnAsync(ProcessUserChatCommand request, CancellationToken cancellationToken,
+    private async Task<Result<ChatResponse>> HandleTurnAsync(ProcessUserChatCommand request, ConversationRecordingState recording, CancellationToken cancellationToken,
         DateTime? answeredAtUtc = null)
     {
         using var turnCancellation = CreateBlockTurnCancellation(cancellationToken, answeredAtUtc);
@@ -228,6 +251,7 @@ public partial class ProcessUserChatCommandHandler(
             return contextResult.PropagateError<ChatResponse>();
 
         var context = contextResult.Value;
+        recording.Enabled = context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraConversationRecording);
         var crisisTurn = CrisisSupportGuard.IsEnabled(detectedCrisisLocales, context.EnabledFeatureFlags);
         if (crisisTurn)
             return await HandleCrisisTurnAsync(request, detectedCrisisLocales);
@@ -262,7 +286,8 @@ public partial class ProcessUserChatCommandHandler(
         if (response.IsFailure)
             return response.PropagateError<ChatResponse>();
 
-        var executionResults = new ToolExecutionAccumulator { AnsweredAtUtc = answeredAtUtc };
+        recording.UsedModel = true;
+        var executionResults = new ToolExecutionAccumulator { AnsweredAtUtc = answeredAtUtc, Recording = recording };
         var actionsStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var toolLoopResult = await RunToolCallLoopAsync(
             response.Value,

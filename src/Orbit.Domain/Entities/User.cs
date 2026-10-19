@@ -55,6 +55,7 @@ public partial class User : Entity
     public DateTime? GoogleCalendarSyncReconciledAt { get; private set; }
     public bool IsDeactivated { get; private set; }
     public DateTime? DeactivatedAt { get; private set; }
+    public DateTime? ConversationHistoryClearedAtUtc { get; private set; }
     public DateTime? ScheduledDeletionAt { get; private set; }
     public int WeekStartDay { get; private set; } = 1;
     public bool? Uses24HourClockPreference { get; private set; }
@@ -739,6 +740,7 @@ public partial class User : Entity
     /// </summary>
     public void ResetAccount()
     {
+        ConversationHistoryClearedAtUtc = DateTime.UtcNow;
         ReminderPreferencesVersion++;
         HasCompletedOnboarding = false;
         HasCompletedTour = false;

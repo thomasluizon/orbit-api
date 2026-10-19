@@ -43,6 +43,8 @@ public class AccountResetRepositoryTests : IDisposable
 
     private void SeedForUser(Guid userId)
     {
+        _dbContext.ConversationTurns.Add(ConversationTurn.Create(userId, Guid.NewGuid(), "user", DateTime.UtcNow,
+            null, "Private message", "[]").Value);
         _dbContext.ChecklistTemplates.Add(
             ChecklistTemplate.Create(userId, "Morning", ["Item"]).Value);
 
@@ -125,6 +127,8 @@ public class AccountResetRepositoryTests : IDisposable
 
         await _repository.DeleteAllUserDataAsync(_userId);
 
+        (await _dbContext.ConversationTurns.CountAsync(turn => turn.UserId == _userId)).Should().Be(0);
+        (await _dbContext.ConversationTurns.CountAsync(turn => turn.UserId == _otherUserId)).Should().Be(1);
         (await _dbContext.ChecklistTemplates.CountAsync(ct => ct.UserId == _userId)).Should().Be(0);
         (await _dbContext.GoogleCalendarSyncSuggestions.CountAsync(s => s.UserId == _userId)).Should().Be(0);
         (await _dbContext.AgentStepUpChallenges.CountAsync(c => c.UserId == _userId)).Should().Be(0);

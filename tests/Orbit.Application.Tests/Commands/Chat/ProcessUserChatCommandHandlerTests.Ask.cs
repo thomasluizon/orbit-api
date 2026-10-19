@@ -254,6 +254,9 @@ public partial class ProcessUserChatCommandHandlerTests
         var result = await handler.Handle(new(UserId, "Walk", BlockAnswer: new(block.Id, ["a"])), default);
         result.IsSuccess.Should().BeTrue();
         result.Value.PendingOperations.Should().ContainSingle();
+        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn =>
+            !turn.UsedModel && turn.UserContent == "Walk" && turn.ToolCallsJson.Contains("bulk_create_habits")
+            && turn.ToolCallsJson.Contains("PendingConfirmation")));
         await _aiIntentService.DidNotReceiveWithAnyArgs().SendWithToolsAsync(default!, default, default);
         await _payGate.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
         _productAnalytics.Received(1).CaptureUserEvent(UserId, "astra_block_answered", Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, object>>());

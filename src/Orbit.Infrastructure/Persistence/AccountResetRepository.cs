@@ -8,6 +8,10 @@ public class AccountResetRepository(OrbitDbContext context, IAccountEventCollect
 {
     public async Task DeleteAllUserDataAsync(Guid userId, CancellationToken cancellationToken = default)
     {
+        var clearedAtUtc = DateTime.UtcNow;
+        await context.Users.Where(user => user.Id == userId)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(user => user.ConversationHistoryClearedAtUtc, clearedAtUtc), cancellationToken);
+        await context.ConversationTurns.Where(turn => turn.UserId == userId).ExecuteDeleteAsync(cancellationToken);
         await context.NotionTasks.Where(t => t.UserId == userId).ExecuteDeleteAsync(cancellationToken);
         await context.NotionConnections.Where(c => c.UserId == userId).ExecuteDeleteAsync(cancellationToken);
         await context.NotionOAuthStates.Where(s => s.UserId == userId).ExecuteDeleteAsync(cancellationToken);

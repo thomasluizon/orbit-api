@@ -529,6 +529,13 @@ namespace Orbit.Infrastructure.Migrations
                         },
                         new
                         {
+                            Key = "astra_conversation_recording",
+                            Description = "Record encrypted Astra conversations for failure diagnosis for 30 days after privacy disclosure is published",
+                            Enabled = false,
+                            UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
                             Key = "ai_chat",
                             Description = "AI chat assistant",
                             Enabled = true,
@@ -937,6 +944,49 @@ namespace Orbit.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("ContentBlocks");
+                });
+
+            modelBuilder.Entity("Orbit.Domain.Entities.ConversationTurn", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Content")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Model")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("ToolCallsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("TurnId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAtUtc");
+
+                    b.HasIndex("TurnId", "Role")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "CreatedAtUtc");
+
+                    b.ToTable("ConversationTurns");
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.DistributedRateLimitBucket", b =>
@@ -2399,6 +2449,9 @@ namespace Orbit.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<DateTime?>("ConversationHistoryClearedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -3012,6 +3065,15 @@ namespace Orbit.Infrastructure.Migrations
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.ClosedMonthRecap", b =>
+                {
+                    b.HasOne("Orbit.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Orbit.Domain.Entities.ConversationTurn", b =>
                 {
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()

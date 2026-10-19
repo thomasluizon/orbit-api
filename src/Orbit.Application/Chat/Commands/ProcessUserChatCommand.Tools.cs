@@ -113,6 +113,9 @@ public partial class ProcessUserChatCommandHandler
         foreach (var call in orderedCalls)
         {
             var outcome = outcomesByCallId[call.Id];
+            if (executionResults.Recording is { Enabled: true } recording)
+                recording.ToolCalls.Add(new ConversationToolCall(call.Id, call.Name, call.Args.Clone(),
+                    outcome.ToolResult.Success, outcome.ToolResult.Error));
             toolResults.Add(outcome.ToolResult);
             executionResults.ToolResults.Add(outcome.ToolResult);
             executionResults.Add(
