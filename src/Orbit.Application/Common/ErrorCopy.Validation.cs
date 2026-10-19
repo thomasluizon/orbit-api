@@ -15,7 +15,6 @@ public static partial class ErrorCopy
         (ValidationErrorCodes.ApiKeyScopesRequired, "API key scopes must be non-empty strings.", "As permissões da chave de API não podem estar vazias."),
         (ValidationErrorCodes.ApiKeyScopeInvalid, "API key scope '{PropertyValue}' is not a recognized scope.", "A permissão '{PropertyValue}' da chave de API não é reconhecida."),
         (ValidationErrorCodes.ApiKeyExpiryFuture, "API key expiry must be in the future.", "A validade da chave de API deve estar no futuro."),
-        (ValidationErrorCodes.AccessTokenRequired, "Access token is required.", "O token de acesso é obrigatório."),
         (ValidationErrorCodes.LanguageSupported, $"Language must be one of: {string.Join(", ", AppConstants.SupportedLanguages)}", $"O idioma deve ser um destes: {string.Join(", ", AppConstants.SupportedLanguages)}"),
         (ValidationErrorCodes.RefreshTokenFormat, "Refresh token format is invalid.", "O formato do token de atualização é inválido."),
         (ValidationErrorCodes.CalendarSelectionLimit, $"You can select at most {AppConstants.MaxSelectedCalendars} calendars.", $"Você pode selecionar no máximo {AppConstants.MaxSelectedCalendars} agendas."),
