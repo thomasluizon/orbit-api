@@ -161,16 +161,6 @@ public static class ErrorMessages
     public static readonly AppError ContentRejected = From(ErrorCodes.ContentRejected);
     public static readonly AppError FriendRequestNotFound = From(ErrorCodes.FriendRequestNotFound);
     public static readonly AppError CheerNotFound = From(ErrorCodes.CheerNotFound);
-    public static readonly AppError ChallengeNotFound = From(ErrorCodes.ChallengeNotFound);
-    public static readonly AppError ChallengeFull = From(ErrorCodes.ChallengeFull);
-    public static readonly AppError AlreadyJoinedChallenge = From(ErrorCodes.AlreadyJoinedChallenge);
-    public static readonly AppError NotChallengeParticipant = From(ErrorCodes.NotChallengeParticipant);
-    public static readonly AppError InvalidJoinCode = From(ErrorCodes.InvalidJoinCode);
-    public static readonly AppError ChallengeClosed = From(ErrorCodes.ChallengeClosed);
-    public static readonly AppError PairNotFound = From(ErrorCodes.PairNotFound);
-    public static readonly AppError PairLimitReached = From(ErrorCodes.PairLimitReached);
-    public static readonly AppError AlreadyPaired = From(ErrorCodes.AlreadyPaired);
-    public static readonly AppError AlreadyCheckedIn = From(ErrorCodes.AlreadyCheckedIn);
     public static readonly AppError StreakRepairUnavailable = From(ErrorCodes.StreakRepairUnavailable);
     public static readonly AppError StreakGapRepairUnavailable = From(ErrorCodes.StreakGapRepairUnavailable);
 }

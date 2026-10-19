@@ -6,9 +6,6 @@ public static partial class ErrorCopy
 {
     private static (string Code, string En, string PtBr)[] Validation =>
     [
-        (ValidationErrorCodes.AccountabilityHabitLimit, $"You can link at most {AppConstants.MaxAccountabilityHabitsPerUser} habits per pair.", $"Você pode vincular no máximo {AppConstants.MaxAccountabilityHabitsPerUser} hábitos por dupla."),
-        (ValidationErrorCodes.HabitIdsRequired, "Habit ids must not be empty.", "Os IDs dos hábitos não podem estar vazios."),
-        (ValidationErrorCodes.HabitIdsUnique, "Habit ids must not contain duplicates.", "Os IDs dos hábitos não podem se repetir."),
         (ValidationErrorCodes.VerificationCodeFormat, "Enter all 6 digits", "Digite os 6 dígitos"),
         (ValidationErrorCodes.ApiKeyNameRequired, "Give the API key a name", "Dê um nome à chave de API"),
         (ValidationErrorCodes.ApiKeyNameLength, "Shorten the API key name to 50 characters or fewer", "Encurte o nome da chave de API para até 50 caracteres"),
@@ -19,12 +16,6 @@ public static partial class ErrorCopy
         (ValidationErrorCodes.RefreshTokenFormat, "Refresh token format is invalid.", "O formato do token de atualização é inválido."),
         (ValidationErrorCodes.CalendarSelectionLimit, $"You can select at most {AppConstants.MaxSelectedCalendars} calendars.", $"Você pode selecionar no máximo {AppConstants.MaxSelectedCalendars} agendas."),
         (ValidationErrorCodes.CalendarIdsRequired, "Calendar ids must be non-empty.", "Os IDs das agendas não podem estar vazios."),
-        (ValidationErrorCodes.ChallengeTargetPositive, "A goal challenge requires a target count greater than 0.", "Um desafio de meta precisa de uma quantidade maior que 0."),
-        (ValidationErrorCodes.StreakChallengeTargetAbsent, "A streak challenge cannot have a target count.", "Um desafio de sequência não pode ter uma quantidade alvo."),
-        (ValidationErrorCodes.ChallengeEndDateRequired, "A goal challenge requires an end date.", "Um desafio de meta precisa de uma data de término."),
-        (ValidationErrorCodes.ChallengeHabitsRequired, "Link at least one of your habits to the challenge.", "Vincule pelo menos um dos seus hábitos ao desafio."),
-        (ValidationErrorCodes.ChallengeHabitLimit, $"You can link at most {AppConstants.MaxHabitsPerChallengeParticipant} habits.", $"Você pode vincular no máximo {AppConstants.MaxHabitsPerChallengeParticipant} hábitos."),
-        (ValidationErrorCodes.ChallengeInviteLimit, $"You can invite at most {AppConstants.MaxChallengeParticipants - 1} friends.", $"Você pode convidar no máximo {AppConstants.MaxChallengeParticipants - 1} amigos."),
         (ValidationErrorCodes.ChatMessageRequired, "Write a message", "Escreva uma mensagem"),
         (ValidationErrorCodes.ChatMessageLength, $"Shorten your message to {AppConstants.MaxChatMessageLength} characters or fewer", $"Encurte sua mensagem para até {AppConstants.MaxChatMessageLength} caracteres"),
         (ValidationErrorCodes.ChatHistoryLimit, $"Chat history cannot exceed {AppConstants.MaxChatHistoryMessages} messages.", $"O histórico da conversa deve ter no máximo {AppConstants.MaxChatHistoryMessages} mensagens."),

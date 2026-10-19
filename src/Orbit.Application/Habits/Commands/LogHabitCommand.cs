@@ -3,7 +3,6 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
-using Orbit.Application.Challenges.Services;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Services;
@@ -47,7 +46,6 @@ public record LogHabitServices(
     IUserStreakService UserStreakService,
     IGamificationService GamificationService,
     IGoalCompletionService GoalCompletionService,
-    IChallengeProgressService ChallengeProgressService,
     IMediator Mediator,
     IPayGateService PayGate);
 
@@ -249,7 +247,7 @@ public partial class LogHabitCommandHandler(
             /**
              * The log row and the due-date advance are both inputs a streak repair reads, so they
              * commit inside HabitCeilingLock. Only the persist is locked: the streak, gamification,
-             * challenge and referral work below is derived and writes the token-protected user row.
+             * and referral work below is derived and writes the token-protected user row.
              */
             persisted = await HabitCeilingLock.ExecuteAsync(
                 unitOfWork,
@@ -276,7 +274,6 @@ public partial class LogHabitCommandHandler(
         var goalSync = persisted.Value.GoalSync;
         var streakState = await services.UserStreakService.RecalculateAsync(request.UserId, cancellationToken: cancellationToken);
         var gamificationResult = await ProcessGamificationSafeAsync(request.UserId, request.HabitId, cancellationToken);
-        await ProcessChallengeProgressSafeAsync(request.UserId, request.HabitId, cancellationToken);
         await ProcessOnboardingChecklistSafeAsync(request.UserId, OnboardingChecklistSignal.HabitLogged, cancellationToken);
 
         if (gamificationResult is null)
@@ -419,19 +416,6 @@ public partial class LogHabitCommandHandler(
         }
     }
 
-    private async Task ProcessChallengeProgressSafeAsync(
-        Guid userId, Guid habitId, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await services.ChallengeProgressService.EvaluateOnHabitLoggedAsync(userId, habitId, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            LogChallengeProgressFailed(logger, ex, habitId);
-        }
-    }
-
     private async Task ProcessOnboardingChecklistSafeAsync(
         Guid userId, OnboardingChecklistSignal signal, CancellationToken cancellationToken)
     {
@@ -474,9 +458,6 @@ public partial class LogHabitCommandHandler(
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Onboarding checklist processing failed for user {UserId}")]
     private static partial void LogOnboardingChecklistFailed(ILogger logger, Exception ex, Guid userId);
-
-    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Challenge progress processing failed for habit {HabitId}")]
-    private static partial void LogChallengeProgressFailed(ILogger logger, Exception ex, Guid habitId);
 }
 
 internal record LinkedGoalSyncResult(IReadOnlyList<LinkedGoalUpdate>? Updates);

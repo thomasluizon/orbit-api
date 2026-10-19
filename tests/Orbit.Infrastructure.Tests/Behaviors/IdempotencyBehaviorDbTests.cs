@@ -8,7 +8,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Orbit.Application.Behaviors;
 using Orbit.Application.Chat.Tools.Implementations;
-using Orbit.Application.Challenges.Services;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Commands;
@@ -662,16 +661,19 @@ public class IdempotencyBehaviorDbTests : IDisposable
             : new BulkLogHabitsTool(mediator, repository, dateService, planner);
         var firstArgs = JsonSerializer.SerializeToElement(new
         {
-            filter = new { search = "Original" }, date = firstDay.ToString("yyyy-MM-dd")
+            filter = new { search = "Original" },
+            date = firstDay.ToString("yyyy-MM-dd")
         });
         var changedArgs = changeDate
             ? JsonSerializer.SerializeToElement(new
             {
-                filter = new { search = "Original" }, date = firstDay.AddDays(1).ToString("yyyy-MM-dd")
+                filter = new { search = "Original" },
+                date = firstDay.AddDays(1).ToString("yyyy-MM-dd")
             })
             : JsonSerializer.SerializeToElement(new
             {
-                filter = new { search = "Outside" }, date = firstDay.ToString("yyyy-MM-dd")
+                filter = new { search = "Outside" },
+                date = firstDay.ToString("yyyy-MM-dd")
             });
 
         await FluentActions.Invoking(() => tool.ExecuteAsync(firstArgs, _userId, CancellationToken.None))
@@ -895,7 +897,6 @@ public class IdempotencyBehaviorDbTests : IDisposable
         userDateService.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(today);
         var streakService = Substitute.For<IUserStreakService>();
         var gamificationService = Substitute.For<IGamificationService>();
-        var challengeService = Substitute.For<IChallengeProgressService>();
         var goalService = Substitute.For<IGoalCompletionService>();
         var mediator = Substitute.For<IMediator>();
         var payGate = Substitute.For<IPayGateService>();
@@ -906,7 +907,7 @@ public class IdempotencyBehaviorDbTests : IDisposable
                 new GenericRepository<HabitLog>(_dbContext),
                 new GenericRepository<User>(_dbContext)),
             new LogHabitServices(userDateService, streakService, gamificationService,
-                goalService, challengeService, mediator, payGate),
+                goalService, mediator, payGate),
             _unitOfWork, cache, NullLogger<LogHabitCommandHandler>.Instance);
 
         var winnerId = Guid.NewGuid();
@@ -961,8 +962,6 @@ public class IdempotencyBehaviorDbTests : IDisposable
             _userId, habit.Id, Arg.Any<CancellationToken>());
         await gamificationService.DidNotReceive().ProcessOnboardingChecklistAsync(
             _userId, OnboardingChecklistSignal.HabitLogged, Arg.Any<CancellationToken>());
-        await challengeService.DidNotReceive().EvaluateOnHabitLoggedAsync(
-            _userId, habit.Id, Arg.Any<CancellationToken>());
     }
 
     [Fact]

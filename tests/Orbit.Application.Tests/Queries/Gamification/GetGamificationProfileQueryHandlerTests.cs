@@ -298,6 +298,8 @@ public class GetGamificationProfileQueryHandlerTests
     [Fact]
     public async Task Handle_RetiredAchievementEarned_IncludesHistoricalBadgeOutsideActiveTotal()
     {
+        var retiredDefinition = AchievementDefinitions.All.Single(a => a.Id == AchievementDefinitions.FirstFriend);
+        retiredDefinition.IsRetired.Should().BeTrue();
         var user = CreateProUser();
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
         _achievementRepo.FindAsync(
@@ -305,7 +307,7 @@ public class GetGamificationProfileQueryHandlerTests
                 Arg.Any<CancellationToken>())
             .Returns(new List<UserAchievement>
             {
-                UserAchievement.Create(UserId, AchievementDefinitions.BattleBuddy)
+                UserAchievement.Create(UserId, AchievementDefinitions.FirstFriend)
             });
 
         var result = await _handler.Handle(new GetGamificationProfileQuery(UserId), CancellationToken.None);
@@ -313,10 +315,10 @@ public class GetGamificationProfileQueryHandlerTests
         result.Value.AchievementsTotal.Should().Be(33);
         result.Value.AchievementsEarned.Should().Be(1);
         result.Value.Achievements.Should().HaveCount(33);
-        var retired = result.Value.Achievements.Single(a => a.Id == AchievementDefinitions.BattleBuddy);
+        var retired = result.Value.Achievements.Single(a => a.Id == AchievementDefinitions.FirstFriend);
         retired.IsEarned.Should().BeTrue();
         retired.EarnedAtUtc.Should().NotBeNull();
-        retired.Name.Should().Be("Battle buddy");
+        retired.Name.Should().Be("First friend");
         retired.Description.Should().NotBeNullOrWhiteSpace();
     }
 
@@ -327,7 +329,7 @@ public class GetGamificationProfileQueryHandlerTests
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
         var earned = AchievementDefinitions.Active
             .Select(definition => UserAchievement.Create(UserId, definition.Id))
-            .Append(UserAchievement.Create(UserId, AchievementDefinitions.BattleBuddy))
+            .Append(UserAchievement.Create(UserId, AchievementDefinitions.FirstFriend))
             .ToList();
         _achievementRepo.FindAsync(
                 Arg.Any<Expression<Func<UserAchievement, bool>>>(),
@@ -340,6 +342,49 @@ public class GetGamificationProfileQueryHandlerTests
         result.Value.AchievementsEarned.Should().Be(33);
         result.Value.AchievementsTotal.Should().Be(33);
         result.Value.AchievementsEarned.Should().BeLessThanOrEqualTo(result.Value.AchievementsTotal);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_RemovedAchievementEarned_OmitsBadgeAndPreservesXpAndLevel(bool includeDefinedAchievements)
+    {
+        var user = CreateProUser();
+        user.AddXp(1_200);
+        var level = user.Level;
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        var unlock = UserAchievement.Create(UserId, "battle_buddy");
+        var definedUnlocks = includeDefinedAchievements
+            ? new List<UserAchievement>
+            {
+                UserAchievement.Create(UserId, AchievementDefinitions.FirstOrbit),
+                UserAchievement.Create(UserId, AchievementDefinitions.FirstFriend)
+            }
+            : new List<UserAchievement>();
+        _achievementRepo.FindAsync(
+                Arg.Any<Expression<Func<UserAchievement, bool>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(definedUnlocks.Append(unlock).ToList());
+
+        var result = await _handler.Handle(new GetGamificationProfileQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Achievements.Should().NotContain(a => a.Id == unlock.AchievementId);
+        result.Value.UserAchievements.Should().BeEquivalentTo(definedUnlocks.Select(a =>
+            new UserAchievementDto(a.AchievementId, a.EarnedAtUtc)));
+        result.Value.AchievementsEarned.Should().Be(definedUnlocks.Count);
+        result.Value.Achievements.Where(a => a.IsEarned).Select(a => a.Id)
+            .Should().BeEquivalentTo(definedUnlocks.Select(a => a.AchievementId));
+        result.Value.AchievementsTotal.Should().Be(result.Value.Achievements.Count);
+        await _progressService.Received(1).LoadAsync(
+            user,
+            Arg.Is<IReadOnlySet<string>>(ids => ids.SetEquals(definedUnlocks.Select(a => a.AchievementId))),
+            Arg.Any<CancellationToken>());
+        result.Value.TotalXp.Should().Be(1_200);
+        result.Value.Level.Should().Be(LevelDefinitions.GetLevelForXp(1_200).Level);
+        user.TotalXp.Should().Be(1_200);
+        user.Level.Should().Be(level);
+        _achievementRepo.DidNotReceive().Remove(Arg.Any<UserAchievement>());
     }
 
     [Fact]

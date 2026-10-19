@@ -1,10 +1,31 @@
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.AspNetCore.Mvc;
+using Orbit.Api.Controllers;
+using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Controllers;
 
 public class SocialDeprecationTests
 {
+    [Fact]
+    public void RemovedControllers_HaveNoHttpActionsOrCatalogEntries()
+    {
+        var controllerNames = typeof(ChatController).Assembly.GetTypes()
+            .Where(type => typeof(ControllerBase).IsAssignableFrom(type))
+            .Select(type => type.Name);
+        controllerNames.Should().NotContain("ChallengesController")
+            .And.NotContain("AccountabilityController")
+            .And.Contain("FriendsController")
+            .And.Contain("PublicProfileController");
+
+        var actions = new AgentCatalogService().GetCapabilities()
+            .SelectMany(capability => capability.ControllerActionKeys ?? []);
+        actions.Should().NotContain(action => action.StartsWith("ChallengesController.", StringComparison.Ordinal)
+            || action.StartsWith("AccountabilityController.", StringComparison.Ordinal));
+        actions.Should().Contain("FriendsController.SendCheer");
+    }
+
     public static TheoryData<string, string, string> RetiringRoutes()
     {
         (string Path, string Method)[] routes =
@@ -84,16 +105,13 @@ public class SocialDeprecationTests
     [InlineData("/api/accountability/pairs/{pairId}/habits", "put")]
     [InlineData("/api/accountability/pairs/{pairId}/check-ins", "get")]
     [InlineData("/api/accountability/pairs/{pairId}/check-ins", "post")]
-    public void GeneratedOpenApi_RouteRemainsAvailableAndDeprecated(string route, string method)
+    public void GeneratedOpenApi_RemovedRouteIsAbsent(string route, string method)
     {
         foreach (var file in new[] { "openapi.json", "openapi_v2.json" })
         {
             using var document = ReadDocument(file);
-            var operation = document.RootElement.GetProperty("paths").GetProperty(route).GetProperty(method);
-
-            operation.TryGetProperty("deprecated", out var deprecated).Should().BeTrue(
-                $"{method} {route} must be deprecated in {file}");
-            deprecated.GetBoolean().Should().BeTrue();
+            document.RootElement.GetProperty("paths").TryGetProperty(route, out _).Should().BeFalse(
+                $"{method} {route} must be absent from {file}");
         }
     }
 
