@@ -12368,7 +12368,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/Profile/ai-summary": {
@@ -15859,7 +15860,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/user-facts/{id}": {
@@ -15929,7 +15931,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/user-facts/bulk": {
@@ -16010,7 +16013,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/Waitlist": {
@@ -19678,7 +19682,8 @@
             ]
           },
           "aiMemoryEnabled": {
-            "type": "boolean"
+            "type": "boolean",
+            "deprecated": true
           },
           "aiSummaryEnabled": {
             "type": "boolean"
