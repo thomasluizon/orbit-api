@@ -20,6 +20,7 @@
     "appsettings.Local.json",
     "architecture.html",
     "architecture.json",
+    "capability-inventory.json",
     "coverlet.runsettings",
     "gating-matrix.json",
     "global.json",
