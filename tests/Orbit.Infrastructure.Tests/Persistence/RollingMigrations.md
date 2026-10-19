@@ -65,8 +65,10 @@ Column and table drops/renames, schema drops, column alterations and required
 columns without defaults need a barrier. Raw SQL containing drops, renames,
 truncation, column/type alterations, dynamic execution or replacement definitions
 also needs one, including compatibility trigger/function removal. SQL matching
-is deliberately conservative and may require review for harmless text; it is not
-a PostgreSQL parser. Review SQL function calls and any indirect DDL as well.
+scans the original SQL, including comments and literals, so a quoted comment
+marker cannot hide later DDL. It is deliberately conservative and may require
+review for harmless text; it is not a PostgreSQL parser. Review SQL function
+calls and any indirect DDL as well.
 Additive tables, nullable/defaulted columns, indexes and ordinary backfills pass.
 `Down` is not executed by forward deployments and does not trigger this gate.
 

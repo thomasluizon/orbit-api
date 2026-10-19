@@ -50,7 +50,7 @@ internal static class RollingMigrationGate
             or DropSchemaOperation or AlterColumnOperation => true,
         AddColumnOperation column => !column.IsNullable && column.DefaultValue is null
             && column.DefaultValueSql is null && column.ComputedColumnSql is null,
-        SqlOperation sql => ContractSql.IsMatch(Regex.Replace(sql.Sql, @"/\*.*?\*/|--[^\r\n]*", " ", RegexOptions.Singleline)),
+        SqlOperation sql => ContractSql.IsMatch(sql.Sql),
         _ => operation.IsDestructiveChange
     };
 

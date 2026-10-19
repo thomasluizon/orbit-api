@@ -106,6 +106,7 @@ public class RollingMigrationGateTests
     [InlineData("ALTER TABLE \"HabitLogs\" ALTER \"IsSlip\" TYPE text;")]
     [InlineData("ALTER TABLE \"Users\" RENAME TO \"Accounts\";")]
     [InlineData("ALTER TABLE \"Users\" DROP\n-- compatibility\nCOLUMN \"OldColumn\";")]
+    [InlineData("SELECT '--'; ALTER TABLE \"Users\" DROP COLUMN \"OldColumn\";")]
     [InlineData("TRUNCATE TABLE \"Users\";")]
     [InlineData("DO $$ BEGIN EXECUTE 'DR' || 'OP TABLE users'; END $$;")]
     [InlineData("CREATE OR REPLACE FUNCTION classify() RETURNS bool AS $$ SELECT true $$ LANGUAGE SQL;")]
