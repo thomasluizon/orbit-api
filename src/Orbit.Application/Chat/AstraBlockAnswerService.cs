@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Orbit.Application.Chat.Commands;
+using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Chat.Validators;
 using Orbit.Application.Common;
@@ -51,7 +52,7 @@ public sealed class AstraBlockAnswerService(
             {
                 await unitOfWork.AcquireAdvisoryLockAsync($"astra-blocks:{request.UserId}", token);
                 if (!await store.CompleteAnswerAsync(request.BlockAnswer!.BlockId, request.UserId,
-                        prepared.AnsweredAtUtc!.Value, JsonSerializer.Serialize(result.Value), token))
+                        prepared.AnsweredAtUtc!.Value, JsonSerializer.Serialize(result.Value, ChatStreamEvent.SerializerOptions), token))
                     throw new InvalidOperationException("Block answer reservation was lost.");
             }, CancellationToken.None);
             completed = true;
@@ -136,7 +137,7 @@ public sealed class AstraBlockAnswerService(
                 }
                 await store.RecordAnswerAsync(block.Id, request.UserId, answeredAtUtc,
                     IssuedAstraBlock.SerializeAnswer(answer), reservedAllowanceDate,
-                    response is null ? null : JsonSerializer.Serialize(response), token);
+                    response is null ? null : JsonSerializer.Serialize(response, ChatStreamEvent.SerializerOptions), token);
                 return Result.Success(new PreparedAstraBlockAnswer(message, response, crisis,
                     answeredAtUtc, reservedAllowanceDate));
             }, ct);
@@ -169,7 +170,7 @@ public sealed class AstraBlockAnswerService(
     {
         if (block is not { AnsweredAtUtc: not null, ResponseJson: not null } || !block.MatchesAnswer(answer))
             return null;
-        var stored = JsonSerializer.Deserialize<ChatResponse>(block.ResponseJson)
+        var stored = JsonSerializer.Deserialize<ChatResponse>(block.ResponseJson, ChatStreamEvent.SerializerOptions)
             ?? throw new InvalidOperationException("Stored block has no response.");
         return stored.PendingOperations is { Count: > 0 } pending
             ? stored with
