@@ -25,11 +25,22 @@ public class GroundednessCheckerTests
     [InlineData("Você completou 1.234,50 minutos.", "pt-BR")]
     [InlineData("You completed 1,234.50 minutes.", "en")]
     [InlineData("Você completou 1234,5 minutos.", "pt-BR")]
+    [InlineData("Você completou 1.234,50 minutos.", "en")]
+    [InlineData("You completed 1,234.50 minutes.", "pt-BR")]
     public void Check_ReturnedNumber_AcceptsLocalizedFormatting(string text, string language)
     {
         var facts = Facts(new { total = 1234.5m });
 
         GroundednessChecker.Check(text, facts, language: language).Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("Você completou 1.234,50 minutos.", "en")]
+    [InlineData("You completed 1,234.50 minutes.", "pt-BR")]
+    public void Check_LocalizedNumberWithoutFacts_FlagsClaim(string text, string language)
+    {
+        GroundednessChecker.Check(text, TurnFactSet.Empty, language: language)
+            .Should().ContainSingle().Which.Kind.Should().Be("Number");
     }
 
     [Theory]
@@ -86,7 +97,7 @@ public class GroundednessCheckerTests
     {
         var facts = TurnFactSet.FromToolResults([
             new AiToolCallResult("query_habits", "call_1", false, null, "12 days", null, new { title = "Meditar" }),
-            new AiToolCallResult("query_goals", "call_2", true, null, null, null, new { id = "1234", count = 5 })]);
+            new AiToolCallResult("query_goals", "call_2", true, null, null, null, new { id = "1234", habit_id = 9876, count = 5 })]);
 
         facts.Facts.Should().Equal(new GroundingFact("Number", "5", "query_goals", "call_2"));
         GroundednessChecker.Check("You have 1234 habits.", facts).Should().NotBeEmpty();

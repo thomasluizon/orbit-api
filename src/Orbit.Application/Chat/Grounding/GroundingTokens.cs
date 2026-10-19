@@ -28,10 +28,22 @@ internal static partial class GroundingTokens
         foreach (Match match in NumberPattern().Matches(text))
         {
             var raw = match.Value;
-            var culture = portuguese ? Portuguese : CultureInfo.InvariantCulture;
-            if (decimal.TryParse(raw, NumberStyles.Number, culture, out var number))
-                yield return ("Number", number.ToString("G29", CultureInfo.InvariantCulture), raw);
+            var value = decimal.TryParse(raw, NumberStyles.Number, NumberCulture(raw, portuguese), out var number)
+                ? number.ToString("G29", CultureInfo.InvariantCulture)
+                : raw;
+            yield return ("Number", value, raw);
         }
+    }
+
+    private static CultureInfo NumberCulture(string raw, bool portuguese)
+    {
+        var comma = raw.LastIndexOf(',');
+        var dot = raw.LastIndexOf('.');
+        if (comma >= 0 && dot >= 0)
+            return comma > dot ? Portuguese : CultureInfo.InvariantCulture;
+        if (comma >= 0)
+            return portuguese || raw.Length - comma - 1 != 3 ? Portuguese : CultureInfo.InvariantCulture;
+        return portuguese && dot >= 0 && raw.Length - dot - 1 == 3 ? Portuguese : CultureInfo.InvariantCulture;
     }
 
     private static bool TryDate(string text, out string normalized)

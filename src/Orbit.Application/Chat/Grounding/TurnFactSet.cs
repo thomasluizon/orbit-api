@@ -24,6 +24,10 @@ public sealed record TurnFactSet(IReadOnlyList<GroundingFact> Facts)
 
     private static void ReadPayload(JsonElement element, string? property, AiToolCallResult result, HashSet<GroundingFact> facts)
     {
+        var key = property?.Replace("_", string.Empty, StringComparison.Ordinal).ToUpperInvariant();
+        if (key is not null && (key == "ID" || key.EndsWith("ID", StringComparison.Ordinal)))
+            return;
+
         switch (element.ValueKind)
         {
             case JsonValueKind.Object:
@@ -38,9 +42,6 @@ public sealed record TurnFactSet(IReadOnlyList<GroundingFact> Facts)
                 AddText(element.GetRawText(), false, result, facts);
                 break;
             case JsonValueKind.String:
-                var key = property?.Replace("_", string.Empty, StringComparison.Ordinal).ToUpperInvariant();
-                if (key is not null && (key == "ID" || key.EndsWith("ID", StringComparison.Ordinal)))
-                    break;
                 AddText(element.GetString(), key is "TITLE" or "NAME" or "HABITTITLE" or "GOALTITLE" or "HABITNAME" or "GOALNAME" or "TAGNAME", result, facts);
                 break;
         }

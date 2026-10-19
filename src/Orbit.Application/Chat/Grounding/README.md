@@ -36,7 +36,8 @@ Cached FAQ text must pass against an empty current-turn fact set before reuse.
 
 ## Deterministic coverage
 
-Numbers are compared as decimal values, with pt-BR formatting selected by the user's language.
+Numbers are compared as decimal values. Mixed decimal and grouping separators identify pt-BR
+or English formatting directly; the user's language resolves ambiguous single separators.
 Full ISO, Brazilian numeric, and English or Portuguese prose dates are compared as whole
 dates, preventing individual date components from authorizing a different date. List markers
 and GUIDs are excluded. Typed payload numbers use invariant JSON formatting. Prose tool
