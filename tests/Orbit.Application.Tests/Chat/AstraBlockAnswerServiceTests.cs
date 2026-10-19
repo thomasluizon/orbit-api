@@ -78,7 +78,7 @@ public class AstraBlockAnswerServiceTests
     }
 
     [Fact]
-    public async Task ChoiceAtDailyLimit_ReservationFailureDoesNotRecordAnswer()
+    public async Task ChoiceAtDailyLimit_ClaimsAnswerButDoesNotRecordResponse()
     {
         var block = Choice();
         _quota.TryConsumeAiMessage(UserId, _work, Arg.Any<CancellationToken>()).Returns(Result.PayGateFailure("Daily limit"));

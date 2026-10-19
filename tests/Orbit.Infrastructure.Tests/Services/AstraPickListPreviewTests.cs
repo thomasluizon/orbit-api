@@ -110,7 +110,6 @@ public class AstraPickListPreviewTests
                 return executionResponse with { PendingOperation = null };
             });
         var quota = Substitute.For<IPayGateService>();
-        quota.TryConsumeAiMessage(user.Id, Arg.Any<IUnitOfWork>(), Arg.Any<CancellationToken>()).Returns(Result.PayGateFailure("Daily limit"));
         var service = new AstraBlockAnswerService(store, work, quota, recordingExecutor, new GenericRepository<User>(db),
             Substitute.For<IProductAnalytics>(), Substitute.For<IFeatureFlagService>(), pending);
         if (failPreviewFirst)

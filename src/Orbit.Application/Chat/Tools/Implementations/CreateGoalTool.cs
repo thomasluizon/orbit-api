@@ -87,7 +87,7 @@ public class CreateGoalTool : IAiTool, IArgumentCheckTool
             return habitIdsFailure;
 
         if (habitIds.Count > AppConstants.MaxHabitsPerGoal)
-            return new ToolResult(false, Error: ErrorMessages.MaxHabitsPerGoal.Format(AppConstants.MaxHabitsPerGoal).Message);
+            return ToolResult.FromFailure(Orbit.Domain.Common.Result.Failure(ErrorMessages.MaxHabitsPerGoal.Format(AppConstants.MaxHabitsPerGoal)));
 
         var goalResult = Goal.Create(new Goal.CreateGoalParams(
             userId,

@@ -103,7 +103,7 @@ public class CreateGoalToolTests
 
         result.Success.Should().BeFalse();
         result.Error.Should().Be(ErrorMessages.MaxHabitsPerGoal.Format(AppConstants.MaxHabitsPerGoal).Message);
-        result.ErrorCode.Should().BeNull();
+        result.ErrorCode.Should().Be(ErrorMessages.MaxHabitsPerGoal.Code);
         result.EntityId.Should().BeNull();
         await _goalRepo.DidNotReceive().AddAsync(Arg.Any<Goal>(), Arg.Any<CancellationToken>());
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());

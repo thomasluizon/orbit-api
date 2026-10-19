@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Hosting;
 using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
 using NSubstitute;
@@ -324,6 +325,55 @@ public class WebApplicationExtensionsMcpTests
         counts[(WebApplicationExtensions.McpRateLimitPolicy, $"api-key:{secondKey}")].Should().Be(1);
         counts[(WebApplicationExtensions.McpAiRateLimitPolicy, $"api-key:{secondKey}")].Should().Be(1);
         await authentication.Received(3).AuthenticateAsync(Arg.Any<HttpContext>(), Arg.Any<string?>());
+    }
+
+    [Fact]
+    public async Task ConfigureOrbitPipeline_LimitedMcpPost_RejectsBeforeNext()
+    {
+        var limiter = Substitute.For<IDistributedRateLimitService>();
+        limiter.TryAcquireAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new DistributedRateLimitDecision(false, 60, 60, DateTime.UtcNow.AddMinutes(1)));
+        var authentication = Substitute.For<IAuthenticationService>();
+        authentication.AuthenticateAsync(Arg.Any<HttpContext>(), Arg.Any<string?>())
+            .Returns(call => AuthenticateResult.Success(new AuthenticationTicket(call.Arg<HttpContext>().User, "ApiKey")));
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = Environments.Production });
+        builder.Configuration["Database:MigrateOnStartup"] = "false";
+        builder.Services.AddResponseCompression();
+        builder.Services.AddExceptionHandler(options => options.ExceptionHandler = _ => Task.CompletedTask);
+        builder.Services.AddCors(options => options.AddPolicy("ThirdParty", policy => policy.WithOrigins("https://client.example.com")));
+        builder.Services.AddRateLimiter(_ => { });
+        builder.Services.AddAuthentication();
+        builder.Services.AddAuthorization();
+        builder.Services.AddControllers();
+        builder.Services.AddMcpServer().WithHttpTransport();
+        builder.Services.AddHealthChecks();
+        builder.Services.AddSingleton(limiter);
+        builder.Services.AddSingleton(authentication);
+        builder.Services.AddSingleton(Substitute.For<IAppConfigService>());
+        await using var app = builder.Build();
+        await app.ConfigureOrbitPipeline();
+        var nextCalled = false;
+        app.Run(_ =>
+        {
+            nextCalled = true;
+            return Task.CompletedTask;
+        });
+        var invoke = ((IApplicationBuilder)app).Build();
+        var apiKeyId = Guid.NewGuid();
+        var context = CreateRateLimitContext(limiter, apiKeyId, Guid.NewGuid(), app.Services);
+        using var document = CreateSdkToolCallDocument("get_daily_summary", new RequestId(42));
+        context.Request.Method = HttpMethods.Post;
+        context.Request.Path = "/mcp";
+        context.Request.ContentType = "application/json";
+        context.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(document.RootElement.GetRawText()));
+
+        await invoke(context);
+
+        context.Response.StatusCode.Should().Be(StatusCodes.Status429TooManyRequests);
+        nextCalled.Should().BeFalse();
+        await authentication.Received(1).AuthenticateAsync(context, Arg.Any<string?>());
+        await limiter.Received(1).TryAcquireAsync(
+            WebApplicationExtensions.McpRateLimitPolicy, $"api-key:{apiKeyId}", Arg.Any<CancellationToken>());
     }
 
     [Theory]
