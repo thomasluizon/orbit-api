@@ -723,8 +723,9 @@ public class AiSummaryServiceTests
 
         var result = InvokeBuildSummaryPrompt([habit], Today, "en", currentStreak: 12, streakFreezesAccumulated: 2);
 
-        result.Should().Contain("Current streak: 12 days");
+        result.Should().Contain("App-wide active-day streak: 12 days");
         result.Should().Contain("Streak freezes banked: 2");
+        result.Should().Contain("Never attribute the app-wide streak to a single habit");
     }
 
     [Fact]
@@ -734,7 +735,7 @@ public class AiSummaryServiceTests
 
         var result = InvokeBuildSummaryPrompt([habit], Today, "en");
 
-        result.Should().NotContain("Current streak:");
+        result.Should().NotContain("App-wide active-day streak:");
         result.Should().NotContain("Streak freezes banked:");
     }
 
@@ -774,7 +775,119 @@ public class AiSummaryServiceTests
         result.IsFailure.Should().BeTrue();
     }
 
-    private static AiSummaryService BuildSummaryService(string modelJsonContent)
+    [Fact]
+    public async Task GenerateSummaryAsync_RecentSkipsAndMisses_AppearInActualPrompt()
+    {
+        var gym = CreateHabit("Gym", dueDate: Today.AddDays(-13));
+        gym.LoadScheduleLogsForRead([
+            HabitLog.FromSummaryRead(gym.Id, Today.AddDays(-14), 1),
+            HabitLog.FromSummaryRead(gym.Id, Today.AddDays(-3), 0),
+            HabitLog.FromSummaryRead(gym.Id, Today.AddDays(-2), 1),
+            HabitLog.FromSummaryRead(gym.Id, Today.AddDays(-1), 1)]);
+        string? requestBody = null;
+        var service = BuildSummaryService("{\"summary\":\"Take it easy today.\"}", body => requestBody = body);
+
+        var result = await service.GenerateSummaryAsync([gym],
+            new DailySummaryContext(Today, Today, Today, "en", null, 38, 0, new Dictionary<Guid, DateOnly>()));
+
+        result.IsSuccess.Should().BeTrue();
+        requestBody.Should().Contain("App-wide active-day streak: 38 days");
+        requestBody.Should().Contain("14-day history: done=2, skipped=1, missed=10, habit streak=2 scheduled occurrences");
+        requestBody.Should().Contain("Never praise consistency when skipped or missed is nonzero");
+    }
+
+    [Fact]
+    public void SelectScheduledHabits_SkippedToday_VisibleAndNotPending()
+    {
+        var habit = CreateHabit("Gym");
+        habit.LoadScheduleLogsForRead([HabitLog.FromSummaryRead(habit.Id, Today, 0)]);
+
+        var selected = InvokeSelectScheduledHabits([habit], Today);
+
+        selected.Should().ContainSingle();
+        InvokeBuildHabitSection(selected).Should().Contain("Gym (skipped)").And.NotContain("pending");
+    }
+
+    [Fact]
+    public void SelectScheduledHabits_FlexibleQuotaSatisfied_NotSelectedAsPending()
+    {
+        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Gym", FrequencyUnit.Week, 1,
+            DueDate: Today.AddDays(-7), IsFlexible: true)).Value;
+        habit.Log(Today.AddDays(-1));
+
+        InvokeSelectScheduledHabits([habit], Today).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void SelectScheduledHabits_NonDueWeekdayWithResolvedPastOccurrences_NotSelected()
+    {
+        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Gym", FrequencyUnit.Day, 1,
+            DueDate: Today.AddDays(-1), Days: [Today.AddDays(-1).DayOfWeek])).Value;
+        habit.LoadScheduleLogsForRead([HabitLog.FromSummaryRead(habit.Id, Today.AddDays(-1), 0)]);
+        var due = CreateHabit("Read");
+
+        InvokeSelectScheduledHabits([habit, due], Today).Should().ContainSingle(h => h.Id == due.Id);
+    }
+
+    [Fact]
+    public void BuildHabitSection_MovingDueDate_UsesOriginalCadenceForHistory()
+    {
+        var habit = CreateRecurring("Weekly gym", FrequencyUnit.Week, dueDate: Today.AddDays(-13));
+        habit.Log(Today.AddDays(-13));
+        habit.Log(Today.AddDays(-6));
+
+        var section = InvokeBuildHabitSection([habit]);
+
+        section.Should().Contain("14-day history: done=2, skipped=0, missed=0, habit streak=2 scheduled occurrences");
+    }
+
+    [Theory]
+    [InlineData(0, 1, 0)]
+    [InlineData(1, 0, 1)]
+    public void BuildHabitSection_RecentGap_ResetsHabitStreak(int completed, int skipped, int missed)
+    {
+        var habit = CreateHabit("Gym", dueDate: Today.AddDays(-3));
+        var logs = new List<HabitLog>
+        {
+            HabitLog.FromSummaryRead(habit.Id, Today.AddDays(-3), 1),
+            HabitLog.FromSummaryRead(habit.Id, Today.AddDays(-2), 1)
+        };
+        if (completed == 0)
+            logs.Add(HabitLog.FromSummaryRead(habit.Id, Today.AddDays(-1), 0));
+        habit.LoadScheduleLogsForRead(logs);
+
+        var section = InvokeBuildHabitSection([habit]);
+
+        section.Should().Contain($"done=2, skipped={skipped}, missed={missed}, habit streak=0 scheduled occurrences");
+    }
+
+    [Fact]
+    public void BuildHabitSection_ParentAndChild_BothCarryHistoryAndSkipStatus()
+    {
+        var parent = CreateHabit("Workout (home)");
+        var child = CreateHabit("Stretch", parentId: parent.Id);
+        parent.LoadScheduleLogsForRead([HabitLog.FromSummaryRead(parent.Id, Today, 0)]);
+        child.LoadScheduleLogsForRead([HabitLog.FromSummaryRead(child.Id, Today, 0)]);
+
+        var section = InvokeBuildHabitSection([parent, child]);
+
+        section.Should().Contain("Workout (home) (skipped, 0/1 sub-tasks done)");
+        section.Should().Contain("Stretch (skipped)");
+        section.Split("14-day history:").Should().HaveCount(3);
+    }
+
+    [Fact]
+    public void BuildHabitSection_FlexibleHabit_DoesNotInventDailyMissesOrStreak()
+    {
+        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Gym", FrequencyUnit.Week, 3,
+            DueDate: Today.AddDays(-13), IsFlexible: true)).Value;
+        habit.Log(Today.AddDays(-1));
+
+        InvokeBuildHabitSection([habit]).Should().Contain(
+            "14-day history: done=1, skipped=0, missed=unknown, habit streak=unknown (flexible quota)");
+    }
+
+    private static AiSummaryService BuildSummaryService(string modelJsonContent, Action<string>? captureRequest = null)
     {
         var chatClient = new ChatClient(
             model: "gpt-test",
@@ -783,7 +896,7 @@ public class AiSummaryServiceTests
             {
                 Endpoint = new Uri("https://orbit.test/v1"),
                 Transport = new HttpClientPipelineTransport(
-                    new HttpClient(new JsonResponseHandler(modelJsonContent))),
+                    new HttpClient(new JsonResponseHandler(modelJsonContent, captureRequest))),
             });
         var aiClient = new AiCompletionClient(chatClient, NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
         return new AiSummaryService(aiClient, NullLogger<AiSummaryService>.Instance);
@@ -795,21 +908,22 @@ public class AiSummaryServiceTests
             new DailySummaryContext(Today, Today, Today, "en", null, 0, 0, new Dictionary<Guid, DateOnly>()),
             CancellationToken.None);
 
-    private sealed class JsonResponseHandler(string modelJsonContent) : HttpMessageHandler
+    private sealed class JsonResponseHandler(string modelJsonContent, Action<string>? captureRequest) : HttpMessageHandler
     {
-        protected override Task<HttpResponseMessage> SendAsync(
+        protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            captureRequest?.Invoke(await request.Content!.ReadAsStringAsync(cancellationToken));
             var escaped = JsonSerializer.Serialize(modelJsonContent);
             var body =
                 "{\"id\":\"chatcmpl-test\",\"object\":\"chat.completion\",\"created\":1700000000,\"model\":\"gpt-test\","
                 + "\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":" + escaped + "},\"finish_reason\":\"stop\"}],"
                 + "\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":2,\"total_tokens\":3}}";
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 RequestMessage = request,
                 Content = new StringContent(body, Encoding.UTF8, "application/json"),
-            });
+            };
         }
     }
 
