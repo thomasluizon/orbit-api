@@ -454,7 +454,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
     }
 
     [HttpPost("bulk/log")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType<BulkLogResult>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> BulkLog(

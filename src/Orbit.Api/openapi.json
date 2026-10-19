@@ -7833,7 +7833,24 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkLogResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkLogResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkLogResult"
+                }
+              }
+            }
           },
           "400": {
             "description": "Bad Request",
@@ -13792,6 +13809,9 @@
           }
         }
       },
+      "BulkItemStatus": {
+        "type": "integer"
+      },
       "BulkLogHabitItem": {
         "required": [
           "habitId"
@@ -13822,6 +13842,82 @@
             "items": {
               "$ref": "#/components/schemas/BulkLogHabitItem"
             }
+          }
+        }
+      },
+      "BulkLogItemResult": {
+        "required": [
+          "index",
+          "status",
+          "habitId"
+        ],
+        "type": "object",
+        "properties": {
+          "index": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "status": {
+            "$ref": "#/components/schemas/BulkItemStatus"
+          },
+          "habitId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "logId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "errorCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "BulkLogResult": {
+        "required": [
+          "results"
+        ],
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BulkLogItemResult"
+            }
+          },
+          "previousStreak": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "currentStreak": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },

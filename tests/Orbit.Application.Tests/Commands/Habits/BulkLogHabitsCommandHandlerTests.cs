@@ -15,6 +15,7 @@ using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using System.Linq.Expressions;
+using System.Text.Json;
 
 namespace Orbit.Application.Tests.Commands.Habits;
 
@@ -108,6 +109,48 @@ public class BulkLogHabitsCommandHandlerTests
         result.Value.Results[0].Status.Should().Be(BulkItemStatus.Success);
         result.Value.Results[1].Status.Should().Be(BulkItemStatus.Failed);
         result.Value.Results[1].Error.Should().Be(ErrorMessages.HabitNotFound.Message);
+    }
+
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(2, 3)]
+    [InlineData(3, 3)]
+    public async Task Handle_ReportsStreakBeforeAndAfterAllLogs(int previousStreak, int currentStreak)
+    {
+        var habits = Enumerable.Range(1, 2)
+            .Select(i => Habit.Create(new HabitCreateParams(
+                UserId, $"Habit {i}", FrequencyUnit.Day, 1, DueDate: Today)).Value)
+            .ToList();
+        SetupHabitsForUser(habits);
+        _userStreakService.CalculateAsync(UserId, Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            habits.Should().OnlyContain(habit => !habit.Logs.Any());
+            var lastActiveDate = previousStreak == currentStreak
+                ? Today
+                : Today.AddDays(previousStreak == 0 ? -3 : -1);
+            return new UserStreakState(previousStreak, 9, lastActiveDate);
+        });
+        _userStreakService.RecalculateAsync(UserId, cancellationToken: Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                habits.Should().OnlyContain(habit => habit.Logs.Count == 1);
+                return new UserStreakState(currentStreak, 9, Today);
+            });
+
+        var result = await _handler.Handle(
+            new BulkLogHabitsCommand(UserId, habits.Select(habit => new BulkLogItem(habit.Id)).ToList()),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Results.Should().HaveCount(2)
+            .And.OnlyContain(item => item.Status == BulkItemStatus.Success && item.LogId != null);
+        var payload = JsonSerializer.SerializeToElement(result.Value, JsonSerializerOptions.Web);
+        payload.TryGetProperty("previousStreak", out var previous).Should().BeTrue();
+        previous.GetInt32().Should().Be(previousStreak);
+        payload.TryGetProperty("currentStreak", out var current).Should().BeTrue();
+        current.GetInt32().Should().Be(currentStreak);
+        await _userStreakService.Received(1).CalculateAsync(UserId, Arg.Any<CancellationToken>());
+        await _userStreakService.Received(1).RecalculateAsync(UserId, cancellationToken: Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -283,8 +326,10 @@ public class BulkLogHabitsCommandHandlerTests
             Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task Handle_NoSuccessfulLogs_SkipsStreakAndGamification()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(2)]
+    public async Task Handle_NoSuccessfulLogs_SkipsStreakAndGamification(int currentStreak)
     {
         var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         SetupHabitsForUser(new List<Habit> { habit });
@@ -292,11 +337,19 @@ public class BulkLogHabitsCommandHandlerTests
         var futureDate = Today.AddDays(5);
         var items = new List<BulkLogItem> { new(habit.Id, futureDate) };
         var command = new BulkLogHabitsCommand(UserId, items);
+        _userStreakService.CalculateAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new UserStreakState(currentStreak, 9, Today.AddDays(-3)));
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Results[0].Status.Should().Be(BulkItemStatus.Failed);
+        var payload = JsonSerializer.SerializeToElement(result.Value, JsonSerializerOptions.Web);
+        payload.TryGetProperty("previousStreak", out var previous).Should().BeTrue();
+        previous.GetInt32().Should().Be(currentStreak);
+        payload.TryGetProperty("currentStreak", out var current).Should().BeTrue();
+        current.GetInt32().Should().Be(currentStreak);
+        await _userStreakService.Received(1).CalculateAsync(UserId, Arg.Any<CancellationToken>());
         await _userStreakService.DidNotReceive().RecalculateAsync(Arg.Any<Guid>(), cancellationToken: Arg.Any<CancellationToken>());
         await _gamificationService.DidNotReceive().ProcessHabitsLogged(
             Arg.Any<Guid>(), Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>());
@@ -327,9 +380,13 @@ public class BulkLogHabitsCommandHandlerTests
 
         var items = new List<BulkLogItem> { new(habit.Id) };
         var command = new BulkLogHabitsCommand(UserId, items);
+        _userStreakService.CalculateAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new UserStreakState(0, 0, null), new UserStreakState(1, 1, Today));
 
         var first = await _handler.Handle(command, CancellationToken.None);
         first.Value.Results[0].Status.Should().Be(BulkItemStatus.Success);
+        first.Value.PreviousStreak.Should().Be(0);
+        first.Value.CurrentStreak.Should().Be(1);
         habit.DueDate.Should().Be(Today.AddDays(1));
 
         var result = await _handler.Handle(command, CancellationToken.None);
@@ -338,6 +395,8 @@ public class BulkLogHabitsCommandHandlerTests
         result.Value.Results[0].ErrorCode.Should().NotBe(ErrorCodes.NotScheduledOnDate);
         result.Value.Results[0].Status.Should().Be(BulkItemStatus.Success);
         result.Value.Results[0].LogId.Should().BeNull();
+        result.Value.PreviousStreak.Should().Be(1);
+        result.Value.CurrentStreak.Should().Be(1);
         habit.Logs.Should().ContainSingle(l => l.Date == Today && !l.IsDeleted);
         await _habitLogRepo.Received(1).AddAsync(Arg.Any<HabitLog>(), Arg.Any<CancellationToken>());
     }
