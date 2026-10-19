@@ -3,12 +3,14 @@ using System.Security.Cryptography;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Application.Chat;
 using Orbit.Application.Common;
+using Orbit.Application.Profile.Commands;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Configuration;
@@ -114,10 +116,23 @@ public class ConversationTurnRecorderTests
         await fixture.Database.Context.SaveChangesAsync();
         fixture.Recorder.TryRecord(capture).Should().BeTrue();
         var reset = new AccountResetRepository(fixture.Database.Context, Substitute.For<Orbit.Domain.Events.IAccountEventCollector>());
-        await reset.DeleteAllUserDataAsync(fixture.User.Id);
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var dates = Substitute.For<IUserDateService>();
+        dates.GetUserTodayAsync(fixture.User.Id, Arg.Any<CancellationToken>()).Returns(new DateOnly(2026, 6, 15));
+        var handler = new ResetAccountCommandHandler(new GenericRepository<User>(fixture.Database.Context), reset,
+            new UnitOfWork(fixture.Database.Context, new DatabaseConnectionSettings()), dates, cache);
+        var result = await handler.Handle(new ResetAccountCommand(fixture.User.Id), CancellationToken.None);
+        result.IsSuccess.Should().BeTrue();
+        (await fixture.Database.Context.ConversationTurns.CountAsync()).Should().Be(0);
+        var afterReset = Capture(fixture.User.Id) with
+        {
+            CreatedAtUtc = fixture.User.ConversationHistoryClearedAtUtc!.Value.AddTicks(1)
+        };
+        fixture.Recorder.TryRecord(afterReset).Should().BeTrue();
         await fixture.Recorder.StartAsync(CancellationToken.None);
         await fixture.Recorder.StopAsync(CancellationToken.None);
-        (await fixture.Database.Context.ConversationTurns.CountAsync()).Should().Be(0);
+        var rows = await fixture.Database.Context.ConversationTurns.AsNoTracking().ToListAsync();
+        rows.Should().HaveCount(2).And.OnlyContain(turn => turn.TurnId == afterReset.TurnId);
     }
 
     [Fact]

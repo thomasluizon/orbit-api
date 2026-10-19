@@ -1,10 +1,16 @@
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
+using Orbit.Application.Behaviors;
+using Orbit.Application.Profile.Commands;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
+using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
+using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
 
@@ -31,6 +37,13 @@ public class AccountResetRepositoryTests : IDisposable
 
         _dbContext = new SqliteCompatOrbitDbContext(options);
         _dbContext.Database.EnsureCreated();
+        _dbContext.Database.ExecuteSqlRaw("""
+            CREATE TRIGGER AdvanceUserVersion AFTER UPDATE ON "Users"
+            WHEN NEW."xmin" = OLD."xmin"
+            BEGIN
+                UPDATE "Users" SET "xmin" = OLD."xmin" + 1 WHERE "Id" = NEW."Id";
+            END;
+            """);
         _repository = new AccountResetRepository(_dbContext, _eventCollector);
     }
 
@@ -85,11 +98,49 @@ public class AccountResetRepositoryTests : IDisposable
                 userId, "create_habit", "{}", "title", "What title?", "[]", DateTime.UtcNow.AddMinutes(5)));
     }
 
-    private void SeedUser(Guid userId, string email)
+    private User SeedUser(Guid userId, string email)
     {
         var user = User.Create("Test User", email).Value;
         typeof(User).GetProperty("Id")!.SetValue(user, userId);
         _dbContext.Users.Add(user);
+        return user;
+    }
+
+    [Fact]
+    public async Task Handle_ResetWithUserConcurrencyToken_CommitsDeletionsAndCutoffWithoutRetry()
+    {
+        var user = SeedUser(_userId, "target@example.com");
+        SeedUser(_otherUserId, "other@example.com");
+        SeedForUser(_userId);
+        SeedForUser(_otherUserId);
+        user.AddXp(123);
+        user.CompleteOnboarding();
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+        var beforeResetAtUtc = DateTime.UtcNow;
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var dates = Substitute.For<IUserDateService>();
+        dates.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(new DateOnly(2026, 6, 15));
+        var unitOfWork = new UnitOfWork(_dbContext, new DatabaseConnectionSettings(), _eventCollector);
+        var handler = new ResetAccountCommandHandler(
+            new GenericRepository<User>(_dbContext), _repository, unitOfWork, dates, cache);
+        var retry = new ConcurrencyRetryBehavior<ResetAccountCommand, Result>(unitOfWork);
+        var command = new ResetAccountCommand(_userId);
+
+        var result = await retry.Handle(command, ct => handler.Handle(command, ct), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        _eventCollector.Received(1).MarkResync(_userId);
+        _dbContext.ChangeTracker.Clear();
+        var saved = await _dbContext.Users.SingleAsync(u => u.Id == _userId);
+        saved.TotalXp.Should().Be(0);
+        saved.HasCompletedOnboarding.Should().BeFalse();
+        saved.ConversationHistoryClearedAtUtc.Should().NotBeNull();
+        saved.ConversationHistoryClearedAtUtc.Should().BeOnOrAfter(beforeResetAtUtc);
+        _dbContext.Entry(saved).Property<uint>("xmin").CurrentValue.Should().Be(1);
+        (await _dbContext.ConversationTurns.CountAsync(turn => turn.UserId == _userId)).Should().Be(0);
+        (await _dbContext.ConversationTurns.CountAsync(turn => turn.UserId == _otherUserId)).Should().Be(1);
+        (await _dbContext.Users.SingleAsync(u => u.Id == _otherUserId)).ConversationHistoryClearedAtUtc.Should().BeNull();
     }
 
     [Fact]
@@ -322,6 +373,7 @@ public class AccountResetRepositoryTests : IDisposable
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<User>().Property<uint>("xmin").IsConcurrencyToken().ValueGeneratedNever();
 
             foreach (var entityType in modelBuilder.Model.GetEntityTypes())
             {
