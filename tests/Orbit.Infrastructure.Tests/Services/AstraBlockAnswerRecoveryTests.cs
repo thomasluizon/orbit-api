@@ -1,5 +1,9 @@
+using System.Security.Claims;
 using System.Text.Json;
 using FluentAssertions;
+using FluentValidation;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
@@ -10,6 +14,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using NSubstitute;
+using Orbit.Api.Controllers;
+using Orbit.Api.Extensions;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Common;
@@ -139,8 +145,16 @@ public class AstraBlockAnswerRecoveryTests
         (await store.ReleaseAnswerAsync(block.Id, user.Id, claim, default)).Should().BeFalse();
     }
 
-    [Fact]
-    public async Task ReplayPickList_ReadsRevisedItemsFromTheSamePendingOperation()
+    [Theory]
+    [InlineData(false, "available")]
+    [InlineData(true, "available")]
+    [InlineData(false, "unavailable")]
+    [InlineData(true, "unavailable")]
+    [InlineData(false, "throws")]
+    [InlineData(true, "throws")]
+    [InlineData(false, "missing")]
+    [InlineData(true, "missing")]
+    public async Task ReplayPickList_ReplaysOnlyTheCurrentPendingRevision(bool revise, string refresh)
     {
         using var factory = new SqliteOrbitDbContextFactory();
         var db = factory.Context;
@@ -159,8 +173,11 @@ public class AstraBlockAnswerRecoveryTests
         var held = pending.Create(user.Id, capability, "bulk_create_habits", originalArgs, "Choose",
             AgentOperationFingerprint.Compute("bulk_create_habits", originalArgs), AgentExecutionSurface.Chat);
         var original = await previewer.PreviewAsync(user.Id, "bulk_create_habits", JsonSerializer.Deserialize<JsonElement>(originalArgs));
+        pending.Revise(user.Id, held.Id, AgentOperationFingerprint.Compute("bulk_create_habits", originalArgs),
+            originalArgs, AgentOperationFingerprint.Compute("bulk_create_habits", originalArgs), original!.PreviewFingerprint!).Should().BeTrue();
         var response = new ChatResponse("Nothing has been saved.", [], PendingOperations:
-            [held with { Items = original!.Items, PreviewFingerprint = original.PreviewFingerprint }]);
+            [held with { Items = original.Items, Changes = original.Changes,
+                ChangeTargetCount = original.ChangeTargetCount, PreviewFingerprint = original.PreviewFingerprint }]);
         var store = new IssuedAstraBlockStore(db);
         var block = IssuedAstraBlock.Create(user.Id, new("pickList", "Choose", [],
             [new("a", "Walk", JsonSerializer.SerializeToElement(new { title = "Walk" }))], true, Action: "create_habits"));
@@ -171,21 +188,87 @@ public class AstraBlockAnswerRecoveryTests
         await store.RecordAnswerAsync(block.Id, user.Id, claim, IssuedAstraBlock.SerializeAnswer(request.BlockAnswer!), null,
             SerializeResponse(response), default);
         const string revisedArgs = """{"habits":[{"title":"Evening walk","frequency_unit":"Day","preview_item_id":"a"}]}""";
-        var revised = await previewer.PreviewAsync(user.Id, "bulk_create_habits", JsonSerializer.Deserialize<JsonElement>(revisedArgs));
-        pending.Revise(user.Id, held.Id, AgentOperationFingerprint.Compute("bulk_create_habits", originalArgs),
-            revisedArgs, AgentOperationFingerprint.Compute("bulk_create_habits", revisedArgs), revised!.PreviewFingerprint!).Should().BeTrue();
+        var expected = original;
+        if (revise)
+        {
+            expected = await previewer.PreviewAsync(user.Id, "bulk_create_habits", JsonSerializer.Deserialize<JsonElement>(revisedArgs));
+            pending.Revise(user.Id, held.Id, AgentOperationFingerprint.Compute("bulk_create_habits", originalArgs),
+                revisedArgs, AgentOperationFingerprint.Compute("bulk_create_habits", revisedArgs), expected!.PreviewFingerprint!).Should().BeTrue();
+        }
+        var replayPreviewer = Substitute.For<IPendingOperationChangePreviewer>();
+        var refreshCalls = 0;
+        replayPreviewer.PreviewAsync(user.Id, "bulk_create_habits", Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                if ((refresh is "unavailable" or "throws") && ++refreshCalls == 1)
+                    return refresh == "throws"
+                        ? Task.FromException<PendingOperationChangePreview?>(new InvalidOperationException("Preview unavailable"))
+                        : Task.FromResult<PendingOperationChangePreview?>(null);
+                return previewer.PreviewAsync(user.Id, "bulk_create_habits", call.Arg<JsonElement>(), call.Arg<CancellationToken>());
+            });
+        var executor = Substitute.For<IAgentOperationExecutor>();
+        var quota = Substitute.For<IPayGateService>();
         var service = new AstraBlockAnswerService(store, new UnitOfWork(db, new DatabaseConnectionSettings()),
-            Substitute.For<IPayGateService>(), Substitute.For<IAgentOperationExecutor>(), new GenericRepository<User>(db),
-            Substitute.For<IProductAnalytics>(), Substitute.For<IFeatureFlagService>(), pending, previewer: previewer);
+            quota, executor, new GenericRepository<User>(db),
+            Substitute.For<IProductAnalytics>(), Substitute.For<IFeatureFlagService>(), pending,
+            previewer: refresh == "missing" ? null : replayPreviewer);
 
         var replay = await service.ExecuteAsync(request, _ => throw new InvalidOperationException("No new execution"), default);
 
+        var execution = pending.GetExecution(user.Id, held.Id)!;
+        var revisions = new PendingOperationRevisionService(pending, previewer,
+            Substitute.For<IValidator<RevisePendingOperationRequest>>(), new AiToolRegistry([]));
+        (await revisions.CanApproveAsync(user.Id, execution, default)).Should().BeTrue();
+        (await revisions.IsCurrentAsync(user.Id, execution, default)).Should().BeTrue();
+        var approvalPreview = await previewer.PreviewAsync(user.Id, execution.OperationId, execution.Arguments);
+        approvalPreview!.PreviewFingerprint.Should().Be(expected!.PreviewFingerprint);
+        if (revise && refresh != "available")
+        {
+            replay.IsFailure.Should().BeTrue("a revised operation cannot fall back to an older approvable card");
+            replay.ErrorCode.Should().Be(ErrorCodes.AstraBlockAnswered);
+            replay.ToPayGateAwareResult(_ => new OkResult()).Should().BeOfType<ObjectResult>()
+                .Which.StatusCode.Should().Be(StatusCodes.Status409Conflict);
+            (await store.GetAsync(block.Id, user.Id, default))!.ResponseJson.Should().Be(SerializeResponse(response));
+            await executor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+            service = new AstraBlockAnswerService(store, new UnitOfWork(db, new DatabaseConnectionSettings()),
+                quota, executor, new GenericRepository<User>(db),
+                Substitute.For<IProductAnalytics>(), Substitute.For<IFeatureFlagService>(), pending, previewer: replayPreviewer);
+            replay = await service.ExecuteAsync(request, _ => throw new InvalidOperationException("No new execution"), default);
+        }
+
+        replay.IsSuccess.Should().BeTrue();
         var current = replay.Value.PendingOperations.Should().ContainSingle().Subject;
         current.Id.Should().Be(held.Id);
-        JsonSerializer.Serialize(current.Items).Should().Be(JsonSerializer.Serialize(revised.Items));
-        current.Items.Should().ContainSingle().Which.EntityName.Should().Be("Evening walk");
-        current.PreviewFingerprint.Should().Be(revised.PreviewFingerprint);
-        pending.Confirm(user.Id, held.Id).Should().NotBeNull();
+        JsonSerializer.Serialize(current.Items).Should().Be(JsonSerializer.Serialize(expected.Items));
+        current.PreviewFingerprint.Should().Be(approvalPreview.PreviewFingerprint);
+        if (!revise && refresh != "available")
+            JsonSerializer.Serialize(current).Should().Be(JsonSerializer.Serialize(response.PendingOperations![0]));
+        await quota.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
+        await executor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+
+        var controller = new AiController(new AgentCatalogService(), Substitute.For<IAgentPolicyEvaluator>(),
+            new AgentPendingStores(pending, Substitute.For<IPendingClarificationStore>()),
+            Substitute.For<IAgentStepUpService>(), Substitute.For<IAgentAuditService>(), executor, revisions,
+            Substitute.For<IValidator<ResolveClarificationRequest>>())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, user.Id.ToString())], "Test"))
+                }
+            }
+        };
+        var confirmation = (await controller.ConfirmPendingOperation(current.Id, default))
+            .Should().BeOfType<OkObjectResult>().Subject.Value
+            .Should().BeOfType<AiController.ConfirmPendingOperationResponse>().Subject;
+        (await controller.ExecutePendingOperation(current.Id,
+            new AiController.ExecutePendingOperationRequest(confirmation.ConfirmationToken), default))
+            .Should().BeOfType<OkObjectResult>();
+        await executor.Received(1).ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(operation =>
+            operation.OperationId == execution.OperationId
+            && operation.Arguments.GetRawText() == execution.Arguments.GetRawText()
+            && operation.ConfirmationToken == confirmation.ConfirmationToken), Arg.Any<CancellationToken>());
         (await service.ExecuteAsync(request, _ => throw new InvalidOperationException("No new execution"), default))
             .Value.PendingOperations.Should().BeEmpty();
     }

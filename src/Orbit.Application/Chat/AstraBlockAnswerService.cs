@@ -246,14 +246,13 @@ public sealed class AstraBlockAnswerService(
         {
             if (!pendingOperations.IsAwaitingConfirmation(userId, operation.Id))
                 continue;
-            if (previewer is null)
-            {
-                current.Add(operation);
-                continue;
-            }
             var execution = pendingOperations.GetExecution(userId, operation.Id);
-            var preview = execution is null ? null : await previewer.PreviewSafelyAsync(
+            if (execution is null)
+                continue;
+            var preview = previewer is null ? null : await previewer.PreviewSafelyAsync(
                 userId, execution.OperationId, execution.Arguments, logger ?? NullLogger.Instance, ct);
+            if (preview is null && operation.PreviewFingerprint != execution.PreviewFingerprint)
+                throw new AnswerRejectedException(Failure(ErrorCodes.AstraBlockAnswered));
             current.Add(preview is null ? operation : operation with
             {
                 Items = preview.Items,

@@ -164,6 +164,8 @@ public partial class ProcessUserChatCommandHandlerTests
             .Returns(new AgentExecuteOperationResponse(new("delete_habit", "delete_habit", AgentRiskClass.Low,
                 AgentConfirmationRequirement.FreshConfirmation, AgentOperationStatus.PendingConfirmation), pending));
         _pendingOperationStore.IsAwaitingConfirmation(UserId, pending.Id).Returns(true);
+        _pendingOperationStore.GetExecution(UserId, pending.Id).Returns(new PendingAgentOperationExecution(pending.Id,
+            pending.CapabilityId, "delete_habit", ParseArguments("{}"), AgentExecutionSurface.Chat, pending.ConfirmationRequirement));
         SetupAiResponse(ToolResponse("delete_habit", "write", "{}"));
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>()).Returns(Result.Failure<AiResponse>(ErrorMessages.AiUnavailable));
@@ -401,6 +403,9 @@ public partial class ProcessUserChatCommandHandlerTests
         _operationExecutor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())
             .Returns(new AgentExecuteOperationResponse(operation), new AgentExecuteOperationResponse(operation, pending));
         _pendingOperationStore.IsAwaitingConfirmation(UserId, pending.Id).Returns(true);
+        _pendingOperationStore.GetExecution(UserId, pending.Id).Returns(new PendingAgentOperationExecution(pending.Id,
+            pending.CapabilityId, "bulk_create_habits", ParseArguments("""{"habits":[{"title":"Walk"}]}"""),
+            AgentExecutionSurface.Chat, pending.ConfirmationRequirement));
         var request = new ProcessUserChatCommand(UserId, "Walk", BlockAnswer: new(block.Id, ["a"]),
             ClientContext: new(SupportsParts: true));
 
