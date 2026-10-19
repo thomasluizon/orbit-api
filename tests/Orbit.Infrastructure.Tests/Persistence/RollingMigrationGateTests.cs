@@ -133,8 +133,53 @@ public class RollingMigrationGateTests
     }
 
     [Theory]
+    [InlineData("ALTER TABLE \"Users\" ADD COLUMN \"RequiredValue\" text NOT NULL;")]
+    [InlineData("ALTER TABLE \"HabitLogs\" DISABLE TRIGGER \"SetHabitLogIsSlipOnInsert\";")]
+    [InlineData("ALTER TABLE \"HabitLogs\" ADD CONSTRAINT \"RequireIsSlip\" CHECK (\"IsSlip\" IS NOT NULL) NOT VALID;")]
+    [InlineData("ALTER TABLE \"Users\" SET SCHEMA archive;")]
+    public void UnsafeAlterTableSql_RequiresBarrier(string sql)
+    {
+        var builder = new MigrationBuilder("Npgsql.EntityFrameworkCore.PostgreSQL");
+        builder.Sql(sql);
+
+        RollingMigrationGate.Check("contract", builder.Operations).Should().NotBeEmpty();
+        RollingMigrationGate.Check("contract", builder.Operations, Barriers("contract"), (_, _) => true).Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("ALTER TABLE \"Users\" ADD COLUMN \"Optional\" text, DISABLE TRIGGER ALL;")]
+    [InlineData("ALTER TABLE \"Users\" DISABLE TRIGGER ALL, ADD COLUMN \"Optional\" text;")]
+    [InlineData("ALTER TABLE \"Users\" ADD COLUMN \"Optional\" text; ALTER TABLE \"Users\" SET SCHEMA archive;")]
+    [InlineData("ALTER TABLE \"Users\" ADD COLUMN \"Optional\" text DEFAULT 'a,b', ADD COLUMN \"Required\" text NOT NULL;")]
+    [InlineData("ALTER TABLE \"Users\" ENABLE TRIGGER ALL;")]
+    [InlineData("ALTER TABLE \"Users\" ADD CONSTRAINT fk FOREIGN KEY (\"Id\") REFERENCES \"Accounts\" (\"Id\") NOT VALID;")]
+    [InlineData("ALTER TABLE \"Users\" ADD COLUMN \"Value\" text DEFAULT '' CHECK (length(\"Value\") > 0);")]
+    [InlineData("ALTER TABLE \"Users\" ADD COLUMN \"Value\" required_domain;")]
+    [InlineData("ALTER TABLE \"Users--\" DISABLE /* compatibility */ TRIGGER ALL;")]
+    [InlineData("SELECT '--'; ALTER TABLE \"Users\" DISABLE TRIGGER ALL;")]
+    [InlineData("SELECT 'it''s /* text */'; ALTER TABLE \"Users\" SET SCHEMA archive;")]
+    [InlineData("ALTER TABLE \"Users\" /* outer /* nested */ comment */ SET SCHEMA archive;")]
+    public void UnclassifiedOrMixedAlterTableActions_RequireBarrier(string sql)
+    {
+        var builder = new MigrationBuilder("Npgsql.EntityFrameworkCore.PostgreSQL");
+        builder.Sql(sql);
+
+        RollingMigrationGate.Check("contract", builder.Operations).Should().NotBeEmpty();
+        RollingMigrationGate.Check("contract", builder.Operations, Barriers("contract"), (_, _) => true).Should().BeEmpty();
+    }
+
+    [Theory]
     [InlineData("ALTER TABLE \"Users\" ADD COLUMN \"NewColumn\" text NULL;")]
     [InlineData("ALTER\n  TABLE \"Users\" ADD COLUMN \"NewColumn\" text NULL;")]
+    [InlineData("ALTER TABLE \"Users\" ADD COLUMN \"NewColumn\" text;")]
+    [InlineData("ALTER TABLE \"Users\" ADD COLUMN \"NewColumn\" text NOT NULL DEFAULT '';")]
+    [InlineData("ALTER TABLE \"Users\" ADD COLUMN \"NewColumn\" boolean DEFAULT false NOT NULL;")]
+    [InlineData("ALTER TABLE IF EXISTS ONLY public.\"Users\" ADD COLUMN IF NOT EXISTS \"NewColumn\" text;")]
+    [InlineData("ALTER TABLE \"Users\" ADD COLUMN \"First\" numeric(10, 2) DEFAULT round(1.25, 1), ADD COLUMN \"Second\" text;")]
+    [InlineData("ALTER TABLE \"Users\" ADD COLUMN \"First,Column\" text DEFAULT 'a,b;() -- /*', ADD COLUMN \"Second\" text;")]
+    [InlineData("ALTER TABLE \"Users\" ADD COLUMN \"A\"\",B\" text DEFAULT 'it''s,a', ADD COLUMN \"Second\" text;")]
+    [InlineData("ALTER TABLE \"Users\" ADD COLUMN \"First\" text DEFAULT $value$a,b;()$value$, ADD COLUMN \"Second\" text;")]
+    [InlineData("ALTER TABLE \"Users\" ADD /* outer /* nested */ comment */ COLUMN \"First\" text, -- comma,\n ADD COLUMN \"Second\" text;")]
     [InlineData("UPDATE \"HabitLogs\" SET \"IsSlip\" = false WHERE \"IsSlip\" IS NULL;")]
     [InlineData("CREATE INDEX IF NOT EXISTS ix_users ON \"Users\" (\"Id\");")]
     [InlineData("CREATE TRIGGER classify BEFORE INSERT ON \"HabitLogs\" FOR EACH ROW EXECUTE\n  FUNCTION classify();")]

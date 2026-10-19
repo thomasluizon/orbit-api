@@ -75,6 +75,11 @@ marker cannot hide later DDL. It is deliberately conservative and may require
 review for harmless text; it is not a PostgreSQL parser. Review SQL function
 calls and any indirect DDL as well.
 Additive tables, nullable/defaulted columns, indexes and ordinary backfills pass.
+Raw `ALTER TABLE` actions are split at commas outside quoted text and parentheses.
+Every action must be an `ADD COLUMN` using a recognized built-in type, nullable
+or supplied with a default, without added constraints. Unclassified actions and
+types require a barrier, including trigger state changes, schema moves and
+`ADD CONSTRAINT`, even with `NOT VALID`.
 `Down` is not executed by forward deployments and does not trigger this gate.
 
 Startup awaits `Database.MigrateAsync` before the new host serves requests or
