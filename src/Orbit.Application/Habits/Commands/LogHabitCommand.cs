@@ -23,7 +23,8 @@ public record LogHabitResponse(
     int CurrentStreak,
     IReadOnlyList<LinkedGoalUpdate>? LinkedGoalUpdates = null,
     int? XpEarned = null,
-    IReadOnlyList<string>? NewAchievementIds = null);
+    IReadOnlyList<string>? NewAchievementIds = null,
+    int? PreviousStreak = null);
 
 public record LogHabitCommand(
     Guid UserId,
@@ -183,6 +184,7 @@ public partial class LogHabitCommandHandler(
     private async Task<Result<LogHabitResponse>> HandleUnlogAsync(
         Habit habit, DateOnly targetDate, DateOnly today, CancellationToken cancellationToken)
     {
+        var previousStreak = await services.UserStreakService.CalculateAsync(habit.UserId, cancellationToken);
         HabitLog unlogEntity;
         LinkedGoalSyncResult goalSync;
         var attempt = 1;
@@ -231,11 +233,12 @@ public partial class LogHabitCommandHandler(
             unlogId,
             IsFirstCompletionToday: false,
             CurrentStreak: streakState?.CurrentStreak ?? 0,
-            LinkedGoalUpdates: goalSync.Updates));
+            LinkedGoalUpdates: goalSync.Updates,
+            PreviousStreak: previousStreak?.CurrentStreak ?? 0));
     }
 
     /// <summary>The rows a log persists, carried out of the lock so the derived work below can run outside it.</summary>
-    internal sealed record PersistedLog(Guid LogId, bool IsFirstCompletionToday, LinkedGoalSyncResult GoalSync);
+    internal sealed record PersistedLog(Guid LogId, bool IsFirstCompletionToday, LinkedGoalSyncResult GoalSync, int PreviousStreak);
 
     private async Task<Result<LogHabitResponse>> HandleLogAsync(
         Habit habit, LogHabitCommand request, DateOnly targetDate, DateOnly today, int weekStartDay,
@@ -289,13 +292,15 @@ public partial class LogHabitCommandHandler(
             CurrentStreak: streakState?.CurrentStreak ?? 0,
             LinkedGoalUpdates: goalSync.Updates,
             XpEarned: gamificationResult?.XpEarned,
-            NewAchievementIds: gamificationResult?.NewAchievementIds));
+            NewAchievementIds: gamificationResult?.NewAchievementIds,
+            PreviousStreak: persisted.Value.PreviousStreak));
     }
 
     private async Task<Result<PersistedLog>> PersistLogAsync(
         Habit habit, LogHabitCommand request, DateOnly targetDate, DateOnly today, int weekStartDay,
         User? user, CancellationToken cancellationToken)
     {
+        var previousStreak = await services.UserStreakService.CalculateAsync(request.UserId, cancellationToken);
         var isFirstCompletionToday = user is not null
             && !await repos.HabitRepository.AnyAsync(
                 h => h.UserId == request.UserId && h.Logs.Any(l => l.Date == targetDate && l.Value > 0),
@@ -325,7 +330,7 @@ public partial class LogHabitCommandHandler(
                     today,
                     cancellationToken: cancellationToken);
                 return Result.Success(new PersistedLog(
-                    logEntity.Id, isFirstCompletionToday, ToLinkedGoalSyncResult(updates)));
+                    logEntity.Id, isFirstCompletionToday, ToLinkedGoalSyncResult(updates), previousStreak?.CurrentStreak ?? 0));
             }
             catch (DbUpdateConcurrencyException) when (attempt < MaxLogAttempts)
             {
@@ -378,15 +383,16 @@ public partial class LogHabitCommandHandler(
             l => l.HabitId == habit.Id && l.Date == targetDate && l.Value > 0, cancellationToken);
         var winningLog = existingLogs.OrderByDescending(l => l.Id).First();
 
-        var users = await repos.UserRepository.FindAsync(u => u.Id == habit.UserId, cancellationToken);
-        var currentStreak = users.SingleOrDefault()?.CurrentStreak ?? 0;
+        var streakState = await services.UserStreakService.CalculateAsync(habit.UserId, cancellationToken);
+        var currentStreak = streakState?.CurrentStreak ?? 0;
 
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId, today);
 
         return Result.Success(new LogHabitResponse(
             winningLog.Id,
             IsFirstCompletionToday: false,
-            CurrentStreak: currentStreak));
+            CurrentStreak: currentStreak,
+            PreviousStreak: currentStreak));
     }
 
     private const string PostgresUniqueViolationSqlState = "23505";
