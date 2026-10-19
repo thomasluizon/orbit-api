@@ -52,7 +52,7 @@ public class StreakFreezeAutoActivationServiceTests
         targeted.HasProAccess.Should().BeFalse();
         var features = new FeatureExplanationService();
         features.Get("freezes")!.Body.Should().Contain(
-            "Streak freezes are available with Pro access or when the `gamification_free_tier` flag is enabled for your account.",
+            "Streak freezes are part of Orbit Pro. Some free accounts have them too.",
             "freezes.md must describe the access condition that allowed this free user's automatic freeze");
         features.Get("freezes")!.Body.Should().NotContain("Streak freezes are a Pro feature");
         features.Get("paygate")!.Body.Split("## What Pro unlocks")[1].Should()

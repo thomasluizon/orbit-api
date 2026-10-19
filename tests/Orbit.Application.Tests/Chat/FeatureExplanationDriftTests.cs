@@ -1,5 +1,7 @@
 using System.Globalization;
+using System.Reflection;
 using FluentAssertions;
+using FluentAssertions.Execution;
 using NSubstitute;
 using Orbit.Application.Chat.FeatureExplanations;
 using Orbit.Application.Common;
@@ -25,6 +27,26 @@ public class FeatureExplanationDriftTests
     }
 
     private static string N(int value) => value.ToString(CultureInfo.InvariantCulture);
+
+    [Fact]
+    public void AllExplanations_UseProductLanguageWithoutInternalIdentifiers()
+    {
+        var internalKeys = new[] { typeof(FeatureFlagKeys), typeof(AppConfigKeys) }
+            .SelectMany(type => type.GetFields(BindingFlags.Public | BindingFlags.Static))
+            .Where(field => field.IsLiteral && field.FieldType == typeof(string))
+            .Select(field => (string)field.GetRawConstantValue()!);
+
+        using var scope = new AssertionScope();
+        foreach (var key in _service.Keys)
+        {
+            var body = Body(key);
+            body.Should().NotMatchRegex(@"`[^`\r\n]+`",
+                $"{key}.md must explain the product without backticked identifiers");
+            foreach (var internalKey in internalKeys)
+                body.Should().NotContain(internalKey,
+                    $"{key}.md must not expose an internal flag or configuration key");
+        }
+    }
 
     [Fact]
     public void Freezes_MatchesStreakFreezeConstants()

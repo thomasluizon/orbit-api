@@ -1346,7 +1346,7 @@ public class GamificationServiceTests
         user.HasProAccess.Should().BeFalse();
         var features = new FeatureExplanationService();
         features.Get("gamification")!.Body.Should().Contain(
-            "XP, levels, and achievements are available with Pro access or when the `gamification_free_tier` flag is enabled for your account.",
+            "XP, levels, and achievements are part of Orbit Pro. Some free accounts have them too.",
             "gamification.md must describe the access condition that allowed this free user to earn XP and an achievement");
         features.Get("paygate")!.Body.Split("## What Pro unlocks")[1].Should()
             .NotContain("Gamification", "paygate.md must not sell this free user's XP, levels, or achievements as Pro-only");
