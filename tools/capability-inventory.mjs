@@ -112,7 +112,10 @@ function parameters(text, file, offset, classMap, prefix = "", depth = 0) {
   if (!properties) return found
   const open = text.indexOf("{", properties.index)
   const close = balanced(text, open)
-  const requiredText = text.slice(close + 1).match(/required\s*=\s*new\[\]\s*\{([^}]+)\}/)?.[1] ?? ""
+  const requiredText = (text.slice(close + 1).match(/required\s*=\s*new\[\]\s*\{([^}]+)\}/)?.[1] ?? "").replace(/\b(\w+)\b/g, token => {
+    const value = file.text.match(new RegExp(`const string ${token} = "([^"]+)"`))?.[1]
+    return value ? `"${value}"` : token
+  })
   for (const part of members(text.slice(open + 1, close))) {
     const key = part.text.match(/^\s*(?:(\w+)|\[(?:"([^"]+)"|(\w+))\])\s*=/)
     if (!key) continue
@@ -219,6 +222,18 @@ function registries(files, classMap) {
   for (const tool of mcp) {
     const backing = chat.find(candidate => candidate.name === tool.name)
     if (!backing) continue
+    for (const parameter of tool.parameters) {
+      const forwarded = tool.type.text.match(new RegExp(`(?:^|\\n)\\s*(\\w+)\\s*=\\s*${parameter.name}\\s*(?:,|\\n|})`))?.[1]
+      if (forwarded && tool.type.text.includes(`"${tool.name}"`) && !backing.parameters.some(item => normalize(item.name) === normalize(forwarded))) {
+        parameter.unsupportedByExecutorSchema = true
+        parameter.forwardedAs = forwarded
+        parameter.executorSchema = backing.declaration
+        const validation = files.get("src/Orbit.Application/Chat/Tools/ChatToolArgumentCheck.cs")
+        const check = validation.text.indexOf("!AgentArgumentSchema.Accepts")
+        if (check < 0) throw new Error("Review executor schema enforcement")
+        parameter.executorValidation = evidence(validation, check, "!AgentArgumentSchema.Accepts")
+      }
+    }
     for (const parameter of [...tool.parameters]) {
       if (!["filterJson", "updatesJson"].includes(parameter.name)) continue
       const object = parameter.name.replace("Json", "")
@@ -376,7 +391,7 @@ export function buildInventory(root = defaultRoot) {
       const via = operation => surface === "mcp" ? gatewayTools.filter(tool => selects(tool, operation)) : []
       surfaceOperations[surface] = Object.fromEntries(operations.map(operation => [operation, {
         status: relevant(operation).length || via(operation).length ? "covered" : binding.deliberate ? "deliberate" : "absent",
-        tools: relevant(operation).map(tool => ({ name: tool.name, declaration: tool.declaration, registration: tool.registration, parameters: tool.parameters, ...(actions[`${entity}:${operation}`] ? { action: actions[`${entity}:${operation}`] } : {}) })),
+        tools: relevant(operation).map(tool => ({ name: tool.name, declaration: tool.declaration, registration: tool.registration, parameters: tool.parameters, status: tool.parameters.some(parameter => parameter.unsupportedByExecutorSchema) ? "advertised-only" : "covered", ...(actions[`${entity}:${operation}`] ? { action: actions[`${entity}:${operation}`] } : {}) })),
         viaOperations: via(operation).map(tool => ({ name: tool.name, via: gateway.name, declaration: tool.declaration, gateway: gateway.declaration, parameters: tool.parameters })),
         absenceEvidence: relevant(operation).length ? [] : absenceEvidence[surface],
       }]))
@@ -394,7 +409,7 @@ export function buildInventory(root = defaultRoot) {
             const [parent, member] = field.name.split(".")
             const names = member ? [member] : binding.aliases?.[field.name] ?? aliases[field.name] ?? [field.name]
             const parameter = tool.parameters.find(param => !/^(filter|filterJson)\./.test(param.name) && !param.name.includes("sub_habits") && (!member || normalize(param.name).includes(normalize(parent))) && names.some(name => normalize(name) === normalize(param.leaf ?? param.name)))
-            return parameter ? { tool: tool.name, status: "covered", parameter: parameter.name, ...parameter } : null
+            return parameter ? { tool: tool.name, status: tool.parameters.some(item => item.unsupportedByExecutorSchema) ? "advertised-only" : "covered", parameter: parameter.name, ...parameter } : null
           }
           const direct = relevant(operation).map(find).filter(Boolean)
           const indirect = via(operation).map(tool => {
@@ -403,7 +418,8 @@ export function buildInventory(root = defaultRoot) {
           }).filter(Boolean)
           const hasFull = [...direct, ...indirect].some(item => ["covered", "entity-operation"].includes(item.status))
           const reason = deliberateFields[`${entity}.${field.name}`] ?? binding.deliberate
-          cells[operation] = { status: hasFull ? "covered" : direct.length || indirect.length ? "partial" : reason ? "deliberate" : "absent", direct, viaOperations: indirect, ...(reason ? { reason } : {}), evidence: field.domain }
+          const advertisedOnly = [...direct, ...indirect].some(item => item.status === "advertised-only")
+          cells[operation] = { status: hasFull ? "covered" : advertisedOnly ? "advertised-only" : direct.length || indirect.length ? "partial" : reason ? "deliberate" : "absent", direct, viaOperations: indirect, ...(reason ? { reason } : {}), evidence: field.domain }
         }
         const canWrite = ["create", "update", "bulk", "filterKeyedBulk"].some(operation => cells[operation].status === "covered")
         const problems = []
@@ -430,13 +446,16 @@ export function buildInventory(root = defaultRoot) {
   ].map(item => ({ ...item, evidence: registry.mcp.filter(tool => ["create_habit", "update_habit", "get_habit", "list_habits", "log_habit", "set_proactive_astra", "bulk_update_habits", "bulk_reschedule_habits", "get_habit_logs", "get_all_habit_logs"].includes(tool.name)).map(tool => tool.declaration) }))
   const requiredTitle = registry.mcp.find(tool => tool.name === "update_habit")?.parameters.find(param => param.name === "title" && param.required)
   if (requiredTitle) gaps.push({ entity: "Habit", surface: "mcp", field: "Title", problems: ["direct-update-requires-unchanged-title"], evidence: requiredTitle })
+  for (const tool of registry.mcp) for (const parameter of tool.parameters.filter(item => item.unsupportedByExecutorSchema)) {
+    gaps.push({ entity: Object.keys(entities).find(entity => Object.values(entities[entity].tools).flat().includes(tool.name)) ?? "Adapter", surface: "mcp", field: parameter.name, tool: tool.name, problems: ["adapter-forwards-unsupported-parameter"], evidence: parameter })
+  }
   const inputs = [...files.values()]
   for (const path of ["tools/capability-inventory.mjs", "tools/capability-inventory.bindings.mjs"]) inputs.push({ path, text: readFileSync(join(root, path), "utf8").replace(/\r\n?/g, "\n") })
   const hashes = Object.fromEntries(inputs.sort((a, b) => a.path < b.path ? -1 : 1).map(file => [file.path, sha(file.text)]))
   return {
     schemaVersion: 1,
     scope: "Extension of #318: registered chat and MCP tools, persisted domain fields, direct output projections and MCP operation-gateway routes. No user data is read.",
-    semantics: { covered: "A registered tool accepts this parameter or returns the field. Policy, plan, ownership and confirmation checks still apply.", partial: "A summary or count is returned, not the full writable value. This does not satisfy readback.", absent: "No matching registered tool parameter or returned projection in the reviewed bindings. Domain and complete registry evidence accompany the cell.", deliberate: "An explicit reason explains why this operation is not exposed.", delete: "Deletion applies to the entity, not an independent field mutation.", bulk: "Includes repeated explicit-ID operations and filter-keyed operations; filterKeyedBulk is reported separately.", gateway: "MCP can execute non-chat-only IAiTool operations through execute_agent_operation_v2. Direct MCP limitations remain visible in direct arrays.", bindings: "Semantic bindings identify returned DTOs and formatted output members. CI pins all inspected source inputs so a changed projection cannot silently retain an old verdict." },
+    semantics: { covered: "A registered tool accepts this parameter or returns the field. Policy, plan, ownership and confirmation checks still apply.", partial: "A summary or count is returned, not the full writable value. This does not satisfy readback.", "advertised-only": "A direct adapter forwards a parameter absent from its backing executor schema. Its signature alone does not establish working coverage.", absent: "No matching registered tool parameter or returned projection in the reviewed bindings. Domain and complete registry evidence accompany the cell.", deliberate: "An explicit reason explains why this operation is not exposed.", delete: "Deletion applies to the entity, not an independent field mutation.", bulk: "Includes repeated explicit-ID operations and filter-keyed operations; filterKeyedBulk is reported separately.", gateway: "MCP can execute non-chat-only IAiTool operations through execute_agent_operation_v2. Direct MCP limitations remain visible in direct arrays.", bindings: "Semantic bindings identify returned DTOs and formatted output members. CI pins all inspected source inputs so a changed projection cannot silently retain an old verdict." },
     provenance: { digest: sha(JSON.stringify(hashes)), inputs: hashes },
     registries: { chat: registry.chat.map(publicTool), mcp: registry.mcp.map(publicTool) },
     counts: { registeredChat, chat: registry.chat.length, mcp: registry.mcp.length, capabilities: capabilities.length, entities: rows.length, fields: rows.reduce((sum, row) => sum + row.fields.length, 0) },
@@ -462,9 +481,16 @@ export function gapReport(inventory) {
   for (const group of grouped.values()) {
     const first = group[0]
     const requiredTitle = first.problems.includes("direct-update-requires-unchanged-title")
+    const unsupported = first.problems.includes("adapter-forwards-unsupported-parameter")
     const problems = new Set(group.flatMap(gap => gap.problems))
     lines.push(`### ${first.entity}.${first.field}: ${requiredTitle ? "direct MCP update requires the current title" : [...problems].join(", ")}`, "")
     lines.push(`Surfaces: ${group.map(gap => gap.surface).join(", ")}.`)
+    if (unsupported) {
+      lines.push(`Evidence on the API source tree: \`${first.evidence.source}\`, \`${first.evidence.executorSchema.source}\`, \`${first.evidence.executorValidation.source}\`.`)
+      lines.push(`User-visible effect: ${first.tool} forwards ${first.evidence.forwardedAs}, which its backing tool schema does not accept. The direct signature advertises a value that cannot be used successfully.`)
+      lines.push("Fix: Align the direct adapter and executor schema while preserving shipped contracts and validating the intended field.", "")
+      continue
+    }
     const sources = new Set(group.flatMap(gap => gap.evidence ? [gap.evidence.source] : [gap.domain.source, ...(gap.editEvidence ? [gap.editEvidence.source] : []), ...["create", "update", "bulk", "filterKeyedBulk"].flatMap(operation => [...gap.operations[operation].direct, ...gap.operations[operation].viaOperations].map(item => item.source))]))
     const readers = inventory.entities.find(entity => entity.entity === first.entity).operations
     for (const gap of group) for (const tool of readers[gap.surface].read.tools) sources.add(tool.declaration.source)

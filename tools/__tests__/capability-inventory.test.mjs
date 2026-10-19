@@ -83,6 +83,10 @@ test("nested writable fields and filter predicates have distinct parameter paths
   const mcp = inventory.registries.mcp.find(row => row.name === "bulk_update_habits")
   assert.ok(mcp.parameters.some(row => row.name === "updatesJson.emoji"))
   assert.ok(inventory.registries.chat.find(row => row.name === "bulk_create_habits").parameters.some(row => row.name === "habits[].sub_habits[].emoji"))
+  assert.equal(inventory.registries.chat.find(row => row.name === "create_habit").parameters.find(row => row.name === "title").required, true)
+  assert.ok(inventory.registries.mcp.find(row => row.name === "create_habit").parameters.find(row => row.name === "isGeneral").unsupportedByExecutorSchema)
+  assert.equal(field(inventory, "Habit", "IsGeneral").surfaces.mcp.operations.create.status, "advertised-only")
+  assert.deepEqual(inventory.registries.mcp.flatMap(tool => tool.parameters.filter(parameter => parameter.unsupportedByExecutorSchema).map(parameter => [tool.name, parameter.name])), [["create_habit", "isGeneral"]])
 })
 
 test("removing a real registration removes coverage and fails the drift gate", () => {

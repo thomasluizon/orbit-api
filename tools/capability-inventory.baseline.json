@@ -950,7 +950,7 @@
     "src/Orbit.Infrastructure/Services/WaitlistConfirmationTokenService.cs": "878a5d0057af96404f44088e3b2b6382fcf8da028e0ddf949d7bf6c7d66c5848",
     "src/Orbit.Infrastructure/Services/XpAwardLogBackfillHostedService.cs": "5275f0bd27cff867be51c75de41e1aebfc4dee90f9496872bd8bbf3a70f5a3a4",
     "tools/capability-inventory.bindings.mjs": "646981accf68f8668f9e3e306782f6b3fde916dbeafc988b3ad594646300c12e",
-    "tools/capability-inventory.mjs": "8c3f164795a31102a51294b163ef9076ce0cdb13566ab3c229b864e0a97199c7"
+    "tools/capability-inventory.mjs": "7a3d85131699509d889770b18dbfa1b64f6ab6bd888fb56b36077839a52ed51e"
   },
-  "artifactDigest": "db9443c78937ea47ace972845401f6a19f38eff83000602b3e50507b7824eceb"
+  "artifactDigest": "6f0df6455c8acf4a700638d7dc1f9e622afd4cd9af4b17ad385b7737078f0f14"
 }

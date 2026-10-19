@@ -48,11 +48,11 @@ Evidence on the API source tree: `src/Orbit.Domain/Entities/Habit.cs:92`, `src/O
 User-visible effect: Astra can write Habit.ReminderTimes; Astra cannot read its full value back.
 Fix: Return the full field through the relevant read projections.
 
-### Habit.IsGeneral: domain-edit-without-tool-update, create-without-update
+### Habit.IsGeneral: domain-edit-without-tool-update
 
 Surfaces: chat, mcp.
 Evidence on the API source tree: `src/Orbit.Domain/Entities/Habit.cs:93`, `src/Orbit.Domain/Entities/Habit.cs:49`, `src/Orbit.Application/Chat/Tools/Implementations/BulkCreateHabitsTool.cs:130`, `src/Orbit.Api/Mcp/Tools/HabitTools.cs:106`, `src/Orbit.Api/Mcp/Tools/McpToolHelpers.cs:47`, `src/Orbit.Application/Chat/Tools/Implementations/QueryHabitsTool.cs:19`, `src/Orbit.Api/Mcp/Tools/HabitTools.cs:65`, `src/Orbit.Api/Mcp/Tools/HabitTools.cs:22`.
-User-visible effect: The domain supports editing Habit.IsGeneral but Astra has no update parameter; there is no parameter to change it after creation.
+User-visible effect: The domain supports editing Habit.IsGeneral but Astra has no update parameter.
 Fix: Add an update parameter with application validation and domain guards, or record an explicit immutable-field rationale.
 
 ### Habit.IsFlexible: write-without-full-readback
@@ -439,3 +439,10 @@ Surfaces: mcp.
 Evidence on the API source tree: `src/Orbit.Api/Mcp/Tools/HabitTools.cs:141`, `src/Orbit.Api/Mcp/Tools/HabitTools.cs:65`, `src/Orbit.Api/Mcp/Tools/HabitTools.cs:22`.
 User-visible effect: Changing an unrelated habit property through the direct MCP tool requires retrieving and resending its decrypted title. The generic operation route accepts the chat schema.
 Fix: Make title optional on the direct MCP adapter and preserve the existing value when omitted.
+
+### Habit.isGeneral: adapter-forwards-unsupported-parameter
+
+Surfaces: mcp.
+Evidence on the API source tree: `src/Orbit.Api/Mcp/Tools/HabitTools.cs:106`, `src/Orbit.Application/Chat/Tools/Implementations/CreateHabitTool.cs:22`, `src/Orbit.Application/Chat/Tools/ChatToolArgumentCheck.cs:14`.
+User-visible effect: create_habit forwards is_general, which its backing tool schema does not accept. The direct signature advertises a value that cannot be used successfully.
+Fix: Align the direct adapter and executor schema while preserving shipped contracts and validating the intended field.
