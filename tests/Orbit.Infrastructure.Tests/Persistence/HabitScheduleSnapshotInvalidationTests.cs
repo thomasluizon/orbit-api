@@ -161,8 +161,10 @@ public class HabitScheduleSnapshotInvalidationTests
         after.Single().Days.Should().ContainSingle().Which.Should().Be(DayOfWeek.Friday);
     }
 
-    [Fact]
-    public async Task BulkLog_CompletedOneTimeHabit_DoesNotAddUnscheduledStreakDay()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Log_CompletedOneTimeHabit_DoesNotAddUnscheduledStreakDay(bool bulk)
     {
         using var factory = new SqliteOrbitDbContextFactory();
         var context = factory.Context;
@@ -205,15 +207,30 @@ public class HabitScheduleSnapshotInvalidationTests
                 new GenericRepository<StreakFreeze>(context)),
             dates, snapshots);
         using var cache = new MemoryCache(new MemoryCacheOptions());
-        var handler = new BulkLogHabitsCommandHandler(habits, logs,
-            new BulkLogServices(dates, streak, gamification),
-            new GoalCompletionService(new GenericRepository<Goal>(context), gamification, unitOfWork, dates),
-            unitOfWork, cache, NullLogger<BulkLogHabitsCommandHandler>.Instance);
+        var goals = new GoalCompletionService(new GenericRepository<Goal>(context), gamification, unitOfWork, dates);
+        if (bulk)
+        {
+            var handler = new BulkLogHabitsCommandHandler(habits, logs,
+                new BulkLogServices(dates, streak, gamification), goals,
+                unitOfWork, cache, NullLogger<BulkLogHabitsCommandHandler>.Instance);
+            var result = await handler.Handle(new BulkLogHabitsCommand(user.Id, [new(oneTime.Id)]), CancellationToken.None);
 
-        var result = await handler.Handle(new BulkLogHabitsCommand(user.Id, [new(oneTime.Id)]), CancellationToken.None);
+            result.IsSuccess.Should().BeTrue();
+            result.Value.Results.Single().Status.Should().Be(BulkItemStatus.Success);
+        }
+        else
+        {
+            var handler = new LogHabitCommandHandler(
+                new LogHabitRepositories(habits, logs, new GenericRepository<User>(context)),
+                new LogHabitServices(dates, streak, gamification, goals,
+                    Substitute.For<MediatR.IMediator>(), Substitute.For<IPayGateService>()),
+                unitOfWork, cache, NullLogger<LogHabitCommandHandler>.Instance);
+            var result = await handler.Handle(new LogHabitCommand(user.Id, oneTime.Id), CancellationToken.None);
 
-        result.IsSuccess.Should().BeTrue();
-        result.Value.Results.Single().Status.Should().Be(BulkItemStatus.Success);
+            result.IsSuccess.Should().BeTrue();
+            result.Value.PreviousStreak.Should().Be(1);
+            result.Value.CurrentStreak.Should().Be(1);
+        }
         user.CurrentStreak.Should().Be(1);
         user.LongestStreak.Should().Be(1);
     }

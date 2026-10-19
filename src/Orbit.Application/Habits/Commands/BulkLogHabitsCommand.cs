@@ -19,7 +19,10 @@ public record BulkLogHabitsCommand(
     public string IdempotencyFingerprint => BulkHabitCommandFingerprint.Create(Items, item => item.Date);
 }
 
-public record BulkLogResult(IReadOnlyList<BulkLogItemResult> Results);
+public record BulkLogResult(
+    IReadOnlyList<BulkLogItemResult> Results,
+    int? PreviousStreak = null,
+    int? CurrentStreak = null);
 
 public record BulkLogItemResult(
     int Index,
@@ -51,6 +54,8 @@ public partial class BulkLogHabitsCommandHandler(
         var today = await services.UserDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var weekStartDay = await services.UserDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
         var results = new List<BulkLogItemResult>();
+        var previousStreak = 0;
+        var currentStreak = 0;
 
         var habitMap = await BulkHabitLoader.LoadHabitsWithRecentLogsAsync(
             habitRepository, request.Items.Select(i => i.HabitId), request.UserId, today, cancellationToken);
@@ -63,6 +68,9 @@ public partial class BulkLogHabitsCommandHandler(
         /** A completion log and its due-date advance are both inputs a streak repair reads. */
         await HabitCeilingLock.ExecuteAsync(unitOfWork, request.UserId, async ct =>
         {
+            previousStreak = (await services.UserStreakService.CalculateAsync(request.UserId, ct))?.CurrentStreak ?? 0;
+            currentStreak = previousStreak;
+
             for (int i = 0; i < request.Items.Count; i++)
             {
                 var item = request.Items[i];
@@ -114,7 +122,8 @@ public partial class BulkLogHabitsCommandHandler(
 
                 await ConcurrencyRetry.SaveWithRetryAsync(
                     unitOfWork,
-                    c => services.UserStreakService.RecalculateAsync(request.UserId, cancellationToken: c),
+                    async c => currentStreak = (await services.UserStreakService.RecalculateAsync(
+                        request.UserId, cancellationToken: c))?.CurrentStreak ?? 0,
                     ct);
 
             }
@@ -122,7 +131,7 @@ public partial class BulkLogHabitsCommandHandler(
 
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
-        return Result.Success(new BulkLogResult(results));
+        return Result.Success(new BulkLogResult(results, previousStreak, currentStreak));
     }
 
     private async Task<BulkLogItemResult> ProcessLogItem(
