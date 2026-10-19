@@ -55,6 +55,34 @@ public class CreateHabitCommandHandlerTests
             });
     }
 
+    [Theory]
+    [InlineData(HabitSchedule.OneTime)]
+    [InlineData(HabitSchedule.Recurring)]
+    [InlineData(HabitSchedule.Flexible)]
+    [InlineData(HabitSchedule.General)]
+    public async Task Handle_LegacyFieldsStillCreateEachSchedule(HabitSchedule schedule)
+    {
+        var repeating = schedule is HabitSchedule.Recurring or HabitSchedule.Flexible;
+        var command = new CreateHabitCommand(
+            UserId, "Legacy habit", null, repeating ? FrequencyUnit.Day : null, repeating ? 1 : null,
+            DueDate: Today, IsGeneral: schedule == HabitSchedule.General,
+            Options: new HabitCommandOptions(IsFlexible: schedule == HabitSchedule.Flexible));
+        var validation = new Orbit.Application.Habits.Validators.CreateHabitCommandValidator().Validate(command);
+        validation.IsValid.Should().BeTrue();
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _habitRepo.Received(1).AddAsync(
+            Arg.Is<Habit>(habit => habit.Id == result.Value && habit.Schedule == schedule
+                && habit.StartDate == Today && habit.DueDate == Today
+                && habit.IsGeneral == (schedule == HabitSchedule.General)
+                && habit.IsFlexible == (schedule == HabitSchedule.Flexible)
+                && habit.FrequencyUnit == command.FrequencyUnit
+                && habit.FrequencyQuantity == command.FrequencyQuantity),
+            Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task Handle_ValidCommand_CreatesHabitAndSaves()
     {
