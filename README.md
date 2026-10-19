@@ -204,3 +204,36 @@ The Dockerfile uses a multi-stage build (SDK for build, ASP.NET runtime for prod
 ## License
 
 Private project.
+
+## Data export and account erasure
+
+The profile data export returns the account's portable data while the account exists.
+Erasure removes the account and owned data. Provider cancellation obligations are billing
+reconciliation data and survive erasure separately in `OwedSubscriptionCancellations`.
+They cannot be joined back to an account by an Orbit user identifier and are not included
+in the profile export, because they are created as the account is erased.
+
+Each record keeps a random record ID, the provider (Stripe or Google Play), the Stripe
+subscription ID or Play purchase token, the attempt count, creation time, last attempt time,
+next attempt time, and exhaustion time. It keeps no name, email, Orbit user ID, payment card,
+or provider error text. Purchase tokens and subscription IDs must be treated as sensitive
+billing data; alerts use only the record ID, provider and attempt count.
+
+After the seven-day billing deferral, erasure commits each retained provider identifier's
+cancellation obligation in the same transaction that deletes the account. An error alert
+reports erasure with unconfirmed renewals. The cancellation worker scans every minute in
+both scheduler modes, independently of the erased account and any original queued job.
+It backs off for one minute, five minutes, then one hour between attempts. After 27
+attempts it continues attempting cancellation daily. A successful cancellation, an already
+stopped renewal, or a provider-confirmed missing subscription removes the record immediately. A failed provider does not prevent
+another provider's obligation from being processed.
+
+Exhausted obligations remain until billing reconciliation confirms renewal has stopped;
+there is no time-based expiry that could forget an active charge. Exhaustion emits an error
+alert with the record ID and provider, repeated daily while unresolved. Billing operators
+must locate that record, verify and stop renewal with the named provider, and remove the
+record only after confirming cancellation or that the subscription no longer exists.
+The next attempt time schedules both daily cancellation attempts and exhaustion reminders.
+Each attempt is committed before provider calls, which run outside database transactions.
+Interrupted attempts remain due for a retry after backoff. Provider cancellation
+that succeeds before a database failure is safe to verify again on the next scan.

@@ -26,6 +26,18 @@ public class FeatureFlagAccountsMigrationTests
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
 
+        var owedCancellations = differences.OfType<CreateTableOperation>()
+            .Should().ContainSingle(table => table.Name == "OwedSubscriptionCancellations").Subject;
+        owedCancellations.Name.Should().Be("OwedSubscriptionCancellations");
+        owedCancellations.ForeignKeys.Should().BeEmpty();
+        owedCancellations.Columns.Select(column => column.Name).Should().BeEquivalentTo(
+            "Id", "Provider", "ProviderIdentifier", "Attempts", "CreatedAtUtc", "LastAttemptAtUtc",
+            "NextAttemptAtUtc", "ExhaustedAtUtc");
+        var cancellationIndexes = differences.OfType<CreateIndexOperation>()
+            .Where(index => index.Table == "OwedSubscriptionCancellations").ToArray();
+        cancellationIndexes.Should().HaveCount(2).And.OnlyContain(index => index.Table == "OwedSubscriptionCancellations");
+        cancellationIndexes.Should().ContainSingle(index => index.Columns.SequenceEqual(new[] { "NextAttemptAtUtc" }) && !index.IsUnique);
+        cancellationIndexes.Should().ContainSingle(index => index.Columns.SequenceEqual(new[] { "Provider", "ProviderIdentifier" }) && index.IsUnique);
         differences.Where(operation => operation is DropForeignKeyOperation || operation is AddForeignKeyOperation)
             .Should().HaveCount(4);
         differences.OfType<AlterColumnOperation>().Should().ContainSingle(column =>
@@ -74,7 +86,8 @@ public class FeatureFlagAccountsMigrationTests
             "20261018093533_CascadeAccountabilityPairsOnUserDeletion",
             "20261018111350_AddDurableSignupWork",
             "20261018111711_RecordDeletionStoppedRenewals",
-            "20261019011031_ContractHabitLogSlip");
+            "20261019011031_ContractHabitLogSlip",
+            "20261019091925_AddOwedSubscriptionCancellations");
     }
 
     [Fact]

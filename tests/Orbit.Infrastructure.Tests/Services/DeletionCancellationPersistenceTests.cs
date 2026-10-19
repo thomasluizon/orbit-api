@@ -399,6 +399,10 @@ public class DeletionCancellationPersistenceTests
         services.AddSingleton(play);
         services.AddSingleton(Options.Create(new GooglePlaySettings { ProductId = "orbit_pro" }));
         services.AddScoped<CancelSubscriptionOnDeletionJob>();
+        services.AddScoped<OwedSubscriptionCancellationJob>();
+        services.AddScoped<IGenericRepository<OwedSubscriptionCancellation>, GenericRepository<OwedSubscriptionCancellation>>();
+        services.AddSingleton<ILogger<OwedSubscriptionCancellationJob>>(NullLogger<OwedSubscriptionCancellationJob>.Instance);
+        services.AddSingleton(TimeProvider.System);
         var logger = Substitute.For<ILogger<AccountDeletionService>>();
         logger.IsEnabled(Arg.Any<LogLevel>()).Returns(true);
         using var provider = services.BuildServiceProvider();
@@ -418,7 +422,11 @@ public class DeletionCancellationPersistenceTests
 
     private static CancelSubscriptionOnDeletionJob CreateJob(OrbitDbContext context, IBillingService stripe, IPlayBillingService play) =>
         new(new GenericRepository<User>(context), new UnitOfWork(context, new DatabaseConnectionSettings()),
-            stripe, play, Options.Create(new GooglePlaySettings { ProductId = "orbit_pro" }));
+            stripe, play, Options.Create(new GooglePlaySettings { ProductId = "orbit_pro" }),
+            new OwedSubscriptionCancellationJob(new GenericRepository<OwedSubscriptionCancellation>(context),
+                new UnitOfWork(context, new DatabaseConnectionSettings()), stripe, play,
+                Options.Create(new GooglePlaySettings { ProductId = "orbit_pro" }),
+                NullLogger<OwedSubscriptionCancellationJob>.Instance, TimeProvider.System));
 
     private sealed class FailNextSaveInterceptor : SaveChangesInterceptor
     {
