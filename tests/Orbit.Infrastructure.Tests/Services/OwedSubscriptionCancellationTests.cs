@@ -239,6 +239,32 @@ public class OwedSubscriptionCancellationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task Scanner_FinalAttemptSucceeds_RemovesDebtWithoutExhaustionAlert(bool googlePlay)
+    {
+        using var fixture = new Fixture();
+        await fixture.SeedAsync(googlePlay);
+        fixture.FailProviders();
+        for (var attempt = 1; attempt < OwedSubscriptionCancellation.MaxAttempts; attempt++)
+        {
+            await fixture.ScanAsync();
+            using var context = fixture.Factory.CreateContext();
+            fixture.Clock.UtcNow = new DateTimeOffset((await context.OwedSubscriptionCancellations.SingleAsync()).NextAttemptAtUtc);
+        }
+        fixture.Stripe.SetSubscriptionCancelAtPeriodEndAsync("sub_owed", true, Arg.Any<CancellationToken>(), Arg.Any<string?>())
+            .Returns(Task.CompletedTask);
+        fixture.Play.CancelAsync("token", Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+
+        await fixture.ScanAsync();
+
+        using var final = fixture.Factory.CreateContext();
+        (await final.OwedSubscriptionCancellations.AnyAsync()).Should().BeFalse();
+        await fixture.AssertCancellationCallsAsync(googlePlay, OwedSubscriptionCancellation.MaxAttempts);
+        fixture.Errors().Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task ExecuteAsync_ActiveTransaction_RejectsBeforeDoingWork(bool legacyJob)
     {
         using var fixture = new Fixture();

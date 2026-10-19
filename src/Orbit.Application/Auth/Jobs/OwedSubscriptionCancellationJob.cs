@@ -67,9 +67,6 @@ public sealed class OwedSubscriptionCancellationJob(
         if (claimed is null)
             return;
         var attempt = claimed.Attempts;
-        if (claimed.ExhaustedAtUtc.HasValue)
-            AlertExhaustion(claimed);
-
         var succeeded = false;
         try
         {
@@ -78,7 +75,9 @@ public sealed class OwedSubscriptionCancellationJob(
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
-            if (!claimed.ExhaustedAtUtc.HasValue)
+            if (claimed.ExhaustedAtUtc.HasValue)
+                AlertExhaustion(claimed);
+            else
                 logger.LogWarning("Provider cancellation {CancellationId} for {Provider} failed on attempt {Attempt}",
                     claimed.Id, claimed.Provider, attempt);
         }
