@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Runtime.CompilerServices;
+using Orbit.Application.Chat.Tools;
 using FluentAssertions;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
@@ -90,7 +92,6 @@ public class ToolResultMessagesTests
     [InlineData("delete_tag", "", "tagDeleted")]
     [InlineData("delete_checklist_template", "", "checklistTemplateDeleted")]
     [InlineData("send_support_request", "", "supportRequestSent")]
-    [InlineData("manage_feature_flags", "", "featureFlagsUpdated")]
     [InlineData("update_profile_preferences", "set_theme_preference", "themePreferenceUpdated")]
     [InlineData("update_profile_preferences", "complete_onboarding", "onboardingCompleted")]
     [InlineData("update_profile_preferences", "complete_tour", "tourCompleted")]
@@ -130,7 +131,7 @@ public class ToolResultMessagesTests
         var card = new ActionResult("LegacyType", ActionStatus.Success).WithToolResultMessage(Call("update_profile_preferences", args));
 
         card.MessageKey.Should().Be("chat.toolResult." + key);
-        card.Params.Should().Be(new ToolResultMessageParams(Value: value));
+        card.Params.Should().Be(operation == "set_timezone" ? new ToolResultMessageParams(TimeZone: value) : new ToolResultMessageParams(Language: value));
     }
 
     [Theory]
@@ -184,15 +185,13 @@ public class ToolResultMessagesTests
 
         card.MessageKey.Should().Be("chat.toolResult." + key);
         card.Params.Should().Be(tool == "get_referral_code"
-            ? new ToolResultMessageParams(Value: "My value") : new ToolResultMessageParams(EntityName: "My value"));
+            ? new ToolResultMessageParams(ReferralCode: "My value") : new ToolResultMessageParams(EntityName: "My value"));
     }
 
     [Theory]
     [InlineData("Operation is unsupported by policy.", "unsupportedByPolicy")]
-    [InlineData("Confirmation required before this action can run.", "confirmationRequired")]
     [InlineData("An unexpected error occurred.", "unexpectedError")]
     [InlineData("Tool arguments exceeded the clarification stash limit.", "clarificationLimitExceeded")]
-    [InlineData("Policy denied: missing_scope", "policyDenied")]
     [InlineData("A command validation error", "failed")]
     public void FailureCard_HasKeyWithoutEnglishErrorInParams(string error, string key)
     {
@@ -236,12 +235,88 @@ public class ToolResultMessagesTests
         var enriched = legacy.WithToolResultMessage(Call("create_habit"));
         WithoutMetadata(enriched).Should().Be(expected);
         using var json = JsonDocument.Parse(JsonSerializer.Serialize(enriched, ChatStreamEvent.SerializerOptions));
-        json.RootElement.EnumerateObject().Select(property => property.Name).Should().HaveCount(10);
+        json.RootElement.EnumerateObject().Select(property => property.Name).Should().Equal(
+            "type", "status", "entityId", "entityName", "error", "field", "suggestedSubHabits", "clarificationRequest", "messageKey", "params");
         json.RootElement.GetProperty("messageKey").GetString().Should().Be("chat.toolResult.createdHabit");
         json.RootElement.GetProperty("params").GetRawText().Should().Be("""{"entityName":"Read"}""");
         JsonSerializer.Deserialize<ActionResult>(expected, ChatStreamEvent.SerializerOptions).Should().Be(legacy);
         JsonSerializer.Deserialize<ActionResult>(JsonSerializer.Serialize(enriched, ChatStreamEvent.SerializerOptions),
             ChatStreamEvent.SerializerOptions).Should().Be(enriched);
+    }
+
+    [Fact]
+    public void PolicyFailureCard_PreservesReasonAsStructuredParam()
+    {
+        var card = new ActionResult("CreateHabit", ActionStatus.Failed, Error: "Policy denied: missing_scope")
+            .WithToolResultMessage(Call("create_habit"));
+
+        card.MessageKey.Should().Be("chat.toolResult.policyDenied");
+        JsonSerializer.Serialize(card.Params, ChatStreamEvent.SerializerOptions)
+            .Should().Be("""{"policyReason":"missing_scope"}""");
+        card.Error.Should().Be("Policy denied: missing_scope");
+    }
+
+    [Fact]
+    public void SanitizeFailedActions_ReplacesMetadataWithGenericFailure()
+    {
+        var accumulator = new ProcessUserChatCommandHandler.ToolExecutionAccumulator();
+        var success = new ActionResult("CreateHabit", ActionStatus.Success, EntityName: "Read")
+            .WithToolResultMessage(Call("create_habit"));
+        accumulator.ActionResults.Add(success);
+        accumulator.ActionResults.Add(new ActionResult("CreateHabit", ActionStatus.Failed,
+            Error: "Policy denied: missing_scope").WithToolResultMessage(Call("create_habit")));
+
+        accumulator.SanitizeFailedActions("I couldn't complete that. Please try again.");
+
+        accumulator.ActionResults[0].Should().Be(success);
+        var failure = accumulator.ActionResults[1];
+        failure.Error.Should().Be("I couldn't complete that. Please try again.");
+        failure.MessageKey.Should().Be("chat.toolResult.toolFailure");
+        failure.Params.Should().Be(new ToolResultMessageParams());
+    }
+
+    [Fact]
+    public void RegistryWriteTools_EverySupportedActionHasNonFallbackKey()
+    {
+        var tools = typeof(IAiTool).Assembly.GetTypes()
+            .Where(type => type.IsClass && !type.IsAbstract && typeof(IAiTool).IsAssignableFrom(type))
+            .Select(type => (IAiTool)RuntimeHelpers.GetUninitializedObject(type));
+        var registry = new AiToolRegistry(tools);
+        var writes = registry.GetAll().Where(tool => !tool.IsReadOnly).ToList();
+        writes.Should().NotBeEmpty();
+        foreach (var tool in writes)
+        {
+            var schema = JsonSerializer.SerializeToElement(tool.GetParameterSchema());
+            var operations = schema.GetProperty("properties").TryGetProperty("action", out var action)
+                && action.TryGetProperty("enum", out var values)
+                ? values.EnumerateArray().Select(value => value.GetString()).ToArray() : [null];
+            foreach (var operation in operations)
+            {
+                var status = tool.Name == "suggest_breakdown" ? ActionStatus.Suggestion : ActionStatus.Success;
+                var card = new ActionResult("Tool", status).WithToolResultMessage(
+                    Call(tool.Name, JsonSerializer.Serialize(new { action = operation })), new BulkCreateResult([]));
+
+                card.MessageKey.Should().NotBe("chat.toolResult.completed", $"{tool.Name}/{operation} needs a client translation");
+                card.MessageKey.Should().StartWith("chat.toolResult.");
+                card.Params.Should().NotBeNull();
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData("action is required.", "argumentRequired", """{"fieldName":"action"}""")]
+    [InlineData("name is required.", "argumentRequired", """{"fieldName":"name"}""")]
+    [InlineData("Unsupported action 'unknown'.", "unsupportedAction", """{"actionName":"unknown"}""")]
+    [InlineData("No matching habits found to delete.", "noHabitsToDelete", "{}")]
+    [InlineData("notification_ids must be a non-empty array.", "nonEmptyArrayRequired", """{"fieldName":"notification_ids"}""")]
+    [InlineData("notification_ids contains an invalid ID.", "invalidNotificationIds", "{}")]
+    public void ToolFailureCard_HasSpecificKeyAndParams(string error, string key, string parameters)
+    {
+        var card = new ActionResult("Tool", ActionStatus.Failed, Error: error).WithToolResultMessage(Call("delete_notifications"));
+
+        card.MessageKey.Should().Be("chat.toolResult." + key);
+        JsonSerializer.Serialize(card.Params, ChatStreamEvent.SerializerOptions).Should().Be(parameters);
+        card.Error.Should().Be(error);
     }
 
     private static AiToolCall Call(string name, string args = "{}") => new(name, "call", JsonDocument.Parse(args).RootElement);

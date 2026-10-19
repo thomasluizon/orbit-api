@@ -19,7 +19,7 @@ internal static class ToolResultMessages
     private static (string, ToolResultMessageParams) Describe(ActionResult action, AiToolCall call, object? payload)
     {
         if (action.Status == ActionStatus.Failed)
-            return (FailureKey(action.Error), new());
+            return ToolResultFailureMessages.Describe(action.Error);
         if (action.Status == ActionStatus.NeedsClarification)
             return ("needsClarification", new());
         if (action.Status == ActionStatus.Suggestion)
@@ -81,8 +81,7 @@ internal static class ToolResultMessages
             "delete_tag" => ("tagDeleted", new()),
             "delete_checklist_template" => ("checklistTemplateDeleted", new()),
             "send_support_request" => ("supportRequestSent", new()),
-            "get_referral_code" => ("referralCode", new(Value: action.EntityName)),
-            "manage_feature_flags" => ("featureFlagsUpdated", new()),
+            "get_referral_code" => ("referralCode", new(ReferralCode: action.EntityName)),
             _ => (EntityKey(call.Name), new(EntityName: action.EntityName))
         };
     }
@@ -100,8 +99,8 @@ internal static class ToolResultMessages
 
     private static (string, ToolResultMessageParams) Profile(string? operation, JsonElement args) => operation switch
     {
-        "set_timezone" => ("timezoneSet", new(Value: String(args, "timezone"))),
-        "set_language" => ("languageSet", new(Value: String(args, "language"))),
+        "set_timezone" => ("timezoneSet", new(TimeZone: String(args, "timezone"))),
+        "set_language" => ("languageSet", new(Language: String(args, "language"))),
         "set_week_start_day" => ("weekStartDaySet", new(WeekStartDay: Integer(args, "week_start_day"))),
         "set_clock_format" => ("clockFormatSet", new(Hours: Boolean(args, "uses_24_hour_clock") == true ? 24 : 12)),
         "set_theme_preference" => ("themePreferenceUpdated", new()),
@@ -136,16 +135,6 @@ internal static class ToolResultMessages
         "update_tag" => "updatedTag",
         "create_checklist_template" => "createdChecklistTemplate",
         _ => "completed"
-    };
-
-    private static string FailureKey(string? error) => error switch
-    {
-        "Operation is unsupported by policy." => "unsupportedByPolicy",
-        "Confirmation required before this action can run." => "confirmationRequired",
-        "An unexpected error occurred." => "unexpectedError",
-        "Tool arguments exceeded the clarification stash limit." => "clarificationLimitExceeded",
-        _ when error?.StartsWith("Policy denied: ", StringComparison.Ordinal) == true => "policyDenied",
-        _ => "failed"
     };
 
     private static bool TryProperty(JsonElement element, string name, out JsonElement value)
