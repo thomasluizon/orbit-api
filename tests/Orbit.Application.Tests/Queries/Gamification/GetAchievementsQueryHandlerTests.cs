@@ -230,15 +230,39 @@ public class GetAchievementsQueryHandlerTests
                 Arg.Any<CancellationToken>())
             .Returns(new List<UserAchievement>
             {
-                UserAchievement.Create(UserId, AchievementDefinitions.BattleBuddy)
+                UserAchievement.Create(UserId, AchievementDefinitions.FirstFriend)
             });
 
         var result = await _handler.Handle(new GetAchievementsQuery(UserId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Achievements.Should().HaveCount(33);
-        result.Value.Achievements.Single(a => a.Id == AchievementDefinitions.BattleBuddy)
+        result.Value.Achievements.Single(a => a.Id == AchievementDefinitions.FirstFriend)
             .IsEarned.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_RemovedAchievementEarned_OmitsBadgeAndPreservesXpAndLevel()
+    {
+        var user = CreateFreeUser();
+        user.AddXp(1_200);
+        var level = user.Level;
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        var unlock = UserAchievement.Create(UserId, "battle_buddy");
+        _achievementRepo.FindAsync(
+                Arg.Any<Expression<Func<UserAchievement, bool>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new List<UserAchievement> { unlock });
+
+        var result = await _handler.Handle(new GetAchievementsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Achievements.Should().NotContain(a => a.Id == unlock.AchievementId);
+        result.Value.Achievements.Should().Contain(a => a.Id == AchievementDefinitions.ShowOff)
+            .And.Contain(a => a.Id == AchievementDefinitions.YearInReview);
+        user.TotalXp.Should().Be(1_200);
+        user.Level.Should().Be(level);
+        _achievementRepo.DidNotReceive().Remove(Arg.Any<UserAchievement>());
     }
 
     [Fact]

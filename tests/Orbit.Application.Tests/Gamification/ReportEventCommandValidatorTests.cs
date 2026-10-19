@@ -24,7 +24,7 @@ public class ReportEventCommandValidatorTests
     [InlineData("")]
     [InlineData("unknown_key")]
     [InlineData("CARD_SHARED")]
-    [InlineData(AchievementDefinitions.BattleBuddy)]
+    [InlineData(AchievementDefinitions.FirstFriend)]
     public void Validate_UnknownOrEmptyKey_Fails(string eventKey)
     {
         var result = _validator.Validate(new ReportEventCommand(UserId, eventKey));

@@ -305,7 +305,7 @@ public class GetGamificationProfileQueryHandlerTests
                 Arg.Any<CancellationToken>())
             .Returns(new List<UserAchievement>
             {
-                UserAchievement.Create(UserId, AchievementDefinitions.BattleBuddy)
+                UserAchievement.Create(UserId, AchievementDefinitions.FirstFriend)
             });
 
         var result = await _handler.Handle(new GetGamificationProfileQuery(UserId), CancellationToken.None);
@@ -313,10 +313,10 @@ public class GetGamificationProfileQueryHandlerTests
         result.Value.AchievementsTotal.Should().Be(33);
         result.Value.AchievementsEarned.Should().Be(1);
         result.Value.Achievements.Should().HaveCount(33);
-        var retired = result.Value.Achievements.Single(a => a.Id == AchievementDefinitions.BattleBuddy);
+        var retired = result.Value.Achievements.Single(a => a.Id == AchievementDefinitions.FirstFriend);
         retired.IsEarned.Should().BeTrue();
         retired.EarnedAtUtc.Should().NotBeNull();
-        retired.Name.Should().Be("Battle buddy");
+        retired.Name.Should().Be("First friend");
         retired.Description.Should().NotBeNullOrWhiteSpace();
     }
 
@@ -327,7 +327,7 @@ public class GetGamificationProfileQueryHandlerTests
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
         var earned = AchievementDefinitions.Active
             .Select(definition => UserAchievement.Create(UserId, definition.Id))
-            .Append(UserAchievement.Create(UserId, AchievementDefinitions.BattleBuddy))
+            .Append(UserAchievement.Create(UserId, AchievementDefinitions.FirstFriend))
             .ToList();
         _achievementRepo.FindAsync(
                 Arg.Any<Expression<Func<UserAchievement, bool>>>(),

@@ -71,6 +71,21 @@ public class DistributedRateLimitServiceTests : IDisposable
         _dbContext.DistributedRateLimitBuckets.Should().BeEmpty();
     }
 
+    [Theory]
+    [InlineData("challenges")]
+    [InlineData("accountability-invites")]
+    [InlineData("accountability-checkins")]
+    [InlineData("accountability-mutations")]
+    [InlineData("unknown-policy")]
+    public async Task TryAcquireAsync_RemovedOrUnknownPolicy_ThrowsWithoutStoringBucket(string policyName)
+    {
+        var acquire = () => _service.TryAcquireAsync(policyName, "user:one");
+
+        await acquire.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage($"Unknown rate-limit policy '{policyName}'.");
+        _dbContext.DistributedRateLimitBuckets.Should().BeEmpty();
+    }
+
     [Fact]
     public async Task ChatLease_AcquireRefuseRelease_AllowsUsersIndependently()
     {
@@ -241,7 +256,6 @@ public class DistributedRateLimitServiceTests : IDisposable
     [InlineData("achievements", 30)]
     [InlineData("ai-operations", 15)]
     [InlineData("friend-mutations", 50)]
-    [InlineData("accountability-mutations", 50)]
     [InlineData("streak-repair", 10)]
     public async Task TryAcquireAsync_StateChangingSweepPolicy_BlocksAfterPermitLimit(string policyName, int permitLimit)
     {

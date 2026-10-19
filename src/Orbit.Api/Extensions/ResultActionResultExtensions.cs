@@ -42,26 +42,15 @@ public static class ResultActionResultExtensions
         [ErrorCodes.HandleTaken] = StatusCodes.Status409Conflict,
         [ErrorCodes.AlreadyFriends] = StatusCodes.Status409Conflict,
         [ErrorCodes.FriendLimitReached] = StatusCodes.Status409Conflict,
-        [ErrorCodes.AlreadyPaired] = StatusCodes.Status409Conflict,
-        [ErrorCodes.PairLimitReached] = StatusCodes.Status409Conflict,
-        [ErrorCodes.AlreadyCheckedIn] = StatusCodes.Status409Conflict,
         [ErrorCodes.StreakRepairUnavailable] = StatusCodes.Status409Conflict,
         [ErrorCodes.StreakGapRepairUnavailable] = StatusCodes.Status409Conflict,
         [DomainErrors.InsufficientStreakFreezes.Code] = StatusCodes.Status409Conflict,
 
         [ErrorCodes.SocialDisabled] = StatusCodes.Status403Forbidden,
         [ErrorCodes.Blocked] = StatusCodes.Status403Forbidden,
-        [ErrorCodes.NotChallengeParticipant] = StatusCodes.Status403Forbidden,
         [ErrorCodes.ApiKeyCreationChallengeRequired] = StatusCodes.Status428PreconditionRequired,
 
         [ErrorCodes.FriendRequestNotFound] = StatusCodes.Status404NotFound,
-        [ErrorCodes.ChallengeNotFound] = StatusCodes.Status404NotFound,
-        [ErrorCodes.InvalidJoinCode] = StatusCodes.Status404NotFound,
-        [ErrorCodes.PairNotFound] = StatusCodes.Status404NotFound,
-
-        [ErrorCodes.ChallengeFull] = StatusCodes.Status409Conflict,
-        [ErrorCodes.AlreadyJoinedChallenge] = StatusCodes.Status409Conflict,
-        [ErrorCodes.ChallengeClosed] = StatusCodes.Status409Conflict,
 
         [ErrorCodes.InternalServerError] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.PaymentServiceUnavailable] = StatusCodes.Status503ServiceUnavailable,
