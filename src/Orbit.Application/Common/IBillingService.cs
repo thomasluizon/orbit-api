@@ -33,9 +33,13 @@ public interface IBillingService
         string subscriptionId,
         CancellationToken cancellationToken);
 
-    /// <summary>Stops or restores renewal while preserving the current paid period.</summary>
+    /// <summary>
+    /// Stops or restores renewal while preserving the current paid period. Cancellation records
+    /// the deletion owner in provider metadata; restoration removes that marker.
+    /// </summary>
     Task SetSubscriptionCancelAtPeriodEndAsync(
-        string subscriptionId, bool cancelAtPeriodEnd, CancellationToken cancellationToken);
+        string subscriptionId, bool cancelAtPeriodEnd, CancellationToken cancellationToken,
+        string? deletionOwner = null);
 
     /// <summary>List recent invoices for a customer.</summary>
     Task<IReadOnlyList<BillingInvoice>> ListInvoicesAsync(
@@ -53,7 +57,7 @@ public interface IBillingService
     Task<int?> TryGetCouponPercentOffAsync(string couponId, CancellationToken cancellationToken);
 }
 
-/// <summary>Subscription details surfaced on the billing-details endpoint.</summary>
+/// <summary>Provider subscription details, including internal cancellation ownership for reconciliation.</summary>
 public sealed record BillingSubscriptionDetails(
     string Status,
     DateTime CurrentPeriodEnd,
@@ -61,7 +65,8 @@ public sealed record BillingSubscriptionDetails(
     Orbit.Domain.Enums.SubscriptionInterval Interval,
     long UnitAmount,
     string Currency,
-    BillingPaymentMethod? PaymentMethod);
+    BillingPaymentMethod? PaymentMethod,
+    string? DeletionOwner = null);
 
 public sealed record BillingPaymentMethod(string Brand, string Last4, int ExpMonth, int ExpYear);
 

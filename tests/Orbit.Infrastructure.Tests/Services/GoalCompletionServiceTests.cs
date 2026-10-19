@@ -554,6 +554,8 @@ public class GoalCompletionServiceTests
         public Task AcquireUserRowLockAsync(Guid userId, CancellationToken cancellationToken = default) =>
             inner.AcquireUserRowLockAsync(userId, cancellationToken);
 
+        public bool HasActiveTransaction => inner.HasActiveTransaction;
+
         public void DiscardChanges() => inner.DiscardChanges();
 
         public void ResetTracking() => inner.ResetTracking();
@@ -586,6 +588,8 @@ public class GoalCompletionServiceTests
 
         public Task AcquireUserRowLockAsync(Guid userId, CancellationToken cancellationToken = default) =>
             inner.AcquireUserRowLockAsync(userId, cancellationToken);
+
+        public bool HasActiveTransaction => inner.HasActiveTransaction;
 
         public void DiscardChanges() => inner.DiscardChanges();
 
@@ -638,6 +642,8 @@ public class GoalCompletionServiceTests
 
         public Task AcquireUserRowLockAsync(Guid userId, CancellationToken cancellationToken = default) =>
             inner.AcquireUserRowLockAsync(userId, cancellationToken);
+
+        public bool HasActiveTransaction => inner.HasActiveTransaction;
 
         public void DiscardChanges() => inner.DiscardChanges();
 

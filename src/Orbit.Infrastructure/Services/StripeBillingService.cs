@@ -152,7 +152,8 @@ public sealed partial class StripeBillingService(
                 interval,
                 item?.Price?.UnitAmount ?? 0,
                 subscription.Currency ?? "usd",
-                paymentMethod);
+                paymentMethod,
+                subscription.Metadata?.GetValueOrDefault(DeletionOwnerMetadataKey));
         }
         catch (StripeException ex) when (IsMissingSubscription(ex))
         {
@@ -165,17 +166,27 @@ public sealed partial class StripeBillingService(
     }
 
     public Task SetSubscriptionCancelAtPeriodEndAsync(
-        string subscriptionId, bool cancelAtPeriodEnd, CancellationToken cancellationToken) =>
-        UpdateSubscriptionRenewalAsync(subscriptionId, cancelAtPeriodEnd, cancellationToken);
+        string subscriptionId, bool cancelAtPeriodEnd, CancellationToken cancellationToken,
+        string? deletionOwner = null) =>
+        UpdateSubscriptionRenewalAsync(subscriptionId, cancelAtPeriodEnd, deletionOwner, cancellationToken);
+
+    private const string DeletionOwnerMetadataKey = "orbit_deletion_user_id";
 
     private async Task<Subscription?> UpdateSubscriptionRenewalAsync(
-        string subscriptionId, bool cancelAtPeriodEnd, CancellationToken cancellationToken)
+        string subscriptionId, bool cancelAtPeriodEnd, string? deletionOwner, CancellationToken cancellationToken)
     {
         try
         {
             return await StripeRetryPolicy.ExecuteWithRetryAsync(
                 () => clients.Subscriptions.UpdateAsync(subscriptionId,
-                    new SubscriptionUpdateOptions { CancelAtPeriodEnd = cancelAtPeriodEnd },
+                    new SubscriptionUpdateOptions
+                    {
+                        CancelAtPeriodEnd = cancelAtPeriodEnd,
+                        Metadata = new Dictionary<string, string>
+                        {
+                            [DeletionOwnerMetadataKey] = cancelAtPeriodEnd ? deletionOwner ?? "" : ""
+                        }
+                    },
                     cancellationToken: cancellationToken),
                 cancellationToken);
         }
