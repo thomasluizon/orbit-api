@@ -139,6 +139,16 @@ jobs:
           git diff --name-only -z --diff-filter=d "origin/$BASE_REF...HEAD" -- ':(glob)**/Migrations/*.cs' \
             | xargs -0 --no-run-if-empty python3 .github/scripts/check_migration_idempotency.py
 
+      - name: Setup .NET for rolling migration contracts
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Require deployment barriers for schema contractions
+        env:
+          ORBIT_MIGRATION_GUARD_BASE: origin/${{ github.base_ref }}
+        run: dotnet test tests/Orbit.Infrastructure.Tests --filter FullyQualifiedName~RollingMigrationGateTests --nologo
+
   convention-guard:
     name: Guard Conventions
     runs-on: ubuntu-latest
