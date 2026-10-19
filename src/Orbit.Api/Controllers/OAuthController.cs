@@ -56,6 +56,7 @@ public partial class OAuthController(
             registration_endpoint = $"{baseUrl}/oauth/register",
             response_types_supported = SupportedResponseTypes,
             grant_types_supported = SupportedGrantTypes,
+            scopes_supported = AgentScopes.ClaudeDefaultScopes,
             code_challenge_methods_supported = SupportedCodeChallengeMethods,
             token_endpoint_auth_methods_supported = SupportedTokenEndpointAuthMethods
         });
@@ -267,12 +268,12 @@ public partial class OAuthController(
         var googleRedirectUri = BuildGoogleRedirectUri();
         if (string.IsNullOrWhiteSpace(googleSettings.Value.ClientId)
             || !googleSettings.Value.AllowedRedirectUris.Contains(googleRedirectUri, StringComparer.Ordinal))
-            return RedirectToAuthorize(client_id, redirect_uri, state, code_challenge, nonce, "unavailable");
+            return RedirectToAuthorize(client_id, redirect_uri, state, code_challenge, nonce, "unavailable", requestedScopes);
 
         var pending = authStore.TryCreateGoogleRequest(client_id, redirect_uri, state,
             code_challenge, nonce, googleRedirectUri, ResolveLanguage(), requestedScopes);
         if (pending is null)
-            return RedirectToAuthorize(client_id, redirect_uri, state, code_challenge, nonce, "unavailable");
+            return RedirectToAuthorize(client_id, redirect_uri, state, code_challenge, nonce, "unavailable", requestedScopes);
 
         var url = "https://accounts.google.com/o/oauth2/v2/auth"
             + $"?client_id={Uri.EscapeDataString(googleSettings.Value.ClientId)}"
@@ -322,10 +323,10 @@ public partial class OAuthController(
 
     private static IActionResult RedirectToAuthorize(GoogleAuthorizationRequest pending, string googleError) =>
         RedirectToAuthorize(pending.ClientId, pending.RedirectUri, pending.ClientState,
-            pending.CodeChallenge, pending.Nonce, googleError);
+            pending.CodeChallenge, pending.Nonce, googleError, pending.Scopes);
 
     private static IActionResult RedirectToAuthorize(string clientId, string redirectUri, string clientState,
-        string codeChallenge, string? nonce, string googleError)
+        string codeChallenge, string? nonce, string googleError, IReadOnlyList<string>? scopes = null)
     {
         var url = "/oauth/authorize"
             + $"?client_id={Uri.EscapeDataString(clientId)}"
@@ -337,6 +338,8 @@ public partial class OAuthController(
             + $"&google_error={Uri.EscapeDataString(googleError)}";
         if (nonce is not null)
             url += $"&nonce={Uri.EscapeDataString(nonce)}";
+        if (scopes is not null)
+            url += $"&scope={Uri.EscapeDataString(string.Join(' ', scopes))}";
         return new RedirectResult(url);
     }
 

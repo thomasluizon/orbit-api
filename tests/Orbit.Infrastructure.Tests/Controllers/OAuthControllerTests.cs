@@ -113,6 +113,15 @@ public class OAuthControllerTests : IDisposable
     }
 
     [Fact]
+    public void GoogleRetry_PreservesReducedRequestedScopes()
+    {
+        _controller.HttpContext.Request.Host = new HostString("unconfigured.example.com");
+        var response = (RedirectResult)_controller.GoogleStart("client", "https://claude.ai/callback", "state",
+            "challenge", "S256", scope: AgentScopes.ReadHabits);
+        ExtractQueryParam(response.Url, "scope").Should().Be(AgentScopes.ReadHabits);
+    }
+
+    [Fact]
     public void Consent_ListsRequestedScopes_AndPersistsReadOnlyChoice()
     {
         var (verifier, challenge) = GeneratePkce();
