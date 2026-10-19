@@ -37,6 +37,31 @@ public class AiCompletionClientTests
             "fact_extraction", "gpt-6-luna", 0, 1, 2, 3, Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData("json", AiModelTier.Primary)]
+    [InlineData("json", AiModelTier.SubTask)]
+    [InlineData("text", AiModelTier.Primary)]
+    [InlineData("text", AiModelTier.SubTask)]
+    public async Task DefaultModels_BackgroundCalls_UseLunaWithLowReasoning(string kind, AiModelTier tier)
+    {
+        var handler = new CapturingHandler();
+        var settings = new AiSettings { ApiKey = "test-key", BaseUrl = "https://orbit.test/v1" };
+        var usage = Substitute.For<IAiUsageRecorder>();
+        var client = new AiCompletionClient(Options.Create(settings), NullLogger<AiCompletionClient>.Instance,
+            usage, new HttpClientPipelineTransport(new HttpClient(handler)));
+
+        if (kind == "json")
+            await client.CompleteJsonAsync<Probe>("system", "user", tier: tier);
+        else
+            await client.CompleteTextAsync("system", "user", tier: tier);
+
+        using var document = JsonDocument.Parse(handler.LastRequestBody!);
+        document.RootElement.GetProperty("model").GetString().Should().Be("gpt-6-luna");
+        document.RootElement.GetProperty("reasoning").GetProperty("effort").GetString().Should().Be("low");
+        document.RootElement.TryGetProperty("temperature", out _).Should().BeFalse();
+        await usage.Received(1).RecordAsync(kind, "gpt-6-luna", 0, 1, 2, 3, Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task CompleteJsonAsync_LegacyPrimaryModel_SendsTemperature()
     {
@@ -63,7 +88,7 @@ public class AiCompletionClientTests
         await client.CompleteJsonAsync<Probe>("system", "user", userId: userId);
 
         await usageRecorder.Received(1).RecordAsync(
-            "json", "gpt-6.1-sol", 0, 1, 2, 3, Arg.Any<CancellationToken>(), userId);
+            "json", "gpt-6-luna", 0, 1, 2, 3, Arg.Any<CancellationToken>(), userId);
         using var document = JsonDocument.Parse(handler.LastRequestBody!);
         document.RootElement.GetProperty("safety_identifier").GetString().Should().Be(userId.ToString("N"));
         document.RootElement.GetProperty("prompt_cache_key").GetString().Should().Be(userId.ToString("N"));
@@ -84,9 +109,9 @@ public class AiCompletionClientTests
     }
 
     [Theory]
-    [InlineData(AiModelTier.Primary, "gpt-6.1-sol", "gpt-6-luna", false)]
+    [InlineData(AiModelTier.Primary, "gpt-6-luna", "gpt-6-luna", false)]
     [InlineData(AiModelTier.Primary, "gpt-5.4-nano", "gpt-6-luna", false)]
-    [InlineData(AiModelTier.SubTask, "gpt-6.1-sol", "gpt-4.1-mini", true)]
+    [InlineData(AiModelTier.SubTask, "gpt-6-luna", "gpt-4.1-mini", true)]
     [InlineData(AiModelTier.Primary, "gpt-4.1-mini", "gpt-5.4-nano", true)]
     [InlineData(AiModelTier.SubTask, "gpt-4.1-mini", "gpt-5.4-nano", false)]
     [InlineData(AiModelTier.SubTask, "gpt-4.1-mini", "gpt-4.1-mini", true)]
@@ -150,9 +175,10 @@ public class AiCompletionClientTests
 
     [Theory]
     [InlineData("gpt-6.1-sol", "gpt-6-luna", AiModelTier.Primary, "gpt-6.1-sol", false)]
-    [InlineData("gpt-6.1-sol", "gpt-6-luna", AiModelTier.SubTask, "gpt-6-luna", false)]
+    [InlineData("gpt-6-luna", "gpt-6-luna", AiModelTier.Primary, "gpt-6-luna", false)]
+    [InlineData("gpt-6-luna", "gpt-6-luna", AiModelTier.SubTask, "gpt-6-luna", false)]
     [InlineData("gpt-4.1-mini", "gpt-6-luna", AiModelTier.Primary, "gpt-4.1-mini", true)]
-    [InlineData("gpt-6.1-sol", "gpt-4.1-mini", AiModelTier.SubTask, "gpt-4.1-mini", true)]
+    [InlineData("gpt-6-luna", "gpt-4.1-mini", AiModelTier.SubTask, "gpt-4.1-mini", true)]
     [InlineData("gpt-4.1-mini", "", AiModelTier.SubTask, "gpt-4.1-mini", true)]
     public async Task CompleteTextAsync_ConfiguredTier_SendsCompatibleResponsesOptions(
         string primary, string subTask, AiModelTier tier, string expectedModel, bool temperatureAccepted)
