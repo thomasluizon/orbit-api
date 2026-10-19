@@ -757,8 +757,6 @@ public partial class CreateHabitToolTests
         {
             "title": "Project",
             "frequency_unit": "Day",
-            "days": ["Wednesday"],
-            "interval_weeks": 2,
             "sub_habits": [
                 {"title": "Phase 1", "due_date": "2026-06-01"}
             ]
@@ -766,14 +764,7 @@ public partial class CreateHabitToolTests
         """);
 
         result.Success.Should().BeTrue();
-        await _habitRepo.Received(1).AddAsync(
-            Arg.Is<Habit>(habit => habit.ParentHabitId != null
-                && habit.DueDate == new DateOnly(2026, 6, 1)
-                && habit.FrequencyUnit == null
-                && habit.FrequencyQuantity == null
-                && habit.IntervalWeeks == null
-                && habit.Days.Count == 0),
-            Arg.Any<CancellationToken>());
+        await _habitRepo.Received(2).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

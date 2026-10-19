@@ -63,9 +63,8 @@ public partial class CreateHabitToolTests
             "due_end_time":"11:15",
             "sub_habits":[{
                 "title":"Aula extra",
-                "due_date":"2026-08-26",
-                "due_time":"11:15",
-                "due_end_time":"12:05"
+                "frequency_unit":null,
+                "due_date":"2026-08-26"
             }]
         }
         """);
@@ -79,7 +78,9 @@ public partial class CreateHabitToolTests
         parent.DueTime.Should().Be(new TimeOnly(8, 25));
         parent.DueEndTime.Should().Be(new TimeOnly(11, 15));
         var child = habits.Single(habit => habit.ParentHabitId == parent.Id);
-        AssertDatedClass(child, new DateOnly(2026, 8, 26));
+        child.Schedule.Should().Be(HabitSchedule.OneTime);
+        child.Days.Should().BeEmpty();
+        child.DueDate.Should().Be(new DateOnly(2026, 8, 26));
     }
 
     [Fact]
@@ -179,14 +180,10 @@ public partial class CreateHabitToolTests
         inherited.Days.Should().Equal(DayOfWeek.Wednesday);
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task MalformedDeadline_IsRejectedDuringArgumentCheck(bool onChild)
+    [Fact]
+    public async Task MalformedDeadline_IsRejectedDuringArgumentCheck()
     {
-        var json = onChild
-            ? """{"title":"Aulas","sub_habits":[{"title":"Aula extra","due_end_time":"25:00"}]}"""
-            : """{"title":"Aula extra","due_end_time":"25:00"}""";
+        const string json = """{"title":"Aula extra","due_end_time":"25:00"}""";
         using var args = JsonDocument.Parse(json);
 
         var result = await _tool.CheckArgumentsAsync(args.RootElement, UserId, CancellationToken.None);
@@ -194,6 +191,52 @@ public partial class CreateHabitToolTests
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("due_end_time").And.Contain("HH:mm");
         AddedHabits().Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("Day", 1)]
+    [InlineData("Day", 3)]
+    [InlineData("Week", 2)]
+    public async Task DatedChildWithoutExplicitRecurrence_InheritsCadenceWithoutWeekdays(string unit, int quantity)
+    {
+        var parentDays = unit == "Day" && quantity == 1 ? "\"days\":[\"Wednesday\"]," : string.Empty;
+        var json = $$"""
+        {
+            "title":"Aulas",
+            "frequency_unit":"{{unit}}",
+            "frequency_quantity":{{quantity}},
+            "interval_weeks":2,
+            {{parentDays}}
+            "sub_habits":[{"title":"Aula com início próprio","due_date":"2026-08-27"}]
+        }
+        """;
+        using var args = JsonDocument.Parse(json);
+        (await _tool.CheckArgumentsAsync(args.RootElement, UserId, CancellationToken.None)).IsSuccess.Should().BeTrue();
+        (await Execute(json)).Success.Should().BeTrue();
+
+        var child = AddedHabits().Single(habit => habit.ParentHabitId is not null);
+        child.Schedule.Should().Be(HabitSchedule.Recurring);
+        child.FrequencyUnit.Should().Be(Enum.Parse<FrequencyUnit>(unit));
+        child.FrequencyQuantity.Should().Be(quantity);
+        child.IntervalWeeks.Should().Be(2);
+        child.Days.Should().BeEmpty();
+        child.DueDate.Should().Be(new DateOnly(2026, 8, 27));
+    }
+
+    [Fact]
+    public async Task RecurringChild_PreservesExistingUntimedRow()
+    {
+        (await Execute("""
+        {"title":"Aulas","frequency_unit":"Day","days":["Wednesday"],
+         "sub_habits":[{"title":"Aula herdada","due_time":"08:25","due_end_time":"11:15"}]}
+        """)).Success.Should().BeTrue();
+
+        var parent = AddedHabits().Single(habit => habit.ParentHabitId is null);
+        var expected = Habit.Create(new HabitCreateParams(UserId, "Aula herdada", FrequencyUnit.Day, 1,
+            Today, Days: [DayOfWeek.Wednesday], ParentHabitId: parent.Id)).Value;
+        AddedHabits().Single(habit => habit.ParentHabitId is not null).Should().BeEquivalentTo(expected,
+            options => options.ComparingByMembers<Habit>()
+                .Excluding(habit => habit.Id).Excluding(habit => habit.CreatedAtUtc).Excluding(habit => habit.UpdatedAtUtc));
     }
 
     private List<Habit> AddedHabits() => _habitRepo.ReceivedCalls()

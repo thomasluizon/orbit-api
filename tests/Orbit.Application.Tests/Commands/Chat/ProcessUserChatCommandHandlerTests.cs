@@ -3471,7 +3471,9 @@ public partial class ProcessUserChatCommandHandlerTests
             "frequência diária");
         result.Value.Actions.Should().ContainSingle();
         result.Value.Actions[0].Error.Should().Be(PortugueseToolFailureMessage);
-        result.Value.Actions[0].Error.Should().NotContain("Days can only be set when frequency quantity is 1");
+        result.Value.Operations.Should().ContainSingle(operation =>
+            operation.Status == AgentOperationStatus.Failed
+            && operation.PolicyReason == "Days can only be set when frequency quantity is 1.");
     }
 
     [Theory]

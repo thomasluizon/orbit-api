@@ -24,7 +24,7 @@ public class CreateHabitTool(
     public int Order => 0;
 
     public string Description =>
-        "Create a new habit or one-time task in one call: pass tag_names, sub_habits, goal_ids, and checklist_items inline rather than following up with assign_tags, create_sub_habit, or link_*_to_* calls. A single event on a named calendar date is a one-time task: set due_date, set frequency_unit=null, and omit frequency_quantity, interval_weeks, and days, even if a weekday is mentioned. For recurring habits, set frequency_unit and optionally days; due_date then sets the recurrence start date. In mixed requests, create recurring classes with recurrence and dated extra classes as separate one-time tasks; dated sub_habits do not inherit recurrence. For other explicit one-time tasks (e.g., 'just once', 'this Friday only', 'uma vez'), set frequency_unit=null. If the user called it a habit/rotina/hábito or did not state a frequency, ask first via a NeedsClarification card instead of guessing. Structure: checklist_items for atomic sub-steps done together (shopping/prep/packing lists); sub_habits for sub-activities needing independent tracking, streaks, or schedules; never put list items only in the description. Frequency: 'X times per week' without specific days = is_flexible=true, frequency_unit='Week', frequency_quantity=X; recurring weekdays = frequency_unit='Day', frequency_quantity=1, days=[specified weekdays]. Week with quantity 1 and days is also accepted and normalized to Day. Preserve the requested weekdays exactly. For 'before 15h' without a fixed start, set due_end_time='15:00' and omit due_time; for a time range, set both.";
+        "Create a new habit or one-time task in one call: pass tag_names, sub_habits, goal_ids, and checklist_items inline rather than following up with assign_tags, create_sub_habit, or link_*_to_* calls. A single event on a named calendar date is a one-time task: set due_date, set frequency_unit=null, and omit frequency_quantity, interval_weeks, and days, even if a weekday is mentioned. For recurring habits, set frequency_unit and optionally days; due_date then sets the recurrence start date. In mixed requests, create recurring classes with recurrence and dated extra classes as separate one-time tasks; dated sub_habits inherit the parent frequency but not its weekdays; set frequency_unit=null explicitly for a one-time child. For other explicit one-time tasks (e.g., 'just once', 'this Friday only', 'uma vez'), set frequency_unit=null. If the user called it a habit/rotina/hábito or did not state a frequency, ask first via a NeedsClarification card instead of guessing. Structure: checklist_items for atomic sub-steps done together (shopping/prep/packing lists); sub_habits for sub-activities needing independent tracking, streaks, or schedules; never put list items only in the description. Frequency: 'X times per week' without specific days = is_flexible=true, frequency_unit='Week', frequency_quantity=X; recurring weekdays = frequency_unit='Day', frequency_quantity=1, days=[specified weekdays]. Week with quantity 1 and days is also accepted and normalized to Day. Preserve the requested weekdays exactly. For 'before 15h' without a fixed start, set due_end_time='15:00' and omit due_time; for a time range, set both.";
 
     public object GetParameterSchema() => new
     {
@@ -117,13 +117,11 @@ public class CreateHabitTool(
                         title = new { type = JsonSchemaTypes.String, description = "Sub-habit name" },
                         description = new { type = JsonSchemaTypes.String, description = "Optional description" },
                         emoji = new { type = JsonSchemaTypes.String, description = "Emoji used as the sub-habit icon. Pick a relevant emoji when clear.", nullable = true },
-                        frequency_unit = new { type = JsonSchemaTypes.String, description = "Override parent recurrence. Null makes a one-time task. A due_date without a recurrence unit also makes a one-time task.", nullable = true, @enum = JsonSchemaTypes.FrequencyUnitEnum },
+                        frequency_unit = new { type = JsonSchemaTypes.String, description = "Override parent recurrence. Set null explicitly for a one-time task. Otherwise the parent's unit and quantity are inherited.", nullable = true, @enum = JsonSchemaTypes.FrequencyUnitEnum },
                         frequency_quantity = new { type = JsonSchemaTypes.Integer },
                         interval_weeks = new { type = JsonSchemaTypes.Integer, description = "Repeat interval in weeks. Minimum 1." },
                         days = new { type = JsonSchemaTypes.Array, description = "Recurring weekdays with Day (or Week normalized to Day) and quantity 1. Omit for dated one-time tasks.", items = new { type = JsonSchemaTypes.String } },
-                        due_date = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD. Without an explicit recurrence unit, creates a one-time task without inheriting the parent's weekdays or frequency." },
-                        due_time = new { type = JsonSchemaTypes.String, description = "HH:mm 24h format start time", nullable = true },
-                        due_end_time = new { type = JsonSchemaTypes.String, description = "HH:mm 24h format end time or deadline; omit due_time for a deadline without a fixed start.", nullable = true },
+                        due_date = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD. Sets the child's start date without inheriting the parent's weekdays. Set frequency_unit=null explicitly for a one-time task." },
                         is_bad_habit = new { type = JsonSchemaTypes.Boolean },
                         checklist_items = new
                         {
@@ -171,7 +169,7 @@ public class CreateHabitTool(
         var subHabits = args.TryGetProperty("sub_habits", out var subEl) && subEl.ValueKind == JsonValueKind.Array
             ? subEl.EnumerateArray().ToList()
             : [];
-        var fieldError = BulkHabitToolArguments.CheckHabitFields(args)
+        var fieldError = BulkHabitToolArguments.CheckCreateHabitFields(args)
             ?? subHabits.Select(BulkHabitToolArguments.CheckHabitFields).FirstOrDefault(error => error is not null);
         if (fieldError is not null)
             return Domain.Common.Result.Failure(fieldError);
@@ -316,8 +314,7 @@ public class CreateHabitTool(
         var subIntervalWeeks = JsonArgumentParser.GetOptionalInt(sub, "interval_weeks");
         var subDays = JsonArgumentParser.ParseDays(sub);
         var subDueDate = JsonArgumentParser.ParseDateOnly(sub, "due_date");
-        var isOneTime = subFrequencyUnit is null
-            && (subDueDate is not null || sub.TryGetProperty("frequency_unit", out var unit) && unit.ValueKind == JsonValueKind.Null);
+        var isOneTime = sub.TryGetProperty("frequency_unit", out var unit) && unit.ValueKind == JsonValueKind.Null;
         var hasExplicitCadence = isOneTime || subFrequencyUnit is not null
             || subFrequencyQuantity is not null
             || subIntervalWeeks is not null
@@ -327,7 +324,7 @@ public class CreateHabitTool(
         if (isOneTime)
             subDays = null;
         frequencyUnit = NormalizeWeekdayUnit(frequencyUnit, frequencyQuantity, subDays);
-        if (subDays is null && frequencyUnit == FrequencyUnit.Day && frequencyQuantity == 1)
+        if (subDays is null && subDueDate is null && frequencyUnit == FrequencyUnit.Day && frequencyQuantity == 1)
             subDays = parentDays;
 
         return Habit.Create(new HabitCreateParams(
@@ -339,8 +336,6 @@ public class CreateHabitTool(
             JsonArgumentParser.GetOptionalString(sub, "description"),
             Days: subDays,
             IsBadHabit: JsonArgumentParser.GetOptionalBool(sub, "is_bad_habit") ?? false,
-            DueTime: JsonArgumentParser.ParseTimeOnly(sub, "due_time"),
-            DueEndTime: JsonArgumentParser.ParseTimeOnly(sub, "due_end_time"),
             ParentHabitId: parentId,
             Emoji: JsonArgumentParser.GetOptionalString(sub, "emoji"),
             ChecklistItems: JsonArgumentParser.ParseChecklistItems(sub),
