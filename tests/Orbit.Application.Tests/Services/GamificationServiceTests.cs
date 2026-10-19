@@ -242,7 +242,6 @@ public class GamificationServiceTests
         var streak = new UserStreakService(
             new UserStreakRepositories(_userRepo, _habitLogRepo, freezeRepo),
             _userDateService,
-
             _snapshotStore);
 
         var streakState = await streak.RecalculateAsync(UserId);

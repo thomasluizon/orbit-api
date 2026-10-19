@@ -74,6 +74,5 @@ public static class AppConstants
     public const int SyncCleanupMarginDays = 1;
     public const int MaxChallengeTitleLength = 200;
     public const int MaxChallengeDescriptionLength = 2000;
-    public static readonly int[] StreakMilestoneTiers = [7, 14, 30, 90, 100, 365];
     public static readonly string[] SupportedLanguages = ["en", "pt-BR"];
 }

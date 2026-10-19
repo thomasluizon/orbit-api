@@ -28,7 +28,6 @@ public class UserStreakServiceTests
                 _habitLogRepository,
                 _streakFreezeRepository),
             _userDateService,
-
             new HabitScheduleSnapshotStore(_habitRepository));
     }
 
