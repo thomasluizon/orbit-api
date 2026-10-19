@@ -211,8 +211,16 @@ public partial class AgentOperationExecutor(
         if (pending is not null && execution.Request.Surface == AgentExecutionSurface.Chat
             && execution.Request.IncludeChangePreview)
         {
-            var preview = await changePreviewer.PreviewSafelyAsync(
+            var attemptedPreview = await changePreviewer.TryPreviewAsync(
                 execution.Request.UserId, execution.Operation.Id, execution.Arguments, logger, cancellationToken);
+            if (attemptedPreview.IsFailure)
+            {
+                pendingOperationStore.Cancel(execution.Request.UserId, pending.Id,
+                    AgentOperationFingerprint.Compute(execution.Operation.Id, execution.Arguments.GetRawText()));
+                return await BuildToolOutcomeResponseAsync(execution, policyDecision,
+                    new ToolResult(false, Error: attemptedPreview.Error), cancellationToken);
+            }
+            var preview = attemptedPreview.Value;
 
             if (preview is { ChangeTargetCount: 0 } || preview?.Items is { Count: 0 }
                 || preview is null && RequiresMatchedHabits(execution.Operation.Id))

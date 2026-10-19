@@ -357,7 +357,7 @@ public class AgentExecutionAndSanitizerTests
     }
 
     [Fact]
-    public async Task AgentOperationExecutor_PreviewFailure_KeepsPendingConfirmation()
+    public async Task AgentOperationExecutor_PreviewFailure_DoesNotOfferUnboundApproval()
     {
         var catalog = Substitute.For<IAgentCatalogService>();
         var capability = CreateCapability(AgentCapabilityIds.HabitsBulkWrite, AgentScopes.WriteHabits,
@@ -381,8 +381,9 @@ public class AgentExecutionAndSanitizerTests
             UserId, operation.Id, Parse("{}"), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt,
             IncludeChangePreview: true));
 
-        response.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation);
-        response.PendingOperation!.Changes.Should().BeNull();
+        response.Operation.Status.Should().Be(AgentOperationStatus.Failed);
+        response.Operation.PolicyReason.Should().Be("preview_unavailable");
+        response.PendingOperation.Should().BeNull();
     }
 
     [Fact]
