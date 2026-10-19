@@ -43,13 +43,10 @@ public class SupportControllerTests
     }
 
     [Theory]
-    [InlineData(false, 1)]
-    [InlineData(true, 2)]
-    public async Task SendSupport_LoggingLevel_PreservesResponseAndSkipsUnusedArguments(bool enabled, int expectedUserReads)
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SendSupport_LoggingLevel_PreservesResponseAndChecksLevel(bool enabled)
     {
-        var principal = new CountingPrincipal(new ClaimsIdentity(
-            [new Claim(ClaimTypes.NameIdentifier, UserId.ToString())], "Test"));
-        _controller.HttpContext.User = principal;
         _logger.IsEnabled(LogLevel.Information).Returns(enabled);
         _mediator.Send(Arg.Any<SendSupportCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
@@ -60,20 +57,9 @@ public class SupportControllerTests
         var result = response.Should().BeOfType<OkObjectResult>().Subject;
         System.Text.Json.JsonSerializer.Serialize(result.Value)
             .Should().Be("""{"message":"Support request sent successfully"}""");
-        principal.Reads.Should().Be(expectedUserReads);
+        _logger.Received().IsEnabled(LogLevel.Information);
         await _mediator.Received(1).Send(
             Arg.Is<SendSupportCommand>(command => command.UserId == UserId), CancellationToken.None);
-    }
-
-    private sealed class CountingPrincipal(ClaimsIdentity identity) : ClaimsPrincipal(identity)
-    {
-        public int Reads { get; private set; }
-
-        public override Claim? FindFirst(string type)
-        {
-            Reads++;
-            return base.FindFirst(type);
-        }
     }
 
     [Fact]

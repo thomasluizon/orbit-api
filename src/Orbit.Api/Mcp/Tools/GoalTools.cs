@@ -42,7 +42,6 @@ public class GoalTools(IMediator mediator, McpExecutorBridge executorBridge)
     }
 
     [McpServerTool(Name = "create_goal"), Description("Create a new goal. Requires Pro subscription.")]
-    // CreateGoal preserves flat title, targetValue, unit, description, deadline and type schema properties. https://github.com/thomasluizon/orbit-tickets/issues/230
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "CreateGoal preserves flat title, targetValue, unit, description, deadline and type schema properties. MCP schema generation requires these separate parameters.")]
     public async Task<string> CreateGoal(
         ClaimsPrincipal user,
@@ -96,7 +95,6 @@ public class GoalTools(IMediator mediator, McpExecutorBridge executorBridge)
     }
 
     [McpServerTool(Name = "update_goal"), Description("Update a goal's title, description, target value, unit, or deadline.")]
-    // UpdateGoal preserves flat goalId, title, targetValue, unit, description and deadline schema properties. https://github.com/thomasluizon/orbit-tickets/issues/230
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "UpdateGoal preserves flat goalId, title, targetValue, unit, description and deadline schema properties. MCP schema generation requires these separate parameters.")]
     public async Task<string> UpdateGoal(
         ClaimsPrincipal user,

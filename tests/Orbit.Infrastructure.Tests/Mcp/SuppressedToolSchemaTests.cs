@@ -7,11 +7,10 @@ using NSubstitute;
 using Orbit.Api.Mcp;
 using Orbit.Api.Mcp.Tools;
 using Orbit.Domain.Interfaces;
-using Xunit.Abstractions;
 
 namespace Orbit.Infrastructure.Tests.Mcp;
 
-public sealed class SuppressedToolSchemaTests(ITestOutputHelper output)
+public sealed class SuppressedToolSchemaTests
 {
     [Theory]
     [InlineData(typeof(ApiKeyTools), nameof(ApiKeyTools.ManageApiKeys))]
@@ -33,15 +32,18 @@ public sealed class SuppressedToolSchemaTests(ITestOutputHelper output)
         var method = type.GetMethod(methodName) ?? throw new InvalidOperationException(methodName);
         var tool = McpServerTool.Create(method, target);
         var schema = tool.ProtocolTool.InputSchema;
-        output.WriteLine($"{type.Name}.{methodName}: {schema}");
+        schema.GetProperty("type").GetString().Should().Be("object");
 
         var describedParameters = method.GetParameters()
-            .Select(parameter => (parameter.Name, Description: parameter.GetCustomAttribute<DescriptionAttribute>()))
+            .Select(parameter => (parameter.Name, parameter.HasDefaultValue, Description: parameter.GetCustomAttribute<DescriptionAttribute>()))
             .Where(parameter => parameter.Description is not null)
             .ToList();
         var properties = schema.GetProperty("properties");
+        describedParameters.Should().NotBeEmpty();
         properties.EnumerateObject().Select(property => property.Name)
             .Should().BeEquivalentTo(describedParameters.Select(parameter => parameter.Name));
+        schema.GetProperty("required").EnumerateArray().Select(property => property.GetString())
+            .Should().BeEquivalentTo(describedParameters.Where(parameter => !parameter.HasDefaultValue).Select(parameter => parameter.Name));
         foreach (var parameter in describedParameters)
             properties.GetProperty(parameter.Name!).GetProperty("description").GetString()
                 .Should().Be(parameter.Description!.Description);

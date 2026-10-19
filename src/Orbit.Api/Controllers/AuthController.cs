@@ -10,7 +10,6 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
-
 namespace Orbit.Api.Controllers;
 
 [ApiController]

@@ -8,7 +8,6 @@ using Orbit.Application.Goals.Commands;
 using Orbit.Application.Goals.Queries;
 using Orbit.Domain.Enums;
 
-
 namespace Orbit.Api.Controllers;
 
 [Authorize]

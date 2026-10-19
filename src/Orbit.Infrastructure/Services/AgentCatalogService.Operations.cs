@@ -5,7 +5,6 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Infrastructure.Services;
 
-
 public partial class AgentCatalogService
 {
     private const string SchemaObject = "object";

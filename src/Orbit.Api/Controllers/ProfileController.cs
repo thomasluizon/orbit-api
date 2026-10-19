@@ -10,7 +10,6 @@ using Orbit.Application.Profile.Commands;
 using Orbit.Application.Profile.Queries;
 using Orbit.Domain.Interfaces;
 
-
 namespace Orbit.Api.Controllers;
 
 [Authorize]

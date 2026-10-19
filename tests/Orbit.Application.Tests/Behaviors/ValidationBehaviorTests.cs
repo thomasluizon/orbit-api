@@ -2,7 +2,6 @@ using FluentAssertions;
 using FluentValidation;
 using FluentValidation.Results;
 using MediatR;
-using MediatR.Wrappers;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Orbit.Application.Behaviors;
@@ -75,7 +74,7 @@ public class ValidationBehaviorTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Handle_MediatRWrapper_PreservesHandlerTokenAndResult(bool hasValidator)
+    public async Task Handle_MediatRPipeline_PreservesHandlerTokenAndResult(bool hasValidator)
     {
         using var cancellation = new CancellationTokenSource();
         var handler = Substitute.For<IRequestHandler<ValidationTestRequest, string>>();
@@ -84,14 +83,16 @@ public class ValidationBehaviorTests
         validator.ValidateAsync(Arg.Any<ValidationContext<ValidationTestRequest>>(), cancellation.Token)
             .Returns(new ValidationResult());
         var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddMediatR(configuration =>
+            configuration.RegisterServicesFromAssemblyContaining<ValidationTestRequest>());
         services.AddSingleton(handler);
         services.AddSingleton<IPipelineBehavior<ValidationTestRequest, string>>(
             new ValidationBehavior<ValidationTestRequest, string>(hasValidator ? [validator] : []));
         using var provider = services.BuildServiceProvider();
         var request = new ValidationTestRequest("valid");
 
-        var result = await new RequestHandlerWrapperImpl<ValidationTestRequest, string>()
-            .Handle(request, provider, cancellation.Token);
+        var result = await provider.GetRequiredService<IMediator>().Send(request, cancellation.Token);
 
         result.Should().Be("success");
         await handler.Received(1).Handle(request, cancellation.Token);

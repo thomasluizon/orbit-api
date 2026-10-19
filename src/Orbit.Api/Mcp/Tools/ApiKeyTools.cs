@@ -38,7 +38,6 @@ public class ApiKeyTools(McpExecutorBridge executorBridge)
     }
 
     [McpServerTool(Name = "manage_api_keys"), Description("Create or revoke scoped API keys.")]
-    // ManageApiKeys preserves flat action, keyId, name, scopes, isReadOnly, expiresAtUtc and confirmationToken schema properties. https://github.com/thomasluizon/orbit-tickets/issues/230
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "ManageApiKeys preserves flat action, keyId, name, scopes, isReadOnly, expiresAtUtc and confirmationToken schema properties. MCP schema generation requires these separate parameters.")]
     public async Task<string> ManageApiKeys(
         ClaimsPrincipal user,

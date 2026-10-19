@@ -6,7 +6,6 @@ using Orbit.Api.Extensions;
 using Orbit.Application.ChecklistTemplates.Commands;
 using Orbit.Application.ChecklistTemplates.Queries;
 
-
 namespace Orbit.Api.Controllers;
 
 [Authorize]

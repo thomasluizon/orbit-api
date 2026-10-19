@@ -7,7 +7,6 @@ using Orbit.Application.Common;
 using Orbit.Application.Notifications.Commands;
 using Orbit.Application.Notifications.Queries;
 
-
 namespace Orbit.Api.Controllers;
 
 [Authorize]

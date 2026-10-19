@@ -9,7 +9,6 @@ using Orbit.Application.Habits.Commands;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Interfaces;
 
-
 namespace Orbit.Api.Controllers;
 
 [Authorize]

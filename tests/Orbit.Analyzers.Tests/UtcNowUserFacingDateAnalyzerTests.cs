@@ -208,6 +208,44 @@ public sealed class UtcNowUserFacingDateAnalyzerTests
     }
 
     [Fact]
+    public Task Flags_Local_With_Timezone_Conversion_And_AtUtc_Sink()
+    {
+        const string source = """
+            using System;
+            public sealed class Sessions
+            {
+                private static void Revoke(DateTime revokedAtUtc) { }
+                public DateTime Run(TimeZoneInfo zone)
+                {
+                    var nowUtc = {|ORBIT0004:DateTime.UtcNow|};
+                    Revoke(nowUtc);
+                    return TimeZoneInfo.ConvertTimeFromUtc(nowUtc, zone);
+                }
+            }
+            """;
+        return VerifyAnalyzerAsync(source, "Orbit.Infrastructure");
+    }
+
+    [Fact]
+    public Task Flags_Assignment_To_Non_Property_AtUtc_Local()
+    {
+        const string source = """
+            using System;
+            public sealed class Sessions
+            {
+                public DateTime Run()
+                {
+                    DateTime createdAtUtc;
+                    createdAtUtc =
+                        {|ORBIT0004:DateTime.UtcNow|};
+                    return createdAtUtc;
+                }
+            }
+            """;
+        return VerifyAnalyzerAsync(source, "Orbit.Infrastructure");
+    }
+
+    [Fact]
     public Task Flags_Unused_Or_Reassigned_Utc_Local()
     {
         const string source = """

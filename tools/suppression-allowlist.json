@@ -25,7 +25,7 @@
     },
     "ORBIT0004": {
       "verdict": "Narrow the rule for direct *AtUtc arguments and locals used exclusively by UTC timestamp sinks; keep explicit exemptions for other instant and bucket contexts.",
-      "evidence": "UtcNowUserFacingDateAnalyzerTests reproduces a direct Revoke(DateTime.UtcNow) and a local nowUtc used only by timestamp sinks. Every local use must qualify; calendar conversion, reassignment, unused locals and .Date truncation remain diagnostic. AuthSessionService locals also feed GetRefreshExpiry(nowUtc) and CanUse(nowUtc), so the hypothesis does not justify a blanket *Utc-name exemption."
+      "evidence": "UtcNowUserFacingDateAnalyzerTests reproduces a direct Revoke(DateTime.UtcNow) and a local nowUtc used only by timestamp sinks. Every local use must qualify; calendar conversion, reassignment, unused locals and .Date truncation remain diagnostic. The exemption includes *AtUtc fields and properties and Add* arithmetic on the instant. It trusts a callee's *AtUtc parameter name and cannot inspect the callee body. AuthSessionService locals also feed GetRefreshExpiry(nowUtc) and CanUse(nowUtc), so the hypothesis does not justify a blanket *Utc-name exemption."
     },
     "ORBIT0005": {
       "verdict": "keep the rule as it stands; no site is suppressed.",

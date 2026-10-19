@@ -7,7 +7,6 @@ using Orbit.Api.RateLimiting;
 using Orbit.Application.ApiKeys.Commands;
 using Orbit.Application.ApiKeys.Queries;
 
-
 namespace Orbit.Api.Controllers;
 
 [Authorize]

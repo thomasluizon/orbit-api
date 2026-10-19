@@ -3,7 +3,6 @@ using Orbit.Domain.Enums;
 using Orbit.Domain.ValueObjects;
 using Orbit.Domain.Models;
 
-
 namespace Orbit.Domain.Entities;
 
 public record HabitCreateParams(

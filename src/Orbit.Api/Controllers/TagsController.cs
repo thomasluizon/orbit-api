@@ -7,7 +7,6 @@ using Orbit.Api.RateLimiting;
 using Orbit.Application.Tags.Commands;
 using Orbit.Application.Tags.Queries;
 
-
 namespace Orbit.Api.Controllers;
 
 [Authorize]

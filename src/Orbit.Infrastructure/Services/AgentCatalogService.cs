@@ -8,7 +8,6 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Infrastructure.Services;
 
-
 public partial class AgentCatalogService : IAgentCatalogService
 {
     private readonly IReadOnlyList<AgentCapability> _capabilities;

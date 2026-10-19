@@ -195,7 +195,7 @@ const problems = [...uninventoriable, ...undeclaredInGenerated]
 let declaredSites = 0
 const reasonOwners = new Map()
 const checkUniqueReason = (reason, owner) => {
-  const normalized = reason.trim()
+  const normalized = reason.trim().replace(/\s+/g, " ").toLowerCase()
   const previous = reasonOwners.get(normalized)
   if (previous) problems.push(`duplicate reason shared by ${previous} and ${owner}; write a reason specific to each site`)
   else reasonOwners.set(normalized, owner)

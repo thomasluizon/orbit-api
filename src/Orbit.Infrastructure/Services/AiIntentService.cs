@@ -11,7 +11,6 @@ using Orbit.Domain.Models;
 using Orbit.Infrastructure.AI;
 using Orbit.Infrastructure.Services.Prompts;
 
-
 namespace Orbit.Infrastructure.Services;
 
 public sealed partial class AiIntentService(

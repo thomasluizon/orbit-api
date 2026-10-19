@@ -3,7 +3,6 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Infrastructure.Services;
 
-
 public partial class AgentCatalogService
 {
     private const string CatalogDomain = "catalog";

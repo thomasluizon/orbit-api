@@ -17,11 +17,11 @@ public sealed class UtcNowUserFacingDateAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor InstantRule = new(
         DiagnosticId,
         "Raw DateTime.UtcNow for a user-facing date",
-        "Do not use DateTime.UtcNow here. User-facing dates MUST come from IUserDateService.GetUserTodayAsync(userId); DateTime.UtcNow is only acceptable for *AtUtc timestamps, cache keys, or as input to a TimeZoneInfo conversion into the user's timezone.",
+        "Do not use DateTime.UtcNow here. User-facing dates MUST come from IUserDateService.GetUserTodayAsync(userId); DateTime.UtcNow is only acceptable for *AtUtc timestamp parameters, fields or properties (including Add* arithmetic and locals used exclusively by those sinks), cache keys, or as input to a TimeZoneInfo conversion into the user's timezone.",
         "Reliability",
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "Raw DateTime.UtcNow reads outside timestamp, cache-key, and timezone-conversion contexts compute server-clock dates that are wrong for users in other timezones.");
+        description: "Raw DateTime.UtcNow reads outside timestamp, cache-key, and timezone-conversion contexts compute server-clock dates that are wrong for users in other timezones. Timestamp sinks include *AtUtc parameters, fields and properties, Add* arithmetic on the instant, and locals used only by those sinks. The analyzer trusts a callee's *AtUtc parameter name and cannot inspect the callee body.");
 
     private static readonly DiagnosticDescriptor DateOnlyRule = new(
         DiagnosticId,

@@ -6,7 +6,6 @@ using Orbit.Api.Extensions;
 using Orbit.Api.RateLimiting;
 using Orbit.Application.Support.Commands;
 
-
 namespace Orbit.Api.Controllers;
 
 [Authorize]
