@@ -324,14 +324,14 @@ public class AstraBlockAnswerRecoveryTests
         var syncer = Substitute.For<IGoalProgressReadSyncer>();
         syncer.ComputeFreshValuesAsync(user.Id, today, Arg.Any<CancellationToken>()).Returns(new Dictionary<Guid, int>());
         var handler = new ProcessUserChatCommandHandler(
-            new(habits, goals, users, new GenericRepository<UserFact>(db), tags,
+            new(habits, goals, users, tags,
                 new GenericRepository<ChecklistTemplate>(db), flags),
             new(ai, new AiToolRegistry([tool]), prompt, new AgentCatalogService()),
             new(dates, Substitute.For<IUserStreakService>(), quota, work, Substitute.For<IServiceScopeFactory>(),
                 executor, Substitute.For<IPendingClarificationStore>(), syncer, Substitute.For<IGamificationService>(),
                 Substitute.For<IMediator>(), Substitute.For<IProductAnalytics>(), Substitute.For<IHabitScheduleLogReader>(),
                 store, Substitute.For<IPendingAgentOperationStore>()),
-            NullLogger<ProcessUserChatCommandHandler>.Instance);
+            NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>());
 
         var response = await handler.Handle(new(user.Id, "Evening", BlockAnswer: new(block.Id, ["b"])), default);
 

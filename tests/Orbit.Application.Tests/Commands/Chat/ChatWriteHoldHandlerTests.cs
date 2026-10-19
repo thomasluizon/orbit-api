@@ -238,7 +238,7 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
             Substitute.For<IPendingAgentOperationStore>());
 
         return new ProcessUserChatCommandHandler(dataDeps, aiDeps, executionDeps,
-            Substitute.For<ILogger<ProcessUserChatCommandHandler>>());
+            Substitute.For<ILogger<ProcessUserChatCommandHandler>>(), Substitute.For<IAppConfigService>());
     }
 
     private void ScriptToolCall(string arguments)

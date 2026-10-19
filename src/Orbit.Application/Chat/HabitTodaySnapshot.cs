@@ -1,5 +1,6 @@
 using Orbit.Application.Habits.Queries;
 using Orbit.Application.Habits.Services;
+using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
@@ -10,6 +11,40 @@ internal sealed record HabitTodaySnapshot(
     IReadOnlySet<Guid> OverdueIds,
     IReadOnlySet<Guid> DoneTodayIds)
 {
+    internal static async Task<HabitTodaySnapshot> ReadAsync(
+        IReadOnlyList<Habit> habits,
+        DateOnly date,
+        int weekStartDay,
+        IHabitScheduleLogReader reader,
+        CancellationToken cancellationToken)
+    {
+        var logFrom = date.AddDays(-AppConstants.MaxRangeDays);
+        var candidateIds = habits.Where(habit => !habit.IsCompleted
+            || habit.FrequencyUnit is null && !habit.IsGeneral).Select(habit => habit.Id).ToArray();
+        var logDays = await reader.ReadDaysAsync(candidateIds, logFrom, date, cancellationToken);
+        var logFacts = new HabitScheduleLogFacts(logDays);
+        var active = habits.Where(habit => !habit.IsCompleted).ToList();
+        var dueDateResolution = active
+            .Where(habit => habit.DueDate >= logFrom
+                && habit.DueDate <= date
+                && logFacts.ResolvedDates(habit.Id).Contains(habit.DueDate))
+            .Select(habit => habit.Id)
+            .ToHashSet();
+        var oldDueDateIds = active
+            .Where(habit => habit.FrequencyUnit is not null
+                && !habit.IsFlexible
+                && !habit.IsBadHabit
+                && habit.DueDate < logFrom)
+            .Select(habit => habit.Id)
+            .ToArray();
+        if (oldDueDateIds.Length > 0)
+        {
+            var olderResolutions = await reader.ReadResolvedDueDateIdsAsync(oldDueDateIds, cancellationToken);
+            dueDateResolution.UnionWith(olderResolutions);
+        }
+        return Build(habits, date, weekStartDay, logDays, dueDateResolution);
+    }
+
     internal static HabitTodaySnapshot Build(
         IReadOnlyList<Habit> habits,
         DateOnly today,

@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Models;
+using Orbit.Application.Chat.Grounding;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.ApiKeys.Queries;
@@ -64,7 +65,11 @@ public record ChatResponse(
     IReadOnlyList<RecordListCard>? RecordLists = null,
     AccountRowsCard? AccountRows = null,
     IReadOnlyList<string>? FollowUps = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ChatResponsePart>? Parts = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ChatResponsePart>? Parts = null)
+{
+    [JsonIgnore]
+    public TurnFactSet GroundingFacts { get; init; } = TurnFactSet.Empty;
+}
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
 [JsonDerivedType(typeof(ChatTextPart), "text")]
@@ -151,7 +156,8 @@ public partial class ProcessUserChatCommandHandler(
     ChatDataDependencies data,
     ChatAiDependencies ai,
     ChatExecutionDependencies execution,
-    ILogger<ProcessUserChatCommandHandler> logger) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
+    ILogger<ProcessUserChatCommandHandler> logger,
+    IAppConfigService appConfig) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
 {
     private static class PartKinds
     {
@@ -230,13 +236,14 @@ public partial class ProcessUserChatCommandHandler(
         CaptureFollowUpSentEvent(request, context.User);
 
         var userLanguage = GetUserLanguage(context.User);
-        var aiStreamFilter = BuildAiStreamFilter(request.StreamSink);
+        var groundingTurn = await LoadGroundingTurnAsync(context, cancellationToken);
+        var aiStreamFilter = BuildAiStreamFilter(groundingTurn.Enforce ? null : request.StreamSink);
         Func<AiStreamEvent, Task>? aiStreamSink = aiStreamFilter is null
             ? null
             : aiStreamFilter.HandleAsync;
 
         var faqMatch = ChatFaqCache.TryMatchFaqKey(request.Message);
-        var cachedFaqAnswer = request.BlockAnswer is null ? TryGetCachedFaqAnswer(faqMatch) : null;
+        var cachedFaqAnswer = await GetGroundedCachedFaqAnswerAsync(faqMatch, groundingTurn, request);
         if (cachedFaqAnswer is not null)
             return Result.Success(new ChatResponse(cachedFaqAnswer, [], CorrelationId: request.CorrelationId));
 
@@ -296,9 +303,12 @@ public partial class ProcessUserChatCommandHandler(
                 request, context, executionResults, cancellationToken)
             : await TryBuildResponseCardsAsync(
                 responseText, request, context, executionResults, cancellationToken);
+        var groundedReply = await ApplyGroundingAsync(cards.AiMessage, followUps, executionResults, request, groundingTurn);
+        var aiMessage = groundedReply.Message;
+        followUps = groundedReply.FollowUps;
+        cards = ApplyGroundingToCards(cards, aiMessage);
         if (executionResults.AskBlock is { } askBlock)
             cards = cards with { Parts = (cards.Parts ?? []).Concat(new[] { askBlock }).ToArray() };
-        var aiMessage = cards.AiMessage;
 
         if (GetShareableFaqAnswer(faqMatch, aiMessage, executionResults, cards) is { } faqToCache)
         {
@@ -335,7 +345,8 @@ public partial class ProcessUserChatCommandHandler(
             cards.RecordLists,
             cards.AccountRows,
             followUps,
-            cards.Parts));
+            cards.Parts)
+        { GroundingFacts = groundedReply.Facts });
     }
 
     private static string? GetUserLanguage(User? user) => user?.Language;

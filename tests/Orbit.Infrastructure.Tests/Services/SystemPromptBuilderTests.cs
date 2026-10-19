@@ -11,6 +11,25 @@ public class SystemPromptBuilderTests
 {
     private static readonly Guid TestUserId = Guid.NewGuid();
 
+    [Fact]
+    public void Build_RequiresCurrentTurnToolFactsAcrossStaticAndDynamicSections()
+    {
+        var habit = Habit.Create(new HabitCreateParams(TestUserId, "Meditação", FrequencyUnit.Day, 1,
+            DueDate: new DateOnly(2026, 4, 3))).Value;
+        var request = new PromptBuildRequest([habit], UserToday: new DateOnly(2026, 4, 3));
+        var builder = new SystemPromptBuilder();
+        var prompt = builder.BuildStatic(request) + builder.BuildDynamic(request);
+
+        prompt.Should().Contain("GROUNDING INVARIANT");
+        prompt.Should().Contain("only when a successful tool returned it in the CURRENT TURN");
+        prompt.Should().Contain("set date and omit is_completed to include entries already done that day");
+        prompt.Should().Contain("Never estimate or recall facts from earlier turns");
+        prompt.Should().Contain("call the appropriate tool or say the data is unavailable");
+        prompt.Should().Contain("Call query_habits before making factual claims");
+        prompt.Should().NotContain("Answer listing and schedule questions directly from it");
+        prompt.Should().NotContain("Never call query_habits or query_goals to re-fetch");
+    }
+
     private static string BuildPrompt(
         IReadOnlyList<Habit> habits,
         bool hasImage = false, IReadOnlyList<Tag>? userTags = null,
