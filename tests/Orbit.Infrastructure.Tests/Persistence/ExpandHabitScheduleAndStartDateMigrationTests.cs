@@ -14,7 +14,7 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 public class ExpandHabitScheduleAndStartDateMigrationTests
 {
     [Fact]
-    public void TargetModel_PreservesRedesignAndMatchesCurrentModel()
+    public void TargetModel_PreservesRedesignAndOnlyLacksEvalTraceSeed()
     {
         using var context = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
             .UseNpgsql("Host=unused;Database=unused").Options);
@@ -22,8 +22,17 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
             .Initialize(Migration.TargetModel, designTime: true);
         var current = context.GetService<IDesignTimeModel>().Model;
 
-        context.GetService<IMigrationsModelDiffer>()
-            .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel())
+        var differ = context.GetService<IMigrationsModelDiffer>();
+        var seed = differ.GetDifferences(target.GetRelationalModel(), current.GetRelationalModel())
+            .Should().ContainSingle().Which.Should().BeOfType<InsertDataOperation>().Subject;
+        seed.Table.Should().Be("AppFeatureFlags");
+        seed.Values.GetLength(0).Should().Be(1);
+        seed.Values[0, Array.IndexOf(seed.Columns, "Key")].Should().Be("astra_eval_trace");
+        seed.Values[0, Array.IndexOf(seed.Columns, "Enabled")].Should().Be(false);
+
+        var evalTraceTarget = context.GetService<IModelRuntimeInitializer>()
+            .Initialize(new AddAstraEvalTraceFlag().TargetModel, designTime: true);
+        differ.GetDifferences(evalTraceTarget.GetRelationalModel(), current.GetRelationalModel())
             .Should().BeEmpty();
     }
 
