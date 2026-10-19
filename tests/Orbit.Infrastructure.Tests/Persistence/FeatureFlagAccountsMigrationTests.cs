@@ -26,9 +26,19 @@ public class FeatureFlagAccountsMigrationTests
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
 
-        differences.Should().HaveCount(7).And.OnlyContain(operation =>
+        differences.Should().HaveCount(9).And.OnlyContain(operation =>
             operation is DropForeignKeyOperation || operation is AddForeignKeyOperation
-            || operation is AddColumnOperation || operation is AlterColumnOperation);
+            || operation is AddColumnOperation || operation is AlterColumnOperation
+            || operation is CreateTableOperation || operation is CreateIndexOperation);
+        var owedCancellations = differences.OfType<CreateTableOperation>().Should().ContainSingle().Subject;
+        owedCancellations.Name.Should().Be("OwedSubscriptionCancellations");
+        owedCancellations.ForeignKeys.Should().BeEmpty();
+        owedCancellations.Columns.Select(column => column.Name).Should().BeEquivalentTo(
+            "Id", "Provider", "ProviderIdentifier", "Attempts", "CreatedAtUtc", "LastAttemptAtUtc",
+            "NextAttemptAtUtc", "ExhaustedAtUtc");
+        var retryIndex = differences.OfType<CreateIndexOperation>().Should().ContainSingle().Subject;
+        retryIndex.Table.Should().Be("OwedSubscriptionCancellations");
+        retryIndex.Columns.Should().Equal("NextAttemptAtUtc");
         differences.OfType<AlterColumnOperation>().Should().ContainSingle().Which
             .Should().Match<AlterColumnOperation>(column => column.Table == "HabitLogs"
                 && column.Name == "IsSlip" && !column.IsNullable && column.OldColumn.IsNullable);
@@ -64,10 +74,11 @@ public class FeatureFlagAccountsMigrationTests
             "SignupLanguage", "SignupReferralCode", "SignupCompletedAtUtc",
             "SignupReferralCompletedAtUtc", "SignupAnalyticsCompletedAtUtc", "SignupWelcomeCompletedAtUtc");
         context.Database.HasPendingModelChanges().Should().BeFalse();
-        context.Database.GetMigrations().TakeLast(6).Should().Equal(
+        context.Database.GetMigrations().TakeLast(7).Should().Equal(
             "20261001074038_AddHabitSkipUndo", "20261017011939_AddFeatureFlagAccounts",
             "20261018093533_CascadeAccountabilityPairsOnUserDeletion", "20261018111350_AddDurableSignupWork",
-            "20261018111711_RecordDeletionStoppedRenewals", "20261019011031_ContractHabitLogSlip");
+            "20261018111711_RecordDeletionStoppedRenewals", "20261019011031_ContractHabitLogSlip",
+            "20261019091925_AddOwedSubscriptionCancellations");
     }
 
     [Fact]

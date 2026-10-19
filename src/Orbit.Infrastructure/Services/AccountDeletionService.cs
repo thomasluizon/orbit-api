@@ -139,7 +139,8 @@ public partial class AccountDeletionService(
             return false;
         }
 
-        if (nowAtUtc - user.ScheduledDeletionAt.Value >= MaxBillingDeferral)
+        if (nowAtUtc - user.ScheduledDeletionAt.Value >= MaxBillingDeferral
+            && (!string.IsNullOrWhiteSpace(user.StripeSubscriptionId) || !string.IsNullOrWhiteSpace(user.PlayPurchaseToken)))
         {
             var cancellations = services.GetRequiredService<OwedSubscriptionCancellationJob>();
             if (!string.IsNullOrWhiteSpace(user.StripeSubscriptionId))
