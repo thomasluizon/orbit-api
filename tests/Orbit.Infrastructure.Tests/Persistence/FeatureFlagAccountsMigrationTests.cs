@@ -26,8 +26,12 @@ public class FeatureFlagAccountsMigrationTests
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
 
-        differences.Should().HaveCount(6).And.OnlyContain(operation =>
-            operation is DropForeignKeyOperation || operation is AddForeignKeyOperation || operation is AddColumnOperation);
+        differences.Should().HaveCount(7).And.OnlyContain(operation =>
+            operation is DropForeignKeyOperation || operation is AddForeignKeyOperation
+            || operation is AddColumnOperation || operation is AlterColumnOperation);
+        differences.OfType<AlterColumnOperation>().Should().ContainSingle().Which
+            .Should().Match<AlterColumnOperation>(column => column.Table == "HabitLogs"
+                && column.Name == "IsSlip" && !column.IsNullable && column.OldColumn.IsNullable);
         var renewalColumns = differences.OfType<AddColumnOperation>().ToArray();
         renewalColumns.Should().HaveCount(2).And.OnlyContain(column =>
             column.Table == "Users" && column.ClrType == typeof(bool) && !column.IsNullable
@@ -60,10 +64,10 @@ public class FeatureFlagAccountsMigrationTests
             "SignupLanguage", "SignupReferralCode", "SignupCompletedAtUtc",
             "SignupReferralCompletedAtUtc", "SignupAnalyticsCompletedAtUtc", "SignupWelcomeCompletedAtUtc");
         context.Database.HasPendingModelChanges().Should().BeFalse();
-        context.Database.GetMigrations().TakeLast(5).Should().Equal(
+        context.Database.GetMigrations().TakeLast(6).Should().Equal(
             "20261001074038_AddHabitSkipUndo", "20261017011939_AddFeatureFlagAccounts",
             "20261018093533_CascadeAccountabilityPairsOnUserDeletion", "20261018111350_AddDurableSignupWork",
-            "20261018111711_RecordDeletionStoppedRenewals");
+            "20261018111711_RecordDeletionStoppedRenewals", "20261019011031_ContractHabitLogSlip");
     }
 
     [Fact]

@@ -8,7 +8,7 @@ public class HabitLog : Entity, ITimestamped, ISoftDeletable
     public DateOnly Date { get; private set; }
     public decimal Value { get; private set; }
     public int CompletionOrdinal { get; private set; }
-    public bool? IsSlip { get; private set; }
+    public bool IsSlip { get; private set; }
     public string? Note { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
