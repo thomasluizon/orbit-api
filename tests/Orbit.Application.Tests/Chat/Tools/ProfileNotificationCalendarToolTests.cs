@@ -23,6 +23,11 @@ public class ProfileNotificationCalendarToolTests
     public void ToolMetadata_ExposesNamesAndSchemas()
     {
         var mediator = Substitute.For<IMediator>();
+        typeof(IAiTool).Assembly.GetTypes()
+            .Where(type => type is { IsAbstract: false, IsInterface: false }
+                && typeof(ToggleProfileSettingTool).IsAssignableFrom(type))
+            .Select(type => ((IAiTool)Activator.CreateInstance(type, mediator)!).Name)
+            .Should().Contain("set_proactive_astra");
         var profileTool = new GetProfileTool(mediator);
         var preferencesTool = new UpdateProfilePreferencesTool(mediator);
         var aiMemoryTool = new SetAiMemoryTool(mediator);

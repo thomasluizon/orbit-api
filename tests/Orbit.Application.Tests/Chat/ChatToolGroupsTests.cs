@@ -50,4 +50,32 @@ public class ChatToolGroupsTests
 
         active.Should().Contain("some_future_tool");
     }
+
+    [Theory]
+    [InlineData("log my run and show my habits")]
+    [InlineData("sync my Google Calendar please")]
+    [InlineData("show my notification settings")]
+    [InlineData("hello Astra")]
+    public void ResolveActiveToolNames_UnrelatedTurn_PreservesExistingToolList(string message)
+    {
+        var existing = ChatToolGroups.ResolveActiveToolNames(AllTools, message);
+        var withProactive = ChatToolGroups.ResolveActiveToolNames(
+            AllTools.Append("set_proactive_astra"), message);
+
+        withProactive.Should().BeEquivalentTo(existing);
+    }
+
+    [Theory]
+    [InlineData("turn proactive Astra off")]
+    [InlineData("enable proactive Astra")]
+    [InlineData("desative a Astra proativa")]
+    [InlineData("ativar Astra proativo")]
+    public void ResolveActiveToolNames_ProactiveRequest_AddsOnlyProactiveTool(string message)
+    {
+        var active = ChatToolGroups.ResolveActiveToolNames(
+            AllTools.Append("set_proactive_astra"), message);
+        var existing = ChatToolGroups.ResolveActiveToolNames(AllTools, "log my run");
+
+        active.Should().BeEquivalentTo(existing.Append("set_proactive_astra"));
+    }
 }

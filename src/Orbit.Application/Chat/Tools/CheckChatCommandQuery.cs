@@ -140,7 +140,8 @@ public sealed class CheckChatCommandQueryHandler(IServiceProvider services) : IR
         SetClockFormatCommand => Result.Success(),
         SetThemePreferenceCommand theme => theme.Preference is null or "light" or "dark"
             ? Result.Success() : Result.Failure("Invalid theme preference."),
-        SetAiMemoryCommand or SetAiSummaryCommand or CompleteOnboardingCommand or CompleteTourCommand or ResetTourCommand => Result.Success(),
+        SetAiMemoryCommand or SetAiSummaryCommand or SetProactiveAstraEnabledCommand
+            or CompleteOnboardingCommand or CompleteTourCommand or ResetTourCommand => Result.Success(),
         _ => await Task.FromResult<Result?>(null)
     };
 

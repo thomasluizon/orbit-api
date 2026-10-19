@@ -531,6 +531,8 @@ public partial class AgentCatalogService
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
                 planRequirement: "Pro",
+                chatTools: ["set_proactive_astra"],
+                mcpTools: ["set_proactive_astra"],
                 equivalentControllerActions: ["ProfileController.SetProactiveAstra"])
         ];
     }

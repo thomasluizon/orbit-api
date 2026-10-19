@@ -84,6 +84,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAiTool, UpdateProfilePreferencesTool>();
         builder.Services.AddScoped<IAiTool, SetAiMemoryTool>();
         builder.Services.AddScoped<IAiTool, SetAiSummaryTool>();
+        builder.Services.AddScoped<IAiTool, SetProactiveAstraTool>();
         builder.Services.AddScoped<IAiTool, GetNotificationsTool>();
         builder.Services.AddScoped<IAiTool, UpdateNotificationsTool>();
         builder.Services.AddScoped<IAiTool, DeleteNotificationsTool>();
