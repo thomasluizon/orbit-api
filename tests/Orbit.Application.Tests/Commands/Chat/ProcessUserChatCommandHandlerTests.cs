@@ -54,6 +54,7 @@ public class ProcessUserChatCommandHandlerTests
     private readonly IMediator _mediator = Substitute.For<IMediator>();
     private readonly IProductAnalytics _productAnalytics = Substitute.For<IProductAnalytics>();
     private readonly IHabitScheduleLogReader _scheduleLogReader = Substitute.For<IHabitScheduleLogReader>();
+    private readonly IAppConfigService _appConfig = Substitute.For<IAppConfigService>();
     private readonly ILogger<ProcessUserChatCommandHandler> _logger = Substitute.For<ILogger<ProcessUserChatCommandHandler>>();
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -114,7 +115,7 @@ public class ProcessUserChatCommandHandlerTests
             _scheduleLogReader);
 
         return new ProcessUserChatCommandHandler(
-            dataDeps, aiDeps, executionDeps, _logger);
+            dataDeps, aiDeps, executionDeps, _logger, _appConfig);
     }
 
     public ProcessUserChatCommandHandlerTests()
@@ -3876,6 +3877,23 @@ public class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Actions[0].SuggestedSubHabits.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_InventedStreak_LogsGroundingViolationBeforeReturningText()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "You are on a 12-day streak." });
+
+        var result = await CreateHandler().Handle(
+            new ProcessUserChatCommand(UserId, "How am I doing?"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessage.Should().Be("You are on a 12-day streak.");
+        _logger.ReceivedCalls().Should().Contain(call =>
+            call.GetMethodInfo().Name == "Log"
+            && (LogLevel)call.GetArguments()[0]! == LogLevel.Warning
+            && call.GetArguments()[2]!.ToString()!.Contains("Grounding violation"));
     }
 
     [Fact]

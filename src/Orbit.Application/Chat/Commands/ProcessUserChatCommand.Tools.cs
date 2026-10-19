@@ -110,6 +110,7 @@ public partial class ProcessUserChatCommandHandler
         {
             var outcome = outcomesByCallId[call.Id];
             toolResults.Add(outcome.ToolResult);
+            executionResults.ToolResults.Add(outcome.ToolResult);
             executionResults.Add(
                 call.Name,
                 outcome.ActionResult,

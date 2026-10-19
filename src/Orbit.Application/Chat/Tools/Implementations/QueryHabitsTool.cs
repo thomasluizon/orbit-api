@@ -18,7 +18,7 @@ public class QueryHabitsTool(
     public bool IsReadOnly => true;
 
     public string Description =>
-        "Deep lookup for habits beyond the prompt index: metrics, streaks, completion percentages, descriptions, checklist items, completed habits, and filtered searches by text, date, frequency, tag, or status. The active-habit index in the system prompt already lists titles, IDs, hierarchy, and due status - do not call this just to list habits or answer what is due today.";
+        "Read current-turn habit facts for listings, schedules, metrics, streaks, completion percentages, descriptions, checklist items, and filtered searches by text, date, frequency, tag, or status. Call this before answering habit listing or schedule questions; prompt indexes alone do not ground the reply.";
 
     public object GetParameterSchema() => new
     {
