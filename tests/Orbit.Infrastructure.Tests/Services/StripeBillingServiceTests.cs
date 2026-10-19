@@ -248,6 +248,21 @@ public class StripeBillingServiceTests
         second.Should().NotBe(first);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("coupon_referral")]
+    public async Task Checkout_ThreeDSecurePolicy_DoesNotReuseThePrePolicyKey(string? coupon)
+    {
+        var current = await CheckoutKeyAsync(coupon: coupon);
+        string[] prePolicyParameters = ["cus_test", "price_test", SuccessUrl, CancelUrl, coupon ?? ""];
+        var prePolicyDigest = System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(prePolicyParameters)));
+        var prePolicyKey = $"orbit-checkout-{UserId}-{Convert.ToHexStringLower(prePolicyDigest)[..16]}";
+
+        current.Should().StartWith($"orbit-checkout-{UserId}-");
+        current.Should().NotBe(prePolicyKey);
+    }
+
     [Fact]
     public async Task Checkout_EmptyAndNullCoupon_UseSameKey()
     {

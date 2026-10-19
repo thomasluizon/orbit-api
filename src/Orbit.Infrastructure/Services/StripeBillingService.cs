@@ -88,7 +88,7 @@ public sealed partial class StripeBillingService(
             }
 
             var idempotencyKey = CreateSessionIdempotencyKey($"orbit-checkout-{userId}",
-                customerId, priceId, successUrl, cancelUrl, referralCouponId ?? "");
+                customerId, priceId, successUrl, cancelUrl, referralCouponId ?? "", RequestThreeDSecureWhenSupported);
             var session = await StripeRetryPolicy.ExecuteWithRetryAsync(
                 () => clients.CheckoutSessions.CreateAsync(
                     options, new RequestOptions { IdempotencyKey = idempotencyKey }, cancellationToken),
