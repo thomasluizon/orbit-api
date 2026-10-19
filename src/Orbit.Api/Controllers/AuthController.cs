@@ -125,6 +125,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
     }
 
     [HttpPost("google")]
+    [Obsolete("Use POST /api/Auth/google/code to sign in with a Google authorization code.")]
     [DistributedRateLimit("auth")]
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -147,6 +148,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
     }
 
     [HttpPost("operations/google")]
+    [Obsolete("Use POST /api/Auth/operations/google/code to sign in with a Google authorization code.")]
     [DistributedRateLimit("auth")]
     [AllowAnonymous]
     public async Task<IActionResult> GoogleAuthOperation(
