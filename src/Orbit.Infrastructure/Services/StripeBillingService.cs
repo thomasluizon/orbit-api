@@ -28,6 +28,8 @@ public sealed partial class StripeBillingService(
     StripeServiceClients clients,
     ILogger<StripeBillingService> logger) : IBillingService
 {
+    private const string RequestThreeDSecureWhenSupported = "any";
+
     public async Task<string> CreateCustomerAsync(string email, string name, Guid userId, CancellationToken cancellationToken)
     {
         try
@@ -63,6 +65,13 @@ public sealed partial class StripeBillingService(
             {
                 Customer = customerId,
                 Mode = "subscription",
+                PaymentMethodOptions = new SessionPaymentMethodOptionsOptions
+                {
+                    Card = new SessionPaymentMethodOptionsCardOptions
+                    {
+                        RequestThreeDSecure = RequestThreeDSecureWhenSupported,
+                    },
+                },
                 LineItems = [new SessionLineItemOptions { Price = priceId, Quantity = 1 }],
                 SuccessUrl = successUrl,
                 CancelUrl = cancelUrl,

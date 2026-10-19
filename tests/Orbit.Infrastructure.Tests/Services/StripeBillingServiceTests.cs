@@ -192,6 +192,31 @@ public class StripeBillingServiceTests
 
     [Theory]
     [InlineData(null)]
+    [InlineData("")]
+    [InlineData("coupon_referral")]
+    public async Task Checkout_RequestsThreeDSecureWithoutChangingSubscriptionOptions(string? coupon)
+    {
+        await CheckoutKeyAsync(coupon: coupon);
+
+        _checkoutRequests.Single().Options.Should().BeEquivalentTo(new SessionCreateOptions
+        {
+            Customer = "cus_test",
+            Mode = "subscription",
+            PaymentMethodOptions = new SessionPaymentMethodOptionsOptions
+            {
+                Card = new SessionPaymentMethodOptionsCardOptions { RequestThreeDSecure = "any" },
+            },
+            LineItems = [new SessionLineItemOptions { Price = "price_test", Quantity = 1 }],
+            SuccessUrl = SuccessUrl,
+            CancelUrl = CancelUrl,
+            Metadata = new Dictionary<string, string> { ["userId"] = UserId.ToString() },
+            Discounts = string.IsNullOrEmpty(coupon) ? null : [new SessionDiscountOptions { Coupon = coupon }],
+            AllowPromotionCodes = string.IsNullOrEmpty(coupon) ? true : null,
+        });
+    }
+
+    [Theory]
+    [InlineData(null)]
     [InlineData("coupon_referral")]
     public async Task Checkout_IdenticalRequests_UseSameKey(string? coupon)
     {
