@@ -46,6 +46,45 @@ public sealed class PendingOperationChangePreviewerTests
         preview.Should().BeNull();
     }
 
+    [Theory]
+    [InlineData("bulk_log_habits")]
+    [InlineData("bulk_skip_habits")]
+    public async Task PreviewAsync_RevisedDates_IgnoreOriginalRangeAndKeepOfferedIdentity(string operationId)
+    {
+        var habit = CreateHabit("Read", null);
+        Setup([habit]);
+        var itemId = $"{habit.Id}:2026-10-19";
+        var arguments = JsonSerializer.Serialize(new
+        {
+            habit_ids = new[] { habit.Id },
+            dates = new[] { "2026-10-18", "2026-10-19" },
+            revised_items = new[] { new { habit_id = habit.Id, date = "2026-10-17", preview_item_id = itemId } }
+        });
+
+        var preview = await Preview(operationId, arguments);
+
+        var retained = preview!.Items.Should().ContainSingle().Subject;
+        retained.ItemId.Should().Be(itemId);
+        retained.EntityId.Should().Be(habit.Id);
+        retained.Fields.Should().ContainSingle().Which.NewValue.Should().Be("2026-10-17");
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("{}")]
+    [InlineData("[]")]
+    public async Task PreviewAsync_InvalidRevisedDates_DoNotFallBackToOriginalRange(string revisedItems)
+    {
+        var habit = CreateHabit("Read", null);
+        Setup([habit]);
+
+        var preview = await Preview("bulk_log_habits", $$"""
+            {"habit_ids":["{{habit.Id}}"],"dates":["2026-10-18","2026-10-19"],"revised_items":{{revisedItems}}}
+            """);
+
+        preview.Should().BeNull();
+    }
+
     [Fact]
     public async Task PreviewAsync_GoalLink_OnlyLinkedRecordChangesInvalidateApproval()
     {

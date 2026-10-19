@@ -348,6 +348,7 @@ public sealed class PendingOperationRevisionService(
         }
         root.Remove("filter");
         root.Remove("habit_ids");
+        root.Remove("dates");
         root["revised_items"] = items;
         return true;
     }

@@ -37,7 +37,13 @@ public sealed class PendingOperationChangePreviewer(
         CancellationToken cancellationToken = default)
     {
         if (HasLogDates(operationId, arguments))
-            return await PreviewLogDatesAsync(userId, operationId, arguments, cancellationToken);
+        {
+            var expanded = await BulkHabitLogArguments.ExpandAsync(arguments, habitRepository,
+                userDateService, userId, cancellationToken);
+            if (expanded.IsFailure)
+                return null;
+            arguments = expanded.Value;
+        }
         if (operationId == "bulk_create_habits")
             return await PreviewCreateAsync(userId, arguments, cancellationToken);
 
@@ -56,8 +62,9 @@ public sealed class PendingOperationChangePreviewer(
         if (operationId == "delete_habit")
             return await PreviewSingleHabitAsync(userId, arguments, cancellationToken);
 
-        var isRevised = arguments.TryGetProperty("revised_items", out var revisedItems)
-            && revisedItems.ValueKind == JsonValueKind.Array;
+        var isRevised = arguments.TryGetProperty("revised_items", out var revisedItems);
+        if (isRevised && revisedItems.ValueKind != JsonValueKind.Array)
+            return null;
         var revisedChanges = new Dictionary<Guid, BulkHabitChanges>();
         var (filter, filterError) = ResolveFilter(operationId, arguments,
             isRevised, revisedItems, revisedChanges);
@@ -176,14 +183,8 @@ public sealed class PendingOperationChangePreviewer(
     }
 
     private static bool HasLogDates(string operationId, JsonElement arguments) =>
-        operationId == "bulk_log_habits" && arguments.TryGetProperty("dates", out _);
-
-    private async Task<PendingOperationChangePreview?> PreviewLogDatesAsync(Guid userId, string operationId,
-        JsonElement arguments, CancellationToken ct)
-    {
-        var expanded = await BulkHabitLogArguments.ExpandAsync(arguments, habitRepository, userDateService, userId, ct);
-        return expanded.IsSuccess ? await PreviewAsync(userId, operationId, expanded.Value, ct) : null;
-    }
+        operationId == "bulk_log_habits" && arguments.TryGetProperty("dates", out _)
+        && !arguments.TryGetProperty("revised_items", out _);
 
     private static bool IsDatedRevision(string operationId, bool revised) =>
         revised && operationId is "bulk_log_habits" or "bulk_skip_habits";
