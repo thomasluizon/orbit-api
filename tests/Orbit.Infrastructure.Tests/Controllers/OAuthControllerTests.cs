@@ -297,25 +297,72 @@ public class OAuthControllerTests : IDisposable
         var expected = OAuthLoginPage.Render(
             "client-123", "https://claude.ai/callback", "state-abc", "challenge-xyz", "S256", nonce,
             googleError is null ? null : "Google sign-in was cancelled. Try again or use email.", "en");
+        var query = CreateAuthorizeQuery();
+        if (nonce is not null) query["nonce"] = nonce;
+        if (googleError is not null) query["google_error"] = googleError;
+
+        var (context, result) = await BindAuthorizeQueryAsync(query);
+
+        context.ModelState.IsValid.Should().BeTrue();
+        var actual = result.Should().BeOfType<ContentResult>().Subject;
+        actual.ContentType.Should().Be("text/html");
+        actual.Content.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("client_id")]
+    [InlineData("redirect_uri")]
+    [InlineData("response_type")]
+    [InlineData("state")]
+    [InlineData("code_challenge")]
+    [InlineData("code_challenge_method")]
+    public async Task Authorize_QueryBinding_MissingRequiredValue_ReturnsBadRequestWithQueryName(string missingKey)
+    {
+        var query = CreateAuthorizeQuery();
+        query.Remove(missingKey);
+
+        var (context, result) = await BindAuthorizeQueryAsync(query);
+
+        context.ModelState.IsValid.Should().BeFalse();
+        context.ModelState.Where(entry => entry.Value is { Errors.Count: > 0 })
+            .Select(entry => entry.Key).Should().Equal(missingKey);
+        var badRequest = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        badRequest.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        badRequest.Value.Should().BeOfType<ValidationProblemDetails>().Which.Errors.Keys.Should().Equal(missingKey);
+    }
+
+    [Fact]
+    public async Task Authorize_QueryBinding_MissingOptionalValues_ReturnsHtml()
+    {
+        var (context, result) = await BindAuthorizeQueryAsync(CreateAuthorizeQuery());
+
+        context.ModelState.IsValid.Should().BeTrue();
+        var content = result.Should().BeOfType<ContentResult>().Subject;
+        (content.StatusCode ?? StatusCodes.Status200OK).Should().Be(StatusCodes.Status200OK);
+        content.ContentType.Should().Be("text/html");
+    }
+
+    private static Dictionary<string, string?> CreateAuthorizeQuery() => new()
+    {
+        ["client_id"] = "client-123",
+        ["redirect_uri"] = "https://claude.ai/callback",
+        ["response_type"] = "code",
+        ["state"] = "state-abc",
+        ["code_challenge"] = "challenge-xyz",
+        ["code_challenge_method"] = "S256"
+    };
+
+    private async Task<(ActionContext Context, IActionResult Result)> BindAuthorizeQueryAsync(
+        Dictionary<string, string?> query)
+    {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddMvcCore().AddApplicationPart(typeof(OAuthController).Assembly);
+        services.AddControllers().AddApplicationPart(typeof(OAuthController).Assembly);
         using var provider = services.BuildServiceProvider();
         var action = provider.GetRequiredService<IActionDescriptorCollectionProvider>()
             .ActionDescriptors.Items.OfType<ControllerActionDescriptor>()
             .Single(action => action.ControllerTypeInfo.AsType() == typeof(OAuthController)
                 && action.ActionName == nameof(OAuthController.Authorize));
-        var query = new Dictionary<string, string?>
-        {
-            ["client_id"] = "client-123",
-            ["redirect_uri"] = "https://claude.ai/callback",
-            ["response_type"] = "code",
-            ["state"] = "state-abc",
-            ["code_challenge"] = "challenge-xyz",
-            ["code_challenge_method"] = "S256"
-        };
-        if (nonce is not null) query["nonce"] = nonce;
-        if (googleError is not null) query["google_error"] = googleError;
         var httpContext = new DefaultHttpContext { RequestServices = provider };
         httpContext.Request.Method = "GET";
         httpContext.Request.QueryString = QueryString.Create(query);
@@ -339,11 +386,18 @@ public class OAuthControllerTests : IDisposable
             arguments.Add(bound.IsModelSet ? bound.Model : null);
         }
 
-        context.ModelState.IsValid.Should().BeTrue();
-        var actual = action.MethodInfo.Invoke(_controller, arguments.ToArray())
-            .Should().BeOfType<ContentResult>().Subject;
-        actual.ContentType.Should().Be("text/html");
-        actual.Content.Should().Be(expected);
+        var filter = new ModelStateInvalidFilter(provider.GetRequiredService<IOptions<ApiBehaviorOptions>>().Value,
+            NullLogger.Instance);
+        var filters = new List<IFilterMetadata> { filter };
+        var execution = new ActionExecutingContext(context, filters,
+            action.Parameters.Select((parameter, index) => (parameter.Name, Value: arguments[index]))
+                .ToDictionary(argument => argument.Name, argument => argument.Value), _controller);
+        filter.OnActionExecuting(execution);
+        if (execution.Result is not null)
+            return (context, execution.Result);
+
+        var result = action.MethodInfo.Invoke(_controller, arguments.ToArray()).Should().BeAssignableTo<IActionResult>().Subject;
+        return (context, result);
     }
 
     [Fact]
