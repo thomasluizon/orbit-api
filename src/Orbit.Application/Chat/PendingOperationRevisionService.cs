@@ -211,6 +211,13 @@ public sealed class PendingOperationRevisionService(
     private static bool BuildOtherArguments(JsonObject root, string operationId,
         IReadOnlyList<RevisedPendingOperationItem> selected)
     {
+        if (operationId == "assign_tags" && root.ContainsKey("habit_ids"))
+        {
+            if (selected.Any(HasEdits))
+                return false;
+            root["habit_ids"] = new JsonArray(selected.Select(item => (JsonNode?)JsonValue.Create(item.ItemId)).ToArray());
+            return true;
+        }
         if (operationId is "delete_goal" or "delete_tag" or "delete_checklist_template")
             return selected.Count == 1 && !HasEdits(selected[0]);
         if (operationId == "manage_calendar_sync")
@@ -331,7 +338,7 @@ public sealed class PendingOperationRevisionService(
                 System.Globalization.CultureInfo.InvariantCulture,
                 System.Globalization.DateTimeStyles.None, out _))
                 return false;
-            items.Add(new JsonObject { ["habit_id"] = item.ItemId, ["date"] = date });
+            items.Add(new JsonObject { ["habit_id"] = offered[item.ItemId].EntityId?.ToString(), ["date"] = date });
         }
         root.Remove("filter");
         root.Remove("habit_ids");

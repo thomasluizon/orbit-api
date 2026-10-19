@@ -36,6 +36,8 @@ public sealed class PendingOperationChangePreviewer(
         JsonElement arguments,
         CancellationToken cancellationToken = default)
     {
+        if (HasLogDates(operationId, arguments))
+            return await PreviewLogDatesAsync(userId, operationId, arguments, cancellationToken);
         if (operationId == "bulk_create_habits")
             return await PreviewCreateAsync(userId, arguments, cancellationToken);
 
@@ -43,10 +45,7 @@ public sealed class PendingOperationChangePreviewer(
             or "bulk_delete_habits" or "bulk_log_habits" or "bulk_skip_habits"
             or "bulk_update_habit_emojis" or "delete_habit"))
         {
-            return destructivePreviewer is not null && destructivePreviewer.Handles(operationId)
-                ? await destructivePreviewer.PreviewAsync(userId, operationId, arguments, cancellationToken)
-                : AgentArgumentPreview.Build(operationId, arguments,
-                    await ResolveTargetAsync(userId, arguments, cancellationToken), EditableSchema(operationId));
+            return await PreviewOtherAsync(userId, operationId, arguments, cancellationToken);
         }
 
         if (operationId == "bulk_update_habit_emojis"
@@ -73,6 +72,8 @@ public sealed class PendingOperationChangePreviewer(
 
         var habits = await BulkHabitSelection.LoadAsync(habitRepository, userId, filter, cancellationToken);
         var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
+        if (IsDatedRevision(operationId, isRevised))
+            return PreviewDatedItems(operationId, arguments, habits);
         var rows = new List<PendingOperationChange>();
         var items = new List<PendingOperationItem>();
         foreach (var habit in habits)
@@ -105,6 +106,106 @@ public sealed class PendingOperationChangePreviewer(
         }
 
         return BuildPreview(operationId, rows, items);
+    }
+
+    private async Task<PendingOperationChangePreview?> PreviewOtherAsync(Guid userId, string operationId,
+        JsonElement arguments, CancellationToken ct)
+    {
+        if (destructivePreviewer is not null && destructivePreviewer.Handles(operationId))
+            return await destructivePreviewer.PreviewAsync(userId, operationId, arguments, ct);
+        if (operationId == "assign_tags" && arguments.TryGetProperty("habit_ids", out _))
+        {
+            var singles = AssignTagsTool.SingleHabitArguments(arguments);
+            if (singles is null)
+                return null;
+            var items = new List<PendingOperationItem>();
+            foreach (var single in singles)
+            {
+                var preview = await PreviewOtherAsync(userId, operationId, single, ct);
+                if (preview?.Items is not { Count: 1 } || preview.Items[0].EntityId is null)
+                    return null;
+                items.Add(preview.Items[0] with
+                {
+                    Fields = preview.Items[0].Fields.Select(field => field with { IsEditable = false }).ToList()
+                });
+            }
+            return BuildPreview(operationId, items.Take(10).SelectMany(item => item.Fields).ToList(), items);
+        }
+        var built = AgentArgumentPreview.Build(operationId, arguments,
+            await ResolveTargetAsync(userId, arguments, ct), EditableSchema(operationId));
+        return await BindDependenciesAsync(userId, operationId, arguments, built, ct);
+    }
+
+    private async Task<PendingOperationChangePreview?> BindDependenciesAsync(Guid userId, string operationId,
+        JsonElement arguments, PendingOperationChangePreview? preview, CancellationToken ct)
+    {
+        if (preview?.Items is null)
+            return preview;
+        var habitIds = DependencyIds(arguments, "habit_ids", "parent_habit_id");
+        var tagIds = DependencyIds(arguments, "tag_ids");
+        if (habitIds.Count == 0 && tagIds.Count == 0)
+            return preview;
+        var habits = habitIds.Count == 0 ? [] : await habitRepository.FindAsync(
+            habit => habit.UserId == userId && habitIds.Contains(habit.Id), ct);
+        var tags = tagIds.Count == 0 ? [] : await tagRepository.FindAsync(
+            tag => tag.UserId == userId && tagIds.Contains(tag.Id), ct);
+        if (habits.Count != habitIds.Count || tags.Count != tagIds.Count)
+            return null;
+        var states = habits.OrderBy(habit => habit.Id).Select(FingerprintHabit)
+            .Concat(tags.OrderBy(tag => tag.Id).Select(FingerprintTag)).ToArray();
+        var items = preview.Items.Select(item => item with
+        {
+            StateFingerprint = AgentOperationFingerprint.Compute(item.StateFingerprint, JsonSerializer.Serialize(states))
+        }).ToList();
+        return BuildPreview(operationId, preview.Changes, items);
+    }
+
+    private static HashSet<Guid> DependencyIds(JsonElement arguments, params string[] fields)
+    {
+        var result = new HashSet<Guid>();
+        foreach (var field in fields)
+        {
+            if (!arguments.TryGetProperty(field, out var value))
+                continue;
+            var values = value.ValueKind == JsonValueKind.Array ? value.EnumerateArray().ToArray() : [value];
+            foreach (var candidate in values)
+                if (candidate.ValueKind == JsonValueKind.String && Guid.TryParse(candidate.GetString(), out var id))
+                    result.Add(id);
+        }
+        return result;
+    }
+
+    private static bool HasLogDates(string operationId, JsonElement arguments) =>
+        operationId == "bulk_log_habits" && arguments.TryGetProperty("dates", out _);
+
+    private async Task<PendingOperationChangePreview?> PreviewLogDatesAsync(Guid userId, string operationId,
+        JsonElement arguments, CancellationToken ct)
+    {
+        var expanded = await BulkHabitLogArguments.ExpandAsync(arguments, habitRepository, userDateService, userId, ct);
+        return expanded.IsSuccess ? await PreviewAsync(userId, operationId, expanded.Value, ct) : null;
+    }
+
+    private static bool IsDatedRevision(string operationId, bool revised) =>
+        revised && operationId is "bulk_log_habits" or "bulk_skip_habits";
+
+    private static PendingOperationChangePreview? PreviewDatedItems(string operationId,
+        JsonElement arguments, IReadOnlyList<Habit> habits)
+    {
+        var (datedItems, _) = BulkHabitToolArguments.ParseRevisedDatedItems(arguments);
+        var byId = habits.ToDictionary(habit => habit.Id);
+        if (datedItems is null || datedItems.Any(item => !byId.ContainsKey(item.HabitId)))
+            return null;
+        var multipleDates = datedItems.GroupBy(item => item.HabitId).Any(group => group.Count() > 1);
+        var datedPreview = datedItems.OrderBy(item => item.HabitId).ThenBy(item => item.Date).Select(item =>
+        {
+            var habit = byId[item.HabitId];
+            var date = item.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            var change = new PendingOperationChange(habit.Id, habit.Title, "date", null, date,
+                "date", JsonSerializer.SerializeToElement(date), true);
+            return new PendingOperationItem(multipleDates ? $"{habit.Id}:{date}" : habit.Id.ToString(),
+                habit.Id, habit.Title, [change], FingerprintHabit(habit), RemovesData: false);
+        }).ToList();
+        return BuildPreview(operationId, datedPreview.Take(10).SelectMany(item => item.Fields).ToList(), datedPreview);
     }
 
     /// <summary>
@@ -372,7 +473,7 @@ public sealed class PendingOperationChangePreviewer(
                 FingerprintHabit(habit), RemovesData: true)).ToList());
     }
 
-    private static async Task<PendingOperationChangePreview?> PreviewCreateAsync(
+    private async Task<PendingOperationChangePreview?> PreviewCreateAsync(
         Guid userId, JsonElement arguments, CancellationToken cancellationToken)
     {
         if (!arguments.TryGetProperty("habits", out var habits) || habits.ValueKind != JsonValueKind.Array)
@@ -383,6 +484,12 @@ public sealed class PendingOperationChangePreviewer(
                 : null)
             .Select(item => item ?? new BulkHabitItem(string.Empty, null, null, null)).ToList());
         var validation = await new BulkCreateHabitsCommandValidator().ValidateAsync(command, cancellationToken);
+        var parent = TryReadId(arguments, "parent_habit_id", out var parentId)
+            ? await habitRepository.FindAsync(habit => habit.UserId == userId && habit.Id == parentId, cancellationToken)
+            : [];
+        if (arguments.TryGetProperty("parent_habit_id", out _) && parent.Count != 1)
+            return null;
+        var parentFingerprint = parent.Count == 1 ? FingerprintHabit(parent[0]) : string.Empty;
         var items = habits.EnumerateArray().Select((habit, index) =>
         {
             var prefix = $"Habits[{index}].";
@@ -410,7 +517,7 @@ public sealed class PendingOperationChangePreviewer(
                 && habit.TryGetProperty("preview_item_id", out var storedId)
                 ? storedId.ToString() : index.ToString(CultureInfo.InvariantCulture);
             return new PendingOperationItem(itemId, null,
-                name, fields, AgentOperationFingerprint.Compute("bulk_create_habits", habit.GetRawText()),
+                name, fields, AgentOperationFingerprint.Compute("bulk_create_habits" + parentFingerprint, habit.GetRawText()),
                 RemovesData: false, ValidationErrors: errors.Count > 0 ? errors : null);
         }).ToList();
         return BuildPreview("bulk_create_habits", [], items);

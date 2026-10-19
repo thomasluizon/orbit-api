@@ -47,6 +47,25 @@ public sealed class PendingOperationChangePreviewerTests
     }
 
     [Fact]
+    public async Task PreviewAsync_GoalLink_OnlyLinkedRecordChangesInvalidateApproval()
+    {
+        var linked = CreateHabit("Ler 10 minutos", null);
+        var unrelated = CreateHabit("Beber água", null);
+        var habits = new[] { linked, unrelated };
+        _habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => habits.Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).ToList());
+        var arguments = JsonSerializer.Serialize(new { title = "Ler livros", habit_ids = new[] { linked.Id } });
+        var initial = await Preview("create_goal", arguments);
+        unrelated.PostponeTo(new DateOnly(2026, 9, 26));
+        var afterUnrelated = await Preview("create_goal", arguments);
+        linked.PostponeTo(new DateOnly(2026, 9, 27));
+        var afterLinked = await Preview("create_goal", arguments);
+
+        afterUnrelated!.PreviewFingerprint.Should().Be(initial!.PreviewFingerprint);
+        afterLinked!.PreviewFingerprint.Should().NotBe(initial.PreviewFingerprint);
+    }
+
+    [Fact]
     public async Task PreviewAsync_ThreeMatches_UsesEachRealOldEmoji()
     {
         var habits = new[] { CreateHabit("One", "🔴"), CreateHabit("Two", "🟡"), CreateHabit("Three", "🔵") };

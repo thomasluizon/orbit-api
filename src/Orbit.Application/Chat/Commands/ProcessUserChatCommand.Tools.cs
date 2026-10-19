@@ -187,6 +187,9 @@ public partial class ProcessUserChatCommandHandler
             .Where(call => call.Name != "ask" && ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly != true)
             .ToList();
         var bulkRedirects = BulkToolRepeatGuard.FindRedirects(writeCalls);
+        var resolvedWrites = writeCalls.ToDictionary(call => call.Id, call => ResolveHabitCall(call, executionResults));
+        await CoalesceLogCallsAsync(writeCalls, resolvedWrites, request.UserId, cancellationToken);
+        CoalesceTagCalls(resolvedWrites);
 
         var readOnlyTasks = readOnlyCalls
             .Select(call => ExecuteReadOnlyToolCallOnIsolatedScopeAsync(call, request, executionResults, cancellationToken))
@@ -204,10 +207,18 @@ public partial class ProcessUserChatCommandHandler
                 outcomesByCallId[call.Id] = RepeatedSingleEntityToolOutcome(call, bulkTool);
                 continue;
             }
-            outcomesByCallId[call.Id] = executionResults.AnsweredAtUtc is { } claim
-                ? await ExecuteBlockWriteAsync(call, request, executionResults, claim, cancellationToken)
+            var resolved = resolvedWrites[call.Id];
+            if (resolved is null || !executionResults.PreviewedCalls.Add(
+                Orbit.Domain.Common.AgentOperationFingerprint.Compute(resolved.Name, resolved.Args.GetRawText())))
+            {
+                outcomesByCallId[call.Id] = ResolvedWithoutWrite(call, executionResults);
+                continue;
+            }
+            var outcome = executionResults.AnsweredAtUtc is { } claim
+                ? await ExecuteBlockWriteAsync(resolved, request, executionResults, claim, cancellationToken)
                 : await ExecuteSingleToolCallAsync(
-                    call, request, executionResults, execution.OperationExecutor, execution.PendingClarificationStore, cancellationToken);
+                    resolved, request, executionResults, execution.OperationExecutor, execution.PendingClarificationStore, cancellationToken);
+            outcomesByCallId[call.Id] = outcome with { ToolResult = outcome.ToolResult with { Name = call.Name } };
         }
 
         if (orderedCalls.FirstOrDefault(call => call.Name == "ask") is { } askCall)
@@ -338,7 +349,17 @@ public partial class ProcessUserChatCommandHandler
         return operationResult.Status switch
         {
             AgentOperationStatus.PendingConfirmation => new ToolCallOutcome(
-                new AiToolCallResult(call.Name, call.Id, false, null, null, "Confirmation required before this action can run."),
+                new AiToolCallResult(call.Name, call.Id, true, null, null, null, new
+                {
+                    status = "awaiting_confirmation",
+                    item_count = executionResponse.PendingOperation?.ChangeTargetCount,
+                    habit_count = call.Name == "bulk_log_habits" ? executionResponse.PendingOperation?.Items?.Select(item => item.EntityId).Distinct().Count() : (int?)null,
+                    date_count = call.Name == "bulk_log_habits" ? executionResponse.PendingOperation?.Items?.SelectMany(item => item.Fields).Where(field => field.Field == "date").Select(field => field.NewValue).Distinct().Count() : (int?)null,
+                    resolved_habits = executionResults.Habits.Where(habit => call.Args.GetRawText().Contains(habit.Id.ToString(), StringComparison.OrdinalIgnoreCase)).Select(habit => new { habit.Id, habit.Title }).ToArray(),
+                    items = executionResponse.PendingOperation?.Items,
+                    changes = executionResponse.PendingOperation?.Changes,
+                    instruction = "This is a proposal. Nothing has changed until approval. Use only the returned numbers, names, and dates."
+                }),
                 null,
                 null,
                 executionResponse.PolicyDenial,

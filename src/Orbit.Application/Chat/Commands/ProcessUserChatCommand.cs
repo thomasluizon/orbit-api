@@ -262,7 +262,14 @@ public partial class ProcessUserChatCommandHandler(
         if (response.IsFailure)
             return response.PropagateError<ChatResponse>();
 
-        var executionResults = new ToolExecutionAccumulator { AnsweredAtUtc = answeredAtUtc };
+        var executionResults = new ToolExecutionAccumulator
+        {
+            AnsweredAtUtc = answeredAtUtc,
+            Habits = context.ActiveHabits,
+            IsTaggingIntent = IsTagOnlyIntent(request.Message),
+            RequiresExistingParent = Regex.IsMatch(request.Message, @"\b(divida|dividir|split|break down)\b", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1))
+        };
+        SeedProposedHabitNames(request.UserId, executionResults);
         var actionsStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var toolLoopResult = await RunToolCallLoopAsync(
             response.Value,
@@ -303,6 +310,7 @@ public partial class ProcessUserChatCommandHandler(
                 request, context, executionResults, cancellationToken)
             : await TryBuildResponseCardsAsync(
                 responseText, request, context, executionResults, cancellationToken);
+        cards = ApplyResolutionToCards(cards, executionResults, userLanguage);
         var groundedReply = await ApplyGroundingAsync(cards.AiMessage, followUps, executionResults, request, groundingTurn);
         var aiMessage = groundedReply.Message;
         followUps = groundedReply.FollowUps;

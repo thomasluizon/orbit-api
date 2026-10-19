@@ -47,7 +47,7 @@ internal static class BulkHabitSelection
             .Where(habit => string.IsNullOrWhiteSpace(tag)
                 || habit.Tags.Any(candidate => candidate.Name.Equals(tag, StringComparison.OrdinalIgnoreCase)))
             .Where(habit => string.IsNullOrWhiteSpace(search)
-                || habit.Title.Contains(search, StringComparison.OrdinalIgnoreCase)
+                || Orbit.Application.Chat.HabitNameMatcher.Matches(habit.Title, search)
                 || habit.Description?.Contains(search, StringComparison.OrdinalIgnoreCase) == true)
             .Where(habit => filter.IsGeneral is null || habit.IsGeneral == filter.IsGeneral)
             .Where(habit => filter.IsBadHabit is null || habit.IsBadHabit == filter.IsBadHabit)

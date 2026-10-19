@@ -3941,7 +3941,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         var handler = CreateHandler(createTool);
 
-        var toolCallArgs = JsonDocument.Parse("{}").RootElement;
+        var toolCallArgs = JsonDocument.Parse("""{"title":"First"}""").RootElement;
 
         var firstResponse = new AiResponse
         {
@@ -3952,7 +3952,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         var secondResponse = new AiResponse
         {
-            ToolCalls = [new AiToolCall("create_habit", "call_2", toolCallArgs)],
+            ToolCalls = [new AiToolCall("create_habit", "call_2", JsonDocument.Parse("""{"title":"Second"}""").RootElement)],
             ConversationContext = TestConversationContext
         };
 

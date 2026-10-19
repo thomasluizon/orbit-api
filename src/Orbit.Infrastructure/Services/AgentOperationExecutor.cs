@@ -214,6 +214,19 @@ public partial class AgentOperationExecutor(
             var preview = await changePreviewer.PreviewSafelyAsync(
                 execution.Request.UserId, execution.Operation.Id, execution.Arguments, logger, cancellationToken);
 
+            if (preview is { ChangeTargetCount: 0 } || preview?.Items is { Count: 0 }
+                || preview is null && RequiresMatchedHabits(execution.Operation.Id))
+            {
+                pendingOperationStore.Cancel(execution.Request.UserId, pending.Id,
+                    AgentOperationFingerprint.Compute(execution.Operation.Id, execution.Arguments.GetRawText()));
+                return await BuildToolOutcomeResponseAsync(execution, policyDecision, new ToolResult(true,
+                    Payload: new
+                    {
+                        status = "no_matching_habits",
+                        instruction = "No approval preview was created. Tell the person which habit names did not resolve and ask which existing habits to use. Do not create habits."
+                    }), cancellationToken);
+            }
+
             if (preview is not null)
             {
                 if (!string.IsNullOrWhiteSpace(preview.PreviewFingerprint))
@@ -243,6 +256,10 @@ public partial class AgentOperationExecutor(
             policyDecision.Reason,
             pending);
     }
+
+    private static bool RequiresMatchedHabits(string operationId) => operationId is
+        "bulk_log_habits" or "bulk_skip_habits" or "bulk_update_habits" or "bulk_reschedule_habits"
+        or "bulk_delete_habits" or "bulk_create_habits";
 
     private async Task<AgentExecuteOperationResponse> ExecuteWithPolicyAsync(
         OperationExecutionContext execution,

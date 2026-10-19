@@ -20,6 +20,7 @@ public class BulkCreateHabitsTool(
         type = JsonSchemaTypes.Object,
         properties = new
         {
+            parent_habit_id = new { type = JsonSchemaTypes.String, description = "Existing parent habit ID. When supplied, create the items as children of this habit, never create the parent again." },
             habits = new
             {
                 type = JsonSchemaTypes.Array,
@@ -59,6 +60,37 @@ public class BulkCreateHabitsTool(
 
         if (items.Count == 0)
             return new ToolResult(false, Error: "No habits provided.");
+
+        if (args.TryGetProperty("parent_habit_id", out var parentValue))
+        {
+            if (parentValue.ValueKind != JsonValueKind.String || !Guid.TryParse(parentValue.GetString(), out var parentId))
+                return new ToolResult(false, Error: "parent_habit_id must be a valid habit ID.");
+            if (items.Any(item => item.SubHabits is { Count: > 0 }))
+                return new ToolResult(false, Error: "Create children directly under the existing parent; nested sub_habits are not supported in this call.");
+            var created = new List<BulkCreateItemResult>();
+            foreach (var item in items)
+            {
+                var childCommand = new CreateSubHabitCommand(userId, parentId, item.Title, item.Description,
+                    item.FrequencyUnit, item.FrequencyQuantity, item.IsBadHabit, item.DueDate,
+                    new HabitCommandOptions(Days: item.Days, DueTime: item.DueTime, IsFlexible: item.IsFlexible,
+                        ChecklistItems: item.ChecklistItems), Emoji: item.Emoji, InheritParentFrequency: true,
+                    IntervalWeeks: item.IntervalWeeks);
+                if (checkOnly)
+                {
+                    var checkedItem = await ChatToolArgumentCheck.CheckCommandAsync(mediator, childCommand, ct);
+                    if (!checkedItem.Success)
+                        return checkedItem;
+                }
+                else
+                {
+                    var childResult = await mediator.Send(childCommand, ct);
+                    if (childResult.IsFailure)
+                        return ToolResult.FromFailure(childResult);
+                    created.Add(new BulkCreateItemResult(created.Count, BulkItemStatus.Success, childResult.Value, item.Title));
+                }
+            }
+            return new ToolResult(true, EntityName: $"{items.Count} sub-habits", Payload: new BulkCreateResult(created));
+        }
 
         var command = new BulkCreateHabitsCommand(userId, items);
         if (checkOnly)

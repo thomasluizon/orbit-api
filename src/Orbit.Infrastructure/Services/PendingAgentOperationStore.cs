@@ -103,6 +103,32 @@ public class PendingAgentOperationStore(
             entity.PreviewFingerprint);
     }
 
+    public IReadOnlyList<PendingHabitCreation> GetPendingHabitCreations(Guid userId)
+    {
+        var checkedAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
+        var proposals = dbContext.PendingAgentOperations.AsNoTracking()
+            .Where(item => item.UserId == userId && item.ConsumedAtUtc == null && item.ExpiresAtUtc > checkedAtUtc
+                && (item.OperationId == "create_habit" || item.OperationId == "bulk_create_habits" || item.OperationId == "create_sub_habit"))
+            .Select(item => item.ArgumentsJson).ToList();
+        var names = new List<PendingHabitCreation>();
+        foreach (var json in proposals)
+        {
+            var arguments = ParseArguments(json);
+            Guid? parentId = arguments.TryGetProperty("parent_habit_id", out var parent)
+                && parent.ValueKind == JsonValueKind.String && Guid.TryParse(parent.GetString(), out var parsedParent)
+                    ? parsedParent : null;
+            if (arguments.TryGetProperty("habits", out var habits) && habits.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var habit in habits.EnumerateArray())
+                    if (habit.TryGetProperty("title", out var title) && title.ValueKind == JsonValueKind.String)
+                        names.Add(new PendingHabitCreation(title.GetString()!, parentId));
+            }
+            else if (arguments.TryGetProperty("title", out var title) && title.ValueKind == JsonValueKind.String)
+                names.Add(new PendingHabitCreation(title.GetString()!, parentId));
+        }
+        return names;
+    }
+
     public bool IsAwaitingConfirmation(Guid userId, Guid pendingOperationId)
     {
         var checkedAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;

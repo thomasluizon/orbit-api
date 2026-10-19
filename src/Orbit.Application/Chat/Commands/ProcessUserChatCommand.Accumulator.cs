@@ -16,6 +16,13 @@ public partial class ProcessUserChatCommandHandler
         private readonly HashSet<(string Domain, string Access)> _seenToolSteps = [];
         private readonly SemaphoreSlim _toolStepGate = new(1, 1);
 
+        public IReadOnlyList<Orbit.Domain.Entities.Habit> Habits { get; init; } = [];
+        public bool RequiresExistingParent { get; init; }
+        public HashSet<(Guid? ParentId, string Name)> ProposedHabitNames { get; } = [];
+        public bool IsTaggingIntent { get; init; }
+        public HashSet<string> MissingHabitNames { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public HashSet<string> PreviewedCalls { get; } = new(StringComparer.Ordinal);
+
         public DateTime? AnsweredAtUtc { get; init; }
         public List<ActionResult> CommittedActions { get; } = [];
         public List<PendingAgentOperation> CommittedPendingOperations { get; } = [];
@@ -95,7 +102,8 @@ public partial class ProcessUserChatCommandHandler
             if (policyDenial is not null)
                 PolicyDenials.Add(policyDenial);
 
-            if (pendingOperation is not null)
+            if (pendingOperation is not null && PendingOperations.All(item => item.Id != pendingOperation.Id)
+                && pendingOperation.ChangeTargetCount != 0 && pendingOperation.Items is not { Count: 0 })
                 PendingOperations.Add(pendingOperation);
         }
 

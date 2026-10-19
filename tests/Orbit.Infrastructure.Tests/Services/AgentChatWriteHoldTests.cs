@@ -378,6 +378,140 @@ public class AgentChatWriteHoldTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task ExecuteAsync_EmptySelection_NeverReturnsAnApproval()
+    {
+        var tools = new AiToolRegistry([new StubTool("bulk_log_habits")]);
+        var previewer = Substitute.For<IPendingOperationChangePreviewer>();
+        previewer.PreviewAsync(_userId, "bulk_log_habits", Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
+            .Returns(new PendingOperationChangePreview([], 0, [], "empty"));
+        var executor = CreateExecutor(tools, previewer);
+
+        var result = await executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId,
+            "bulk_log_habits", Parse("""{"filter":{"search":"meditação"}}"""),
+            AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, IncludeChangePreview: true));
+
+        result.PendingOperation.Should().BeNull();
+        result.Operation.Status.Should().NotBe(AgentOperationStatus.PendingConfirmation);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_CreateApproval_JsonStorageOrderAndUnrelatedChangeDoNotMakeItStale()
+    {
+        var today = new DateOnly(2026, 10, 19);
+        var unrelated = Habit.Create(new HabitCreateParams(_userId, "Beber água", FrequencyUnit.Day, 1, today)).Value;
+        _dbContext.Habits.Add(unrelated);
+        await _dbContext.SaveChangesAsync();
+        var tool = new StubTool("bulk_create_habits");
+        var tools = new AiToolRegistry([tool]);
+        var dates = Substitute.For<IUserDateService>();
+        dates.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(today);
+        var previewer = new PendingOperationChangePreviewer(new GenericRepository<Habit>(_dbContext),
+            new GenericRepository<Goal>(_dbContext), new GenericRepository<Tag>(_dbContext), dates, tools);
+        var executor = CreateExecutor(tools, previewer);
+        var arguments = Parse("""{"habits":[{"title":"Novo","frequency_unit":"Day"}]}""");
+        var held = await executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, tool.Name,
+            arguments, AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, IncludeChangePreview: true));
+        var stored = _dbContext.PendingAgentOperations.Single(item => item.Id == held.PendingOperation!.Id);
+        var reordered = """{"habits":[{"frequency_unit":"Day","title":"Novo"}]}""";
+        stored.Revise(reordered, AgentOperationFingerprint.Compute(tool.Name, reordered),
+            held.PendingOperation!.PreviewFingerprint!, DateTime.UtcNow).Should().BeTrue();
+        unrelated.Update(new HabitUpdateParams("Changed unrelated habit", unrelated.Description, unrelated.FrequencyUnit,
+            unrelated.FrequencyQuantity, Days: unrelated.Days.ToList(), IsBadHabit: unrelated.IsBadHabit, DueDate: unrelated.DueDate)).IsSuccess.Should().BeTrue();
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+        var revisions = new PendingOperationRevisionService(_pendingOperationStore, previewer,
+            new RevisePendingOperationRequestValidator(), tools);
+        var execution = _pendingOperationStore.GetExecution(_userId, held.PendingOperation.Id)!;
+
+        (await revisions.IsCurrentAsync(_userId, execution, default)).Should().BeTrue();
+        var confirmation = _pendingOperationStore.Confirm(_userId, held.PendingOperation.Id)!;
+        var approved = await executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, execution.OperationId,
+            execution.Arguments, AgentExecutionSurface.Chat, AgentAuthMethod.Jwt,
+            ConfirmationToken: confirmation.ConfirmationToken));
+
+        approved.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
+        tool.Calls.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task AssignTags_BatchApproval_ReusesOneTagAcrossExistingHabits()
+    {
+        var today = new DateOnly(2026, 10, 19);
+        var habits = new[] { "Beber água", "Academia" }.Select(title =>
+            Habit.Create(new HabitCreateParams(_userId, title, FrequencyUnit.Day, 1, today)).Value).ToArray();
+        _dbContext.Habits.AddRange(habits);
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+        var tool = new Orbit.Application.Chat.Tools.Implementations.AssignTagsTool(
+            new GenericRepository<Habit>(_dbContext), new GenericRepository<Tag>(_dbContext),
+            new UnitOfWork(_dbContext, new DatabaseConnectionSettings()));
+        var arguments = JsonSerializer.SerializeToElement(new { habit_ids = habits.Select(habit => habit.Id).ToArray(), tag_names = new[] { "Saúde" } });
+
+        (await tool.CheckArgumentsAsync(arguments, _userId, default)).IsSuccess.Should().BeTrue();
+        var result = await tool.ExecuteAsync(arguments, _userId, default);
+
+        result.Success.Should().BeTrue();
+        _dbContext.ChangeTracker.Clear();
+        var saved = await _dbContext.Habits.Include(habit => habit.Tags).Where(habit => habit.UserId == _userId).ToListAsync();
+        saved.Should().HaveCount(2);
+        saved.Should().OnlyContain(habit => habit.Tags.Count == 1 && habit.Tags.Single().Name == "Saúde");
+        (await _dbContext.Tags.CountAsync(tag => tag.UserId == _userId)).Should().Be(1);
+    }
+
+    [Fact]
+    public void PendingCreateProposals_KeepParentScopeAndExcludeOtherUsersAndCancelledWrites()
+    {
+        var parentId = Guid.NewGuid();
+        var capability = _catalogService.GetCapabilityByChatTool("bulk_create_habits")!;
+        var rootJson = """{"habits":[{"title":"Novo"}]}""";
+        var childJson = JsonSerializer.Serialize(new { parent_habit_id = parentId, habits = new[] { new { title = "Treino" } } });
+        var root = _pendingOperationStore.Create(_userId, capability, "bulk_create_habits", rootJson, "Create",
+            AgentOperationFingerprint.Compute("bulk_create_habits", rootJson), AgentExecutionSurface.Chat);
+        _pendingOperationStore.Create(_userId, capability, "bulk_create_habits", childJson, "Create children",
+            AgentOperationFingerprint.Compute("bulk_create_habits", childJson), AgentExecutionSurface.Chat);
+        _pendingOperationStore.Create(Guid.NewGuid(), capability, "bulk_create_habits", rootJson, "Other user",
+            AgentOperationFingerprint.Compute("bulk_create_habits", rootJson), AgentExecutionSurface.Chat);
+
+        _pendingOperationStore.GetPendingHabitCreations(_userId).Should().BeEquivalentTo(
+            [new PendingHabitCreation("Novo"), new PendingHabitCreation("Treino", parentId)]);
+        _pendingOperationStore.Cancel(_userId, root.Id,
+            AgentOperationFingerprint.Compute("bulk_create_habits", rootJson)).Should().BeTrue();
+        _pendingOperationStore.GetPendingHabitCreations(_userId).Should().Equal(new PendingHabitCreation("Treino", parentId));
+    }
+
+    [Fact]
+    public async Task ReviseDateRange_KeepingOneDate_PreservesTheOfferedItem()
+    {
+        var habit = Habit.Create(new HabitCreateParams(_userId, "Beber água", FrequencyUnit.Day, 1,
+            new DateOnly(2026, 10, 19))).Value;
+        _dbContext.Habits.Add(habit);
+        await _dbContext.SaveChangesAsync();
+        var tools = new AiToolRegistry([new StubTool("bulk_log_habits")]);
+        var previewer = new PendingOperationChangePreviewer(new GenericRepository<Habit>(_dbContext),
+            new GenericRepository<Goal>(_dbContext), new GenericRepository<Tag>(_dbContext), Substitute.For<IUserDateService>(), tools);
+        var executor = CreateExecutor(tools, previewer);
+        var arguments = JsonSerializer.SerializeToElement(new { revised_items = new[]
+        {
+            new { habit_id = habit.Id, date = "2026-10-18" }, new { habit_id = habit.Id, date = "2026-10-19" }
+        } });
+        var held = await executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, "bulk_log_habits",
+            arguments, AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, IncludeChangePreview: true));
+        var pending = held.PendingOperation!;
+        var chosen = pending.Items![0];
+        var revisions = new PendingOperationRevisionService(_pendingOperationStore, previewer,
+            new RevisePendingOperationRequestValidator(), tools);
+
+        var result = await revisions.ReviseAsync(_userId, pending.Id,
+            new RevisePendingOperationRequest(pending.PreviewFingerprint!, [new(chosen.ItemId)]), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Preview!.Items.Should().ContainSingle().Which.ItemId.Should().Be(chosen.ItemId);
+        var execution = _pendingOperationStore.GetExecution(_userId, pending.Id)!;
+        execution.Arguments.GetProperty("revised_items").GetArrayLength().Should().Be(1);
+        (await revisions.IsCurrentAsync(_userId, execution, default)).Should().BeTrue();
+    }
+
     private AgentOperationExecutor CreateExecutor(AiToolRegistry toolRegistry,
         IPendingOperationChangePreviewer? previewer = null)
     {
