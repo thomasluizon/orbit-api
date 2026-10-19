@@ -7,7 +7,6 @@ using Orbit.Api.RateLimiting;
 using Orbit.Application.Tags.Commands;
 using Orbit.Application.Tags.Queries;
 
-#pragma warning disable CA1873
 
 namespace Orbit.Api.Controllers;
 
@@ -48,7 +47,8 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
 
         if (result.IsSuccess)
         {
-            LogTagCreated(logger, result.Value, HttpContext.GetUserId());
+            if (logger.IsEnabled(LogLevel.Information))
+                LogTagCreated(logger, result.Value, HttpContext.GetUserId());
             return Created($"/api/tags/{result.Value}", new { id = result.Value });
         }
         return result.ToErrorResult();
@@ -69,7 +69,8 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
 
         if (result.IsSuccess)
         {
-            LogTagUpdated(logger, id, HttpContext.GetUserId());
+            if (logger.IsEnabled(LogLevel.Information))
+                LogTagUpdated(logger, id, HttpContext.GetUserId());
             return NoContent();
         }
         return result.ToErrorResult();
@@ -87,7 +88,8 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
 
         if (result.IsSuccess)
         {
-            LogTagDeleted(logger, id, HttpContext.GetUserId());
+            if (logger.IsEnabled(LogLevel.Information))
+                LogTagDeleted(logger, id, HttpContext.GetUserId());
             return NoContent();
         }
         return result.ToErrorResult();
@@ -105,7 +107,8 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
         var result = await mediator.Send(command, cancellationToken);
         return result.ToPayGateAwareResult(() =>
         {
-            LogTagRestored(logger, id, HttpContext.GetUserId());
+            if (logger.IsEnabled(LogLevel.Information))
+                LogTagRestored(logger, id, HttpContext.GetUserId());
             return NoContent();
         });
     }

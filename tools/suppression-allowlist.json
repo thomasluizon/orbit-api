@@ -39,42 +39,6 @@
         "reason": "BCrypt.Verify is expensive, so the early exit through foreach is deliberate rather than a LINQ simplification."
       }
     },
-    "src/Orbit.Api/Controllers/ApiKeysController.cs": {
-      "CA1873": {
-        "count": 1,
-        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
-      }
-    },
-    "src/Orbit.Api/Controllers/AuthController.cs": {
-      "CA1873": {
-        "count": 1,
-        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
-      }
-    },
-    "src/Orbit.Api/Controllers/ChecklistTemplatesController.cs": {
-      "CA1873": {
-        "count": 1,
-        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
-      }
-    },
-    "src/Orbit.Api/Controllers/GoalsController.cs": {
-      "CA1873": {
-        "count": 1,
-        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
-      }
-    },
-    "src/Orbit.Api/Controllers/HabitsController.cs": {
-      "CA1873": {
-        "count": 1,
-        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
-      }
-    },
-    "src/Orbit.Api/Controllers/NotificationController.cs": {
-      "CA1873": {
-        "count": 1,
-        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
-      }
-    },
     "src/Orbit.Api/Controllers/OAuthController.cs": {
       "S107": {
         "count": 1,
@@ -89,34 +53,16 @@
         "reason": "the raw Request.Body and Request.Headers are needed for signature verification: Play RTDN push, the Stripe webhook, and reverse-proxy X-Forwarded-Proto detection."
       }
     },
-    "src/Orbit.Api/Controllers/ProfileController.cs": {
-      "CA1873": {
-        "count": 1,
-        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
-      }
-    },
     "src/Orbit.Api/Controllers/SubscriptionController.cs": {
       "S6932": {
         "count": 2,
         "reason": "the raw Request.Body and Request.Headers are needed for signature verification: Play RTDN push, the Stripe webhook, and reverse-proxy X-Forwarded-Proto detection."
       }
     },
-    "src/Orbit.Api/Controllers/SupportController.cs": {
-      "CA1873": {
-        "count": 1,
-        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
-      }
-    },
     "src/Orbit.Api/Controllers/SyncController.cs": {
       "ORBIT0004": {
         "count": 2,
         "reason": "instant: the sync-window guard against `since`, and the ServerTimestamp field of the sync envelope. Both are wire-protocol UTC instants."
-      }
-    },
-    "src/Orbit.Api/Controllers/TagsController.cs": {
-      "CA1873": {
-        "count": 1,
-        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
       }
     },
     "src/Orbit.Api/OAuth/OAuthAuthorizationStore.cs": {
@@ -279,12 +225,6 @@
       "ORBIT0004": {
         "count": 2,
         "reason": "cooldownBoundary limits challenge issuance by elapsed seconds; CanVerify compares the challenge TTL with the current instant. Neither read selects a user calendar day."
-      }
-    },
-    "src/Orbit.Infrastructure/Services/AiIntentService.cs": {
-      "CA1873": {
-        "count": 1,
-        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
       }
     },
     "src/Orbit.Infrastructure/Services/AiUsageSummaryService.cs": {

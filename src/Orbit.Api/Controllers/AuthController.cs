@@ -10,7 +10,6 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
-#pragma warning disable CA1873
 
 namespace Orbit.Api.Controllers;
 
@@ -47,11 +46,13 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
         if (result.IsSuccess)
         {
-            LogVerificationCodeSent(logger, HttpContext.GetRequestId());
+            if (logger.IsEnabled(LogLevel.Information))
+                LogVerificationCodeSent(logger, HttpContext.GetRequestId());
             return Ok(new { message = "Verification code sent" });
         }
 
-        LogFailedToSendCode(logger, result.Error, HttpContext.GetRequestId());
+        if (logger.IsEnabled(LogLevel.Warning))
+            LogFailedToSendCode(logger, result.Error, HttpContext.GetRequestId());
         return result.ToErrorResult();
     }
 
@@ -99,11 +100,13 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
         if (result.IsSuccess)
         {
-            LogUserLoggedInViaCode(logger, result.Value.UserId, HttpContext.GetRequestId());
+            if (logger.IsEnabled(LogLevel.Information))
+                LogUserLoggedInViaCode(logger, result.Value.UserId, HttpContext.GetRequestId());
             return Ok(result.Value);
         }
 
-        LogCodeVerificationFailed(logger, result.Error, HttpContext.GetRequestId());
+        if (logger.IsEnabled(LogLevel.Warning))
+            LogCodeVerificationFailed(logger, result.Error, HttpContext.GetRequestId());
         return result.ToErrorResult(StatusCodes.Status401Unauthorized);
     }
 
@@ -135,11 +138,13 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
             request.Code, request.CodeVerifier, request.RedirectUri, request.Language, request.ReferralCode), cancellationToken);
         if (result.IsSuccess)
         {
-            LogUserLoggedInViaGoogle(logger, HttpContext.GetRequestId());
+            if (logger.IsEnabled(LogLevel.Information))
+                LogUserLoggedInViaGoogle(logger, HttpContext.GetRequestId());
             return Ok(result.Value);
         }
 
-        LogGoogleAuthFailed(logger, result.Error, HttpContext.GetRequestId());
+        if (logger.IsEnabled(LogLevel.Warning))
+            LogGoogleAuthFailed(logger, result.Error, HttpContext.GetRequestId());
         return result.ToErrorResult(StatusCodes.Status401Unauthorized);
     }
 
@@ -169,11 +174,13 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
         if (result.IsSuccess)
         {
-            LogSessionRefreshed(logger, HttpContext.GetRequestId());
+            if (logger.IsEnabled(LogLevel.Information))
+                LogSessionRefreshed(logger, HttpContext.GetRequestId());
             return Ok(result.Value);
         }
 
-        LogSessionRefreshFailed(logger, result.Error, HttpContext.GetRequestId());
+        if (logger.IsEnabled(LogLevel.Warning))
+            LogSessionRefreshFailed(logger, result.Error, HttpContext.GetRequestId());
         return result.ToErrorResult(StatusCodes.Status401Unauthorized);
     }
 
@@ -223,11 +230,13 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
         if (result.IsSuccess)
         {
-            LogSessionRevoked(logger, HttpContext.GetRequestId());
+            if (logger.IsEnabled(LogLevel.Information))
+                LogSessionRevoked(logger, HttpContext.GetRequestId());
             return Ok(new { message = "Logged out" });
         }
 
-        LogSessionRevocationFailed(logger, result.Error, HttpContext.GetRequestId());
+        if (logger.IsEnabled(LogLevel.Warning))
+            LogSessionRevocationFailed(logger, result.Error, HttpContext.GetRequestId());
         return result.ToErrorResult(StatusCodes.Status401Unauthorized);
     }
 
@@ -271,11 +280,13 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
         if (result.IsSuccess)
         {
-            LogAllSessionsRevoked(logger, HttpContext.GetUserId(), HttpContext.GetRequestId());
+            if (logger.IsEnabled(LogLevel.Information))
+                LogAllSessionsRevoked(logger, HttpContext.GetUserId(), HttpContext.GetRequestId());
             return Ok(new { message = "Logged out of all sessions" });
         }
 
-        LogSessionRevocationFailed(logger, result.Error, HttpContext.GetRequestId());
+        if (logger.IsEnabled(LogLevel.Warning))
+            LogSessionRevocationFailed(logger, result.Error, HttpContext.GetRequestId());
         return result.ToErrorResult();
     }
 
@@ -292,11 +303,13 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
         if (result.IsSuccess)
         {
-            LogAccountDeletionRequested(logger, HttpContext.GetUserId());
+            if (logger.IsEnabled(LogLevel.Information))
+                LogAccountDeletionRequested(logger, HttpContext.GetUserId());
             return Ok(new { message = "Deletion code sent" });
         }
 
-        LogDeletionRequestFailed(logger, HttpContext.GetUserId(), result.Error);
+        if (logger.IsEnabled(LogLevel.Warning))
+            LogDeletionRequestFailed(logger, HttpContext.GetUserId(), result.Error);
         return result.ToErrorResult();
     }
 
@@ -315,11 +328,13 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
         if (result.IsSuccess)
         {
-            LogAccountDeactivated(logger, HttpContext.GetUserId(), result.Value);
+            if (logger.IsEnabled(LogLevel.Information))
+                LogAccountDeactivated(logger, HttpContext.GetUserId(), result.Value);
             return Ok(new { message = "Account deactivated", scheduledDeletionAt = result.Value });
         }
 
-        LogDeletionConfirmationFailed(logger, HttpContext.GetUserId(), result.Error);
+        if (logger.IsEnabled(LogLevel.Warning))
+            LogDeletionConfirmationFailed(logger, HttpContext.GetUserId(), result.Error);
         return result.ToErrorResult();
     }
 

@@ -8,7 +8,6 @@ using Orbit.Application.Goals.Commands;
 using Orbit.Application.Goals.Queries;
 using Orbit.Domain.Enums;
 
-#pragma warning disable CA1873
 
 namespace Orbit.Api.Controllers;
 
@@ -64,7 +63,8 @@ public partial class GoalsController(IMediator mediator, ILogger<GoalsController
         var result = await mediator.Send(command, cancellationToken);
         return result.ToPayGateAwareResult(value =>
         {
-            LogGoalCreated(logger, value, HttpContext.GetUserId());
+            if (logger.IsEnabled(LogLevel.Information))
+                LogGoalCreated(logger, value, HttpContext.GetUserId());
             return CreatedAtAction(nameof(GetGoalById), new { id = value }, new { id = value });
         });
     }
@@ -132,7 +132,8 @@ public partial class GoalsController(IMediator mediator, ILogger<GoalsController
         var result = await mediator.Send(command, cancellationToken);
         return result.ToPayGateAwareResult(() =>
         {
-            LogLinkedHabitsToGoal(logger, request.HabitIds.Count, goalId, HttpContext.GetUserId());
+            if (logger.IsEnabled(LogLevel.Information))
+                LogLinkedHabitsToGoal(logger, request.HabitIds.Count, goalId, HttpContext.GetUserId());
             return NoContent();
         });
     }
@@ -203,7 +204,8 @@ public partial class GoalsController(IMediator mediator, ILogger<GoalsController
         var result = await mediator.Send(command, cancellationToken);
         return result.ToPayGateAwareResult(() =>
         {
-            LogGoalDeleted(logger, id, HttpContext.GetUserId());
+            if (logger.IsEnabled(LogLevel.Information))
+                LogGoalDeleted(logger, id, HttpContext.GetUserId());
             return NoContent();
         });
     }
@@ -219,7 +221,8 @@ public partial class GoalsController(IMediator mediator, ILogger<GoalsController
         var result = await mediator.Send(command, cancellationToken);
         return result.ToPayGateAwareResult(() =>
         {
-            LogGoalRestored(logger, id, HttpContext.GetUserId());
+            if (logger.IsEnabled(LogLevel.Information))
+                LogGoalRestored(logger, id, HttpContext.GetUserId());
             return NoContent();
         });
     }

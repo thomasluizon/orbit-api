@@ -6,7 +6,6 @@ using Orbit.Api.Extensions;
 using Orbit.Api.RateLimiting;
 using Orbit.Application.Support.Commands;
 
-#pragma warning disable CA1873
 
 namespace Orbit.Api.Controllers;
 
@@ -37,7 +36,7 @@ public partial class SupportController(IMediator mediator, ILogger<SupportContro
 
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogSupportRequestSent(logger, HttpContext.GetUserId(), request.Subject);
 
         return result.IsSuccess

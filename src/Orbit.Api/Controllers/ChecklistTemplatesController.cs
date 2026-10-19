@@ -6,7 +6,6 @@ using Orbit.Api.Extensions;
 using Orbit.Application.ChecklistTemplates.Commands;
 using Orbit.Application.ChecklistTemplates.Queries;
 
-#pragma warning disable CA1873
 
 namespace Orbit.Api.Controllers;
 
@@ -43,7 +42,8 @@ public partial class ChecklistTemplatesController(IMediator mediator, ILogger<Ch
 
         if (result.IsSuccess)
         {
-            LogChecklistTemplateCreated(logger, result.Value, HttpContext.GetUserId());
+            if (logger.IsEnabled(LogLevel.Information))
+                LogChecklistTemplateCreated(logger, result.Value, HttpContext.GetUserId());
             return Created($"/api/checklist-templates/{result.Value}", new { id = result.Value });
         }
         return result.ToErrorResult();
@@ -60,7 +60,8 @@ public partial class ChecklistTemplatesController(IMediator mediator, ILogger<Ch
 
         if (result.IsSuccess)
         {
-            LogChecklistTemplateDeleted(logger, id, HttpContext.GetUserId());
+            if (logger.IsEnabled(LogLevel.Information))
+                LogChecklistTemplateDeleted(logger, id, HttpContext.GetUserId());
             return NoContent();
         }
         return result.ToErrorResult();

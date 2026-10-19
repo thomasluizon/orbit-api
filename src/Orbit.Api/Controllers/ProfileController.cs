@@ -10,7 +10,6 @@ using Orbit.Application.Profile.Commands;
 using Orbit.Application.Profile.Queries;
 using Orbit.Domain.Interfaces;
 
-#pragma warning disable CA1873
 
 namespace Orbit.Api.Controllers;
 
@@ -70,7 +69,7 @@ public partial class ProfileController(
         var command = new SetTimezoneCommand(HttpContext.GetUserId(), request.TimeZone);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogTimezoneChanged(logger, request.TimeZone, HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
@@ -87,7 +86,7 @@ public partial class ProfileController(
         var command = new SetNameCommand(HttpContext.GetUserId(), request.Name);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogNameChanged(logger, HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
@@ -104,7 +103,7 @@ public partial class ProfileController(
         var command = new SetAiSummaryCommand(HttpContext.GetUserId(), request.Enabled);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogAiSummaryToggled(logger, ToggleLabel(request.Enabled), HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
@@ -121,7 +120,7 @@ public partial class ProfileController(
         var command = new SetProactiveAstraEnabledCommand(HttpContext.GetUserId(), request.Enabled);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogProactiveAstraToggled(logger, ToggleLabel(request.Enabled), HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
@@ -138,7 +137,7 @@ public partial class ProfileController(
         var command = new SetLanguageCommand(HttpContext.GetUserId(), request.Language);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogLanguageChanged(logger, request.Language, HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
@@ -155,7 +154,7 @@ public partial class ProfileController(
         var command = new SetWeekStartDayCommand(HttpContext.GetUserId(), request.WeekStartDay);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogWeekStartDayChanged(logger, request.WeekStartDay, HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
@@ -172,7 +171,7 @@ public partial class ProfileController(
         var command = new SetClockFormatCommand(HttpContext.GetUserId(), request.Uses24HourClock);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogClockFormatChanged(logger, request.Uses24HourClock ? "24-hour" : "12-hour", HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
@@ -189,7 +188,7 @@ public partial class ProfileController(
         var command = new SetThemePreferenceCommand(HttpContext.GetUserId(), request.ThemePreference);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogThemePreferenceChanged(logger, request.ThemePreference, HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
@@ -206,7 +205,7 @@ public partial class ProfileController(
         var command = new SetColorSchemeCommand(HttpContext.GetUserId(), request.ColorScheme);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogColorSchemeChanged(logger, request.ColorScheme, HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
@@ -286,7 +285,7 @@ public partial class ProfileController(
         var command = new UpdateMarketingConsentCommand(HttpContext.GetUserId(), request.Enabled);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogMarketingConsentChanged(logger, ToggleLabel(request.Enabled), HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
@@ -301,7 +300,7 @@ public partial class ProfileController(
         var command = new ResetAccountCommand(HttpContext.GetUserId());
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogAccountReset(logger, HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult();

@@ -9,7 +9,6 @@ using Orbit.Application.Habits.Commands;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Interfaces;
 
-#pragma warning disable CA1873
 
 namespace Orbit.Api.Controllers;
 
@@ -221,7 +220,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
 
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogHabitCreated(logger, result.Value, HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(v => CreatedAtAction(nameof(GetHabits), new { id = v }, new { id = v }));
@@ -364,7 +363,8 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
 
         if (result.IsSuccess)
         {
-            LogHabitDeleted(logger, id, HttpContext.GetUserId());
+            if (logger.IsEnabled(LogLevel.Information))
+                LogHabitDeleted(logger, id, HttpContext.GetUserId());
             return NoContent();
         }
 
@@ -382,7 +382,8 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         var result = await mediator.Send(command, cancellationToken);
         return result.ToPayGateAwareResult(() =>
         {
-            LogHabitRestored(logger, id, HttpContext.GetUserId());
+            if (logger.IsEnabled(LogLevel.Information))
+                LogHabitRestored(logger, id, HttpContext.GetUserId());
             return NoContent();
         });
     }
@@ -427,7 +428,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
 
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogBulkCreated(logger, request.Habits.Count, HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(v => StatusCode(StatusCodes.Status201Created, v));
@@ -447,7 +448,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
 
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogBulkDeleted(logger, request.HabitIds.Count, HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(v => Ok(v));
@@ -468,7 +469,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
 
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogBulkLogged(logger, request.Items.Count, HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(v => Ok(v));
@@ -489,7 +490,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
 
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogBulkSkipped(logger, request.Items.Count, HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(v => Ok(v));
@@ -594,7 +595,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         var command = new LinkGoalsToHabitCommand(HttpContext.GetUserId(), habitId, request.GoalIds);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogLinkedGoalsToHabit(logger, request.GoalIds.Count, habitId, HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
