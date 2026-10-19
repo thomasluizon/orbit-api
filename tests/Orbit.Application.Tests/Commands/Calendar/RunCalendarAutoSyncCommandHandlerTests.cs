@@ -444,6 +444,53 @@ public class RunCalendarAutoSyncCommandHandlerTests
         legacyHabit.GoogleEventId.Should().Be("evt_standup");
     }
 
+    [Theory]
+    [InlineData("America/Sao_Paulo", 0, false)]
+    [InlineData("Europe/Lisbon", 3, true)]
+    public async Task Handle_Success_ReconciliationRespectsRecurrenceProjectionGate(
+        string accountTimeZone, int habitHour, bool shouldLink)
+    {
+        var user = CreateEnabledProUser(accountTimeZone);
+        StubUser(user);
+        _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
+            .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
+
+        var manualHabit = Habit.Create(new HabitCreateParams(
+            user.Id, "Lisbon stand-up", FrequencyUnit.Day, 1,
+            DueDate: new DateOnly(2027, 1, 7),
+            DueTime: new TimeOnly(habitHour, 30))).Value;
+        var habits = new List<Habit> { manualHabit };
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => habits.Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).ToList().AsReadOnly());
+        _habitRepo.FindTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => habits.Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).ToList().AsReadOnly());
+
+        var startUtc = new DateTime(2027, 1, 7, 3, 30, 0, DateTimeKind.Utc);
+        var master = new CalendarEventItem(
+            "master-lisbon", "Lisbon stand-up", null, "2027-01-07", "03:30", "04:00",
+            true, "RRULE:FREQ=DAILY;BYDAY=TH", [],
+            StartUtc: startUtc,
+            EndUtc: startUtc.AddMinutes(30),
+            RecurrenceTimeZone: "Europe/Lisbon")
+        {
+            SourceTimeZone = "Europe/Lisbon",
+            RecurrenceStartUtc = startUtc,
+            ExpandedOccurrencesUtc = [startUtc]
+        };
+        _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CalendarEventItem> { master });
+
+        var result = await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id), default);
+
+        result.IsSuccess.Should().BeTrue();
+        manualHabit.GoogleEventId.Should().Be(shouldLink ? master.Id : null);
+        result.Value.ReconciledHabits.Should().Be(shouldLink ? 1 : 0);
+        result.Value.NewSuggestions.Should().Be(0);
+        user.GoogleCalendarSyncReconciledAt.Should().Be(_timeProvider.GetUtcNow().UtcDateTime);
+        await _suggestionRepo.DidNotReceive().AddAsync(Arg.Any<GoogleCalendarSyncSuggestion>(), Arg.Any<CancellationToken>());
+        await _notificationRepo.DidNotReceive().AddAsync(Arg.Any<Notification>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task Handle_Success_ReconciliationRunsAgainForHabitsStillMissingGoogleEventId()
     {

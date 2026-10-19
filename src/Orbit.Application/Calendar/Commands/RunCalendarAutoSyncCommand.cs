@@ -177,6 +177,8 @@ public partial class RunCalendarAutoSyncCommandHandler(
 
         var eventsByKey = fetched
             .Where(ev => !assignedEventIds.Contains(ev.Id))
+            // Event links persist projection-derived state, so withheld recurrences must stay unlinked. https://github.com/thomasluizon/orbit-tickets/issues/626
+            .Where(ev => !ev.HasUnrepresentableRecurrenceAfterProjection(timeZone))
             .Select(ev => ev.ProjectTo(timeZone))
             .GroupBy(ev => LegacyCalendarMatchKey.BuildLegacyMatchKey(ev.Title, ev.StartDate, ev.StartTime), StringComparer.Ordinal)
             .Where(group => group.Count() == 1)
