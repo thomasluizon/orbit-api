@@ -28,6 +28,9 @@ public class FeatureFlagAccountsMigrationTests
 
         differences.Where(operation => operation is DropForeignKeyOperation || operation is AddForeignKeyOperation)
             .Should().HaveCount(4);
+        differences.OfType<AlterColumnOperation>().Should().ContainSingle(column =>
+            column.Table == "HabitLogs" && column.Name == "IsSlip"
+            && !column.IsNullable && column.OldColumn.IsNullable);
         var renewalColumns = differences.OfType<AddColumnOperation>()
             .Where(column => column.Table == "Users").ToArray();
         renewalColumns.Should().HaveCount(2).And.OnlyContain(column =>
@@ -70,7 +73,8 @@ public class FeatureFlagAccountsMigrationTests
             "20261017182405_TrackNotionOAuthStateConsumption",
             "20261018093533_CascadeAccountabilityPairsOnUserDeletion",
             "20261018111350_AddDurableSignupWork",
-            "20261018111711_RecordDeletionStoppedRenewals");
+            "20261018111711_RecordDeletionStoppedRenewals",
+            "20261019011031_ContractHabitLogSlip");
     }
 
     [Fact]
