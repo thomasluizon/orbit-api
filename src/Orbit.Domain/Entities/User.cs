@@ -187,7 +187,6 @@ public partial class User : Entity
         }
     }
 
-    public void SetAiMemory(bool enabled) => AiMemoryEnabled = enabled;
 
     public void SetAiSummary(bool enabled) => AiSummaryEnabled = enabled;
 

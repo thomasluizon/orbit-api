@@ -22,7 +22,6 @@ public class PendingAgentOperationStoreTests : IDisposable
         ["delete_tag"] = "deleteTag",
         ["delete_notifications"] = "deleteNotifications",
         ["manage_calendar_sync"] = "manageCalendarSync",
-        ["delete_user_facts"] = "deleteUserFacts",
         ["manage_subscription"] = "manageSubscription",
         ["get_api_keys"] = "viewApiKeys",
         ["manage_api_keys"] = "manageApiKeys",

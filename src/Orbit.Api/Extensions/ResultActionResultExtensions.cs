@@ -27,7 +27,6 @@ public static class ResultActionResultExtensions
         [ErrorCodes.ParentHabitNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.TargetParentNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.TagNotFound] = StatusCodes.Status404NotFound,
-        [ErrorCodes.FactNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.GoalNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.ApiKeyNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.NotificationNotFound] = StatusCodes.Status404NotFound,
@@ -40,7 +39,6 @@ public static class ResultActionResultExtensions
         [ErrorCodes.StepUpChallengeNotFound] = StatusCodes.Status404NotFound,
 
         [ErrorCodes.DuplicateTagName] = StatusCodes.Status409Conflict,
-        [ErrorCodes.DuplicateFact] = StatusCodes.Status409Conflict,
         [ErrorCodes.AlreadyReferred] = StatusCodes.Status409Conflict,
         [ErrorCodes.SkipUndoConflict] = StatusCodes.Status409Conflict,
         [ErrorCodes.ConcurrentUpdateConflict] = StatusCodes.Status409Conflict,

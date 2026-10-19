@@ -13,7 +13,7 @@ public partial class AgentCatalogService
         return
         [
             .. ProfileHabitAndGoalDataEntries(),
-            .. MemoryCalendarAndNotificationDataEntries(),
+            .. CalendarAndNotificationDataEntries(),
             .. GamificationReferralAndBillingDataEntries(),
             .. SupportSyncAndCredentialDataEntries()
         ];
@@ -77,24 +77,10 @@ public partial class AgentCatalogService
         ];
     }
 
-    private static UserDataCatalogEntry[] MemoryCalendarAndNotificationDataEntries()
+    private static UserDataCatalogEntry[] CalendarAndNotificationDataEntries()
     {
         return
         [
-            new UserDataCatalogEntry(
-                "user-facts",
-                "AI Memory Facts",
-                "Compact facts extracted from prior conversations when AI memory is enabled.",
-                "high",
-                "Retained until deleted or memory is cleared; facts are soft-deleted for auditability.",
-                AiReadable: true,
-                AiMutableInPhaseOne: true,
-                Fields:
-                [
-                    new UserDataFieldDescriptor("FactText", "User fact remembered by AI.", true, false),
-                    new UserDataFieldDescriptor("Category", "Fact category label.", true, false)
-                ]),
-
             new UserDataCatalogEntry(
                 "calendar",
                 "Calendar Integration",

@@ -18,7 +18,6 @@ public static class ReferenceCacheKeys
 
     public static string ChecklistTemplates(Guid userId) => $"checklist-templates:{userId}";
 
-    public static string UserFacts(Guid userId) => $"user-facts:{userId}";
 
     public static string ApiKeys(Guid userId) => $"api-keys:{userId}";
 }

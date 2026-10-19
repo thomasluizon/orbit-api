@@ -26,7 +26,6 @@ public partial class ProfileController(
 {
     public record SetTimezoneRequest(string TimeZone);
     public record SetNameRequest(string Name);
-    public record SetAiMemoryRequest([property: JsonRequired] bool Enabled);
     public record SetAiSummaryRequest([property: JsonRequired] bool Enabled);
     public record SetProactiveAstraEnabledRequest([property: JsonRequired] bool Enabled);
     public record SetLanguageRequest(string Language);
@@ -100,24 +99,6 @@ public partial class ProfileController(
 
         if (result.IsSuccess)
             LogNameChanged(logger, HttpContext.GetUserId());
-
-        return result.ToPayGateAwareResult(() => NoContent());
-    }
-
-    [HttpPut("ai-memory")]
-    [Obsolete("AI memory is deprecated and will be removed.")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> SetAiMemory(
-        [FromBody] SetAiMemoryRequest request,
-        CancellationToken cancellationToken)
-    {
-        var command = new SetAiMemoryCommand(HttpContext.GetUserId(), request.Enabled);
-        var result = await mediator.Send(command, cancellationToken);
-
-        if (result.IsSuccess)
-            LogAiMemoryToggled(logger, ToggleLabel(request.Enabled), HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
     }
@@ -419,9 +400,6 @@ public partial class ProfileController(
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Timezone changed to {Timezone} for user {UserId}")]
     private static partial void LogTimezoneChanged(ILogger logger, string timezone, Guid userId);
-
-    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "AI memory {State} for user {UserId}")]
-    private static partial void LogAiMemoryToggled(ILogger logger, string state, Guid userId);
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "AI summary {State} for user {UserId}")]
     private static partial void LogAiSummaryToggled(ILogger logger, string state, Guid userId);

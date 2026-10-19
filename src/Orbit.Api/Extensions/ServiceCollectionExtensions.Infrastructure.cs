@@ -274,7 +274,6 @@ public static partial class ServiceCollectionExtensions
             .WithTools<NotificationTools>()
             .WithTools<RecordPageTools>()
             .WithTools<SubscriptionTools>()
-            .WithTools<UserFactTools>()
             .WithTools<CalendarTools>()
             .WithTools<NotionTools>()
             .WithTools<AccountTools>()

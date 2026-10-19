@@ -196,16 +196,6 @@ public abstract class ToggleProfileSettingTool(IMediator mediator) : IAiTool, IA
     }
 }
 
-public class SetAiMemoryTool(IMediator mediator) : ToggleProfileSettingTool(mediator)
-{
-    public override string Name => "set_ai_memory";
-    public override string Description => "Enable or disable AI memory.";
-    protected override string SettingLabel => "AI memory";
-
-    protected override IRequest<Orbit.Domain.Common.Result> CreateCommand(Guid userId, bool enabled) =>
-        new SetAiMemoryCommand(userId, enabled);
-}
-
 public class SetAiSummaryTool(IMediator mediator) : ToggleProfileSettingTool(mediator)
 {
     public override string Name => "set_ai_summary";

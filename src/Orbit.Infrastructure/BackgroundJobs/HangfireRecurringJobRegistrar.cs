@@ -5,8 +5,8 @@ using Microsoft.Extensions.Logging;
 namespace Orbit.Infrastructure.BackgroundJobs;
 
 /// <summary>
-/// Registers every <see cref="IScheduledJob"/> as a Hangfire recurring job on startup when the
-/// durable-queue flag is on. Each job is keyed by its stable name, so re-registering on every boot
+/// Registers every <see cref="IScheduledJob"/> as a Hangfire recurring job on startup.
+/// Each job is keyed by its stable name, so re-registering on every boot
 /// reconciles cron changes without creating duplicates, and Hangfire's storage keeps the schedule
 /// across restarts while its distributed lock ensures a single instance runs each occurrence.
 /// </summary>
@@ -17,6 +17,8 @@ public sealed partial class HangfireRecurringJobRegistrar(
 {
     public Task StartAsync(CancellationToken cancellationToken)
     {
+        recurringJobManager.RemoveIfExists("openai-batch-poller");
+
         foreach (var job in jobs)
         {
             recurringJobManager.AddOrUpdate<ScheduledJobRunner>(

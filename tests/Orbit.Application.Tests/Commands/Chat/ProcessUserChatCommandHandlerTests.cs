@@ -36,7 +36,6 @@ public partial class ProcessUserChatCommandHandlerTests
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
-    private readonly IGenericRepository<UserFact> _userFactRepo = Substitute.For<IGenericRepository<UserFact>>();
     private readonly IGenericRepository<Tag> _tagRepo = Substitute.For<IGenericRepository<Tag>>();
     private readonly IGenericRepository<ChecklistTemplate> _checklistTemplateRepo = Substitute.For<IGenericRepository<ChecklistTemplate>>();
     private readonly IFeatureFlagService _featureFlagService = Substitute.For<IFeatureFlagService>();
@@ -116,7 +115,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var toolRegistry = new AiToolRegistry(tools);
         SetupOperationExecutor(toolRegistry);
         var aiDeps = new ChatAiDependencies(_aiIntentService, toolRegistry, _promptBuilder, _catalogService);
-        var dataDeps = new ChatDataDependencies(_habitRepo, _goalRepo, userRepository, _userFactRepo, _tagRepo, _checklistTemplateRepo, _featureFlagService);
+        var dataDeps = new ChatDataDependencies(_habitRepo, _goalRepo, userRepository, _tagRepo, _checklistTemplateRepo, _featureFlagService);
         var executionDeps = new ChatExecutionDependencies(
             _userDateService, _userStreakService, payGate, unitOfWork, _scopeFactory, _operationExecutor,
             _pendingClarificationStore, _goalProgressReadSyncer, _gamificationService, _mediator, _productAnalytics,
@@ -158,10 +157,6 @@ public partial class ProcessUserChatCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(new List<Habit>().AsReadOnly());
 
-        _userFactRepo.FindAsync(
-            Arg.Any<Expression<Func<UserFact, bool>>>(),
-            Arg.Any<CancellationToken>())
-            .Returns(new List<UserFact>().AsReadOnly());
 
         _goalRepo.FindAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),
@@ -4200,25 +4195,6 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Actions.Should().HaveCount(1);
-    }
-
-    [Fact]
-    public async Task Handle_AiMemoryDisabled_DoesNotLoadFacts()
-    {
-        var user = User.Create("Alex", "alex@test.com").Value;
-        user.SetAiMemory(false);
-        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-        _payGate.TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>()).Returns(Result.Success());
-        SetupAiResponse(new AiResponse { TextMessage = "Hi!", ToolCalls = null });
-        var handler = CreateHandler();
-
-        var command = new ProcessUserChatCommand(UserId, "Hello");
-        var result = await handler.Handle(command, CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        await _userFactRepo.DidNotReceive().FindAsync(
-            Arg.Any<Expression<Func<UserFact, bool>>>(),
-            Arg.Any<CancellationToken>());
     }
 
     [Fact]

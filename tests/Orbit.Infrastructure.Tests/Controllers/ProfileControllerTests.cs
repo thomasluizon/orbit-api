@@ -97,32 +97,6 @@ public class ProfileControllerTests
     }
 
     [Fact]
-    [Obsolete("Covers the deprecated PUT /api/Profile/ai-memory route.")]
-    public async Task SetAiMemory_Success_ReturnsNoContent()
-    {
-        _mediator.Send(Arg.Any<SetAiMemoryCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
-
-        var request = new ProfileController.SetAiMemoryRequest(true);
-        var result = await _controller.SetAiMemory(request, CancellationToken.None);
-
-        result.Should().BeOfType<NoContentResult>();
-    }
-
-    [Fact]
-    [Obsolete("Covers the deprecated PUT /api/Profile/ai-memory route.")]
-    public async Task SetAiMemory_Failure_ReturnsBadRequest()
-    {
-        _mediator.Send(Arg.Any<SetAiMemoryCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure("Error"));
-
-        var request = new ProfileController.SetAiMemoryRequest(true);
-        var result = await _controller.SetAiMemory(request, CancellationToken.None);
-
-        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
-    }
-
-    [Fact]
     public async Task SetAiSummary_Success_ReturnsNoContent()
     {
         _mediator.Send(Arg.Any<SetAiSummaryCommand>(), Arg.Any<CancellationToken>())

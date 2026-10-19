@@ -2,7 +2,6 @@ namespace Orbit.Application.Common;
 
 public static class AppConfigKeys
 {
-    public const string MaxUserFacts = "MaxUserFacts";
     public const string MaxHabitDepth = "MaxHabitDepth";
     public const string MaxTagsPerHabit = "MaxTagsPerHabit";
     public const string ReferralRewardDays = "ReferralRewardDays";

@@ -122,7 +122,6 @@ public record ChatDataDependencies(
     IGenericRepository<Habit> HabitRepository,
     IGenericRepository<Goal> GoalRepository,
     IGenericRepository<User> UserRepository,
-    IGenericRepository<UserFact> UserFactRepository,
     IGenericRepository<Tag> TagRepository,
     IGenericRepository<ChecklistTemplate> ChecklistTemplateRepository,
     IFeatureFlagService FeatureFlagService);
@@ -311,13 +310,6 @@ public partial class ProcessUserChatCommandHandler(
         CaptureChangePreviewEvents(request, context.User, executionResults.PendingOperations);
         CaptureFollowUpsEmittedEvent(request, context.User, followUps);
 
-        RunBackgroundPostResponseWork(
-            request.UserId,
-            request.Message,
-            aiMessage,
-            shouldExtractFacts: ShouldExtractFacts(context),
-            existingFacts: context.UserFacts);
-
         totalStopwatch.Stop();
         LogTotalRequestProcessingTime(logger, totalStopwatch.ElapsedMilliseconds);
         LogContextLoadingTime(logger, context.ContextLoadMilliseconds);
@@ -460,9 +452,6 @@ public partial class ProcessUserChatCommandHandler(
 
         return (match.Value.Key, match.Value.Locale, aiMessage);
     }
-
-    private static bool ShouldExtractFacts(ChatContext context) =>
-        context.AiMemoryEnabled && context.User is { HasProAccess: true };
 
     private void CaptureCardEvent(
         ProcessUserChatCommand request, ChatContext context, string eventName, string kind,
@@ -936,8 +925,8 @@ public partial class ProcessUserChatCommandHandler(
     [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Processing chat message: '{Message}'")]
     private static partial void LogProcessingChatMessage(ILogger logger, string message);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Context loaded in {ElapsedMs}ms (Habits: {HabitCount}, Facts: {FactCount})")]
-    private static partial void LogContextLoaded(ILogger logger, long elapsedMs, int habitCount, int factCount);
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Context loaded in {ElapsedMs}ms (Habits: {HabitCount})")]
+    private static partial void LogContextLoaded(ILogger logger, long elapsedMs, int habitCount);
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "Calling AI intent service with {ToolCount} tools...")]
     private static partial void LogCallingAiIntentService(ILogger logger, int toolCount);
@@ -998,9 +987,6 @@ public partial class ProcessUserChatCommandHandler(
 
     [LoggerMessage(EventId = 26, Level = LogLevel.Warning, Message = "Tool {Name} requested clarification with oversized partial args ({Length} chars) — dropped without stashing")]
     private static partial void LogClarificationArgsTooLarge(ILogger logger, string name, int length);
-
-    [LoggerMessage(EventId = 23, Level = LogLevel.Warning, Message = "Background post-response work failed")]
-    private static partial void LogBackgroundPostResponseFailed(ILogger logger, Exception ex);
 
     [LoggerMessage(EventId = 27, Level = LogLevel.Warning, Message = "Prompt habit index truncated. OriginalEntryCount={OriginalEntryCount} RetainedEntryCount={RetainedEntryCount} MaxEntries={MaxEntries}")]
     private static partial void LogPromptHabitIndexTruncated(

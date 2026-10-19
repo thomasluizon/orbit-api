@@ -110,7 +110,6 @@ public class ResultActionResultExtensionsTests
     [InlineData(ErrorCodes.HabitNotOwned, 403)]
     [InlineData(Result.PayGateErrorCode, 403)]
     [InlineData(ErrorCodes.DuplicateTagName, 409)]
-    [InlineData(ErrorCodes.DuplicateFact, 409)]
     [InlineData(ErrorCodes.InternalServerError, 500)]
     [InlineData(ErrorCodes.ValidationError, 400)]
     [InlineData(ErrorCodes.DeadlineInPast, 400)]

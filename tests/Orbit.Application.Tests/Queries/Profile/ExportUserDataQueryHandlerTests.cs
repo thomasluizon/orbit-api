@@ -9,6 +9,7 @@ using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Services;
 using System.Linq.Expressions;
+using System.Text.Json;
 
 namespace Orbit.Application.Tests.Queries.Profile;
 
@@ -20,7 +21,6 @@ public class ExportUserDataQueryHandlerTests
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IGenericRepository<GoalProgressLog> _goalProgressLogRepo = Substitute.For<IGenericRepository<GoalProgressLog>>();
     private readonly IGenericRepository<Tag> _tagRepo = Substitute.For<IGenericRepository<Tag>>();
-    private readonly IGenericRepository<UserFact> _userFactRepo = Substitute.For<IGenericRepository<UserFact>>();
     private readonly IGenericRepository<Notification> _notificationRepo = Substitute.For<IGenericRepository<Notification>>();
     private readonly IGenericRepository<ChecklistTemplate> _checklistTemplateRepo = Substitute.For<IGenericRepository<ChecklistTemplate>>();
     private readonly IGenericRepository<UserAchievement> _userAchievementRepo = Substitute.For<IGenericRepository<UserAchievement>>();
@@ -46,7 +46,7 @@ public class ExportUserDataQueryHandlerTests
     {
         _handler = new ExportUserDataQueryHandler(
             new ExportUserDataRepositories(
-                _userRepo, _habitRepo, _habitLogRepo, _goalRepo, _goalProgressLogRepo, _tagRepo, _userFactRepo,
+                _userRepo, _habitRepo, _habitLogRepo, _goalRepo, _goalProgressLogRepo, _tagRepo,
                 _notificationRepo, _checklistTemplateRepo, _userAchievementRepo, _streakFreezeRepo, _referralRepo, _apiKeyRepo,
                 _friendshipRepo, _cheerRepo, _blockedUserRepo, _reportRepo, _friendFeedEventRepo, _proactiveRepo, _notionConnections, _notionTasks),
             _userDateService, _goalProgressReadSyncer);
@@ -63,7 +63,6 @@ public class ExportUserDataQueryHandlerTests
         ReturnsEmpty(_goalRepo);
         ReturnsEmpty(_goalProgressLogRepo);
         ReturnsEmpty(_tagRepo);
-        ReturnsEmpty(_userFactRepo);
         ReturnsEmpty(_notificationRepo);
         ReturnsEmpty(_checklistTemplateRepo);
         ReturnsEmpty(_userAchievementRepo);
@@ -157,19 +156,25 @@ public class ExportUserDataQueryHandlerTests
         result.Value.Account.Name.Should().Be("Test User");
         result.Value.Account.Email.Should().Be("test@example.com");
         result.Value.Account.Plan.Should().Be("free");
-        result.Value.Settings.AiMemoryEnabled.Should().Be(user.AiMemoryEnabled);
         result.Value.Settings.ProactiveAstraEnabled.Should().Be(user.EffectiveProactivePushEnabled);
         result.Value.Settings.StoredProactiveAstraEnabled.Should().Be(user.ProactiveAstraEnabled);
         result.Value.Settings.Uses24HourClock.Should().BeNull();
         result.Value.Habits.Should().BeEmpty();
         result.Value.Goals.Should().BeEmpty();
         result.Value.Tags.Should().BeEmpty();
-        result.Value.Facts.Should().BeEmpty();
         result.Value.Friendships.Should().BeEmpty();
         result.Value.Cheers.Should().BeEmpty();
         result.Value.BlockedUsers.Should().BeEmpty();
         result.Value.Reports.Should().BeEmpty();
         result.Value.FriendFeedEvents.Should().BeEmpty();
+
+        var payload = JsonSerializer.SerializeToElement(result.Value, JsonSerializerOptions.Web);
+        payload.TryGetProperty("facts", out _).Should().BeFalse();
+        payload.GetProperty("settings").TryGetProperty("aiMemoryEnabled", out _).Should().BeFalse();
+        payload.EnumerateObject().Select(property => property.Name).Should().BeEquivalentTo(
+            "exportedAtUtc", "account", "settings", "subscription", "habits", "goals", "tags",
+            "notifications", "checklistTemplates", "achievements", "streakFreezes", "referrals",
+            "apiKeys", "friendships", "cheers", "blockedUsers", "reports", "friendFeedEvents");
     }
 
     [Fact]
@@ -305,15 +310,13 @@ public class ExportUserDataQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_TagsAndFacts_Mapped()
+    public async Task Handle_Tags_Mapped()
     {
         ArrangeUser(CreateTestUser());
 
         var tag = Tag.Create(UserId, "Health", "#FF0000").Value;
         Returns(_tagRepo, tag);
 
-        var fact = UserFact.Create(UserId, "Prefers morning workouts", "routine").Value;
-        Returns(_userFactRepo, fact);
 
         var result = await _handler.Handle(new ExportUserDataQuery(UserId), CancellationToken.None);
 
@@ -321,9 +324,6 @@ public class ExportUserDataQueryHandlerTests
         result.Value.Tags.Should().ContainSingle();
         result.Value.Tags[0].Name.Should().Be("Health");
         result.Value.Tags[0].Color.Should().Be("#FF0000");
-        result.Value.Facts.Should().ContainSingle();
-        result.Value.Facts[0].FactText.Should().Be("Prefers morning workouts");
-        result.Value.Facts[0].Category.Should().Be("routine");
     }
 
     [Fact]

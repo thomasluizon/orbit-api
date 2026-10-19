@@ -16,7 +16,7 @@ public record ProfileResponse(
     string Name,
     string Email,
     string? TimeZone,
-    [property: Obsolete("AI memory is deprecated and will be removed.")]
+    /// <summary>Retained until thomasluizon/orbit-tickets#685 removes it after the MinSupportedVersion raise.</summary>
     bool AiMemoryEnabled,
     bool AiSummaryEnabled,
     bool HasCompletedOnboarding,
@@ -119,7 +119,7 @@ public class GetProfileQueryHandler(
             user.Name,
             user.Email,
             user.TimeZone,
-            user.AiMemoryEnabled,
+            false,
             user.AiSummaryEnabled,
             user.HasCompletedOnboarding,
             user.HasCompletedTour,

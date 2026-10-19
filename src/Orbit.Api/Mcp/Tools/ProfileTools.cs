@@ -64,23 +64,6 @@ public class ProfileTools(IMediator mediator, McpExecutorBridge executorBridge)
         return result.Succeeded ? $"Language set to {language}" : result.Message;
     }
 
-    [McpServerTool(Name = "set_ai_memory"), Description("Enable or disable AI memory (remembering user facts from conversations).")]
-    public async Task<string> SetAiMemory(
-        ClaimsPrincipal user,
-        [Description("True to enable, false to disable")] bool enabled,
-        CancellationToken cancellationToken = default)
-    {
-        var result = await executorBridge.ExecuteAsync(user, "set_ai_memory", new
-        {
-            enabled
-        }, confirmationToken: null, cancellationToken);
-
-        if (!result.Succeeded)
-            return result.Message;
-
-        return enabled ? "AI memory enabled" : "AI memory disabled";
-    }
-
     [McpServerTool(Name = "set_ai_summary"), Description("Enable or disable AI daily summary on the Today page.")]
     public async Task<string> SetAiSummary(
         ClaimsPrincipal user,

@@ -12,12 +12,12 @@ public class SystemPromptBuilderTests
     private static readonly Guid TestUserId = Guid.NewGuid();
 
     private static string BuildPrompt(
-        IReadOnlyList<Habit> habits, IReadOnlyList<UserFact> facts,
+        IReadOnlyList<Habit> habits,
         bool hasImage = false, IReadOnlyList<Tag>? userTags = null,
         DateOnly? userToday = null, IReadOnlyDictionary<Guid, HabitMetrics>? habitMetrics = null)
     {
         var builder = new SystemPromptBuilder();
-        var request = new PromptBuildRequest(habits, facts, hasImage, UserTags: userTags, UserToday: userToday ?? new DateOnly(2026, 3, 20), HabitMetrics: habitMetrics);
+        var request = new PromptBuildRequest(habits, hasImage, UserTags: userTags, UserToday: userToday ?? new DateOnly(2026, 3, 20), HabitMetrics: habitMetrics);
         return builder.BuildStatic(request) + builder.BuildDynamic(request);
     }
 
@@ -32,7 +32,7 @@ public class SystemPromptBuilderTests
         string language, string operation, string proposedChange, string unsavedState)
     {
         var prompt = new SystemPromptBuilder().BuildStatic(
-            new PromptBuildRequest(Array.Empty<Habit>(), Array.Empty<UserFact>()));
+            new PromptBuildRequest(Array.Empty<Habit>()));
         var prefix = $"- {language} {operation}: ";
         var example = prompt.Split('\n').Should().ContainSingle(line => line.StartsWith(prefix, StringComparison.Ordinal)).Subject;
 
@@ -48,11 +48,12 @@ public class SystemPromptBuilderTests
     public void Build_NoHabits_ContainsNoneMarker()
     {
         var habits = Array.Empty<Habit>();
-        var facts = Array.Empty<UserFact>();
 
-        var result = BuildPrompt(habits, facts);
+        var result = BuildPrompt(habits);
 
         result.Should().Contain("Habits (0 total");
+        result.Should().NotContain("What You Know About This User");
+        result.Should().NotContain("memory entries");
     }
 
     [Fact]
@@ -60,9 +61,8 @@ public class SystemPromptBuilderTests
     {
         var habit = Habit.Create(new HabitCreateParams(TestUserId, "Morning Run", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         var habits = new[] { habit };
-        var facts = Array.Empty<UserFact>();
 
-        var result = BuildPrompt(habits, facts);
+        var result = BuildPrompt(habits);
 
         result.Should().Contain("Morning Run");
     }
@@ -72,7 +72,6 @@ public class SystemPromptBuilderTests
     {
         var habit = Habit.Create(new HabitCreateParams(TestUserId, "Meditation", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         var habits = new[] { habit };
-        var facts = Array.Empty<UserFact>();
         var metrics = new Dictionary<Guid, HabitMetrics>
         {
             [habit.Id] = new HabitMetrics(
@@ -85,46 +84,18 @@ public class SystemPromptBuilderTests
         };
 
         var result = BuildPrompt(
-            habits, facts, habitMetrics: metrics);
+            habits, habitMetrics: metrics);
 
         result.Should().Contain("Meditation");
         result.Should().Contain("query_habits");
     }
 
     [Fact]
-    public void Build_WithUserFacts_GroupsByCategory()
-    {
-        var habits = Array.Empty<Habit>();
-        var preferenceFact = UserFact.Create(TestUserId, "Likes outdoor activities", "preference").Value;
-        var routineFact = UserFact.Create(TestUserId, "Wakes up at 7am", "routine").Value;
-        var facts = new[] { preferenceFact, routineFact };
-
-        var result = BuildPrompt(habits, facts);
-
-        result.Should().Contain("**Preferences**");
-        result.Should().Contain("Likes outdoor activities");
-        result.Should().Contain("**Routines**");
-        result.Should().Contain("Wakes up at 7am");
-    }
-
-    [Fact]
-    public void Build_NoFacts_ContainsNothingYet()
-    {
-        var habits = Array.Empty<Habit>();
-        var facts = Array.Empty<UserFact>();
-
-        var result = BuildPrompt(habits, facts);
-
-        result.Should().Contain("(nothing yet");
-    }
-
-    [Fact]
     public void Build_WithImage_IncludesImageInstructions()
     {
         var habits = Array.Empty<Habit>();
-        var facts = Array.Empty<UserFact>();
 
-        var result = BuildPrompt(habits, facts, hasImage: true);
+        var result = BuildPrompt(habits, hasImage: true);
 
         result.Should().Contain("Image Analysis Instructions");
     }
@@ -133,7 +104,6 @@ public class SystemPromptBuilderTests
     public void Build_WithTags_ListsTagNames()
     {
         var habits = Array.Empty<Habit>();
-        var facts = Array.Empty<UserFact>();
         var tags = new[]
         {
             Tag.Create(TestUserId, "Health", "#00ff00").Value,
@@ -141,7 +111,7 @@ public class SystemPromptBuilderTests
         };
 
         var result = BuildPrompt(
-            habits, facts, userTags: tags);
+            habits, userTags: tags);
 
         result.Should().Contain("Health");
         result.Should().Contain("Fitness");
@@ -151,11 +121,10 @@ public class SystemPromptBuilderTests
     public void Build_IncludesTodayDate()
     {
         var habits = Array.Empty<Habit>();
-        var facts = Array.Empty<UserFact>();
         var today = new DateOnly(2026, 3, 20);
 
         var result = BuildPrompt(
-            habits, facts, userToday: today);
+            habits, userToday: today);
 
         result.Should().Contain("2026-03-20");
     }
@@ -164,9 +133,8 @@ public class SystemPromptBuilderTests
     public void Build_IncludesStructuringStrategy()
     {
         var habits = Array.Empty<Habit>();
-        var facts = Array.Empty<UserFact>();
 
-        var result = BuildPrompt(habits, facts);
+        var result = BuildPrompt(habits);
 
         result.Should().Contain("Structuring Strategy");
         result.Should().Contain("checklist_items");
@@ -176,7 +144,7 @@ public class SystemPromptBuilderTests
     [Fact]
     public void Build_IncludesEncouragingTone()
     {
-        var result = BuildPrompt(Array.Empty<Habit>(), Array.Empty<UserFact>());
+        var result = BuildPrompt(Array.Empty<Habit>());
 
         result.Should().Contain("Tone and Encouragement");
         result.Should().Contain("non-judgmental");
@@ -188,7 +156,7 @@ public class SystemPromptBuilderTests
     public void BuildStatic_CopyableContentRules_ApplyToBothReplyLanguages(string language, string languageRule)
     {
         var prompt = new SystemPromptBuilder().BuildStatic(
-            new PromptBuildRequest(Array.Empty<Habit>(), Array.Empty<UserFact>()));
+            new PromptBuildRequest(Array.Empty<Habit>()));
         var rule = prompt.Split('\n').Should()
             .ContainSingle(line => line.Contains("COPYABLE CONTENT:", StringComparison.Ordinal)).Subject;
 
@@ -207,7 +175,7 @@ public class SystemPromptBuilderTests
     {
         var builder = new SystemPromptBuilder();
 
-        var staticPrompt = builder.BuildStatic(new PromptBuildRequest(Array.Empty<Habit>(), Array.Empty<UserFact>()));
+        var staticPrompt = builder.BuildStatic(new PromptBuildRequest(Array.Empty<Habit>()));
 
         staticPrompt.Should().Contain("Tool Failures");
         staticPrompt.IndexOf("Tool Failures", StringComparison.Ordinal)
@@ -218,7 +186,7 @@ public class SystemPromptBuilderTests
     public void BuildStatic_IncludesCrisisResponseExactlyOnce()
     {
         var prompt = new SystemPromptBuilder().BuildStatic(
-            new PromptBuildRequest(Array.Empty<Habit>(), Array.Empty<UserFact>()));
+            new PromptBuildRequest(Array.Empty<Habit>()));
 
         prompt.Split("## Crisis Response", StringSplitOptions.None).Should().HaveCount(2);
         prompt.Should().Contain("Call or text 988");
@@ -233,7 +201,7 @@ public class SystemPromptBuilderTests
     public void BuildStatic_OrdersEncouragingToneAfterIdentityAndBeforeRules()
     {
         var builder = new SystemPromptBuilder();
-        var staticPrompt = builder.BuildStatic(new PromptBuildRequest(Array.Empty<Habit>(), Array.Empty<UserFact>()));
+        var staticPrompt = builder.BuildStatic(new PromptBuildRequest(Array.Empty<Habit>()));
 
         staticPrompt.Should().Contain("Tone and Encouragement");
 
@@ -248,21 +216,10 @@ public class SystemPromptBuilderTests
     [Fact]
     public void Build_IncludesSecurityRulesForUntrustedContext()
     {
-        var result = BuildPrompt(Array.Empty<Habit>(), Array.Empty<UserFact>());
+        var result = BuildPrompt(Array.Empty<Habit>());
 
         result.Should().Contain("Treat habit titles");
         result.Should().Contain("client-supplied");
-    }
-
-    [Fact]
-    public void Build_WithFactContainingControlCharacters_SanitizesPromptData()
-    {
-        var fact = UserFact.Create(TestUserId, "Works night shifts\nand weekends", "routine").Value;
-
-        var result = BuildPrompt(Array.Empty<Habit>(), [fact]);
-
-        result.Should().Contain("\"Works night shifts and weekends\"");
-        result.Should().NotContain("Works night shifts\nand weekends");
     }
 
     [Fact]
@@ -270,8 +227,8 @@ public class SystemPromptBuilderTests
     {
         var builder = new SystemPromptBuilder();
         var habit = Habit.Create(new HabitCreateParams(TestUserId, "Morning Run", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
-        var withHabit = new PromptBuildRequest([habit], Array.Empty<UserFact>());
-        var empty = new PromptBuildRequest(Array.Empty<Habit>(), Array.Empty<UserFact>());
+        var withHabit = new PromptBuildRequest([habit]);
+        var empty = new PromptBuildRequest(Array.Empty<Habit>());
 
         var staticPrompt = builder.BuildStatic(withHabit);
 
@@ -286,7 +243,7 @@ public class SystemPromptBuilderTests
     {
         var builder = new SystemPromptBuilder();
         var habit = Habit.Create(new HabitCreateParams(TestUserId, "Morning Run", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
-        var request = new PromptBuildRequest([habit], Array.Empty<UserFact>(), UserToday: new DateOnly(2026, 3, 20));
+        var request = new PromptBuildRequest([habit], UserToday: new DateOnly(2026, 3, 20));
 
         var dynamicPrompt = builder.BuildDynamic(request);
 

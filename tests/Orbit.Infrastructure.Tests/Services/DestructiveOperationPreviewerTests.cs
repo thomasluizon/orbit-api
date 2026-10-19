@@ -38,28 +38,6 @@ public sealed class DestructiveOperationPreviewerTests
     }
 
     [Fact]
-    public async Task DeleteFacts_ListsEveryRequestedOwnedFact()
-    {
-        var userId = Guid.NewGuid();
-        var options = new DbContextOptionsBuilder<OrbitDbContext>()
-            .UseInMemoryDatabase($"DestructivePreview_{Guid.NewGuid()}").Options;
-        await using var db = new OrbitDbContext(options);
-        var first = UserFact.Create(userId, "Likes tea", null).Value;
-        var second = UserFact.Create(userId, "Likes coffee", null).Value;
-        db.UserFacts.AddRange(first, second);
-        await db.SaveChangesAsync();
-        var args = JsonDocument.Parse($"{{\"fact_ids\":[\"{first.Id}\",\"{second.Id}\"]}}")
-            .RootElement.Clone();
-
-        var preview = await new DestructiveOperationPreviewer(db)
-            .PreviewAsync(userId, "delete_user_facts", args);
-
-        preview!.Items.Should().HaveCount(2);
-        preview.Items.Should().OnlyContain(item => item.RemovesData == true);
-        preview.ChangeTargetCount.Should().Be(2);
-    }
-
-    [Fact]
     public async Task DismissCalendarSuggestion_PreviewsOwnedSuggestionWithoutRemovingDataAndDetectsStateChange()
     {
         var userId = Guid.NewGuid();

@@ -28,7 +28,6 @@ public static class ErrorCodes
     public const string ParentHabitNotFound = "PARENT_HABIT_NOT_FOUND";
     public const string TargetParentNotFound = "TARGET_PARENT_NOT_FOUND";
     public const string TagNotFound = "TAG_NOT_FOUND";
-    public const string FactNotFound = "FACT_NOT_FOUND";
     public const string NoPermission = "NO_PERMISSION";
     public const string HabitNotOwned = "HABIT_NOT_OWNED";
     public const string GoalNotFound = "GOAL_NOT_FOUND";
@@ -78,8 +77,6 @@ public static class ErrorCodes
     public const string InvalidStepUpCode = "INVALID_STEP_UP_CODE";
     public const string DuplicateTagName = "DUPLICATE_TAG_NAME";
     public const string MaxTagsPerHabit = "MAX_TAGS_PER_HABIT";
-    public const string UserFactsLimitReached = "USER_FACTS_LIMIT_REACHED";
-    public const string DuplicateFact = "DUPLICATE_FACT";
     public const string PaymentServiceUnavailable = "PAYMENT_SERVICE_UNAVAILABLE";
     public const string BillingDetailsUnavailable = "BILLING_DETAILS_UNAVAILABLE";
     public const string WebhookSecretNotConfigured = "WEBHOOK_SECRET_NOT_CONFIGURED";

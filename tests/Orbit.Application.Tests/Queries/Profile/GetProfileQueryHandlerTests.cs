@@ -70,6 +70,27 @@ public class GetProfileQueryHandlerTests
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_SerializedProfileRetainsDisabledMemorySetting(bool pro)
+    {
+        var user = pro ? CreateTestUser() : CreateFreeUser();
+        if (pro)
+            user.GrantLifetimePro();
+        user.AiMemoryEnabled.Should().BeTrue();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        StubFreezeRepoEmpty();
+
+        var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var payload = JsonSerializer.SerializeToElement(result.Value, JsonSerializerOptions.Web);
+        payload.GetProperty("aiMemoryEnabled").GetBoolean().Should().BeFalse();
+        payload.GetProperty("hasProAccess").GetBoolean().Should().Be(pro);
+        payload.GetProperty("aiSummaryEnabled").GetBoolean().Should().Be(user.AiSummaryEnabled);
+    }
+
+    [Theory]
     [InlineData(0)]
     [InlineData(1)]
     [InlineData(3)]
@@ -146,7 +167,6 @@ public class GetProfileQueryHandlerTests
             Name = "John Doe",
             Email = "test@example.com",
             user.TimeZone,
-            user.AiMemoryEnabled,
             user.AiSummaryEnabled,
             user.HasCompletedOnboarding,
             user.HasCompletedTour,

@@ -12,7 +12,7 @@ public sealed class DestructiveOperationPreviewer(OrbitDbContext dbContext) : ID
 {
     private static readonly HashSet<string> HandledOperations = new(StringComparer.Ordinal)
     {
-        "delete_goal", "delete_tag", "delete_checklist_template", "delete_user_facts",
+        "delete_goal", "delete_tag", "delete_checklist_template",
         "delete_notifications", "manage_calendar_sync"
     };
 
@@ -33,25 +33,10 @@ public sealed class DestructiveOperationPreviewer(OrbitDbContext dbContext) : ID
                 "delete_checklist_template" => LoadAsync(dbContext.ChecklistTemplates, userId, operationId,
                     ReadIds(arguments, "template_id"), template => template.Name,
                     template => new { template.Name, template.UpdatedAtUtc, template.IsDeleted }, cancellationToken),
-                "delete_user_facts" => LoadFactsAsync(userId, operationId, arguments, cancellationToken),
                 "delete_notifications" => LoadNotificationsAsync(userId, operationId, arguments, cancellationToken),
                 "manage_calendar_sync" => LoadCalendarAsync(userId, operationId, arguments, cancellationToken),
                 _ => Task.FromResult<PendingOperationChangePreview?>(null)
             };
-
-    private Task<PendingOperationChangePreview?> LoadFactsAsync(Guid userId, string operationId,
-        JsonElement arguments, CancellationToken cancellationToken)
-    {
-        var ids = ReadIds(arguments, "fact_ids", "fact_id");
-        return LoadAsync(dbContext.UserFacts, userId, operationId, ids,
-            fact => fact.FactText, fact => new
-            {
-                fact.FactText,
-                fact.Category,
-                fact.UpdatedAtUtc,
-                fact.IsDeleted
-            }, cancellationToken);
-    }
 
     private Task<PendingOperationChangePreview?> LoadNotificationsAsync(Guid userId,
         string operationId, JsonElement arguments, CancellationToken cancellationToken)

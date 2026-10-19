@@ -21,7 +21,6 @@ public class BackgroundServiceHealthCheck : IHealthCheck
         ["PlayNotificationCleanup"] = TimeSpan.FromHours(48),
         ["CalendarAutoSync"] = TimeSpan.FromMinutes(45),
         ["NotionAutoSync"] = TimeSpan.FromMinutes(45),
-        ["OpenAiBatchPoller"] = TimeSpan.FromMinutes(10),
         ["AiUsageSummary"] = TimeSpan.FromMinutes(180)
     };
 
