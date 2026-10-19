@@ -14,7 +14,7 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 public class ExpandHabitScheduleAndStartDateMigrationTests
 {
     [Fact]
-    public void TargetModel_PreservesRedesignAndMatchesCurrentModel()
+    public void TargetModel_PreservesRedesignWithOnlyConversationChangesInCurrentModel()
     {
         using var context = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
             .UseNpgsql("Host=unused;Database=unused").Options);
@@ -22,9 +22,14 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
             .Initialize(Migration.TargetModel, designTime: true);
         var current = context.GetService<IDesignTimeModel>().Model;
 
-        context.GetService<IMigrationsModelDiffer>()
-            .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel())
-            .Should().BeEmpty();
+        var differences = context.GetService<IMigrationsModelDiffer>()
+            .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
+        differences.Should().HaveCount(6).And.OnlyContain(operation =>
+            operation is CreateTableOperation && ((CreateTableOperation)operation).Name == "ConversationTurns"
+            || operation is CreateIndexOperation && ((CreateIndexOperation)operation).Table == "ConversationTurns"
+            || operation is AddColumnOperation && ((AddColumnOperation)operation).Table == "Users"
+                && ((AddColumnOperation)operation).Name == "ConversationHistoryClearedAtUtc"
+            || operation is InsertDataOperation && ((InsertDataOperation)operation).Table == "AppFeatureFlags");
     }
 
     [Fact]
