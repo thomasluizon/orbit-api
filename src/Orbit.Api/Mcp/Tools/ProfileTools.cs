@@ -98,6 +98,23 @@ public class ProfileTools(IMediator mediator, McpExecutorBridge executorBridge)
         return enabled ? "AI summary enabled" : "AI summary disabled";
     }
 
+    [McpServerTool(Name = "set_proactive_astra"), Description("Enable or disable proactive Astra push check-ins. Requires Pro; in-app items remain available.")]
+    public async Task<string> SetProactiveAstra(
+        ClaimsPrincipal user,
+        [Description("True to enable, false to disable")] bool enabled,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await executorBridge.ExecuteAsync(user, "set_proactive_astra", new
+        {
+            enabled
+        }, confirmationToken: null, cancellationToken);
+
+        if (!result.Succeeded)
+            return result.Message;
+
+        return enabled ? "Proactive Astra enabled" : "Proactive Astra disabled";
+    }
+
     [McpServerTool(Name = "set_week_start_day"), Description("Set which day the week starts on.")]
     public async Task<string> SetWeekStartDay(
         ClaimsPrincipal user,

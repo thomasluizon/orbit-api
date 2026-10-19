@@ -532,6 +532,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.None,
                 planRequirement: "Pro",
                 chatTools: ["set_proactive_astra"],
+                mcpTools: ["set_proactive_astra"],
                 equivalentControllerActions: ["ProfileController.SetProactiveAstra"])
         ];
     }
