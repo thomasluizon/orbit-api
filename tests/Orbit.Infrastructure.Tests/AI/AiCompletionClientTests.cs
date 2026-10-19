@@ -1,6 +1,7 @@
 using System.ClientModel;
 using System.ClientModel.Primitives;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -9,6 +10,8 @@ using OpenAI;
 using OpenAI.Chat;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.AI;
+using Orbit.Infrastructure.Services;
+using Orbit.Domain.Models;
 
 namespace Orbit.Infrastructure.Tests.AI;
 
@@ -74,6 +77,42 @@ public class AiCompletionClientTests
     public void ShouldApplyTemperature_SuppressedOnlyForDistinctSubTaskModel(
         AiModelTier tier, string primary, string subTask, bool expected)
         => AiCompletionClient.ShouldApplyTemperature(tier, primary, subTask).Should().Be(expected);
+
+    [Theory]
+    [InlineData("json")]
+    [InlineData("text")]
+    [InlineData("chat")]
+    [InlineData("stream")]
+    public async Task CompletionDeadline_CancelsTheWholeCallIncludingRetryWaits(string kind)
+    {
+        var client = new AiCompletionClient(BuildChatClient(new WaitingHandler()), NullLogger<AiCompletionClient>.Instance,
+            Substitute.For<IAiUsageRecorder>(), TimeSpan.FromMilliseconds(50));
+        var intent = new AiIntentService(client, Substitute.For<IAiUsageRecorder>(), NullLogger<AiIntentService>.Instance);
+        Func<Task> call = kind switch
+        {
+            "json" => async () => await client.CompleteJsonAsync<Probe>("system", "user"),
+            "text" => async () => await client.CompleteTextAsync("system", "user"),
+            _ => async () => await intent.SendWithToolsAsync(new AiToolRequest("user", "system", [], Guid.NewGuid()),
+                kind == "stream" ? _ => Task.CompletedTask : null)
+        };
+
+        Func<Task> boundedCall = () => call().WaitAsync(TimeSpan.FromSeconds(5));
+        await boundedCall.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    private sealed class WaitingHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests)
+            {
+                RequestMessage = request,
+                Content = new StringContent("{}", Encoding.UTF8, "application/json")
+            };
+            response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromHours(1));
+            return Task.FromResult(response);
+        }
+    }
 
     private static ChatClient BuildChatClient(HttpMessageHandler handler) =>
         new(

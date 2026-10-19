@@ -143,7 +143,10 @@ public record ChatExecutionDependencies(
     IMediator Mediator,
     IProductAnalytics ProductAnalytics,
     IHabitScheduleLogReader ScheduleLogReader,
-    IIssuedAstraBlockStore BlockStore);
+    IIssuedAstraBlockStore BlockStore,
+    IPendingAgentOperationStore PendingOperationStore,
+    IPendingOperationChangePreviewer? PendingOperationPreviewer = null,
+    TimeSpan? BlockAnswerTimeout = null);
 
 public partial class ProcessUserChatCommandHandler(
     ChatDataDependencies data,
@@ -164,7 +167,6 @@ public partial class ProcessUserChatCommandHandler(
         public const string AccountRows = "accountRows";
     }
 
-    private const int MaxToolIterations = 5;
     private const string UnsupportedByPolicyReason = "unsupported_by_policy";
     private const string DescribeFeatureToolName = "describe_feature";
     private const string EnglishToolFailureMessage = "I couldn't complete that. Please try again.";
@@ -178,25 +180,42 @@ public partial class ProcessUserChatCommandHandler(
         ProcessUserChatCommand request,
         CancellationToken cancellationToken)
     {
-        var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        LogProcessingChatMessage(logger, request.Message);
         if (request.BlockAnswer is not null)
         {
-            var prepared = await PrepareBlockAnswerAsync(request, cancellationToken);
-            if (prepared.IsFailure)
-                return prepared.PropagateError<ChatResponse>();
-            if (prepared.Value.Response is { } preparedResponse)
-                return Result.Success(preparedResponse);
-            request = request with { Message = prepared.Value.Message };
+            var answerService = new AstraBlockAnswerService(execution.BlockStore, execution.UnitOfWork,
+                execution.PayGateService, execution.OperationExecutor, data.UserRepository, execution.ProductAnalytics,
+                data.FeatureFlagService, execution.PendingOperationStore, logger, execution.PendingOperationPreviewer, execution.BlockAnswerTimeout);
+            return await answerService.ExecuteAsync(request, prepared =>
+                prepared.Crisis != CrisisLocales.None
+                    ? HandleCrisisTurnAsync(request with { Message = prepared.Message }, prepared.Crisis)
+                    : HandleTurnAsync(request with { Message = prepared.Message }, cancellationToken, prepared.AnsweredAtUtc), cancellationToken);
         }
-        else
+        await execution.UnitOfWork.ExecuteInTransactionAsync(async token =>
         {
-            await execution.UnitOfWork.ExecuteInTransactionAsync(async token =>
-            {
-                await execution.UnitOfWork.AcquireAdvisoryLockAsync($"astra-blocks:{request.UserId}", token);
-                await execution.BlockStore.InvalidateOpenAsync(request.UserId, token);
-            }, cancellationToken);
+            await execution.UnitOfWork.AcquireAdvisoryLockAsync($"astra-blocks:{request.UserId}", token);
+            await execution.BlockStore.InvalidateOpenAsync(request.UserId, token);
+        }, cancellationToken);
+        return await HandleTurnAsync(request, cancellationToken);
+    }
+
+    private CancellationTokenSource CreateBlockTurnCancellation(CancellationToken token, DateTime? answeredAtUtc)
+    {
+        var cancellation = CancellationTokenSource.CreateLinkedTokenSource(token);
+        if (answeredAtUtc is { } claim && execution.BlockAnswerTimeout is { } timeout)
+        {
+            var remaining = claim + timeout - TimeProvider.System.GetUtcNow().UtcDateTime;
+            cancellation.CancelAfter(remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero);
         }
+        return cancellation;
+    }
+
+    private async Task<Result<ChatResponse>> HandleTurnAsync(ProcessUserChatCommand request, CancellationToken cancellationToken,
+        DateTime? answeredAtUtc = null)
+    {
+        using var turnCancellation = CreateBlockTurnCancellation(cancellationToken, answeredAtUtc);
+        cancellationToken = turnCancellation.Token;
+        var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        LogProcessingChatMessage(logger, request.Message);
         var detectedCrisisLocales = CrisisSupportGuard.Detect(request.Message);
 
         var contextResult = await LoadChatContextAsync(request, cancellationToken);
@@ -237,7 +256,7 @@ public partial class ProcessUserChatCommandHandler(
         if (response.IsFailure)
             return response.PropagateError<ChatResponse>();
 
-        var executionResults = new ToolExecutionAccumulator();
+        var executionResults = new ToolExecutionAccumulator { AnsweredAtUtc = answeredAtUtc };
         var actionsStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var toolLoopResult = await RunToolCallLoopAsync(
             response.Value,
@@ -248,6 +267,8 @@ public partial class ProcessUserChatCommandHandler(
             cancellationToken);
         var aiResponse = toolLoopResult.FinalResponse;
         var iterations = toolLoopResult.Iterations;
+        if (request.BlockAnswer is not null && (toolLoopResult.HadToolFailure || aiResponse.HasToolCalls))
+            return Result.Failure<ChatResponse>(ErrorMessages.AiUnavailable);
         if (toolLoopResult.HadToolFailure)
             executionResults.SanitizeFailedActions(ToolFailureMessage(userLanguage));
         if (aiStreamFilter is not null)
@@ -323,24 +344,6 @@ public partial class ProcessUserChatCommandHandler(
             cards.AccountRows,
             followUps,
             cards.Parts));
-    }
-
-    private async Task<Result<PreparedAstraBlockAnswer>> PrepareBlockAnswerAsync(
-        ProcessUserChatCommand request, CancellationToken cancellationToken)
-    {
-        var answerService = new AstraBlockAnswerService(execution.BlockStore, execution.UnitOfWork,
-            execution.PayGateService, execution.OperationExecutor, data.UserRepository, execution.ProductAnalytics,
-            data.FeatureFlagService, logger);
-        var prepared = await answerService.PrepareAsync(request, cancellationToken);
-        if (prepared.IsFailure)
-            return prepared;
-        await answerService.CaptureAnsweredAsync(request, cancellationToken);
-        if (prepared.Value.Crisis == CrisisLocales.None)
-            return prepared;
-
-        var crisisRequest = request with { Message = prepared.Value.Message };
-        var response = await HandleCrisisTurnAsync(crisisRequest, prepared.Value.Crisis);
-        return Result.Success(prepared.Value with { Response = response.Value });
     }
 
     private static string? GetUserLanguage(User? user) => user?.Language;

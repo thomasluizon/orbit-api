@@ -13,6 +13,10 @@ public sealed class IssuedAstraBlock : Entity
     public DateTime ExpiresAtUtc { get; private set; }
     public DateTime? AnsweredAtUtc { get; private set; }
     public DateTime? InvalidatedAtUtc { get; private set; }
+    public string? AnswerJson { get; private set; }
+    public string? ResponseJson { get; private set; }
+    public string? CommittedResponseJson { get; private set; }
+    public DateOnly? ReservedAllowanceDate { get; private set; }
 
     private IssuedAstraBlock() { }
 
@@ -76,4 +80,15 @@ public sealed class IssuedAstraBlock : Entity
             throw new InvalidOperationException("Block is not open.");
         AnsweredAtUtc = answeredAtUtc;
     }
+
+    public static string SerializeAnswer(AstraBlockAnswer answer) =>
+        JsonSerializer.Serialize(answer with { SelectedIds = answer.SelectedIds.Order(StringComparer.Ordinal).ToArray() });
+
+    public bool MatchesAnswer(AstraBlockAnswer answer)
+    {
+        var stored = AnswerJson is null ? null : JsonSerializer.Deserialize<AstraBlockAnswer>(AnswerJson);
+        return stored is not null && stored.BlockId == answer.BlockId && stored.FreeText == answer.FreeText
+            && stored.SelectedIds.Order(StringComparer.Ordinal).SequenceEqual(answer.SelectedIds.Order(StringComparer.Ordinal));
+    }
+
 }

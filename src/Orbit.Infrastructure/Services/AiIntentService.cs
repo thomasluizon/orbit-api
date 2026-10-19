@@ -140,6 +140,8 @@ public sealed partial class AiIntentService(
         Func<AiStreamEvent, Task>? streamSink,
         CancellationToken cancellationToken)
     {
+        using var completionCancellation = aiClient.CreateCompletionCancellation(cancellationToken);
+        cancellationToken = completionCancellation.Token;
         try
         {
             LogCallingAiWithTools(logger);

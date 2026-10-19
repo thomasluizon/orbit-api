@@ -70,4 +70,19 @@ public class IssuedAstraBlockTests
         var expired = IssuedAstraBlock.Create(Guid.NewGuid(), Choice());
         ((Action)(() => expired.MarkAnswered(expired.ExpiresAtUtc))).Should().Throw<InvalidOperationException>();
     }
+
+    [Fact]
+    public void Answer_MatchesSelectionAsSetAndExactFreeText()
+    {
+        var block = IssuedAstraBlock.Create(Guid.NewGuid(), Choice() with { MultiSelect = true, AllowFreeText = true });
+        block.MarkAnswered(block.CreatedAtUtc);
+        typeof(IssuedAstraBlock).GetProperty(nameof(IssuedAstraBlock.AnswerJson))!
+            .SetValue(block, IssuedAstraBlock.SerializeAnswer(new(block.Id, ["1", "0"], "After dinner")));
+
+        block.MatchesAnswer(new(block.Id, ["0", "1"], "After dinner")).Should().BeTrue();
+        block.MatchesAnswer(new(block.Id, ["0"], "After dinner")).Should().BeFalse();
+        block.MatchesAnswer(new(block.Id, ["0", "1"], "Before dinner")).Should().BeFalse();
+        block.MatchesAnswer(new(Guid.NewGuid(), ["0", "1"], "After dinner")).Should().BeFalse();
+    }
+
 }

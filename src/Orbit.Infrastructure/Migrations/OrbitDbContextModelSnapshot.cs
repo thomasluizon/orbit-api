@@ -1453,8 +1453,14 @@ namespace Orbit.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AnswerJson")
+                        .HasColumnType("jsonb");
+
                     b.Property<DateTime?>("AnsweredAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CommittedResponseJson")
+                        .HasColumnType("text");
 
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -1473,6 +1479,12 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.Property<DateTime?>("InvalidatedAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly?>("ReservedAllowanceDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("ResponseJson")
+                        .HasColumnType("text");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");

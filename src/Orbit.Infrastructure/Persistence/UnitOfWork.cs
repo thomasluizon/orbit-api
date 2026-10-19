@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Events;
@@ -79,6 +80,47 @@ public sealed class UnitOfWork(
         }
     }
 
+    public async Task ExecuteOnceInTransactionAsync(
+        Func<CancellationToken, Task> operation,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        if (!UseRelationalTransactionPath() || context.Database.CurrentTransaction is not null)
+        {
+            await operation(cancellationToken);
+            return;
+        }
+
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(databaseSettings.TransactionTimeoutSeconds));
+        var token = timeoutCts.Token;
+        try
+        {
+            var strategy = context.Database.CreateExecutionStrategy();
+            await using var transaction = await strategy.ExecuteAsync(() => context.Database.BeginTransactionAsync(token));
+            await new SingleAttemptExecutionStrategy(context).ExecuteAsync(async () =>
+            {
+                try
+                {
+                    await operation(token);
+                    await transaction.CommitAsync(token);
+                }
+                catch
+                {
+                    context.ChangeTracker.Clear();
+                    scheduleSnapshots?.Invalidate();
+                    eventCollector?.Clear();
+                    throw;
+                }
+            });
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            throw new TimeoutException(
+                $"Transaction exceeded the {databaseSettings.TransactionTimeoutSeconds}s timeout and was rolled back.");
+        }
+    }
+
     public Task AcquireAdvisoryLockAsync(string key, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrEmpty(key);
@@ -124,6 +166,12 @@ public sealed class UnitOfWork(
     {
         await context.DisposeAsync();
         GC.SuppressFinalize(this);
+    }
+
+    private sealed class SingleAttemptExecutionStrategy(OrbitDbContext context)
+        : ExecutionStrategy(context, 0, TimeSpan.Zero)
+    {
+        protected override bool ShouldRetryOn(Exception exception) => false;
     }
 
     private bool UseRelationalTransactionPath()

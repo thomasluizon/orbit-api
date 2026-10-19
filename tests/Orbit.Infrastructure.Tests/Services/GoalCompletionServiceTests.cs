@@ -548,6 +548,10 @@ public class GoalCompletionServiceTests
             CancellationToken cancellationToken = default) =>
             inner.ExecuteInTransactionAsync(operation, cancellationToken);
 
+        public Task ExecuteOnceInTransactionAsync(Func<CancellationToken, Task> operation,
+            CancellationToken cancellationToken = default) =>
+            inner.ExecuteOnceInTransactionAsync(operation, cancellationToken);
+
         public Task AcquireAdvisoryLockAsync(string key, CancellationToken cancellationToken = default) =>
             inner.AcquireAdvisoryLockAsync(key, cancellationToken);
 
@@ -582,6 +586,10 @@ public class GoalCompletionServiceTests
             Func<CancellationToken, Task<T>> operation,
             CancellationToken cancellationToken = default) =>
             inner.ExecuteInTransactionAsync(operation, cancellationToken);
+
+        public Task ExecuteOnceInTransactionAsync(Func<CancellationToken, Task> operation,
+            CancellationToken cancellationToken = default) =>
+            inner.ExecuteOnceInTransactionAsync(operation, cancellationToken);
 
         public Task AcquireAdvisoryLockAsync(string key, CancellationToken cancellationToken = default) =>
             inner.AcquireAdvisoryLockAsync(key, cancellationToken);
@@ -636,6 +644,10 @@ public class GoalCompletionServiceTests
 
             return await inner.ExecuteInTransactionAsync(operation, cancellationToken);
         }
+
+        public Task ExecuteOnceInTransactionAsync(Func<CancellationToken, Task> operation,
+            CancellationToken cancellationToken = default) =>
+            inner.ExecuteOnceInTransactionAsync(operation, cancellationToken);
 
         public Task AcquireAdvisoryLockAsync(string key, CancellationToken cancellationToken = default) =>
             inner.AcquireAdvisoryLockAsync(key, cancellationToken);

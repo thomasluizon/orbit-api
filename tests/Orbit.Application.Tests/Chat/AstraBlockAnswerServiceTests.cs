@@ -4,6 +4,7 @@ using NSubstitute;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Common;
+using Orbit.Application.Chat.Models;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -31,7 +32,8 @@ public class AstraBlockAnswerServiceTests
         _store.MarkAnsweredAsync(Arg.Any<Guid>(), UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
     }
 
-    private AstraBlockAnswerService Service => new(_store, _work, _quota, _executor, _users, _analytics, _featureFlags);
+    private AstraBlockAnswerService Service => new(_store, _work, _quota, _executor, _users, _analytics, _featureFlags,
+        Substitute.For<IPendingAgentOperationStore>());
     private IssuedAstraBlock Choice(bool multi = false, bool free = false)
     {
         var block = IssuedAstraBlock.Create(UserId, new("choice", "Which time?", [new("a", "Morning"), new("b", "Evening")], [], multi, free));
@@ -175,4 +177,80 @@ public class AstraBlockAnswerServiceTests
         await _quota.DidNotReceiveWithAnyArgs().CanSendAiMessage(default, default);
         await _quota.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
     }
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Replay_WaitingOperationWithoutRefresh_KeepsTheStoredOperation(bool throws)
+    {
+        var block = Choice();
+        var answer = new AstraBlockAnswer(block.Id, ["a"]);
+        var pending = new PendingAgentOperation(Guid.NewGuid(), "habits", "Habits", "Preview",
+            AgentRiskClass.Low, AgentConfirmationRequirement.FreshConfirmation, block.ExpiresAtUtc,
+            Items: [new("a", null, "Walk", [], "fingerprint")]);
+        block.MarkAnswered(block.CreatedAtUtc);
+        typeof(IssuedAstraBlock).GetProperty(nameof(block.AnswerJson))!.SetValue(block, IssuedAstraBlock.SerializeAnswer(answer));
+        typeof(IssuedAstraBlock).GetProperty(nameof(block.ResponseJson))!.SetValue(block,
+            JsonSerializer.Serialize(new ChatResponse("Nothing has been saved.", [], PendingOperations: [pending]), ChatStreamEvent.SerializerOptions));
+        var operations = Substitute.For<IPendingAgentOperationStore>();
+        operations.IsAwaitingConfirmation(UserId, pending.Id).Returns(true);
+        operations.GetExecution(UserId, pending.Id).Returns(new PendingAgentOperationExecution(pending.Id,
+            "habits", "bulk_create_habits", JsonSerializer.SerializeToElement(new { habits = new[] { new { title = "Walk" } } }),
+            AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation));
+        var previewer = Substitute.For<IPendingOperationChangePreviewer>();
+        previewer.PreviewAsync(UserId, "bulk_create_habits", Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
+            .Returns(_ => throws ? Task.FromException<PendingOperationChangePreview?>(new InvalidOperationException("preview failed"))
+                : Task.FromResult<PendingOperationChangePreview?>(null));
+        var service = new AstraBlockAnswerService(_store, _work, _quota, _executor, _users, _analytics,
+            _featureFlags, operations, previewer: previewer);
+
+        var result = await service.PrepareAsync(Request(block.Id, ["a"]), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Response!.PendingOperations.Should().ContainSingle().Which.Should().BeEquivalentTo(pending);
+        await _quota.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
+        await _executor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+    }
+
+    [Fact]
+    public async Task StaleLegacyAnswer_IsNeverReleasedOrRefunded()
+    {
+        var block = Choice();
+        block.MarkAnswered(block.CreatedAtUtc);
+        var service = new AstraBlockAnswerService(_store, _work, _quota, _executor, _users, _analytics,
+            _featureFlags, Substitute.For<IPendingAgentOperationStore>(), claimLifetime: TimeSpan.Zero);
+
+        var result = await service.PrepareAsync(Request(block.Id, ["a"]), default);
+
+        result.ErrorCode.Should().Be(ErrorCodes.AstraBlockAnswered);
+        await _store.DidNotReceiveWithAnyArgs().ReleaseAnswerAsync(default, default, default, default);
+        await _quota.DidNotReceiveWithAnyArgs().RefundAiMessage(default, default, default!, default);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StaleRecordedAnswer_RefundsOnlyAReleasedClaim(bool released)
+    {
+        var block = Choice();
+        block.MarkAnswered(block.CreatedAtUtc);
+        var reservedDate = new DateOnly(2026, 4, 3);
+        typeof(IssuedAstraBlock).GetProperty(nameof(block.AnswerJson))!.SetValue(block,
+            IssuedAstraBlock.SerializeAnswer(new(block.Id, ["a"])));
+        typeof(IssuedAstraBlock).GetProperty(nameof(block.ReservedAllowanceDate))!.SetValue(block, reservedDate);
+        _store.ReleaseAnswerAsync(block.Id, UserId, block.CreatedAtUtc, Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            if (released)
+                typeof(IssuedAstraBlock).GetProperty(nameof(block.AnsweredAtUtc))!.SetValue(block, null);
+            return released;
+        });
+        _quota.RefundAiMessage(UserId, reservedDate, _work, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        var service = new AstraBlockAnswerService(_store, _work, _quota, _executor, _users, _analytics,
+            _featureFlags, Substitute.For<IPendingAgentOperationStore>(), claimLifetime: TimeSpan.Zero);
+
+        var result = await service.PrepareAsync(Request(block.Id, ["a"]), default);
+
+        result.IsSuccess.Should().Be(released);
+        await _quota.Received(released ? 1 : 0).RefundAiMessage(UserId, reservedDate, _work, Arg.Any<CancellationToken>());
+    }
+
 }

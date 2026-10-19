@@ -17,6 +17,12 @@ public sealed class AiSettings
     /// </summary>
     public int BatchNetworkTimeoutSeconds { get; init; } = 120;
     public int MaxRetries { get; init; } = 2;
+
+    /// <summary>
+    /// Bounds the whole completion, including every network attempt and retry wait.
+    /// Each retry has one network-timeout allowance for its request and one for its wait.
+    /// </summary>
+    public TimeSpan CompletionTimeout => TimeSpan.FromSeconds((long)NetworkTimeoutSeconds * (2L * MaxRetries + 1));
     public Dictionary<string, AiModelPrice> Pricing { get; init; } = new();
 }
 

@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Orbit.Application.Chat;
 using Orbit.Infrastructure.Configuration;
 
 namespace Orbit.Infrastructure.Tests.Configuration;
@@ -32,4 +33,21 @@ public class AiSettingsTests
 
         settings.SubTaskModel.Should().Be("gpt-5.4-nano");
     }
+    [Theory]
+    [InlineData(15, 120)]
+    [InlineData(90, 120)]
+    [InlineData(15, 240)]
+    public void BlockAnswerTimeout_CoversInitialCompletionEachContinuationAndSummary(int networkSeconds, int transactionSeconds)
+    {
+        var ai = new AiSettings { NetworkTimeoutSeconds = networkSeconds };
+        var database = new DatabaseConnectionSettings { TransactionTimeoutSeconds = transactionSeconds };
+        var completion = ai.CompletionTimeout;
+        var transaction = TimeSpan.FromSeconds(database.TransactionTimeoutSeconds);
+
+        var lifetime = ChatTurnLimits.BlockAnswerTimeout(completion, transaction);
+
+        lifetime.Should().Be((1 + 2 * ChatTurnLimits.MaxToolIterations) * (completion + transaction));
+        lifetime.Should().BeGreaterThan(TimeSpan.FromSeconds(135));
+    }
+
 }

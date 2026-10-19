@@ -232,9 +232,12 @@ public class ClosedMonthRecapResetRaceTests
             }
         }
 
+        public Task ExecuteOnceInTransactionAsync(Func<CancellationToken, Task> operation,
+            CancellationToken cancellationToken = default) => ExecuteInTransactionAsync(operation, cancellationToken);
+
         public async Task AcquireAdvisoryLockAsync(
-            string key,
-            CancellationToken cancellationToken = default)
+                string key,
+                CancellationToken cancellationToken = default)
         {
             var transaction = _transaction.Value
                 ?? throw new InvalidOperationException("A transaction is required for an advisory lock.");

@@ -201,6 +201,11 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<MediatR.IMediator>(),
                 sp.GetRequiredService<IProductAnalytics>(),
                 sp.GetRequiredService<IHabitScheduleLogReader>(),
-                sp.GetRequiredService<IIssuedAstraBlockStore>()));
+                sp.GetRequiredService<IIssuedAstraBlockStore>(),
+                sp.GetRequiredService<IPendingAgentOperationStore>(),
+                sp.GetRequiredService<IPendingOperationChangePreviewer>(),
+                ChatTurnLimits.BlockAnswerTimeout(
+                    sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AiSettings>>().Value.CompletionTimeout,
+                    TimeSpan.FromSeconds(DatabaseConnectionSettings.From(builder.Configuration).TransactionTimeoutSeconds))));
     }
 }

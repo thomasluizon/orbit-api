@@ -103,6 +103,14 @@ public class PendingAgentOperationStore(
             entity.PreviewFingerprint);
     }
 
+    public bool IsAwaitingConfirmation(Guid userId, Guid pendingOperationId)
+    {
+        var checkedAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
+        return dbContext.PendingAgentOperations.AsNoTracking().Any(item => item.Id == pendingOperationId
+            && item.UserId == userId && item.ConfirmedAtUtc == null && item.ConsumedAtUtc == null
+            && item.ExpiresAtUtc > checkedAtUtc);
+    }
+
     public bool Revise(Guid userId, Guid pendingOperationId, string expectedFingerprint,
         string argumentsJson, string operationFingerprint, string previewFingerprint)
     {

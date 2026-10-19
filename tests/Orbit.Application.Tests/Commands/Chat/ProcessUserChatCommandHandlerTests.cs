@@ -51,6 +51,7 @@ public partial class ProcessUserChatCommandHandlerTests
     private readonly IAgentCatalogService _catalogService = Substitute.For<IAgentCatalogService>();
     private readonly IAgentOperationExecutor _operationExecutor = Substitute.For<IAgentOperationExecutor>();
     private readonly IIssuedAstraBlockStore _blockStore = Substitute.For<IIssuedAstraBlockStore>();
+    private readonly IPendingAgentOperationStore _pendingOperationStore = Substitute.For<IPendingAgentOperationStore>();
     private readonly IPendingClarificationStore _pendingClarificationStore = Substitute.For<IPendingClarificationStore>();
     private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
     private readonly IMediator _mediator = Substitute.For<IMediator>();
@@ -119,7 +120,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var executionDeps = new ChatExecutionDependencies(
             _userDateService, _userStreakService, payGate, unitOfWork, _scopeFactory, _operationExecutor,
             _pendingClarificationStore, _goalProgressReadSyncer, _gamificationService, _mediator, _productAnalytics,
-            _scheduleLogReader, _blockStore);
+            _scheduleLogReader, _blockStore, _pendingOperationStore);
 
         return new ProcessUserChatCommandHandler(
             dataDeps, aiDeps, executionDeps, _logger);
@@ -131,6 +132,8 @@ public partial class ProcessUserChatCommandHandlerTests
             Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(),
             Arg.Any<CancellationToken>()).Returns(Array.Empty<HabitScheduleLogDay>());
         _unitOfWork.PassThroughTransactions();
+        _blockStore.CompleteAnswerAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<DateTime>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(true);
         SetupScopeFactory();
         _catalogService.GetCapabilities().Returns([BuildCapability("test_capability")]);
         _catalogService.GetCapability(Arg.Any<string>())

@@ -25,13 +25,15 @@ namespace Orbit.Infrastructure.Tests.Services;
 public class AstraPickListPreviewTests
 {
     [Theory]
-    [InlineData("create_habits", false)]
-    [InlineData("log_habits", false)]
-    [InlineData("skip_habits", false)]
-    [InlineData("create_habits", true)]
-    [InlineData("log_habits", true)]
-    [InlineData("skip_habits", true)]
-    public async Task Answer_UsesRealPendingOperationPathAndWritesOnlyTheChosenPreview(string action, bool shadowMode)
+    [InlineData("create_habits", false, false)]
+    [InlineData("log_habits", false, false)]
+    [InlineData("skip_habits", false, false)]
+    [InlineData("create_habits", true, false)]
+    [InlineData("log_habits", true, false)]
+    [InlineData("skip_habits", true, false)]
+    [InlineData("create_habits", false, true)]
+    [InlineData("create_habits", true, true)]
+    public async Task Answer_UsesRealPendingOperationPathAndWritesOnlyTheChosenPreview(string action, bool shadowMode, bool failPreviewFirst)
     {
         using var factory = new SqliteOrbitDbContextFactory();
         var db = factory.Context;
@@ -96,13 +98,28 @@ public class AstraPickListPreviewTests
         var executor = new AgentOperationExecutor(catalog, policy, Substitute.For<IAgentAuditService>(),
             ownership, bridge, tools, previewer, pending, work, NullLogger<AgentOperationExecutor>.Instance);
         AgentExecuteOperationResponse? executionResponse = null;
+        var failPreview = failPreviewFirst;
         var recordingExecutor = Substitute.For<IAgentOperationExecutor>();
         recordingExecutor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())
-            .Returns(async call => executionResponse = await executor.ExecuteAsync(call.Arg<AgentExecuteOperationRequest>(), default));
+            .Returns(async call =>
+            {
+                executionResponse = await executor.ExecuteAsync(call.Arg<AgentExecuteOperationRequest>(), default);
+                if (!failPreview)
+                    return executionResponse;
+                failPreview = false;
+                return executionResponse with { PendingOperation = null };
+            });
         var quota = Substitute.For<IPayGateService>();
         quota.CanSendAiMessage(user.Id, Arg.Any<CancellationToken>()).Returns(Result.PayGateFailure("Daily limit"));
         var service = new AstraBlockAnswerService(store, work, quota, recordingExecutor, new GenericRepository<User>(db),
-            Substitute.For<IProductAnalytics>(), Substitute.For<IFeatureFlagService>());
+            Substitute.For<IProductAnalytics>(), Substitute.For<IFeatureFlagService>(), pending);
+        if (failPreviewFirst)
+        {
+            var failed = await service.PrepareAsync(new(user.Id, "Habit 1, Habit 3", BlockAnswer: new(block.Id, ["3", "1"])), default);
+            failed.ErrorCode.Should().Be(ErrorCodes.AstraBlockPreviewUnavailable);
+            (await store.GetAsync(block.Id, user.Id, default))!.AnsweredAtUtc.Should().BeNull();
+            (await db.PendingAgentOperations.CountAsync()).Should().Be(0);
+        }
         var answer = await service.PrepareAsync(new ProcessUserChatCommand(user.Id, "Habit 1, Habit 3",
             BlockAnswer: new(block.Id, ["3", "1"])), default);
         answer.IsSuccess.Should().BeTrue(JsonSerializer.Serialize(executionResponse));
@@ -114,6 +131,18 @@ public class AstraPickListPreviewTests
         (await db.HabitLogs.CountAsync()).Should().Be(0);
         await quota.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
         mediator.ReceivedCalls().Should().OnlyContain(call => call.GetArguments()[0] is CheckChatCommandQuery);
+        var identicalReplay = await service.PrepareAsync(new(user.Id, "Habit 1, Habit 3", BlockAnswer: new(block.Id, ["1", "3"])), default);
+        identicalReplay.IsSuccess.Should().BeTrue();
+        var originalJson = Orbit.Application.Chat.Models.ChatStreamEvent.Final(answer.Value.Response!).ToJson();
+        var replayJson = Orbit.Application.Chat.Models.ChatStreamEvent.Final(identicalReplay.Value.Response!).ToJson();
+        System.Text.Json.Nodes.JsonNode.DeepEquals(System.Text.Json.Nodes.JsonNode.Parse(originalJson),
+            System.Text.Json.Nodes.JsonNode.Parse(replayJson)).Should().BeTrue();
+        (await db.PendingAgentOperations.CountAsync()).Should().Be(1);
+        await recordingExecutor.Received(failPreviewFirst ? 2 : 1).ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>());
+        pending.Confirm(user.Id, saved.Id).Should().NotBeNull();
+        var closedReplay = await service.PrepareAsync(new(user.Id, "Habit 1, Habit 3", BlockAnswer: new(block.Id, ["1", "3"])), default);
+        closedReplay.IsSuccess.Should().BeTrue();
+        closedReplay.Value.Response!.PendingOperations.Should().BeEmpty();
         var replay = await service.PrepareAsync(new ProcessUserChatCommand(user.Id, "Habit 1", BlockAnswer: new(block.Id, ["1"])), default);
         replay.ErrorCode.Should().Be(ErrorCodes.AstraBlockAnswered);
         (await db.PendingAgentOperations.CountAsync()).Should().Be(1);
@@ -139,7 +168,7 @@ public class AstraPickListPreviewTests
         var quota = Substitute.For<IPayGateService>();
         var service = new AstraBlockAnswerService(store, new UnitOfWork(db, new DatabaseConnectionSettings()), quota,
             Substitute.For<IAgentOperationExecutor>(), new GenericRepository<User>(db), Substitute.For<IProductAnalytics>(),
-            Substitute.For<IFeatureFlagService>());
+            Substitute.For<IFeatureFlagService>(), Substitute.For<IPendingAgentOperationStore>());
         (await service.PrepareAsync(new(user.Id, "Morning", BlockAnswer: new(block.Id, ["a"])), default)).ErrorCode.Should().Be(invalidated ? ErrorCodes.AstraBlockInvalidated : ErrorCodes.AstraBlockExpired);
         (await store.GetAsync(block.Id, user.Id, default))!.AnsweredAtUtc.Should().BeNull();
         await quota.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
@@ -161,7 +190,8 @@ public class AstraPickListPreviewTests
         quota.CanSendAiMessage(user.Id, Arg.Any<CancellationToken>()).Returns(Result.Success());
         quota.TryConsumeAiMessage(user.Id, work, Arg.Any<CancellationToken>()).Returns(Result.PayGateFailure("Daily limit"));
         var service = new AstraBlockAnswerService(store, work, quota, Substitute.For<IAgentOperationExecutor>(),
-            new GenericRepository<User>(db), Substitute.For<IProductAnalytics>(), Substitute.For<IFeatureFlagService>());
+            new GenericRepository<User>(db), Substitute.For<IProductAnalytics>(), Substitute.For<IFeatureFlagService>(),
+            Substitute.For<IPendingAgentOperationStore>());
         (await service.PrepareAsync(new(user.Id, "Morning", BlockAnswer: new(block.Id, ["a"])), default)).ErrorCode.Should().Be(Result.PayGateErrorCode);
         (await store.GetAsync(block.Id, user.Id, default))!.AnsweredAtUtc.Should().BeNull();
     }

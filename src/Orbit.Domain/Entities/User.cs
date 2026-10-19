@@ -451,6 +451,12 @@ public partial class User : Entity
     public int GetAiMessagesUsedToday(DateOnly userToday) =>
         AiMessagesLocalDate == userToday ? AiMessagesUsedToday : 0;
 
+    public void RefundAiMessage(DateOnly reservedDate)
+    {
+        if (AiMessagesLocalDate == reservedDate && AiMessagesUsedToday > 0)
+            AiMessagesUsedToday--;
+    }
+
     public int GetAiMessagesUsedForQuota(DateOnly userToday) =>
         AiMessagesLocalDate >= userToday ? AiMessagesUsedToday : 0;
 

@@ -72,6 +72,47 @@ public class PendingAgentOperationStoreTests : IDisposable
         pending.ConfirmationRequirement.Should().Be(AgentConfirmationRequirement.FreshConfirmation);
     }
 
+    [Theory]
+    [InlineData("confirmed")]
+    [InlineData("rejected")]
+    [InlineData("consumed")]
+    [InlineData("expired")]
+    public void IsAwaitingConfirmation_ExcludesForeignMissingAndClosedOperations(string terminalState)
+    {
+        var capability = _catalogService.GetCapabilityByChatTool("bulk_create_habits")!
+            with
+        { ConfirmationRequirement = AgentConfirmationRequirement.FreshConfirmation };
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime;
+        var entity = PendingAgentOperationState.Create(new()
+        {
+            UserId = _userId,
+            Capability = capability,
+            OperationId = "bulk_create_habits",
+            ArgumentsJson = "{}",
+            Summary = "Preview",
+            OperationFingerprint = "fingerprint",
+            Surface = AgentExecutionSurface.Chat,
+            ExpiresAtUtc = terminalState == "expired" ? now.AddMinutes(-1) : now.AddMinutes(5)
+        });
+        _dbContext.PendingAgentOperations.Add(entity);
+        _dbContext.SaveChanges();
+        _store.IsAwaitingConfirmation(Guid.NewGuid(), entity.Id).Should().BeFalse();
+        _store.IsAwaitingConfirmation(_userId, Guid.NewGuid()).Should().BeFalse();
+        _store.IsAwaitingConfirmation(_userId, entity.Id).Should().Be(terminalState != "expired");
+
+        if (terminalState == "confirmed")
+            _store.Confirm(_userId, entity.Id).Should().NotBeNull();
+        else if (terminalState == "rejected")
+            _store.Cancel(_userId, entity.Id, entity.OperationFingerprint).Should().BeTrue();
+        else if (terminalState == "consumed")
+        {
+            entity.MarkConsumed();
+            _dbContext.SaveChanges();
+        }
+
+        _store.IsAwaitingConfirmation(_userId, entity.Id).Should().BeFalse();
+    }
+
     public void Dispose()
     {
         _dbContext.Dispose();

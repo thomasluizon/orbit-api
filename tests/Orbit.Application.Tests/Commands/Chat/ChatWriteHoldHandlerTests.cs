@@ -235,7 +235,8 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
         var executionDeps = new ChatExecutionDependencies(
             _userDateService, _userStreakService, _payGate, _unitOfWork, _scopeFactory, _executor,
             _clarificationStore, _goalProgressReadSyncer, _gamificationService, _mediator,
-            _productAnalytics, _scheduleLogReader, Substitute.For<IIssuedAstraBlockStore>());
+            _productAnalytics, _scheduleLogReader, Substitute.For<IIssuedAstraBlockStore>(),
+            Substitute.For<IPendingAgentOperationStore>());
 
         return new ProcessUserChatCommandHandler(dataDeps, aiDeps, executionDeps,
             Substitute.For<ILogger<ProcessUserChatCommandHandler>>());
