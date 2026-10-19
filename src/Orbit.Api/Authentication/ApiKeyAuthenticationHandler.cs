@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
+using Microsoft.EntityFrameworkCore;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
@@ -47,21 +48,28 @@ public class ApiKeyAuthenticationHandler(
         var verified = candidate.Verify(rawKey);
         if (!verified && candidate.KeyHash.StartsWith("$2", StringComparison.Ordinal))
         {
-            await unitOfWork.ExecuteInTransactionAsync(async token =>
+            try
             {
-                await unitOfWork.AcquireAdvisoryLockAsync($"api-key-upgrade:{candidate.Id}", token);
-                await apiKeyRepository.ReloadAsync(candidate, token);
-                if (candidate.IsRevoked || candidate.HasExpired())
-                    return;
-                verified = candidate.Verify(rawKey);
-                if (!verified && candidate.KeyHash.StartsWith("$2", StringComparison.Ordinal)
-                    && BCrypt.Net.BCrypt.Verify(rawKey, candidate.KeyHash))
+                await unitOfWork.ExecuteInTransactionAsync(async token =>
                 {
-                    candidate.UpgradeHash(rawKey);
-                    await unitOfWork.SaveChangesAsync(token);
-                    verified = true;
-                }
-            }, Context.RequestAborted);
+                    await unitOfWork.AcquireAdvisoryLockAsync($"api-key-upgrade:{candidate.Id}", token);
+                    await apiKeyRepository.ReloadAsync(candidate, token);
+                    if (candidate.IsRevoked || candidate.HasExpired())
+                        return;
+                    verified = candidate.Verify(rawKey);
+                    if (!verified && candidate.KeyHash.StartsWith("$2", StringComparison.Ordinal)
+                        && BCrypt.Net.BCrypt.Verify(rawKey, candidate.KeyHash))
+                    {
+                        candidate.UpgradeHash(rawKey);
+                        await unitOfWork.SaveChangesAsync(token);
+                        verified = true;
+                    }
+                }, Context.RequestAborted);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                return AuthenticateResult.Fail("API key was revoked during verification.");
+            }
         }
         if (!verified)
             return AuthenticateResult.Fail("Invalid API key.");

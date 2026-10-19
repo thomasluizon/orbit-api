@@ -98,6 +98,26 @@ public partial class ProcessUserChatCommandHandlerTests
         await _aiIntentService.DidNotReceive().SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData("I want to hurt myself", "988", true, false)]
+    [InlineData("I want to hurt myself", "988", false, true)]
+    [InlineData("Quero me machucar", "188", true, false)]
+    [InlineData("Quero me machucar", "188", false, true)]
+    public async Task CrisisDisclosure_BypassesModerationRefusal(string message, string resource, bool flagged, bool unavailable)
+    {
+        SetupUserAndPayGate();
+        _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult(flagged, unavailable, []));
+
+        var result = await CreateHandler().Handle(new(UserId, message), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessage.Should().Contain(resource);
+        await _moderation.DidNotReceiveWithAnyArgs().CheckTextAsync(default!, default);
+        await _aiIntentService.DidNotReceiveWithAnyArgs().SendWithToolsAsync(default!, default, default);
+        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+    }
+
     [Fact]
     public async Task ContinuationProviderFailure_FailsTurnExplicitly()
     {

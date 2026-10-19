@@ -4,6 +4,7 @@ using System.Text.Encodings.Web;
 using FluentAssertions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -27,13 +28,18 @@ public class ApiKeyAuthenticationHandlerTests
         string? authorizationHeader,
         string path = "/mcp",
         IReadOnlyList<ApiKey>? candidates = null,
-        Result? payGateResult = null)
+        Result? payGateResult = null,
+        bool conflictOnUpgrade = false)
     {
         var apiKeyRepo = Substitute.For<IGenericRepository<ApiKey>>();
         var payGate = Substitute.For<IPayGateService>();
         var unitOfWork = Substitute.For<IUnitOfWork>();
         unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(call => call.Arg<Func<CancellationToken, Task>>()(call.Arg<CancellationToken>()));
+
+        if (conflictOnUpgrade)
+            unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+                .Returns<int>(_ => throw new DbUpdateConcurrencyException("The credential was revoked during upgrade."));
 
         payGate.CanReadApiKeys(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(payGateResult ?? Result.Success()));
@@ -87,6 +93,17 @@ public class ApiKeyAuthenticationHandlerTests
         second.Result.Succeeded.Should().BeTrue();
         await second.UnitOfWork.DidNotReceive().ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>());
         await second.UnitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task LegacyKey_RevokedDuringUpgrade_RejectsAuthentication()
+    {
+        var (key, raw) = ApiKey.Create(Guid.NewGuid(), "Legacy").Value;
+        typeof(ApiKey).GetProperty(nameof(ApiKey.KeyHash))!.SetValue(key, BCrypt.Net.BCrypt.HashPassword(raw));
+
+        var run = await RunHandler($"Bearer {raw}", candidates: [key], conflictOnUpgrade: true);
+
+        run.Result.Succeeded.Should().BeFalse();
     }
 
     [Fact]

@@ -40,8 +40,12 @@ public sealed class OAuthStateStore(OrbitDbContext db, TimeProvider timeProvider
         var payload = Read(secret, kind, nowAtUtc);
         if (payload is null)
             return null;
-        return db.OAuthStates.Where(state => state.SecretHash == hash && state.Kind == kind && state.ExpiresAtUtc > nowAtUtc)
-            .ExecuteDelete() == 1 ? payload : null;
+        var query = db.OAuthStates.Where(state => state.SecretHash == hash && state.Kind == kind && state.ExpiresAtUtc > nowAtUtc);
+        var affected = kind == "refresh"
+            ? query.Where(state => state.ConsumedAtUtc == null)
+                .ExecuteUpdate(setters => setters.SetProperty(state => state.ConsumedAtUtc, nowAtUtc))
+            : query.ExecuteDelete();
+        return affected == 1 ? payload : null;
     }
 
     public void RemoveExpired(DateTime nowAtUtc) => db.OAuthStates.Where(state => state.ExpiresAtUtc <= nowAtUtc).ExecuteDelete();

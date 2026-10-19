@@ -53,14 +53,28 @@ public sealed class OAuthAuthorizationStore(IOAuthStateStore states, TimeProvide
     public string CreatePendingConsent(ConsentEntry entry) => Put("consent", entry, CodeExpiry);
     public ConsentEntry? ReadPendingConsent(string secret) => Deserialize<ConsentEntry>(states.Read(secret, "consent", timeProvider.GetUtcNow().UtcDateTime));
     public ConsentEntry? ConsumePendingConsent(string secret) => Deserialize<ConsentEntry>(states.Take(secret, "consent", timeProvider.GetUtcNow().UtcDateTime));
-    public string CreateRefreshToken(RefreshEntry entry) => Put("refresh", entry, TimeSpan.FromDays(30));
+    public string CreateRefreshToken(RefreshEntry entry)
+    {
+        var expiresAtUtc = entry.FamilyExpiresAtUtc ?? timeProvider.GetUtcNow().UtcDateTime.AddDays(30);
+        entry = entry with { FamilyId = entry.FamilyId == Guid.Empty ? entry.ApiKeyId : entry.FamilyId, FamilyExpiresAtUtc = expiresAtUtc };
+        return PutUntil("refresh", entry, expiresAtUtc);
+    }
+
+    public RefreshEntry? ReadRefreshToken(string secret)
+    {
+        var entry = Deserialize<RefreshEntry>(states.Read(secret, "refresh", timeProvider.GetUtcNow().UtcDateTime));
+        return entry is null ? null : entry with { FamilyId = entry.FamilyId == Guid.Empty ? entry.ApiKeyId : entry.FamilyId };
+    }
     public RefreshEntry? ConsumeRefreshToken(string secret) => Deserialize<RefreshEntry>(states.Take(secret, "refresh", timeProvider.GetUtcNow().UtcDateTime));
 
-    private string Put<T>(string kind, T entry, TimeSpan lifetime)
+    private string Put<T>(string kind, T entry, TimeSpan lifetime) =>
+        PutUntil(kind, entry, timeProvider.GetUtcNow().UtcDateTime.Add(lifetime));
+
+    private string PutUntil<T>(string kind, T entry, DateTime expiresAtUtc)
     {
         Cleanup();
         var secret = NewSecret();
-        states.Put(secret, kind, JsonSerializer.Serialize(entry), timeProvider.GetUtcNow().UtcDateTime.Add(lifetime));
+        states.Put(secret, kind, JsonSerializer.Serialize(entry), expiresAtUtc);
         return secret;
     }
 
@@ -80,7 +94,7 @@ public sealed class OAuthAuthorizationStore(IOAuthStateStore states, TimeProvide
 
 public record ConsentEntry(Guid UserId, string CodeChallenge, string RedirectUri, string ClientId,
     string State, string? Nonce, string Language, IReadOnlyList<string>? Scopes = null);
-public record RefreshEntry(Guid UserId, Guid ApiKeyId, string ClientId);
+public record RefreshEntry(Guid UserId, Guid ApiKeyId, string ClientId, Guid FamilyId = default, DateTime? FamilyExpiresAtUtc = null);
 
 public record AuthorizationEntry(
     Guid UserId,

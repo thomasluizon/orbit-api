@@ -412,6 +412,7 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<bool>("IsRevoked")
+                        .IsConcurrencyToken()
                         .HasColumnType("boolean");
 
                     b.Property<string>("KeyHash")
@@ -431,6 +432,9 @@ namespace Orbit.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<Guid?>("OAuthFamilyId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Scopes")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -443,6 +447,8 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("KeyPrefix");
+
+                    b.HasIndex("OAuthFamilyId");
 
                     b.HasIndex("UserId");
 
@@ -1791,6 +1797,9 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ConsumedAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("ExpiresAtUtc")
                         .HasColumnType("timestamp with time zone");

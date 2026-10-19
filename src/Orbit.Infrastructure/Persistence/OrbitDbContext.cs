@@ -463,6 +463,8 @@ public class OrbitDbContext : DbContext
         {
             entity.HasIndex(k => k.KeyPrefix);
             entity.HasIndex(k => k.UserId);
+            entity.HasIndex(k => k.OAuthFamilyId);
+            entity.Property(k => k.IsRevoked).IsConcurrencyToken();
             entity.HasOne<User>().WithMany().HasForeignKey(k => k.UserId).OnDelete(DeleteBehavior.Cascade);
             entity.Property(k => k.Name).HasMaxLength(50);
             entity.Property(k => k.KeyPrefix).HasMaxLength(12);

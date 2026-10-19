@@ -16,6 +16,7 @@ public class ApiKey : Entity
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime? LastUsedAtUtc { get; private set; }
     public bool IsRevoked { get; private set; }
+    public Guid? OAuthFamilyId { get; private set; }
 
     private ApiKey() { }
 
@@ -24,7 +25,8 @@ public class ApiKey : Entity
         string name,
         IReadOnlyList<string>? scopes = null,
         bool isReadOnly = false,
-        DateTime? expiresAtUtc = null)
+        DateTime? expiresAtUtc = null,
+        Guid? oauthFamilyId = null)
     {
         if (userId == Guid.Empty)
             return Result.Failure<(ApiKey, string)>(DomainErrors.UserIdRequired);
@@ -37,6 +39,9 @@ public class ApiKey : Entity
 
         if (expiresAtUtc.HasValue && expiresAtUtc.Value <= DateTime.UtcNow)
             return Result.Failure<(ApiKey, string)>(DomainErrors.ApiKeyExpiryInPast);
+
+        if (oauthFamilyId == Guid.Empty)
+            return Result.Failure<(ApiKey, string)>("An OAuth family id must not be empty.");
 
         var normalizedScopes = (scopes ?? [])
             .Where(scope => !string.IsNullOrWhiteSpace(scope))
@@ -61,7 +66,8 @@ public class ApiKey : Entity
             IsReadOnly = isReadOnly,
             ExpiresAtUtc = expiresAtUtc,
             CreatedAtUtc = DateTime.UtcNow,
-            IsRevoked = false
+            IsRevoked = false,
+            OAuthFamilyId = oauthFamilyId
         };
 
         return Result.Success((apiKey, rawKey));

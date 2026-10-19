@@ -8,6 +8,7 @@ public sealed class OAuthState : Entity
     public string Kind { get; private set; } = string.Empty;
     public string Payload { get; private set; } = string.Empty;
     public DateTime ExpiresAtUtc { get; private set; }
+    public DateTime? ConsumedAtUtc { get; private set; }
 
     private OAuthState() { }
 

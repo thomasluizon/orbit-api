@@ -60,6 +60,8 @@ public class McpPlanAccessTests
                 Arg.Any<Expression<Func<ApiKey, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(call => keys.Where(call.Arg<Expression<Func<ApiKey, bool>>>().Compile()).ToList());
         var unitOfWork = Substitute.For<IUnitOfWork>();
+        unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<IActionResult>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<IActionResult>>>()(call.Arg<CancellationToken>()));
 
         string token;
         if (throughOAuth)

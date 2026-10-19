@@ -3,6 +3,7 @@ using System.Text.Json;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Orbit.Api.Extensions;
 using Orbit.Api.OAuth;
@@ -379,43 +380,57 @@ public partial class OAuthController(
         if (entry is null)
             return BadRequest(new { error = "invalid_grant", error_description = "Invalid, expired, or already used authorization code" });
 
-        var existingKeys = await apiKeyRepository.FindTrackedAsync(
-            k => k.UserId == entry.UserId && k.Name == "Claude.ai", ct);
-        foreach (var existing in existingKeys)
-            existing.Revoke();
-
-        var keyResult = ApiKey.Create(
-            entry.UserId,
-            "Claude.ai",
-            entry.Scopes ?? AgentScopes.ClaudeDefaultScopes,
-            isReadOnly: entry.IsReadOnly,
-            expiresAtUtc: DateTime.UtcNow.AddHours(1));
-        if (keyResult.IsFailure)
+        try
         {
-            if (logger.IsEnabled(LogLevel.Error))
-                LogFailedToCreateOAuthApiKey(logger, entry.UserId, keyResult.Error);
-            return StatusCode(500, new { error = "server_error" });
+            return await unitOfWork.ExecuteInTransactionAsync<IActionResult>(async token =>
+            {
+                await unitOfWork.AcquireAdvisoryLockAsync($"oauth-keys:{entry.UserId}", token);
+                var existingKeys = await apiKeyRepository.FindTrackedAsync(
+                    k => k.UserId == entry.UserId && k.Name == "Claude.ai", token);
+                foreach (var existing in existingKeys)
+                    existing.Revoke();
+
+                var familyId = Guid.NewGuid();
+                var keyResult = ApiKey.Create(
+                    entry.UserId,
+                    "Claude.ai",
+                    entry.Scopes ?? AgentScopes.ClaudeDefaultScopes,
+                    isReadOnly: entry.IsReadOnly,
+                    expiresAtUtc: DateTime.UtcNow.AddHours(1),
+                    oauthFamilyId: familyId);
+                if (keyResult.IsFailure)
+                {
+                    if (logger.IsEnabled(LogLevel.Error))
+                        LogFailedToCreateOAuthApiKey(logger, entry.UserId, keyResult.Error);
+                    return StatusCode(500, new { error = "server_error" });
+                }
+
+                var (apiKey, rawKey) = keyResult.Value;
+                await apiKeyRepository.AddAsync(apiKey, token);
+                await unitOfWork.SaveChangesAsync(token);
+
+                if (logger.IsEnabled(LogLevel.Debug))
+                    LogOAuthApiKeyCreated(logger, entry.UserId, entry.ClientId);
+
+                var response = new Dictionary<string, object>
+                {
+                    ["access_token"] = rawKey,
+                    ["token_type"] = "Bearer",
+                    ["scope"] = string.Join(' ', apiKey.Scopes),
+                    ["expires_in"] = 3600,
+                    ["refresh_token"] = authStore.CreateRefreshToken(new RefreshEntry(entry.UserId, apiKey.Id, entry.ClientId, familyId))
+                };
+                if (!string.IsNullOrEmpty(entry.Nonce))
+                    response["nonce"] = entry.Nonce;
+
+                return Ok(response);
+            }, ct);
         }
-
-        var (apiKey, rawKey) = keyResult.Value;
-        await apiKeyRepository.AddAsync(apiKey, ct);
-        await unitOfWork.SaveChangesAsync(ct);
-
-        if (logger.IsEnabled(LogLevel.Debug))
-            LogOAuthApiKeyCreated(logger, entry.UserId, entry.ClientId);
-
-        var response = new Dictionary<string, object>
+        catch (DbUpdateConcurrencyException)
         {
-            ["access_token"] = rawKey,
-            ["token_type"] = "Bearer",
-            ["scope"] = string.Join(' ', apiKey.Scopes),
-            ["expires_in"] = 3600,
-            ["refresh_token"] = authStore.CreateRefreshToken(new RefreshEntry(entry.UserId, apiKey.Id, entry.ClientId))
-        };
-        if (!string.IsNullOrEmpty(entry.Nonce))
-            response["nonce"] = entry.Nonce;
-
-        return Ok(response);
+            unitOfWork.ResetTracking();
+            return BadRequest(new { error = "invalid_grant" });
+        }
     }
 
     [HttpGet("/oauth/consent")]
@@ -448,31 +463,60 @@ public partial class OAuthController(
 
     private async Task<IActionResult> RefreshAsync(string? refreshToken, CancellationToken ct)
     {
-        var grant = string.IsNullOrWhiteSpace(refreshToken) ? null : authStore.ConsumeRefreshToken(refreshToken);
+        var grant = string.IsNullOrWhiteSpace(refreshToken) ? null : authStore.ReadRefreshToken(refreshToken);
         if (grant is null)
             return BadRequest(new { error = "invalid_grant" });
         var previous = await apiKeyRepository.GetByIdAsync(grant.ApiKeyId, ct);
-        if (previous is null || previous.IsRevoked || previous.UserId != grant.UserId)
+        if (previous is null || previous.UserId != grant.UserId)
             return BadRequest(new { error = "invalid_grant" });
         var tracked = await apiKeyRepository.FindOneTrackedAsync(key => key.Id == previous.Id, cancellationToken: ct);
-        if (tracked is null || tracked.IsRevoked)
+        if (tracked is null)
             return BadRequest(new { error = "invalid_grant" });
-        var created = ApiKey.Create(grant.UserId, "Claude.ai", previous.Scopes, previous.IsReadOnly,
-            expiresAtUtc: DateTime.UtcNow.AddHours(1));
-        if (created.IsFailure)
-            return StatusCode(500, new { error = "server_error" });
-        tracked.Revoke();
-        var (key, raw) = created.Value;
-        await apiKeyRepository.AddAsync(key, ct);
-        await unitOfWork.SaveChangesAsync(ct);
-        return Ok(new
+        try
         {
-            access_token = raw,
-            token_type = "Bearer",
-            scope = string.Join(' ', key.Scopes),
-            expires_in = 3600,
-            refresh_token = authStore.CreateRefreshToken(new RefreshEntry(grant.UserId, key.Id, grant.ClientId))
-        });
+            return await unitOfWork.ExecuteInTransactionAsync<IActionResult>(async token =>
+            {
+                await unitOfWork.AcquireAdvisoryLockAsync($"oauth-keys:{grant.UserId}", token);
+                if (authStore.ConsumeRefreshToken(refreshToken!) is null)
+                {
+                    var family = await apiKeyRepository.FindTrackedAsync(
+                        key => key.UserId == grant.UserId && !key.IsRevoked
+                            && (key.OAuthFamilyId == grant.FamilyId || key.Id == grant.FamilyId), token);
+                    foreach (var member in family)
+                        member.Revoke();
+                    await unitOfWork.SaveChangesAsync(token);
+                    return BadRequest(new { error = "invalid_grant" });
+                }
+                var familyExpiresAtUtc = grant.FamilyExpiresAtUtc ?? previous.CreatedAtUtc.AddDays(30);
+                if (tracked.IsRevoked || familyExpiresAtUtc <= TimeProvider.System.GetUtcNow().UtcDateTime)
+                    return BadRequest(new { error = "invalid_grant" });
+                var expiresAtUtc = DateTime.UtcNow.AddHours(1);
+                if (familyExpiresAtUtc < expiresAtUtc)
+                    expiresAtUtc = familyExpiresAtUtc;
+                var created = ApiKey.Create(grant.UserId, "Claude.ai", previous.Scopes, previous.IsReadOnly,
+                    expiresAtUtc: expiresAtUtc, oauthFamilyId: grant.FamilyId);
+                if (created.IsFailure)
+                    return StatusCode(500, new { error = "server_error" });
+                tracked.Revoke();
+                var (key, raw) = created.Value;
+                await apiKeyRepository.AddAsync(key, token);
+                await unitOfWork.SaveChangesAsync(token);
+                return Ok(new
+                {
+                    access_token = raw,
+                    token_type = "Bearer",
+                    scope = string.Join(' ', key.Scopes),
+                    expires_in = (int)Math.Ceiling((expiresAtUtc - TimeProvider.System.GetUtcNow().UtcDateTime).TotalSeconds),
+                    refresh_token = authStore.CreateRefreshToken(new RefreshEntry(grant.UserId, key.Id, grant.ClientId,
+                        grant.FamilyId, familyExpiresAtUtc))
+                });
+            }, ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            unitOfWork.ResetTracking();
+            return BadRequest(new { error = "invalid_grant" });
+        }
     }
 
     private static IReadOnlyList<string>? RequestedScopes(string? scope)

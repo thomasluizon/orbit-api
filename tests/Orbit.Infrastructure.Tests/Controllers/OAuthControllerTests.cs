@@ -58,6 +58,8 @@ public class OAuthControllerTests : IDisposable
 
     public OAuthControllerTests()
     {
+        _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<IActionResult>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<IActionResult>>>()(call.Arg<CancellationToken>()));
         _authStore = new OAuthAuthorizationStore(new OAuthStateStore(_oauthDb.Context, _timeProvider), _timeProvider);
         var googleSettings = Options.Create(new GoogleSettings
         {

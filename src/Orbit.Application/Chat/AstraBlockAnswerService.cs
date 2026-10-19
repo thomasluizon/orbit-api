@@ -31,9 +31,10 @@ public sealed class AstraBlockAnswerService(
     TimeSpan? claimLifetime = null)
 {
     public async Task<Result<ChatResponse>> ExecuteAsync(ProcessUserChatCommand request,
-        Func<PreparedAstraBlockAnswer, Task<Result<ChatResponse>>> produceResponse, CancellationToken ct)
+        Func<PreparedAstraBlockAnswer, Task<Result<ChatResponse>>> produceResponse, CancellationToken ct,
+        Func<string, CancellationToken, Task<Result>>? checkInput = null)
     {
-        var preparation = await PrepareAsync(request, ct);
+        var preparation = await PrepareAsync(request, ct, checkInput);
         if (preparation.IsFailure)
             return preparation.PropagateError<ChatResponse>();
         var prepared = preparation.Value;
@@ -141,7 +142,8 @@ public sealed class AstraBlockAnswerService(
             throw new InvalidOperationException(refund.Error);
     }
 
-    public async Task<Result<PreparedAstraBlockAnswer>> PrepareAsync(ProcessUserChatCommand request, CancellationToken ct)
+    public async Task<Result<PreparedAstraBlockAnswer>> PrepareAsync(ProcessUserChatCommand request, CancellationToken ct,
+        Func<string, CancellationToken, Task<Result>>? checkInput = null)
     {
         var answer = request.BlockAnswer ?? throw new ArgumentException("Block answer is required.", nameof(request));
         var validation = await new AstraBlockAnswerValidator().ValidateAsync(answer, ct);
@@ -176,6 +178,12 @@ public sealed class AstraBlockAnswerService(
                 var isChoice = definition.Form == AstraBlockKinds.Choice;
                 var message = BuildMessage(definition, answer);
                 var crisis = isChoice ? await DetectCrisisTurnAsync(request.UserId, message, token) : CrisisLocales.None;
+                if (crisis == CrisisLocales.None && checkInput is not null)
+                {
+                    var inputCheck = await checkInput(message, token);
+                    if (inputCheck.IsFailure)
+                        return inputCheck.PropagateError<PreparedAstraBlockAnswer>();
+                }
                 if (isChoice && crisis == CrisisLocales.None)
                 {
                     var allowance = await payGate.CanSendAiMessage(request.UserId, token);

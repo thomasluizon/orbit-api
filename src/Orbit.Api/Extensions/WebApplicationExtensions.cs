@@ -188,7 +188,9 @@ public static partial class WebApplicationExtensions
 
         var replayFingerprint = AgentOperationFingerprint.Compute(toolName!, root!.Value.GetProperty("params").GetRawText());
         context.Items[Orbit.Api.Idempotency.HttpIdempotencyContext.McpRequestKey] =
-            $"mcp:{context.User.FindFirstValue("api_key_id")}:{requestId?.GetRawText()}:{replayFingerprint}";
+            new Orbit.Api.Idempotency.McpReplayIdentity(
+                context.User.FindFirstValue("api_key_id") ?? context.User.GetUserId().ToString(),
+                requestId?.GetRawText(), replayFingerprint);
 
         await HandleMcpToolCallAsync(
             context,
