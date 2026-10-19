@@ -241,6 +241,7 @@ public class GoogleCodeAuthCommandHandlerTests
                 cfg.AddOpenBehavior(typeof(ConcurrencyRetryBehavior<,>));
             })
             .AddScoped<GoogleSignInFlow>()
+            .AddSingleton(new AccountReactivation(_notifications, Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()))
             .AddSingleton<ISignupJobDispatcher>(new SignupJobDispatcher(_jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance))
             .AddSingleton(_store)
             .AddSingleton(_jobs)
