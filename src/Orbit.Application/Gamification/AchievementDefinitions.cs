@@ -39,9 +39,6 @@ public static class AchievementDefinitions
     public const string Cheerleader = "cheerleader";
     public const string ShowOff = "show_off";
     public const string YearInReview = "year_in_review";
-    public const string TeamPlayer = "team_player";
-    public const string MissionAccomplished = "mission_accomplished";
-    public const string BattleBuddy = "battle_buddy";
     public const string StreakImmortal = "streak_immortal";
     public const string Unstoppable = "unstoppable";
 
@@ -81,9 +78,6 @@ public static class AchievementDefinitions
         new(Cheerleader, "Cheerleader", "Send 25 cheers", AchievementCategory.Social, AchievementRarity.Rare, 150, "cheerleader", IsRetired: true),
         new(ShowOff, "Show off", "Share your first card", AchievementCategory.Sharing, AchievementRarity.Uncommon, 75, "show_off"),
         new(YearInReview, "Year in review", "View your first Wrapped", AchievementCategory.Sharing, AchievementRarity.Uncommon, 75, "year_in_review"),
-        new(TeamPlayer, "Team player", "Join your first cooperative challenge", AchievementCategory.Together, AchievementRarity.Uncommon, 75, "team_player", IsRetired: true),
-        new(MissionAccomplished, "Mission accomplished", "Complete a cooperative challenge", AchievementCategory.Together, AchievementRarity.Rare, 150, "mission_accomplished", IsRetired: true),
-        new(BattleBuddy, "Battle buddy", "Start a 1:1 accountability pair", AchievementCategory.Together, AchievementRarity.Uncommon, 75, "battle_buddy", IsRetired: true),
         new(StreakImmortal, "Streak immortal", "Achieve a 1000-day streak", AchievementCategory.Consistency, AchievementRarity.Legendary, 1500, "streak_immortal", ProgressMetric.CurrentStreak, 1000),
         new(Unstoppable, "Unstoppable", "Complete 2500 habits total", AchievementCategory.Volume, AchievementRarity.Legendary, 1000, "unstoppable", ProgressMetric.TotalCompletions, 2500),
     ];

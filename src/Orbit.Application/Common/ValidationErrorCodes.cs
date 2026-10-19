@@ -2,9 +2,6 @@ namespace Orbit.Application.Common;
 
 public static class ValidationErrorCodes
 {
-    public const string AccountabilityHabitLimit = "VALIDATION_ACCOUNTABILITY_HABIT_LIMIT";
-    public const string HabitIdsRequired = "VALIDATION_HABIT_IDS_REQUIRED";
-    public const string HabitIdsUnique = "VALIDATION_HABIT_IDS_UNIQUE";
     public const string VerificationCodeFormat = "VALIDATION_VERIFICATION_CODE_FORMAT";
     public const string ApiKeyNameRequired = "VALIDATION_API_KEY_NAME_REQUIRED";
     public const string ApiKeyNameLength = "VALIDATION_API_KEY_NAME_LENGTH";
@@ -15,12 +12,6 @@ public static class ValidationErrorCodes
     public const string RefreshTokenFormat = "VALIDATION_REFRESH_TOKEN_FORMAT";
     public const string CalendarSelectionLimit = "VALIDATION_CALENDAR_SELECTION_LIMIT";
     public const string CalendarIdsRequired = "VALIDATION_CALENDAR_IDS_REQUIRED";
-    public const string ChallengeTargetPositive = "VALIDATION_CHALLENGE_TARGET_POSITIVE";
-    public const string StreakChallengeTargetAbsent = "VALIDATION_STREAK_CHALLENGE_TARGET_ABSENT";
-    public const string ChallengeEndDateRequired = "VALIDATION_CHALLENGE_END_DATE_REQUIRED";
-    public const string ChallengeHabitsRequired = "VALIDATION_CHALLENGE_HABITS_REQUIRED";
-    public const string ChallengeHabitLimit = "VALIDATION_CHALLENGE_HABIT_LIMIT";
-    public const string ChallengeInviteLimit = "VALIDATION_CHALLENGE_INVITE_LIMIT";
     public const string ChatMessageRequired = "VALIDATION_CHAT_MESSAGE_REQUIRED";
     public const string ChatMessageLength = "VALIDATION_CHAT_MESSAGE_LENGTH";
     public const string ChatHistoryLimit = "VALIDATION_CHAT_HISTORY_LIMIT";

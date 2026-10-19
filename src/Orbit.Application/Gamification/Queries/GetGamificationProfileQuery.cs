@@ -106,7 +106,9 @@ public class GetGamificationProfileQueryHandler(
     private async Task<(List<AchievementDto> Achievements, List<UserAchievementDto> UserAchievements, int EarnedCount)> BuildAchievementsAsync(
         User user, CancellationToken cancellationToken)
     {
-        var earned = await achievementRepository.FindAsync(a => a.UserId == user.Id, cancellationToken);
+        var earned = (await achievementRepository.FindAsync(a => a.UserId == user.Id, cancellationToken))
+            .Where(a => AchievementDefinitions.GetById(a.AchievementId) is not null)
+            .ToList();
         var earnedMap = earned.ToDictionary(a => a.AchievementId, a => a.EarnedAtUtc);
         var earnedIds = earnedMap.Keys.ToHashSet();
 

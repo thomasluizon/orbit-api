@@ -53,7 +53,9 @@ public class GetAchievementsQueryHandler(
             request.UserId,
             cancellationToken);
 
-        var earnedList = await achievementRepository.FindAsync(a => a.UserId == request.UserId, cancellationToken);
+        var earnedList = (await achievementRepository.FindAsync(a => a.UserId == request.UserId, cancellationToken))
+            .Where(a => AchievementDefinitions.GetById(a.AchievementId) is not null)
+            .ToList();
         var earnedMap = earnedList.ToDictionary(a => a.AchievementId, a => a.EarnedAtUtc);
         var earnedIds = earnedMap.Keys.ToHashSet();
 
