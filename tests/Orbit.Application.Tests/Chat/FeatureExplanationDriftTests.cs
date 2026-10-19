@@ -1,8 +1,11 @@
 using System.Globalization;
 using FluentAssertions;
+using NSubstitute;
 using Orbit.Application.Chat.FeatureExplanations;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification;
+using Orbit.Domain.Entities;
+using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Tests.Chat;
 
@@ -61,6 +64,70 @@ public class FeatureExplanationDriftTests
         body.Should().Contain(N(AppConstants.DefaultFreeMaxHabits));
         body.Should().Contain(N(AppConstants.DefaultFreeAiMessages));
         body.Should().Contain(N(AppConstants.DefaultProAiMessages));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Paygate_QuotaClaimMatchesEnforcedDailyWindow(bool pro)
+    {
+        var user = User.Create("Quota reader", "quota@example.com").Value;
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        if (pro)
+            user.GrantLifetimePro();
+        var today = new DateOnly(2026, 8, 5);
+        var users = Substitute.For<IGenericRepository<User>>();
+        users.GetByIdAsync(user.Id, Arg.Any<CancellationToken>()).Returns(user);
+        var dates = Substitute.For<IUserDateService>();
+        dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(today);
+        var config = Substitute.For<IAppConfigService>();
+        config.GetAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<int>(1));
+        var gate = new PayGateService(Substitute.For<IGenericRepository<Habit>>(), users, config, dates);
+        var limit = pro ? AppConstants.DefaultProAiMessages : AppConstants.DefaultFreeAiMessages;
+
+        for (var count = 0; count < limit; count++)
+        {
+            (await gate.CanSendAiMessage(user.Id)).IsSuccess.Should().BeTrue();
+            user.IncrementAiMessageCount(today);
+        }
+
+        (await gate.CanSendAiMessage(user.Id)).IsFailure.Should().BeTrue();
+        dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(today.AddDays(1));
+        (await gate.CanSendAiMessage(user.Id)).IsSuccess.Should().BeTrue();
+        user.IncrementAiMessageCount(today.AddDays(1));
+        user.AiMessagesUsedToday.Should().Be(1);
+        Body("paygate").Should().Contain(
+            $"**AI messages** are capped at **{N(AppConstants.DefaultFreeAiMessages)}** per day. Pro raises this to **{N(AppConstants.DefaultProAiMessages)}** per day.",
+            "paygate.md must describe the enforced daily quota and its plan limits");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Paygate_ProUnlocksMatchEnforcedGates(bool pro)
+    {
+        var user = User.Create("Plan reader", "plan@example.com").Value;
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        if (pro)
+            user.GrantLifetimePro();
+        var users = Substitute.For<IGenericRepository<User>>();
+        users.GetByIdAsync(user.Id, Arg.Any<CancellationToken>()).Returns(user);
+        var config = Substitute.For<IAppConfigService>();
+        config.GetAsync(Arg.Any<string>(), true, Arg.Any<CancellationToken>()).Returns(true);
+        var gate = new PayGateService(Substitute.For<IGenericRepository<Habit>>(), users, config,
+            Substitute.For<IUserDateService>());
+
+        (await gate.CanCreateSubHabits(user.Id)).IsSuccess.Should().Be(pro);
+        (await gate.CanUseDailySummary(user.Id)).IsSuccess.Should().Be(pro);
+        (await gate.CanAccessCalendar(user.Id)).IsSuccess.Should().Be(pro);
+        (await gate.CanUseRetrospective(user.Id)).IsSuccess.Should().Be(pro);
+
+        var unlocks = Body("paygate").Split("## What Pro unlocks")[1]
+            .Split('\n').Where(line => line.StartsWith("- ", StringComparison.Ordinal));
+        unlocks.Should().BeEquivalentTo(
+            ["- Sub-habits", "- The daily AI summary", "- Calendar integration", "- Retrospectives"],
+            "paygate.md must list the features these default plan gates enforce");
     }
 
     [Fact]

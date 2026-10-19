@@ -14,7 +14,7 @@ derived_from:
 
 # Streak Freezes
 
-A streak freeze protects your streak on a day you couldn't complete a habit. **Streak freezes are a Pro feature.**
+A streak freeze protects your streak on a day you couldn't complete a habit. Streak freezes are available with Pro access or when the `gamification_free_tier` flag is enabled for your account.
 
 ## Earning freezes
 

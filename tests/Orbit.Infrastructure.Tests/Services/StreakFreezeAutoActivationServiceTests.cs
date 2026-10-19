@@ -6,6 +6,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using Orbit.Application.Chat.FeatureExplanations;
 using Orbit.Application.Notifications;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -48,6 +49,14 @@ public class StreakFreezeAutoActivationServiceTests
 
         (await dbContext.StreakFreezes.SingleAsync()).UserId.Should().Be(targeted.Id);
         other.StreakFreezesAccumulated.Should().Be(1);
+        targeted.HasProAccess.Should().BeFalse();
+        var features = new FeatureExplanationService();
+        features.Get("freezes")!.Body.Should().Contain(
+            "Streak freezes are available with Pro access or when the `gamification_free_tier` flag is enabled for your account.",
+            "freezes.md must describe the access condition that allowed this free user's automatic freeze");
+        features.Get("freezes")!.Body.Should().NotContain("Streak freezes are a Pro feature");
+        features.Get("paygate")!.Body.Split("## What Pro unlocks")[1].Should()
+            .NotContain("Streak freezes", "paygate.md must not list this free user's freeze as a Pro unlock");
     }
 
     [Fact]

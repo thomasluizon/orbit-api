@@ -13,7 +13,7 @@ derived_from:
 
 # XP, Levels, and Achievements
 
-Gamification rewards consistency with experience points (XP), levels, and achievements. Achievements are available on both free and Pro plans.
+Gamification rewards consistency with experience points (XP), levels, and achievements. XP, levels, and achievements are available with Pro access or when the `gamification_free_tier` flag is enabled for your account.
 
 ## Earning XP
 
