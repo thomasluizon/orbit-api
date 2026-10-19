@@ -39,36 +39,35 @@ public class ApiKeyAuthenticationHandler(
         var candidates = await apiKeyRepository.FindTrackedAsync(
             k => k.KeyPrefix == keyPrefix && !k.IsRevoked);
 
-        foreach (var candidate in candidates.Where(candidate => BCrypt.Net.BCrypt.Verify(rawKey, candidate.KeyHash)))
+        var candidate = candidates.FirstOrDefault(candidate => BCrypt.Net.BCrypt.Verify(rawKey, candidate.KeyHash));
+        if (candidate is null)
+            return AuthenticateResult.Fail("Invalid API key.");
+
+        if (candidate.HasExpired())
+            return AuthenticateResult.Fail("API key expired.");
+
+        var gateCheck = await payGate.CanReadApiKeys(candidate.UserId, Context.RequestAborted);
+        if (gateCheck.IsFailure)
+            return AuthenticateResult.Fail("API keys are not available for this plan.");
+
+        candidate.MarkUsed();
+        await unitOfWork.SaveChangesAsync();
+
+        cache.Remove(ReferenceCacheKeys.ApiKeys(candidate.UserId));
+
+        var claims = new List<Claim>
         {
-            if (candidate.HasExpired())
-                return AuthenticateResult.Fail("API key expired.");
+            new(ClaimTypes.NameIdentifier, candidate.UserId.ToString()),
+            new("auth_method", "api_key"),
+            new("api_key_id", candidate.Id.ToString()),
+            new("api_key_read_only", candidate.IsReadOnly.ToString())
+        };
 
-            var gateCheck = await payGate.CanReadApiKeys(candidate.UserId, Context.RequestAborted);
-            if (gateCheck.IsFailure)
-                return AuthenticateResult.Fail("API keys are not available for this plan.");
-
-            candidate.MarkUsed();
-            await unitOfWork.SaveChangesAsync();
-
-            cache.Remove(ReferenceCacheKeys.ApiKeys(candidate.UserId));
-
-            var claims = new List<Claim>
-            {
-                new(ClaimTypes.NameIdentifier, candidate.UserId.ToString()),
-                new("auth_method", "api_key"),
-                new("api_key_id", candidate.Id.ToString()),
-                new("api_key_read_only", candidate.IsReadOnly.ToString())
-            };
-
-            claims.AddRange(candidate.Scopes.Select(scope => new Claim("scope", scope)));
-            var identity = new ClaimsIdentity(claims, Scheme.Name);
-            var principal = new ClaimsPrincipal(identity);
-            var ticket = new AuthenticationTicket(principal, Scheme.Name);
-            return AuthenticateResult.Success(ticket);
-        }
-
-        return AuthenticateResult.Fail("Invalid API key.");
+        claims.AddRange(candidate.Scopes.Select(scope => new Claim("scope", scope)));
+        var identity = new ClaimsIdentity(claims, Scheme.Name);
+        var principal = new ClaimsPrincipal(identity);
+        var ticket = new AuthenticationTicket(principal, Scheme.Name);
+        return AuthenticateResult.Success(ticket);
     }
 
     private static bool IsAllowedApiKeyPath(PathString path)

@@ -44,7 +44,7 @@ public partial class ApiKeysController(IMediator mediator, ILogger<ApiKeysContro
         return result.ToPayGateAwareResult(value =>
         {
             if (logger.IsEnabled(LogLevel.Information))
-                LogApiKeyCreated(logger, value.Id, HttpContext.GetUserId());
+                logger.LogApiKeyCreated(value.Id, HttpContext.GetUserId());
             return Created($"/api/api-keys/{value.Id}", value);
         });
     }
@@ -104,15 +104,18 @@ public partial class ApiKeysController(IMediator mediator, ILogger<ApiKeysContro
         if (result.IsSuccess)
         {
             if (logger.IsEnabled(LogLevel.Information))
-                LogApiKeyRevoked(logger, id, HttpContext.GetUserId());
+                logger.LogApiKeyRevoked(id, HttpContext.GetUserId());
             return NoContent();
         }
         return result.ToErrorResult();
     }
+}
 
+internal static partial class ApiKeysControllerLogging
+{
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "API key created {KeyId} by user {UserId}")]
-    private static partial void LogApiKeyCreated(ILogger logger, Guid keyId, Guid userId);
+    internal static partial void LogApiKeyCreated(this ILogger logger, Guid keyId, Guid userId);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "API key revoked {KeyId} by user {UserId}")]
-    private static partial void LogApiKeyRevoked(ILogger logger, Guid keyId, Guid userId);
+    internal static partial void LogApiKeyRevoked(this ILogger logger, Guid keyId, Guid userId);
 }

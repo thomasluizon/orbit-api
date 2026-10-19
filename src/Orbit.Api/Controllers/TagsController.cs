@@ -47,7 +47,7 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
         if (result.IsSuccess)
         {
             if (logger.IsEnabled(LogLevel.Information))
-                LogTagCreated(logger, result.Value, HttpContext.GetUserId());
+                logger.LogTagCreated(result.Value, HttpContext.GetUserId());
             return Created($"/api/tags/{result.Value}", new { id = result.Value });
         }
         return result.ToErrorResult();
@@ -69,7 +69,7 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
         if (result.IsSuccess)
         {
             if (logger.IsEnabled(LogLevel.Information))
-                LogTagUpdated(logger, id, HttpContext.GetUserId());
+                logger.LogTagUpdated(id, HttpContext.GetUserId());
             return NoContent();
         }
         return result.ToErrorResult();
@@ -88,7 +88,7 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
         if (result.IsSuccess)
         {
             if (logger.IsEnabled(LogLevel.Information))
-                LogTagDeleted(logger, id, HttpContext.GetUserId());
+                logger.LogTagDeleted(id, HttpContext.GetUserId());
             return NoContent();
         }
         return result.ToErrorResult();
@@ -107,7 +107,7 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
         return result.ToPayGateAwareResult(() =>
         {
             if (logger.IsEnabled(LogLevel.Information))
-                LogTagRestored(logger, id, HttpContext.GetUserId());
+                logger.LogTagRestored(id, HttpContext.GetUserId());
             return NoContent();
         });
     }
@@ -147,17 +147,19 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
 
         return result.ToPayGateAwareResult(v => Ok(v));
     }
+}
 
+internal static partial class TagsControllerLogging
+{
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Tag created {TagId} by user {UserId}")]
-    private static partial void LogTagCreated(ILogger logger, Guid tagId, Guid userId);
+    internal static partial void LogTagCreated(this ILogger logger, Guid tagId, Guid userId);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Tag updated {TagId} by user {UserId}")]
-    private static partial void LogTagUpdated(ILogger logger, Guid tagId, Guid userId);
+    internal static partial void LogTagUpdated(this ILogger logger, Guid tagId, Guid userId);
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Tag deleted {TagId} by user {UserId}")]
-    private static partial void LogTagDeleted(ILogger logger, Guid tagId, Guid userId);
+    internal static partial void LogTagDeleted(this ILogger logger, Guid tagId, Guid userId);
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Tag restored {TagId} by user {UserId}")]
-    private static partial void LogTagRestored(ILogger logger, Guid tagId, Guid userId);
-
+    internal static partial void LogTagRestored(this ILogger logger, Guid tagId, Guid userId);
 }

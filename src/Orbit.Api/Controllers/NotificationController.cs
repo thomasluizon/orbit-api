@@ -109,7 +109,7 @@ public partial class NotificationController(
         if (result.IsSuccess)
         {
             if (logger.IsEnabled(LogLevel.Information))
-                LogPushSubscriptionRegistered(logger, HttpContext.GetUserId());
+                logger.LogPushSubscriptionRegistered(HttpContext.GetUserId());
             return Ok();
         }
 
@@ -133,7 +133,7 @@ public partial class NotificationController(
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
-            LogPushSubscriptionRemoved(logger, HttpContext.GetUserId());
+            logger.LogPushSubscriptionRemoved(HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult();
     }
@@ -151,17 +151,20 @@ public partial class NotificationController(
             return result.ToErrorResult();
 
         if (result.Value.Status == "failed" && logger.IsEnabled(LogLevel.Warning))
-            LogTestPushFailed(logger, HttpContext.GetUserId());
+            logger.LogTestPushFailed(HttpContext.GetUserId());
 
         return Ok(result.Value);
     }
+}
 
+internal static partial class NotificationControllerLogging
+{
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Push subscription registered for user {UserId}")]
-    private static partial void LogPushSubscriptionRegistered(ILogger logger, Guid userId);
+    internal static partial void LogPushSubscriptionRegistered(this ILogger logger, Guid userId);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Push subscription removed for user {UserId}")]
-    private static partial void LogPushSubscriptionRemoved(ILogger logger, Guid userId);
+    internal static partial void LogPushSubscriptionRemoved(this ILogger logger, Guid userId);
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Test push failed for user {UserId}")]
-    private static partial void LogTestPushFailed(ILogger logger, Guid userId);
+    internal static partial void LogTestPushFailed(this ILogger logger, Guid userId);
 }

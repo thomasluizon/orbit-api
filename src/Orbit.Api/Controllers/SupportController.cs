@@ -36,14 +36,16 @@ public partial class SupportController(IMediator mediator, ILogger<SupportContro
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
-            LogSupportRequestSent(logger, HttpContext.GetUserId(), request.Subject);
+            logger.LogSupportRequestSent(HttpContext.GetUserId(), request.Subject);
 
         return result.IsSuccess
             ? Ok(new { message = "Support request sent successfully" })
             : result.ToErrorResult();
     }
+}
 
+internal static partial class SupportControllerLogging
+{
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Support request sent by user {UserId} subject {Subject}")]
-    private static partial void LogSupportRequestSent(ILogger logger, Guid userId, string subject);
-
+    internal static partial void LogSupportRequestSent(this ILogger logger, Guid userId, string subject);
 }

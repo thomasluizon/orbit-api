@@ -10,6 +10,8 @@ namespace Orbit.Infrastructure.Services;
 
 public partial class AgentCatalogService : IAgentCatalogService
 {
+    private const string UnknownContextValue = "unknown";
+
     private readonly IReadOnlyList<AgentCapability> _capabilities;
     private readonly IReadOnlyList<AgentOperation> _operations;
     private readonly IReadOnlyList<AppSurface> _surfaces;
@@ -98,8 +100,8 @@ public partial class AgentCatalogService : IAgentCatalogService
     {
         sb.AppendLine("## Safe User Context");
         sb.AppendLine(CultureInfo.InvariantCulture, $"Plan: {snapshot.Plan}");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"Language: {snapshot.Language ?? "unknown"}");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"Timezone: {snapshot.TimeZone ?? "unknown"}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Language: {snapshot.Language ?? UnknownContextValue}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Timezone: {snapshot.TimeZone ?? UnknownContextValue}");
         sb.AppendLine(CultureInfo.InvariantCulture, $"AI summary: {(snapshot.AiSummaryEnabled ? "enabled" : "disabled")}");
         sb.AppendLine(CultureInfo.InvariantCulture, $"Week starts on: {(snapshot.WeekStartDay == 0 ? "Sunday" : "Monday")}");
         sb.AppendLine(CultureInfo.InvariantCulture, $"Clock: {(snapshot.Uses24HourClock ? "24-hour" : "12-hour")}");
@@ -126,10 +128,10 @@ public partial class AgentCatalogService : IAgentCatalogService
         {
             sb.AppendLine();
             sb.AppendLine("## Untrusted Client Hints");
-            sb.AppendLine(CultureInfo.InvariantCulture, $"Platform: {snapshot.ClientContext.Platform ?? "unknown"}");
-            sb.AppendLine(CultureInfo.InvariantCulture, $"Locale: {snapshot.ClientContext.Locale ?? "unknown"}");
-            sb.AppendLine(CultureInfo.InvariantCulture, $"Time format: {snapshot.ClientContext.TimeFormat ?? "unknown"}");
-            sb.AppendLine(CultureInfo.InvariantCulture, $"Current app area: {snapshot.ClientContext.CurrentAppArea ?? "unknown"}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"Platform: {snapshot.ClientContext.Platform ?? UnknownContextValue}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"Locale: {snapshot.ClientContext.Locale ?? UnknownContextValue}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"Time format: {snapshot.ClientContext.TimeFormat ?? UnknownContextValue}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"Current app area: {snapshot.ClientContext.CurrentAppArea ?? UnknownContextValue}");
             if (snapshot.ClientContext.ShowGeneralOnToday.HasValue)
                 sb.AppendLine(CultureInfo.InvariantCulture, $"Show general on today: {snapshot.ClientContext.ShowGeneralOnToday.Value}");
         }

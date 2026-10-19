@@ -220,7 +220,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
-            LogHabitCreated(logger, result.Value, HttpContext.GetUserId());
+            logger.LogHabitCreated(result.Value, HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(v => CreatedAtAction(nameof(GetHabits), new { id = v }, new { id = v }));
     }
@@ -363,7 +363,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         if (result.IsSuccess)
         {
             if (logger.IsEnabled(LogLevel.Information))
-                LogHabitDeleted(logger, id, HttpContext.GetUserId());
+                logger.LogHabitDeleted(id, HttpContext.GetUserId());
             return NoContent();
         }
 
@@ -382,7 +382,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         return result.ToPayGateAwareResult(() =>
         {
             if (logger.IsEnabled(LogLevel.Information))
-                LogHabitRestored(logger, id, HttpContext.GetUserId());
+                logger.LogHabitRestored(id, HttpContext.GetUserId());
             return NoContent();
         });
     }
@@ -428,7 +428,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
-            LogBulkCreated(logger, request.Habits.Count, HttpContext.GetUserId());
+            logger.LogBulkCreated(request.Habits.Count, HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(v => StatusCode(StatusCodes.Status201Created, v));
     }
@@ -448,7 +448,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
-            LogBulkDeleted(logger, request.HabitIds.Count, HttpContext.GetUserId());
+            logger.LogBulkDeleted(request.HabitIds.Count, HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(v => Ok(v));
     }
@@ -469,7 +469,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
-            LogBulkLogged(logger, request.Items.Count, HttpContext.GetUserId());
+            logger.LogBulkLogged(request.Items.Count, HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(v => Ok(v));
     }
@@ -490,7 +490,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
-            LogBulkSkipped(logger, request.Items.Count, HttpContext.GetUserId());
+            logger.LogBulkSkipped(request.Items.Count, HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(v => Ok(v));
     }
@@ -595,7 +595,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
-            LogLinkedGoalsToHabit(logger, request.GoalIds.Count, habitId, HttpContext.GetUserId());
+            logger.LogLinkedGoalsToHabit(request.GoalIds.Count, habitId, HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
     }
@@ -626,29 +626,31 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
             IntervalWeeks: request.IntervalWeeks,
             RelativeReminders: request.RelativeReminders);
     }
+}
 
+internal static partial class HabitsControllerLogging
+{
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Habit created {HabitId} by user {UserId}")]
-    private static partial void LogHabitCreated(ILogger logger, Guid habitId, Guid userId);
+    internal static partial void LogHabitCreated(this ILogger logger, Guid habitId, Guid userId);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Habit deleted {HabitId} by user {UserId}")]
-    private static partial void LogHabitDeleted(ILogger logger, Guid habitId, Guid userId);
+    internal static partial void LogHabitDeleted(this ILogger logger, Guid habitId, Guid userId);
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Bulk created {Count} habits for user {UserId}")]
-    private static partial void LogBulkCreated(ILogger logger, int count, Guid userId);
+    internal static partial void LogBulkCreated(this ILogger logger, int count, Guid userId);
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Bulk deleted {Count} habits for user {UserId}")]
-    private static partial void LogBulkDeleted(ILogger logger, int count, Guid userId);
+    internal static partial void LogBulkDeleted(this ILogger logger, int count, Guid userId);
 
     [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Bulk logged {Count} habits for user {UserId}")]
-    private static partial void LogBulkLogged(ILogger logger, int count, Guid userId);
+    internal static partial void LogBulkLogged(this ILogger logger, int count, Guid userId);
 
     [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Bulk skipped {Count} habits for user {UserId}")]
-    private static partial void LogBulkSkipped(ILogger logger, int count, Guid userId);
+    internal static partial void LogBulkSkipped(this ILogger logger, int count, Guid userId);
 
     [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Linked {Count} goals to habit {HabitId} by user {UserId}")]
-    private static partial void LogLinkedGoalsToHabit(ILogger logger, int count, Guid habitId, Guid userId);
+    internal static partial void LogLinkedGoalsToHabit(this ILogger logger, int count, Guid habitId, Guid userId);
 
     [LoggerMessage(EventId = 8, Level = LogLevel.Information, Message = "Habit restored {HabitId} by user {UserId}")]
-    private static partial void LogHabitRestored(ILogger logger, Guid habitId, Guid userId);
-
+    internal static partial void LogHabitRestored(this ILogger logger, Guid habitId, Guid userId);
 }

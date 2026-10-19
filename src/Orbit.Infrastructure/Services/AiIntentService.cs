@@ -97,29 +97,7 @@ public sealed partial class AiIntentService(
                 payload["entity_name"] = PromptDataSanitizer.SanitizeBlock(result.EntityName, AppConstants.MaxAiToolResultTextLength);
             if (result.Error is not null)
                 payload["error"] = PromptDataSanitizer.SanitizeInline(result.Error, AppConstants.MaxChatMessageLength);
-            if (result.Payload is not null)
-            {
-                var serializedPayload = JsonSerializer.Serialize(result.Payload, SerializeOptions);
-                if (serializedPayload.Length > AppConstants.MaxAiToolPayloadJsonLength)
-                {
-                    payload["payload"] = new Dictionary<string, object>
-                    {
-                        ["dropped"] = true,
-                        ["original_length"] = serializedPayload.Length,
-                        ["instruction"] = "Re-query with a narrower filter."
-                    };
-                    if (logger.IsEnabled(LogLevel.Warning))
-                        LogToolPayloadDropped(
-                            logger,
-                            result.Name,
-                            serializedPayload.Length,
-                            AppConstants.MaxAiToolPayloadJsonLength);
-                }
-                else
-                {
-                    payload["payload"] = JsonSerializer.Deserialize<JsonElement>(serializedPayload);
-                }
-            }
+            AddToolPayload(payload, result);
 
             messages.Add(new ToolChatMessage(result.Id, JsonSerializer.Serialize(payload)));
         }
@@ -130,6 +108,29 @@ public sealed partial class AiIntentService(
             conversationContext.UserId,
             streamSink,
             cancellationToken);
+    }
+
+    private void AddToolPayload(Dictionary<string, object> payload, AiToolCallResult result)
+    {
+        if (result.Payload is null)
+            return;
+
+        var serializedPayload = JsonSerializer.Serialize(result.Payload, SerializeOptions);
+        if (serializedPayload.Length > AppConstants.MaxAiToolPayloadJsonLength)
+        {
+            payload["payload"] = new Dictionary<string, object>
+            {
+                ["dropped"] = true,
+                ["original_length"] = serializedPayload.Length,
+                ["instruction"] = "Re-query with a narrower filter."
+            };
+            if (logger.IsEnabled(LogLevel.Warning))
+                LogToolPayloadDropped(logger, result.Name, serializedPayload.Length, AppConstants.MaxAiToolPayloadJsonLength);
+        }
+        else
+        {
+            payload["payload"] = JsonSerializer.Deserialize<JsonElement>(serializedPayload);
+        }
     }
 
     private async Task<Result<AiResponse>> CallWithToolsAsync(
@@ -428,16 +429,13 @@ public sealed partial class AiIntentService(
             retainedCharacters += line.Length;
         }
 
-        if (retainedEntries.Count < sanitizedEntries.Count)
-        {
-            if (logger.IsEnabled(LogLevel.Warning))
-                LogHistoryTranscriptTruncated(
-                    logger,
-                    sanitizedEntries.Count,
-                    retainedEntries.Count,
-                    prefix.Length + retainedCharacters + suffix.Length,
-                    AppConstants.MaxAiHistoryTranscriptCharacters);
-        }
+        if (retainedEntries.Count < sanitizedEntries.Count && logger.IsEnabled(LogLevel.Warning))
+            LogHistoryTranscriptTruncated(
+                logger,
+                sanitizedEntries.Count,
+                retainedEntries.Count,
+                prefix.Length + retainedCharacters + suffix.Length,
+                AppConstants.MaxAiHistoryTranscriptCharacters);
 
         retainedEntries.Reverse();
         return string.Concat(prefix, string.Concat(retainedEntries), suffix);

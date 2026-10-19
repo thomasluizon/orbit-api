@@ -15,6 +15,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.Extensions.Configuration;
@@ -271,14 +273,77 @@ public class OAuthControllerTests : IDisposable
     [Fact]
     public void Authorize_ValidParams_ReturnsHtmlContent()
     {
-        var result = _controller.Authorize(
-            "client-123", "https://claude.ai/callback", "code",
-            "state-abc", "challenge-xyz", "S256");
+        var result = _controller.Authorize(new OAuthController.AuthorizeRequest
+        {
+            ClientId = "client-123",
+            RedirectUri = "https://claude.ai/callback",
+            ResponseType = "code",
+            State = "state-abc",
+            CodeChallenge = "challenge-xyz",
+            CodeChallengeMethod = "S256",
+        });
 
         var content = result.Should().BeOfType<ContentResult>().Subject;
         content.ContentType.Should().Be("text/html");
         content.Content.Should().Contain("/oauth/google/start?client_id=");
         content.Content.Should().NotContain("google.accounts.id");
+    }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("nonce-value", "cancelled")]
+    public async Task Authorize_QueryBinding_PreservesOAuthNamesAndHtml(string? nonce, string? googleError)
+    {
+        var expected = OAuthLoginPage.Render(
+            "client-123", "https://claude.ai/callback", "state-abc", "challenge-xyz", "S256", nonce,
+            googleError is null ? null : "Google sign-in was cancelled. Try again or use email.", "en");
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddMvcCore().AddApplicationPart(typeof(OAuthController).Assembly);
+        using var provider = services.BuildServiceProvider();
+        var action = provider.GetRequiredService<IActionDescriptorCollectionProvider>()
+            .ActionDescriptors.Items.OfType<ControllerActionDescriptor>()
+            .Single(action => action.ControllerTypeInfo.AsType() == typeof(OAuthController)
+                && action.ActionName == nameof(OAuthController.Authorize));
+        var query = new Dictionary<string, string?>
+        {
+            ["client_id"] = "client-123",
+            ["redirect_uri"] = "https://claude.ai/callback",
+            ["response_type"] = "code",
+            ["state"] = "state-abc",
+            ["code_challenge"] = "challenge-xyz",
+            ["code_challenge_method"] = "S256"
+        };
+        if (nonce is not null) query["nonce"] = nonce;
+        if (googleError is not null) query["google_error"] = googleError;
+        var httpContext = new DefaultHttpContext { RequestServices = provider };
+        httpContext.Request.Method = "GET";
+        httpContext.Request.QueryString = QueryString.Create(query);
+        var context = new ActionContext(httpContext, new RouteData(), action);
+        var metadataProvider = (ModelMetadataProvider)provider.GetRequiredService<IModelMetadataProvider>();
+        var binderFactory = provider.GetRequiredService<IModelBinderFactory>();
+        var parameterBinder = provider.GetRequiredService<ParameterBinder>();
+        var values = new QueryStringValueProvider(BindingSource.Query, httpContext.Request.Query,
+            System.Globalization.CultureInfo.InvariantCulture);
+        var arguments = new List<object?>();
+        foreach (var parameter in action.Parameters.Cast<ControllerParameterDescriptor>())
+        {
+            var metadata = metadataProvider.GetMetadataForParameter(parameter.ParameterInfo);
+            var binder = binderFactory.CreateBinder(new ModelBinderFactoryContext
+            {
+                Metadata = metadata,
+                BindingInfo = parameter.BindingInfo,
+                CacheToken = parameter
+            });
+            var bound = await parameterBinder.BindModelAsync(context, binder, values, parameter, metadata, null);
+            arguments.Add(bound.IsModelSet ? bound.Model : null);
+        }
+
+        context.ModelState.IsValid.Should().BeTrue();
+        var actual = action.MethodInfo.Invoke(_controller, arguments.ToArray())
+            .Should().BeOfType<ContentResult>().Subject;
+        actual.ContentType.Should().Be("text/html");
+        actual.Content.Should().Be(expected);
     }
 
     [Fact]
@@ -343,8 +408,16 @@ public class OAuthControllerTests : IDisposable
         var redirect = StartGoogle().Should().BeOfType<RedirectResult>().Subject;
 
         ExtractQueryParam(redirect.Url!, "google_error").Should().Be("unavailable");
-        var page = _controller.Authorize("client-123", "https://claude.ai/callback", "code",
-            "client-state", "mcp-challenge", "S256", google_error: "unavailable")
+        var page = _controller.Authorize(new OAuthController.AuthorizeRequest
+        {
+            ClientId = "client-123",
+            RedirectUri = "https://claude.ai/callback",
+            ResponseType = "code",
+            State = "client-state",
+            CodeChallenge = "mcp-challenge",
+            CodeChallengeMethod = "S256",
+            GoogleError = "unavailable",
+        })
             .Should().BeOfType<ContentResult>().Subject;
         page.Content.Should().Contain("Google sign-in is unavailable");
         page.Content.Should().Contain("/oauth/send-code");
@@ -414,8 +487,16 @@ public class OAuthControllerTests : IDisposable
         var redirect = (await _controller.GoogleCallback(state, null, "access_denied", CancellationToken.None))
             .Should().BeOfType<RedirectResult>().Subject;
         ExtractQueryParam(redirect.Url!, "google_error").Should().Be("cancelled");
-        var page = _controller.Authorize("client-123", "https://claude.ai/callback", "code",
-            "client-state", "mcp-challenge", "S256", google_error: "cancelled")
+        var page = _controller.Authorize(new OAuthController.AuthorizeRequest
+        {
+            ClientId = "client-123",
+            RedirectUri = "https://claude.ai/callback",
+            ResponseType = "code",
+            State = "client-state",
+            CodeChallenge = "mcp-challenge",
+            CodeChallengeMethod = "S256",
+            GoogleError = "cancelled",
+        })
             .Should().BeOfType<ContentResult>().Subject;
         ReadRenderedError(page.Content!).Should().StartWith("O acesso com o Google foi cancelado");
         page.Content.Should().Contain("/oauth/send-code");
@@ -467,8 +548,16 @@ public class OAuthControllerTests : IDisposable
     {
         _controller.HttpContext.Request.Headers.AcceptLanguage = language;
 
-        var page = _controller.Authorize("client-123", "https://claude.ai/callback", "code",
-            "client-state", "mcp-challenge", "S256", google_error: error)
+        var page = _controller.Authorize(new OAuthController.AuthorizeRequest
+        {
+            ClientId = "client-123",
+            RedirectUri = "https://claude.ai/callback",
+            ResponseType = "code",
+            State = "client-state",
+            CodeChallenge = "mcp-challenge",
+            CodeChallengeMethod = "S256",
+            GoogleError = error,
+        })
             .Should().BeOfType<ContentResult>().Subject;
 
         ReadRenderedError(page.Content!).Should().StartWith(message);
@@ -508,9 +597,15 @@ public class OAuthControllerTests : IDisposable
     [Fact]
     public void Authorize_UnsupportedResponseType_ReturnsBadRequest()
     {
-        var result = _controller.Authorize(
-            "client-123", "https://claude.ai/callback", "token",
-            "state-abc", "challenge-xyz", "S256");
+        var result = _controller.Authorize(new OAuthController.AuthorizeRequest
+        {
+            ClientId = "client-123",
+            RedirectUri = "https://claude.ai/callback",
+            ResponseType = "token",
+            State = "state-abc",
+            CodeChallenge = "challenge-xyz",
+            CodeChallengeMethod = "S256",
+        });
 
         var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
         var json = JsonSerializer.Serialize(bad.Value);
@@ -520,9 +615,15 @@ public class OAuthControllerTests : IDisposable
     [Fact]
     public void Authorize_MissingCodeChallenge_ReturnsBadRequest()
     {
-        var result = _controller.Authorize(
-            "client-123", "https://claude.ai/callback", "code",
-            "state-abc", "", "S256");
+        var result = _controller.Authorize(new OAuthController.AuthorizeRequest
+        {
+            ClientId = "client-123",
+            RedirectUri = "https://claude.ai/callback",
+            ResponseType = "code",
+            State = "state-abc",
+            CodeChallenge = "",
+            CodeChallengeMethod = "S256",
+        });
 
         result.Should().BeOfType<BadRequestObjectResult>();
     }
@@ -530,9 +631,15 @@ public class OAuthControllerTests : IDisposable
     [Fact]
     public void Authorize_WrongCodeChallengeMethod_ReturnsBadRequest()
     {
-        var result = _controller.Authorize(
-            "client-123", "https://claude.ai/callback", "code",
-            "state-abc", "challenge-xyz", "plain");
+        var result = _controller.Authorize(new OAuthController.AuthorizeRequest
+        {
+            ClientId = "client-123",
+            RedirectUri = "https://claude.ai/callback",
+            ResponseType = "code",
+            State = "state-abc",
+            CodeChallenge = "challenge-xyz",
+            CodeChallengeMethod = "plain",
+        });
 
         result.Should().BeOfType<BadRequestObjectResult>();
     }
@@ -540,9 +647,15 @@ public class OAuthControllerTests : IDisposable
     [Fact]
     public void Authorize_DisallowedRedirectHost_ReturnsBadRequest()
     {
-        var result = _controller.Authorize(
-            "client-123", "https://evil.com/callback", "code",
-            "state-abc", "challenge-xyz", "S256");
+        var result = _controller.Authorize(new OAuthController.AuthorizeRequest
+        {
+            ClientId = "client-123",
+            RedirectUri = "https://evil.com/callback",
+            ResponseType = "code",
+            State = "state-abc",
+            CodeChallenge = "challenge-xyz",
+            CodeChallengeMethod = "S256",
+        });
 
         var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
         var json = JsonSerializer.Serialize(bad.Value);
@@ -552,9 +665,15 @@ public class OAuthControllerTests : IDisposable
     [Fact]
     public void Authorize_InvalidUri_ReturnsBadRequest()
     {
-        var result = _controller.Authorize(
-            "client-123", "not-a-valid-uri", "code",
-            "state-abc", "challenge-xyz", "S256");
+        var result = _controller.Authorize(new OAuthController.AuthorizeRequest
+        {
+            ClientId = "client-123",
+            RedirectUri = "not-a-valid-uri",
+            ResponseType = "code",
+            State = "state-abc",
+            CodeChallenge = "challenge-xyz",
+            CodeChallengeMethod = "S256",
+        });
 
         result.Should().BeOfType<BadRequestObjectResult>();
     }
@@ -903,9 +1022,15 @@ public class OAuthControllerTests : IDisposable
     [Fact]
     public void Authorize_WithAttackerDomain_ReturnsBadRequest()
     {
-        var result = _controller.Authorize(
-            "client-123", "https://attacker.com/callback", "code",
-            "state-abc", "challenge-xyz", "S256");
+        var result = _controller.Authorize(new OAuthController.AuthorizeRequest
+        {
+            ClientId = "client-123",
+            RedirectUri = "https://attacker.com/callback",
+            ResponseType = "code",
+            State = "state-abc",
+            CodeChallenge = "challenge-xyz",
+            CodeChallengeMethod = "S256",
+        });
 
         var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
         var json = JsonSerializer.Serialize(bad.Value);
@@ -941,9 +1066,15 @@ public class OAuthControllerTests : IDisposable
     [Fact]
     public void Authorize_WithInvalidSchemeRedirectUri_ReturnsBadRequest()
     {
-        var result = _controller.Authorize(
-            "client-123", "javascript:alert('xss')", "code",
-            "state-abc", "challenge-xyz", "S256");
+        var result = _controller.Authorize(new OAuthController.AuthorizeRequest
+        {
+            ClientId = "client-123",
+            RedirectUri = "javascript:alert('xss')",
+            ResponseType = "code",
+            State = "state-abc",
+            CodeChallenge = "challenge-xyz",
+            CodeChallengeMethod = "S256",
+        });
 
         result.Should().BeOfType<BadRequestObjectResult>();
     }
@@ -951,9 +1082,15 @@ public class OAuthControllerTests : IDisposable
     [Fact]
     public void Authorize_WithHttpSchemeRedirectUri_ReturnsBadRequest()
     {
-        var result = _controller.Authorize(
-            "client-123", "http://claude.ai/callback", "code",
-            "state-abc", "challenge-xyz", "S256");
+        var result = _controller.Authorize(new OAuthController.AuthorizeRequest
+        {
+            ClientId = "client-123",
+            RedirectUri = "http://claude.ai/callback",
+            ResponseType = "code",
+            State = "state-abc",
+            CodeChallenge = "challenge-xyz",
+            CodeChallengeMethod = "S256",
+        });
 
         result.Should().BeOfType<BadRequestObjectResult>();
     }
@@ -961,9 +1098,15 @@ public class OAuthControllerTests : IDisposable
     [Fact]
     public void Authorize_WithFtpSchemeRedirectUri_ReturnsBadRequest()
     {
-        var result = _controller.Authorize(
-            "client-123", "ftp://claude.ai/callback", "code",
-            "state-abc", "challenge-xyz", "S256");
+        var result = _controller.Authorize(new OAuthController.AuthorizeRequest
+        {
+            ClientId = "client-123",
+            RedirectUri = "ftp://claude.ai/callback",
+            ResponseType = "code",
+            State = "state-abc",
+            CodeChallenge = "challenge-xyz",
+            CodeChallengeMethod = "S256",
+        });
 
         result.Should().BeOfType<BadRequestObjectResult>();
     }
@@ -971,9 +1114,15 @@ public class OAuthControllerTests : IDisposable
     [Fact]
     public void Authorize_WithSubdomainAttempt_ReturnsBadRequest()
     {
-        var result = _controller.Authorize(
-            "client-123", "https://attacker.claude.ai/callback", "code",
-            "state-abc", "challenge-xyz", "S256");
+        var result = _controller.Authorize(new OAuthController.AuthorizeRequest
+        {
+            ClientId = "client-123",
+            RedirectUri = "https://attacker.claude.ai/callback",
+            ResponseType = "code",
+            State = "state-abc",
+            CodeChallenge = "challenge-xyz",
+            CodeChallengeMethod = "S256",
+        });
 
         var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
         var json = JsonSerializer.Serialize(bad.Value);
@@ -1001,9 +1150,15 @@ public class OAuthControllerTests : IDisposable
     [Fact]
     public void Authorize_MissingState_ReturnsBadRequest()
     {
-        var result = _controller.Authorize(
-            "client-123", "https://claude.ai/callback", "code",
-            "", "challenge-xyz", "S256");
+        var result = _controller.Authorize(new OAuthController.AuthorizeRequest
+        {
+            ClientId = "client-123",
+            RedirectUri = "https://claude.ai/callback",
+            ResponseType = "code",
+            State = "",
+            CodeChallenge = "challenge-xyz",
+            CodeChallengeMethod = "S256",
+        });
 
         var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
         JsonSerializer.Serialize(bad.Value).Should().Contain("invalid_request");
@@ -1118,8 +1273,16 @@ public class OAuthControllerTests : IDisposable
     [Fact]
     public void Authorize_PageViewAllocatesNoPendingGoogleRequest()
     {
-        var page = _controller.Authorize("client-123", "https://claude.ai/callback", "code",
-            "client-state", "mcp-challenge", "S256", "mcp-nonce")
+        var page = _controller.Authorize(new OAuthController.AuthorizeRequest
+        {
+            ClientId = "client-123",
+            RedirectUri = "https://claude.ai/callback",
+            ResponseType = "code",
+            State = "client-state",
+            CodeChallenge = "mcp-challenge",
+            CodeChallengeMethod = "S256",
+            Nonce = "mcp-nonce",
+        })
             .Should().BeOfType<ContentResult>().Subject;
 
         var link = System.Text.RegularExpressions.Regex.Match(page.Content!,
