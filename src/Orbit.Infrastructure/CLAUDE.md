@@ -1,6 +1,6 @@
 # Orbit.Infrastructure — persistence + external services
 
-EF Core + PostgreSQL + service integrations (OpenAI, Firebase, Stripe, Amazon SES, VAPID, Supabase Auth).
+EF Core + PostgreSQL + service integrations (OpenAI, Firebase, Stripe, Amazon SES, VAPID).
 
 ## Layout
 
