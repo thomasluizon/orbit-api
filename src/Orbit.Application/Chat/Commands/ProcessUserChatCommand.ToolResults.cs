@@ -25,7 +25,7 @@ public partial class ProcessUserChatCommandHandler
                 ToolNameToPascalCase(call.Name),
                 ActionStatus.Failed,
                 EntityName: result.EntityName,
-                Error: result.Error);
+                Error: result.Error).WithToolResultMessage(call, result.Payload);
         }
 
         if (call.Name == "suggest_breakdown")
@@ -34,14 +34,14 @@ public partial class ProcessUserChatCommandHandler
                 ToolNameToPascalCase(call.Name),
                 ActionStatus.Suggestion,
                 EntityName: result.EntityName,
-                SuggestedSubHabits: ExtractSuggestedSubHabits(call.Args));
+                SuggestedSubHabits: ExtractSuggestedSubHabits(call.Args)).WithToolResultMessage(call, result.Payload);
         }
 
         return new ActionResult(
             ToolNameToPascalCase(call.Name),
             ActionStatus.Success,
             result.EntityId is not null ? Guid.Parse(result.EntityId) : null,
-            result.EntityName);
+            result.EntityName).WithToolResultMessage(call, result.Payload);
     }
 
     private static string BuildOperationSummary(AiToolCall call)

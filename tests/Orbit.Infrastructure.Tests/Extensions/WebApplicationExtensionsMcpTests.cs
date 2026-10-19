@@ -1,16 +1,21 @@
 using System.Security.Claims;
+using System.Text;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Hosting;
 using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
 using NSubstitute;
 using Orbit.Api.Extensions;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
+using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Extensions;
 
@@ -235,8 +240,146 @@ public class WebApplicationExtensionsMcpTests
     }
 
     [Theory]
+    [InlineData(WebApplicationExtensions.McpRateLimitPolicy)]
+    [InlineData(WebApplicationExtensions.McpAiRateLimitPolicy)]
+    public async Task UseMcpSelectiveAuth_ExhaustedKey_RejectsBeforeNextAndLeavesSecondKeyUnaffected(string exhaustedPolicy)
+    {
+        var limiter = Substitute.For<IDistributedRateLimitService>();
+        var counts = new Dictionary<(string Policy, string Partition), int>();
+        limiter.TryAcquireAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var policy = call.ArgAt<string>(0);
+                var partition = call.ArgAt<string>(1);
+                counts.TryGetValue((policy, partition), out var count);
+                counts[(policy, partition)] = ++count;
+                var limit = policy == exhaustedPolicy ? 1 : 60;
+                return new DistributedRateLimitDecision(count <= limit, limit, Math.Min(count, limit), DateTime.UtcNow.AddMinutes(1));
+            });
+        var authentication = Substitute.For<IAuthenticationService>();
+        authentication.AuthenticateAsync(Arg.Any<HttpContext>(), Arg.Any<string?>())
+            .Returns(call => AuthenticateResult.Success(new AuthenticationTicket(call.Arg<HttpContext>().User, "ApiKey")));
+        var catalog = new AgentCatalogService();
+        var policy = Substitute.For<IAgentPolicyEvaluator>();
+        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+            .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, catalog.GetCapabilityByMcpTool("get_daily_summary")));
+        await using var services = new ServiceCollection()
+            .AddSingleton(limiter)
+            .AddSingleton(authentication)
+            .AddSingleton<IAgentCatalogService>(catalog)
+            .AddSingleton(policy)
+            .AddSingleton(Substitute.For<IAgentAuditService>())
+            .AddSingleton(TimeProvider.System)
+            .AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance)
+            .BuildServiceProvider();
+        var nextRequests = new List<HttpContext>();
+        var pipeline = new ApplicationBuilder(services);
+        pipeline.UseMcpSelectiveAuth();
+        pipeline.Run(context =>
+        {
+            context.User.Identity!.IsAuthenticated.Should().BeTrue();
+            context.Request.Body.Position.Should().Be(0);
+            nextRequests.Add(context);
+            context.Response.StatusCode = StatusCodes.Status200OK;
+            return Task.CompletedTask;
+        });
+        var invoke = pipeline.Build();
+        var userId = Guid.NewGuid();
+        var firstKey = Guid.NewGuid();
+        var secondKey = Guid.NewGuid();
+        using var document = CreateSdkToolCallDocument("get_daily_summary", new RequestId(42));
+        var body = Encoding.UTF8.GetBytes(document.RootElement.GetRawText());
+
+        DefaultHttpContext Request(Guid apiKeyId)
+        {
+            var context = CreateRateLimitContext(limiter, apiKeyId, userId, services);
+            context.Request.Method = HttpMethods.Post;
+            context.Request.Path = "/mcp";
+            context.Request.ContentType = "application/json";
+            context.Request.Body = new MemoryStream(body);
+            return context;
+        }
+
+        var allowed = Request(firstKey);
+        await invoke(allowed);
+        allowed.Response.StatusCode.Should().Be(StatusCodes.Status200OK);
+        nextRequests.Should().Equal(allowed);
+
+        var limited = Request(firstKey);
+        await invoke(limited);
+        limited.Response.StatusCode.Should().Be(StatusCodes.Status429TooManyRequests);
+        nextRequests.Should().Equal(allowed);
+        limited.Response.Body.Position = 0;
+        using var rejection = await JsonDocument.ParseAsync(limited.Response.Body);
+        rejection.RootElement.GetProperty("id").GetInt32().Should().Be(42);
+        rejection.RootElement.GetProperty("error").GetProperty("data").GetProperty("policy").GetString()
+            .Should().Be(exhaustedPolicy);
+
+        var otherKey = Request(secondKey);
+        await invoke(otherKey);
+        otherKey.Response.StatusCode.Should().Be(StatusCodes.Status200OK);
+        nextRequests.Should().Equal(allowed, otherKey);
+        counts[(WebApplicationExtensions.McpRateLimitPolicy, $"api-key:{firstKey}")].Should().Be(2);
+        counts[(WebApplicationExtensions.McpAiRateLimitPolicy, $"api-key:{firstKey}")]
+            .Should().Be(exhaustedPolicy == WebApplicationExtensions.McpRateLimitPolicy ? 1 : 2);
+        counts[(WebApplicationExtensions.McpRateLimitPolicy, $"api-key:{secondKey}")].Should().Be(1);
+        counts[(WebApplicationExtensions.McpAiRateLimitPolicy, $"api-key:{secondKey}")].Should().Be(1);
+        await authentication.Received(3).AuthenticateAsync(Arg.Any<HttpContext>(), Arg.Any<string?>());
+    }
+
+    [Fact]
+    public async Task ConfigureOrbitPipeline_LimitedMcpPost_RejectsBeforeNext()
+    {
+        var limiter = Substitute.For<IDistributedRateLimitService>();
+        limiter.TryAcquireAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new DistributedRateLimitDecision(false, 60, 60, DateTime.UtcNow.AddMinutes(1)));
+        var authentication = Substitute.For<IAuthenticationService>();
+        authentication.AuthenticateAsync(Arg.Any<HttpContext>(), Arg.Any<string?>())
+            .Returns(call => AuthenticateResult.Success(new AuthenticationTicket(call.Arg<HttpContext>().User, "ApiKey")));
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = Environments.Production });
+        builder.Configuration["Database:MigrateOnStartup"] = "false";
+        builder.Services.AddResponseCompression();
+        builder.Services.AddExceptionHandler(options => options.ExceptionHandler = _ => Task.CompletedTask);
+        builder.Services.AddCors(options => options.AddPolicy("ThirdParty", policy => policy.WithOrigins("https://client.example.com")));
+        builder.Services.AddRateLimiter(_ => { });
+        builder.Services.AddAuthentication();
+        builder.Services.AddAuthorization();
+        builder.Services.AddControllers();
+        builder.Services.AddMcpServer().WithHttpTransport();
+        builder.Services.AddHealthChecks();
+        builder.Services.AddSingleton(limiter);
+        builder.Services.AddSingleton(authentication);
+        builder.Services.AddSingleton(Substitute.For<IAppConfigService>());
+        await using var app = builder.Build();
+        await app.ConfigureOrbitPipeline();
+        var nextCalled = false;
+        app.Run(_ =>
+        {
+            nextCalled = true;
+            return Task.CompletedTask;
+        });
+        var invoke = ((IApplicationBuilder)app).Build();
+        var apiKeyId = Guid.NewGuid();
+        var context = CreateRateLimitContext(limiter, apiKeyId, Guid.NewGuid(), app.Services);
+        using var document = CreateSdkToolCallDocument("get_daily_summary", new RequestId(42));
+        context.Request.Method = HttpMethods.Post;
+        context.Request.Path = "/mcp";
+        context.Request.ContentType = "application/json";
+        context.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(document.RootElement.GetRawText()));
+
+        await invoke(context);
+
+        context.Response.StatusCode.Should().Be(StatusCodes.Status429TooManyRequests);
+        nextCalled.Should().BeFalse();
+        await authentication.Received(1).AuthenticateAsync(context, Arg.Any<string?>());
+        await limiter.Received(1).TryAcquireAsync(
+            WebApplicationExtensions.McpRateLimitPolicy, $"api-key:{apiKeyId}", Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
     [InlineData("get_daily_summary")]
     [InlineData("get_goal_review")]
+    [InlineData("get_retrospective")]
     public async Task TryApplyMcpRateLimitsAsync_AiBearingTool_HitsAiLimitBeforeGeneralLimit(string toolName)
     {
         var service = Substitute.For<IDistributedRateLimitService>();
@@ -389,9 +532,10 @@ public class WebApplicationExtensionsMcpTests
     private static DefaultHttpContext CreateRateLimitContext(
         IDistributedRateLimitService service,
         Guid? apiKeyId,
-        Guid? userId = null)
+        Guid? userId = null,
+        IServiceProvider? requestServices = null)
     {
-        var services = new ServiceCollection()
+        var services = requestServices ?? new ServiceCollection()
             .AddSingleton(service)
             .AddSingleton(TimeProvider.System)
             .AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance)

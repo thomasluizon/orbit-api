@@ -12,8 +12,6 @@ namespace Orbit.Infrastructure.Tests.Services;
 /// <summary>
 /// Tests the pure helper methods of AiIntentService:
 /// NormalizeSchemaTypes, ConvertToSdkTool, and SerializeOptions behavior.
-/// The AI client interactions require mocking the ChatClient which
-/// is complex; we test the deterministic logic here.
 /// </summary>
 public class AiIntentServiceTests
 {

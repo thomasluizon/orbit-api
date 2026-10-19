@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Globalization;
 using System.Reflection;
 using FluentAssertions;
@@ -99,7 +100,10 @@ public class FeatureExplanationDriftTests
             user.GrantLifetimePro();
         var today = new DateOnly(2026, 8, 5);
         var users = Substitute.For<IGenericRepository<User>>();
-        users.GetByIdAsync(user.Id, Arg.Any<CancellationToken>()).Returns(user);
+        users.FindOneTrackedAsync(Arg.Any<Expression<Func<User, bool>>>(),
+                Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>())
+            .Returns(user);
+        var work = Substitute.For<IUnitOfWork>();
         var dates = Substitute.For<IUserDateService>();
         dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(today);
         var config = Substitute.For<IAppConfigService>();
@@ -110,14 +114,12 @@ public class FeatureExplanationDriftTests
 
         for (var count = 0; count < limit; count++)
         {
-            (await gate.CanSendAiMessage(user.Id)).IsSuccess.Should().BeTrue();
-            user.IncrementAiMessageCount(today);
+            (await gate.TryConsumeAiMessage(user.Id, work)).IsSuccess.Should().BeTrue();
         }
 
-        (await gate.CanSendAiMessage(user.Id)).IsFailure.Should().BeTrue();
+        (await gate.TryConsumeAiMessage(user.Id, work)).IsFailure.Should().BeTrue();
         dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(today.AddDays(1));
-        (await gate.CanSendAiMessage(user.Id)).IsSuccess.Should().BeTrue();
-        user.IncrementAiMessageCount(today.AddDays(1));
+        (await gate.TryConsumeAiMessage(user.Id, work)).IsSuccess.Should().BeTrue();
         user.AiMessagesUsedToday.Should().Be(1);
         Body("paygate").Should().Contain(
             $"**AI messages** are capped at **{N(AppConstants.DefaultFreeAiMessages)}** per day. Pro raises this to **{N(AppConstants.DefaultProAiMessages)}** per day.",
