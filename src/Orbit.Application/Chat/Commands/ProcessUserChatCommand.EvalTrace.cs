@@ -15,20 +15,25 @@ public partial class ProcessUserChatCommandHandler
 
         private void Add(AiToolCall call, string status, AiToolCallResult? result, bool omitData)
         {
-            var redactApiKey = string.Equals(call.Name, "manage_api_keys", StringComparison.OrdinalIgnoreCase);
+            var sensitiveField = call.Name.ToLowerInvariant() switch
+            {
+                "manage_api_keys" => "key",
+                "manage_account" => "code",
+                _ => null
+            };
             _calls.Add(new ChatEvalToolCall(call.Id, call.Name,
-                omitData ? JsonSerializer.SerializeToElement("[redacted]") : Sanitize(call.Args, redactApiKey),
-                status, omitData || result is null ? null : Sanitize(result, redactApiKey)));
+                omitData ? JsonSerializer.SerializeToElement("[redacted]") : Sanitize(call.Args, sensitiveField),
+                status, omitData || result is null ? null : Sanitize(result, sensitiveField)));
         }
 
-        private static JsonElement Sanitize(object value, bool redactApiKey)
+        private static JsonElement Sanitize(object value, string? sensitiveField)
         {
             var node = JsonSerializer.SerializeToNode(value, ChatStreamEvent.SerializerOptions);
-            Redact(node, redactApiKey);
+            Redact(node, sensitiveField);
             return JsonSerializer.SerializeToElement(node);
         }
 
-        private static void Redact(JsonNode? node, bool redactApiKey)
+        private static void Redact(JsonNode? node, string? sensitiveField)
         {
             if (node is JsonObject obj)
             {
@@ -36,16 +41,16 @@ public partial class ProcessUserChatCommandHandler
                 {
                     var name = property.Key.Replace("_", "", StringComparison.Ordinal)
                         .Replace("-", "", StringComparison.Ordinal).ToLowerInvariant();
-                    if (IsSensitive(name) || redactApiKey && name == "key")
+                    if (IsSensitive(name) || name == sensitiveField)
                         obj[property.Key] = "[redacted]";
                     else
-                        Redact(property.Value, redactApiKey);
+                        Redact(property.Value, sensitiveField);
                 }
             }
             else if (node is JsonArray array)
             {
                 foreach (var item in array)
-                    Redact(item, redactApiKey);
+                    Redact(item, sensitiveField);
             }
         }
 

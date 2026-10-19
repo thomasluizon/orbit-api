@@ -6,6 +6,8 @@ using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.ApiKeys.Commands;
+using Orbit.Application.Auth.Commands;
+using Orbit.Application.Referrals.Commands;
 using Orbit.Application.FeatureFlags;
 using Orbit.Application.FeatureFlags.Commands;
 using Orbit.Application.Common;
@@ -260,5 +262,46 @@ public partial class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.EvalTrace!.ToolCalls.Should().ContainSingle().Which.Status.Should().Be("NotExecuted");
         await tool.DidNotReceiveWithAnyArgs().ExecuteAsync(default, default, default);
+    }
+
+    [Fact]
+    public async Task Handle_EvalTrace_RedactsAccountDeletionCodeFromRealToolArguments()
+    {
+        SetupUserAndPayGate();
+        _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new[] { "astra_eval_trace" });
+        _mediator.Send(Arg.Any<ConfirmAccountDeletionCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)));
+        SetupReadToolReply("manage_account", "Deletion scheduled.");
+        SetupAiResponse(ToolResponse("manage_account", "deletion-call",
+            """{"action":"confirm_deletion","code":"private-deletion-code"}"""));
+
+        var result = await CreateHandler(new ManageAccountTool(_mediator)).Handle(new ProcessUserChatCommand(UserId,
+            "Confirm deletion", EvalTraceRequested: true), default);
+
+        result.IsSuccess.Should().BeTrue();
+        var trace = result.Value.EvalTrace!;
+        trace.ToolCalls.Should().ContainSingle().Which.Arguments.GetProperty("code").GetString().Should().Be("[redacted]");
+        JsonSerializer.Serialize(trace).Should().NotContain("private-deletion-code");
+        await _mediator.Received(1).Send(Arg.Is<ConfirmAccountDeletionCommand>(command =>
+            command.Code == "private-deletion-code"), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_EvalTrace_PreservesPublicReferralCodeFromRealToolResult()
+    {
+        SetupUserAndPayGate();
+        _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new[] { "astra_eval_trace" });
+        _mediator.Send(Arg.Any<GetOrCreateReferralCodeCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success("shareable-code"));
+        SetupReadToolReply("get_referral_code", "Here is your referral code.");
+
+        var result = await CreateHandler(new GetReferralCodeTool(_mediator)).Handle(new ProcessUserChatCommand(UserId,
+            "Get my referral code", EvalTraceRequested: true), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.EvalTrace!.ToolCalls.Should().ContainSingle().Which.Result!.Value
+            .GetProperty("payload").GetProperty("code").GetString().Should().Be("shareable-code");
     }
 }
