@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Orbit.Application.Habits.Commands;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -10,7 +11,8 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 internal static class BulkHabitLogArguments
 {
     public static async Task<Result<JsonElement>> ExpandAsync(JsonElement arguments,
-        IGenericRepository<Habit> habits, IUserDateService dates, Guid userId, CancellationToken ct)
+        IGenericRepository<Habit> habits, IUserDateService dates, Guid userId, CancellationToken ct,
+        IReadOnlyList<Habit>? loadedHabits = null)
     {
         if (arguments.TryGetProperty("revised_items", out _))
         {
@@ -26,6 +28,8 @@ internal static class BulkHabitLogArguments
             if (arguments.TryGetProperty("date", out _) || dateArray.ValueKind != JsonValueKind.Array
                 || dateArray.GetArrayLength() == 0)
                 return Result.Failure<JsonElement>("Provide dates as a non-empty array, without date.");
+            if (dateArray.GetArrayLength() > AppConstants.MaxBulkOperationSize)
+                return Result.Failure<JsonElement>($"Provide at most {AppConstants.MaxBulkOperationSize} dates per preview.");
             foreach (var date in dateArray.EnumerateArray())
             {
                 if (!TryDate(date, out var parsed))
@@ -42,7 +46,9 @@ internal static class BulkHabitLogArguments
         else
             selectedDates.Add(await dates.GetUserTodayAsync(userId, ct));
 
-        var selectedHabits = await BulkHabitSelection.LoadAsync(habits, userId, filter!, ct);
+        var selectedHabits = loadedHabits is null
+            ? await BulkHabitSelection.LoadAsync(habits, userId, filter!, ct)
+            : BulkHabitSelection.Select(loadedHabits, filter!);
         if (selectedHabits.Count == 0)
             return Result.Failure<JsonElement>("No matching habits found.");
         return Result.Success(JsonSerializer.SerializeToElement(new

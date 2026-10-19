@@ -27,7 +27,8 @@ public sealed class BulkLogHabitsTool(
         {
             type = JsonSchemaTypes.Array,
             items = new { type = JsonSchemaTypes.String },
-            description = "All requested dates in YYYY-MM-DD format. Use one call for a date range, omitting excluded dates."
+            maxItems = Orbit.Application.Common.AppConstants.MaxBulkOperationSize,
+            description = "At most 100 requested dates in YYYY-MM-DD format. Use one call for a date range, omitting excluded dates."
         });
         return schema;
     }

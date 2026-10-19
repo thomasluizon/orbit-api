@@ -28,6 +28,45 @@ public sealed class PendingOperationChangePreviewerTests
             .Returns(new DateOnly(2026, 9, 25));
 
     [Fact]
+    public async Task RoundThree_BulkDelete_PreservesLiteralSearchSemantics()
+    {
+        Setup([CreateHabit("Beber água", null)]);
+        (await Preview("bulk_delete_habits", """{"filter":{"search":"agua"}}""")).Should().BeNull();
+        (await Preview("bulk_delete_habits", """{"filter":{"search":"água"}}""")).Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task RoundThree_UnchangedUpdateFields_JsonOrderDoesNotInvalidateApproval()
+    {
+        Setup([CreateHabit("Read", null)]);
+        var first = await Preview("bulk_update_habits", """{"filter":{"all":true},"updates":{"title":"Read","description":null}}""");
+        var reordered = await Preview("bulk_update_habits", """{"updates":{"description":null,"title":"Read"},"filter":{"all":true}}""");
+        reordered!.PreviewFingerprint.Should().Be(first!.PreviewFingerprint);
+    }
+
+    [Fact]
+    public async Task RoundThree_CreateChildren_ShowsParentInEveryItem()
+    {
+        var parent = CreateHabit("Academia", null);
+        _habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns(new[] { parent });
+        var preview = await Preview("bulk_create_habits", JsonSerializer.Serialize(new
+        {
+            parent_habit_id = parent.Id,
+            habits = new[] { new { title = "Treino" } }
+        }));
+        preview!.Items!.Single().Fields.Should().Contain(field => field.Field == "parent_habit_id"
+            && field.NewValue == "Academia" && !field.IsEditable);
+        preview.Changes.Should().Contain(field => field.Field == "parent_habit_id" && field.NewValue == "Academia");
+    }
+
+    [Theory]
+    [InlineData("Alergia", "ler", false)]
+    [InlineData("Ler 10 minutos", "leitura", false)]
+    [InlineData("Beber água", "AGUA", true)]
+    public void RoundThree_NameMatching_UsesNormalizedWholeWords(string title, string search, bool matches) =>
+        HabitNameMatcher.Matches(title, search).Should().Be(matches);
+
+    [Fact]
     public async Task PreviewAsync_Create_JsonPropertyOrderDoesNotChangeApproval()
     {
         var first = await Preview("bulk_create_habits", """{"habits":[{"title":"Academia","frequency_unit":"Day","sub_habits":[{"title":"Treino"}]}]}""");

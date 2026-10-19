@@ -25,7 +25,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var handler = CreateHandler(goal);
         var held = HoldReplayWrites(goal);
         _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
-            .Returns(ReplayCall("create_goal", """{"title":"Ler 12 livros","target_value":12,"unit":"livros","deadline":"2026-12-31","habit_ids":["leitura"]}"""));
+            .Returns(ReplayCall("create_goal", """{"title":"Ler 12 livros","target_value":12,"unit":"livros","deadline":"2026-12-31","habit_ids":["Ler 10 minutos"]}"""));
         ReplyToReplay("Revise a meta antes de aprovar.");
 
         var result = await handler.Handle(new(UserId, "Crie uma meta de ler 12 livros até dezembro e ligue ao hábito de leitura."), default);
@@ -44,7 +44,7 @@ public partial class ProcessUserChatCommandHandlerTests
             new BulkHabitReplayPlanner(Substitute.For<IIdempotencyContext>(), Substitute.For<IIdempotencyStore>(), _unitOfWork));
         var handler = CreateHandler(log);
         var held = HoldReplayWrites(log);
-        const string arguments = """{"habit_ids":["água","leitura","meditação"],"dates":["2026-03-28","2026-03-29","2026-03-30","2026-03-31","2026-04-01","2026-04-03"]}""";
+        const string arguments = """{"habit_ids":["água","Ler 10 minutos","meditação"],"dates":["2026-03-28","2026-03-29","2026-03-30","2026-03-31","2026-04-01","2026-04-03"]}""";
         _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { ToolCalls = [new("bulk_log_habits", "log1", ParseArguments(arguments)), new("bulk_log_habits", "log2", ParseArguments(arguments))], ConversationContext = new() }));
         ReplyToReplay("Revise os registros.");
@@ -98,6 +98,7 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.PendingOperations.Should().ContainSingle();
         held.Should().ContainSingle().Which.OperationId.Should().Be("assign_tags");
         held[0].Arguments.GetProperty("habit_id").GetString().Should().Be(habits[2].Id.ToString());
+        result.Value.AiMessage.Should().NotContain("Meditação").And.NotContain("Água");
     }
 
     [Fact]
@@ -117,8 +118,10 @@ public partial class ProcessUserChatCommandHandlerTests
         Orbit.Application.Chat.Grounding.GroundednessChecker.Check(result.Value.AiMessage, result.Value.GroundingFacts).Should().BeEmpty();
     }
 
-    [Fact]
-    public async Task Replay_UnresolvedNames_NoEmptyPreviewAndOneQuestion()
+    [Theory]
+    [InlineData("""{"habit_ids":["meditação"]}""")]
+    [InlineData("""{"filter":{"search":"meditação"}}""")]
+    public async Task Replay_UnresolvedNames_NoEmptyPreviewAndOneQuestion(string arguments)
     {
         SetupResolutionAccount();
         var log = new BulkLogHabitsTool(_mediator, _habitRepo, _userDateService,
@@ -126,7 +129,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var handler = CreateHandler(log);
         var held = HoldReplayWrites(log);
         _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
-            .Returns(ReplayCall("bulk_log_habits", """{"habit_ids":["meditação"]}"""));
+            .Returns(ReplayCall("bulk_log_habits", arguments));
         ReplyToReplay("Escolha um hábito.");
 
         var result = await handler.Handle(new(UserId, "Registre meditação."), default);
@@ -138,7 +141,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
     [Theory]
     [InlineData("Novo", "NOVO")]
-    [InlineData("Praticar yoga", "Yoga")]
+    [InlineData("Praticar yoga", "PRATICAR YOGA")]
     public async Task Replay_PreviousCreateProposal_IsRefusedAcrossTurns(string previousName, string proposedName)
     {
         SetupResolutionAccount();
@@ -188,7 +191,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var handler = CreateHandler(log);
         HoldReplayWrites(log);
         _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
-            .Returns(ReplayCall("bulk_log_habits", """{"habit_ids":["água","leitura"],"dates":["2026-03-28","2026-03-29","2026-03-30","2026-03-31","2026-04-01","2026-04-03"]}"""));
+            .Returns(ReplayCall("bulk_log_habits", """{"habit_ids":["água","Ler 10 minutos"],"dates":["2026-03-28","2026-03-29","2026-03-30","2026-03-31","2026-04-01","2026-04-03"]}"""));
         ReplyToReplay("Revise 12 registros de 2 hábitos em 6 datas.");
 
         var result = await handler.Handle(new(UserId, "Registre água e leitura nos últimos sete dias, menos ontem."), default);
@@ -211,7 +214,7 @@ public partial class ProcessUserChatCommandHandlerTests
                 ToolCalls = Enumerable.Range(0, 7).Where(offset => offset != 1).Select(offset =>
                     new AiToolCall("bulk_log_habits", "date" + offset, JsonSerializer.SerializeToElement(new
                     {
-                        habit_ids = new[] { "água", "leitura" },
+                        habit_ids = new[] { "água", "Ler 10 minutos" },
                         date = Today.AddDays(-offset).ToString("yyyy-MM-dd")
                     }))).ToArray(),
                 ConversationContext = new()
@@ -254,6 +257,201 @@ public partial class ProcessUserChatCommandHandlerTests
         ReplyToReplay("Revise a prévia.");
 
         var result = await handler.Handle(new(UserId, "Crie meditação."), default);
+
+        result.Value.PendingOperations.Should().ContainSingle().Which.Items.Should().ContainSingle();
+        held.Should().ContainSingle();
+    }
+
+    [Theory]
+    [InlineData("Crie Rotina com aquecimento.", "Rotina", "Rotina da manhã")]
+    [InlineData("Crie Rotina com sub-hábitos de aquecimento.", "Rotina", "Rotina da manhã")]
+    [InlineData("Crie o hábito Correr com a tag Saúde.", "Correr", "Correr 5 km")]
+    [InlineData("Cria um hábito Correr com a tag Saúde.", "Correr", "Correr 5 km")]
+    public async Task RoundThree_ExplicitCreate_DoesNotBecomeExistingParent(string message, string title, string existing)
+    {
+        SetupResolutionAccount();
+        var matching = new[] { CreateHabit(existing) };
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns(matching);
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(matching);
+        var bulk = new BulkCreateHabitsTool(_mediator);
+        var handler = CreateHandler(bulk);
+        var held = HoldReplayWrites(bulk);
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(ReplayCall("bulk_create_habits", JsonSerializer.Serialize(new { habits = new[] { new { title, sub_habits = new[] { new { title = "Aquecimento" } } } } })));
+        ReplyToReplay("Revise a prévia.");
+
+        var result = await handler.Handle(new(UserId, message), default);
+
+        held.Should().ContainSingle();
+        held[0].Arguments.TryGetProperty("parent_habit_id", out _).Should().BeFalse();
+        held[0].Arguments.GetProperty("habits")[0].GetProperty("title").GetString().Should().Be(title);
+    }
+
+    [Fact]
+    public async Task RoundThree_AmbiguousHabit_ListsCandidatesAndDoesNotWrite()
+    {
+        SetupResolutionAccount();
+        var matching = new[] { CreateHabit("Água de manhã"), CreateHabit("Água de noite") };
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns(matching);
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(matching);
+        var tags = new AssignTagsTool(_habitRepo, _tagRepo, _unitOfWork);
+        var handler = CreateHandler(tags);
+        var held = HoldReplayWrites(tags);
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(ReplayCall("assign_tags", """{"habit_id":"água","tag_names":["Saúde"]}"""));
+        ReplyToReplay("Qual hábito?");
+
+        var result = await handler.Handle(new(UserId, "Atribua Saúde a água."), default);
+
+        held.Should().BeEmpty();
+        result.Value.AiMessage.Should().Contain("Água de manhã").And.Contain("Água de noite").And.NotContain("Não encontrei");
+    }
+
+    [Theory]
+    [InlineData("Prepare uma nova prévia para criar Novo.")]
+    [InlineData("Prepare uma nova.")]
+    [InlineData("Prepare a new one.")]
+    public async Task RoundThree_PendingDuplicate_AsksAndNextExplicitRequestCanReplaceIt(string replacementRequest)
+    {
+        SetupResolutionAccount();
+        var bulk = new BulkCreateHabitsTool(_mediator);
+        var handler = CreateHandler(bulk);
+        var held = HoldReplayWrites(bulk);
+        _pendingOperationStore.GetPendingHabitCreations(UserId).Returns([new PendingHabitCreation("Novo")]);
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(ReplayCall("bulk_create_habits", """{"habits":[{"title":"NOVO"}]}"""));
+        ReplyToReplay("Revise a prévia.");
+
+        var first = await handler.Handle(new(UserId, "Crie Novo."), default);
+
+        held.Should().BeEmpty();
+        first.Value.AiMessage.Should().Contain("Novo").And.Contain("prévia").And.Contain("Aprove");
+        var next = await handler.Handle(new(UserId, replacementRequest,
+            History: [new ChatHistoryMessage("assistant", first.Value.AiMessage!)]), default);
+        held.Should().ContainSingle();
+        next.Value.PendingOperations.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task RoundThree_ExistingExactDuplicate_AsksInsteadOfSilentlyRefusing()
+    {
+        SetupResolutionAccount();
+        var bulk = new BulkCreateHabitsTool(_mediator);
+        var handler = CreateHandler(bulk);
+        HoldReplayWrites(bulk);
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(ReplayCall("bulk_create_habits", """{"habits":[{"title":"ACADEMIA"}]}"""));
+        ReplyToReplay("Tudo certo.");
+
+        var result = await handler.Handle(new(UserId, "Crie Academia."), default);
+
+        result.Value.PendingOperations.Should().BeEmpty();
+        result.Value.AiMessage.Should().Contain("Academia").And.Contain("?");
+    }
+
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("{\"habit_ids\":[7],\"tag_names\":[\"Saúde\"]}")]
+    public async Task RoundThree_MalformedModelArguments_ReturnToolError(string arguments)
+    {
+        SetupResolutionAccount();
+        var tags = new AssignTagsTool(_habitRepo, _tagRepo, _unitOfWork);
+        var handler = CreateHandler(tags);
+        var held = HoldReplayWrites(tags);
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(ReplayCall("assign_tags", arguments));
+        ReplyToReplay("Tente novamente.");
+
+        var result = await handler.Handle(new(UserId, "Atribua Saúde à academia."), default);
+
+        result.IsSuccess.Should().BeTrue();
+        held.Should().BeEmpty();
+        await _aiIntentService.Received().ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+            Arg.Is<IReadOnlyList<AiToolCallResult>>(values => values.Any(value => !value.Success)),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RoundThree_LogCoalescing_UsesTurnSnapshotAndReturnsCompactFacts()
+    {
+        SetupResolutionAccount();
+        var log = new BulkLogHabitsTool(_mediator, _habitRepo, _userDateService,
+            new BulkHabitReplayPlanner(Substitute.For<IIdempotencyContext>(), Substitute.For<IIdempotencyStore>(), _unitOfWork));
+        var handler = CreateHandler(log);
+        HoldReplayWrites(log);
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse
+            {
+                ToolCalls = Enumerable.Range(1, 6).Select(day => new AiToolCall("bulk_log_habits", "log" + day,
+                    JsonSerializer.SerializeToElement(new { habit_ids = new[] { "água" }, date = $"2026-04-0{day}" }))).ToArray(),
+                ConversationContext = new()
+            }));
+        ReplyToReplay("Revise os registros.");
+
+        var result = await handler.Handle(new(UserId, "Registre água."), default);
+
+        result.Value.PendingOperations.Should().ContainSingle();
+        await _habitRepo.Received(2).FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>());
+        await _aiIntentService.Received().ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+            Arg.Is<IReadOnlyList<AiToolCallResult>>(values => values.Where(value => value.Payload != null)
+                .All(value => !JsonSerializer.SerializeToElement(value.Payload).EnumerateObject().Any(property => property.Name == "items"))),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RoundThree_ExcessiveLogDates_ReturnClearError()
+    {
+        SetupResolutionAccount();
+        var log = new BulkLogHabitsTool(_mediator, _habitRepo, _userDateService,
+            new BulkHabitReplayPlanner(Substitute.For<IIdempotencyContext>(), Substitute.For<IIdempotencyStore>(), _unitOfWork));
+        var arguments = JsonSerializer.SerializeToElement(new
+        {
+            habit_ids = new[] { Guid.NewGuid().ToString() },
+            dates = Enumerable.Range(0, 101).Select(offset => Today.AddDays(-offset).ToString("yyyy-MM-dd")).ToArray()
+        });
+
+        var result = await log.CheckArgumentsAsync(arguments, UserId, default);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("100");
+        await _habitRepo.DidNotReceiveWithAnyArgs().FindAsync(default!, default(Func<IQueryable<Habit>, IQueryable<Habit>>), default);
+    }
+
+    [Fact]
+    public async Task ExplicitChildrenUnderNamedParent_UsesExistingParent()
+    {
+        var habits = SetupResolutionAccount();
+        var bulk = new BulkCreateHabitsTool(_mediator);
+        var handler = CreateHandler(bulk);
+        var held = HoldReplayWrites(bulk);
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(ReplayCall("bulk_create_habits", """{"parent_habit_id":"Academia","habits":[{"title":"Aquecimento"}]}"""));
+        ReplyToReplay("Revise a prévia.");
+
+        var result = await handler.Handle(new(UserId, "Crie sub-hábitos de aquecimento no hábito Academia."), default);
+
+        result.Value.PendingOperations.Should().ContainSingle();
+        held.Should().ContainSingle().Which.Arguments.GetProperty("parent_habit_id").GetString().Should().Be(habits[2].Id.ToString());
+    }
+
+    [Fact]
+    public async Task Replay_LogSelectionRetainsCompletedHabitsFromTurnSnapshot()
+    {
+        var habits = SetupResolutionAccount().Append(CreateHabit("Concluído", true)).ToArray();
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
+            .Returns(call => habits.Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).ToList());
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => habits.Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).ToList());
+        var log = new BulkLogHabitsTool(_mediator, _habitRepo, _userDateService,
+            new BulkHabitReplayPlanner(Substitute.For<IIdempotencyContext>(), Substitute.For<IIdempotencyStore>(), _unitOfWork));
+        var handler = CreateHandler(log);
+        var held = HoldReplayWrites(log);
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(ReplayCall("bulk_log_habits", JsonSerializer.Serialize(new { habit_ids = new[] { habits[^1].Id }, date = Today.ToString("yyyy-MM-dd") })));
+        ReplyToReplay("Revise os registros.");
+
+        var result = await handler.Handle(new(UserId, "Registre Concluído."), default);
 
         result.Value.PendingOperations.Should().ContainSingle().Which.Items.Should().ContainSingle();
         held.Should().ContainSingle();

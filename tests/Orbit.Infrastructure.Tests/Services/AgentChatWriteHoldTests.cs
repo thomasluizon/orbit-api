@@ -338,7 +338,7 @@ public class AgentChatWriteHoldTests : IDisposable
         _dbContext.ChangeTracker.Clear();
 
         var execution = _pendingOperationStore.GetExecution(_userId, pending.Id)!;
-        var shouldExecute = !includePreview || !addHabit;
+        var shouldExecute = !addHabit;
         (await revisions.IsCurrentAsync(_userId, execution, CancellationToken.None))
             .Should().Be(shouldExecute);
         execution.PreviewFingerprint.Should().Be(pending.PreviewFingerprint);
@@ -491,10 +491,13 @@ public class AgentChatWriteHoldTests : IDisposable
         var previewer = new PendingOperationChangePreviewer(new GenericRepository<Habit>(_dbContext),
             new GenericRepository<Goal>(_dbContext), new GenericRepository<Tag>(_dbContext), Substitute.For<IUserDateService>(), tools);
         var executor = CreateExecutor(tools, previewer);
-        var arguments = JsonSerializer.SerializeToElement(new { revised_items = new[]
+        var arguments = JsonSerializer.SerializeToElement(new
+        {
+            revised_items = new[]
         {
             new { habit_id = habit.Id, date = "2026-10-18" }, new { habit_id = habit.Id, date = "2026-10-19" }
-        } });
+        }
+        });
         var held = await executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, "bulk_log_habits",
             arguments, AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, IncludeChangePreview: true));
         var pending = held.PendingOperation!;
@@ -512,6 +515,44 @@ public class AgentChatWriteHoldTests : IDisposable
         (await revisions.IsCurrentAsync(_userId, execution, default)).Should().BeTrue();
     }
 
+    [Theory]
+    [InlineData("create_goal")]
+    [InlineData("assign_tags")]
+    public async Task RoundThree_UnavailablePreview_RefusesEveryWrite(string operationId)
+    {
+        var tool = new StubTool(operationId);
+        var executor = CreateExecutor(new AiToolRegistry([tool]), Substitute.For<IPendingOperationChangePreviewer>());
+        var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, operationId,
+            Parse("{}"), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, IncludeChangePreview: true));
+        response.PendingOperation.Should().BeNull();
+        tool.Calls.Should().Be(0);
+        _dbContext.PendingAgentOperations.Should().OnlyContain(item => item.ConsumedAtUtc != null);
+    }
+
+    [Fact]
+    public async Task RoundThree_MissingStoredFingerprint_CannotApprove()
+    {
+        var capability = _catalogService.GetCapabilityByChatTool("create_goal")!;
+        var pending = _pendingOperationStore.Create(_userId, capability, "create_goal", "{}", "Create",
+            AgentOperationFingerprint.Compute("create_goal", "{}"), AgentExecutionSurface.Chat);
+        var tools = new AiToolRegistry([new StubTool("create_goal")]);
+        var revisions = new PendingOperationRevisionService(_pendingOperationStore,
+            Substitute.For<IPendingOperationChangePreviewer>(), new RevisePendingOperationRequestValidator(), tools);
+        (await revisions.IsCurrentAsync(_userId, _pendingOperationStore.GetExecution(_userId, pending.Id)!, default))
+            .Should().BeFalse();
+    }
+
+    [Fact]
+    public void RoundThree_ConfirmedProposals_AreNotStillPending()
+    {
+        var capability = _catalogService.GetCapabilityByChatTool("bulk_create_habits")!;
+        const string args = """{"habits":[{"title":"Novo"}]}""";
+        var pending = _pendingOperationStore.Create(_userId, capability, "bulk_create_habits", args, "Create",
+            AgentOperationFingerprint.Compute("bulk_create_habits", args), AgentExecutionSurface.Chat);
+        _pendingOperationStore.Confirm(_userId, pending.Id).Should().NotBeNull();
+        _pendingOperationStore.GetPendingHabitCreations(_userId).Should().BeEmpty();
+    }
+
     private AgentOperationExecutor CreateExecutor(AiToolRegistry toolRegistry,
         IPendingOperationChangePreviewer? previewer = null)
     {
@@ -522,6 +563,13 @@ public class AgentChatWriteHoldTests : IDisposable
         stepUpBridge.GetRequiredConfirmationAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns((AgentConfirmationRequirement?)null);
 
+        if (previewer is null)
+        {
+            previewer = Substitute.For<IPendingOperationChangePreviewer>();
+            previewer.PreviewAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
+                .Returns(call => AgentArgumentPreview.Build(call.Arg<string>(), call.Arg<JsonElement>(), null, default));
+        }
+
         return new AgentOperationExecutor(
             _catalogService,
             _policyEvaluator,
@@ -529,7 +577,7 @@ public class AgentChatWriteHoldTests : IDisposable
             ownership,
             stepUpBridge,
             toolRegistry,
-            previewer ?? Substitute.For<IPendingOperationChangePreviewer>(),
+            previewer,
             _pendingOperationStore,
             Substitute.For<IUnitOfWork>(),
             NullLogger<AgentOperationExecutor>.Instance);

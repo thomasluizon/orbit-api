@@ -188,7 +188,7 @@ public partial class ProcessUserChatCommandHandler
             .ToList();
         var bulkRedirects = BulkToolRepeatGuard.FindRedirects(writeCalls);
         var resolvedWrites = writeCalls.ToDictionary(call => call.Id, call => ResolveHabitCall(call, executionResults));
-        await CoalesceLogCallsAsync(writeCalls, resolvedWrites, request.UserId, cancellationToken);
+        await CoalesceLogCallsAsync(writeCalls, resolvedWrites, request.UserId, executionResults, cancellationToken);
         CoalesceTagCalls(resolvedWrites);
 
         var readOnlyTasks = readOnlyCalls
@@ -355,9 +355,14 @@ public partial class ProcessUserChatCommandHandler
                     item_count = executionResponse.PendingOperation?.ChangeTargetCount,
                     habit_count = call.Name == "bulk_log_habits" ? executionResponse.PendingOperation?.Items?.Select(item => item.EntityId).Distinct().Count() : (int?)null,
                     date_count = call.Name == "bulk_log_habits" ? executionResponse.PendingOperation?.Items?.SelectMany(item => item.Fields).Where(field => field.Field == "date").Select(field => field.NewValue).Distinct().Count() : (int?)null,
+                    proposed_titles = executionResponse.PendingOperation?.Items?.Select(item => item.EntityName).Distinct().Take(10).ToArray(),
+                    proposed_values = call.Args.EnumerateObject().Where(property =>
+                        property.Value.ValueKind is JsonValueKind.Number || property.Name is "title" or "deadline" or "unit")
+                        .ToDictionary(property => property.Name, property => property.Value.Clone()),
                     resolved_habits = executionResults.Habits.Where(habit => call.Args.GetRawText().Contains(habit.Id.ToString(), StringComparison.OrdinalIgnoreCase)).Select(habit => new { habit.Id, habit.Title }).ToArray(),
-                    items = executionResponse.PendingOperation?.Items,
-                    changes = executionResponse.PendingOperation?.Changes,
+                    dates = call.Name == "bulk_log_habits" ? executionResponse.PendingOperation?.Items?
+                        .SelectMany(item => item.Fields).Where(field => field.Field == "date")
+                        .Select(field => field.NewValue).Distinct().Order().ToArray() : null,
                     instruction = "This is a proposal. Nothing has changed until approval. Use only the returned numbers, names, and dates."
                 }),
                 null,

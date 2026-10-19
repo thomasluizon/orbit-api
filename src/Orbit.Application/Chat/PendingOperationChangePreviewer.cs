@@ -125,30 +125,37 @@ public sealed class PendingOperationChangePreviewer(
             var singles = AssignTagsTool.SingleHabitArguments(arguments);
             if (singles is null)
                 return null;
-            var items = new List<PendingOperationItem>();
-            foreach (var single in singles)
+            var ids = singles.Select(single => Guid.Parse(single.GetProperty("habit_id").GetString()!)).ToArray();
+            var habits = await habitRepository.FindAsync(habit => habit.UserId == userId && ids.Contains(habit.Id),
+                AssignTagsTool.IncludeTags, ct);
+            if (habits.Count != ids.Length)
+                return null;
+            var items = habits.OrderBy(habit => habit.Id).Select(habit =>
             {
-                var preview = await PreviewOtherAsync(userId, operationId, single, ct);
-                if (preview?.Items is not { Count: 1 } || preview.Items[0].EntityId is null)
-                    return null;
-                items.Add(preview.Items[0] with
+                var single = singles.Single(value => value.GetProperty("habit_id").GetString() == habit.Id.ToString());
+                var preview = AgentArgumentPreview.Build(operationId, single, TargetHabit(habit, true), EditableSchema(operationId))!;
+                return preview.Items![0] with
                 {
                     Fields = preview.Items[0].Fields.Select(field => field with { IsEditable = false }).ToList()
-                });
-            }
-            return BuildPreview(operationId, items.Take(10).SelectMany(item => item.Fields).ToList(), items);
+                };
+            }).ToList();
+            return await BindDependenciesAsync(userId, operationId, arguments,
+                BuildPreview(operationId, items.Take(10).SelectMany(item => item.Fields).ToList(), items), ct,
+                bindHabits: false);
         }
-        var built = AgentArgumentPreview.Build(operationId, arguments,
-            await ResolveTargetAsync(userId, arguments, ct), EditableSchema(operationId));
+        var target = await ResolveTargetAsync(userId, arguments, ct);
+        if (target is null && new[] { "habit_id", "goal_id", "tag_id" }.Any(field => arguments.TryGetProperty(field, out _)))
+            return null;
+        var built = AgentArgumentPreview.Build(operationId, arguments, target, EditableSchema(operationId));
         return await BindDependenciesAsync(userId, operationId, arguments, built, ct);
     }
 
     private async Task<PendingOperationChangePreview?> BindDependenciesAsync(Guid userId, string operationId,
-        JsonElement arguments, PendingOperationChangePreview? preview, CancellationToken ct)
+        JsonElement arguments, PendingOperationChangePreview? preview, CancellationToken ct, bool bindHabits = true)
     {
         if (preview?.Items is null)
             return preview;
-        var habitIds = DependencyIds(arguments, "habit_ids", "parent_habit_id");
+        var habitIds = bindHabits ? DependencyIds(arguments, "habit_ids", "parent_habit_id") : [];
         var tagIds = DependencyIds(arguments, "tag_ids");
         if (habitIds.Count == 0 && tagIds.Count == 0)
             return preview;
@@ -162,9 +169,16 @@ public sealed class PendingOperationChangePreviewer(
             .Concat(tags.OrderBy(tag => tag.Id).Select(FingerprintTag)).ToArray();
         var items = preview.Items.Select(item => item with
         {
+            Fields = item.Fields.Select(field => field.Field switch
+            {
+                "habit_ids" => field with { NewValue = string.Join(", ", habits.OrderBy(habit => habit.Id).Select(habit => habit.Title)) },
+                "parent_habit_id" => field with { NewValue = habits.Single().Title },
+                "tag_ids" => field with { NewValue = string.Join(", ", tags.OrderBy(tag => tag.Id).Select(tag => tag.Name)) },
+                _ => field
+            }).ToList(),
             StateFingerprint = AgentOperationFingerprint.Compute(item.StateFingerprint, JsonSerializer.Serialize(states))
         }).ToList();
-        return BuildPreview(operationId, preview.Changes, items);
+        return BuildPreview(operationId, items.Take(10).SelectMany(item => item.Fields).ToList(), items);
     }
 
     private static HashSet<Guid> DependencyIds(JsonElement arguments, params string[] fields)
@@ -240,10 +254,7 @@ public sealed class PendingOperationChangePreviewer(
             var habit = habits.FirstOrDefault();
             if (habit is null)
                 return null;
-            var values = HabitValues(habit);
-            if (readsTags)
-                values["tag_names"] = values["tag_ids"] = FormatTags(habit);
-            return new AgentPreviewTarget(habit.Id, habit.Title, values, FingerprintHabit(habit));
+            return TargetHabit(habit, readsTags);
         }
 
         if (TryReadId(arguments, "goal_id", out var goalId))
@@ -265,6 +276,16 @@ public sealed class PendingOperationChangePreviewer(
         }
 
         return null;
+    }
+
+    private static AgentPreviewTarget TargetHabit(Habit habit, bool readsTags)
+    {
+        var values = HabitValues(habit);
+        if (readsTags)
+            values["tag_names"] = values["tag_ids"] = FormatTags(habit);
+        var fingerprint = readsTags ? AgentOperationFingerprint.Compute(FingerprintHabit(habit),
+            JsonSerializer.Serialize(habit.Tags.OrderBy(tag => tag.Id).Select(FingerprintTag))) : FingerprintHabit(habit);
+        return new AgentPreviewTarget(habit.Id, habit.Title, values, fingerprint);
     }
 
     private static bool TryReadId(JsonElement arguments, string field, out Guid id)
@@ -378,11 +399,11 @@ public sealed class PendingOperationChangePreviewer(
                 ? arguments.GetProperty("updates") : default;
         if (proposed.ValueKind != JsonValueKind.Object)
             return;
-        foreach (var property in proposed.EnumerateObject())
+        foreach (var property in proposed.EnumerateObject().OrderBy(property => property.Name, StringComparer.Ordinal))
         {
             if (fields.Any(field => field.Field == property.Name))
                 continue;
-            var value = property.Value.ToString();
+            var value = AgentArgumentPreview.FormatValue(property.Value);
             fields.Add(new PendingOperationChange(habit.Id, habit.Title,
                 property.Name, value, value, "text", property.Value.Clone(),
                 IsEditableUpdateField(property.Name, habit, effective, changes)));
@@ -517,6 +538,9 @@ public sealed class PendingOperationChangePreviewer(
                     Guid.Empty, name, property.Name, null, AgentArgumentPreview.FormatValue(property.Value), "text",
                     property.Value.Clone(), true)).ToList()
                 : [];
+            if (parent.Count == 1)
+                fields.Add(new PendingOperationChange(parent[0].Id, name, "parent_habit_id", null,
+                    parent[0].Title, "text", JsonSerializer.SerializeToElement(parent[0].Id), false));
             foreach (var error in errors.Where(error => CreateFields.Contains(error.Field)))
                 if (fields.All(field => field.Field != error.Field))
                     fields.Add(new PendingOperationChange(Guid.Empty, name, error.Field,
@@ -528,7 +552,8 @@ public sealed class PendingOperationChangePreviewer(
                 name, fields, AgentOperationFingerprint.Compute("bulk_create_habits" + parentFingerprint, habit.GetRawText()),
                 RemovesData: false, ValidationErrors: errors.Count > 0 ? errors : null);
         }).ToList();
-        return BuildPreview("bulk_create_habits", [], items);
+        return BuildPreview("bulk_create_habits", items.SelectMany(item => item.Fields)
+            .Where(field => field.Field == "parent_habit_id").ToList(), items);
     }
 
     private static PendingOperationChangePreview? BuildPreview(

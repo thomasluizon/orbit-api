@@ -14,6 +14,7 @@ using NSubstitute;
 using Orbit.Api.Controllers;
 using Orbit.Application.Auth.Commands;
 using Orbit.Application.Auth.Models;
+using Orbit.Application.Chat;
 using Orbit.Application.Chat.Tools;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -420,14 +421,15 @@ public class AgentExecutionAndSanitizerTests
             AgentAuthMethod.Jwt));
 
         response.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation);
-        response.PendingOperation.Should().Be(pending);
+        response.PendingOperation!.Id.Should().Be(pending.Id);
+        response.PendingOperation.PreviewFingerprint.Should().NotBeNullOrWhiteSpace();
     }
 
     [Theory]
     [InlineData(AgentExecutionSurface.Chat, true, true)]
-    [InlineData(AgentExecutionSurface.Chat, false, false)]
+    [InlineData(AgentExecutionSurface.Chat, false, true)]
     [InlineData(AgentExecutionSurface.Mcp, true, false)]
-    public async Task AgentOperationExecutor_PreviewsOnlyCapableChatConfirmations(
+    public async Task AgentOperationExecutor_PreviewsEveryChatConfirmation(
         AgentExecutionSurface surface, bool includePreview, bool expectedPreview)
     {
         var catalog = Substitute.For<IAgentCatalogService>();
@@ -446,7 +448,8 @@ public class AgentExecutionAndSanitizerTests
         var previewer = Substitute.For<IPendingOperationChangePreviewer>();
         previewer.PreviewAsync(UserId, operation.Id, Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
             .Returns(new PendingOperationChangePreview(
-                [new PendingOperationChange(Guid.NewGuid(), "Habit", "emoji", "🔴", "✅", "emoji")], 1));
+                [new PendingOperationChange(Guid.Empty, "Habit", "emoji", "🔴", "✅", "emoji")], 1,
+                [new PendingOperationItem("0", null, "Habit", [], "state")], "fresh"));
         var executor = CreateExecutor(catalog, policyEvaluator: policy, changePreviewer: previewer);
 
         var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
@@ -964,6 +967,15 @@ public class AgentExecutionAndSanitizerTests
                 .Returns((string?)null);
         }
 
+        if (changePreviewer is null)
+        {
+            changePreviewer = Substitute.For<IPendingOperationChangePreviewer>();
+            changePreviewer.PreviewAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
+                .Returns(call => AgentArgumentPreview.Build(call.Arg<string>(), call.Arg<JsonElement>(), null, default));
+        }
+        var pendingStore = Substitute.For<IPendingAgentOperationStore>();
+        pendingStore.Revise(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>()).Returns(true);
+
         return new AgentOperationExecutor(
             catalogService,
             policyEvaluator ?? Substitute.For<IAgentPolicyEvaluator>(),
@@ -971,8 +983,8 @@ public class AgentExecutionAndSanitizerTests
             ownershipService,
             stepUpAuthorizationBridge,
             toolRegistry ?? new AiToolRegistry([]),
-            changePreviewer ?? Substitute.For<IPendingOperationChangePreviewer>(),
-            Substitute.For<IPendingAgentOperationStore>(),
+            changePreviewer,
+            pendingStore,
             unitOfWork ?? Substitute.For<IUnitOfWork>(),
             logger ?? NullLogger<AgentOperationExecutor>.Instance);
     }

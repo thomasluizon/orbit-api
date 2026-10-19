@@ -24,11 +24,7 @@ public static class HabitNameMatcher
         if (normalized.Length == 0)
             return false;
         var candidate = Normalize(title);
-        if (candidate.Contains(normalized, StringComparison.Ordinal))
-            return true;
-        var words = candidate.Split(' ').Select(CanonicalWord).ToArray();
-        return normalized.Split(' ').Select(CanonicalWord)
-            .All(word => words.Contains(word, StringComparer.Ordinal));
+        return (" " + candidate + " ").Contains(" " + normalized + " ", StringComparison.Ordinal);
     }
 
     public static Habit? Resolve(IEnumerable<Habit> habits, string name)
@@ -41,5 +37,4 @@ public static class HabitNameMatcher
         return matches.Count == 1 ? matches[0] : null;
     }
 
-    private static string CanonicalWord(string word) => word is "ler" or "leitura" or "lendo" ? "leitura" : word;
 }

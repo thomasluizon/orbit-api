@@ -119,8 +119,8 @@ public sealed class PendingOperationRevisionService(
     public async Task<bool> IsCurrentAsync(Guid userId, PendingAgentOperationExecution execution,
         CancellationToken cancellationToken)
     {
-        if (execution.PreviewFingerprint is null)
-            return true;
+        if (string.IsNullOrWhiteSpace(execution.PreviewFingerprint))
+            return toolRegistry.GetTool(execution.OperationId)?.IsReadOnly == true;
         var current = await previewer.PreviewAsync(userId, execution.OperationId,
             execution.Arguments, cancellationToken);
         return current?.PreviewFingerprint == execution.PreviewFingerprint;

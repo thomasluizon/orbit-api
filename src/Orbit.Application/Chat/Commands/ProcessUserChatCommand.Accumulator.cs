@@ -17,9 +17,15 @@ public partial class ProcessUserChatCommandHandler
         private readonly SemaphoreSlim _toolStepGate = new(1, 1);
 
         public IReadOnlyList<Orbit.Domain.Entities.Habit> Habits { get; init; } = [];
+        public IReadOnlyList<Orbit.Domain.Entities.Habit> AllHabits { get; init; } = [];
         public bool RequiresExistingParent { get; init; }
         public HashSet<(Guid? ParentId, string Name)> ProposedHabitNames { get; } = [];
+        public Dictionary<(Guid? ParentId, string Name), string> PendingHabitNames { get; } = [];
         public bool IsTaggingIntent { get; init; }
+        public HashSet<string> ExistingDuplicateNames { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public HashSet<string> PendingDuplicateNames { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, string[]> AmbiguousHabitNames { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, string> InvalidCalls { get; } = new(StringComparer.Ordinal);
         public HashSet<string> MissingHabitNames { get; } = new(StringComparer.OrdinalIgnoreCase);
         public HashSet<string> PreviewedCalls { get; } = new(StringComparer.Ordinal);
 

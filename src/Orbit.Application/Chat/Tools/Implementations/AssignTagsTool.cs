@@ -48,19 +48,22 @@ public class AssignTagsTool(
             var batch = SingleHabitArguments(args);
             if (batch is null)
                 return Orbit.Domain.Common.Result.Failure("Provide a non-empty habit_ids array without habit_id.");
-            foreach (var arguments in batch)
-            {
-                var checkedItem = await CheckArgumentsAsync(arguments, userId, ct);
-                if (checkedItem.IsFailure)
-                    return checkedItem;
-            }
-            return Orbit.Domain.Common.Result.Success();
+            var habitIds = batch.Select(value => Guid.Parse(value.GetProperty("habit_id").GetString()!)).ToArray();
+            var batchHabits = await habitRepository.FindAsync(habit => habit.UserId == userId && habitIds.Contains(habit.Id), ct);
+            if (batchHabits.Count != habitIds.Length)
+                return Orbit.Domain.Common.Result.Failure("Habit not found.");
+            return await CheckTagsAsync(args, userId, ct);
         }
         if (!HabitToolHelpers.TryParseHabitId(args, out var habitId))
             return Orbit.Domain.Common.Result.Failure("Invalid habit_id.");
         var habits = await habitRepository.FindAsync(h => h.Id == habitId && h.UserId == userId, ct);
         if (habits.Count == 0)
             return Orbit.Domain.Common.Result.Failure("Habit not found.");
+        return await CheckTagsAsync(args, userId, ct);
+    }
+
+    private async Task<Orbit.Domain.Common.Result> CheckTagsAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
         var hasIds = args.TryGetProperty("tag_ids", out var ids);
         var hasNames = args.TryGetProperty("tag_names", out var names);
         if (hasIds == hasNames)
@@ -114,21 +117,40 @@ public class AssignTagsTool(
 
     private async Task<ToolResult> AssignBatchAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
-        var validation = await CheckArgumentsAsync(args, userId, ct);
+        var batch = SingleHabitArguments(args);
+        if (batch is null)
+            return new ToolResult(false, Error: "Provide a non-empty habit_ids array without habit_id.");
+        var validation = await CheckTagsAsync(args, userId, ct);
         if (validation.IsFailure)
             return ToolResult.FromFailure(validation);
-        var results = new List<ToolResult>();
-        foreach (var arguments in SingleHabitArguments(args)!)
+        var ids = batch.Select(value => Guid.Parse(value.GetProperty("habit_id").GetString()!)).ToArray();
+        var habits = await habitRepository.FindTrackedAsync(habit => habit.UserId == userId && ids.Contains(habit.Id), IncludeTags, ct);
+        if (habits.Count != ids.Length)
+            return new ToolResult(false, Error: "Habit not found.");
+        List<Tag> resolvedTags;
+        if (args.TryGetProperty("tag_ids", out _))
         {
-            var result = await ExecuteAsync(arguments, userId, ct);
-            if (!result.Success)
-                return result;
-            results.Add(result);
+            var tagIds = JsonArgumentParser.ParseGuidArray(args, "tag_ids")!;
+            resolvedTags = tagIds.Count == 0 ? [] : (await tagRepository.FindTrackedAsync(tag =>
+                tag.UserId == userId && tagIds.Contains(tag.Id), ct)).ToList();
+            if (resolvedTags.Count != tagIds.Distinct().Count())
+                return new ToolResult(false, Error: "Tag not found.");
         }
-        return new ToolResult(true, EntityName: $"{results.Count} habits tagged", Payload: new
+        else
+            resolvedTags = await HabitToolHelpers.ResolveOrCreateTagsAsync(tagRepository,
+                args.GetProperty("tag_names").EnumerateArray().Select(value => value.GetString()!), userId, ct);
+        foreach (var habit in habits)
         {
-            habit_count = results.Count,
-            habits = results.Select(result => new { id = result.EntityId, title = result.EntityName }).ToArray()
+            foreach (var tag in habit.Tags.ToList())
+                habit.RemoveTag(tag);
+            foreach (var tag in resolvedTags)
+                habit.AddTag(tag);
+        }
+        await unitOfWork.SaveChangesAsync(ct);
+        return new ToolResult(true, EntityName: $"{habits.Count} habits tagged", Payload: new
+        {
+            habit_count = habits.Count,
+            habits = habits.Select(habit => new { id = habit.Id, title = habit.Title }).ToArray()
         });
     }
 

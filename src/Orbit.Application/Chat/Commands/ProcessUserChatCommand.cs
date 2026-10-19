@@ -266,10 +266,11 @@ public partial class ProcessUserChatCommandHandler(
         {
             AnsweredAtUtc = answeredAtUtc,
             Habits = context.ActiveHabits,
+            AllHabits = context.UserHabits,
             IsTaggingIntent = IsTagOnlyIntent(request.Message),
-            RequiresExistingParent = Regex.IsMatch(request.Message, @"\b(divida|dividir|split|break down)\b", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1))
+            RequiresExistingParent = RequestsExistingParent(request.Message, context.ActiveHabits)
         };
-        SeedProposedHabitNames(request.UserId, executionResults);
+        SeedProposedHabitNames(request, executionResults);
         var actionsStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var toolLoopResult = await RunToolCallLoopAsync(
             response.Value,
