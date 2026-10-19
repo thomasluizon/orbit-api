@@ -26,6 +26,7 @@ public class ConfigControllerTests : IDisposable
 
     public ConfigControllerTests()
     {
+        _configService.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new Dictionary<string, string>());
         var options = new DbContextOptionsBuilder<OrbitDbContext>()
             .UseInMemoryDatabase(databaseName: $"ConfigControllerTests_{Guid.NewGuid()}")
             .Options;
@@ -46,6 +47,24 @@ public class ConfigControllerTests : IDisposable
     {
         _dbContext.Dispose();
         GC.SuppressFinalize(this);
+    }
+
+    [Fact]
+    public async Task GetConfig_OmitsRetainedMemoryLimitWithoutMutatingCachedConfiguration()
+    {
+        var stored = await _dbContext.AppConfigs.AsNoTracking()
+            .ToDictionaryAsync(config => config.Key, config => config.Value);
+        stored.Should().ContainKey("MaxUserFacts");
+        _configService.GetAllAsync(Arg.Any<CancellationToken>()).Returns(stored);
+
+        var result = (OkObjectResult)await _controller.GetConfig(CancellationToken.None);
+
+        var payload = JsonSerializer.SerializeToElement(result.Value, JsonSerializerOptions.Web);
+        var limits = payload.GetProperty("limits");
+        limits.TryGetProperty("MaxUserFacts", out _).Should().BeFalse();
+        limits.EnumerateObject().Select(property => property.Name)
+            .Should().BeEquivalentTo(stored.Keys.Where(key => key != "MaxUserFacts"));
+        stored.Should().ContainKey("MaxUserFacts");
     }
 
     [Fact]

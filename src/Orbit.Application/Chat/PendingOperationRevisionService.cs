@@ -215,8 +215,6 @@ public sealed class PendingOperationRevisionService(
             return selected.Count == 1 && !HasEdits(selected[0]);
         if (operationId == "manage_calendar_sync")
             return BuildCalendarArguments(root, selected);
-        if (operationId == "delete_user_facts")
-            return BuildSelectedDeletion(root, selected, "fact_id", "fact_ids");
         if (operationId == "delete_notifications")
         {
             if (!BuildSelectedDeletion(root, selected, "notification_id", "notification_ids"))

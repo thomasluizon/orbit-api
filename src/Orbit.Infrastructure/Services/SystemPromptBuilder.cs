@@ -28,7 +28,6 @@ public class SystemPromptBuilder : ISystemPromptBuilder
             new ActiveHabitsSection(),
             new ActiveGoalsSection(),
             new UserTagsSection(),
-            new UserFactsSection(),
             new RoutinePatternsSection(),
             new TodayDateSection(),
             new ImageInstructionsSection(),
@@ -53,7 +52,6 @@ public class SystemPromptBuilder : ISystemPromptBuilder
     private static PromptContext ToContext(PromptBuildRequest request) =>
         new(
             request.ActiveHabits,
-            request.UserFacts,
             request.HasImage,
             request.RoutinePatterns,
             request.UserTags,

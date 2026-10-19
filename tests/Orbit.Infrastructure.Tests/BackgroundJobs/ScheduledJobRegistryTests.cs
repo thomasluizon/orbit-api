@@ -57,7 +57,25 @@ public class ScheduledJobRegistryTests
     [Fact]
     public void AllRecurringSchedulers_AreRegisteredAsJobs()
     {
-        BuildAll().Should().HaveCount(16);
+        BuildAll().Should().HaveCount(15);
+        BuildAll().Select(job => job.Name).Should().NotContain("openai-batch-poller");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void MemoryPollerIsAbsentFromBothSchedulerModes(bool durable)
+    {
+        var builder = WebApplication.CreateBuilder();
+        if (durable)
+            OrbitServiceCollectionExtensions.AddDurableRecurringJobs(builder);
+        else
+            OrbitServiceCollectionExtensions.AddInProcessSchedulers(builder);
+
+        builder.Services.Select(descriptor => descriptor.ImplementationType?.Name)
+            .Should().NotContain("OpenAiBatchPollerService");
+        builder.Services.Select(descriptor => descriptor.ServiceType.Name)
+            .Should().NotContain("OpenAiBatchPollerService");
     }
 
     [Theory]
@@ -189,7 +207,6 @@ public class ScheduledJobRegistryTests
         new SyncCleanupService(ScopeFactory(), NullLogger<SyncCleanupService>.Instance),
         new PlayNotificationCleanupService(ScopeFactory(), NullLogger<PlayNotificationCleanupService>.Instance),
         new CalendarAutoSyncService(ScopeFactory(), NullLogger<CalendarAutoSyncService>.Instance, EmptyConfiguration, TimeProvider.System),
-        new OpenAiBatchPollerService(ScopeFactory(), NullLogger<OpenAiBatchPollerService>.Instance, EmptyConfiguration, new MemoryCache(new MemoryCacheOptions())),
         new AiUsageSummaryService(ScopeFactory(), NullLogger<AiUsageSummaryService>.Instance, EmptyConfiguration, Options.Create(new AiSettings())),
         new FoundingAchievementReconciliationService(
             ScopeFactory(),

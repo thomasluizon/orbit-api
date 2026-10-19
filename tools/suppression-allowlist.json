@@ -119,12 +119,6 @@
         "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
       }
     },
-    "src/Orbit.Api/Controllers/UserFactsController.cs": {
-      "CA1873": {
-        "count": 1,
-        "reason": "File-level suppression for LoggerMessage source-generated call sites. Narrow the scope if the analyzer supports it."
-      }
-    },
     "src/Orbit.Api/OAuth/OAuthAuthorizationStore.cs": {
       "ORBIT0004": {
         "count": 3,
@@ -209,12 +203,6 @@
       "S3459": {
         "count": 1,
         "reason": "the same field: EF writes it through reflection and at the SQL layer, so unassigned-field is a false positive."
-      }
-    },
-    "src/Orbit.Infrastructure/AI/AiBatchClient.cs": {
-      "OPENAI001": {
-        "count": 1,
-        "reason": "the OpenAI Batch and Files surface is pre-release, which the class's own XML doc records; the suppression is scoped to the file that wraps it."
       }
     },
     "src/Orbit.Infrastructure/AI/AiUsageRecorder.cs": {

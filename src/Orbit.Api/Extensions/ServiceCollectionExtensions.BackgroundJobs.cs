@@ -26,6 +26,7 @@ public static partial class ServiceCollectionExtensions
             builder.Services.AddHostedService<XpAwardLogBackfillHostedService>();
 
             AddDurableJobQueue(builder);
+            builder.Services.AddHostedService<HangfireRecurringJobRegistrar>();
 
             if (useDurableQueue)
                 AddDurableRecurringJobs(builder);
@@ -55,7 +56,6 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddHostedService<SyncCleanupService>();
         builder.Services.AddHostedService<PlayNotificationCleanupService>();
         builder.Services.AddHostedService<CalendarAutoSyncService>();
-        builder.Services.AddHostedService<OpenAiBatchPollerService>();
         builder.Services.AddHostedService<AiUsageSummaryService>();
         builder.Services.AddHostedService<FoundingAchievementReconciliationService>();
     }
@@ -105,11 +105,9 @@ public static partial class ServiceCollectionExtensions
         AddScheduledJob<SyncCleanupService>(builder);
         AddScheduledJob<PlayNotificationCleanupService>(builder);
         AddScheduledJob<CalendarAutoSyncService>(builder);
-        AddScheduledJob<OpenAiBatchPollerService>(builder);
         AddScheduledJob<AiUsageSummaryService>(builder);
         AddScheduledJob<FoundingAchievementReconciliationService>(builder);
 
-        builder.Services.AddHostedService<HangfireRecurringJobRegistrar>();
     }
 
     private static void AddScheduledJob<TJob>(WebApplicationBuilder builder)

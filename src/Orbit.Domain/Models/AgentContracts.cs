@@ -255,7 +255,6 @@ public record AgentContextSnapshot(
     string Plan,
     string? Language,
     string? TimeZone,
-    bool AiMemoryEnabled,
     bool AiSummaryEnabled,
     int WeekStartDay,
     string? ThemePreference,
@@ -316,7 +315,6 @@ public static class AgentCapabilityIds
     public const string ProfilePreferencesWrite = "profile.preferences.write";
     public const string ProfilePremiumAppearanceWrite = "profile.premium-appearance.write";
     public const string ProfileAiSettingsWrite = "profile.ai-settings.write";
-    public const string ProfileAiMemoryWrite = "profile.ai-memory.write";
     public const string ProfileAiSummaryWrite = "profile.ai-summary.write";
     public const string ProfileProactiveAstraWrite = "profile.proactive-astra.write";
     public const string NotificationsRead = "notifications.read";
@@ -329,8 +327,6 @@ public static class AgentCapabilityIds
     public const string GamificationRepairGap = "gamification.repair_gap";
     public const string ChecklistTemplatesRead = "checklist-templates.read";
     public const string ChecklistTemplatesWrite = "checklist-templates.write";
-    public const string UserFactsRead = "user-facts.read";
-    public const string UserFactsDelete = "user-facts.delete";
     public const string ReferralsRead = "referrals.read";
     public const string ReferralsWrite = "referrals.write";
     public const string SubscriptionsRead = "subscriptions.read";
@@ -380,8 +376,6 @@ public static class AgentScopes
     public const string WriteGamification = "write_gamification";
     public const string ReadChecklistTemplates = "read_checklist_templates";
     public const string WriteChecklistTemplates = "write_checklist_templates";
-    public const string ReadUserFacts = "read_user_facts";
-    public const string DeleteUserFacts = "delete_user_facts";
     public const string ReadReferrals = "read_referrals";
     public const string WriteReferrals = "write_referrals";
     public const string ReadSubscriptions = "read_subscriptions";
@@ -425,8 +419,6 @@ public static class AgentScopes
         WriteGamification,
         ReadChecklistTemplates,
         WriteChecklistTemplates,
-        ReadUserFacts,
-        DeleteUserFacts,
         ReadReferrals,
         WriteReferrals,
         ReadSubscriptions,
@@ -469,8 +461,6 @@ public static class AgentScopes
         ReadGamification,
         ReadChecklistTemplates,
         WriteChecklistTemplates,
-        ReadUserFacts,
-        DeleteUserFacts,
         ReadReferrals,
         WriteReferrals,
         ReadSubscriptions

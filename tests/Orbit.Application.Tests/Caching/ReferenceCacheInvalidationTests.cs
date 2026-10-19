@@ -1,4 +1,4 @@
-﻿using System.Linq.Expressions;
+using System.Linq.Expressions;
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
@@ -11,8 +11,6 @@ using Orbit.Application.ChecklistTemplates.Queries;
 using Orbit.Application.Common;
 using Orbit.Application.Tags.Commands;
 using Orbit.Application.Tags.Queries;
-using Orbit.Application.UserFacts.Commands;
-using Orbit.Application.UserFacts.Queries;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -75,38 +73,6 @@ public class ReferenceCacheInvalidationTests
 
         await read.Handle(new GetChecklistTemplatesQuery(UserId), CancellationToken.None);
         await repo.Received(2).FindAsync(Arg.Any<Expression<Func<ChecklistTemplate, bool>>>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task UserFacts_Read_IsCached_AndDeleteInvalidatesIt()
-    {
-        var cache = new MemoryCache(new MemoryCacheOptions());
-        var repo = Substitute.For<IGenericRepository<UserFact>>();
-        var payGate = Substitute.For<IPayGateService>();
-        var unitOfWork = Substitute.For<IUnitOfWork>();
-        var fact = UserFact.Create(UserId, "User is a vegetarian", "context").Value;
-
-        payGate.CanReadUserFacts(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
-        payGate.CanManageUserFacts(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
-        repo.FindAsync(Arg.Any<Expression<Func<UserFact, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(new List<UserFact> { fact }.AsReadOnly());
-        repo.FindOneTrackedAsync(
-                Arg.Any<Expression<Func<UserFact, bool>>>(),
-                Arg.Any<Func<IQueryable<UserFact>, IQueryable<UserFact>>?>(),
-                Arg.Any<CancellationToken>())
-            .Returns(fact);
-
-        var read = new GetUserFactsQueryHandler(repo, payGate, cache);
-        await read.Handle(new GetUserFactsQuery(UserId), CancellationToken.None);
-        await read.Handle(new GetUserFactsQuery(UserId), CancellationToken.None);
-        await repo.Received(1).FindAsync(Arg.Any<Expression<Func<UserFact, bool>>>(), Arg.Any<CancellationToken>());
-
-        var delete = new DeleteUserFactCommandHandler(repo, payGate, unitOfWork, cache);
-        (await delete.Handle(new DeleteUserFactCommand(UserId, fact.Id), CancellationToken.None))
-            .IsSuccess.Should().BeTrue();
-
-        await read.Handle(new GetUserFactsQuery(UserId), CancellationToken.None);
-        await repo.Received(2).FindAsync(Arg.Any<Expression<Func<UserFact, bool>>>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

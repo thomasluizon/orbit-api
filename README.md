@@ -38,7 +38,6 @@ The backend for **Orbit** -- an AI-powered habit tracker. Provides a REST API fo
 - **Social** -- Friends, public profiles, and referrals
 - **Checklist Templates** -- Reusable habit/checklist templates
 - **Tags** -- Colored tags for habit organization
-- **User Facts** -- Personal context facts that enhance AI responses (soft-deleted)
 - **Push Notifications** -- Dual delivery: FCM for native Android, VAPID Web Push for browsers, plus background schedulers for reminders, goal deadlines, slip alerts, and check-ins
 - **Email Verification** -- Passwordless code-based login via Amazon SES
 - **Subscription Billing** -- Stripe (web) and Google Play Billing (native) with webhook / RTDN processing; backend is the source of truth for entitlements
@@ -110,7 +109,7 @@ src/
     Goals/ Gamification/  #   Goals, XP/streaks/achievements
     Calendar/             #   Google Calendar sync
     Social/ Referrals/    #   Social graph
-    ChecklistTemplates/ Tags/ UserFacts/ Uploads/    # Content
+    ChecklistTemplates/ Tags/ Uploads/    # Content
     Auth/ Profile/ ApiKeys/ Subscriptions/ Support/ Notifications/ Waitlist/
     Behaviors/            #   MediatR pipeline (ValidationBehavior, ...)
 
@@ -119,7 +118,7 @@ src/
 
   Orbit.Infrastructure/   # Infrastructure layer
     Persistence/          #   OrbitDbContext, GenericRepository<T>, UnitOfWork
-    Services/             #   AI (AiIntentService, AiSummaryService, OpenAiBatchPollerService, ...),
+    Services/             #   AI (AiIntentService, AiSummaryService, ...),
                           #   Agent/MCP (AgentCatalogService, AgentOperationExecutor, AgentPolicyEvaluator, ...),
                           #   billing (StripeBillingService, GooglePlayBillingService),
                           #   push + schedulers (PushNotificationService, ReminderSchedulerService, ...),
@@ -134,7 +133,7 @@ tests/
 
 ### Controllers
 
-`Achievements`, `Ai`, `ApiKeys`, `Auth`, `Calendar`, `Chat`, `ChecklistTemplates`, `Config`, `Friends`, `Gamification`, `Goals`, `Habits`, `Notification`, `OAuth`, `Profile`, `PublicProfile`, `Referral`, `Subscription`, `Support`, `Sync`, `Tags`, `Uploads`, `UserFacts`, `Waitlist`.
+`Achievements`, `Ai`, `ApiKeys`, `Auth`, `Calendar`, `Chat`, `ChecklistTemplates`, `Config`, `Friends`, `Gamification`, `Goals`, `Habits`, `Notification`, `OAuth`, `Profile`, `PublicProfile`, `Referral`, `Subscription`, `Support`, `Sync`, `Tags`, `Uploads`, `Waitlist`.
 
 ### Key Patterns
 

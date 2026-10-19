@@ -154,20 +154,11 @@ public class PayGateService(
     public Task<Result> CanManageApiKeys(Guid userId, CancellationToken ct = default) =>
         CanReadApiKeys(userId, ct);
 
-    public Task<Result> CanManageAiMemory(Guid userId, CancellationToken ct = default) =>
-        RequireProAccess(userId, "AI memory is a Pro feature. Upgrade to unlock!", ct);
-
     public Task<Result> CanManageAiSummary(Guid userId, CancellationToken ct = default) =>
         RequireProAccess(userId, "AI summaries are a Pro feature. Upgrade to unlock!", ct);
 
     public Task<Result> CanManageProactiveAstra(Guid userId, CancellationToken ct = default) =>
         RequireProAccess(userId, "Proactive Astra check-ins are a Pro feature. Upgrade to unlock!", ct);
-
-    public Task<Result> CanReadUserFacts(Guid userId, CancellationToken ct = default) =>
-        RequireProAccess(userId, "AI memory is a Pro feature. Upgrade to unlock!", ct);
-
-    public Task<Result> CanManageUserFacts(Guid userId, CancellationToken ct = default) =>
-        CanReadUserFacts(userId, ct);
 
     public Task<Result> CanUseSlipAlerts(Guid userId, CancellationToken ct = default) =>
         RequireProAccess(userId, "Slip alerts are a Pro feature. Upgrade to unlock!", ct);

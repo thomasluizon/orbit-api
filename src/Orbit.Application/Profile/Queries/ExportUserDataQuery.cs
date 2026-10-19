@@ -18,7 +18,6 @@ public record ExportUserDataRepositories(
     IGenericRepository<Goal> Goals,
     IGenericRepository<GoalProgressLog> GoalProgressLogs,
     IGenericRepository<Tag> Tags,
-    IGenericRepository<UserFact> UserFacts,
     IGenericRepository<Notification> Notifications,
     IGenericRepository<ChecklistTemplate> ChecklistTemplates,
     IGenericRepository<UserAchievement> UserAchievements,
@@ -62,7 +61,6 @@ public class ExportUserDataQueryHandler(
             .ToDictionary(g => g.Key, g => g.OrderBy(p => p.CreatedAtUtc).ToList());
 
         var tags = await repos.Tags.FindAsync(t => t.UserId == request.UserId, cancellationToken);
-        var facts = await repos.UserFacts.FindAsync(f => f.UserId == request.UserId, cancellationToken);
         var notifications = await repos.Notifications.FindAsync(n => n.UserId == request.UserId, cancellationToken);
         var checklistTemplates = await repos.ChecklistTemplates.FindAsync(c => c.UserId == request.UserId, cancellationToken);
         var achievements = await repos.UserAchievements.FindAsync(a => a.UserId == request.UserId, cancellationToken);
@@ -90,7 +88,6 @@ public class ExportUserDataQueryHandler(
                 user.WeekStartDay,
                 user.ThemePreference,
                 user.ColorScheme,
-                user.AiMemoryEnabled,
                 user.AiSummaryEnabled,
                 user.ProactiveAstraEnabled,
                 user.Uses24HourClockPreference),
@@ -104,7 +101,6 @@ public class ExportUserDataQueryHandler(
             habits.Select(h => MapHabit(h, logsByHabit)).ToList(),
             goals.Select(g => MapGoal(g, progressByGoal, freshProgressValues)).ToList(),
             tags.Select(t => new ExportedTag(t.Id, t.Name, t.Color, t.CreatedAtUtc)).ToList(),
-            facts.Select(f => new ExportedUserFact(f.FactText, f.Category, f.ExtractedAtUtc)).ToList(),
             notifications
                 .OrderBy(n => n.CreatedAtUtc)
                 .Select(n => new ExportedNotification(n.Id, n.Title, n.Body, n.Url, n.IsRead, n.CreatedAtUtc))

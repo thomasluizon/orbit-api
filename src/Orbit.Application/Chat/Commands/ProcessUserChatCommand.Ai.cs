@@ -20,7 +20,7 @@ public partial class ProcessUserChatCommandHandler
         CancellationToken cancellationToken)
     {
         var promptRequest = new PromptBuildRequest(
-            context.PromptHabits, context.UserFacts,
+            context.PromptHabits,
             HasImage: request.ImageData is not null,
             UserTags: context.UserTags,
             UserToday: context.UserToday,
@@ -177,7 +177,6 @@ public partial class ProcessUserChatCommandHandler
             hasProAccess ? "pro" : "free",
             user?.Language,
             user?.TimeZone,
-            hasProAccess && (user?.AiMemoryEnabled ?? true),
             hasProAccess && (user?.AiSummaryEnabled ?? true),
             user?.WeekStartDay ?? 1,
             user?.ThemePreference,
