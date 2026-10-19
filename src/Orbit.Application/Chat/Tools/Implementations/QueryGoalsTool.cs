@@ -18,7 +18,7 @@ public class QueryGoalsTool(
     public bool IsReadOnly => true;
 
     public string Description =>
-        "Deep lookup for goals beyond the prompt index: completed or abandoned goals and filtered searches by text or status. The active-goal list in the system prompt already shows titles, IDs, progress, status, deadlines, descriptions, and linked habits - do not call this just to list active goals.";
+        "Read current-turn facts for goals: listings, progress, status, deadlines, descriptions, linked habits, and filtered searches by text or status. Call this before answering goal questions; prompt indexes alone do not ground the reply.";
 
     public object GetParameterSchema() => new
     {

@@ -237,7 +237,7 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
             _productAnalytics, _scheduleLogReader);
 
         return new ProcessUserChatCommandHandler(dataDeps, aiDeps, executionDeps,
-            Substitute.For<ILogger<ProcessUserChatCommandHandler>>());
+            Substitute.For<ILogger<ProcessUserChatCommandHandler>>(), Substitute.For<IAppConfigService>());
     }
 
     private void ScriptToolCall(string arguments)

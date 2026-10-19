@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
 using Orbit.Application.Chat;
-using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -26,33 +25,8 @@ public partial class ProcessUserChatCommandHandler
         var activeHabits = userHabits.Where(habit => !habit.IsCompleted).ToList();
         var userToday = await execution.UserDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var weekStartDay = await execution.UserDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
-        var logFrom = userToday.AddDays(-AppConstants.MaxRangeDays);
-        var activeIds = userHabits.Where(habit => !habit.IsCompleted
-            || habit.FrequencyUnit is null && !habit.IsGeneral).Select(habit => habit.Id).ToArray();
-        var logDays = await execution.ScheduleLogReader.ReadDaysAsync(
-            activeIds, logFrom, userToday, cancellationToken);
-        var logFacts = new HabitScheduleLogFacts(logDays);
-        var dueDateResolution = activeHabits
-            .Where(habit => habit.DueDate >= logFrom
-                && habit.DueDate <= userToday
-                && logFacts.ResolvedDates(habit.Id).Contains(habit.DueDate))
-            .Select(habit => habit.Id)
-            .ToHashSet();
-        var oldDueDateIds = activeHabits
-            .Where(habit => habit.FrequencyUnit is not null
-                && !habit.IsFlexible
-                && !habit.IsBadHabit
-                && habit.DueDate < logFrom)
-            .Select(habit => habit.Id)
-            .ToArray();
-        if (oldDueDateIds.Length > 0)
-        {
-            var olderResolutions = await execution.ScheduleLogReader.ReadResolvedDueDateIdsAsync(
-                oldDueDateIds, cancellationToken);
-            dueDateResolution.UnionWith(olderResolutions);
-        }
-        var todayFacts = HabitTodaySnapshot.Build(
-            userHabits, userToday, weekStartDay, logDays, dueDateResolution);
+        var todayFacts = await HabitTodaySnapshot.ReadAsync(
+            userHabits, userToday, weekStartDay, execution.ScheduleLogReader, cancellationToken);
         var todayHabits = userHabits.Where(habit => !habit.IsCompleted
             || habit.FrequencyUnit is null && todayFacts.DoneTodayIds.Contains(habit.Id)).ToList();
         var promptHabitIndex = BuildPromptHabitIndex(userHabits, userToday, todayFacts);
