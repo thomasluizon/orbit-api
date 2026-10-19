@@ -195,6 +195,11 @@ public sealed class PendingOperationChangePreviewer(
         var byId = habits.ToDictionary(habit => habit.Id);
         if (datedItems is null || datedItems.Any(item => !byId.ContainsKey(item.HabitId)))
             return null;
+        var stableIds = arguments.GetProperty("revised_items").EnumerateArray()
+            .Where(item => item.TryGetProperty("preview_item_id", out var id) && id.ValueKind == JsonValueKind.String)
+            .ToDictionary(item => (Guid.Parse(item.GetProperty("habit_id").GetString()!),
+                DateOnly.ParseExact(item.GetProperty("date").GetString()!, "yyyy-MM-dd", CultureInfo.InvariantCulture)),
+                item => item.GetProperty("preview_item_id").GetString()!);
         var multipleDates = datedItems.GroupBy(item => item.HabitId).Any(group => group.Count() > 1);
         var datedPreview = datedItems.OrderBy(item => item.HabitId).ThenBy(item => item.Date).Select(item =>
         {
@@ -202,7 +207,9 @@ public sealed class PendingOperationChangePreviewer(
             var date = item.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
             var change = new PendingOperationChange(habit.Id, habit.Title, "date", null, date,
                 "date", JsonSerializer.SerializeToElement(date), true);
-            return new PendingOperationItem(multipleDates ? $"{habit.Id}:{date}" : habit.Id.ToString(),
+            var itemId = stableIds.TryGetValue((item.HabitId, item.Date), out var stableId)
+                ? stableId : multipleDates ? $"{habit.Id}:{date}" : habit.Id.ToString();
+            return new PendingOperationItem(itemId,
                 habit.Id, habit.Title, [change], FingerprintHabit(habit), RemovesData: false);
         }).ToList();
         return BuildPreview(operationId, datedPreview.Take(10).SelectMany(item => item.Fields).ToList(), datedPreview);

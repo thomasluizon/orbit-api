@@ -338,7 +338,13 @@ public sealed class PendingOperationRevisionService(
                 System.Globalization.CultureInfo.InvariantCulture,
                 System.Globalization.DateTimeStyles.None, out _))
                 return false;
-            items.Add(new JsonObject { ["habit_id"] = offered[item.ItemId].EntityId?.ToString(), ["date"] = date });
+            var targetId = offered[item.ItemId].EntityId?.ToString();
+            if (targetId is null)
+                return false;
+            var revisedItem = new JsonObject { ["habit_id"] = targetId, ["date"] = date };
+            if (item.ItemId != targetId)
+                revisedItem["preview_item_id"] = item.ItemId;
+            items.Add(revisedItem);
         }
         root.Remove("filter");
         root.Remove("habit_ids");
