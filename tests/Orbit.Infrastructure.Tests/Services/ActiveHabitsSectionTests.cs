@@ -287,6 +287,9 @@ public class ActiveHabitsSectionTests
 
         result.Should().Contain("Fetch current-turn tool results before answering schedule questions");
         result.Should().Contain("preserve the returned entries and counts");
+        result.Should().Contain("Today's full schedule includes DONE TODAY entries");
+        result.Should().Contain("query_habits(date: 'today') without is_completed");
+        result.Should().Contain("Only for remaining work, use is_completed: false");
         result.Should().NotContain("Verify your list matches those counts");
     }
 

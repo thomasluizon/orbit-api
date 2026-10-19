@@ -125,7 +125,9 @@ public class GroundednessCheckerTests
             .Returns(new List<Habit> { habit }.AsReadOnly());
         var users = Substitute.For<IGenericRepository<User>>();
         users.GetByIdAsync(userId, Arg.Any<CancellationToken>()).Returns(User.Create("Alex", "alex@example.com").Value);
-        var output = await new QueryHabitsTool(habits, users)
+        var dates = Substitute.For<IUserDateService>();
+        dates.GetUserTodayAsync(userId, Arg.Any<CancellationToken>()).Returns(new DateOnly(2026, 4, 3));
+        var output = await new QueryHabitsTool(habits, users, dates, Substitute.For<IHabitScheduleLogReader>())
             .ExecuteAsync(JsonSerializer.SerializeToElement(new { }), userId, CancellationToken.None);
         var facts = TurnFactSet.FromToolResults([
             new AiToolCallResult("query_habits", "real_output", output.Success,

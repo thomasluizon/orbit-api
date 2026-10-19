@@ -2,11 +2,13 @@ using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
 using NSubstitute;
+using Orbit.Application.Chat.Grounding;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Chat;
@@ -15,6 +17,8 @@ public class QueryHabitsToolTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
+    private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
+    private readonly IHabitScheduleLogReader _scheduleLogReader = Substitute.For<IHabitScheduleLogReader>();
     private readonly QueryHabitsTool _tool;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -22,7 +26,8 @@ public class QueryHabitsToolTests
 
     public QueryHabitsToolTests()
     {
-        _tool = new QueryHabitsTool(_habitRepo, _userRepo);
+        _tool = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
 
         var user = User.Create("Test", "test@test.com").Value;
         user.SetTimeZone("UTC");
@@ -152,6 +157,67 @@ public class QueryHabitsToolTests
         result.EntityName.Should().NotContain("Overdue");
     }
 
+    [Theory]
+    [InlineData("today")]
+    [InlineData("explicit")]
+    public async Task DateSchedule_LoggedDailyHabit_IncludesDoneButRemainingExcludesIt(string date)
+    {
+        var habit = CreateHabit("Drink water", FrequencyUnit.Day, 1, dueDate: Today);
+        habit.Log(Today).IsSuccess.Should().BeTrue();
+        habit.DueDate.Should().Be(Today.AddDays(1));
+
+        await AssertDoneScheduleAsync(habit, date);
+    }
+
+    [Theory]
+    [InlineData("today")]
+    [InlineData("explicit")]
+    public async Task DateSchedule_CompletedOneTimeTask_IncludesDoneButRemainingExcludesIt(string date)
+    {
+        var habit = CreateHabit("File taxes", null, null, dueDate: Today);
+        habit.Log(Today).IsSuccess.Should().BeTrue();
+        habit.IsCompleted.Should().BeTrue();
+
+        await AssertDoneScheduleAsync(habit, date);
+    }
+
+    private async Task AssertDoneScheduleAsync(Habit done, string date)
+    {
+        var pending = CreateHabit("Read a book", null, null, dueDate: Today);
+        var completedEarlier = CreateHabit("Old task", null, null, dueDate: Today.AddDays(-1));
+        completedEarlier.Log(Today.AddDays(-1)).IsSuccess.Should().BeTrue();
+        var otherUser = Habit.Create(new HabitCreateParams(
+            Guid.NewGuid(), "Other user task", null, null, DueDate: Today)).Value;
+        SetupHabits(done, pending, completedEarlier, otherUser);
+        var dateValue = date == "today" ? date : Today.ToString("yyyy-MM-dd");
+
+        var schedule = await Execute(JsonSerializer.Serialize(new { date = dateValue }));
+
+        schedule.Success.Should().BeTrue();
+        schedule.EntityName.Should().Contain(done.Title);
+        schedule.EntityName.Should().Contain("Found 2 habit(s)");
+        schedule.EntityName.Should().Contain("1 done, 1 remaining");
+        schedule.EntityName!.Split('\n').Single(line => line.Contains(done.Title))
+            .Should().Contain("DONE TODAY");
+        schedule.EntityName.Should().Contain(pending.Title);
+        schedule.EntityName.Should().NotContain(completedEarlier.Title).And.NotContain(otherUser.Title);
+        var facts = TurnFactSet.FromToolResults([
+            new AiToolCallResult("query_habits", "schedule", schedule.Success,
+                schedule.EntityId, schedule.EntityName, schedule.Error, schedule.Payload)]);
+        GroundednessChecker.Check($"You have 2 habits: \"{done.Title}\" is done and \"{pending.Title}\" remains.",
+            facts, [done.Title, pending.Title]).Should().BeEmpty();
+
+        var remaining = await Execute(JsonSerializer.Serialize(new { date = dateValue, is_completed = false }));
+        remaining.EntityName.Should().Contain("Found 1 habit(s)").And.Contain(pending.Title);
+        remaining.EntityName.Should().NotContain(done.Title);
+        remaining.EntityName.Should().Contain("0 done, 1 remaining");
+
+        var completed = await Execute(JsonSerializer.Serialize(new { date = dateValue, is_completed = true }));
+        completed.EntityName.Should().Contain("Found 1 habit(s)").And.Contain(done.Title);
+        completed.EntityName.Should().NotContain(pending.Title);
+        completed.EntityName.Should().Contain("1 done, 0 remaining");
+    }
+
     [Fact]
     public async Task DateSpecific_ReturnsHabitsDueOnThatDate()
     {
@@ -164,6 +230,49 @@ public class QueryHabitsToolTests
 
         result.EntityName.Should().Contain("Friday task");
         result.EntityName.Should().NotContain("Other");
+    }
+
+    [Fact]
+    public async Task DateSpecific_RecurringHabit_UsesScheduleRatherThanStoredDueDate()
+    {
+        var date = Today.AddDays(5);
+        var recurring = CreateHabit("Daily reading", FrequencyUnit.Day, 1, dueDate: Today);
+        var oneTime = CreateHabit("Single task", null, null, dueDate: Today);
+        SetupHabits(recurring, oneTime);
+
+        var result = await Execute(JsonSerializer.Serialize(new { date = date.ToString("yyyy-MM-dd") }));
+
+        result.EntityName.Should().Contain(recurring.Title).And.NotContain(oneTime.Title);
+        result.EntityName.Should().Contain("SCHEDULED ON DATE").And.Contain("0 done, 1 remaining");
+    }
+
+    [Fact]
+    public async Task DateToday_UsesUserDateRatherThanUtcDate()
+    {
+        var userToday = Today.AddDays(-1);
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(userToday);
+        var task = CreateHabit("Local task", null, null, dueDate: userToday);
+        var tomorrow = CreateHabit("Tomorrow task", null, null, dueDate: Today);
+        SetupHabits(task, tomorrow);
+
+        var result = await Execute("""{"date": "today"}""");
+
+        result.EntityName.Should().Contain(task.Title).And.NotContain(tomorrow.Title);
+        result.EntityName.Should().Contain($"Returned schedule for {userToday:yyyy-MM-dd}");
+    }
+
+    [Fact]
+    public async Task DateToday_CompletedChildWithoutScheduledParent_RemainsVisible()
+    {
+        var parent = CreateHabit("Future routine", null, null, dueDate: Today.AddDays(2));
+        var child = CreateHabit("Completed step", null, null, dueDate: Today, parentId: parent.Id);
+        child.Log(Today).IsSuccess.Should().BeTrue();
+        SetupHabits(parent, child);
+
+        var result = await Execute("""{"date": "today"}""");
+
+        result.EntityName.Should().Contain(child.Title).And.NotContain(parent.Title);
+        result.EntityName.Should().Contain("Found 1 habit(s)").And.Contain("1 done, 0 remaining");
     }
 
     [Fact]
@@ -500,6 +609,30 @@ public class QueryHabitsToolTests
 
     private void SetupHabits(params Habit[] habits)
     {
+        _scheduleLogReader.ReadDaysAsync(
+            Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(),
+            Arg.Any<CancellationToken>()).Returns(callInfo =>
+        {
+            var ids = callInfo.ArgAt<IReadOnlyCollection<Guid>>(0);
+            var from = callInfo.ArgAt<DateOnly>(1);
+            var to = callInfo.ArgAt<DateOnly>(2);
+            return habits.Where(habit => ids.Contains(habit.Id))
+                .SelectMany(habit => habit.Logs
+                    .Where(log => !log.IsDeleted && log.Date >= from && log.Date <= to)
+                    .GroupBy(log => log.Date)
+                    .Select(group => new HabitScheduleLogDay(habit.Id, group.Key,
+                        group.Count(log => log.Value > 0 && log.IsSlip != true),
+                        group.Count(log => log.Value == 0), true)))
+                .ToList();
+        });
+        _scheduleLogReader.ReadResolvedDueDateIdsAsync(
+            Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>()).Returns(callInfo =>
+        {
+            var ids = callInfo.ArgAt<IReadOnlyCollection<Guid>>(0);
+            return (IReadOnlySet<Guid>)habits.Where(habit => ids.Contains(habit.Id)
+                    && habit.Logs.Any(log => !log.IsDeleted && log.Date == habit.DueDate))
+                .Select(habit => habit.Id).ToHashSet();
+        });
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),

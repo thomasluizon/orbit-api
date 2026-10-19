@@ -21,7 +21,8 @@ public class SystemPromptBuilderTests
         var prompt = builder.BuildStatic(request) + builder.BuildDynamic(request);
 
         prompt.Should().Contain("GROUNDING INVARIANT");
-        prompt.Should().Contain("only when a tool returned it in the CURRENT TURN");
+        prompt.Should().Contain("only when a successful tool returned it in the CURRENT TURN");
+        prompt.Should().Contain("set date and omit is_completed to include entries already done that day");
         prompt.Should().Contain("Never estimate or recall facts from earlier turns");
         prompt.Should().Contain("call the appropriate tool or say the data is unavailable");
         prompt.Should().Contain("Call query_habits before making factual claims");
