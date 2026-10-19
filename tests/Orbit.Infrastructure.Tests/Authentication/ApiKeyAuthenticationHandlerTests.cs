@@ -12,6 +12,7 @@ using Orbit.Api.Authentication;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 
 namespace Orbit.Infrastructure.Tests.Authentication;
 
@@ -139,6 +140,20 @@ public class ApiKeyAuthenticationHandlerTests
             .Should().BeEquivalentTo("habits:read", "goals:read");
         apiKey.LastUsedAtUtc.Should().NotBeNull();
         await run.UnitOfWork.Received(1).SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task HandleAuthenticateAsync_StoredSocialScope_DoesNotRejectOtherGrantedScopes()
+    {
+        var (apiKey, rawKey) = ApiKey.Create(Guid.NewGuid(), "Existing key",
+            ["manage_social", AgentScopes.ReadHabits]).Value;
+
+        var run = await RunHandler($"Bearer {rawKey}", candidates: [apiKey]);
+
+        run.Result.Succeeded.Should().BeTrue();
+        run.Result.Principal!.FindAll("scope").Select(claim => claim.Value)
+            .Should().BeEquivalentTo("manage_social", AgentScopes.ReadHabits);
+        AgentScopes.All.Should().NotContain("manage_social");
     }
 
     [Fact]

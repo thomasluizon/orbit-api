@@ -161,18 +161,6 @@
         "reason": "instant: the MarkImported(habitId, now) ImportedAtUtc audit timestamp for a calendar suggestion."
       }
     },
-    "src/Orbit.Application/Profile/Commands/SetHandleCommand.cs": {
-      "CA1862": {
-        "count": 1,
-        "reason": "EF Core cannot translate string.Equals(StringComparison) to SQL, so the case-insensitive match stays as ToLower(). dotnet/efcore#1222."
-      }
-    },
-    "src/Orbit.Application/Social/Services/FriendGraphService.cs": {
-      "CA1862": {
-        "count": 1,
-        "reason": "EF Core cannot translate string.Equals(StringComparison) to SQL, so the case-insensitive match stays as ToLower(). dotnet/efcore#1222."
-      }
-    },
     "src/Orbit.Application/Waitlist/Commands/JoinWaitlistCommand.cs": {
       "ORBIT0004": {
         "count": 1,

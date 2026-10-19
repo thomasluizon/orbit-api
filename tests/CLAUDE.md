@@ -51,7 +51,7 @@ dotnet test --filter "FullyQualifiedName~CreateHabit_Should_Succeed"
 
 ## Query-shape / round-trip-count pattern
 
-`QueryRoundTripCountTests` and the SQLite case in `SocialGraphReaderTests` catch N+1 regressions without a real Postgres: build the context via the shared `SqliteOrbitDbContextFactory` (SQLite in-memory — the only provider that emits real SQL — with the `::`-cast/filtered-index compat shim), pass a `CountingDbCommandInterceptor`, seed a small and a large row set, run the query, and assert the command count is **invariant to volume** (a count that grows with the seed is the N+1 signature). Use `SqliteOrbitDbContextFactory` for any new relational query-shape test; the ~6 inline copies of the compat shim are a known dedup follow-up.
+`QueryRoundTripCountTests` catches N+1 regressions without a real Postgres: build the context via the shared `SqliteOrbitDbContextFactory` (SQLite in-memory, which emits real SQL, with the `::`-cast/filtered-index compatibility shim), pass a `CountingDbCommandInterceptor`, seed a small and a large row set, run the query, and assert the command count is invariant to volume. Use `SqliteOrbitDbContextFactory` for new relational query-shape tests.
 
 ## Benchmarks (not part of `dotnet test`)
 

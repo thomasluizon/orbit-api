@@ -132,21 +132,10 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IGamificationService, GamificationService>();
         builder.Services.AddScoped<Orbit.Application.Gamification.Services.IAchievementProgressService, Orbit.Application.Gamification.Services.AchievementProgressService>();
         builder.Services.AddScoped<Orbit.Application.Gamification.Backfill.XpAwardLogBackfillService>();
-        builder.Services.AddScoped<Orbit.Application.Social.Services.SocialAccessGuard>();
-        builder.Services.AddScoped<Orbit.Application.Social.Services.FriendGraphService>();
-        builder.Services.AddScoped<Orbit.Application.Social.Services.SocialNotificationDispatcher>();
-        builder.Services.AddScoped<Orbit.Application.Social.Services.IFriendFeedEventEmitter, Orbit.Application.Social.Services.FriendFeedEmitter>();
-        builder.Services.AddScoped<IFriendFeedReader, FriendFeedReader>();
-        builder.Services.AddScoped<ISocialGraphReader, SocialGraphReader>();
         builder.Services.AddScoped<IHabitLogReader, HabitLogReader>();
         builder.Services.AddScoped<IHabitScheduleLogReader, HabitScheduleLogReader>();
         builder.Services.AddScoped<IHabitSummaryLogReader, HabitSummaryLogReader>();
         builder.Services.AddScoped<IHabitSchedulePageLoader, HabitSchedulePageLoader>();
-        builder.Services.AddScoped<Orbit.Application.Social.Commands.SendCheerRepositories>(sp =>
-            new Orbit.Application.Social.Commands.SendCheerRepositories(
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Cheer>>()));
         builder.Services.AddScoped<Orbit.Application.Goals.Commands.GoalRepositories>(sp =>
             new Orbit.Application.Goals.Commands.GoalRepositories(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Goal>>(),
@@ -172,13 +161,6 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Goal>>()));
-        builder.Services.AddScoped<Orbit.Application.Social.Queries.GetFriendProfileRepositories>(sp =>
-            new Orbit.Application.Social.Queries.GetFriendProfileRepositories(
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserAchievement>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.AccountabilityPair>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Challenge>>()));
         builder.Services.AddScoped<Orbit.Infrastructure.Services.UserStreakRepositories>(sp =>
             new Orbit.Infrastructure.Services.UserStreakRepositories(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
@@ -203,8 +185,6 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.BlockedUser>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Report>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.FriendFeedEvent>>()));
-        builder.Services.AddScoped<Orbit.Application.Social.Services.SocialInteractionServices>();
-        builder.Services.AddScoped<Orbit.Application.Gamification.Services.GamificationNotifiers>();
         builder.Services.AddScoped<IGoogleTokenService, GoogleTokenService>();
         builder.Services.AddScoped<GoogleSignInFlow>();
         builder.Services.AddScoped<AccountReactivation>();

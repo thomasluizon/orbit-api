@@ -108,7 +108,7 @@ src/
     Chat/                 #   AI chat orchestration
     Goals/ Gamification/  #   Goals, XP/streaks/achievements
     Calendar/             #   Google Calendar sync
-    Social/ Referrals/    #   Social graph
+    Referrals/            #   Referral rewards
     ChecklistTemplates/ Tags/ Uploads/    # Content
     Auth/ Profile/ ApiKeys/ Subscriptions/ Support/ Notifications/ Waitlist/
     Behaviors/            #   MediatR pipeline (ValidationBehavior, ...)
@@ -133,7 +133,7 @@ tests/
 
 ### Controllers
 
-`Achievements`, `Ai`, `ApiKeys`, `Auth`, `Calendar`, `Chat`, `ChecklistTemplates`, `Config`, `Friends`, `Gamification`, `Goals`, `Habits`, `Notification`, `OAuth`, `Profile`, `PublicProfile`, `Referral`, `Subscription`, `Support`, `Sync`, `Tags`, `Uploads`, `Waitlist`.
+`Achievements`, `Ai`, `ApiKeys`, `Auth`, `Calendar`, `Chat`, `ChecklistTemplates`, `Config`, `Gamification`, `Goals`, `Habits`, `Notification`, `OAuth`, `Profile`, `Referral`, `Subscription`, `Support`, `Sync`, `Tags`, `Uploads`, `Waitlist`.
 
 ### Key Patterns
 

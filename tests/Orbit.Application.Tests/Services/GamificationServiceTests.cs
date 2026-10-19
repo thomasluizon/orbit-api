@@ -11,7 +11,6 @@ using Orbit.Application.Gamification.Models;
 using Orbit.Application.Gamification.Services;
 using Orbit.Application.Habits.Services;
 using Orbit.Application.Notifications;
-using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -32,7 +31,6 @@ public class GamificationServiceTests
     private readonly IGenericRepository<XpAwardLog> _xpAwardLogRepo = Substitute.For<IGenericRepository<XpAwardLog>>();
     private readonly IPushNotificationService _pushService = Substitute.For<IPushNotificationService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
-    private readonly IFriendFeedEventEmitter _feedEmitter = Substitute.For<IFriendFeedEventEmitter>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IFeatureFlagService _featureFlagService = Substitute.For<IFeatureFlagService>();
     private readonly IFoundingAchievementReader _foundingAchievementReader = Substitute.For<IFoundingAchievementReader>();
@@ -50,7 +48,7 @@ public class GamificationServiceTests
             _foundingAchievementReader);
         _snapshotStore = new HabitScheduleSnapshotStore(_habitRepo);
         _sut = new GamificationService(
-            repos, new GamificationNotifiers(_pushService, _feedEmitter), _userDateService, new XpAwarder(_xpAwardLogRepo), _unitOfWork,
+            repos, _pushService, _userDateService, new XpAwarder(_xpAwardLogRepo), _unitOfWork,
             _featureFlagService, Substitute.For<ILogger<GamificationService>>(),
             _snapshotStore);
 
@@ -244,7 +242,6 @@ public class GamificationServiceTests
         var streak = new UserStreakService(
             new UserStreakRepositories(_userRepo, _habitLogRepo, freezeRepo),
             _userDateService,
-            _feedEmitter,
             _snapshotStore);
 
         var streakState = await streak.RecalculateAsync(UserId);

@@ -8,7 +8,6 @@ using Orbit.Application.Common;
 using Orbit.Application.Gamification;
 using Orbit.Application.Gamification.Services;
 using Orbit.Application.Profile.Commands;
-using Orbit.Application.Social.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -71,9 +70,7 @@ public class FoundingAchievementResetRaceTests
                 Substitute.For<IGenericRepository<Notification>>(),
                 xpAwardLogRepository,
                 foundingReader),
-            new GamificationNotifiers(
-                Substitute.For<IPushNotificationService>(),
-                Substitute.For<IFriendFeedEventEmitter>()),
+            Substitute.For<IPushNotificationService>(),
             userDateService,
             new XpAwarder(xpAwardLogRepository),
             unitOfWork,

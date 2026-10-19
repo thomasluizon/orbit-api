@@ -1,6 +1,5 @@
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
-using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
@@ -16,7 +15,6 @@ public record UserStreakRepositories(
 public class UserStreakService(
     UserStreakRepositories repos,
     IUserDateService userDateService,
-    IFriendFeedEventEmitter friendFeedEventEmitter,
     HabitScheduleSnapshotStore scheduleSnapshots) : IUserStreakService
 {
     public async Task<UserStreakState?> RecalculateAsync(
@@ -30,7 +28,6 @@ public class UserStreakService(
         if (user is null)
             return null;
 
-        var previousStreak = user.CurrentStreak;
         var state = await CalculateStateAsync(userId, user, cancellationToken);
         user.SetStreakState(state.CurrentStreak, state.LongestStreak, state.LastActiveDate);
         if (awardFreezeIfEligible)
@@ -39,7 +36,6 @@ public class UserStreakService(
                 AppConstants.MaxStreakFreezesAccumulated,
                 AppConstants.StreakDaysPerFreeze);
         }
-        await friendFeedEventEmitter.EmitStreakMilestonesAsync(user, previousStreak, cancellationToken);
         return state;
     }
 

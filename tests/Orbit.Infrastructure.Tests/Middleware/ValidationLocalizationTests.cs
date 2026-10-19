@@ -40,8 +40,6 @@ using Orbit.Application.Profile.Commands;
 using Orbit.Application.Profile.Validators;
 using Orbit.Application.Referrals.Commands;
 using Orbit.Application.Referrals.Validators;
-using Orbit.Application.Social.Queries;
-using Orbit.Application.Social.Validators;
 using Orbit.Application.Subscriptions.Commands;
 using Orbit.Application.Subscriptions.Validators;
 using Orbit.Application.Support.Commands;
@@ -71,7 +69,6 @@ public partial class ValidationLocalizationTests(ITestOutputHelper output)
     [InlineData("Notifications")]
     [InlineData("Profile")]
     [InlineData("Referrals")]
-    [InlineData("Social")]
     [InlineData("Subscriptions")]
     [InlineData("Support")]
     [InlineData("Tags")]
@@ -207,7 +204,6 @@ public partial class ValidationLocalizationTests(ITestOutputHelper output)
             "Notifications" => Case(new UnsubscribePushCommandValidator(), new UnsubscribePushCommand(id, ""), "Endpoint", "NotEmptyValidator", "Preencha Endpoint."),
             "Profile" => Case(new SetLanguageCommandValidator(), new SetLanguageCommand(id, "fr"), "Language", ValidationErrorCodes.LanguageSupported, "O idioma deve ser um destes: en, pt-BR"),
             "Referrals" => Case(new ProcessReferralCodeCommandValidator(), new ProcessReferralCodeCommand(id, ""), "ReferralCode", "NotEmptyValidator", "Digite o código de indicação"),
-            "Social" => Case(new GetCheersQueryValidator(), new GetCheersQuery(id, "unknown"), "Direction", ValidationErrorCodes.CheersDirection, "A direção deve ser 'received' ou 'sent'."),
             "Subscriptions" => Case(new CreateCheckoutCommandValidator(), new CreateCheckoutCommand(id, "weekly", null, null), "Interval", ValidationErrorCodes.BillingIntervalSupported, "O intervalo de cobrança deve ser 'monthly' ou 'yearly'."),
             "Support" => Case(new SendSupportCommandValidator(), new SendSupportCommand(id, "Reader", "reader@example.com", "", "Help"), "Subject", "NotEmptyValidator", "Escolha um assunto para a gente encaminhar certo."),
             "Tags" => Case(new CreateTagCommandValidator(), new CreateTagCommand(id, "Read", "invalid"), "Color", ValidationErrorCodes.TagColorFormat, "Escolha uma cor da paleta"),

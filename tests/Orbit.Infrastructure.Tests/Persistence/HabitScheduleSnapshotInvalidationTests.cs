@@ -7,7 +7,6 @@ using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Commands;
 using Orbit.Application.Habits.Services;
-using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -204,7 +203,7 @@ public class HabitScheduleSnapshotInvalidationTests
         var streak = new UserStreakService(
             new UserStreakRepositories(new GenericRepository<User>(context), logs,
                 new GenericRepository<StreakFreeze>(context)),
-            dates, Substitute.For<IFriendFeedEventEmitter>(), snapshots);
+            dates, snapshots);
         using var cache = new MemoryCache(new MemoryCacheOptions());
         var handler = new BulkLogHabitsCommandHandler(habits, logs,
             new BulkLogServices(dates, streak, gamification),
