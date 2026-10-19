@@ -32,11 +32,11 @@ public sealed class GooglePlayBillingService(
                 .Get(_settings.PackageName, purchaseToken)
                 .ExecuteAsync(cancellationToken);
         }
-        catch (GoogleApiException ex) when (ex.HttpStatusCode == System.Net.HttpStatusCode.NotFound)
+        catch (GoogleApiException ex) when (ex.HttpStatusCode is System.Net.HttpStatusCode.NotFound or System.Net.HttpStatusCode.Gone)
         {
             return null;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             throw new BillingProviderException("Failed to verify Play subscription", ex);
         }
@@ -67,7 +67,31 @@ public sealed class GooglePlayBillingService(
             purchase.LinkedPurchaseToken,
             purchase.ExternalAccountIdentifiers?.ObfuscatedExternalAccountId,
             lineItem?.OfferDetails?.OfferId,
-            purchase.SubscriptionState == "SUBSCRIPTION_STATE_IN_GRACE_PERIOD");
+            purchase.SubscriptionState == "SUBSCRIPTION_STATE_IN_GRACE_PERIOD",
+            purchase.SubscriptionState is not ("SUBSCRIPTION_STATE_CANCELED" or "SUBSCRIPTION_STATE_EXPIRED")
+                && purchase.LineItems?.Any(item => item.AutoRenewingPlan is { AutoRenewEnabled: not false }) == true);
+    }
+
+    public async Task CancelAsync(string purchaseToken, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await androidPublisher.Purchases.Subscriptionsv2.Cancel(new CancelSubscriptionPurchaseRequest
+            {
+                CancellationContext = new CancellationContext
+                {
+                    CancellationType = "USER_REQUESTED_STOP_RENEWALS"
+                }
+            }, _settings.PackageName, purchaseToken).ExecuteAsync(cancellationToken);
+        }
+        catch (GoogleApiException ex) when (ex.HttpStatusCode is System.Net.HttpStatusCode.NotFound or System.Net.HttpStatusCode.Gone)
+        {
+            return;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            throw new BillingProviderException("Failed to cancel Play subscription", ex);
+        }
     }
 
     public async Task AcknowledgeAsync(string productId, string purchaseToken, CancellationToken cancellationToken)

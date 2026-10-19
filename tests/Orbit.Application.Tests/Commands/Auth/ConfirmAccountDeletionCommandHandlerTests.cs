@@ -1,7 +1,15 @@
+using System.Linq.Expressions;
+using Microsoft.Extensions.Options;
+using NSubstitute.ExceptionExtensions;
+using Orbit.Domain.Enums;
 using FluentAssertions;
+using Hangfire;
+using Hangfire.Common;
+using Hangfire.States;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Application.Auth.Commands;
+using Orbit.Application.Auth.Jobs;
 using Orbit.Application.Auth.Services;
 using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
@@ -15,6 +23,7 @@ public class ConfirmAccountDeletionCommandHandlerTests
     private readonly MemoryCache _cache = new(new MemoryCacheOptions());
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
+    private readonly IBackgroundJobClient _jobs = Substitute.For<IBackgroundJobClient>();
     private readonly ConfirmAccountDeletionCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -25,7 +34,7 @@ public class ConfirmAccountDeletionCommandHandlerTests
         _handler = new ConfirmAccountDeletionCommandHandler(
             new EmailChallengeService(_cache, TimeProvider.System),
             _userRepo,
-            _unitOfWork);
+            _unitOfWork, _jobs);
     }
 
     [Fact]
@@ -78,6 +87,7 @@ public class ConfirmAccountDeletionCommandHandlerTests
             CancellationToken.None);
 
         result.Value.Should().Be(planExpiresAtUtc.AddDays(7));
+        _jobs.Received(1).Create(Arg.Any<Job>(), Arg.Any<IState>());
     }
 
     [Fact]
@@ -109,6 +119,7 @@ public class ConfirmAccountDeletionCommandHandlerTests
             new ConfirmAccountDeletionCommand(UserId, "123456"),
             CancellationToken.None);
 
+        _jobs.DidNotReceive().Create(Arg.Any<Job>(), Arg.Any<IState>());
         var latestScheduledDeletionAtUtc = DateTime.UtcNow.AddDays(7);
         result.Value.Should().BeOnOrAfter(earliestScheduledDeletionAtUtc)
             .And.BeOnOrBefore(latestScheduledDeletionAtUtc);
@@ -126,6 +137,7 @@ public class ConfirmAccountDeletionCommandHandlerTests
             new ConfirmAccountDeletionCommand(UserId, "123456"),
             CancellationToken.None);
 
+        _jobs.DidNotReceive().Create(Arg.Any<Job>(), Arg.Any<IState>());
         var latestScheduledDeletionAtUtc = DateTime.UtcNow.AddDays(7);
         result.Value.Should().BeOnOrAfter(earliestScheduledDeletionAtUtc)
             .And.BeOnOrBefore(latestScheduledDeletionAtUtc);
@@ -195,6 +207,7 @@ public class ConfirmAccountDeletionCommandHandlerTests
         result.Error.Should().Be(ErrorMessages.InvalidDeletionCode.Format(2).Message);
         user.IsDeactivated.Should().BeFalse();
         user.ScheduledDeletionAt.Should().BeNull();
+        _jobs.DidNotReceive().Create(Arg.Any<Job>(), Arg.Any<IState>());
         _cache.TryGetValue($"delete-attempts:{TestEmail}", out int attempts).Should().BeTrue();
         attempts.Should().Be(1);
     }
@@ -271,6 +284,87 @@ public class ConfirmAccountDeletionCommandHandlerTests
         typeof(ConfirmAccountDeletionCommand).Should().NotBeAssignableTo<IConcurrencyRetryable>(
             "the handler removes the OTP from cache before SaveChangesAsync, so a transparent retry would re-enter, "
             + "find the code consumed, and silently fail with DeletionCodeExpired");
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task Handle_PaidSubscription_EnqueuesEveryRetainedProviderAfterSaving(bool play, bool both)
+    {
+        var user = User.Create("Paid", TestEmail).Value;
+        var expiresAtUtc = DateTime.UtcNow.AddDays(20);
+        if (play)
+            user.SetPlaySubscription("play-token", expiresAtUtc);
+        else
+            user.SetStripeSubscription("sub_paid", expiresAtUtc);
+        if (both)
+        {
+            if (play)
+            {
+                user.SetStripeSubscription("sub_paid", expiresAtUtc);
+                user.SetPlaySubscription("play-token", expiresAtUtc);
+            }
+            else
+                user.LinkPlayPurchaseToken("play-token");
+        }
+        SetupUser(user);
+        SetupDeletionCode(TestEmail, "123456");
+        var saved = false;
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            saved = true;
+            return 1;
+        });
+        Job? enqueued = null;
+        _jobs.Create(Arg.Do<Job>(job =>
+        {
+            saved.Should().BeTrue();
+            user.IsDeactivated.Should().BeTrue();
+            enqueued = job;
+        }), Arg.Any<IState>());
+
+        var result = await _handler.Handle(new ConfirmAccountDeletionCommand(UserId, "123456"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().Be(expiresAtUtc.AddDays(7));
+        user.PlanExpiresAt.Should().Be(expiresAtUtc);
+        _jobs.Received(1).Create(Arg.Any<Job>(), Arg.Is<IState>(state => state is EnqueuedState));
+        enqueued!.Type.Should().Be<CancelSubscriptionOnDeletionJob>();
+        enqueued.Method.Name.Should().Be(nameof(CancelSubscriptionOnDeletionJob.ExecuteAsync));
+        enqueued.Args.Should().Equal(user.Id, play && !both ? null : "sub_paid", play || both ? "play-token" : null, true, CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Handle_ProviderOutage_ConfirmationSucceedsAndQueuedJobFailsForRetry()
+    {
+        var user = User.Create("Paid", TestEmail).Value;
+        user.SetStripeSubscription("sub_paid", DateTime.UtcNow.AddDays(20));
+        SetupUser(user);
+        SetupDeletionCode(TestEmail, "123456");
+        Job? enqueued = null;
+        _jobs.Create(Arg.Do<Job>(job => enqueued = job), Arg.Any<IState>());
+        var stripe = Substitute.For<IBillingService>();
+        var play = Substitute.For<IPlayBillingService>();
+        stripe.GetSubscriptionDetailsAsync("sub_paid", Arg.Any<CancellationToken>())
+            .Returns(new BillingSubscriptionDetails("active", user.PlanExpiresAt!.Value, false, SubscriptionInterval.Monthly, 1000, "usd", null));
+        stripe.SetSubscriptionCancelAtPeriodEndAsync("sub_paid", true, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new BillingProviderException("unavailable"));
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>()).Returns(user);
+        _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<bool>>>()(call.Arg<CancellationToken>()));
+
+        var result = await _handler.Handle(new ConfirmAccountDeletionCommand(UserId, "123456"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.IsDeactivated.Should().BeTrue();
+        enqueued.Should().NotBeNull();
+        stripe.ReceivedCalls().Should().BeEmpty();
+        var job = new CancelSubscriptionOnDeletionJob(_userRepo, _unitOfWork, stripe, play, Options.Create(new GooglePlaySettings()));
+        var execute = () => job.ExecuteAsync((Guid)enqueued!.Args[0], (string?)enqueued.Args[1], (string?)enqueued.Args[2],
+            (bool)enqueued.Args[3], CancellationToken.None);
+        await execute.Should().ThrowAsync<BillingProviderException>();
     }
 
     private void SetupUser(User user)

@@ -1,9 +1,11 @@
 using System.Security.Claims;
 using System.Text;
 using FluentAssertions;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Orbit.Infrastructure.Configuration;
+using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Auth;
 
@@ -14,8 +16,8 @@ public class JwtValidationTests
         SecretKey = "test-secret-key-that-is-at-least-32-bytes-long-for-hmac",
         Issuer = "https://api.orbit.test",
         Audience = "orbit-clients",
-        ExpiryHours = 168,
-        ExpiryMinutes = 0
+        ExpiryHours = 0,
+        ExpiryMinutes = 15
     };
 
     private TokenValidationParameters BuildAppParameters() => new()
@@ -57,9 +59,8 @@ public class JwtValidationTests
     [Fact]
     public async Task Validate_WellFormedToken_Succeeds()
     {
-        var token = CreateToken(
-            _settings.SecretKey, _settings.Issuer, _settings.Audience,
-            expires: DateTime.UtcNow.AddMinutes(30));
+        var token = new JwtTokenService(Options.Create(_settings))
+            .GenerateToken(Guid.NewGuid(), "user@orbit.test", Guid.NewGuid());
 
         var result = await new JsonWebTokenHandler().ValidateTokenAsync(token, BuildAppParameters());
 
@@ -72,7 +73,7 @@ public class JwtValidationTests
     {
         var token = CreateToken(
             _settings.SecretKey, _settings.Issuer, _settings.Audience,
-            expires: DateTime.UtcNow.AddMinutes(-5),
+            expires: DateTime.UtcNow.AddSeconds(-1),
             notBefore: DateTime.UtcNow.AddMinutes(-30));
 
         var result = await new JsonWebTokenHandler().ValidateTokenAsync(token, BuildAppParameters());

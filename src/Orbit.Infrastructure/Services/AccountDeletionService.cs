@@ -1,9 +1,12 @@
+using Hangfire;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Marketing.Services;
+using Orbit.Application.Auth.Jobs;
+using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.BackgroundJobs;
@@ -91,38 +94,11 @@ public partial class AccountDeletionService(
         try
         {
             using var scope = scopeFactory.CreateScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
-
             var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-            var resetRepository = scope.ServiceProvider.GetRequiredService<IAccountResetRepository>();
-            var contactRepository = scope.ServiceProvider.GetRequiredService<IGenericRepository<MarketingContact>>();
-            await unitOfWork.ExecuteInTransactionAsync(async transactionToken =>
-            {
-                await unitOfWork.AcquireUserRowLockAsync(userId, transactionToken);
-                var now = TimeProvider.System.GetUtcNow().UtcDateTime;
-                var userToDelete = await dbContext.Users
-                    .IgnoreQueryFilters()
-                    .FirstOrDefaultAsync(u => u.Id == userId && u.IsDeactivated
-                        && u.ScheduledDeletionAt.HasValue && u.ScheduledDeletionAt.Value <= now, transactionToken);
-                if (userToDelete is not null)
-                {
-                    var stores = scope.ServiceProvider.GetServices<IObjectStorageDeletionService>().ToArray();
-                    if (stores.Length == 0)
-                        throw new InvalidOperationException("No upload deletion providers are configured.");
-                    foreach (var store in stores)
-                        await DeleteObjectsWithRetryAsync(store, userId, transactionToken);
+            var deleted = await unitOfWork.ExecuteInTransactionAsync(
+                transactionToken => DeleteLockedAccountAsync(scope.ServiceProvider, userId, transactionToken), ct);
 
-                    await MarketingContactOptOut.RecordAsync(userToDelete.Email, contactRepository, unitOfWork, transactionToken);
-                    await dbContext.AiUsageDaily
-                        .Where(u => u.UserId == userId)
-                        .ExecuteDeleteAsync(transactionToken);
-                    await resetRepository.DeleteAllUserDataAsync(userId, transactionToken);
-                    dbContext.Users.Remove(userToDelete);
-                    await unitOfWork.SaveChangesAsync(transactionToken);
-                }
-            }, ct);
-
-            if (logger.IsEnabled(LogLevel.Information))
+            if (deleted && logger.IsEnabled(LogLevel.Information))
                 LogAccountDeleted(logger, userId);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -130,6 +106,61 @@ public partial class AccountDeletionService(
             if (logger.IsEnabled(LogLevel.Error))
                 LogAccountDeletionFailed(logger, ex, userId);
         }
+    }
+
+    private async Task<bool> DeleteLockedAccountAsync(IServiceProvider services, Guid userId, CancellationToken ct)
+    {
+        var dbContext = services.GetRequiredService<OrbitDbContext>();
+        var unitOfWork = services.GetRequiredService<IUnitOfWork>();
+        await unitOfWork.AcquireUserRowLockAsync(userId, ct);
+        var user = await dbContext.Users.IgnoreQueryFilters().FirstOrDefaultAsync(u => u.Id == userId, ct);
+        var nowAtUtc = DateTime.UtcNow;
+        if (user is not { IsDeactivated: true, ScheduledDeletionAt: not null } || user.ScheduledDeletionAt > nowAtUtc)
+            return false;
+
+        var contacts = services.GetRequiredService<IGenericRepository<MarketingContact>>();
+        await MarketingContactOptOut.RecordAsync(user.Email, contacts, unitOfWork, ct);
+        try
+        {
+            await StopRenewalsBeforeErasureAsync(services, user, nowAtUtc, ct);
+        }
+        catch (BillingProviderException ex)
+        {
+            LogAccountDeletionFailed(logger, ex, userId);
+            return false;
+        }
+
+        var stores = services.GetServices<IObjectStorageDeletionService>().ToArray();
+        if (stores.Length == 0)
+            throw new InvalidOperationException("No upload deletion providers are configured.");
+        foreach (var store in stores)
+            await DeleteObjectsWithRetryAsync(store, userId, ct);
+
+        await dbContext.AiUsageDaily.Where(u => u.UserId == userId).ExecuteDeleteAsync(ct);
+        await services.GetRequiredService<IAccountResetRepository>().DeleteAllUserDataAsync(userId, ct);
+        dbContext.Users.Remove(user);
+        await unitOfWork.SaveChangesAsync(ct);
+        return true;
+    }
+
+    private async Task StopRenewalsBeforeErasureAsync(IServiceProvider services, User user, DateTime nowAtUtc,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(user.StripeSubscriptionId) && string.IsNullOrWhiteSpace(user.PlayPurchaseToken))
+            return;
+
+        if (nowAtUtc - user.ScheduledDeletionAt!.Value < MaxBillingDeferral)
+        {
+            await services.GetRequiredService<CancelSubscriptionOnDeletionJob>().CancelBeforeDeletionAsync(user, ct);
+            return;
+        }
+
+        var jobs = services.GetRequiredService<IBackgroundJobClient>();
+        var jobId = jobs.Enqueue<CancelSubscriptionOnDeletionJob>(job => job.ExecuteAsync(user.Id,
+            user.StripeSubscriptionId, user.PlayPurchaseToken, true, CancellationToken.None));
+        if (jobId is null)
+            throw new InvalidOperationException("Billing cancellation job was not created.");
+        LogCancellationDeferred(logger, user.Id, jobId);
     }
 
     private async Task DeleteObjectsWithRetryAsync(
@@ -178,10 +209,11 @@ public partial class AccountDeletionService(
             LogStaleRecordsCleaned(logger, deletedReminders, deletedSlipAlerts, deletedProcessedRequests);
     }
 
-    [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "Retrying upload deletion for user {UserId} after attempt {Attempt}")]
+    [LoggerMessage(EventId = 9, Level = LogLevel.Warning, Message = "Retrying upload deletion for user {UserId} after attempt {Attempt}")]
     private static partial void LogStorageDeletionRetry(ILogger logger, Exception ex, Guid userId, int attempt);
 
     private const int ProcessedRequestRetentionDays = 30;
+    private static readonly TimeSpan MaxBillingDeferral = TimeSpan.FromDays(7);
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "AccountDeletionService started")]
     private static partial void LogServiceStarted(ILogger logger);
@@ -203,5 +235,8 @@ public partial class AccountDeletionService(
 
     [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Cleaned up {Reminders} stale SentReminders and {SlipAlerts} stale SentSlipAlerts older than 90 days, plus {ProcessedRequests} ProcessedRequests older than 30 days")]
     private static partial void LogStaleRecordsCleaned(ILogger logger, int reminders, int slipAlerts, int processedRequests);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Error, Message = "Billing cancellation for account {UserId} is unconfirmed past the erasure deferral limit; cancellation job {JobId} queued before erasure")]
+    private static partial void LogCancellationDeferred(ILogger logger, Guid userId, string jobId);
 
 }

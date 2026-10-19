@@ -43,8 +43,8 @@ locals {
     Google__AllowedRedirectUris__1      = "https://api.useorbit.org/oauth/google/callback"
     Google__ClientId                    = "355604968359-tqco1o3l874mg7rvme91vniael7pn3tk.apps.googleusercontent.com"
     Jwt__Audience                       = "OrbitClient"
-    Jwt__ExpiryHours                    = "168"
-    Jwt__ExpiryMinutes                  = "0"
+    Jwt__ExpiryHours                    = "0"
+    Jwt__ExpiryMinutes                  = "15"
     Jwt__Issuer                         = "OrbitApi"
     Jwt__RefreshExpiryDays              = "90"
     Ses__Region                         = "us-east-2"
@@ -113,9 +113,7 @@ locals {
 
   production_render_npgsql = "Host=${local.production_db_host};Port=5432;Database=${local.production_db_name};Username=${render_postgres.production.database_user};Password=\"${replace(render_postgres.production.connection_info.password, "\"", "\"\"")}\""
 
-  production_api_database_values = var.api_database == "supabase" ? {
-    for key in local.database_keys : key => data.aws_ssm_parameter.production_api_database[key].value
-    } : {
+  production_api_database_values = {
     for key in local.database_keys : key => local.production_render_npgsql
   }
 
@@ -138,11 +136,6 @@ data "aws_ssm_parameter" "staging_api" {
 data "aws_ssm_parameter" "staging_api_billing" {
   for_each = local.staging_api_billing_keys
   name     = "/orbit/staging/api/${each.key}"
-}
-
-data "aws_ssm_parameter" "production_api_database" {
-  for_each = var.api_database == "supabase" ? local.database_keys : toset([])
-  name     = "/orbit/production/api/${each.key}"
 }
 
 data "aws_ssm_parameter" "production_web_sentry" {

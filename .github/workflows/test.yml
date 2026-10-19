@@ -139,6 +139,33 @@ jobs:
           git diff --name-only -z --diff-filter=d "origin/$BASE_REF...HEAD" -- ':(glob)**/Migrations/*.cs' \
             | xargs -0 --no-run-if-empty python3 .github/scripts/check_migration_idempotency.py
 
+      - name: Detect rolling migration contract inputs
+        id: contract-inputs
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if git diff --name-only --diff-filter=d "origin/$BASE_REF...HEAD" -- \
+            ':(glob)**/Migrations/*.cs' \
+            .github/migration-contracts.json \
+            tests/Orbit.Infrastructure.Tests/Persistence/RollingMigrationGate.cs \
+            tests/Orbit.Infrastructure.Tests/Persistence/RollingMigrationGateTests.cs | grep -q .; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No migration or deployment barrier changed; the rolling contract gate has nothing to check."
+          fi
+
+      - name: Setup .NET for rolling migration contracts
+        if: steps.contract-inputs.outputs.changed == 'true'
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Require deployment barriers for schema contractions
+        if: steps.contract-inputs.outputs.changed == 'true'
+        env:
+          ORBIT_MIGRATION_GUARD_BASE: origin/${{ github.base_ref }}
+        run: dotnet test tests/Orbit.Infrastructure.Tests --filter FullyQualifiedName~RollingMigrationGateTests --nologo
+
   convention-guard:
     name: Guard Conventions
     runs-on: ubuntu-latest

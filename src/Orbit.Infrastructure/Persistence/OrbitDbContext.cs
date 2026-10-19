@@ -731,11 +731,14 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(u => u.PlayPurchaseToken).IsUnique().HasFilter("\"PlayPurchaseToken\" IS NOT NULL");
             entity.HasIndex(u => u.PublicProfileSlug).IsUnique().HasFilter("\"PublicProfileSlug\" IS NOT NULL");
 
+            entity.Property(u => u.StripeRenewalStoppedByDeletion).HasDefaultValue(false);
+            entity.Property(u => u.PlayRenewalStoppedByDeletion).HasDefaultValue(false);
             entity.Property(u => u.Handle).HasMaxLength(DomainConstants.HandleMaxLength);
             entity.Property(u => u.PublicProfileSlug).HasMaxLength(32);
 
             entity.Property(u => u.ColorScheme).HasMaxLength(50);
             entity.Property(u => u.Language).HasMaxLength(10);
+            entity.Property(u => u.SignupLanguage).HasMaxLength(10);
             entity.Property(u => u.ThemePreference).HasMaxLength(10);
             entity.Property(u => u.TimeZone).HasMaxLength(100);
 

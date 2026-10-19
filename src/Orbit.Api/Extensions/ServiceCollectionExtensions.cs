@@ -226,6 +226,8 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<Orbit.Application.Gamification.Services.GamificationNotifiers>();
         builder.Services.AddScoped<IGoogleTokenService, GoogleTokenService>();
         builder.Services.AddScoped<GoogleSignInFlow>();
+        builder.Services.AddScoped<IAuthUserStore, AuthUserStore>();
+        builder.Services.AddScoped<ISignupJobDispatcher, SignupJobDispatcher>();
         builder.Services.AddScoped<IGoogleAuthorizationCodeService, GoogleAuthorizationCodeService>();
         builder.Services.AddScoped<IGoogleIdTokenValidator, GoogleIdTokenValidator>();
         builder.Services.AddGoogleCalendarServices(GetDefaultHttpTimeout(builder));
@@ -273,9 +275,6 @@ public static partial class ServiceCollectionExtensions
                 OnTokenValidated = async context =>
                 {
                     var sessionClaim = context.Principal?.FindFirst("orbit_session_id")?.Value;
-                    if (sessionClaim is null)
-                        return;
-
                     var userClaim = context.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                     if (!Guid.TryParse(sessionClaim, out var sessionId)
                         || !Guid.TryParse(userClaim, out var userId)

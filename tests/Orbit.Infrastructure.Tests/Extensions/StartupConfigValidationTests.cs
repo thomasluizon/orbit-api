@@ -15,6 +15,36 @@ namespace Orbit.Infrastructure.Tests.Extensions;
 /// </summary>
 public class StartupConfigValidationTests
 {
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(-1, 0)]
+    [InlineData(168, 0)]
+    [InlineData(0, 61)]
+    public void ValidateOrbitSecuritySettings_InvalidJwtLifetime_ThrowsWithSettings(int hours, int minutes)
+    {
+        var values = ValidJwt();
+        values["Jwt:ExpiryHours"] = hours.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        values["Jwt:ExpiryMinutes"] = minutes.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var builder = BuildWith(values);
+        builder.Environment.EnvironmentName = "Development";
+
+        var act = () => builder.ValidateOrbitSecuritySettings();
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Jwt:ExpiryMinutes*Jwt:ExpiryHours*60*");
+    }
+
+    [Fact]
+    public void ValidateOrbitSecuritySettings_ValidJwtLifetime_DoesNotThrow()
+    {
+        var builder = BuildWith(ValidJwt());
+        builder.Environment.EnvironmentName = "Development";
+
+        var act = () => builder.ValidateOrbitSecuritySettings();
+
+        act.Should().NotThrow();
+    }
+
     [Fact]
     public void AddOrbitAuthentication_MissingJwtSection_ThrowsMissing()
     {
@@ -125,6 +155,8 @@ public class StartupConfigValidationTests
         ["Jwt:SecretKey"] = "0123456789abcdef0123456789abcdef",
         ["Jwt:Issuer"] = "OrbitApi",
         ["Jwt:Audience"] = "OrbitClient",
+        ["Jwt:ExpiryHours"] = "0",
+        ["Jwt:ExpiryMinutes"] = "15",
     };
 
     private static Dictionary<string, string?> ValidInfrastructure() => new()

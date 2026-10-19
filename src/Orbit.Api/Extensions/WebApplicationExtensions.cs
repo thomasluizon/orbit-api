@@ -121,7 +121,7 @@ public static partial class WebApplicationExtensions
         await context.Response.WriteAsJsonAsync(result);
     }
 
-    private static void UseMcpSelectiveAuth(this WebApplication app)
+    internal static void UseMcpSelectiveAuth(this IApplicationBuilder app)
     {
         app.Use(async (context, next) =>
         {

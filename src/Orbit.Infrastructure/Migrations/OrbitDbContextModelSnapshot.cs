@@ -1369,7 +1369,7 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
-                    b.Property<bool?>("IsSlip")
+                    b.Property<bool>("IsSlip")
                         .HasColumnType("boolean");
 
                     b.Property<string>("Note")
@@ -2183,6 +2183,11 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<string>("PlayPurchaseToken")
                         .HasColumnType("text");
 
+                    b.Property<bool>("PlayRenewalStoppedByDeletion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<int?>("PreGapFreezeAwardStreak")
                         .HasColumnType("integer");
 
@@ -2223,6 +2228,25 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<DateTime?>("ScheduledDeletionAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("SignupAnalyticsCompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("SignupCompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SignupLanguage")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("SignupReferralCode")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("SignupReferralCompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("SignupWelcomeCompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<bool>("SocialOptIn")
                         .HasColumnType("boolean");
 
@@ -2231,6 +2255,11 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.Property<string>("StripeCustomerId")
                         .HasColumnType("text");
+
+                    b.Property<bool>("StripeRenewalStoppedByDeletion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
 
                     b.Property<DateTime?>("StripeSubscriptionEventCreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
