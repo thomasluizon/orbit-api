@@ -13,7 +13,8 @@ public class GoogleSignInFlow(
     IUnitOfWork unitOfWork,
     IAuthSessionService authSessionService,
     ISignupJobDispatcher signupJobDispatcher,
-    IBackgroundJobClient backgroundJobClient)
+    IBackgroundJobClient backgroundJobClient,
+    AccountReactivation accountReactivation)
 {
     public async Task<Result<LoginResponse>> CompleteAsync(
         string rawEmail, string name, string language, string? referralCode,
@@ -21,6 +22,7 @@ public class GoogleSignInFlow(
     {
         var email = rawEmail.Trim().ToLowerInvariant();
         User? reactivatedUser = null;
+        string? reactivatedPlayToken = null;
         var signupPending = false;
         var signupLanguage = language;
         var signupReferralCode = referralCode;
@@ -38,7 +40,7 @@ public class GoogleSignInFlow(
             var wasReactivated = user.IsDeactivated;
             if (wasReactivated)
             {
-                user.CancelDeactivation();
+                reactivatedPlayToken = await accountReactivation.ReactivateAsync(user, transactionToken);
                 reactivatedUser = user;
             }
 
@@ -60,7 +62,10 @@ public class GoogleSignInFlow(
             return result;
 
         if (result.Value.WasReactivated && reactivatedUser is not null)
+        {
             CancelSubscriptionOnDeletionJob.EnqueueRestoration(backgroundJobClient, reactivatedUser);
+            NotifyPlayRenewalOnReactivationJob.Enqueue(backgroundJobClient, reactivatedUser.Id, reactivatedPlayToken);
+        }
 
         signupJobDispatcher.Dispatch(result.Value.UserId, signupPending, signupLanguage, signupReferralCode);
 
