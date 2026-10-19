@@ -515,6 +515,13 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasData(
                         new
                         {
+                            Key = "astra_eval_trace",
+                            Description = "Opt-in tool-call traces for Astra evaluation accounts",
+                            Enabled = false,
+                            UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
                             Key = "redesign",
                             Description = "Serve the redesigned web and Android builds to this account",
                             Enabled = false,

@@ -622,6 +622,7 @@ public class OrbitDbContext : DbContext
             entity.Property(f => f.PlanRequirement).HasMaxLength(50);
 
             entity.HasData(
+                new { Key = "astra_eval_trace", Enabled = false, PlanRequirement = (string?)null, Description = (string?)"Opt-in tool-call traces for Astra evaluation accounts", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "redesign", Enabled = false, PlanRequirement = (string?)null, Description = (string?)"Serve the redesigned web and Android builds to this account", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "offline_mode", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Enable offline mode with background sync", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "ai_chat", Enabled = true, PlanRequirement = (string?)"Free", Description = (string?)"AI chat assistant", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },

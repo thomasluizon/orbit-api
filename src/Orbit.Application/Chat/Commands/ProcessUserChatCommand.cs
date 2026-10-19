@@ -45,7 +45,8 @@ public record ProcessUserChatCommand(
     bool IsReadOnlyCredential = false,
     string? CorrelationId = null,
     Func<ChatStreamEvent, Task>? StreamSink = null,
-    AstraBlockAnswer? BlockAnswer = null) : IRequest<Result<ChatResponse>>;
+    AstraBlockAnswer? BlockAnswer = null,
+    bool EvalTraceRequested = false) : IRequest<Result<ChatResponse>>;
 
 public record ChatResponse(
     string? AiMessage,
@@ -65,7 +66,8 @@ public record ChatResponse(
     IReadOnlyList<RecordListCard>? RecordLists = null,
     AccountRowsCard? AccountRows = null,
     IReadOnlyList<string>? FollowUps = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ChatResponsePart>? Parts = null)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ChatResponsePart>? Parts = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ChatEvalTrace? EvalTrace = null)
 {
     [JsonIgnore]
     public TurnFactSet GroundingFacts { get; init; } = TurnFactSet.Empty;
@@ -185,6 +187,25 @@ public partial class ProcessUserChatCommandHandler(
         ProcessUserChatCommand request,
         CancellationToken cancellationToken)
     {
+        ChatEvalTraceCollector? evalTrace = null;
+        if (request.EvalTraceRequested)
+        {
+            var flags = await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, cancellationToken);
+            if (flags.Contains(FeatureFlagKeys.AstraEvalTrace, StringComparer.Ordinal))
+                evalTrace = new ChatEvalTraceCollector(request.CorrelationId ?? Guid.NewGuid().ToString("N"));
+        }
+
+        var result = await HandleRequestAsync(request, evalTrace, cancellationToken);
+        return result.IsSuccess && evalTrace is not null
+            ? Result.Success(result.Value with { EvalTrace = evalTrace.Build() })
+            : result;
+    }
+
+    private async Task<Result<ChatResponse>> HandleRequestAsync(
+        ProcessUserChatCommand request,
+        ChatEvalTraceCollector? evalTrace,
+        CancellationToken cancellationToken)
+    {
         if (request.BlockAnswer is not null)
         {
             var answerService = new AstraBlockAnswerService(execution.BlockStore, execution.UnitOfWork,
@@ -193,14 +214,14 @@ public partial class ProcessUserChatCommandHandler(
             return await answerService.ExecuteAsync(request, prepared =>
                 prepared.Crisis != CrisisLocales.None
                     ? HandleCrisisTurnAsync(request with { Message = prepared.Message }, prepared.Crisis)
-                    : HandleTurnAsync(request with { Message = prepared.Message }, cancellationToken, prepared.AnsweredAtUtc), cancellationToken);
+                    : HandleTurnAsync(request with { Message = prepared.Message }, evalTrace, cancellationToken, prepared.AnsweredAtUtc), cancellationToken);
         }
         await execution.UnitOfWork.ExecuteInTransactionAsync(async token =>
         {
             await execution.UnitOfWork.AcquireAdvisoryLockAsync($"astra-blocks:{request.UserId}", token);
             await execution.BlockStore.InvalidateOpenAsync(request.UserId, token);
         }, cancellationToken);
-        return await HandleTurnAsync(request, cancellationToken);
+        return await HandleTurnAsync(request, evalTrace, cancellationToken);
     }
 
     private CancellationTokenSource CreateBlockTurnCancellation(CancellationToken token, DateTime? answeredAtUtc)
@@ -214,7 +235,7 @@ public partial class ProcessUserChatCommandHandler(
         return cancellation;
     }
 
-    private async Task<Result<ChatResponse>> HandleTurnAsync(ProcessUserChatCommand request, CancellationToken cancellationToken,
+    private async Task<Result<ChatResponse>> HandleTurnAsync(ProcessUserChatCommand request, ChatEvalTraceCollector? evalTrace, CancellationToken cancellationToken,
         DateTime? answeredAtUtc = null)
     {
         using var turnCancellation = CreateBlockTurnCancellation(cancellationToken, answeredAtUtc);
@@ -262,7 +283,7 @@ public partial class ProcessUserChatCommandHandler(
         if (response.IsFailure)
             return response.PropagateError<ChatResponse>();
 
-        var executionResults = new ToolExecutionAccumulator { AnsweredAtUtc = answeredAtUtc };
+        var executionResults = new ToolExecutionAccumulator { AnsweredAtUtc = answeredAtUtc, EvalTrace = evalTrace };
         var actionsStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var toolLoopResult = await RunToolCallLoopAsync(
             response.Value,

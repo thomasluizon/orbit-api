@@ -17,6 +17,7 @@ public partial class ProcessUserChatCommandHandler
         private readonly SemaphoreSlim _toolStepGate = new(1, 1);
 
         public DateTime? AnsweredAtUtc { get; init; }
+        public ChatEvalTraceCollector? EvalTrace { get; init; }
         public List<ActionResult> CommittedActions { get; } = [];
         public List<PendingAgentOperation> CommittedPendingOperations { get; } = [];
 
