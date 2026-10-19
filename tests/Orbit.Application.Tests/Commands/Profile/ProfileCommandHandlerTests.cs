@@ -31,8 +31,6 @@ public class ProfileCommandHandlerTests
     {
         _unitOfWork.PassThroughTransactions<Result>();
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
-        _payGate.CanManageAiMemory(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(Result.Success()));
         _payGate.CanManageAiSummary(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result.Success()));
         _payGate.CanManageProactiveAstra(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
@@ -109,22 +107,6 @@ public class ProfileCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         user.Language.Should().Be("pt-BR");
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task SetAiMemory_Valid_UpdatesAndSaves()
-    {
-        var user = CreateTestUser();
-        SetupUserFound(user);
-
-        var handler = new SetAiMemoryCommandHandler(_userRepo, _payGate, _unitOfWork);
-        var command = new SetAiMemoryCommand(UserId, false);
-
-        var result = await handler.Handle(command, CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        user.AiMemoryEnabled.Should().BeFalse();
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 

@@ -35,7 +35,6 @@ public sealed class HeldWriteRevisionTests
         { "update_profile_preferences", """{"action":"set_week_start_day","week_start_day":0}""", "week_start_day", "1", "WeekStartDay" },
         { "update_profile_preferences", """{"action":"set_clock_format","uses_24_hour_clock":false}""", "uses_24_hour_clock", "true", "Uses24HourClock" },
         { "update_profile_preferences", """{"action":"set_theme_preference","theme_preference":"light"}""", "theme_preference", "\"dark\"", "Preference" },
-        { "set_ai_memory", """{"enabled":true}""", "enabled", "false", "Enabled" },
         { "set_ai_summary", """{"enabled":true}""", "enabled", "false", "Enabled" },
         { "update_notifications", """{"action":"subscribe_push","endpoint":"https://fcm.googleapis.com/fcm/send/a","p256dh":"key","auth":"secret"}""", "endpoint", "\"https://fcm.googleapis.com/fcm/send/b\"", "Endpoint" },
         { "update_notifications", """{"action":"unsubscribe_push","endpoint":"https://example.com/a"}""", "endpoint", "\"https://example.com/b\"", "Endpoint" },

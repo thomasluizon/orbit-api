@@ -101,7 +101,6 @@ internal sealed class HeldWriteTestContext : IDisposable
         RegisterRepository<Notification>(services);
         RegisterRepository<PushSubscription>(services);
         RegisterRepository<ApiKey>(services);
-        RegisterRepository<UserFact>(services);
         RegisterRepository<GoogleCalendarSyncSuggestion>(services);
         services.AddValidatorsFromAssemblyContaining<CreateHabitCommandValidator>();
         _services = services.BuildServiceProvider();
@@ -131,7 +130,6 @@ internal sealed class HeldWriteTestContext : IDisposable
         SetupWrite<SetWeekStartDayCommand>();
         SetupWrite<SetClockFormatCommand>();
         SetupWrite<SetThemePreferenceCommand>();
-        SetupWrite<SetAiMemoryCommand>();
         SetupWrite<SetAiSummaryCommand>();
         SetupWrite<SetCalendarAutoSyncCommand>();
         SetupWrite<SubscribePushCommand>();

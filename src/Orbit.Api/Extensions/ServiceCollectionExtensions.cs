@@ -192,7 +192,6 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Goal>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.GoalProgressLog>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Tag>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserFact>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Notification>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.ChecklistTemplate>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserAchievement>>(),

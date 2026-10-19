@@ -50,8 +50,6 @@ using Orbit.Application.Tags.Commands;
 using Orbit.Application.Tags.Validators;
 using Orbit.Application.Uploads.Commands;
 using Orbit.Application.Uploads.Validators;
-using Orbit.Application.UserFacts.Commands;
-using Orbit.Application.UserFacts.Validators;
 using Orbit.Application.Waitlist.Commands;
 using Orbit.Application.Waitlist.Validators;
 
@@ -78,7 +76,6 @@ public partial class ValidationLocalizationTests(ITestOutputHelper output)
     [InlineData("Support")]
     [InlineData("Tags")]
     [InlineData("Uploads")]
-    [InlineData("UserFacts")]
     [InlineData("Waitlist")]
     public async Task EveryValidatorFamily_ReturnsPortugueseCopyAndAlignedCodes(string family)
     {
@@ -215,7 +212,6 @@ public partial class ValidationLocalizationTests(ITestOutputHelper output)
             "Support" => Case(new SendSupportCommandValidator(), new SendSupportCommand(id, "Reader", "reader@example.com", "", "Help"), "Subject", "NotEmptyValidator", "Escolha um assunto para a gente encaminhar certo."),
             "Tags" => Case(new CreateTagCommandValidator(), new CreateTagCommand(id, "Read", "invalid"), "Color", ValidationErrorCodes.TagColorFormat, "Escolha uma cor da paleta"),
             "Uploads" => Case(new SignUploadValidator(), new SignUploadCommand(id, "invalid", 1), "ContentType", ValidationErrorCodes.UploadContentTypeSupported, $"O tipo de conteúdo deve ser um destes: {string.Join(", ", UploadContentTypes.Allowed)}."),
-            "UserFacts" => Case(new BulkDeleteUserFactsCommandValidator(), new BulkDeleteUserFactsCommand(id, []), "FactIds", ValidationErrorCodes.FactIdsRequired, "A lista de IDs dos fatos não pode estar vazia"),
             "Waitlist" => Case(new JoinWaitlistCommandValidator(), new JoinWaitlistCommand("reader@example.com", "fr"), "Language", ValidationErrorCodes.WaitlistLanguageSupported, "O idioma deve ser um destes: en, pt-BR."),
             _ => throw new ArgumentOutOfRangeException(nameof(family))
         };

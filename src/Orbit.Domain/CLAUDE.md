@@ -8,7 +8,7 @@ Pure domain model. No EF Core attributes, no `Microsoft.Extensions.*` references
 Entities/         - aggregate roots (Habit, User, Tag, Goal, ...) + child entities (HabitLog, etc.)
 Enums/            - domain enums (FrequencyUnit, UserPlan, ...)
 Interfaces/       - abstractions Infrastructure implements (IUserDateService, IPushNotificationService, ITokenService, ...)
-Models/           - domain DTOs / value-bearing types (HabitMetrics, SlipPattern, ExtractedFacts)
+Models/           - domain DTOs / value-bearing types (HabitMetrics, SlipPattern)
 ValueObjects/     - immutable value types (ChecklistItem, ...)
 Common/           - cross-entity domain primitives
 ```

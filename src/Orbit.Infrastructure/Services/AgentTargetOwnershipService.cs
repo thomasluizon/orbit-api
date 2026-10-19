@@ -19,7 +19,6 @@ public class AgentTargetOwnershipService(OrbitDbContext dbContext) : IAgentTarge
             CreateCheck("goal", await AllOwnedAsync(dbContext.Goals.IgnoreQueryFilters(), userId, CollectGuids(arguments, "goal_id", "goal_ids"), cancellationToken)),
             CreateCheck("notification", await AllOwnedAsync(dbContext.Notifications, userId, CollectGuids(arguments, "notification_id"), cancellationToken)),
             CreateCheck("template", await AllOwnedAsync(dbContext.ChecklistTemplates, userId, CollectGuids(arguments, "template_id"), cancellationToken)),
-            CreateCheck("user_fact", await AllOwnedAsync(dbContext.UserFacts.IgnoreQueryFilters(), userId, CollectGuids(arguments, "fact_id", "fact_ids"), cancellationToken)),
             CreateCheck("api_key", await AllOwnedAsync(dbContext.ApiKeys, userId, CollectGuids(arguments, "key_id"), cancellationToken)),
             CreateCheck("calendar_suggestion", await AllOwnedAsync(dbContext.GoogleCalendarSyncSuggestions, userId, CollectGuids(arguments, "suggestion_id"), cancellationToken))
         };

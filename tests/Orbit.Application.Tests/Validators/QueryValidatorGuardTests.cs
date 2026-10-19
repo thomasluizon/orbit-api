@@ -22,8 +22,6 @@ using Orbit.Application.Subscriptions.Queries;
 using Orbit.Application.Subscriptions.Validators;
 using Orbit.Application.Tags.Queries;
 using Orbit.Application.Tags.Validators;
-using Orbit.Application.UserFacts.Queries;
-using Orbit.Application.UserFacts.Validators;
 
 namespace Orbit.Application.Tests.Validators;
 
@@ -185,14 +183,6 @@ public class QueryValidatorGuardTests
         var validator = new GetTagsQueryValidator();
         RejectsProperty(validator, new GetTagsQuery(Guid.Empty), "UserId");
         Accepts(validator, new GetTagsQuery(Guid.NewGuid()));
-    }
-
-    [Fact]
-    public void GetUserFacts_GuardsUserId()
-    {
-        var validator = new GetUserFactsQueryValidator();
-        RejectsProperty(validator, new GetUserFactsQuery(Guid.Empty), "UserId");
-        Accepts(validator, new GetUserFactsQuery(Guid.NewGuid()));
     }
 
     [Fact]

@@ -72,6 +72,16 @@ public class CreateApiKeyValidatorTests
         result.ShouldHaveValidationErrorFor("Scopes[1]");
     }
 
+    [Theory]
+    [InlineData("read_user_facts")]
+    [InlineData("delete_user_facts")]
+    public void Validate_RetiredMemoryScope_HasError(string scope)
+    {
+        var result = _validator.TestValidate(ValidCommand() with { Scopes = [scope] });
+
+        result.ShouldHaveValidationErrorFor("Scopes[0]");
+    }
+
     [Fact]
     public void Validate_ScopeCaseInsensitive_NoError()
     {

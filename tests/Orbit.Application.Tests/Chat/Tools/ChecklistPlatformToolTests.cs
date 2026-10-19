@@ -20,13 +20,11 @@ using Orbit.Application.Subscriptions;
 using Orbit.Application.Subscriptions.Commands;
 using Orbit.Application.Subscriptions.Queries;
 using Orbit.Application.Support.Commands;
-using Orbit.Application.UserFacts.Commands;
-using Orbit.Application.UserFacts.Queries;
 using Orbit.Domain.Common;
 
 namespace Orbit.Application.Tests.Chat.Tools;
 
-public class ChecklistUserFactPlatformToolTests
+public class ChecklistPlatformToolTests
 {
     private static readonly Guid UserId = Guid.NewGuid();
 
@@ -37,8 +35,6 @@ public class ChecklistUserFactPlatformToolTests
         var checklistTemplatesTool = new GetChecklistTemplatesTool(mediator);
         var createChecklistTemplateTool = new CreateChecklistTemplateTool(mediator);
         var deleteChecklistTemplateTool = new DeleteChecklistTemplateTool(mediator);
-        var userFactsTool = new GetUserFactsTool(mediator);
-        var deleteUserFactsTool = new DeleteUserFactsTool(mediator);
         var gamificationTool = new GetGamificationOverviewTool(mediator);
         var referralTool = new GetReferralOverviewTool(mediator);
         var subscriptionOverviewTool = new GetSubscriptionOverviewTool(mediator);
@@ -58,12 +54,7 @@ public class ChecklistUserFactPlatformToolTests
         deleteChecklistTemplateTool.Name.Should().Be("delete_checklist_template");
         JsonSerializer.Serialize(deleteChecklistTemplateTool.GetParameterSchema()).Should().Contain("template_id");
 
-        userFactsTool.Name.Should().Be("get_user_facts");
-        userFactsTool.IsReadOnly.Should().BeTrue();
-        JsonSerializer.Serialize(userFactsTool.GetParameterSchema()).Should().Contain("properties");
 
-        deleteUserFactsTool.Name.Should().Be("delete_user_facts");
-        JsonSerializer.Serialize(deleteUserFactsTool.GetParameterSchema()).Should().Contain("fact_ids");
 
         gamificationTool.Name.Should().Be("get_gamification_overview");
         gamificationTool.IsReadOnly.Should().BeTrue();
@@ -202,113 +193,6 @@ public class ChecklistUserFactPlatformToolTests
         result.Success.Should().BeTrue();
         result.EntityId.Should().Be(templateId.ToString());
         result.EntityName.Should().Be("Deleted checklist template");
-    }
-
-    [Fact]
-    public async Task GetUserFactsTool_ReturnsSuccess()
-    {
-        var mediator = Substitute.For<IMediator>();
-        mediator.Send(Arg.Any<GetUserFactsQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success<IReadOnlyList<UserFactDto>>([]));
-        var tool = new GetUserFactsTool(mediator);
-
-        var result = await tool.ExecuteAsync(Parse("{}"), UserId, CancellationToken.None);
-
-        result.Success.Should().BeTrue();
-    }
-
-    [Fact]
-    public async Task GetUserFactsTool_ReturnsFailure()
-    {
-        var mediator = Substitute.For<IMediator>();
-        mediator.Send(Arg.Any<GetUserFactsQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<IReadOnlyList<UserFactDto>>("facts_failed"));
-        var tool = new GetUserFactsTool(mediator);
-
-        var result = await tool.ExecuteAsync(Parse("{}"), UserId, CancellationToken.None);
-
-        result.Success.Should().BeFalse();
-        result.Error.Should().Be("facts_failed");
-    }
-
-    [Fact]
-    public async Task DeleteUserFactsTool_RequiresFactIdOrFactIds()
-    {
-        var tool = new DeleteUserFactsTool(Substitute.For<IMediator>());
-
-        var result = await tool.ExecuteAsync(Parse("{}"), UserId, CancellationToken.None);
-
-        result.Success.Should().BeFalse();
-        result.Error.Should().Be("fact_id or fact_ids is required.");
-    }
-
-    [Fact]
-    public async Task DeleteUserFactsTool_DeletesMultipleFacts()
-    {
-        var mediator = Substitute.For<IMediator>();
-        mediator.Send(Arg.Any<BulkDeleteUserFactsCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(2));
-        var tool = new DeleteUserFactsTool(mediator);
-        var idOne = Guid.NewGuid();
-        var idTwo = Guid.NewGuid();
-
-        var result = await tool.ExecuteAsync(
-            Parse($$"""{"fact_ids":["{{idOne}}","{{idTwo}}"]}"""),
-            UserId,
-            CancellationToken.None);
-
-        result.Success.Should().BeTrue();
-        result.EntityName.Should().Be("Deleted user facts");
-        result.EntityId.Should().Be(UserId.ToString());
-    }
-
-    [Fact]
-    public async Task DeleteUserFactsTool_PropagatesBulkFailure()
-    {
-        var mediator = Substitute.For<IMediator>();
-        mediator.Send(Arg.Any<BulkDeleteUserFactsCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<int>("bulk_failed"));
-        var tool = new DeleteUserFactsTool(mediator);
-        var factId = Guid.NewGuid();
-
-        var result = await tool.ExecuteAsync(
-            Parse($$"""{"fact_ids":["{{factId}}"]}"""),
-            UserId,
-            CancellationToken.None);
-
-        result.Success.Should().BeFalse();
-        result.Error.Should().Be("bulk_failed");
-    }
-
-    [Fact]
-    public async Task DeleteUserFactsTool_DeletesSingleFact()
-    {
-        var factId = Guid.NewGuid();
-        var mediator = Substitute.For<IMediator>();
-        mediator.Send(Arg.Any<DeleteUserFactCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
-        var tool = new DeleteUserFactsTool(mediator);
-
-        var result = await tool.ExecuteAsync(Parse($$"""{"fact_id":"{{factId}}"}"""), UserId, CancellationToken.None);
-
-        result.Success.Should().BeTrue();
-        result.EntityId.Should().Be(factId.ToString());
-        result.EntityName.Should().Be("Deleted user fact");
-    }
-
-    [Fact]
-    public async Task DeleteUserFactsTool_PropagatesSingleDeleteFailure()
-    {
-        var factId = Guid.NewGuid();
-        var mediator = Substitute.For<IMediator>();
-        mediator.Send(Arg.Any<DeleteUserFactCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure("single_failed"));
-        var tool = new DeleteUserFactsTool(mediator);
-
-        var result = await tool.ExecuteAsync(Parse($$"""{"fact_id":"{{factId}}"}"""), UserId, CancellationToken.None);
-
-        result.Success.Should().BeFalse();
-        result.Error.Should().Be("single_failed");
     }
 
     [Fact]

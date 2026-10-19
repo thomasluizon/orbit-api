@@ -73,11 +73,6 @@ public interface IPayGateService
     Task<Result> CanManageApiKeys(Guid userId, CancellationToken ct = default);
 
     /// <summary>
-    /// Checks if the user can manage AI memory settings (Pro-only feature).
-    /// </summary>
-    Task<Result> CanManageAiMemory(Guid userId, CancellationToken ct = default);
-
-    /// <summary>
     /// Checks if the user can manage AI summary settings (Pro-only feature).
     /// </summary>
     Task<Result> CanManageAiSummary(Guid userId, CancellationToken ct = default);
@@ -86,16 +81,6 @@ public interface IPayGateService
     /// Checks if the user can manage proactive Astra check-ins (Pro-only feature).
     /// </summary>
     Task<Result> CanManageProactiveAstra(Guid userId, CancellationToken ct = default);
-
-    /// <summary>
-    /// Checks if the user can read AI memory facts (Pro-only feature).
-    /// </summary>
-    Task<Result> CanReadUserFacts(Guid userId, CancellationToken ct = default);
-
-    /// <summary>
-    /// Checks if the user can manage AI memory facts (Pro-only feature).
-    /// </summary>
-    Task<Result> CanManageUserFacts(Guid userId, CancellationToken ct = default);
 
     /// <summary>
     /// Checks if the user can enable or manage slip alerts (Pro-only feature).

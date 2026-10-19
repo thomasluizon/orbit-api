@@ -64,12 +64,6 @@ public class FeatureExplanationDriftTests
     }
 
     [Fact]
-    public void AiMemory_MatchesMaxUserFactsConstant()
-    {
-        Body("ai-memory").Should().Contain(N(AppConstants.MaxUserFacts));
-    }
-
-    [Fact]
     public void ScheduleMath_MatchesOverdueWindowConstant()
     {
         Body("schedule-math").Should().Contain(N(AppConstants.DefaultOverdueWindowDays));

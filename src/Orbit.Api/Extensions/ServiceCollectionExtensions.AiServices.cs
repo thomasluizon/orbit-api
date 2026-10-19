@@ -20,10 +20,8 @@ public static partial class ServiceCollectionExtensions
             builder.Configuration.GetSection(AgentPlatformSettings.SectionName));
         builder.Services.AddSingleton<AiCompletionClient>();
         builder.Services.AddSingleton<IAiUsageRecorder, AiUsageRecorder>();
-        builder.Services.AddSingleton<IAiBatchClient, AiBatchClient>();
         builder.Services.AddScoped<IAudioTranscriptionService, AudioTranscriptionService>();
         builder.Services.AddScoped<IAiIntentService, AiIntentService>();
-        builder.Services.AddScoped<IFactExtractionService, AiFactExtractionService>();
         builder.Services.AddScoped<IHabitEmojiInferenceService, AiHabitEmojiInferenceService>();
         builder.Services.AddScoped<ISummaryService, AiSummaryService>();
         builder.Services.AddScoped<IRescheduleSuggestionService, AiRescheduleSuggestionService>();
@@ -78,7 +76,6 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAiTool, GoalReviewTool>();
         builder.Services.AddScoped<IAiTool, GetProfileTool>();
         builder.Services.AddScoped<IAiTool, UpdateProfilePreferencesTool>();
-        builder.Services.AddScoped<IAiTool, SetAiMemoryTool>();
         builder.Services.AddScoped<IAiTool, SetAiSummaryTool>();
         builder.Services.AddScoped<IAiTool, GetNotificationsTool>();
         builder.Services.AddScoped<IAiTool, UpdateNotificationsTool>();
@@ -88,8 +85,6 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAiTool, GetChecklistTemplatesTool>();
         builder.Services.AddScoped<IAiTool, CreateChecklistTemplateTool>();
         builder.Services.AddScoped<IAiTool, DeleteChecklistTemplateTool>();
-        builder.Services.AddScoped<IAiTool, GetUserFactsTool>();
-        builder.Services.AddScoped<IAiTool, DeleteUserFactsTool>();
         builder.Services.AddScoped<IAiTool, GetGamificationOverviewTool>();
         builder.Services.AddScoped<IAiTool, GetReferralOverviewTool>();
         builder.Services.AddScoped<IAiTool, GetSubscriptionOverviewTool>();
@@ -175,7 +170,6 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Goal>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserFact>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Tag>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.ChecklistTemplate>>(),
                 sp.GetRequiredService<IFeatureFlagService>()));

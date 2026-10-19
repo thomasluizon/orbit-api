@@ -25,7 +25,6 @@ public class ProfileNotificationCalendarToolTests
         var mediator = Substitute.For<IMediator>();
         var profileTool = new GetProfileTool(mediator);
         var preferencesTool = new UpdateProfilePreferencesTool(mediator);
-        var aiMemoryTool = new SetAiMemoryTool(mediator);
         var aiSummaryTool = new SetAiSummaryTool(mediator);
         var notificationsTool = new GetNotificationsTool(mediator);
         var updateNotificationsTool = new UpdateNotificationsTool(mediator);
@@ -40,8 +39,6 @@ public class ProfileNotificationCalendarToolTests
         preferencesTool.Name.Should().Be("update_profile_preferences");
         JsonSerializer.Serialize(preferencesTool.GetParameterSchema()).Should().Contain("set_theme_preference");
 
-        aiMemoryTool.Name.Should().Be("set_ai_memory");
-        JsonSerializer.Serialize(aiMemoryTool.GetParameterSchema()).Should().Contain("enabled");
 
         aiSummaryTool.Name.Should().Be("set_ai_summary");
         JsonSerializer.Serialize(aiSummaryTool.GetParameterSchema()).Should().Contain("enabled");
@@ -264,31 +261,6 @@ public class ProfileNotificationCalendarToolTests
 
         result.Success.Should().BeFalse();
         result.Error.Should().Be("Unsupported action 'unknown'.");
-    }
-
-    [Fact]
-    public async Task SetAiMemoryTool_RequiresEnabled()
-    {
-        var tool = new SetAiMemoryTool(Substitute.For<IMediator>());
-
-        var result = await tool.ExecuteAsync(Parse("""{}"""), UserId, CancellationToken.None);
-
-        result.Success.Should().BeFalse();
-        result.Error.Should().Be("enabled is required.");
-    }
-
-    [Fact]
-    public async Task SetAiMemoryTool_BuildsAiMemoryEntityName()
-    {
-        var mediator = Substitute.For<IMediator>();
-        mediator.Send(Arg.Any<SetAiMemoryCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
-        var tool = new SetAiMemoryTool(mediator);
-
-        var result = await tool.ExecuteAsync(Parse("""{"enabled":true}"""), UserId, CancellationToken.None);
-
-        result.Success.Should().BeTrue();
-        result.EntityName.Should().Be("AI memory enabled");
     }
 
     [Fact]

@@ -17,13 +17,12 @@ public class FeatureExplanationResourceTests
         "schedule-math",
         "freezes",
         "notifications",
-        "ai-memory",
     ];
 
     private static Assembly ApplicationAssembly => typeof(AppConstants).Assembly;
 
     [Fact]
-    public void EmbedsExactlyTheEightFeatureExplanationFiles()
+    public void EmbedsExactlyTheSupportedFeatureExplanationFiles()
     {
         var names = ApplicationAssembly
             .GetManifestResourceNames()
@@ -43,7 +42,6 @@ public class FeatureExplanationResourceTests
     [InlineData("schedule-math")]
     [InlineData("freezes")]
     [InlineData("notifications")]
-    [InlineData("ai-memory")]
     public void EachResourceLoadsWithFrontmatterKeyMatchingItsFilename(string key)
     {
         using var stream = ApplicationAssembly.GetManifestResourceStream($"{Prefix}{key}.md");

@@ -1,4 +1,4 @@
-﻿using FluentAssertions;
+using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
@@ -237,12 +237,12 @@ public class AppConfigServiceTests
     public async Task GetAsync_MalformedIntegerRow_ThrowsNamingTheKey()
     {
         await using var dbContext = NewDbContext();
-        await SeedAsync(dbContext, AppConfigKeys.MaxUserFacts, "not-a-number");
+        await SeedAsync(dbContext, AppConfigKeys.MaxHabitDepth, "not-a-number");
         var service = Create(dbContext);
 
-        var read = async () => await service.GetAsync(AppConfigKeys.MaxUserFacts, 10);
+        var read = async () => await service.GetAsync(AppConfigKeys.MaxHabitDepth, 10);
 
         (await read.Should().ThrowAsync<InvalidOperationException>())
-            .WithMessage($"*{AppConfigKeys.MaxUserFacts}*");
+            .WithMessage($"*{AppConfigKeys.MaxHabitDepth}*");
     }
 }

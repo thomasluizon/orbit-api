@@ -40,7 +40,6 @@ public partial class ProcessUserChatCommandHandler
         }
         var user = await data.UserRepository.GetByIdAsync(request.UserId, cancellationToken);
         var hasProAccess = user?.HasProAccess ?? false;
-        var aiMemoryEnabled = user is { HasProAccess: true, AiMemoryEnabled: true };
 
         var freshProgressValues = await execution.GoalProgressReadSyncer.ComputeFreshValuesAsync(request.UserId, userToday, cancellationToken);
         var loadedGoals = await data.GoalRepository.FindAsync(
@@ -53,14 +52,6 @@ public partial class ProcessUserChatCommandHandler
                 GoalProgressSyncService.ApplyReadValue(goal, fresh);
         }
         IReadOnlyList<Goal> activeGoals = loadedGoals;
-
-        IReadOnlyList<UserFact> userFacts = [];
-        if (aiMemoryEnabled)
-        {
-            userFacts = await data.UserFactRepository.FindAsync(
-                f => f.UserId == request.UserId,
-                cancellationToken);
-        }
 
         var userTags = await data.TagRepository.FindAsync(
             t => t.UserId == request.UserId,
@@ -75,7 +66,7 @@ public partial class ProcessUserChatCommandHandler
             cancellationToken);
 
         dbStopwatch.Stop();
-        LogContextLoaded(logger, dbStopwatch.ElapsedMilliseconds, activeHabits.Count, userFacts.Count);
+        LogContextLoaded(logger, dbStopwatch.ElapsedMilliseconds, activeHabits.Count);
 
         return Result.Success(new ChatContext(
             activeHabits,
@@ -84,9 +75,7 @@ public partial class ProcessUserChatCommandHandler
             promptHabitIndex.IsPartial,
             user,
             hasProAccess,
-            aiMemoryEnabled,
             activeGoals,
-            userFacts,
             userTags,
             checklistTemplates,
             enabledFeatureFlags,
@@ -206,9 +195,7 @@ public partial class ProcessUserChatCommandHandler
         bool IsPromptHabitIndexPartial,
         User? User,
         bool HasProAccess,
-        bool AiMemoryEnabled,
         IReadOnlyList<Goal> ActiveGoals,
-        IReadOnlyList<UserFact> UserFacts,
         IReadOnlyList<Tag> UserTags,
         IReadOnlyList<ChecklistTemplate> ChecklistTemplates,
         IReadOnlyList<string> EnabledFeatureFlags,
