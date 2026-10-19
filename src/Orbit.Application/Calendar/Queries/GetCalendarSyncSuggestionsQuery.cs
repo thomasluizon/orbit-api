@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using MediatR;
 using Microsoft.Extensions.Logging;
+using Orbit.Application.Calendar.Services;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -58,7 +59,7 @@ public partial class GetCalendarSyncSuggestionsQueryHandler(
             .ToHashSet(StringComparer.Ordinal);
 
         var importedLegacyKeys = habits
-            .Select(h => BuildLegacyMatchKey(
+            .Select(h => LegacyCalendarMatchKey.BuildLegacyMatchKey(
                 h.Title,
                 h.DueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                 h.DueTime?.ToString("HH:mm", CultureInfo.InvariantCulture)))
@@ -74,7 +75,7 @@ public partial class GetCalendarSyncSuggestionsQueryHandler(
             {
                 candidates.Add((
                     item,
-                    BuildLegacyMatchKey(item.Event.Title, item.Event.StartDate, item.Event.StartTime)));
+                    LegacyCalendarMatchKey.BuildLegacyMatchKey(item.Event.Title, item.Event.StartDate, item.Event.StartTime)));
             }
         }
 
@@ -152,11 +153,6 @@ public partial class GetCalendarSyncSuggestionsQueryHandler(
             LogDeserializeSuggestionFailed(logger, ex, suggestion.Id);
             return null;
         }
-    }
-
-    private static string BuildLegacyMatchKey(string title, string? startDate, string? startTime)
-    {
-        return $"{title.Trim().ToLowerInvariant()}|{startDate ?? ""}|{startTime ?? ""}";
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Failed to deserialize sync suggestion {SuggestionId}")]
