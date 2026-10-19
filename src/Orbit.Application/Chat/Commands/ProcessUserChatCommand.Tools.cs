@@ -161,11 +161,11 @@ public partial class ProcessUserChatCommandHandler
     private static string CommittedWriteMessage(string? language, bool hasSavedActions) =>
         LocaleHelper.IsPortuguese(language)
             ? hasSavedActions
-                ? "As alterações listadas foram salvas, mas o restante da resposta não foi concluído."
-                : "Nada foi salvo, e o restante da resposta não foi concluído."
+                ? "Salvei as mudanças listadas aqui, mas não consegui terminar minha resposta."
+                : "Não consegui terminar minha resposta, e nada muda até você aprovar."
             : hasSavedActions
-                ? "The listed changes were saved, but the rest of the reply did not finish."
-                : "Nothing has been saved, and the rest of the reply did not finish.";
+                ? "I saved the changes listed here, but I couldn't finish my reply."
+                : "I couldn't finish my reply, and nothing changes until you approve.";
 
     /// <summary>
     /// Executes a round's tool calls, dispatching the read-only subset concurrently (each on its

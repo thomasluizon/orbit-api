@@ -138,8 +138,8 @@ public partial class ProcessUserChatCommandHandlerTests
 
         first.IsSuccess.Should().BeTrue();
         first.Value.AiMessage.Should().Be(language == "pt-BR"
-            ? "As alterações listadas foram salvas, mas o restante da resposta não foi concluído."
-            : "The listed changes were saved, but the rest of the reply did not finish.");
+            ? "Salvei as mudanças listadas aqui, mas não consegui terminar minha resposta."
+            : "I saved the changes listed here, but I couldn't finish my reply.");
         first.Value.Actions.Should().ContainSingle(action => action.Type == "CreateHabit" && action.Status == ActionStatus.Success);
         retry.Value.Should().BeEquivalentTo(first.Value);
         user.GetAiMessagesUsedToday(Today).Should().Be(1);
@@ -147,8 +147,8 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Theory]
-    [InlineData("en", "Nothing has been saved, and the rest of the reply did not finish.")]
-    [InlineData("pt-BR", "Nada foi salvo, e o restante da resposta não foi concluído.")]
+    [InlineData("en", "I couldn't finish my reply, and nothing changes until you approve.")]
+    [InlineData("pt-BR", "Não consegui terminar minha resposta, e nada muda até você aprovar.")]
     public async Task ChoiceAnswer_PendingWriteThenFailure_ReplaysWithoutClaimingChangesWereSaved(string language, string message)
     {
         var user = User.Create("Alex", "retry@example.com").Value;
