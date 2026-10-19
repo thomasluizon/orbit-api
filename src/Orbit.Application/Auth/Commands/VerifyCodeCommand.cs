@@ -20,7 +20,8 @@ public class VerifyCodeCommandHandler(
     IUnitOfWork unitOfWork,
     IAuthSessionService authSessionService,
     ISignupJobDispatcher signupJobDispatcher,
-    IBackgroundJobClient backgroundJobClient) : IRequestHandler<VerifyCodeCommand, Result<LoginResponse>>
+    IBackgroundJobClient backgroundJobClient,
+    AccountReactivation accountReactivation) : IRequestHandler<VerifyCodeCommand, Result<LoginResponse>>
 {
     public async Task<Result<LoginResponse>> Handle(VerifyCodeCommand request, CancellationToken cancellationToken)
     {
@@ -48,7 +49,7 @@ public class VerifyCodeCommandHandler(
             var wasReactivated = user.IsDeactivated;
             if (wasReactivated)
             {
-                user.CancelDeactivation();
+                await accountReactivation.ReactivateAsync(user, transactionToken);
                 reactivatedUser = user;
             }
             await unitOfWork.SaveChangesAsync(transactionToken);

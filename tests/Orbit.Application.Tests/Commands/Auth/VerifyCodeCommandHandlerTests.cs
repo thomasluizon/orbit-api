@@ -29,6 +29,8 @@ public class VerifyCodeCommandHandlerTests
     private readonly IBackgroundJobClient _jobs = Substitute.For<IBackgroundJobClient>();
     private readonly VerifyCodeCommandHandler _handler;
 
+    private readonly IGenericRepository<Notification> _notifications = Substitute.For<IGenericRepository<Notification>>();
+
     private const string TestEmail = "test@example.com";
 
     public VerifyCodeCommandHandlerTests()
@@ -36,7 +38,7 @@ public class VerifyCodeCommandHandlerTests
         _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>(), Arg.Any<CancellationToken>())
             .Returns(call => call.Arg<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>()(call.Arg<CancellationToken>()));
         _handler = new VerifyCodeCommandHandler(
-            _cache, _userRepo, _unitOfWork, _authSessionService, new SignupJobDispatcher(_jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _jobs);
+            _cache, _userRepo, _unitOfWork, _authSessionService, new SignupJobDispatcher(_jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _jobs, new AccountReactivation(_notifications, Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
 
         _userRepo.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(call => call.Arg<User>());
         _authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -60,6 +62,8 @@ public class VerifyCodeCommandHandlerTests
             user.SetStripeSubscription("sub_paid", expiryAtUtc);
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
         user.Deactivate(DateTime.UtcNow.AddDays(7));
+        if (play)
+            user.RecordDeletionStoppedRenewal(SubscriptionSource.GooglePlay, "play-token");
         Job? enqueued = null;
         _jobs.Create(Arg.Do<Job>(job => { if (job.Type == typeof(CancelSubscriptionOnDeletionJob)) enqueued = job; }), Arg.Any<IState>());
 
@@ -69,6 +73,10 @@ public class VerifyCodeCommandHandlerTests
         result.Value.WasReactivated.Should().BeTrue();
         user.IsDeactivated.Should().BeFalse();
         user.ScheduledDeletionAt.Should().BeNull();
+        user.PlayRenewalStoppedByDeletion.Should().BeFalse("reactivation must resolve deletion-owned Play renewal");
+        await _notifications.Received(play ? 1 : 0).AddAsync(Arg.Is<Notification>(notice =>
+            notice.UserId == user.Id && notice.Title == "Your Google Play renewal is off"
+            && notice.Body.Contains("Resubscribe")), Arg.Any<CancellationToken>());
         user.HasProAccess.Should().Be(!expired);
         user.Plan.Should().Be(expired ? UserPlan.Free : UserPlan.Pro);
         _jobs.Received(1).Create(Arg.Is<Job>(job => job.Type == typeof(CompleteSignupJob)

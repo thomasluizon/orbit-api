@@ -13,7 +13,8 @@ public class GoogleSignInFlow(
     IUnitOfWork unitOfWork,
     IAuthSessionService authSessionService,
     ISignupJobDispatcher signupJobDispatcher,
-    IBackgroundJobClient backgroundJobClient)
+    IBackgroundJobClient backgroundJobClient,
+    AccountReactivation accountReactivation)
 {
     public async Task<Result<LoginResponse>> CompleteAsync(
         string rawEmail, string name, string language, string? referralCode,
@@ -38,7 +39,7 @@ public class GoogleSignInFlow(
             var wasReactivated = user.IsDeactivated;
             if (wasReactivated)
             {
-                user.CancelDeactivation();
+                await accountReactivation.ReactivateAsync(user, transactionToken);
                 reactivatedUser = user;
             }
 

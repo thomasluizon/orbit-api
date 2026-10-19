@@ -103,7 +103,7 @@ public class GoogleAuthFirstLoginRaceTests
                 new GenericRepository<UserSession>(context), new GenericRepository<UserSessionRefreshToken>(context),
                 new GenericRepository<User>(context), tokenService, work,
                 Options.Create(new JwtSettings { SecretKey = "unused-test-secret", Issuer = "test", Audience = "test", RefreshExpiryDays = 90 }));
-            var flow = new GoogleSignInFlow(new AuthUserStore(context), work, sessions, new SignupJobDispatcher(jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), jobs);
+            var flow = new GoogleSignInFlow(new AuthUserStore(context), work, sessions, new SignupJobDispatcher(jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), jobs, new AccountReactivation(Substitute.For<IGenericRepository<Notification>>(), Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
             if (concurrently)
                 ready.SignalAndWait(TimeSpan.FromSeconds(10)).Should().BeTrue();
             var result = await flow.CompleteAsync("Google@Example.com", "Google User", "pt-BR", "friend",
@@ -146,9 +146,9 @@ public class GoogleAuthFirstLoginRaceTests
         using var cache = new MemoryCache(new MemoryCacheOptions());
         cache.Set("verify:google@example.com", new VerificationEntry("123456", 0, DateTime.UtcNow));
         var result = google
-            ? await new GoogleSignInFlow(users, work, sessions, dispatcher, jobs).CompleteAsync(
+            ? await new GoogleSignInFlow(users, work, sessions, dispatcher, jobs, new AccountReactivation(Substitute.For<IGenericRepository<Notification>>(), Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>())).CompleteAsync(
                 "google@example.com", "Google User", language, referralCode, null, null, CancellationToken.None)
-            : await new VerifyCodeCommandHandler(cache, users, work, sessions, dispatcher, jobs).Handle(
+            : await new VerifyCodeCommandHandler(cache, users, work, sessions, dispatcher, jobs, new AccountReactivation(Substitute.For<IGenericRepository<Notification>>(), Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>())).Handle(
                 new VerifyCodeCommand("google@example.com", "123456", language, referralCode), CancellationToken.None);
         result.IsSuccess.Should().BeTrue();
         result.Value.Token.Should().Be("session-token");

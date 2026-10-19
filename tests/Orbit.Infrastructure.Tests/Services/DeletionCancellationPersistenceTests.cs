@@ -124,7 +124,7 @@ public class DeletionCancellationPersistenceTests
         var restoredUser = await finalContext.Users.SingleAsync();
         if (playSubscription)
         {
-            restoredUser.PlayRenewalStoppedByDeletion.Should().BeTrue();
+            restoredUser.PlayRenewalStoppedByDeletion.Should().BeFalse();
             canceled.Should().BeTrue();
         }
         else
@@ -348,7 +348,7 @@ public class DeletionCancellationPersistenceTests
 
         restoredUser.StripeRenewalStoppedByDeletion.Should().BeFalse();
         stripeCanceled.Should().Be(stripeIndependentlyCanceled);
-        restoredUser.PlayRenewalStoppedByDeletion.Should().BeTrue();
+        restoredUser.PlayRenewalStoppedByDeletion.Should().BeFalse();
         await stripe.Received(stripeIndependentlyCanceled ? 0 : 1)
             .SetSubscriptionCancelAtPeriodEndAsync("sub_paid", false, Arg.Any<CancellationToken>());
         await stripe.Received(stripeIndependentlyCanceled ? 0 : 1)
