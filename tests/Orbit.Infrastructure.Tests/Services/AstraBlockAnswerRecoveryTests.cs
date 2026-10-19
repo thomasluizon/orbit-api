@@ -289,7 +289,6 @@ public class AstraBlockAnswerRecoveryTests
         var today = new DateOnly(2026, 4, 3);
         dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(today);
         var quota = Substitute.For<IPayGateService>();
-        quota.CanSendAiMessage(user.Id, Arg.Any<CancellationToken>()).Returns(Result.Success());
         quota.TryConsumeAiMessage(user.Id, Arg.Any<IUnitOfWork>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
         quota.RefundAiMessage(user.Id, today, Arg.Any<IUnitOfWork>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
         quota.CanCreateHabits(user.Id, 1, Arg.Any<CancellationToken>()).Returns(Result.Success());

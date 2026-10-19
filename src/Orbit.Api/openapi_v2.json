@@ -7531,7 +7531,24 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogHabitResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogHabitResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogHabitResponse"
+                }
+              }
+            }
           },
           "400": {
             "description": "Bad Request",
@@ -8350,7 +8367,24 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkLogResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkLogResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkLogResult"
+                }
+              }
+            }
           },
           "400": {
             "description": "Bad Request",
@@ -13886,6 +13920,22 @@
                 "$ref": "#/components/schemas/ClarificationRequest"
               }
             ]
+          },
+          "messageKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "params": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ToolResultMessageParams"
+              }
+            ]
           }
         }
       },
@@ -14665,6 +14715,9 @@
           }
         }
       },
+      "BulkItemStatus": {
+        "type": "integer"
+      },
       "BulkLogHabitItem": {
         "required": [
           "habitId"
@@ -14695,6 +14748,82 @@
             "items": {
               "$ref": "#/components/schemas/BulkLogHabitItem"
             }
+          }
+        }
+      },
+      "BulkLogItemResult": {
+        "required": [
+          "index",
+          "status",
+          "habitId"
+        ],
+        "type": "object",
+        "properties": {
+          "index": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "status": {
+            "$ref": "#/components/schemas/BulkItemStatus"
+          },
+          "habitId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "logId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "errorCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "BulkLogResult": {
+        "required": [
+          "results"
+        ],
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BulkLogItemResult"
+            }
+          },
+          "previousStreak": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "currentStreak": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -17293,6 +17422,40 @@
           }
         }
       },
+      "LinkedGoalUpdate": {
+        "required": [
+          "goalId",
+          "title",
+          "newProgress",
+          "targetValue"
+        ],
+        "type": "object",
+        "properties": {
+          "goalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "newProgress": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "targetValue": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          }
+        }
+      },
       "LinkGoalsRequest": {
         "required": [
           "goalIds"
@@ -17332,6 +17495,67 @@
               "string"
             ],
             "format": "date"
+          }
+        }
+      },
+      "LogHabitResponse": {
+        "required": [
+          "logId",
+          "isFirstCompletionToday",
+          "currentStreak"
+        ],
+        "type": "object",
+        "properties": {
+          "logId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "isFirstCompletionToday": {
+            "type": "boolean"
+          },
+          "currentStreak": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "linkedGoalUpdates": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/LinkedGoalUpdate"
+            }
+          },
+          "xpEarned": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "newAchievementIds": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "previousStreak": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -20392,6 +20616,112 @@
           "updatedAtUtc": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "ToolResultMessageParams": {
+        "type": "object",
+        "properties": {
+          "entityName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "count": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "totalCount": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "skippedCount": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "partial": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "weekStartDay": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "hours": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "toolName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "bulkTool": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "policyReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "timeZone": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "language": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "referralCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fieldName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "actionName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "entityId": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

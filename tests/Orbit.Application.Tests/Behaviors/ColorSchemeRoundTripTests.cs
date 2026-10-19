@@ -48,7 +48,7 @@ public class ColorSchemeRoundTripTests
             Substitute.For<IGenericRepository<ApiKey>>(),
             _streakFreezeRepo,
             _habitLogReader,
-            _userDateService,
+            new ProfileStreakServices(_userDateService, Substitute.For<IUserStreakService>()),
             _featureFlagService,
             _payGate);
     }
