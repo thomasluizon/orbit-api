@@ -74,6 +74,10 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     public bool IsBadHabit { get; private set; }
     public bool IsCompleted { get; private set; }
     public HabitSchedule Schedule { get; private set; }
+    /// <summary>
+    /// The date the habit was created to start. This creation anchor stays fixed when DueDate
+    /// moves, including to an earlier date; the clamp applies to the backfill only.
+    /// </summary>
     public DateOnly StartDate { get; private set; }
     public DateOnly DueDate { get; private set; }
     public DateOnly? ScheduledStartDate { get; private set; }
@@ -195,8 +199,6 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         FrequencyQuantity = candidate.FrequencyQuantity;
         IntervalWeeks = candidate.IntervalWeeks;
         DueDate = candidate.DueDate;
-        StartDate = candidate.StartDate;
-        Schedule = candidate.Schedule;
         ScheduledStartDate = candidate.ScheduledStartDate;
         OriginalDayOfMonth = candidate.OriginalDayOfMonth;
         EndDate = candidate.EndDate;

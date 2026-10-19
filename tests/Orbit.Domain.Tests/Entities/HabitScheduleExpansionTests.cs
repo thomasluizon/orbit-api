@@ -37,6 +37,8 @@ public class HabitScheduleExpansionTests
     [InlineData("CatchUp")]
     [InlineData("Postpone")]
     [InlineData("Update")]
+    [InlineData("UpdateEarlier")]
+    [InlineData("PostponeEarlier")]
     [InlineData("Skip")]
     public void Mutations_PreserveOriginalStartDate(string operation)
     {
@@ -62,6 +64,16 @@ public class HabitScheduleExpansionTests
                     .IsSuccess.Should().BeTrue();
                 habit.DueDate.Should().Be(Start.AddDays(4));
                 habit.ScheduledStartDate.Should().Be(Start.AddDays(4));
+                break;
+            case "UpdateEarlier":
+                habit.Update(new HabitUpdateParams(
+                    "Updated", null, FrequencyUnit.Day, 1, null, false, Start.AddDays(-4)))
+                    .IsSuccess.Should().BeTrue();
+                habit.DueDate.Should().Be(Start.AddDays(-4));
+                break;
+            case "PostponeEarlier":
+                habit.PostponeTo(Start.AddDays(-4));
+                habit.DueDate.Should().Be(Start.AddDays(-4));
                 break;
             case "Skip":
                 habit.SkipFlexible(Start).IsSuccess.Should().BeTrue();
@@ -139,12 +151,12 @@ public class HabitScheduleExpansionTests
         AssertSchedule(hydrated, HabitSchedule.Recurring);
 
         original.Update(new HabitUpdateParams(
-            "Flexible", null, FrequencyUnit.Week, 2, null, false, Start.AddDays(2), IsFlexible: true))
+            "Recurring", null, FrequencyUnit.Week, 2, null, false, Start.AddDays(2)))
             .IsSuccess.Should().BeTrue();
         hydrated.LoadScheduleFieldsForRead(original);
         hydrated.StartDate.Should().Be(Start);
         hydrated.DueDate.Should().Be(Start.AddDays(2));
-        AssertSchedule(hydrated, HabitSchedule.Flexible);
+        AssertSchedule(hydrated, HabitSchedule.Recurring);
     }
 
     private static readonly DateOnly Start = new(2026, 4, 3);

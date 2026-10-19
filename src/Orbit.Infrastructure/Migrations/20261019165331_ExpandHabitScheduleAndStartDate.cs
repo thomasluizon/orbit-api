@@ -42,7 +42,7 @@ namespace Orbit.Infrastructure.Migrations
                 nullable: false,
                 defaultValueSql: "'0001-01-01'");
 
-            // https://github.com/thomasluizon/orbit-tickets/issues/227: the original start is unrecoverable; approximate it from the earliest active log, else UTC creation date, capped at DueDate. ScheduledStartDate remains the recurrence anchor.
+            // https://github.com/thomasluizon/orbit-tickets/issues/227: StartDate is the date the habit was created to start; the clamp applies to the backfill only. Approximate the unrecoverable original from the earliest active log, else UTC creation date, capped at DueDate. ScheduledStartDate remains the recurrence anchor. Bump UpdatedAtUtc for a full delta-sync resend of the added fields.
             migrationBuilder.Sql("""
                 UPDATE "Habits" AS h
                 SET "StartDate" = LEAST(
@@ -56,7 +56,8 @@ namespace Orbit.Infrastructure.Migrations
                         WHEN h."IsFlexible" THEN 2
                         WHEN h."FrequencyUnit" IS NULL THEN 0
                         ELSE 1
-                    END;
+                    END,
+                    "UpdatedAtUtc" = now();
                 """);
 
             // https://github.com/thomasluizon/orbit-tickets/issues/227: older API processes still write only the legacy columns during the expand rollout.
@@ -95,7 +96,7 @@ namespace Orbit.Infrastructure.Migrations
                 DECLARE affected_count bigint;
                 BEGIN
                     SELECT COUNT(*) INTO affected_count FROM "Habits";
-                    RAISE NOTICE 'Habit schedule expansion backfilled % rows', affected_count;
+                    RAISE NOTICE 'Habit schedule expansion total rows: %', affected_count;
                 END $$;
                 """);
         }

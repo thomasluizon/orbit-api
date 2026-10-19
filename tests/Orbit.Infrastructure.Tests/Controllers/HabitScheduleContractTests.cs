@@ -118,6 +118,24 @@ public class HabitScheduleContractTests
         }
     }
 
+    [Theory]
+    [InlineData("openapi.json", "HabitSchedule")]
+    [InlineData("openapi_v2.json", "HabitSchedule")]
+    [InlineData("openapi.json", "FrequencyUnit")]
+    [InlineData("openapi_v2.json", "FrequencyUnit")]
+    public void OpenApi_ScheduleEnumsMatchSerializedNames(string file, string name)
+    {
+        var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
+            "../../../../..", "src/Orbit.Api", file));
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        var schema = document.RootElement.GetProperty("components").GetProperty("schemas").GetProperty(name);
+        schema.GetProperty("type").GetString().Should().Be("string");
+        schema.GetProperty("enum").EnumerateArray().Select(value => value.GetString())
+            .Should().Equal(name == "HabitSchedule"
+                ? ["OneTime", "Recurring", "Flexible", "General"]
+                : ["Day", "Week", "Month", "Year"]);
+    }
+
     private static Habit Create(Guid userId, HabitSchedule type, Guid? parentId = null) =>
         Habit.Create(new HabitCreateParams(userId, "Habit",
             type is HabitSchedule.Recurring or HabitSchedule.Flexible ? FrequencyUnit.Day : null,

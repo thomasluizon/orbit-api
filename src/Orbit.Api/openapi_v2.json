@@ -15102,7 +15102,13 @@
         }
       },
       "FrequencyUnit": {
-        "type": "integer"
+        "enum": [
+          "Day",
+          "Week",
+          "Month",
+          "Year"
+        ],
+        "type": "string"
       },
       "GetPushSubscriptionsResponse": {
         "required": [
@@ -15900,7 +15906,13 @@
         }
       },
       "HabitSchedule": {
-        "type": "integer"
+        "enum": [
+          "OneTime",
+          "Recurring",
+          "Flexible",
+          "General"
+        ],
+        "type": "string"
       },
       "HabitScheduleChildItem": {
         "required": [

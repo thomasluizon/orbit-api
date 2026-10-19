@@ -14,10 +14,10 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
         using var connection = OpenDatabase();
         Execute(connection, """
             INSERT INTO "Habits" VALUES
-                (1, 0, 0, 0, 0, 1, '[]', '2026-04-10', '2026-04-05T23:00:00Z', NULL, NULL),
-                (2, 0, 0, 0, 0, 1, '[]', '2026-04-10', '2026-04-05T23:00:00Z', NULL, NULL),
-                (3, 0, 0, 0, 0, 1, '[]', '2026-04-01', '2026-04-05T23:00:00Z', NULL, NULL),
-                (4, 0, 0, 0, 0, 1, '[]', '2026-04-01', '2026-04-05T23:00:00Z', NULL, NULL);
+                (1, 0, 0, 0, 0, 1, '[]', '2026-04-10', '2026-04-05T23:00:00Z', NULL, NULL, '2000-01-01T00:00:00Z'),
+                (2, 0, 0, 0, 0, 1, '[]', '2026-04-10', '2026-04-05T23:00:00Z', NULL, NULL, '2000-01-01T00:00:00Z'),
+                (3, 0, 0, 0, 0, 1, '[]', '2026-04-01', '2026-04-05T23:00:00Z', NULL, NULL, '2000-01-01T00:00:00Z'),
+                (4, 0, 0, 0, 0, 1, '[]', '2026-04-01', '2026-04-05T23:00:00Z', NULL, NULL, '2000-01-01T00:00:00Z');
             INSERT INTO "HabitLogs" VALUES
                 (1, '2026-04-03', 0), (1, '2026-04-02', 0), (1, '2026-04-01', 1),
                 (2, '2026-04-01', 1), (4, '2026-04-04', 0);
@@ -26,12 +26,13 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
         RunBackfill(connection);
 
         using var command = connection.CreateCommand();
-        command.CommandText = "SELECT \"StartDate\" FROM \"Habits\" ORDER BY \"Id\"";
+        command.CommandText = "SELECT \"StartDate\", \"UpdatedAtUtc\" FROM \"Habits\" ORDER BY \"Id\"";
         using var reader = command.ExecuteReader();
         foreach (var expected in new[] { "2026-04-02", "2026-04-05", "2026-04-01", "2026-04-01" })
         {
             reader.Read().Should().BeTrue();
             reader.GetString(0).Should().Be(expected);
+            DateTime.Parse(reader.GetString(1)).Should().BeAfter(new DateTime(2000, 1, 2));
         }
         reader.Read().Should().BeFalse();
     }
@@ -47,7 +48,7 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
         using var insert = connection.CreateCommand();
         insert.CommandText = """
             INSERT INTO "Habits" VALUES
-                (1, $general, $flexible, 0, $unit, $quantity, '[]', '2026-04-10', '2026-04-03T00:00:00Z', NULL, NULL);
+                (1, $general, $flexible, 0, $unit, $quantity, '[]', '2026-04-10', '2026-04-03T00:00:00Z', NULL, NULL, '2000-01-01T00:00:00Z');
             """;
         insert.Parameters.AddWithValue("$general", general);
         insert.Parameters.AddWithValue("$flexible", flexible);
@@ -76,14 +77,14 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
         using var connection = OpenDatabase();
         Execute(connection, """
             INSERT INTO "Habits" VALUES
-                (1, 1, 0, 0, 0, 1, '[]', '2026-04-03', '2026-04-03', NULL, NULL),
-                (2, 1, 0, 1, NULL, NULL, '[]', '2026-04-03', '2026-04-03', NULL, NULL),
-                (3, 0, 1, 0, NULL, NULL, '[]', '2026-04-03', '2026-04-03', NULL, NULL),
-                (4, 0, 1, 0, 0, 1, '[1]', '2026-04-03', '2026-04-03', NULL, NULL),
-                (5, 1, 0, 0, NULL, NULL, '[]', '2026-04-03', '2026-04-03', NULL, NULL),
-                (6, 0, 0, 0, NULL, NULL, '[]', '2026-04-03', '2026-04-03', NULL, NULL),
-                (7, 0, 0, 0, 0, 1, '[]', '2026-04-03', '2026-04-03', NULL, NULL),
-                (8, 0, 1, 0, 1, 2, '[]', '2026-04-03', '2026-04-03', NULL, NULL);
+                (1, 1, 0, 0, 0, 1, '[]', '2026-04-03', '2026-04-03', NULL, NULL, '2000-01-01T00:00:00Z'),
+                (2, 1, 0, 1, NULL, NULL, '[]', '2026-04-03', '2026-04-03', NULL, NULL, '2000-01-01T00:00:00Z'),
+                (3, 0, 1, 0, NULL, NULL, '[]', '2026-04-03', '2026-04-03', NULL, NULL, '2000-01-01T00:00:00Z'),
+                (4, 0, 1, 0, 0, 1, '[1]', '2026-04-03', '2026-04-03', NULL, NULL, '2000-01-01T00:00:00Z'),
+                (5, 1, 0, 0, NULL, NULL, '[]', '2026-04-03', '2026-04-03', NULL, NULL, '2000-01-01T00:00:00Z'),
+                (6, 0, 0, 0, NULL, NULL, '[]', '2026-04-03', '2026-04-03', NULL, NULL, '2000-01-01T00:00:00Z'),
+                (7, 0, 0, 0, 0, 1, '[]', '2026-04-03', '2026-04-03', NULL, NULL, '2000-01-01T00:00:00Z'),
+                (8, 0, 1, 0, 1, 2, '[]', '2026-04-03', '2026-04-03', NULL, NULL, '2000-01-01T00:00:00Z');
             """);
         using var command = connection.CreateCommand();
         command.CommandText = query;
@@ -128,7 +129,8 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
 
     private static void RunBackfill(SqliteConnection connection) => Execute(connection,
         BackfillSql.Replace("LEAST(", "MIN(", StringComparison.Ordinal)
-            .Replace(" AT TIME ZONE 'UTC'", "", StringComparison.Ordinal));
+            .Replace(" AT TIME ZONE 'UTC'", "", StringComparison.Ordinal)
+            .Replace("now()", "CURRENT_TIMESTAMP", StringComparison.Ordinal));
 
     private static SqliteConnection OpenDatabase()
     {
@@ -138,7 +140,7 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
             CREATE TABLE "Habits" (
                 "Id" INTEGER PRIMARY KEY, "IsGeneral" INTEGER, "IsFlexible" INTEGER, "IsBadHabit" INTEGER,
                 "FrequencyUnit" INTEGER, "FrequencyQuantity" INTEGER, "Days" TEXT, "DueDate" TEXT,
-                "CreatedAtUtc" TEXT, "StartDate" TEXT, "Schedule" INTEGER);
+                "CreatedAtUtc" TEXT, "StartDate" TEXT, "Schedule" INTEGER, "UpdatedAtUtc" TEXT);
             CREATE TABLE "HabitLogs" ("HabitId" INTEGER, "Date" TEXT, "IsDeleted" INTEGER);
             """);
         return connection;

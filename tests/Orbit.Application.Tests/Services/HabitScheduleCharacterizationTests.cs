@@ -31,4 +31,28 @@ public class HabitScheduleCharacterizationTests
         HabitMetricsCalculator.Calculate(habit, Today, 1, TimeZoneInfo.Utc)
             .Should().Be(new HabitMetrics(1, 1, 100m, 100m, 1, Today));
     }
+
+    [Theory]
+    [InlineData(0, 1, 1, 100, 1, 0)]
+    [InlineData(1, 1, 2, 75, 3, 3)]
+    [InlineData(2, 1, 1, 50, 3, 3)]
+    [InlineData(3, 1, 1, 100, 3, 3)]
+    public void Metrics_WithGapsKeepTypeSpecificResults(
+        int type, int currentStreak, int longestStreak, int rate, int completions, int lastOffset)
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            Guid.NewGuid(), "Habit", type == 2 ? FrequencyUnit.Week : type == 1 ? FrequencyUnit.Day : null,
+            type == 2 ? 2 : type == 1 ? 1 : null, Today,
+            IsFlexible: type == 2, IsGeneral: type == 3,
+            CreatedAtUtc: Today.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc))).Value;
+        habit.Log(Today, advanceDueDate: false).IsSuccess.Should().BeTrue();
+        if (type != 0)
+        {
+            habit.Log(Today.AddDays(1), advanceDueDate: false).IsSuccess.Should().BeTrue();
+            habit.Log(Today.AddDays(3), advanceDueDate: false).IsSuccess.Should().BeTrue();
+        }
+
+        HabitMetricsCalculator.Calculate(habit, Today.AddDays(3), 1, TimeZoneInfo.Utc)
+            .Should().Be(new HabitMetrics(currentStreak, longestStreak, rate, rate, completions, Today.AddDays(lastOffset)));
+    }
 }
