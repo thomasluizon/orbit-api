@@ -141,8 +141,10 @@ public partial class ProcessUserChatCommandHandler
                 results.MissingHabitNames.Add(name);
                 continue;
             }
-            if (!results.ProposedHabitNames.Add((parentId, HabitNameMatcher.Normalize(name))))
+            if (results.ProposedHabitNames.Any(previous => previous.ParentId == parentId
+                && (HabitNameMatcher.Matches(previous.Name, name) || HabitNameMatcher.Matches(name, previous.Name))))
                 continue;
+            results.ProposedHabitNames.Add((parentId, HabitNameMatcher.Normalize(name)));
             proposed.Add(item.DeepClone());
         }
         return proposed;

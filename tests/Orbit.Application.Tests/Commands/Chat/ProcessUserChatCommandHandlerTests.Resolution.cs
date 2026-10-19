@@ -136,16 +136,18 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.AiMessage.Should().Contain("meditação").And.Contain("?");
     }
 
-    [Fact]
-    public async Task Replay_PreviousCreateProposal_IsRefusedAcrossTurns()
+    [Theory]
+    [InlineData("Novo", "NOVO")]
+    [InlineData("Praticar yoga", "Yoga")]
+    public async Task Replay_PreviousCreateProposal_IsRefusedAcrossTurns(string previousName, string proposedName)
     {
         SetupResolutionAccount();
         var bulk = new BulkCreateHabitsTool(_mediator);
         var handler = CreateHandler(bulk);
         var held = HoldReplayWrites(bulk);
-        _pendingOperationStore.GetPendingHabitCreations(UserId).Returns([new PendingHabitCreation("Novo")]);
+        _pendingOperationStore.GetPendingHabitCreations(UserId).Returns([new PendingHabitCreation(previousName)]);
         _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
-            .Returns(ReplayCall("bulk_create_habits", """{"habits":[{"title":"NOVO","description":"A changed proposal"}]}"""));
+            .Returns(ReplayCall("bulk_create_habits", JsonSerializer.Serialize(new { habits = new[] { new { title = proposedName, description = "A changed proposal" } } })));
         ReplyToReplay("A prévia anterior continua disponível.");
 
         var result = await handler.Handle(new(UserId, "Crie Novo de novo."), default);
