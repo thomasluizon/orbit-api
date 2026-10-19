@@ -140,15 +140,24 @@ public class GooglePlayBillingServiceTests
         var user = User.Create("Paused", "paused@example.com").Value;
         user.SetPlaySubscription("purchase-token", purchase.ExpiresAt);
         user.Deactivate(DateTime.UtcNow.AddDays(7));
-        var job = new CancelSubscriptionOnDeletionJob(Substitute.For<IGenericRepository<User>>(),
-            Substitute.For<IUnitOfWork>(), Substitute.For<IBillingService>(), play,
-            Options.Create(new GooglePlaySettings { ProductId = "orbit_pro" }));
+        using var factory = new Orbit.Infrastructure.Tests.Persistence.SqliteOrbitDbContextFactory();
+        factory.Context.Users.Add(user);
+        await factory.Context.SaveChangesAsync();
+        var unitOfWork = new Orbit.Infrastructure.Persistence.UnitOfWork(factory.Context,
+            new Orbit.Infrastructure.Configuration.DatabaseConnectionSettings());
+        var stripe = Substitute.For<IBillingService>();
+        var options = Options.Create(new GooglePlaySettings { ProductId = "orbit_pro" });
+        var job = new CancelSubscriptionOnDeletionJob(new Orbit.Infrastructure.Persistence.GenericRepository<User>(factory.Context),
+            unitOfWork, stripe, play, options,
+            new OwedSubscriptionCancellationJob(new Orbit.Infrastructure.Persistence.GenericRepository<Orbit.Domain.Entities.OwedSubscriptionCancellation>(factory.Context),
+                unitOfWork, stripe, play, options,
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<OwedSubscriptionCancellationJob>.Instance, TimeProvider.System));
 
         await job.CancelBeforeDeletionAsync(user, CancellationToken.None);
 
         handler.Method.Should().Be(HttpMethod.Post);
         handler.Path.Should().EndWith("purchase-token:cancel");
-        handler.Calls.Should().Be(3);
+        handler.Calls.Should().Be(4);
     }
 
     [Theory]

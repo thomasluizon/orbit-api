@@ -34,6 +34,7 @@ public class FriendsControllerTests
     }
 
     [Fact]
+    [Obsolete("Covers the deprecated social API routes retained for ORB-233 part 1.")]
     public async Task GetFriends_Success_ReturnsOk()
     {
         _mediator.Send(Arg.Any<GetFriendsQuery>(), Arg.Any<CancellationToken>())
@@ -45,6 +46,7 @@ public class FriendsControllerTests
     }
 
     [Fact]
+    [Obsolete("Covers the deprecated social API routes retained for ORB-233 part 1.")]
     public async Task GetFriends_PayGateFailure_Returns403()
     {
         _mediator.Send(Arg.Any<GetFriendsQuery>(), Arg.Any<CancellationToken>())
@@ -56,6 +58,7 @@ public class FriendsControllerTests
     }
 
     [Fact]
+    [Obsolete("Covers the deprecated social API routes retained for ORB-233 part 1.")]
     public async Task GetFriendProfile_Success_ReturnsOk()
     {
         _mediator.Send(Arg.Any<GetFriendProfileQuery>(), Arg.Any<CancellationToken>())
@@ -67,6 +70,7 @@ public class FriendsControllerTests
     }
 
     [Fact]
+    [Obsolete("Covers the deprecated social API routes retained for ORB-233 part 1.")]
     public async Task GetInvitePreview_Success_ReturnsOk()
     {
         _mediator.Send(Arg.Any<GetInvitePreviewQuery>(), Arg.Any<CancellationToken>())
@@ -78,6 +82,7 @@ public class FriendsControllerTests
     }
 
     [Fact]
+    [Obsolete("Covers the deprecated social API routes retained for ORB-233 part 1.")]
     public async Task GetFeed_Success_ReturnsOk()
     {
         _mediator.Send(Arg.Any<GetFriendFeedQuery>(), Arg.Any<CancellationToken>())
@@ -89,6 +94,7 @@ public class FriendsControllerTests
     }
 
     [Fact]
+    [Obsolete("Covers the deprecated social API routes retained for ORB-233 part 1.")]
     public async Task GetCheers_Success_ReturnsOk()
     {
         _mediator.Send(Arg.Any<GetCheersQuery>(), Arg.Any<CancellationToken>())
@@ -100,6 +106,7 @@ public class FriendsControllerTests
     }
 
     [Fact]
+    [Obsolete("Covers the deprecated social API routes retained for ORB-233 part 1.")]
     public async Task SendRequest_Success_ReturnsOk()
     {
         _mediator.Send(Arg.Any<SendFriendRequestCommand>(), Arg.Any<CancellationToken>())
@@ -112,6 +119,7 @@ public class FriendsControllerTests
     }
 
     [Fact]
+    [Obsolete("Covers the deprecated social API routes retained for ORB-233 part 1.")]
     public async Task SendRequest_Failure_ReturnsBadRequest()
     {
         _mediator.Send(Arg.Any<SendFriendRequestCommand>(), Arg.Any<CancellationToken>())
@@ -124,6 +132,7 @@ public class FriendsControllerTests
     }
 
     [Fact]
+    [Obsolete("Covers the deprecated social API routes retained for ORB-233 part 1.")]
     public async Task AcceptRequest_Success_ReturnsNoContent()
     {
         _mediator.Send(Arg.Any<AcceptFriendRequestCommand>(), Arg.Any<CancellationToken>())
@@ -135,6 +144,7 @@ public class FriendsControllerTests
     }
 
     [Fact]
+    [Obsolete("Covers the deprecated social API routes retained for ORB-233 part 1.")]
     public async Task RemoveFriend_Success_ReturnsNoContent()
     {
         _mediator.Send(Arg.Any<RemoveFriendCommand>(), Arg.Any<CancellationToken>())
@@ -146,6 +156,7 @@ public class FriendsControllerTests
     }
 
     [Fact]
+    [Obsolete("Covers the deprecated social API routes retained for ORB-233 part 1.")]
     public async Task SendCheer_Success_ReturnsOk()
     {
         _mediator.Send(Arg.Any<SendCheerCommand>(), Arg.Any<CancellationToken>())
@@ -158,6 +169,7 @@ public class FriendsControllerTests
     }
 
     [Fact]
+    [Obsolete("Covers the deprecated social API routes retained for ORB-233 part 1.")]
     public async Task SendCheer_SocialDisabled_Returns403()
     {
         _mediator.Send(Arg.Any<SendCheerCommand>(), Arg.Any<CancellationToken>())
@@ -170,6 +182,7 @@ public class FriendsControllerTests
     }
 
     [Fact]
+    [Obsolete("Covers the deprecated social API routes retained for ORB-233 part 1.")]
     public async Task Block_Success_ReturnsNoContent()
     {
         _mediator.Send(Arg.Any<BlockUserCommand>(), Arg.Any<CancellationToken>())
@@ -182,6 +195,7 @@ public class FriendsControllerTests
     }
 
     [Fact]
+    [Obsolete("Covers the deprecated social API routes retained for ORB-233 part 1.")]
     public async Task Unblock_Success_ReturnsNoContent()
     {
         _mediator.Send(Arg.Any<UnblockUserCommand>(), Arg.Any<CancellationToken>())
@@ -193,6 +207,7 @@ public class FriendsControllerTests
     }
 
     [Fact]
+    [Obsolete("Covers the deprecated social API routes retained for ORB-233 part 1.")]
     public async Task Report_Success_ReturnsOk()
     {
         _mediator.Send(Arg.Any<ReportUserCommand>(), Arg.Any<CancellationToken>())

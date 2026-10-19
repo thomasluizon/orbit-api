@@ -14,6 +14,7 @@ using Orbit.Domain.Enums;
 
 namespace Orbit.Infrastructure.Tests.Controllers;
 
+[Obsolete("Covers the deprecated accountability routes.")]
 public class AccountabilityControllerTests
 {
     private readonly IMediator _mediator = Substitute.For<IMediator>();

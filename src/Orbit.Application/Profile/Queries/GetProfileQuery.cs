@@ -16,6 +16,7 @@ public record ProfileResponse(
     string Name,
     string Email,
     string? TimeZone,
+    [property: Obsolete("AI memory is deprecated and will be removed.")]
     bool AiMemoryEnabled,
     bool AiSummaryEnabled,
     bool HasCompletedOnboarding,
@@ -53,7 +54,9 @@ public record ProfileResponse(
     GoogleCalendarAutoSyncStatus GoogleCalendarAutoSyncStatus,
     DateTime? GoogleCalendarLastSyncedAt,
     bool CanViewGamification,
+    [property: Obsolete("The social profile field is deprecated and will be removed in part 2 of ORB-233.")]
     string? Handle,
+    [property: Obsolete("The social profile field is deprecated and will be removed in part 2 of ORB-233.")]
     bool SocialOptIn,
     bool Uses24HourClock = true,
     PublicProfileSettings? PublicProfile = null,

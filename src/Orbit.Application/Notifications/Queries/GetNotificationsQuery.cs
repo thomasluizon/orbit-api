@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using MediatR;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -28,7 +29,7 @@ public class GetNotificationsQueryHandler(
     public async Task<Result<GetNotificationsResponse>> Handle(GetNotificationsQuery request, CancellationToken cancellationToken)
     {
         var notifications = await notificationRepository.FindAsync(
-            n => n.UserId == request.UserId,
+            VisibleForUser(request.UserId),
             q => q.OrderByDescending(n => n.CreatedAtUtc).ThenByDescending(n => n.Id)
                 .Skip(request.Offset).Take(request.Limit),
             cancellationToken);
@@ -38,13 +39,20 @@ public class GetNotificationsQueryHandler(
             .ToList();
 
         var unreadCount = await notificationRepository.CountAsync(
-            n => n.UserId == request.UserId && !n.IsRead,
+            VisibleForUser(request.UserId, unreadOnly: true),
             cancellationToken);
 
         var totalCount = await notificationRepository.CountAsync(
-            n => n.UserId == request.UserId,
+            VisibleForUser(request.UserId),
             cancellationToken);
 
         return Result.Success(new GetNotificationsResponse(items, unreadCount, totalCount));
     }
+
+    // Mirrors RETIRED_NOTIFICATION_URL_PREFIXES so counts match both inboxes: https://github.com/thomasluizon/orbit-ui-mobile/blob/main/packages/shared/src/utils/notification-actions.ts
+    private static Expression<Func<Notification, bool>> VisibleForUser(Guid userId, bool unreadOnly = false) =>
+        n => n.UserId == userId && (!unreadOnly || !n.IsRead)
+            && (n.Url == null || (!n.Url.StartsWith("/social")
+                && !n.Url.StartsWith("/public-profile")
+                && !n.Url.StartsWith("/u/")));
 }

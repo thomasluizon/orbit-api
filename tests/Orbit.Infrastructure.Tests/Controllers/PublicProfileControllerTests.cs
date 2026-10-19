@@ -23,6 +23,7 @@ public class PublicProfileControllerTests
     }
 
     [Fact]
+    [Obsolete("Covers the deprecated social API routes retained for ORB-233 part 1.")]
     public async Task GetPublicProfile_CacheMissSuccess_ReturnsJsonContent()
     {
         _mediator.Send(Arg.Any<GetPublicProfileQuery>(), Arg.Any<CancellationToken>())
@@ -35,6 +36,7 @@ public class PublicProfileControllerTests
     }
 
     [Fact]
+    [Obsolete("Covers the deprecated social API routes retained for ORB-233 part 1.")]
     public async Task GetPublicProfile_CacheMissFailure_ReturnsNotFound()
     {
         _mediator.Send(Arg.Any<GetPublicProfileQuery>(), Arg.Any<CancellationToken>())
@@ -46,6 +48,7 @@ public class PublicProfileControllerTests
     }
 
     [Fact]
+    [Obsolete("Covers the deprecated social API routes retained for ORB-233 part 1.")]
     public async Task GetPublicProfile_CacheHit_ReturnsJsonWithoutQuerying()
     {
         _cache.GetAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())

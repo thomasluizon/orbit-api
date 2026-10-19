@@ -36,7 +36,7 @@ public class VerifyCodeCommandHandlerTests
         _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>(), Arg.Any<CancellationToken>())
             .Returns(call => call.Arg<Func<CancellationToken, Task<Result<Orbit.Application.Auth.Queries.LoginResponse>>>>()(call.Arg<CancellationToken>()));
         _handler = new VerifyCodeCommandHandler(
-            _cache, _userRepo, _unitOfWork, _authSessionService, new SignupJobDispatcher(_jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _jobs);
+            _cache, _userRepo, _unitOfWork, _authSessionService, new SignupJobDispatcher(_jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _jobs, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
 
         _userRepo.UpsertAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(call => call.Arg<User>());
         _authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -60,6 +60,8 @@ public class VerifyCodeCommandHandlerTests
             user.SetStripeSubscription("sub_paid", expiryAtUtc);
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
         user.Deactivate(DateTime.UtcNow.AddDays(7));
+        if (play)
+            user.RecordDeletionStoppedRenewal(SubscriptionSource.GooglePlay, "play-token");
         Job? enqueued = null;
         _jobs.Create(Arg.Do<Job>(job => { if (job.Type == typeof(CancelSubscriptionOnDeletionJob)) enqueued = job; }), Arg.Any<IState>());
 
@@ -69,11 +71,15 @@ public class VerifyCodeCommandHandlerTests
         result.Value.WasReactivated.Should().BeTrue();
         user.IsDeactivated.Should().BeFalse();
         user.ScheduledDeletionAt.Should().BeNull();
+        user.PlayRenewalStoppedByDeletion.Should().BeFalse("reactivation must resolve deletion-owned Play renewal");
+        _jobs.Received(play ? 1 : 0).Create(Arg.Is<Job>(job => job.Type == typeof(NotifyPlayRenewalOnReactivationJob)
+            && (Guid)job.Args[0] == user.Id && (string)job.Args[1] == "play-token"
+            && (Guid)job.Args[2] != Guid.Empty), Arg.Any<IState>());
         user.HasProAccess.Should().Be(!expired);
         user.Plan.Should().Be(expired ? UserPlan.Free : UserPlan.Pro);
         _jobs.Received(1).Create(Arg.Is<Job>(job => job.Type == typeof(CompleteSignupJob)
             && (Guid)job.Args[0] == user.Id && !(bool)job.Args[1]), Arg.Any<IState>());
-        _jobs.Received(!expired && !play ? 2 : 1).Create(Arg.Any<Job>(), Arg.Any<IState>());
+        _jobs.Received(play || !expired ? 2 : 1).Create(Arg.Any<Job>(), Arg.Any<IState>());
         if (!expired && !play)
         {
             _jobs.Received(1).Create(Arg.Is<Job>(job => job.Type == typeof(CancelSubscriptionOnDeletionJob)), Arg.Any<IState>());

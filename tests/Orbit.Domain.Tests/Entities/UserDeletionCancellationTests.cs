@@ -9,7 +9,7 @@ public class UserDeletionCancellationTests
     [Theory]
     [InlineData(SubscriptionSource.Stripe)]
     [InlineData(SubscriptionSource.GooglePlay)]
-    public void CancellationOwnership_SurvivesReactivationAndSameSubscriptionWebhook(SubscriptionSource source)
+    public void Reactivation_ResolvesPlayOwnershipAndPreservesStripeRestoration(SubscriptionSource source)
     {
         var user = CreatePaidUser();
         var identifier = source == SubscriptionSource.Stripe ? "sub_paid" : "play-token";
@@ -21,7 +21,7 @@ public class UserDeletionCancellationTests
             user.SetPlaySubscription(identifier, DateTime.UtcNow.AddDays(20));
 
         user.StripeRenewalStoppedByDeletion.Should().Be(source == SubscriptionSource.Stripe);
-        user.PlayRenewalStoppedByDeletion.Should().Be(source == SubscriptionSource.GooglePlay);
+        user.PlayRenewalStoppedByDeletion.Should().BeFalse();
         if (source == SubscriptionSource.Stripe)
         {
             user.RecordStripeRenewalRestored(identifier);

@@ -208,7 +208,7 @@ public class SendCodeCommandHandlerTests
             .Returns(Result.Success(new SessionTokens("jwt-token", "refresh-token")));
 
         return new VerifyCodeCommandHandler(
-            _cache, userRepo, unitOfWork, authSessionService, new SignupJobDispatcher(_backgroundJobClient, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _backgroundJobClient);
+            _cache, userRepo, unitOfWork, authSessionService, new SignupJobDispatcher(_backgroundJobClient, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), _backgroundJobClient, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
     }
 
     private static async Task WithEnv(string aspNetEnv, string? smokeEmail, string? smokeCode, Func<Task> body)

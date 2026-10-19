@@ -97,6 +97,7 @@ public class ProfileControllerTests
     }
 
     [Fact]
+    [Obsolete("Covers the deprecated PUT /api/Profile/ai-memory route.")]
     public async Task SetAiMemory_Success_ReturnsNoContent()
     {
         _mediator.Send(Arg.Any<SetAiMemoryCommand>(), Arg.Any<CancellationToken>())
@@ -109,6 +110,7 @@ public class ProfileControllerTests
     }
 
     [Fact]
+    [Obsolete("Covers the deprecated PUT /api/Profile/ai-memory route.")]
     public async Task SetAiMemory_Failure_ReturnsBadRequest()
     {
         _mediator.Send(Arg.Any<SetAiMemoryCommand>(), Arg.Any<CancellationToken>())

@@ -33,6 +33,7 @@ public class UserFactsControllerTests
     }
 
     [Fact]
+    [Obsolete("Covers the deprecated GET /api/user-facts route.")]
     public async Task GetUserFacts_Success_ReturnsOk()
     {
         _mediator.Send(Arg.Any<GetUserFactsQuery>(), Arg.Any<CancellationToken>())
@@ -44,6 +45,7 @@ public class UserFactsControllerTests
     }
 
     [Fact]
+    [Obsolete("Covers the deprecated GET /api/user-facts route.")]
     public async Task GetUserFacts_Failure_ReturnsBadRequest()
     {
         _mediator.Send(Arg.Any<GetUserFactsQuery>(), Arg.Any<CancellationToken>())
@@ -55,6 +57,7 @@ public class UserFactsControllerTests
     }
 
     [Fact]
+    [Obsolete("Covers the deprecated DELETE /api/user-facts/{id} route.")]
     public async Task DeleteUserFact_Success_ReturnsNoContent()
     {
         _mediator.Send(Arg.Any<DeleteUserFactCommand>(), Arg.Any<CancellationToken>())
@@ -66,6 +69,7 @@ public class UserFactsControllerTests
     }
 
     [Fact]
+    [Obsolete("Covers the deprecated DELETE /api/user-facts/{id} route.")]
     public async Task DeleteUserFact_NotFound_ReturnsNotFound()
     {
         _mediator.Send(Arg.Any<DeleteUserFactCommand>(), Arg.Any<CancellationToken>())
@@ -77,6 +81,7 @@ public class UserFactsControllerTests
     }
 
     [Fact]
+    [Obsolete("Covers the deprecated DELETE /api/user-facts/bulk route.")]
     public async Task BulkDeleteUserFacts_Success_ReturnsOk()
     {
         _mediator.Send(Arg.Any<BulkDeleteUserFactsCommand>(), Arg.Any<CancellationToken>())
@@ -89,6 +94,7 @@ public class UserFactsControllerTests
     }
 
     [Fact]
+    [Obsolete("Covers the deprecated DELETE /api/user-facts/bulk route.")]
     public async Task BulkDeleteUserFacts_Failure_ReturnsBadRequest()
     {
         _mediator.Send(Arg.Any<BulkDeleteUserFactsCommand>(), Arg.Any<CancellationToken>())
