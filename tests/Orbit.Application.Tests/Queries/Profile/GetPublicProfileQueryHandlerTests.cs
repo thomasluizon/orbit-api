@@ -139,11 +139,11 @@ public class GetPublicProfileQueryHandlerTests
     {
         var user = BuildOwner(u => u.SetPublicProfileVisibility(true, true, true, false));
         StubUserBySlug(user);
-        StubAchievements(AchievementDefinitions.BattleBuddy);
+        StubAchievements(AchievementDefinitions.FirstFriend);
 
         var result = await _handler.Handle(new GetPublicProfileQuery(Slug), CancellationToken.None);
 
-        result.Value.Achievements.Should().ContainSingle().Which.Name.Should().Be("Battle buddy");
+        result.Value.Achievements.Should().ContainSingle().Which.Name.Should().Be("First friend");
     }
 
     [Fact]

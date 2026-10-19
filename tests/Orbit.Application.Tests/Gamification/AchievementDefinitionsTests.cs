@@ -14,9 +14,9 @@ public class AchievementDefinitionsTests
     }
 
     [Fact]
-    public void All_Has39Achievements()
+    public void All_Has36Achievements()
     {
-        AchievementDefinitions.All.Should().HaveCount(39);
+        AchievementDefinitions.All.Should().HaveCount(36);
     }
 
     [Fact]
@@ -37,9 +37,6 @@ public class AchievementDefinitionsTests
             AchievementDefinitions.FirstFriend,
             AchievementDefinitions.SquadGoals,
             AchievementDefinitions.Cheerleader,
-            AchievementDefinitions.TeamPlayer,
-            AchievementDefinitions.MissionAccomplished,
-            AchievementDefinitions.BattleBuddy
         };
 
         retiredIds.Should().AllSatisfy(id => AchievementDefinitions.GetById(id)!.IsRetired.Should().BeTrue());
@@ -111,7 +108,7 @@ public class AchievementDefinitionsTests
     {
         var categories = AchievementDefinitions.All.Select(a => a.Category).Distinct().ToList();
 
-        categories.Should().HaveCount(9);
+        categories.Should().HaveCount(8);
     }
 
     [Fact]
@@ -163,13 +160,13 @@ public class AchievementDefinitionsTests
     }
 
     [Fact]
-    public void TogetherCategory_Has3Achievements()
+    public void RemovedAchievements_HaveNoDefinitionsOrCategory()
     {
-        var together = AchievementDefinitions.All
-            .Where(a => a.Category == Domain.Enums.AchievementCategory.Together)
-            .ToList();
+        var removedIds = new[] { "team_player", "mission_accomplished", "battle_buddy" };
 
-        together.Should().HaveCount(3);
+        AchievementDefinitions.All.Should().NotContain(a => removedIds.Contains(a.Id));
+        removedIds.Should().AllSatisfy(id => AchievementDefinitions.GetById(id).Should().BeNull());
+        Enum.GetNames<AchievementCategory>().Should().NotContain("Together");
     }
 
     [Theory]
@@ -182,9 +179,6 @@ public class AchievementDefinitionsTests
     [InlineData(AchievementDefinitions.Cheerleader, "Cheerleader", Domain.Enums.AchievementCategory.Social, Domain.Enums.AchievementRarity.Rare, 150)]
     [InlineData(AchievementDefinitions.ShowOff, "Show off", Domain.Enums.AchievementCategory.Sharing, Domain.Enums.AchievementRarity.Uncommon, 75)]
     [InlineData(AchievementDefinitions.YearInReview, "Year in review", Domain.Enums.AchievementCategory.Sharing, Domain.Enums.AchievementRarity.Uncommon, 75)]
-    [InlineData(AchievementDefinitions.TeamPlayer, "Team player", Domain.Enums.AchievementCategory.Together, Domain.Enums.AchievementRarity.Uncommon, 75)]
-    [InlineData(AchievementDefinitions.MissionAccomplished, "Mission accomplished", Domain.Enums.AchievementCategory.Together, Domain.Enums.AchievementRarity.Rare, 150)]
-    [InlineData(AchievementDefinitions.BattleBuddy, "Battle buddy", Domain.Enums.AchievementCategory.Together, Domain.Enums.AchievementRarity.Uncommon, 75)]
     [InlineData(AchievementDefinitions.StreakImmortal, "Streak immortal", Domain.Enums.AchievementCategory.Consistency, Domain.Enums.AchievementRarity.Legendary, 1500)]
     [InlineData(AchievementDefinitions.Unstoppable, "Unstoppable", Domain.Enums.AchievementCategory.Volume, Domain.Enums.AchievementRarity.Legendary, 1000)]
     public void NewAchievements_HaveExpectedMetadata(
