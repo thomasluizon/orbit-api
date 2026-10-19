@@ -32,6 +32,21 @@ public class AiSummaryServiceTests
     private static readonly Guid ValidUserId = Guid.NewGuid();
     private static readonly DateOnly Today = new(2025, 4, 1);
 
+    [Fact]
+    public async Task GenerateSummaryAsync_ReservesOutputTokensForReasoningAndJson()
+    {
+        string? body = null;
+        var service = BuildSummaryService("{\"summary\":\"You kept going.\"}", request => body = request);
+
+        var result = await InvokeGenerateSummaryAsync(service);
+
+        result.IsSuccess.Should().BeTrue();
+        using var document = JsonDocument.Parse(body!);
+        document.RootElement.GetProperty("model").GetString().Should().Be("gpt-6.1-sol");
+        document.RootElement.GetProperty("reasoning").GetProperty("effort").GetString().Should().Be("low");
+        document.RootElement.GetProperty("max_output_tokens").GetInt32().Should().Be(8192);
+    }
+
     private static readonly BindingFlags PrivateStatic =
         BindingFlags.NonPublic | BindingFlags.Static;
 

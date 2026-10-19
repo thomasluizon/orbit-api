@@ -1,6 +1,7 @@
 #pragma warning disable OPENAI001
 
 using System.ClientModel;
+using System.ClientModel.Primitives;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
@@ -14,7 +15,9 @@ namespace Orbit.Infrastructure.AI;
 public sealed partial class AiCompletionClient
 {
     private readonly ResponsesClient _responsesClient;
+    private readonly ResponsesClient _streamingResponsesClient;
     internal TimeSpan CompletionTimeout { get; }
+    internal TimeSpan StreamingCompletionTimeout { get; }
     private readonly string _primaryModel;
     private readonly string _subTaskModel;
     private readonly ILogger<AiCompletionClient> _logger;
@@ -30,22 +33,33 @@ public sealed partial class AiCompletionClient
         IOptions<AiSettings> options,
         ILogger<AiCompletionClient> logger,
         IAiUsageRecorder usageRecorder)
+        : this(options, logger, usageRecorder, null)
+    {
+    }
+
+    internal AiCompletionClient(
+        IOptions<AiSettings> options,
+        ILogger<AiCompletionClient> logger,
+        IAiUsageRecorder usageRecorder,
+        PipelineTransport? transport)
     {
         _logger = logger;
         _usageRecorder = usageRecorder;
         var settings = options.Value;
         CompletionTimeout = settings.CompletionTimeout;
+        StreamingCompletionTimeout = settings.StreamingCompletionTimeout;
 
-        var clientOptions = new ResponsesClientOptions
+        ResponsesClient CreateClient(int networkTimeoutSeconds) => new(new ApiKeyCredential(settings.ApiKey), new ResponsesClientOptions
         {
             Endpoint = new Uri(settings.BaseUrl),
-            NetworkTimeout = TimeSpan.FromSeconds(settings.NetworkTimeoutSeconds),
+            NetworkTimeout = TimeSpan.FromSeconds(networkTimeoutSeconds),
+            Transport = transport,
             RetryPolicy = new AiRetryLoggingPolicy(settings.MaxRetries, logger)
-        };
-        var credential = new ApiKeyCredential(settings.ApiKey);
+        });
 
         _primaryModel = settings.Model;
-        _responsesClient = new ResponsesClient(credential, clientOptions);
+        _responsesClient = CreateClient(settings.BufferedNetworkTimeoutSeconds);
+        _streamingResponsesClient = CreateClient(settings.NetworkTimeoutSeconds);
 
         _subTaskModel = ResolveSubTaskModel(settings.SubTaskModel, settings.Model);
     }
@@ -56,7 +70,7 @@ public sealed partial class AiCompletionClient
     internal static bool ShouldApplyTemperature(AiModelTier tier, string primaryModel, string subTaskModel)
         => !IsReasoningModel(tier == AiModelTier.SubTask ? subTaskModel : primaryModel);
 
-    private static bool IsReasoningModel(string model)
+    internal static bool IsReasoningModel(string model)
         => model.StartsWith("gpt-5", StringComparison.OrdinalIgnoreCase)
             || model.StartsWith("gpt-6", StringComparison.OrdinalIgnoreCase)
             || model.StartsWith("o1", StringComparison.OrdinalIgnoreCase)
@@ -68,11 +82,13 @@ public sealed partial class AiCompletionClient
         ILogger<AiCompletionClient> logger,
         IAiUsageRecorder usageRecorder,
         TimeSpan? completionTimeout = null,
-        string primaryModel = "gpt-4.1-mini",
+        string primaryModel = "gpt-6.1-sol",
         string subTaskModel = "gpt-6-luna")
     {
         CompletionTimeout = completionTimeout ?? new AiSettings().CompletionTimeout;
+        StreamingCompletionTimeout = completionTimeout ?? new AiSettings().StreamingCompletionTimeout;
         _responsesClient = responsesClient;
+        _streamingResponsesClient = responsesClient;
         _primaryModel = primaryModel;
         _subTaskModel = ResolveSubTaskModel(subTaskModel, primaryModel);
         _logger = logger;
@@ -80,6 +96,7 @@ public sealed partial class AiCompletionClient
     }
 
     internal ResponsesClient ResponsesClient => _responsesClient;
+    internal ResponsesClient StreamingResponsesClient => _streamingResponsesClient;
 
     internal string ChatModel => _primaryModel;
 
@@ -99,15 +116,17 @@ public sealed partial class AiCompletionClient
         if (ShouldApplyTemperature(tier, _primaryModel, _subTaskModel))
             options.Temperature = (float)temperature;
         else
+        {
             options.ReasoningOptions = new ResponseReasoningOptions
             {
                 ReasoningEffortLevel = ResponseReasoningEffortLevel.Low
             };
+            options.IncludedProperties.Add(IncludedResponseProperty.ReasoningEncryptedContent);
+        }
 
-        options.IncludedProperties.Add(IncludedResponseProperty.ReasoningEncryptedContent);
         if (userId is { } id && id != Guid.Empty)
         {
-            options.EndUserId = id.ToString("N");
+            options.SafetyIdentifier = id.ToString("N");
             options.PromptCacheKey = id.ToString("N");
         }
         return options;
@@ -133,7 +152,7 @@ public sealed partial class AiCompletionClient
         var completion = await _responsesClient.CreateResponseAsync(options, cancellationToken);
         await RecordUsageAsync(completion.Value.Usage, purpose, options.Model, cancellationToken);
         EnsureSuccessful(completion.Value);
-        var text = completion.Value.GetOutputText();
+        var text = GetAssistantOutputText(completion.Value);
 
         if (!string.IsNullOrWhiteSpace(text))
             LogTextCompletionSuccessful(_logger, text.Length);
@@ -166,7 +185,7 @@ public sealed partial class AiCompletionClient
         var completion = await _responsesClient.CreateResponseAsync(options, cancellationToken);
         await RecordUsageAsync(completion.Value.Usage, purpose, options.Model, cancellationToken, userId);
         EnsureSuccessful(completion.Value);
-        var text = completion.Value.GetOutputText();
+        var text = GetAssistantOutputText(completion.Value);
 
         if (string.IsNullOrWhiteSpace(text))
         {
@@ -185,10 +204,18 @@ public sealed partial class AiCompletionClient
             throw new InvalidOperationException("AI response did not complete successfully.");
     }
 
-    internal CancellationTokenSource CreateCompletionCancellation(CancellationToken cancellationToken)
+    internal static string GetAssistantOutputText(ResponseResult response)
+        => string.Join("\n\n", response.OutputItems.OfType<MessageResponseItem>()
+            .Where(message => message.Role == MessageRole.Assistant)
+            .Select(message => string.Concat(message.Content
+                .Where(part => part.Kind == ResponseContentPartKind.OutputText)
+                .Select(part => part.Text)))
+            .Where(text => !string.IsNullOrEmpty(text)));
+
+    internal CancellationTokenSource CreateCompletionCancellation(CancellationToken cancellationToken, bool streaming = false)
     {
         var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        cancellation.CancelAfter(CompletionTimeout);
+        cancellation.CancelAfter(streaming ? StreamingCompletionTimeout : CompletionTimeout);
         return cancellation;
     }
 

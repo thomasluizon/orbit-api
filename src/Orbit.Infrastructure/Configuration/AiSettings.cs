@@ -9,13 +9,16 @@ public sealed class AiSettings
     public string TranscriptionModel { get; init; } = "whisper-1";
     public string BaseUrl { get; init; } = "https://api.openai.com/v1";
     public int NetworkTimeoutSeconds { get; init; } = 15;
+    public int BufferedNetworkTimeoutSeconds { get; init; } = 90;
     public int MaxRetries { get; init; } = 2;
 
     /// <summary>
     /// Bounds the whole completion, including every network attempt and retry wait.
     /// Each retry has one network-timeout allowance for its request and one for its wait.
     /// </summary>
-    public TimeSpan CompletionTimeout => TimeSpan.FromSeconds((long)NetworkTimeoutSeconds * (2L * MaxRetries + 1));
+    public TimeSpan CompletionTimeout => TimeSpan.FromSeconds(
+        (long)Math.Max(BufferedNetworkTimeoutSeconds, NetworkTimeoutSeconds) * (2L * MaxRetries + 1));
+    public TimeSpan StreamingCompletionTimeout => TimeSpan.FromSeconds((long)NetworkTimeoutSeconds * (2L * MaxRetries + 1));
     public Dictionary<string, AiModelPrice> Pricing { get; init; } = new();
 }
 

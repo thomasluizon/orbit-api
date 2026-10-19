@@ -135,7 +135,7 @@ public sealed partial class AiIntentService(
         Func<AiStreamEvent, Task>? streamSink,
         CancellationToken cancellationToken)
     {
-        using var completionCancellation = aiClient.CreateCompletionCancellation(cancellationToken);
+        using var completionCancellation = aiClient.CreateCompletionCancellation(cancellationToken, streaming: streamSink is not null);
         cancellationToken = completionCancellation.Token;
         try
         {
@@ -226,9 +226,10 @@ public sealed partial class AiIntentService(
         options.StreamingEnabled = true;
         var firstTokenLogged = false;
         var contentEmitted = false;
+        int? lastTextOutputIndex = null;
         ResponseResult? response = null;
 
-        await foreach (var update in aiClient.ResponsesClient.CreateResponseStreamingAsync(options, cancellationToken))
+        await foreach (var update in aiClient.StreamingResponsesClient.CreateResponseStreamingAsync(options, cancellationToken))
         {
             switch (update)
             {
@@ -239,6 +240,9 @@ public sealed partial class AiIntentService(
                         if (logger.IsEnabled(LogLevel.Debug))
                             LogFirstContentToken(logger, stopwatch.ElapsedMilliseconds);
                     }
+                    if (lastTextOutputIndex is not null && lastTextOutputIndex != delta.OutputIndex)
+                        await streamSink(AiStreamEvent.Delta("\n\n"));
+                    lastTextOutputIndex = delta.OutputIndex;
                     contentEmitted = true;
                     await streamSink(AiStreamEvent.Delta(delta.Delta));
                     break;
@@ -284,7 +288,8 @@ public sealed partial class AiIntentService(
         AiCompletionClient.EnsureSuccessful(response);
 
         foreach (var item in response.OutputItems)
-            messages.Add(item);
+            if (item is not ReasoningResponseItem || AiCompletionClient.IsReasoningModel(aiClient.ChatModel))
+                messages.Add(item);
 
         var truncated = response.IncompleteStatusDetails?.Reason == ResponseIncompleteStatusReason.MaxOutputTokens;
         if (truncated && logger.IsEnabled(LogLevel.Warning))
@@ -294,7 +299,7 @@ public sealed partial class AiIntentService(
         if (response.Status == ResponseStatus.Incomplete && toolCalls.Count > 0)
             throw new InvalidOperationException("AI returned incomplete tool calls.");
 
-        return new CompletedRound(response.GetOutputText(), toolCalls, GetReportedTokenCount(response.Usage), truncated);
+        return new CompletedRound(AiCompletionClient.GetAssistantOutputText(response), toolCalls, GetReportedTokenCount(response.Usage), truncated);
     }
 
     private static List<AiToolCall> ToAiToolCalls(IReadOnlyList<FunctionCallResponseItem> toolCalls)

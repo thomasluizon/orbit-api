@@ -24,6 +24,29 @@ public class AiSettingsTests
 
         settings.SubTaskModel.Should().Be("gpt-6-luna");
     }
+
+    [Fact]
+    public void Defaults_AllowBufferedReasoningWithoutExtendingStreamingNetworkTimeout()
+    {
+        var settings = new AiSettings();
+
+        settings.NetworkTimeoutSeconds.Should().Be(15);
+        settings.CompletionTimeout.Should().Be(TimeSpan.FromSeconds(450));
+    }
+
+    [Fact]
+    public void RenderEnvironmentGroups_UseConfiguredPrimaryAndSubTaskModels()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Orbit.slnx")))
+            directory = directory.Parent;
+        directory.Should().NotBeNull();
+        var terraform = File.ReadAllText(Path.Combine(directory!.FullName, "infra", "configuration.tf"));
+
+        terraform.Should().MatchRegex("AI__Model\\s*=\\s*\"gpt-6.1-sol\"");
+        terraform.Should().MatchRegex("AI__SubTaskModel\\s*=\\s*\"gpt-6-luna\"");
+        terraform.Should().Contain("staging_api_values = merge(local.production_api_values, {");
+    }
     [Fact]
     public void ConfiguredAndDefaultModels_HavePricingRows()
     {
