@@ -99,10 +99,12 @@ public sealed class CalendarAutoSyncServiceTests : IDisposable
     public async Task RunAsync_FreePlan_DoesNotDispatchUser()
     {
         var user = CreateEligibleUser();
-        user.CancelStripeSubscription(SubscriptionLapseReason.Expired);
+        _db.Users.Add(user);
+        _db.Entry(user).Property(u => u.Plan).CurrentValue = UserPlan.Free;
         user.GoogleCalendarAutoSyncEnabled.Should().BeTrue();
+        user.PlanExpiresAt.Should().BeAfter(NowUtc);
 
-        await SeedAndRunAsync(user);
+        await SeedAndRunAsync();
 
         _dispatchedUserIds.Should().BeEmpty();
     }
