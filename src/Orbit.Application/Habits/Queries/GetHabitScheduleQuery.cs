@@ -51,7 +51,11 @@ public record HabitScheduleItem(
     IReadOnlyList<SearchMatchField>? SearchMatches = null,
     string? Emoji = null,
     int? IntervalWeeks = null,
-    IReadOnlyList<RelativeReminderTime>? RelativeReminders = null);
+    IReadOnlyList<RelativeReminderTime>? RelativeReminders = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    HabitSchedule? Schedule = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    DateOnly? StartDate = null);
 
 public record HabitScheduleChildItem(
     Guid Id,
@@ -83,7 +87,11 @@ public record HabitScheduleChildItem(
     string? Emoji = null,
     int? IntervalWeeks = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    DateTime? CreatedAtUtc = null);
+    DateTime? CreatedAtUtc = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    HabitSchedule? Schedule = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    DateOnly? StartDate = null);
 
 public record GetHabitScheduleQuery(
     Guid UserId,
@@ -372,7 +380,9 @@ public class GetHabitScheduleQueryHandler(
                     h.IsCompleted,
                     h.IsGeneral,
                     h.IsFlexible,
-                    h.Days.ToList()),
+                    h.Days.ToList(),
+                    h.Schedule,
+                    h.StartDate),
                 h.Title,
                 includeDescription ? h.Description : null,
                 h.Position,

@@ -73,6 +73,12 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     public int? IntervalWeeks { get; private set; }
     public bool IsBadHabit { get; private set; }
     public bool IsCompleted { get; private set; }
+    public HabitSchedule Schedule { get; private set; }
+    /// <summary>
+    /// The date the habit was created to start. This creation anchor stays fixed when DueDate
+    /// moves, including to an earlier date; the clamp applies to the backfill only.
+    /// </summary>
+    public DateOnly StartDate { get; private set; }
     public DateOnly DueDate { get; private set; }
     public DateOnly? ScheduledStartDate { get; private set; }
     /// <summary>
@@ -157,6 +163,8 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         FrequencyQuantity = snapshot.FrequencyQuantity,
         IntervalWeeks = snapshot.IntervalWeeks,
         DueDate = snapshot.DueDate,
+        StartDate = snapshot.StartDate,
+        Schedule = snapshot.Schedule,
         ScheduledStartDate = snapshot.ScheduledStartDate,
         OriginalDayOfMonth = snapshot.OriginalDayOfMonth,
         EndDate = snapshot.EndDate,
@@ -252,6 +260,8 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             IsGeneral = p.IsGeneral,
             IsFlexible = p.IsFlexible,
             DueDate = p.DueDate,
+            StartDate = p.DueDate,
+            Schedule = ResolveSchedule(p.IsGeneral, p.IsFlexible, p.FrequencyUnit),
             ScheduledStartDate = p.DueDate,
             OriginalDayOfMonth = p.FrequencyUnit is Enums.FrequencyUnit.Month or Enums.FrequencyUnit.Year
                 ? p.DueDate.Day
@@ -273,6 +283,12 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             CreatedAtUtc = ResolveCreatedAtUtc(p.CreatedAtUtc)
         });
     }
+
+    private static HabitSchedule ResolveSchedule(bool isGeneral, bool isFlexible, FrequencyUnit? frequencyUnit) =>
+        isGeneral ? HabitSchedule.General
+        : isFlexible ? HabitSchedule.Flexible
+        : frequencyUnit is null ? HabitSchedule.OneTime
+        : HabitSchedule.Recurring;
 
     private static DateTime ResolveCreatedAtUtc(DateTime? createdAtUtc) => createdAtUtc ?? DateTime.UtcNow;
 
@@ -638,6 +654,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         var previousDueTime = DueTime;
         ApplyRequiredUpdates(p);
         ApplyOptionalUpdates(p);
+        Schedule = ResolveSchedule(IsGeneral, IsFlexible, FrequencyUnit);
 
         if (!previousDueTime.HasValue && DueTime.HasValue && p.ReminderTimes is null && RelativeReminders.Count > 0)
             ReminderTimes = [];

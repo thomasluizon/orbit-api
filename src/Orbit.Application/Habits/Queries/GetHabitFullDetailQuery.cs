@@ -79,7 +79,9 @@ public class GetHabitFullDetailQueryHandler(
                 ? habit.Goals.Select(goal => new LinkedGoalDto(goal.Id, goal.Title)).ToList()
                 : null,
             SlipAlertEnabled: habit.ParentHabitId.HasValue ? habit.SlipAlertEnabled : null,
-            RelativeReminders: habit.RelativeReminders);
+            RelativeReminders: habit.RelativeReminders,
+            Schedule: habit.Schedule,
+            StartDate: habit.StartDate);
 
         var metrics = HabitMetricsCalculator.Calculate(
             habit,
