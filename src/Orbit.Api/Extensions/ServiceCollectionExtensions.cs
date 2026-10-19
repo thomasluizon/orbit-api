@@ -156,6 +156,10 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.GoogleCalendarSyncSuggestion>>()));
+        builder.Services.AddScoped<Orbit.Application.Profile.Queries.ProfileStreakServices>(sp =>
+            new Orbit.Application.Profile.Queries.ProfileStreakServices(
+                sp.GetRequiredService<IUserDateService>(),
+                sp.GetRequiredService<IUserStreakService>()));
         builder.Services.AddScoped<Orbit.Application.Profile.Commands.ApplyOnboardingRepositories>(sp =>
             new Orbit.Application.Profile.Commands.ApplyOnboardingRepositories(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),

@@ -27,10 +27,10 @@ A yearly habit anchored on **February 29** fires on **February 28** in non-leap 
 
 The "every N" interval (every 2 weeks, every 3 months, and so on) is measured from the anchor date, not from the current date. The anchor is the fixed reference point the whole schedule lines up against.
 
-## Overdue is DueDate-authoritative
+## When a habit is overdue
 
 A habit is **overdue when its due date has fallen before today**. The due date rests on the oldest unresolved occurrence; logging or skipping advances it past today. This single signal — due date earlier than today — is what marks a recurring habit overdue everywhere in the app.
 
 Bad habits are never overdue (there's no "must do" expectation to miss), and flexible habits use their window instead of an overdue date.
 
-The default overdue lookback window is **7** days (`DefaultOverdueWindowDays`): the day view surfaces unresolved occurrences from up to a week back so a missed day doesn't silently disappear.
+The default overdue lookback window is **7** days: the day view surfaces unresolved occurrences from up to a week back so a missed day doesn't silently disappear.

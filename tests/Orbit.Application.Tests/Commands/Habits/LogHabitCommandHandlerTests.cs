@@ -15,6 +15,7 @@ using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using System.Data.Common;
 using System.Linq.Expressions;
+using System.Text.Json;
 using Orbit.Application.Tests.Common;
 
 namespace Orbit.Application.Tests.Commands.Habits;
@@ -177,12 +178,21 @@ public class LogHabitCommandHandlerTests
         var logged = await _handler.Handle(command, CancellationToken.None);
         logged.IsSuccess.Should().BeTrue();
         habit.DueDate.Should().Be(Today.AddDays(1));
+        _userStreakService.CalculateAsync(UserId, Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            habit.Logs.Should().ContainSingle(log => log.Date == Today && !log.IsDeleted);
+            return new UserStreakState(1, 1, Today);
+        });
+        _userStreakService.RecalculateAsync(UserId, false, Arg.Any<CancellationToken>())
+            .Returns(new UserStreakState(0, 1, null));
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.ErrorCode.Should().NotBe(ErrorCodes.NotScheduledOnDate);
         result.IsSuccess.Should().BeTrue();
         habit.DueDate.Should().Be(Today);
+        result.Value.PreviousStreak.Should().Be(1);
+        result.Value.CurrentStreak.Should().Be(0);
         _habitLogRepo.DidNotReceive().Remove(Arg.Any<HabitLog>());
         habit.Logs.Should().ContainSingle(l => l.Date == Today).Which.IsDeleted.Should().BeTrue();
         habit.Logs.Should().NotContain(l => l.Date == Today && !l.IsDeleted);
@@ -826,22 +836,48 @@ public class LogHabitCommandHandlerTests
             Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task Handle_UserUpdatesStreak()
+    [Theory]
+    [InlineData(3, 0, 1, false)]
+    [InlineData(1, 2, 3, false)]
+    [InlineData(0, 3, 3, false)]
+    [InlineData(1, 2, 2, true)]
+    public async Task Handle_UserUpdatesStreak(int daysSinceActive, int previousStreak, int currentStreak, bool unscheduled)
     {
-        var habit = CreateTestHabit();
+        var habit = unscheduled
+            ? Habit.Create(new HabitCreateParams(UserId, "Weekly", FrequencyUnit.Week, 1, DueDate: Today.AddDays(-1))).Value
+            : CreateTestHabit();
         _habitRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(habit);
+        var user = User.Create("Streak", "streak@test.com").Value;
+        user.SetStreakState(2, 9, Today.AddDays(-daysSinceActive));
+        _userRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
+            Arg.Any<CancellationToken>()).Returns(user);
+        _habitRepo.AnyAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(daysSinceActive == 0);
+        _userStreakService.CalculateAsync(UserId, Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            habit.Logs.Should().NotContain(log => log.Date == Today);
+            return new UserStreakState(previousStreak, 9, user.LastActiveDate);
+        });
+        _userStreakService.RecalculateAsync(UserId, cancellationToken: Arg.Any<CancellationToken>())
+            .Returns(new UserStreakState(currentStreak, 9, Today));
 
         var command = new LogHabitCommand(UserId, habit.Id);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.CurrentStreak.Should().BeGreaterThanOrEqualTo(0);
+        result.Value.CurrentStreak.Should().Be(currentStreak);
+        result.Value.IsFirstCompletionToday.Should().Be(daysSinceActive != 0);
+        var payload = JsonSerializer.SerializeToElement(result.Value, JsonSerializerOptions.Web);
+        payload.TryGetProperty("previousStreak", out var previous).Should().BeTrue();
+        previous.GetInt32().Should().Be(previousStreak);
+        await _userStreakService.Received(1).CalculateAsync(UserId, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -874,6 +910,8 @@ public class LogHabitCommandHandlerTests
             Arg.Any<Expression<Func<User, bool>>>(),
             Arg.Any<CancellationToken>())
             .Returns(new[] { streakUser });
+        _userStreakService.CalculateAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new UserStreakState(3, 9, Today.AddDays(-1)), new UserStreakState(4, 9, Today));
 
         var command = new LogHabitCommand(UserId, habit.Id);
 
@@ -883,6 +921,9 @@ public class LogHabitCommandHandlerTests
         result.Value.LogId.Should().Be(winningLog.Id);
         result.Value.IsFirstCompletionToday.Should().BeFalse();
         result.Value.CurrentStreak.Should().Be(4);
+        var payload = JsonSerializer.SerializeToElement(result.Value, JsonSerializerOptions.Web);
+        payload.TryGetProperty("previousStreak", out var previous).Should().BeTrue();
+        previous.GetInt32().Should().Be(4);
         result.Value.XpEarned.Should().BeNull();
         result.Value.NewAchievementIds.Should().BeNull();
         _unitOfWork.Received(1).DiscardChanges();

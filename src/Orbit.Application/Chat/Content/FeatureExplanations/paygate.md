@@ -24,10 +24,7 @@ Orbit has a free plan and a Pro plan. The free plan is fully usable for daily ha
 
 Upgrading to Pro unlocks:
 
-- AI goal reviews
 - Sub-habits
 - The daily AI summary
 - Calendar integration
-- Streak freezes
-- Gamification: XP, levels, and achievements
 - Retrospectives
