@@ -1,6 +1,7 @@
 #pragma warning disable OPENAI001
 
 using System.ClientModel;
+using System.Diagnostics;
 using System.ClientModel.Primitives;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -8,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenAI.Responses;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using Orbit.Infrastructure.Configuration;
 
 namespace Orbit.Infrastructure.AI;
@@ -149,10 +151,9 @@ public sealed partial class AiCompletionClient
 
         LogCallingTextCompletion(_logger);
 
-        var completion = await _responsesClient.CreateResponseAsync(options, cancellationToken);
-        await RecordUsageAsync(completion.Value.Usage, purpose, options.Model, cancellationToken);
-        EnsureSuccessful(completion.Value);
-        var text = GetAssistantOutputText(completion.Value);
+        var response = await ExecuteResponseAsync(options, purpose, cancellationToken);
+        EnsureSuccessful(response);
+        var text = GetAssistantOutputText(response);
 
         if (!string.IsNullOrWhiteSpace(text))
             LogTextCompletionSuccessful(_logger, text.Length);
@@ -182,10 +183,9 @@ public sealed partial class AiCompletionClient
 
         LogCallingJsonCompletion(_logger);
 
-        var completion = await _responsesClient.CreateResponseAsync(options, cancellationToken);
-        await RecordUsageAsync(completion.Value.Usage, purpose, options.Model, cancellationToken, userId);
-        EnsureSuccessful(completion.Value);
-        var text = GetAssistantOutputText(completion.Value);
+        var response = await ExecuteResponseAsync(options, purpose, cancellationToken, userId);
+        EnsureSuccessful(response);
+        var text = GetAssistantOutputText(response);
 
         if (string.IsNullOrWhiteSpace(text))
         {
@@ -219,37 +219,47 @@ public sealed partial class AiCompletionClient
         return cancellation;
     }
 
-    private async Task RecordUsageAsync(
-        ResponseTokenUsage? usage,
+    private async Task<ResponseResult> ExecuteResponseAsync(
+        CreateResponseOptions options,
         string purpose,
-        string model,
         CancellationToken cancellationToken,
         Guid? userId = null)
     {
-        if (usage is null)
-            return;
-
-        var cachedTokens = usage.InputTokenDetails?.CachedTokenCount ?? 0;
-
-        LogAiTokenUsage(
-            _logger,
-            purpose,
-            model,
-            cachedTokens,
-            usage.InputTokenCount,
-            usage.OutputTokenCount,
-            usage.TotalTokenCount);
-
-        await _usageRecorder.RecordAsync(
-            purpose,
-            model,
-            cachedTokens,
-            usage.InputTokenCount,
-            usage.OutputTokenCount,
-            usage.TotalTokenCount,
-            cancellationToken,
-            userId);
+        var stopwatch = Stopwatch.StartNew();
+        ResponseResult? response = null;
+        var traceId = Guid.NewGuid().ToString("N");
+        try
+        {
+            var completion = await _responsesClient.CreateResponseAsync(options, cancellationToken);
+            response = completion.Value;
+            return response;
+        }
+        finally
+        {
+            stopwatch.Stop();
+            var usage = response?.Usage;
+            if (usage is not null)
+                LogAiTokenUsage(_logger, purpose, options.Model, usage.InputTokenDetails?.CachedTokenCount ?? 0,
+                    usage.InputTokenCount, usage.OutputTokenCount, usage.TotalTokenCount);
+            try
+            {
+                await _usageRecorder.RecordAsync(purpose, options.Model,
+                    usage?.InputTokenDetails?.CachedTokenCount ?? 0,
+                    usage?.InputTokenCount ?? 0, usage?.OutputTokenCount ?? 0, usage?.TotalTokenCount ?? 0,
+                    CancellationToken.None, userId,
+                    new AiCallTelemetry(traceId, stopwatch.Elapsed.TotalSeconds,
+                        response is null || response.Status is not (ResponseStatus.Completed or ResponseStatus.Incomplete),
+                        [], HasUsage: usage is not null));
+            }
+            catch (Exception ex)
+            {
+                LogUsageRecordFailed(_logger, options.Model, purpose, ex);
+            }
+        }
     }
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Warning, Message = "Failed to record AI usage for {Model} ({Purpose})")]
+    private static partial void LogUsageRecordFailed(ILogger logger, string model, string purpose, Exception ex);
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Calling AI API for text completion...")]
     private static partial void LogCallingTextCompletion(ILogger logger);

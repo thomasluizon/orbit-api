@@ -223,13 +223,35 @@ public partial class ProcessUserChatCommandHandler(
         cancellationToken = turnCancellation.Token;
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
         LogProcessingChatMessage(logger, request.Message);
-        var detectedCrisisLocales = CrisisSupportGuard.Detect(request.Message);
 
         var contextResult = await LoadChatContextAsync(request, cancellationToken);
         if (contextResult.IsFailure)
             return contextResult.PropagateError<ChatResponse>();
 
         var context = contextResult.Value;
+        var plan = GetAnalyticsPlan(context.User);
+        var telemetry = new AiTurnTelemetry(request.CorrelationId, plan);
+        try
+        {
+            return await HandleLoadedTurnAsync(request, context, telemetry, totalStopwatch, answeredAtUtc, cancellationToken);
+        }
+        finally
+        {
+            AnalyticsCapture.SafeCaptureUserEvent(execution.ProductAnalytics, logger, request.UserId, plan,
+                "astra_message_sent", new Dictionary<string, object>
+                {
+                    ["plan"] = plan,
+                    ["round_count"] = telemetry.RoundCount,
+                    ["tool_call_count"] = telemetry.ToolCallCount
+                });
+        }
+    }
+
+    private async Task<Result<ChatResponse>> HandleLoadedTurnAsync(
+        ProcessUserChatCommand request, ChatContext context, AiTurnTelemetry telemetry,
+        System.Diagnostics.Stopwatch totalStopwatch, DateTime? answeredAtUtc, CancellationToken cancellationToken)
+    {
+        var detectedCrisisLocales = CrisisSupportGuard.Detect(request.Message);
         var crisisTurn = CrisisSupportGuard.IsEnabled(detectedCrisisLocales, context.EnabledFeatureFlags);
         if (crisisTurn)
             return await HandleCrisisTurnAsync(request, detectedCrisisLocales);
@@ -257,7 +279,7 @@ public partial class ProcessUserChatCommandHandler(
                 ChatToolGroups.IsKnownEntryPointIntent(GetEntryPointIntent(request)));
 
         var aiStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var response = await RequestInitialAiResponseAsync(request, context, aiStreamSink, skipTools, cancellationToken);
+        var response = await RequestInitialAiResponseAsync(request, context, aiStreamSink, skipTools, telemetry, cancellationToken);
         aiStopwatch.Stop();
         LogAiIntentServiceCompleted(logger, aiStopwatch.ElapsedMilliseconds);
 
@@ -359,6 +381,9 @@ public partial class ProcessUserChatCommandHandler(
             cards.Parts)
         { GroundingFacts = groundedReply.Facts });
     }
+
+    private static string GetAnalyticsPlan(User? user) =>
+        user is { IsPro: true } ? "pro" : user is { IsTrialActive: true } ? "trial" : "free";
 
     private static string? GetUserLanguage(User? user) => user?.Language;
 

@@ -22,6 +22,29 @@ namespace Orbit.Infrastructure.Tests.AI;
 
 public class AiCompletionClientTests
 {
+    [Theory]
+    [InlineData("text")]
+    [InlineData("json")]
+    public async Task BackgroundCalls_RecordPurposeLatencyAndOneTracePerRun(string kind)
+    {
+        var usage = Substitute.For<IAiUsageRecorder>();
+        var client = new AiCompletionClient(BuildResponsesClient(new CapturingHandler()), NullLogger<AiCompletionClient>.Instance, usage);
+        for (var index = 0; index < 2; index++)
+        {
+            if (kind == "json")
+                await client.CompleteJsonAsync<Probe>("private system", "private user", purpose: "daily_summary");
+            else
+                await client.CompleteTextAsync("private system", "private user", purpose: "daily_summary");
+        }
+        var calls = usage.ReceivedCalls().ToList();
+        calls.Should().HaveCount(2);
+        calls.Should().OnlyContain(call => (string)call.GetArguments()[0]! == "daily_summary");
+        var metadata = calls.Select(call => (AiCallTelemetry)call.GetArguments()[8]!).ToList();
+        metadata.Should().OnlyContain(call => call.LatencySeconds >= 0 && !call.IsError && call.HasUsage && call.ToolNames.Count == 0);
+        metadata.Select(call => call.TraceId).Distinct().Should().HaveCount(2);
+        JsonSerializer.Serialize(metadata).Should().NotContain("private");
+    }
+
     [Fact]
     public async Task CompleteJsonAsync_SubTaskTier_OmitsTemperature()
     {
@@ -35,7 +58,7 @@ public class AiCompletionClientTests
         handler.LastRequestUri.Should().EndWith("/responses");
         handler.LastRequestBody.Should().NotContain("temperature");
         await usageRecorder.Received(1).RecordAsync(
-            "fact_extraction", "gpt-6-luna", 0, 1, 2, 3, Arg.Any<CancellationToken>());
+            "fact_extraction", "gpt-6-luna", 0, 1, 2, 3, Arg.Any<CancellationToken>(), null, Arg.Any<AiCallTelemetry>());
     }
 
     [Theory]
@@ -60,7 +83,7 @@ public class AiCompletionClientTests
         document.RootElement.GetProperty("model").GetString().Should().Be("gpt-6-luna");
         document.RootElement.GetProperty("reasoning").GetProperty("effort").GetString().Should().Be("low");
         document.RootElement.TryGetProperty("temperature", out _).Should().BeFalse();
-        await usage.Received(1).RecordAsync(kind, "gpt-6-luna", 0, 1, 2, 3, Arg.Any<CancellationToken>());
+        await usage.Received(1).RecordAsync(kind, "gpt-6-luna", 0, 1, 2, 3, Arg.Any<CancellationToken>(), null, Arg.Any<AiCallTelemetry>());
     }
 
     [Fact]
@@ -89,7 +112,7 @@ public class AiCompletionClientTests
         await client.CompleteJsonAsync<Probe>("system", "user", userId: userId);
 
         await usageRecorder.Received(1).RecordAsync(
-            "json", "gpt-6-luna", 0, 1, 2, 3, Arg.Any<CancellationToken>(), userId);
+            "json", "gpt-6-luna", 0, 1, 2, 3, Arg.Any<CancellationToken>(), userId, Arg.Any<AiCallTelemetry>());
         using var document = JsonDocument.Parse(handler.LastRequestBody!);
         document.RootElement.GetProperty("safety_identifier").GetString().Should().Be(userId.ToString("N"));
         document.RootElement.GetProperty("prompt_cache_key").GetString().Should().Be(userId.ToString("N"));
@@ -172,6 +195,10 @@ public class AiCompletionClientTests
         await boundedCall.Should().ThrowAsync<OperationCanceledException>();
         client.CompletionTimeout.Should().Be(TimeSpan.FromSeconds(1));
         client.StreamingCompletionTimeout.Should().Be(TimeSpan.FromSeconds(75));
+        var metadata = (AiCallTelemetry)usage.ReceivedCalls().Single().GetArguments()[8]!;
+        metadata.IsError.Should().BeTrue();
+        metadata.HasUsage.Should().BeFalse();
+        metadata.LatencySeconds.Should().BeGreaterThan(0);
     }
 
     [Theory]

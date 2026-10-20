@@ -12,6 +12,26 @@ namespace Orbit.Infrastructure.Tests.Services;
 /// </summary>
 public class PostHogProductAnalyticsTests
 {
+    [Fact]
+    public void CaptureUserEvent_UnknownBackgroundPlan_PreservesExistingPersonPlanAndDollarProperties()
+    {
+        _analytics.CaptureUserEvent(Guid.NewGuid(), "$ai_generation", null,
+            new Dictionary<string, object> { ["$ai_input_tokens"] = 100L, ["$ai_is_error"] = false });
+
+        var properties = (Dictionary<string, object>)_postHogClient.ReceivedCalls().Single().GetArguments()[2]!;
+        properties.Should().NotContainKey("$set");
+        properties["$ai_input_tokens"].Should().Be(100L);
+        properties["$ai_is_error"].Should().Be(false);
+    }
+
+    [Fact]
+    public void CaptureAggregateEvent_BackgroundGeneration_UsesAiAggregateIdentity()
+    {
+        _analytics.CaptureAggregateEvent("$ai_generation", new Dictionary<string, object> { ["purpose"] = "daily_summary" });
+
+        _postHogClient.ReceivedCalls().Single().GetArguments()[0].Should().Be("aggregate:astra_ai");
+    }
+
     private readonly IPostHogClient _postHogClient = Substitute.For<IPostHogClient>();
     private readonly PostHogProductAnalytics _analytics;
 

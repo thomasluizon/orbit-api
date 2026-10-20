@@ -117,6 +117,29 @@ public class AiInputBudgetTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public async Task ToolLoader_RejectsNamesOutsideServerCatalogAndBoundsLoadingRounds()
+    {
+        var response = ResponsesTestData.Response();
+        response.OutputItems.Add(ResponseItem.CreateFunctionCallItem("load_1", "load_tools",
+            BinaryData.FromString("{\"tool_names\":[\"ask\"]}")));
+        var handler = new SequenceHandler(ModelReaderWriter.Write(response).ToString());
+
+        var result = await BuildService(handler).SendWithToolsAsync(new AiToolRequest("help me", "static", [])
+        {
+            AvailableToolDeclarations = [new { name = "duplicate_habit" }]
+        });
+
+        result.IsFailure.Should().BeTrue();
+        handler.Bodies.Should().HaveCount(3);
+        using var last = JsonDocument.Parse(handler.Bodies[^1]);
+        last.RootElement.GetProperty("tools").EnumerateArray().Select(tool => tool.GetProperty("name").GetString())
+            .Should().NotContain("ask");
+        last.RootElement.GetProperty("input").EnumerateArray().Where(item =>
+                item.TryGetProperty("type", out var type) && type.GetString() == "function_call_output")
+            .Should().OnlyContain(item => item.GetProperty("output").GetString()!.Contains("false"));
+    }
+
+    [Fact]
     public async Task FixedTurns_SerializedRequestTokenEstimate_DropsAtLeastThirtyPercent()
     {
         string[] turns = ["obrigado", "log my run today", "create a habit every wednesday and sunday",

@@ -21,6 +21,7 @@ public sealed record AiToolRequest(
 {
     public string? DynamicContext { get; init; }
     public IReadOnlyList<object> AvailableToolDeclarations { get; init; } = [];
+    public AiTurnTelemetry Telemetry { get; init; } = new();
 }
 
 public record AiToolCallResult(
@@ -45,6 +46,7 @@ public sealed class AiConversationContext
     /// <summary>User attributed to each model round in this conversation.</summary>
     public Guid? UserId { get; init; }
     public object? AvailableTools { get; init; }
+    public AiTurnTelemetry Telemetry { get; init; } = new();
 }
 
 public record AiResponse

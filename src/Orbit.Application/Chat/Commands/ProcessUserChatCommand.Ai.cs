@@ -17,6 +17,7 @@ public partial class ProcessUserChatCommandHandler
         ChatContext context,
         Func<AiStreamEvent, Task>? aiStreamSink,
         bool skipTools,
+        AiTurnTelemetry telemetry,
         CancellationToken cancellationToken)
     {
         var promptRequest = new PromptBuildRequest(
@@ -107,6 +108,7 @@ public partial class ProcessUserChatCommandHandler
                 request.ImageMimeType,
                 request.History)
             {
+                Telemetry = telemetry,
                 DynamicContext = dynamicContext,
                 AvailableToolDeclarations = skipTools ? [] : availableTools
             },

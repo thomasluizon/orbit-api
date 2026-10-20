@@ -70,7 +70,7 @@ public sealed partial class AiIntentService(
         foreach (var (name, tool) in activeTools)
             availableTools[name] = tool;
         AddToolLoader(options, availableTools);
-        return await CallWithToolsAsync(messages, options, usageUserId, streamSink, cancellationToken, availableTools);
+        return await CallWithToolsAsync(messages, options, usageUserId, streamSink, cancellationToken, availableTools, telemetry: request.Telemetry);
     }
 
     public async Task<Result<AiResponse>> ContinueWithToolResultsAsync(
@@ -106,7 +106,8 @@ public sealed partial class AiIntentService(
             conversationContext.UserId,
             streamSink,
             cancellationToken,
-            conversationContext.AvailableTools as IReadOnlyDictionary<string, ResponseTool>);
+            conversationContext.AvailableTools as IReadOnlyDictionary<string, ResponseTool>,
+            telemetry: conversationContext.Telemetry);
     }
 
     private void AddToolPayload(Dictionary<string, object> payload, AiToolCallResult result)
@@ -139,19 +140,19 @@ public sealed partial class AiIntentService(
         Func<AiStreamEvent, Task>? streamSink,
         CancellationToken cancellationToken,
         IReadOnlyDictionary<string, ResponseTool>? availableTools = null,
-        int toolLoadRounds = 0)
+        int toolLoadRounds = 0,
+        AiTurnTelemetry? telemetry = null)
     {
         using var completionCancellation = aiClient.CreateCompletionCancellation(cancellationToken, streaming: streamSink is not null);
         cancellationToken = completionCancellation.Token;
+        telemetry ??= new AiTurnTelemetry();
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             if (logger.IsEnabled(LogLevel.Debug))
                 LogCallingAiWithTools(logger);
-            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-            var round = streamSink is null
-                ? await CompleteBufferedRoundAsync(messages, options, userId, cancellationToken)
-                : await CompleteStreamingRoundAsync(messages, options, userId, streamSink, stopwatch, cancellationToken);
+            var round = await CompleteObservedRoundAsync(messages, options, userId, telemetry,
+                availableTools, streamSink, stopwatch, cancellationToken);
 
             stopwatch.Stop();
             if (logger.IsEnabled(LogLevel.Debug))
@@ -172,7 +173,7 @@ public sealed partial class AiIntentService(
                 if (toolCalls.Count == 0)
                 {
                     var loadedResult = await CallWithToolsAsync(messages, options, userId, streamSink,
-                        cancellationToken, availableTools, toolLoadRounds + 1);
+                        cancellationToken, availableTools, toolLoadRounds + 1, telemetry);
                     return loadedResult.IsFailure ? loadedResult : Result.Success(loadedResult.Value with
                     {
                         ReportedTokenCount = loadedResult.Value.ReportedTokenCount + round.ReportedTokenCount
@@ -190,7 +191,8 @@ public sealed partial class AiIntentService(
                     Messages = messages,
                     Options = options,
                     UserId = userId,
-                    AvailableTools = availableTools
+                    AvailableTools = availableTools,
+                    Telemetry = telemetry
                 };
                 return Result.Success(new AiResponse
                 {
@@ -227,22 +229,56 @@ public sealed partial class AiIntentService(
         }
     }
 
+    private async Task<CompletedRound> CompleteObservedRoundAsync(
+        List<ResponseItem> messages, CreateResponseOptions options, Guid? userId,
+        AiTurnTelemetry telemetry, IReadOnlyDictionary<string, ResponseTool>? availableTools,
+        Func<AiStreamEvent, Task>? streamSink, System.Diagnostics.Stopwatch stopwatch,
+        CancellationToken cancellationToken)
+    {
+        var observation = new ModelCallObservation();
+        try
+        {
+            return streamSink is null
+                ? await CompleteBufferedRoundAsync(messages, options, observation, cancellationToken)
+                : await CompleteStreamingRoundAsync(messages, options, observation, streamSink, stopwatch, cancellationToken);
+        }
+        finally
+        {
+            stopwatch.Stop();
+            var toolNames = observation.Response?.OutputItems.OfType<FunctionCallResponseItem>()
+                .Select(call => call.FunctionName)
+                .Where(name => name == ToolLoaderName || availableTools?.ContainsKey(name) == true)
+                .ToArray() ?? [];
+            telemetry.RecordRound(toolNames.Length);
+            await RecordChatUsageAsync(observation.Response?.Usage, streamSink is null ? "buffered" : "streaming",
+                userId, new AiCallTelemetry(telemetry.TraceId, stopwatch.Elapsed.TotalSeconds,
+                    observation.Response is null || observation.Response.Status is not (ResponseStatus.Completed or ResponseStatus.Incomplete),
+                    toolNames, telemetry.Plan, observation.Response?.Usage is not null));
+        }
+    }
+
+    private sealed class ModelCallObservation
+    {
+        public ResponseResult? Response { get; set; }
+    }
+
     private async Task<CompletedRound> CompleteBufferedRoundAsync(
         List<ResponseItem> messages,
         CreateResponseOptions options,
-        Guid? userId,
+        ModelCallObservation observation,
         CancellationToken cancellationToken)
     {
         SetInputItems(options, messages);
         options.StreamingEnabled = false;
         var completion = await aiClient.ResponsesClient.CreateResponseAsync(options, cancellationToken);
-        return await FinishRoundAsync(completion.Value, messages, "buffered", userId, cancellationToken);
+        observation.Response = completion.Value;
+        return FinishRound(completion.Value, messages, "buffered");
     }
 
     private async Task<CompletedRound> CompleteStreamingRoundAsync(
         List<ResponseItem> messages,
         CreateResponseOptions options,
-        Guid? userId,
+        ModelCallObservation observation,
         Func<AiStreamEvent, Task> streamSink,
         System.Diagnostics.Stopwatch stopwatch,
         CancellationToken cancellationToken)
@@ -288,7 +324,8 @@ public sealed partial class AiIntentService(
         if (response is null)
             throw new IOException("AI response stream ended before a terminal event.");
 
-        var round = await FinishRoundAsync(response, messages, "streaming", userId, cancellationToken);
+        observation.Response = response;
+        var round = FinishRound(response, messages, "streaming");
         if (round.ToolCalls.Count > 0 && contentEmitted)
             await streamSink(AiStreamEvent.Reset());
         return round;
@@ -301,15 +338,12 @@ public sealed partial class AiIntentService(
             options.InputItems.Add(message);
     }
 
-    private async Task<CompletedRound> FinishRoundAsync(
+    private CompletedRound FinishRound(
         ResponseResult response,
         List<ResponseItem> messages,
-        string phase,
-        Guid? userId,
-        CancellationToken cancellationToken)
+        string phase)
     {
         LogChatUsage(response.Usage, phase);
-        await RecordChatUsageAsync(response.Usage, phase, userId, cancellationToken);
         AiCompletionClient.EnsureSuccessful(response);
 
         foreach (var item in response.OutputItems)
@@ -446,13 +480,12 @@ public sealed partial class AiIntentService(
         ResponseTokenUsage? usage,
         string phase,
         Guid? userId,
-        CancellationToken cancellationToken)
+        AiCallTelemetry telemetry)
     {
         if (usage is null)
         {
             if (logger.IsEnabled(LogLevel.Warning))
                 LogChatUsageMissing(logger, phase);
-            return;
         }
 
         try
@@ -460,12 +493,13 @@ public sealed partial class AiIntentService(
             await usageRecorder.RecordAsync(
                 "chat",
                 aiClient.ChatModel,
-                usage.InputTokenDetails?.CachedTokenCount ?? 0,
-                usage.InputTokenCount,
-                usage.OutputTokenCount,
-                usage.TotalTokenCount,
-                cancellationToken,
-                userId);
+                usage?.InputTokenDetails?.CachedTokenCount ?? 0,
+                usage?.InputTokenCount ?? 0,
+                usage?.OutputTokenCount ?? 0,
+                usage?.TotalTokenCount ?? 0,
+                CancellationToken.None,
+                userId,
+                telemetry);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

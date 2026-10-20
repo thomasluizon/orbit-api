@@ -23,6 +23,39 @@ namespace Orbit.Infrastructure.Tests.AI;
 public class AiIntentServiceStreamingTests
 {
     [Fact]
+    public async Task SendWithToolsAsync_StreamFailure_RecordsErrorWithoutUsage()
+    {
+        var usage = Substitute.For<IAiUsageRecorder>();
+        var (service, sink) = BuildService(new DroppingHandler(""), usage);
+
+        var result = await service.SendWithToolsAsync(new AiToolRequest("private text", "private context", [])
+        { Telemetry = new AiTurnTelemetry("failure-trace") }, sink.Handle);
+
+        result.IsFailure.Should().BeTrue();
+        await usage.Received(1).RecordAsync("chat", "gpt-6-luna", 0, 0, 0, 0, Arg.Any<CancellationToken>(), null,
+            Arg.Is<AiCallTelemetry>(call => call.TraceId == "failure-trace" && call.IsError && !call.HasUsage
+                && call.ToolNames.Count == 0 && call.LatencySeconds >= 0));
+    }
+
+    [Fact]
+    public async Task SendWithToolsAsync_UsageTelemetry_ContainsOnlyDeclaredToolNames()
+    {
+        var usage = Substitute.For<IAiUsageRecorder>();
+        var response = ResponsesTestData.Response("private completion with private habit name");
+        response.OutputItems.Add(ResponseItem.CreateFunctionCallItem("known", "log_habit",
+            BinaryData.FromString("{\"habit_name\":\"private habit name\"}")));
+        response.OutputItems.Add(ResponseItem.CreateFunctionCallItem("unknown", "private tool name", BinaryData.FromString("{}")));
+        var (service, _) = BuildService(new JsonHandler(ModelReaderWriter.Write(response).ToString()), usage);
+
+        await service.SendWithToolsAsync(new AiToolRequest("private user message", "private user facts",
+            [new { name = "log_habit" }]));
+
+        var metadata = (AiCallTelemetry)usage.ReceivedCalls().Single().GetArguments()[8]!;
+        metadata.ToolNames.Should().Equal("log_habit");
+        JsonSerializer.Serialize(metadata).Should().NotContain("private");
+    }
+
+    [Fact]
     public async Task SendWithToolsAsync_StreamingTextRound_EmitsDeltasAndReturnsFullText()
     {
         var body = TextStream("Hello!", "Hel", "lo!");
@@ -111,7 +144,7 @@ public class AiIntentServiceStreamingTests
         result.IsSuccess.Should().BeTrue();
         result.Value.ReportedTokenCount.Should().Be(18);
         await usageRecorder.Received(1).RecordAsync(
-            "chat", "gpt-6-luna", 3, 11, 7, 18, Arg.Any<CancellationToken>(), userId);
+            "chat", "gpt-6-luna", 3, 11, 7, 18, Arg.Any<CancellationToken>(), userId, Arg.Any<AiCallTelemetry>());
     }
 
     [Fact]
@@ -131,11 +164,11 @@ public class AiIntentServiceStreamingTests
         result.Value.ReportedTokenCount.Should().Be(18);
         handler.LastRequestBody.Should().Contain("\"stream\":true");
         await usageRecorder.Received(1).RecordAsync(
-            "chat", "gpt-6-luna", 3, 11, 7, 18, Arg.Any<CancellationToken>(), userId);
+            "chat", "gpt-6-luna", 3, 11, 7, 18, Arg.Any<CancellationToken>(), userId, Arg.Any<AiCallTelemetry>());
     }
 
     [Fact]
-    public async Task SendWithToolsAsync_StreamingRoundWithoutUsage_LogsAndDoesNotRecord()
+    public async Task SendWithToolsAsync_StreamingRoundWithoutUsage_LogsAndEmitsTelemetryOnly()
     {
         var usageRecorder = Substitute.For<IAiUsageRecorder>();
         var response = ResponsesTestData.Response("Hello");
@@ -150,8 +183,8 @@ public class AiIntentServiceStreamingTests
 
         result.IsSuccess.Should().BeTrue();
         logger.WarningEventIds.Should().Contain(11);
-        await usageRecorder.DidNotReceiveWithAnyArgs().RecordAsync(
-            default!, default!, default, default, default, default, default, default);
+        await usageRecorder.Received(1).RecordAsync("chat", "gpt-6-luna", 0, 0, 0, 0,
+            Arg.Any<CancellationToken>(), Arg.Any<Guid?>(), Arg.Is<AiCallTelemetry>(call => !call.HasUsage && !call.IsError));
     }
 
     [Fact]
@@ -160,7 +193,7 @@ public class AiIntentServiceStreamingTests
         var usageRecorder = Substitute.For<IAiUsageRecorder>();
         usageRecorder.RecordAsync(
                 Arg.Any<string>(), Arg.Any<string>(), Arg.Any<long>(), Arg.Any<long>(),
-                Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>(), Arg.Any<Guid?>())
+                Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>(), Arg.Any<Guid?>(), Arg.Any<AiCallTelemetry>())
             .Returns(Task.FromException(new InvalidOperationException("recorder failed")));
         var body = TextStream("Hello", "Hello");
         var (service, logger) = BuildServiceWithRecordingLogger(new SseHandler(body), usageRecorder);
@@ -187,7 +220,8 @@ public class AiIntentServiceStreamingTests
         var (service, sink) = BuildService(handler, usageRecorder);
 
         var first = await service.SendWithToolsAsync(
-            new AiToolRequest("create it", "system", [], userId),
+            new AiToolRequest("create it", "system", [new { name = "create_habit" }], userId)
+            { Telemetry = new AiTurnTelemetry("chat-trace", "trial") },
             streamSink: sink.Handle);
         var second = await service.ContinueWithToolResultsAsync(
             first.Value.ConversationContext!,
@@ -197,7 +231,15 @@ public class AiIntentServiceStreamingTests
         second.IsSuccess.Should().BeTrue();
         second.Value.TextMessage.Should().Be("Done");
         await usageRecorder.Received(2).RecordAsync(
-            "chat", "gpt-6-luna", 3, 11, 7, 18, Arg.Any<CancellationToken>(), userId);
+            "chat", "gpt-6-luna", 3, 11, 7, 18, Arg.Any<CancellationToken>(), userId, Arg.Any<AiCallTelemetry>());
+        var calls = usageRecorder.ReceivedCalls().Select(call => (AiCallTelemetry)call.GetArguments()[8]!).ToList();
+        calls.Should().HaveCount(2);
+        calls.Should().OnlyContain(call => call.TraceId == "chat-trace" && call.Plan == "trial"
+            && call.LatencySeconds >= 0 && !call.IsError && call.HasUsage);
+        calls[0].ToolNames.Should().Equal("create_habit");
+        calls[1].ToolNames.Should().BeEmpty();
+        first.Value.ConversationContext!.Telemetry.RoundCount.Should().Be(2);
+        first.Value.ConversationContext.Telemetry.ToolCallCount.Should().Be(1);
     }
 
     [Fact]
