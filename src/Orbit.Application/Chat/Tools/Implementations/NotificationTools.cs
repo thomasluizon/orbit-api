@@ -44,9 +44,9 @@ public class UpdateNotificationsTool(IMediator mediator) : IAiTool, IArgumentChe
                 @enum = new[] { "mark_read", "mark_all_read", "subscribe_push", "unsubscribe_push", "test_push" }
             },
             notification_id = new { type = new[] { JsonSchemaTypes.String, "null" } },
-            endpoint = new { type = new[] { JsonSchemaTypes.String, "null" } },
-            p256dh = new { type = new[] { JsonSchemaTypes.String, "null" } },
-            auth = new { type = new[] { JsonSchemaTypes.String, "null" } },
+            endpoint = new { type = new[] { JsonSchemaTypes.String, "null" }, sensitive = true },
+            p256dh = new { type = new[] { JsonSchemaTypes.String, "null" }, sensitive = true },
+            auth = new { type = new[] { JsonSchemaTypes.String, "null" }, sensitive = true },
             release_other_account = new
             {
                 type = new[] { JsonSchemaTypes.Boolean, "null" },

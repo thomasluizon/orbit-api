@@ -40,8 +40,9 @@ public class ConversationMigrationTests
         schemaVersion.ClrType.Should().Be(typeof(int));
         schemaVersion.IsNullable.Should().BeFalse();
         schemaVersion.DefaultValue.Should().Be(0);
-        remaining.Should().HaveCount(2);
+        remaining.Should().HaveCount(3);
         RestoreProactivePreferenceMigrationTests.AssertRequiredPreference(remaining);
+        ExpandHabitScheduleAndStartDateMigrationTests.AssertEvalTraceSeed(remaining);
     }
 
     internal static void AssertConversationExpansion(IReadOnlyList<MigrationOperation> operations)

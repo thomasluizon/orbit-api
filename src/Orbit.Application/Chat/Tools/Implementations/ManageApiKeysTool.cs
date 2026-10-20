@@ -10,6 +10,15 @@ public class ManageApiKeysTool(IMediator mediator) : IAiTool, IArgumentCheckTool
     public string Name => "manage_api_keys";
     public string Description => "Create or revoke scoped API keys.";
 
+    public object GetResultSchema() => new
+    {
+        type = JsonSchemaTypes.Object,
+        properties = new
+        {
+            key = new { type = JsonSchemaTypes.String, sensitive = true }
+        }
+    };
+
     public object GetParameterSchema() => new
     {
         type = JsonSchemaTypes.Object,

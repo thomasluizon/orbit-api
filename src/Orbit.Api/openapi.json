@@ -15209,6 +15209,58 @@
           }
         }
       },
+      "ChatEvalToolCall": {
+        "required": [
+          "id",
+          "name",
+          "arguments",
+          "status",
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "arguments": {
+            "$ref": "#/components/schemas/JsonElement"
+          },
+          "status": {
+            "type": "string"
+          },
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/JsonElement"
+              }
+            ]
+          }
+        }
+      },
+      "ChatEvalTrace": {
+        "required": [
+          "traceId",
+          "toolCalls"
+        ],
+        "type": "object",
+        "properties": {
+          "traceId": {
+            "type": "string"
+          },
+          "toolCalls": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatEvalToolCall"
+            }
+          }
+        }
+      },
       "ChatResponse": {
         "required": [
           "aiMessage",
@@ -15376,6 +15428,16 @@
             "items": {
               "$ref": "#/components/schemas/ChatResponsePart"
             }
+          },
+          "evalTrace": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ChatEvalTrace"
+              }
+            ]
           }
         }
       },
