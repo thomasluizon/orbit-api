@@ -3,6 +3,7 @@ using System.Text.Json;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Orbit.Api.Extensions;
 using Orbit.Api.OAuth;
@@ -33,7 +34,7 @@ public partial class OAuthController(
     private const string InvalidRedirectUriError = "invalid_redirect_uri";
     private const string MissingStateError = "invalid_request";
     private static readonly string[] SupportedResponseTypes = ["code"];
-    private static readonly string[] SupportedGrantTypes = ["authorization_code"];
+    private static readonly string[] SupportedGrantTypes = ["authorization_code", "refresh_token"];
     private static readonly string[] SupportedCodeChallengeMethods = ["S256"];
     private static readonly string[] SupportedTokenEndpointAuthMethods = ["none"];
     private static readonly string[] SupportedBearerMethods = ["header"];
@@ -56,6 +57,7 @@ public partial class OAuthController(
             registration_endpoint = $"{baseUrl}/oauth/register",
             response_types_supported = SupportedResponseTypes,
             grant_types_supported = SupportedGrantTypes,
+            scopes_supported = AgentScopes.ClaudeDefaultScopes,
             code_challenge_methods_supported = SupportedCodeChallengeMethods,
             token_endpoint_auth_methods_supported = SupportedTokenEndpointAuthMethods
         });
@@ -132,6 +134,9 @@ public partial class OAuthController(
 
         [FromQuery(Name = "google_error")]
         public string? GoogleError { get; init; }
+
+        [FromQuery(Name = "scope")]
+        public string? Scope { get; init; }
     }
 
     [HttpGet("/oauth/authorize")]
@@ -150,6 +155,8 @@ public partial class OAuthController(
         if (string.IsNullOrEmpty(request.State))
             return BadRequest(new { error = MissingStateError, error_description = "state is required for CSRF protection" });
 
+        if (RequestedScopes(request.Scope) is null)
+            return BadRequest(new { error = "invalid_scope" });
         var language = ResolveLanguage();
         var errorMessage = request.GoogleError switch
         {
@@ -169,7 +176,7 @@ public partial class OAuthController(
         var html = OAuthLoginPage.Render(
             request.ClientId, request.RedirectUri, request.State,
             request.CodeChallenge, request.CodeChallengeMethod, request.Nonce, errorMessage, language,
-            botProtection.Enabled, botProtection.SiteKey);
+            botProtection.Enabled, botProtection.SiteKey, request.Scope);
 
         return Content(html, "text/html");
     }
@@ -207,7 +214,7 @@ public partial class OAuthController(
     public record VerifyCodeRequest(
         string Email, string Code,
         string State, string CodeChallenge, string RedirectUri, string ClientId,
-        string? Nonce = null);
+        string? Nonce = null, string? Scope = null);
 
     [HttpPost("/oauth/verify-code")]
     [DistributedRateLimit("auth")]
@@ -225,14 +232,12 @@ public partial class OAuthController(
         if (result.IsFailure)
             return result.ToErrorResult();
 
-        var loginResponse = result.Value;
-        var authCode = authStore.CreateCode(
-            loginResponse.UserId, request.CodeChallenge, request.RedirectUri, request.ClientId, request.Nonce);
-
-        var separator = request.RedirectUri.Contains('?') ? "&" : "?";
-        var redirectUrl = $"{request.RedirectUri}{separator}code={Uri.EscapeDataString(authCode)}&state={Uri.EscapeDataString(request.State)}";
-
-        return Ok(new { redirectUrl });
+        var scopes = RequestedScopes(request.Scope);
+        if (scopes is null)
+            return BadRequest(new { error = "invalid_scope" });
+        var consent = authStore.CreatePendingConsent(new ConsentEntry(result.Value.UserId,
+            request.CodeChallenge, request.RedirectUri, request.ClientId, request.State, request.Nonce, ResolveLanguage(), scopes));
+        return Ok(new { redirectUrl = $"/oauth/consent?ticket={Uri.EscapeDataString(consent)}" });
     }
 
     /// <summary>
@@ -248,7 +253,8 @@ public partial class OAuthController(
         [FromQuery] string state,
         [FromQuery] string code_challenge,
         [FromQuery] string code_challenge_method,
-        [FromQuery] string? nonce = null)
+        [FromQuery] string? nonce = null,
+        [FromQuery] string? scope = null)
     {
         if (string.IsNullOrWhiteSpace(client_id)
             || string.IsNullOrEmpty(state)
@@ -257,15 +263,18 @@ public partial class OAuthController(
             || !IsRedirectUriAllowed(redirect_uri))
             return InvalidGoogleState();
 
+        var requestedScopes = RequestedScopes(scope);
+        if (requestedScopes is null)
+            return BadRequest(new { error = "invalid_scope" });
         var googleRedirectUri = BuildGoogleRedirectUri();
         if (string.IsNullOrWhiteSpace(googleSettings.Value.ClientId)
             || !googleSettings.Value.AllowedRedirectUris.Contains(googleRedirectUri, StringComparer.Ordinal))
-            return RedirectToAuthorize(client_id, redirect_uri, state, code_challenge, nonce, "unavailable");
+            return RedirectToAuthorize(client_id, redirect_uri, state, code_challenge, nonce, "unavailable", requestedScopes);
 
         var pending = authStore.TryCreateGoogleRequest(client_id, redirect_uri, state,
-            code_challenge, nonce, googleRedirectUri, ResolveLanguage());
+            code_challenge, nonce, googleRedirectUri, ResolveLanguage(), requestedScopes);
         if (pending is null)
-            return RedirectToAuthorize(client_id, redirect_uri, state, code_challenge, nonce, "unavailable");
+            return RedirectToAuthorize(client_id, redirect_uri, state, code_challenge, nonce, "unavailable", requestedScopes);
 
         var url = "https://accounts.google.com/o/oauth2/v2/auth"
             + $"?client_id={Uri.EscapeDataString(googleSettings.Value.ClientId)}"
@@ -301,10 +310,9 @@ public partial class OAuthController(
         if (result.IsFailure)
             return RedirectToAuthorize(pending, "failed");
 
-        var authCode = authStore.CreateCode(result.Value.UserId, pending.CodeChallenge,
-            pending.RedirectUri, pending.ClientId, pending.Nonce);
-        var separator = pending.RedirectUri.Contains('?') ? "&" : "?";
-        return Redirect($"{pending.RedirectUri}{separator}code={Uri.EscapeDataString(authCode)}&state={Uri.EscapeDataString(pending.ClientState)}");
+        var consent = authStore.CreatePendingConsent(new ConsentEntry(result.Value.UserId, pending.CodeChallenge,
+            pending.RedirectUri, pending.ClientId, pending.ClientState, pending.Nonce, pending.Language, pending.Scopes));
+        return Redirect($"/oauth/consent?ticket={Uri.EscapeDataString(consent)}");
     }
 
     private static IActionResult InvalidGoogleState() => new ContentResult
@@ -316,10 +324,10 @@ public partial class OAuthController(
 
     private static IActionResult RedirectToAuthorize(GoogleAuthorizationRequest pending, string googleError) =>
         RedirectToAuthorize(pending.ClientId, pending.RedirectUri, pending.ClientState,
-            pending.CodeChallenge, pending.Nonce, googleError);
+            pending.CodeChallenge, pending.Nonce, googleError, pending.Scopes);
 
     private static IActionResult RedirectToAuthorize(string clientId, string redirectUri, string clientState,
-        string codeChallenge, string? nonce, string googleError)
+        string codeChallenge, string? nonce, string googleError, IReadOnlyList<string>? scopes = null)
     {
         var url = "/oauth/authorize"
             + $"?client_id={Uri.EscapeDataString(clientId)}"
@@ -331,6 +339,8 @@ public partial class OAuthController(
             + $"&google_error={Uri.EscapeDataString(googleError)}";
         if (nonce is not null)
             url += $"&nonce={Uri.EscapeDataString(nonce)}";
+        if (scopes is not null)
+            url += $"&scope={Uri.EscapeDataString(string.Join(' ', scopes))}";
         return new RedirectResult(url);
     }
 
@@ -351,55 +361,169 @@ public partial class OAuthController(
     [Consumes("application/x-www-form-urlencoded")]
     public async Task<IActionResult> Token(
         [FromForm] string grant_type,
-        [FromForm] string code,
-        [FromForm] string code_verifier,
-        [FromForm] string redirect_uri,
-        CancellationToken ct)
+        [FromForm] string? code,
+        [FromForm] string? code_verifier,
+        [FromForm] string? redirect_uri,
+        CancellationToken ct,
+        [FromForm] string? refresh_token = null)
     {
+        if (grant_type == "refresh_token")
+            return await RefreshAsync(refresh_token, ct);
         if (grant_type != "authorization_code")
             return BadRequest(new { error = "unsupported_grant_type" });
 
-        if (!IsRedirectUriAllowed(redirect_uri))
+        if (redirect_uri is null || !IsRedirectUriAllowed(redirect_uri))
             return BadRequest(new { error = InvalidRedirectUriError });
-
+        if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(code_verifier))
+            return BadRequest(new { error = "invalid_grant" });
         var entry = authStore.ExchangeCode(code, code_verifier, redirect_uri);
         if (entry is null)
             return BadRequest(new { error = "invalid_grant", error_description = "Invalid, expired, or already used authorization code" });
 
-        var existingKeys = await apiKeyRepository.FindTrackedAsync(
-            k => k.UserId == entry.UserId && k.Name == "Claude.ai", ct);
-        foreach (var existing in existingKeys)
-            existing.Revoke();
-
-        var keyResult = ApiKey.Create(
-            entry.UserId,
-            "Claude.ai",
-            AgentScopes.ClaudeDefaultScopes,
-            isReadOnly: false);
-        if (keyResult.IsFailure)
+        try
         {
-            if (logger.IsEnabled(LogLevel.Error))
-                LogFailedToCreateOAuthApiKey(logger, entry.UserId, keyResult.Error);
-            return StatusCode(500, new { error = "server_error" });
+            return await unitOfWork.ExecuteInTransactionAsync<IActionResult>(async token =>
+            {
+                await unitOfWork.AcquireAdvisoryLockAsync($"oauth-keys:{entry.UserId}", token);
+                var existingKeys = await apiKeyRepository.FindTrackedAsync(
+                    k => k.UserId == entry.UserId && k.Name == "Claude.ai", token);
+                foreach (var existing in existingKeys)
+                    existing.Revoke();
+
+                var familyId = Guid.NewGuid();
+                var keyResult = ApiKey.Create(
+                    entry.UserId,
+                    "Claude.ai",
+                    entry.Scopes ?? AgentScopes.ClaudeDefaultScopes,
+                    isReadOnly: entry.IsReadOnly,
+                    expiresAtUtc: DateTime.UtcNow.AddHours(1),
+                    oauthFamilyId: familyId);
+                if (keyResult.IsFailure)
+                {
+                    if (logger.IsEnabled(LogLevel.Error))
+                        LogFailedToCreateOAuthApiKey(logger, entry.UserId, keyResult.Error);
+                    return StatusCode(500, new { error = "server_error" });
+                }
+
+                var (apiKey, rawKey) = keyResult.Value;
+                await apiKeyRepository.AddAsync(apiKey, token);
+                await unitOfWork.SaveChangesAsync(token);
+
+                if (logger.IsEnabled(LogLevel.Debug))
+                    LogOAuthApiKeyCreated(logger, entry.UserId, entry.ClientId);
+
+                var response = new Dictionary<string, object>
+                {
+                    ["access_token"] = rawKey,
+                    ["token_type"] = "Bearer",
+                    ["scope"] = string.Join(' ', apiKey.Scopes),
+                    ["expires_in"] = 3600,
+                    ["refresh_token"] = authStore.CreateRefreshToken(new RefreshEntry(entry.UserId, apiKey.Id, entry.ClientId, familyId))
+                };
+                if (!string.IsNullOrEmpty(entry.Nonce))
+                    response["nonce"] = entry.Nonce;
+
+                return Ok(response);
+            }, ct);
         }
-
-        var (apiKey, rawKey) = keyResult.Value;
-        await apiKeyRepository.AddAsync(apiKey, ct);
-        await unitOfWork.SaveChangesAsync(ct);
-
-        if (logger.IsEnabled(LogLevel.Debug))
-            LogOAuthApiKeyCreated(logger, entry.UserId, entry.ClientId);
-
-        var response = new Dictionary<string, object>
+        catch (DbUpdateConcurrencyException)
         {
-            ["access_token"] = rawKey,
-            ["token_type"] = "Bearer",
-            ["scope"] = string.Join(' ', AgentScopes.ClaudeDefaultScopes)
-        };
-        if (!string.IsNullOrEmpty(entry.Nonce))
-            response["nonce"] = entry.Nonce;
+            unitOfWork.ResetTracking();
+            return BadRequest(new { error = "invalid_grant" });
+        }
+    }
 
-        return Ok(response);
+    [HttpGet("/oauth/consent")]
+    public IActionResult Consent([FromQuery] string ticket)
+    {
+        var entry = authStore.ReadPendingConsent(ticket);
+        if (entry is null)
+            return InvalidGoogleState();
+        return Content(OAuthConsentPage.Render(ticket, entry), "text/html");
+    }
+
+    [HttpPost("/oauth/consent")]
+    [Consumes("application/x-www-form-urlencoded")]
+    public IActionResult GrantConsent([FromForm] string ticket, [FromForm] string access)
+    {
+        if (access is not ("read_only" or "requested"))
+            return BadRequest(new { error = "invalid_request" });
+        var entry = authStore.ConsumePendingConsent(ticket);
+        if (entry is null || !IsRedirectUriAllowed(entry.RedirectUri))
+            return InvalidGoogleState();
+        var readOnly = access == "read_only";
+        var scopes = entry.Scopes ?? AgentScopes.ClaudeDefaultScopes;
+        if (readOnly)
+            scopes = scopes.Where(scope => scope.StartsWith("read_", StringComparison.Ordinal) || scope == AgentScopes.CatalogRead).ToArray();
+        var code = authStore.CreateCode(entry.UserId, entry.CodeChallenge, entry.RedirectUri,
+            entry.ClientId, entry.Nonce, scopes, readOnly);
+        var separator = entry.RedirectUri.Contains('?') ? "&" : "?";
+        return Redirect($"{entry.RedirectUri}{separator}code={Uri.EscapeDataString(code)}&state={Uri.EscapeDataString(entry.State)}");
+    }
+
+    private async Task<IActionResult> RefreshAsync(string? refreshToken, CancellationToken ct)
+    {
+        var grant = string.IsNullOrWhiteSpace(refreshToken) ? null : authStore.ReadRefreshToken(refreshToken);
+        if (grant is null)
+            return BadRequest(new { error = "invalid_grant" });
+        var previous = await apiKeyRepository.GetByIdAsync(grant.ApiKeyId, ct);
+        if (previous is null || previous.UserId != grant.UserId)
+            return BadRequest(new { error = "invalid_grant" });
+        var tracked = await apiKeyRepository.FindOneTrackedAsync(key => key.Id == previous.Id, cancellationToken: ct);
+        if (tracked is null)
+            return BadRequest(new { error = "invalid_grant" });
+        try
+        {
+            return await unitOfWork.ExecuteInTransactionAsync<IActionResult>(async token =>
+            {
+                await unitOfWork.AcquireAdvisoryLockAsync($"oauth-keys:{grant.UserId}", token);
+                if (authStore.ConsumeRefreshToken(refreshToken!) is null)
+                {
+                    var family = await apiKeyRepository.FindTrackedAsync(
+                        key => key.UserId == grant.UserId && !key.IsRevoked
+                            && (key.OAuthFamilyId == grant.FamilyId || key.Id == grant.FamilyId), token);
+                    foreach (var member in family)
+                        member.Revoke();
+                    await unitOfWork.SaveChangesAsync(token);
+                    return BadRequest(new { error = "invalid_grant" });
+                }
+                var familyExpiresAtUtc = grant.FamilyExpiresAtUtc ?? previous.CreatedAtUtc.AddDays(30);
+                if (tracked.IsRevoked || familyExpiresAtUtc <= TimeProvider.System.GetUtcNow().UtcDateTime)
+                    return BadRequest(new { error = "invalid_grant" });
+                var expiresAtUtc = DateTime.UtcNow.AddHours(1);
+                if (familyExpiresAtUtc < expiresAtUtc)
+                    expiresAtUtc = familyExpiresAtUtc;
+                var created = ApiKey.Create(grant.UserId, "Claude.ai", previous.Scopes, previous.IsReadOnly,
+                    expiresAtUtc: expiresAtUtc, oauthFamilyId: grant.FamilyId);
+                if (created.IsFailure)
+                    return StatusCode(500, new { error = "server_error" });
+                tracked.Revoke();
+                var (key, raw) = created.Value;
+                await apiKeyRepository.AddAsync(key, token);
+                await unitOfWork.SaveChangesAsync(token);
+                return Ok(new
+                {
+                    access_token = raw,
+                    token_type = "Bearer",
+                    scope = string.Join(' ', key.Scopes),
+                    expires_in = (int)Math.Ceiling((expiresAtUtc - TimeProvider.System.GetUtcNow().UtcDateTime).TotalSeconds),
+                    refresh_token = authStore.CreateRefreshToken(new RefreshEntry(grant.UserId, key.Id, grant.ClientId,
+                        grant.FamilyId, familyExpiresAtUtc))
+                });
+            }, ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            unitOfWork.ResetTracking();
+            return BadRequest(new { error = "invalid_grant" });
+        }
+    }
+
+    private static IReadOnlyList<string>? RequestedScopes(string? scope)
+    {
+        var requested = string.IsNullOrWhiteSpace(scope) ? AgentScopes.ClaudeDefaultScopes
+            : scope.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct(StringComparer.Ordinal).ToArray();
+        return requested.All(item => AgentScopes.ClaudeDefaultScopes.Contains(item, StringComparer.Ordinal)) ? requested : null;
     }
 
     private bool IsRedirectUriAllowed(string redirectUri)

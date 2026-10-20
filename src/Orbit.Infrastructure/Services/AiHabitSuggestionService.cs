@@ -12,7 +12,7 @@ using Orbit.Infrastructure.Services.Prompts;
 namespace Orbit.Infrastructure.Services;
 
 public sealed partial class AiHabitSuggestionService(
-    AiCompletionClient aiClient,
+    BudgetedAiCompletionClient aiClient,
     ILogger<AiHabitSuggestionService> logger) : IHabitSuggestionService
 {
     private const int MaxSuggestedSubHabits = 6;
@@ -36,6 +36,10 @@ public sealed partial class AiHabitSuggestionService(
                 tier: AiModelTier.SubTask);
 
             return MapSuggestion(dto);
+        }
+        catch (AiBudgetExceededException)
+        {
+            return Result.Failure<HabitSetupSuggestion>(AiBudgetExceededException.Error);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

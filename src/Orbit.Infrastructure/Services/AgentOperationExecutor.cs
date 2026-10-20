@@ -19,7 +19,7 @@ public partial class AgentOperationExecutor(
     IPendingOperationChangePreviewer changePreviewer,
     IPendingAgentOperationStore pendingOperationStore,
     IUnitOfWork unitOfWork,
-    ILogger<AgentOperationExecutor> logger) : IAgentOperationExecutor
+    ILogger<AgentOperationExecutor> logger) : IAgentOperationExecutor, Orbit.Application.Chat.Commands.IAgentMutationRunner
 {
     private const int MaxToolConcurrencyAttempts = 3;
     private const string UnknownOperationCapabilityId = "unknown";
@@ -281,10 +281,13 @@ public partial class AgentOperationExecutor(
 
         try
         {
-            return tool is ITransactionalAiTool
-                ? await unitOfWork.ExecuteInTransactionAsync(
+            if (tool is not ITransactionalAiTool)
+                return await ExecutePolicyAndToolAsync(execution, tool, policyState, cancellationToken);
+            return unitOfWork.HasActiveTransaction
+                ? await unitOfWork.ExecuteInSavepointAsync(
                     ct => ExecutePolicyAndToolAsync(execution, tool, policyState, ct), cancellationToken)
-                : await ExecutePolicyAndToolAsync(execution, tool, policyState, cancellationToken);
+                : await unitOfWork.ExecuteInTransactionAsync(
+                    ct => ExecutePolicyAndToolAsync(execution, tool, policyState, ct), cancellationToken);
         }
         catch (ToolOutcomeRollbackException ex)
         {

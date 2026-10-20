@@ -57,7 +57,7 @@ public class GetDailySummaryQueryHandlerTests
 
         _summaryService.GenerateSummaryAsync(
             Arg.Any<IEnumerable<Habit>>(),
-            Arg.Is<DailySummaryContext>(c => c.DateFrom == Today && c.DateTo == Today && c.Language == "en"),
+            Arg.Is<DailySummaryContext>(c => c.DateFrom == Today && c.DateTo == Today && c.Language == "en" && c.UserId == UserId),
             Arg.Any<CancellationToken>())
             .Returns(Result.Success(new DailySummaryContent("Test summary content", "Take a short walk after lunch")));
 
@@ -117,7 +117,7 @@ public class GetDailySummaryQueryHandlerTests
 
         _summaryService.GenerateSummaryAsync(
             Arg.Any<IEnumerable<Habit>>(),
-            Arg.Is<DailySummaryContext>(c => c.DateFrom == Today && c.DateTo == Today && c.Language == "en"),
+            Arg.Is<DailySummaryContext>(c => c.DateFrom == Today && c.DateTo == Today && c.Language == "en" && c.UserId == UserId),
             Arg.Any<CancellationToken>())
             .Returns(Result.Success(new DailySummaryContent("First call summary", "First call insight")));
 
@@ -157,7 +157,7 @@ public class GetDailySummaryQueryHandlerTests
 
         _summaryService.GenerateSummaryAsync(
             Arg.Any<IEnumerable<Habit>>(),
-            Arg.Is<DailySummaryContext>(c => c.DateFrom == Today && c.DateTo == Today && c.Language == "en"),
+            Arg.Is<DailySummaryContext>(c => c.DateFrom == Today && c.DateTo == Today && c.Language == "en" && c.UserId == UserId),
             Arg.Any<CancellationToken>())
             .Returns(Result.Success(new DailySummaryContent("Summary", "A small nudge")));
 
@@ -173,7 +173,7 @@ public class GetDailySummaryQueryHandlerTests
         await _summaryService.Received(1).GenerateSummaryAsync(
             Arg.Is<IEnumerable<Habit>>(habits =>
                 habits.Select(h => h.Title).SequenceEqual(ExpectedHabitTitles)),
-            Arg.Is<DailySummaryContext>(c => c.DateFrom == Today && c.DateTo == Today && c.Language == "en"),
+            Arg.Is<DailySummaryContext>(c => c.DateFrom == Today && c.DateTo == Today && c.Language == "en" && c.UserId == UserId),
             Arg.Any<CancellationToken>());
     }
 
@@ -236,7 +236,7 @@ public class GetDailySummaryQueryHandlerTests
 
         _summaryService.GenerateSummaryAsync(
             Arg.Any<IEnumerable<Habit>>(),
-            Arg.Is<DailySummaryContext>(c => c.DateFrom == Today && c.DateTo == Today && c.Language == "en"),
+            Arg.Is<DailySummaryContext>(c => c.DateFrom == Today && c.DateTo == Today && c.Language == "en" && c.UserId == UserId),
             Arg.Any<CancellationToken>())
             .Returns(Result.Success(new DailySummaryContent("Summary", "A small nudge")));
 
@@ -247,7 +247,7 @@ public class GetDailySummaryQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         await _summaryService.Received(1).GenerateSummaryAsync(
             Arg.Any<IEnumerable<Habit>>(),
-            Arg.Is<DailySummaryContext>(c => c.DateFrom == Today && c.DateTo == Today && c.Language == "en"
+            Arg.Is<DailySummaryContext>(c => c.DateFrom == Today && c.DateTo == Today && c.Language == "en" && c.UserId == UserId
                 && c.LastBadHabitSlipDates.ContainsKey(badHabit.Id) && c.LastBadHabitSlipDates[badHabit.Id] == slipDate),
             Arg.Any<CancellationToken>());
     }
@@ -280,7 +280,7 @@ public class GetDailySummaryQueryHandlerTests
 
         _summaryService.GenerateSummaryAsync(
             Arg.Any<IEnumerable<Habit>>(),
-            Arg.Is<DailySummaryContext>(c => c.DateFrom == Today && c.DateTo == Today && c.Language == "en"),
+            Arg.Is<DailySummaryContext>(c => c.DateFrom == Today && c.DateTo == Today && c.Language == "en" && c.UserId == UserId),
             Arg.Any<CancellationToken>())
             .Returns(Result.Success(new DailySummaryContent("Summary", "")));
 
@@ -310,7 +310,7 @@ public class GetDailySummaryQueryHandlerTests
 
         _summaryService.GenerateSummaryAsync(
             Arg.Any<IEnumerable<Habit>>(),
-            Arg.Is<DailySummaryContext>(c => c.DateFrom == Today && c.DateTo == Today && c.Language == "en"),
+            Arg.Is<DailySummaryContext>(c => c.DateFrom == Today && c.DateTo == Today && c.Language == "en" && c.UserId == UserId),
             Arg.Any<CancellationToken>())
             .Returns(Result.Success(new DailySummaryContent("Summary", "A small nudge")));
 
@@ -324,7 +324,7 @@ public class GetDailySummaryQueryHandlerTests
             Arg.Any<CancellationToken>());
         await _summaryService.Received(1).GenerateSummaryAsync(
             Arg.Any<IEnumerable<Habit>>(),
-            Arg.Is<DailySummaryContext>(c => c.DateFrom == Today && c.DateTo == Today && c.Language == "en"
+            Arg.Is<DailySummaryContext>(c => c.DateFrom == Today && c.DateTo == Today && c.Language == "en" && c.UserId == UserId
                 && c.LastBadHabitSlipDates.Count == 0),
             Arg.Any<CancellationToken>());
     }
@@ -389,7 +389,7 @@ public class GetDailySummaryQueryHandlerTests
 
         _summaryService.GenerateSummaryAsync(
             Arg.Any<IEnumerable<Habit>>(),
-            Arg.Is<DailySummaryContext>(c => c.DateFrom == Today && c.DateTo == Today && c.Language == "en"),
+            Arg.Is<DailySummaryContext>(c => c.DateFrom == Today && c.DateTo == Today && c.Language == "en" && c.UserId == UserId),
             Arg.Any<CancellationToken>())
             .Returns(Result.Failure<DailySummaryContent>("AI service unavailable"));
 
@@ -432,7 +432,7 @@ public class GetDailySummaryQueryHandlerTests
             Arg.Any<CancellationToken>());
         await _summaryService.DidNotReceive().GenerateSummaryAsync(
             Arg.Any<IEnumerable<Habit>>(),
-            Arg.Is<DailySummaryContext>(c => c.DateFrom == Today && c.DateTo == Today && c.Language == "en"),
+            Arg.Is<DailySummaryContext>(c => c.DateFrom == Today && c.DateTo == Today && c.Language == "en" && c.UserId == UserId),
             Arg.Any<CancellationToken>());
     }
 
@@ -480,7 +480,7 @@ public class GetDailySummaryQueryHandlerTests
 
         _summaryService.GenerateSummaryAsync(
             Arg.Any<IEnumerable<Habit>>(),
-            Arg.Is<DailySummaryContext>(c => c.DateFrom == Today && c.DateTo == Today && c.Language == "en"),
+            Arg.Is<DailySummaryContext>(c => c.DateFrom == Today && c.DateTo == Today && c.Language == "en" && c.UserId == UserId),
             Arg.Any<CancellationToken>())
             .Returns(Result.Success(new DailySummaryContent("Summary", "A small nudge")));
 
@@ -491,7 +491,7 @@ public class GetDailySummaryQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         await _summaryService.Received(1).GenerateSummaryAsync(
             Arg.Any<IEnumerable<Habit>>(),
-            Arg.Is<DailySummaryContext>(c => c.DateFrom == Today && c.DateTo == Today && c.Language == "en"),
+            Arg.Is<DailySummaryContext>(c => c.DateFrom == Today && c.DateTo == Today && c.Language == "en" && c.UserId == UserId),
             Arg.Any<CancellationToken>());
     }
 

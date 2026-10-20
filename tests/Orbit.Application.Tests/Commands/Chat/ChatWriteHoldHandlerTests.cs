@@ -495,7 +495,7 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
             _pendingOperationStore);
 
         return new ProcessUserChatCommandHandler(dataDeps, aiDeps, executionDeps,
-            Substitute.For<ILogger<ProcessUserChatCommandHandler>>(), Substitute.For<IAppConfigService>());
+            Substitute.For<ILogger<ProcessUserChatCommandHandler>>(), Substitute.For<IAppConfigService>(), Orbit.Application.Tests.ModerationTestDouble.Clean());
     }
 
     private void ScriptToolCall(string arguments, string toolName = "create_habit")

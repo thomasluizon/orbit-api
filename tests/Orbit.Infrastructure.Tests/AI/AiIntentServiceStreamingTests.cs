@@ -305,7 +305,7 @@ public class AiIntentServiceStreamingTests
         var handler = new JsonHandler(BufferedCompletion);
         var usageRecorder = Substitute.For<IAiUsageRecorder>();
         var aiClient = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
-        var service = new AiIntentService(aiClient, usageRecorder, NullLogger<AiIntentService>.Instance);
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(aiClient), usageRecorder, NullLogger<AiIntentService>.Instance);
         var userId = Guid.NewGuid();
 
         await service.SendWithToolsAsync(new AiToolRequest("hello", "system", [], userId));
@@ -323,7 +323,7 @@ public class AiIntentServiceStreamingTests
         var handler = new CountingJsonHandler(BufferedCompletion);
         var usageRecorder = Substitute.For<IAiUsageRecorder>();
         var aiClient = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
-        var service = new AiIntentService(aiClient, usageRecorder, NullLogger<AiIntentService>.Instance);
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(aiClient), usageRecorder, NullLogger<AiIntentService>.Instance);
 
         await service.SendWithToolsAsync(new AiToolRequest("hello", "system", [], Guid.NewGuid(), History: BuildHistory(40)));
 
@@ -336,7 +336,7 @@ public class AiIntentServiceStreamingTests
         var handler = new CountingJsonHandler(BufferedCompletion);
         var usageRecorder = Substitute.For<IAiUsageRecorder>();
         var aiClient = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
-        var service = new AiIntentService(aiClient, usageRecorder, NullLogger<AiIntentService>.Instance);
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(aiClient), usageRecorder, NullLogger<AiIntentService>.Instance);
 
         await service.SendWithToolsAsync(new AiToolRequest("hello", "system", [], Guid.NewGuid(), History: BuildHistory(50)));
 
@@ -383,7 +383,7 @@ public class AiIntentServiceStreamingTests
         var usage = Substitute.For<IAiUsageRecorder>();
         var client = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance,
             usage);
-        var service = new AiIntentService(client, usage, NullLogger<AiIntentService>.Instance);
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(client), usage, NullLogger<AiIntentService>.Instance);
         Func<AiStreamEvent, Task>? sink = streaming ? _ => Task.CompletedTask : null;
         var userId = Guid.NewGuid();
         var declaration = new { name = "query_habits", description = "Read habits", parameters = new { type = "object", properties = new { } } };
@@ -428,7 +428,7 @@ public class AiIntentServiceStreamingTests
         var settings = new AiSettings { ApiKey = "test-key", BaseUrl = "https://orbit.test/v1" };
         var client = new AiCompletionClient(Options.Create(settings), NullLogger<AiCompletionClient>.Instance,
             usage, new HttpClientPipelineTransport(new HttpClient(handler)));
-        var service = new AiIntentService(client, usage, NullLogger<AiIntentService>.Instance);
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(client), usage, NullLogger<AiIntentService>.Instance);
         var declaration = new { name = "query_habits", parameters = new { type = "object", properties = new { } } };
 
         var result = await service.SendWithToolsAsync(new AiToolRequest("look up my habits", "system", [declaration]),
@@ -455,7 +455,7 @@ public class AiIntentServiceStreamingTests
         var usage = Substitute.For<IAiUsageRecorder>();
         var client = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance,
             usage, primaryModel: "gpt-4.1-mini");
-        var service = new AiIntentService(client, usage, NullLogger<AiIntentService>.Instance);
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(client), usage, NullLogger<AiIntentService>.Instance);
         var declaration = new { name = "query_habits", parameters = new { type = "object", properties = new { } } };
         Func<AiStreamEvent, Task>? sink = streaming ? _ => Task.CompletedTask : null;
 
@@ -572,7 +572,7 @@ public class AiIntentServiceStreamingTests
     {
         usageRecorder ??= Substitute.For<IAiUsageRecorder>();
         var aiClient = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
-        var service = new AiIntentService(aiClient, usageRecorder, NullLogger<AiIntentService>.Instance);
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(aiClient), usageRecorder, NullLogger<AiIntentService>.Instance);
         return (service, new CollectingSink());
     }
 
@@ -583,7 +583,7 @@ public class AiIntentServiceStreamingTests
         usageRecorder ??= Substitute.For<IAiUsageRecorder>();
         var aiClient = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
         var logger = new RecordingLogger();
-        var service = new AiIntentService(aiClient, usageRecorder, logger);
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(aiClient), usageRecorder, logger);
         return (service, logger);
     }
 

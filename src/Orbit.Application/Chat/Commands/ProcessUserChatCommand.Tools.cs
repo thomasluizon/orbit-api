@@ -50,8 +50,8 @@ public partial class ProcessUserChatCommandHandler
                 aiStreamSink,
                 cancellationToken);
 
-            if (roundResult is null)
-                break;
+            if (roundResult.ProviderError is not null)
+                return new ToolLoopResult(aiResponse, iteration, tokenBudgetExceeded, hadToolFailure, roundResult.ProviderError);
 
             aiResponse = roundResult.Response;
             if (roundResult.HadToolFailure)
@@ -79,17 +79,21 @@ public partial class ProcessUserChatCommandHandler
             hadToolFailure);
     }
 
+    private static bool MustFailToolTurn(ProcessUserChatCommand request, ToolLoopResult result) =>
+        result.ProviderError is not null || (request.BlockAnswer is not null && (result.HadToolFailure || result.FinalResponse.HasToolCalls));
+
     private sealed record ToolLoopResult(
         AiResponse FinalResponse,
         int Iterations,
         bool TokenBudgetExceeded,
-        bool HadToolFailure);
+        bool HadToolFailure,
+        AppError? ProviderError = null);
 
     /// <summary>
     /// Processes one iteration of AI tool calls: orders them, executes each, and sends results
     /// back to the AI. Returns the next AI response, or null if continuation failed.
     /// </summary>
-    private async Task<ToolRoundResult?> ProcessToolCallsAsync(
+    private async Task<ToolRoundResult> ProcessToolCallsAsync(
         AiResponse aiResponse,
         ProcessUserChatCommand request,
         ToolExecutionAccumulator executionResults,
@@ -141,7 +145,8 @@ public partial class ProcessUserChatCommandHandler
         if (continueResult.IsFailure)
         {
             LogContinueWithToolResultsFailed(logger, continueResult.Error);
-            return null;
+            return new ToolRoundResult(aiResponse, ProviderError: new AppError(
+                continueResult.ErrorCode ?? ErrorMessages.AiUnavailable.Code, continueResult.Error));
         }
 
         return new ToolRoundResult(askCall is not null ? continueResult.Value with { ToolCalls = null } : continueResult.Value);
@@ -149,7 +154,8 @@ public partial class ProcessUserChatCommandHandler
 
     private sealed record ToolRoundResult(
         AiResponse Response,
-        bool HadToolFailure = false);
+        bool HadToolFailure = false,
+        AppError? ProviderError = null);
 
     private static AiResponse MessageResponse(string? language) => new()
     {
