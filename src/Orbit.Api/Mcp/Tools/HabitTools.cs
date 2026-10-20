@@ -54,7 +54,11 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         {
             lines.Add(McpToolHelpers.FormatHabitLine(new McpToolHelpers.HabitLineData(h.Id, h.Title, h.FrequencyUnit, h.FrequencyQuantity,
                 h.DueTime, h.IsCompleted, h.IsOverdue, h.IsBadHabit, h.IsGeneral, h.IsFlexible,
-                h.ChecklistItems, h.Tags, h.Emoji), indent: 0));
+                h.ChecklistItems, h.Tags, h.Emoji,
+                new HabitFieldSummary(h.Description, h.DueTime, h.DueEndTime, h.IntervalWeeks, h.Days,
+                    h.EndDate, h.ReminderEnabled, h.ReminderTimes, h.ScheduledReminders,
+                    h.RelativeReminders ?? [], h.SlipAlertEnabled, h.IsFlexible, h.ChecklistItems).Format()
+                    + string.Create(CultureInfo.InvariantCulture, $" | Due: {h.DueDate:yyyy-MM-dd}")), indent: 0));
             McpToolHelpers.AppendChildren(lines, h.Children, indent: 1);
         }
 
@@ -90,7 +94,15 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
                    (h.ChecklistItems.Count > 0 ? string.Create(CultureInfo.InvariantCulture, $"Checklist: {h.ChecklistItems.Count(i => i.IsChecked)}/{h.ChecklistItems.Count} items\n") : "") +
                    string.Create(CultureInfo.InvariantCulture, $"Created: {h.CreatedAtUtc:yyyy-MM-dd}\n") +
                    (h.Children.Count > 0 ? $"Sub-habits: {string.Join(", ", h.Children.Select(c => c.Title))}\n" : "");
-        return habitSummary;
+        var details = new HabitFieldSummary(null, null, h.DueEndTime, h.IntervalWeeks, [], h.EndDate,
+            h.ReminderEnabled, h.ReminderTimes, h.ScheduledReminders, h.RelativeReminders ?? [],
+            h.SlipAlertEnabled == true, false, h.ChecklistItems).Format();
+        if (details.Length > 0) habitSummary += details + "\n";
+        if (h.Tags is { Count: > 0 }) habitSummary += $"Tags: {string.Join(", ", h.Tags.Select(t => t.Name))}\n";
+        if (h.LinkedGoals is { Count: > 0 }) habitSummary += $"Goals: {string.Join(", ", h.LinkedGoals.Select(g => $"{g.Title} ({g.Id})"))}\n";
+        var children = new List<string>();
+        McpToolHelpers.AppendDetailChildren(children, h.Children, 1);
+        return habitSummary + string.Join("\n", children);
     }
 
     [McpServerTool(Name = "create_habit"), Description("Create a new habit or one-time task.")]

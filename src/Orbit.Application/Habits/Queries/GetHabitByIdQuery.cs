@@ -36,7 +36,13 @@ public record HabitChildResponse(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     Domain.Enums.HabitSchedule? Schedule = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    DateOnly? StartDate = null);
+    DateOnly? StartDate = null,
+    IReadOnlyList<HabitTagItem>? Tags = null,
+    bool? ReminderEnabled = null,
+    IReadOnlyList<int>? ReminderTimes = null,
+    IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null,
+    IReadOnlyList<RelativeReminderTime>? RelativeReminders = null,
+    bool? SlipAlertEnabled = null);
 
 public record HabitDetailResponse(
     Guid Id,
@@ -70,7 +76,8 @@ public record HabitDetailResponse(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     Domain.Enums.HabitSchedule? Schedule = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    DateOnly? StartDate = null);
+    DateOnly? StartDate = null,
+    IReadOnlyList<HabitTagItem>? Tags = null);
 
 public record GetHabitByIdQuery(Guid UserId, Guid HabitId) : IRequest<Result<HabitDetailResponse>>;
 
@@ -83,7 +90,9 @@ public class GetHabitByIdQueryHandler(
     {
         var habits = await habitRepository.FindAsync(
             h => h.Id == request.HabitId && h.UserId == request.UserId,
-            q => q.Include(h => h.Children).ThenInclude(c => c.Children),
+            q => q.Include(h => h.Goals).Include(h => h.Tags)
+                .Include(h => h.Children).ThenInclude(c => c.Tags)
+                .Include(h => h.Children).ThenInclude(c => c.Children).ThenInclude(c => c.Tags).AsSplitQuery(),
             cancellationToken);
 
         var habit = habits.Count > 0 ? habits[0] : null;
@@ -134,9 +143,12 @@ public class GetHabitByIdQueryHandler(
             children,
             Emoji: habit.Emoji,
             IntervalWeeks: habit.IntervalWeeks,
+            LinkedGoals: habit.Goals.Select(g => new LinkedGoalDto(g.Id, g.Title)).ToList(),
+            SlipAlertEnabled: habit.SlipAlertEnabled,
             RelativeReminders: habit.RelativeReminders,
             Schedule: habit.Schedule,
-            StartDate: habit.StartDate));
+            StartDate: habit.StartDate,
+            Tags: habit.Tags.Select(t => new HabitTagItem(t.Id, t.Name, t.Color)).ToList()));
     }
 }
 
@@ -216,7 +228,13 @@ internal static class HabitDetailChildMapper
         IntervalWeeks: child.IntervalWeeks,
         CreatedAtUtc: child.CreatedAtUtc,
         Schedule: child.Schedule,
-        StartDate: child.StartDate);
+        StartDate: child.StartDate,
+        Tags: child.Tags.Select(t => new HabitTagItem(t.Id, t.Name, t.Color)).ToList(),
+        ReminderEnabled: child.ReminderEnabled,
+        ReminderTimes: child.ReminderTimes,
+        ScheduledReminders: child.GetScheduledRemindersForLegacyClients(),
+        RelativeReminders: child.RelativeReminders,
+        SlipAlertEnabled: child.SlipAlertEnabled);
 
     private static bool GetResponseCompletion(
         Habit habit,

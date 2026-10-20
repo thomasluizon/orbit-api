@@ -63,6 +63,7 @@ internal static class McpToolHelpers
         if (data.IsBadHabit) line += " | bad habit";
         if (data.Checklist.Count > 0) line += $" | checklist: {data.Checklist.Count(i => i.IsChecked)}/{data.Checklist.Count}";
         if (data.Tags.Count > 0) line += $" | tags: {string.Join(", ", data.Tags.Select(t => t.Name))}";
+        if (!string.IsNullOrEmpty(data.Details)) line += $" | {data.Details}";
         return line;
     }
 
@@ -72,9 +73,29 @@ internal static class McpToolHelpers
         {
             lines.Add(FormatHabitLine(new HabitLineData(c.Id, c.Title, c.FrequencyUnit, c.FrequencyQuantity,
                 c.DueTime, c.IsCompleted, false, c.IsBadHabit, c.IsGeneral, c.IsFlexible,
-                c.ChecklistItems, c.Tags, c.Emoji), indent));
+                c.ChecklistItems, c.Tags, c.Emoji,
+                new HabitFieldSummary(c.Description, c.DueTime, c.DueEndTime, c.IntervalWeeks, c.Days,
+                    c.EndDate, c.ReminderEnabled == true, c.ReminderTimes ?? [], c.ScheduledReminders ?? [],
+                    c.RelativeReminders ?? [], c.SlipAlertEnabled == true, c.IsFlexible, c.ChecklistItems).Format()
+                    + $" | Due: {c.DueDate:yyyy-MM-dd}"), indent));
             if (c.Children.Count > 0)
                 AppendChildren(lines, c.Children, indent + 1);
+        }
+    }
+
+    public static void AppendDetailChildren(List<string> lines, IReadOnlyList<HabitChildResponse> children, int indent)
+    {
+        foreach (var child in children)
+        {
+            var details = new HabitFieldSummary(child.Description, child.DueTime, child.DueEndTime,
+                child.IntervalWeeks, child.Days, child.EndDate, child.ReminderEnabled == true,
+                child.ReminderTimes ?? [], child.ScheduledReminders ?? [], child.RelativeReminders ?? [],
+                child.SlipAlertEnabled == true, child.IsFlexible, child.ChecklistItems).Format();
+            lines.Add(FormatHabitLine(new HabitLineData(child.Id, child.Title, child.FrequencyUnit,
+                child.FrequencyQuantity, child.DueTime, child.IsCompleted, child.IsOverdue, child.IsBadHabit,
+                child.IsGeneral, child.IsFlexible, child.ChecklistItems, child.Tags ?? [], child.Emoji,
+                details + $" | Due: {child.DueDate:yyyy-MM-dd}"), indent));
+            AppendDetailChildren(lines, child.Children, indent + 1);
         }
     }
 
@@ -99,5 +120,5 @@ internal static class McpToolHelpers
         Guid Id, string Title, FrequencyUnit? FreqUnit, int? FreqQty,
         TimeOnly? DueTime, bool IsCompleted, bool IsOverdue, bool IsBadHabit,
         bool IsGeneral, bool IsFlexible,
-        IReadOnlyList<ChecklistItem> Checklist, IReadOnlyList<HabitTagItem> Tags, string? Emoji);
+        IReadOnlyList<ChecklistItem> Checklist, IReadOnlyList<HabitTagItem> Tags, string? Emoji, string? Details = null);
 }

@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Habits.Services;
+using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -20,7 +21,7 @@ public class QueryHabitsTool(
     public bool IsReadOnly => true;
 
     public string Description =>
-        "Read current-turn facts for habits: listings, schedules, metrics, streaks, completion percentages, descriptions, checklist items, and filtered searches by text, date, frequency, tag, or status. Call this before answering habit listing or schedule questions; prompt indexes alone do not ground the reply.";
+        "Read current-turn facts for habits: listings, schedules, metrics, streaks, completion percentages, descriptions, timing, reminders, tags, checklist item text, and filtered searches by text, date, frequency, tag, or status. Call this before answering habit listing or schedule questions; prompt indexes alone do not ground the reply.";
 
     public object GetParameterSchema() => new
     {
@@ -244,7 +245,7 @@ public class QueryHabitsTool(
                 schedule));
 
             if (includeSubs)
-                AppendChildren(sb, allHabits, habit.Id, today, includeMetrics, 1, schedule);
+                AppendChildren(sb, allHabits, habit.Id, today, weekStartDay, includeMetrics, 1, schedule);
         }
 
         return sb.ToString();
@@ -261,8 +262,10 @@ public class QueryHabitsTool(
         var freqLabel = FormatFrequencyLabel(habit);
         var labels = BuildLabels(habit, today, weekStartDay, includeMetrics, schedule);
         var labelStr = labels.Count > 0 ? $" [{string.Join(" | ", labels)}]" : "";
+        var details = HabitFieldSummary.From(habit).Format();
+        var detailSuffix = details.Length == 0 ? string.Empty : $" | {details}";
         var emojiLabel = string.IsNullOrWhiteSpace(habit.Emoji) ? "No emoji" : $"Emoji: {habit.Emoji}";
-        return string.Create(CultureInfo.InvariantCulture, $"- \"{habit.Title}\"{dupSuffix} | ID: {habit.Id} | {emojiLabel} | {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{labelStr}");
+        return string.Create(CultureInfo.InvariantCulture, $"- \"{habit.Title}\"{dupSuffix} | ID: {habit.Id} | {emojiLabel} | {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{labelStr}{detailSuffix}");
     }
 
     private static List<string> BuildLabels(Habit habit, DateOnly today, int weekStartDay, bool includeMetrics, ScheduleContext? schedule)
@@ -328,7 +331,7 @@ public class QueryHabitsTool(
             : $"Every {habit.FrequencyQuantity} {unitName}s";
     }
 
-    private static void AppendChildren(StringBuilder sb, IReadOnlyList<Habit> allHabits, Guid parentId, DateOnly today, bool includeMetrics, int depth, ScheduleContext? schedule)
+    private static void AppendChildren(StringBuilder sb, IReadOnlyList<Habit> allHabits, Guid parentId, DateOnly today, int weekStartDay, bool includeMetrics, int depth, ScheduleContext? schedule)
     {
         var indent = new string(' ', depth * 2);
         var children = allHabits
@@ -339,15 +342,9 @@ public class QueryHabitsTool(
 
         foreach (var child in children)
         {
-            var childLabels = new List<string>();
-            if (schedule is not null && schedule.Facts.DoneTodayIds.Contains(child.Id))
-                childLabels.Add(schedule.Date == today ? "DONE TODAY" : "DONE ON DATE");
-            else if (schedule is null && includeMetrics && child.Logs.Any(l => l.Date == today)) childLabels.Add("DONE");
-            if (GetResponseCompletion(child, today)) childLabels.Add("COMPLETED");
-            var childLabelStr = childLabels.Count > 0 ? $" [{string.Join(" | ", childLabels)}]" : "";
-            var emojiLabel = string.IsNullOrWhiteSpace(child.Emoji) ? "No emoji" : $"Emoji: {child.Emoji}";
-            sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}- \"{child.Title}\"{childSuffixes.GetValueOrDefault(child.Id, string.Empty)} | ID: {child.Id} | {emojiLabel}{childLabelStr}");
-            AppendChildren(sb, allHabits, child.Id, today, includeMetrics, depth + 1, schedule);
+            sb.AppendLine(indent + BuildHabitLine(child, today, weekStartDay, includeMetrics,
+                childSuffixes.GetValueOrDefault(child.Id, string.Empty), schedule));
+            AppendChildren(sb, allHabits, child.Id, today, weekStartDay, includeMetrics, depth + 1, schedule);
         }
     }
 }

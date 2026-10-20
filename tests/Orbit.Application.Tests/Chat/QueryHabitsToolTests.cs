@@ -9,6 +9,7 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
+using Orbit.Domain.ValueObjects;
 using Orbit.Application.Common;
 
 namespace Orbit.Application.Tests.Chat;
@@ -32,6 +33,60 @@ public class QueryHabitsToolTests
         var user = User.Create("Test", "test@test.com").Value;
         user.SetTimeZone("UTC");
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+    }
+
+    [Theory]
+    [InlineData("Description: Two litres")]
+    [InlineData("Due time: 09:00")]
+    [InlineData("Due end time: 15:00")]
+    [InlineData("Interval weeks: 2")]
+    [InlineData("Days: Monday, Wednesday")]
+    [InlineData("End date:")]
+    [InlineData("Reminders: enabled")]
+    [InlineData("Reminder minutes: 10, 20")]
+    [InlineData("Relative reminders: 30 minutes before, day_before 18:00")]
+    [InlineData("Slip alerts: enabled")]
+    [InlineData("[x] Fill bottle")]
+    [InlineData("Tags: Health")]
+    public async Task EditableFields_AppearOnParentAndChild(string expected)
+    {
+        var parent = Habit.Create(new HabitCreateParams(UserId, "Water", FrequencyUnit.Day, 1, Today,
+            Description: "Two litres", Days: [DayOfWeek.Monday, DayOfWeek.Wednesday],
+            DueTime: new TimeOnly(9, 0), DueEndTime: new TimeOnly(15, 0), IntervalWeeks: 2,
+            ReminderEnabled: true, ReminderTimes: [10, 20], SlipAlertEnabled: true,
+            ChecklistItems: [new("Fill bottle", true)], EndDate: Today.AddDays(30),
+            RelativeReminders: [new(MinutesBefore: 30), new(When: ScheduledReminderWhen.DayBefore, Time: new TimeOnly(18, 0))])).Value;
+        var child = Habit.Create(new HabitCreateParams(UserId, "Child", FrequencyUnit.Day, 1, Today,
+            Description: parent.Description, Days: parent.Days.ToList(), DueTime: parent.DueTime,
+            DueEndTime: parent.DueEndTime, IntervalWeeks: parent.IntervalWeeks,
+            ReminderEnabled: true, ReminderTimes: parent.ReminderTimes, SlipAlertEnabled: true,
+            ChecklistItems: parent.ChecklistItems, EndDate: parent.EndDate,
+            RelativeReminders: parent.RelativeReminders, ParentHabitId: parent.Id)).Value;
+        var tag = Tag.Create(UserId, "Health", "#123456").Value;
+        parent.AddTag(tag);
+        child.AddTag(tag);
+        SetupHabits(parent, child);
+
+        var result = await Execute("{}");
+
+        var lines = result.EntityName!.Split('\n');
+        lines.Single(line => line.Contains($"ID: {parent.Id}")).Should().Contain(expected);
+        lines.Single(line => line.Contains($"ID: {child.Id}")).Should().Contain(expected);
+    }
+
+    [Theory]
+    [InlineData(false, "Scheduled reminders: same_day 08:00")]
+    [InlineData(true, "Flexible: true")]
+    public async Task EditableScheduleFields_AppearOnParentAndChild(bool flexible, string expected)
+    {
+        var parent = Habit.Create(new HabitCreateParams(UserId, "Water", FrequencyUnit.Week, 3, Today,
+            IsFlexible: flexible, ScheduledReminders: [new(ScheduledReminderWhen.SameDay, new TimeOnly(8, 0))])).Value;
+        var child = Habit.Create(new HabitCreateParams(UserId, "Child", FrequencyUnit.Week, 3, Today,
+            IsFlexible: flexible, ScheduledReminders: parent.ScheduledReminders, ParentHabitId: parent.Id)).Value;
+        SetupHabits(parent, child);
+        var result = await Execute("{}");
+        result.EntityName!.Split('\n').Single(line => line.Contains($"ID: {parent.Id}")).Should().Contain(expected);
+        result.EntityName!.Split('\n').Single(line => line.Contains($"ID: {child.Id}")).Should().Contain(expected);
     }
 
     [Fact]

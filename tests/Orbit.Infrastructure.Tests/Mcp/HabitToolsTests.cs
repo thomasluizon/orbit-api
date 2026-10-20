@@ -71,6 +71,49 @@ public class HabitToolsTests
         return (AgentExecuteOperationRequest)calls[^1].GetArguments()[0]!;
     }
 
+    [Theory]
+    [InlineData("Interval weeks: 2")]
+    [InlineData("Due end time: 15:00")]
+    [InlineData("Reminders: enabled")]
+    [InlineData("Reminder minutes: 15")]
+    [InlineData("Slip alerts: enabled")]
+    [InlineData("End date: 2026-12-31")]
+    [InlineData("[x] Shoes")]
+    [InlineData("Relative reminders: 30 minutes before")]
+    [InlineData("Scheduled reminders: same_day 08:00")]
+    public async Task ReadSurfaces_PrintEditableFields(string expected)
+    {
+        var date = new DateOnly(2026, 10, 19);
+        var checklist = new[] { new ChecklistItem("Shoes", true) };
+        var scheduled = new[] { new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(8, 0)) };
+        var relative = new[] { new RelativeReminderTime(MinutesBefore: 30) };
+        var detail = new HabitDetailResponse(Guid.NewGuid(), "Run", "Outside", FrequencyUnit.Day, 1,
+            false, false, false, false, date, new TimeOnly(9, 0), new TimeOnly(15, 0), new DateOnly(2026, 12, 31),
+            [DayOfWeek.Monday], null, true, [15], scheduled, checklist, DateTime.UnixEpoch, [],
+            IntervalWeeks: 2, SlipAlertEnabled: true, RelativeReminders: relative);
+        var item = new HabitScheduleItem(detail.Id, detail.Title, detail.Description, FrequencyUnit.Day, 1,
+            false, false, false, false, detail.Days, null, DateTime.UnixEpoch, date, detail.DueTime, detail.DueEndTime,
+            detail.EndDate, [date], false, true, [15], scheduled, true, checklist, [], [], [], false,
+            null, null, false, [], IntervalWeeks: 2, RelativeReminders: relative);
+        _mediator.Send(Arg.Any<GetHabitByIdQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success(detail));
+        _mediator.Send(Arg.Any<GetHabitScheduleQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new PaginatedResponse<HabitScheduleItem>([item], 1, 50, 1, 1)));
+
+        (await _tools.GetHabit(_user, detail.Id.ToString())).Should().Contain(expected);
+        (await _tools.ListHabits(_user, "2026-10-19", "2026-10-20")).Should().Contain(expected);
+    }
+
+    [Fact]
+    public async Task OmittedTitle_AndOtherOmittedFields_AreNotForwarded()
+    {
+        StubExecutor(AgentOperationStatus.Succeeded);
+        var method = typeof(HabitTools).GetMethod(nameof(HabitTools.UpdateHabit))!;
+        method.GetParameters().Single(p => p.Name == "title").IsOptional.Should().BeTrue();
+        var request = await CapturedRequestAsync(() => _tools.UpdateHabit(_user, Guid.NewGuid().ToString(), title: null!));
+        var args = JsonDocument.Parse(request.ArgumentsJson).RootElement;
+        args.EnumerateObject().Select(p => p.Name).Should().Equal("habit_id");
+    }
+
     [Fact]
     public async Task ListHabits_Success_ReturnsFormattedList()
     {
