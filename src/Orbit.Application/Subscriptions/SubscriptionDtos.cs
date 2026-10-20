@@ -56,4 +56,5 @@ public record BillingDetailsResponse(
     string Currency,
     PaymentMethodDto? PaymentMethod,
     IReadOnlyList<InvoiceDto> RecentInvoices,
+    [property: System.ComponentModel.Description("Recurring subscription amount after Stripe-calculated discounts, before tax, in the subscription currency's minor units. Excludes prorations, one-time charges and customer balance. Null when no recurring preview is available, including trials, cancellation and pauses; clients fall back to AmountPerPeriod.")]
     long? BilledAmountPerPeriod = null);

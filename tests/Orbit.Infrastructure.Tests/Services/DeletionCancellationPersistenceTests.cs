@@ -47,8 +47,6 @@ public class DeletionCancellationPersistenceTests
         await factory.Context.SaveChangesAsync();
         var subscriptions = Substitute.For<SubscriptionService>();
         var invoices = Substitute.For<InvoiceService>();
-        invoices.CreatePreviewAsync(Arg.Any<InvoiceCreatePreviewOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
-            .Returns(new Invoice());
         var stripe = new StripeBillingService(new StripeServiceClients(
             new CustomerService(), new Stripe.Checkout.SessionService(), new Stripe.BillingPortal.SessionService(),
             subscriptions, invoices, new PriceService(), new CouponService()),

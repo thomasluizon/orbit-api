@@ -40,8 +40,6 @@ public class StripeBillingServiceTests
                 return Task.FromResult(new PortalSession { Url = "https://billing.stripe.com/session" });
             });
         var invoices = Substitute.For<InvoiceService>();
-        invoices.CreatePreviewAsync(Arg.Any<InvoiceCreatePreviewOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
-            .Returns(new Invoice());
         _service = new StripeBillingService(
             new StripeServiceClients(new CustomerService(), checkout, portal, _subscriptions,
                 invoices, new PriceService(), new CouponService()),

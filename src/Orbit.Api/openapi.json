@@ -13651,6 +13651,7 @@
               "integer",
               "string"
             ],
+            "description": "Recurring subscription amount after Stripe-calculated discounts, before tax, in the subscription currency's minor units. Excludes prorations, one-time charges and customer balance. Null when no recurring preview is available, including trials, cancellation and pauses; clients fall back to AmountPerPeriod.",
             "format": "int64"
           }
         }
