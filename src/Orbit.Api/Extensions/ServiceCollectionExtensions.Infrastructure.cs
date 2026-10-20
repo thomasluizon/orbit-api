@@ -337,6 +337,7 @@ public static partial class ServiceCollectionExtensions
     private static void ConfigureOrbitOpenApi(Microsoft.AspNetCore.OpenApi.OpenApiOptions options, string version)
     {
         options.AddDocumentTransformer<BearerSecuritySchemeTransformer>();
+        options.AddSchemaTransformer<HabitEnumSchemaTransformer>();
         options.AddDocumentTransformer((document, _, _) =>
         {
             document.Info.Version = version;
