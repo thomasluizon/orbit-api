@@ -301,6 +301,14 @@ public partial class AgentOperationExecutor(
         CancellationToken cancellationToken)
     {
         policyState.Decision = null;
+        if (RequiresArgumentCheck(execution.Operation.Id, execution.Arguments) && tool is IArgumentCheckTool check)
+        {
+            var validation = await check.CheckArgumentsAsync(execution.Arguments, execution.Request.UserId, cancellationToken);
+            if (validation.IsFailure)
+                return await DenyByPolicyAsync(execution, new AgentPolicyDecision(
+                    AgentPolicyDecisionStatus.Denied, execution.Capability, validation.ErrorCode ?? validation.Error), cancellationToken);
+        }
+
         var policyDecision = EvaluatePolicy(execution);
         policyState.Decision = policyDecision;
 
@@ -341,6 +349,20 @@ public partial class AgentOperationExecutor(
             throw new ToolOutcomeRollbackException(policyDecision, result);
 
         return await BuildToolOutcomeResponseAsync(execution, policyDecision, result, executionCancellationToken);
+    }
+
+    private static bool RequiresArgumentCheck(string operationId, JsonElement arguments)
+    {
+        var action = arguments.ValueKind == JsonValueKind.Object
+            && arguments.TryGetProperty("action", out var value) && value.ValueKind == JsonValueKind.String
+                ? value.GetString() : null;
+        return operationId switch
+        {
+            "update_checklist_template" => true,
+            "update_profile_preferences" => action == "set_name",
+            "manage_calendar_sync" => action == "set_selected_calendars",
+            _ => false
+        };
     }
 
     private async Task<AgentExecuteOperationResponse> FailOperationAsync(

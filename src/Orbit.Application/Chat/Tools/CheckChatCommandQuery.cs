@@ -39,7 +39,7 @@ public sealed class CheckChatCommandQueryHandler(IServiceProvider services) : IR
         {
             var validation = await validator.ValidateAsync(new ValidationContext<object>(command), ct);
             if (!validation.IsValid)
-                return Result.Failure(validation.ToString());
+                return Result.Failure(validation.ToString(), validation.Errors[0].ErrorCode);
         }
 
         return await CheckHabitAsync(command, ct)

@@ -5,10 +5,14 @@ using NSubstitute;
 using Orbit.Application.Calendar.Commands;
 using Orbit.Application.Calendar.Queries;
 using Orbit.Application.ChecklistTemplates.Commands;
+using Orbit.Application.ChecklistTemplates.Validators;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Common;
 using Orbit.Application.Profile.Commands;
+using Orbit.Application.Profile.Validators;
 using Orbit.Domain.Common;
+using Orbit.Domain.Entities;
 
 namespace Orbit.Application.Tests.Chat.Tools;
 
@@ -86,6 +90,46 @@ public class CapabilityParityToolTests
         var result = await ((IArgumentCheckTool)tool).CheckArgumentsAsync(args, Guid.NewGuid(), default);
         result.IsSuccess.Should().BeTrue(result.Error);
         mediator.ReceivedCalls().Should().ContainSingle().Which.GetArguments()[0].Should().BeOfType<CheckChatCommandQuery>();
+    }
+
+    [Theory]
+    [InlineData(50, true)]
+    [InlineData(51, false)]
+    public async Task SetName_ArgumentCheckUsesCommandValidatorBeforePreview(int length, bool valid)
+    {
+        using var context = new HeldWriteTestContext();
+        var name = new string('a', length);
+        var validation = new SetNameCommandValidator().Validate(new SetNameCommand(context.UserId, name));
+        var result = await ((IArgumentCheckTool)context.Tool("update_profile_preferences")).CheckArgumentsAsync(
+            JsonSerializer.SerializeToElement(new { action = "set_name", name }), context.UserId, default);
+
+        result.IsSuccess.Should().Be(valid).And.Be(validation.IsValid);
+        if (!valid)
+            result.ErrorCode.Should().Be(ValidationErrorCodes.ProfileNameLength)
+                .And.Be(validation.Errors.Single().ErrorCode);
+        context.Commands.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(true, ValidationErrorCodes.TemplateItemLimit)]
+    [InlineData(false, ValidationErrorCodes.TemplateItemLength)]
+    public async Task UpdateChecklistTemplate_ArgumentCheckPreservesCommandValidationCode(bool tooMany, string code)
+    {
+        using var context = new HeldWriteTestContext();
+        var template = ChecklistTemplate.Create(context.UserId, "Morning", ["Water"]).Value;
+        context.Records.Add(template);
+        var items = tooMany ? Enumerable.Repeat("Item", AppConstants.MaxChecklistItems + 1).ToArray()
+            : [new string('a', AppConstants.MaxChecklistItemTextLength + 1)];
+        var validation = new UpdateChecklistTemplateCommandValidator().Validate(
+            new UpdateChecklistTemplateCommand(context.UserId, template.Id, Items: items));
+
+        var result = await ((IArgumentCheckTool)context.Tool("update_checklist_template")).CheckArgumentsAsync(
+            JsonSerializer.SerializeToElement(new { template_id = template.Id, items }), context.UserId, default);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(code).And.Be(validation.Errors.Single().ErrorCode);
+        context.Commands.Should().BeEmpty();
+        template.Items.Should().Equal("Water");
     }
 
     [Theory]
