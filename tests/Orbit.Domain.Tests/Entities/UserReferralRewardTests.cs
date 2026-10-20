@@ -87,15 +87,112 @@ public class UserReferralRewardTests
     }
 
     [Fact]
-    public void GrantBonusProDays_LegacySubscriptionRenewalSupersedesBonusMarker()
+    public void GrantBonusProDays_SubscriptionRenewalPreservesBonusAndRejectsPaidGrant()
     {
         var user = User.Create("Alex", "alex@example.com", _clock).Value;
         user.SetStripeSubscription("sub_paid", _clock.GetUtcNow().UtcDateTime.AddDays(-1));
         user.GrantBonusProDays(7);
-        typeof(User).GetProperty("PlanExpiresAt")!.SetValue(user, _clock.GetUtcNow().UtcDateTime.AddDays(30));
+        var bonusExpiry = user.BonusProExpiresAtUtc;
+        user.SetStripeSubscription("sub_paid", _clock.GetUtcNow().UtcDateTime.AddDays(30));
+        user.BonusProExpiresAtUtc.Should().Be(bonusExpiry);
         user.HasActivePaidSubscription.Should().BeTrue();
         var grant = () => user.GrantBonusProDays(7);
         grant.Should().Throw<InvalidOperationException>();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void GrantBonusProDays_TerminalProviderCancellationPreservesAccessUntilExpiry(bool play)
+    {
+        var clock = new Clock(DateTimeOffset.UtcNow);
+        var user = User.Create("Alex", "alex@example.com", clock).Value;
+        user.StartTrial(DateTime.UtcNow.AddDays(-30));
+        var expired = clock.GetUtcNow().UtcDateTime.AddDays(-1);
+        if (play)
+            user.SetPlaySubscription("play-token", expired);
+        else
+            user.SetStripeSubscription("sub_expired", expired);
+        user.GrantBonusProDays(7);
+        var bonusExpiry = user.BonusProExpiresAtUtc;
+
+        if (play)
+            user.CancelPlaySubscription(SubscriptionLapseReason.Expired);
+        else
+            user.CancelStripeSubscription(SubscriptionLapseReason.Canceled);
+
+        user.HasProAccess.Should().BeTrue();
+        user.IsTrialActive.Should().BeFalse();
+        user.Plan.Should().Be(UserPlan.Pro);
+        user.PlanExpiresAt.Should().Be(bonusExpiry);
+        user.BonusProExpiresAtUtc.Should().Be(bonusExpiry);
+        user.HasActivePaidSubscription.Should().BeFalse();
+        user.SubscriptionSource.Should().BeNull();
+        user.StripeSubscriptionId.Should().BeNull();
+        user.PlayPurchaseToken.Should().BeNull();
+        clock.Advance(TimeSpan.FromDays(7) - TimeSpan.FromTicks(1));
+        user.HasProAccess.Should().BeTrue();
+        clock.Advance(TimeSpan.FromTicks(1));
+        user.HasProAccess.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void BonusAccess_RepeatedProviderCleanupDoesNotResurrectExpiredBonus(bool play)
+    {
+        var clock = new Clock(DateTimeOffset.UtcNow);
+        var user = User.Create("Alex", "alex@example.com", clock).Value;
+        user.StartTrial(DateTime.UtcNow.AddDays(-30));
+        if (play)
+            user.SetPlaySubscription("play-token", clock.GetUtcNow().UtcDateTime.AddDays(-1));
+        else
+            user.SetStripeSubscription("sub_expired", clock.GetUtcNow().UtcDateTime.AddDays(-1));
+        user.GrantBonusProDays(7);
+        var bonusExpiry = user.BonusProExpiresAtUtc;
+        void Cancel()
+        {
+            if (play)
+                user.CancelPlaySubscription(SubscriptionLapseReason.PaymentFailed);
+            else
+                user.CancelStripeSubscription(SubscriptionLapseReason.PaymentFailed);
+        }
+
+        Cancel();
+        user.HasProAccess.Should().BeTrue();
+        clock.Advance(TimeSpan.FromDays(7));
+        Cancel();
+        user.CancelDeactivation();
+        user.StartTrial(clock.GetUtcNow().UtcDateTime.AddDays(-30));
+
+        user.HasProAccess.Should().BeFalse();
+        user.BonusProExpiresAtUtc.Should().Be(bonusExpiry);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void BonusAccess_NewPurchasePreservesIndependentExpiry(bool play)
+    {
+        var clock = new Clock(DateTimeOffset.UtcNow);
+        var user = User.Create("Alex", "alex@example.com", clock).Value;
+        user.StartTrial(DateTime.UtcNow.AddDays(-30));
+        user.GrantBonusProDays(7);
+        var bonusExpiry = user.BonusProExpiresAtUtc;
+        var paidExpiry = clock.GetUtcNow().UtcDateTime.AddDays(2);
+        if (play)
+            user.SetPlaySubscription("play-token", paidExpiry);
+        else
+            user.SetStripeSubscription("sub_new", paidExpiry);
+
+        user.BonusProExpiresAtUtc.Should().Be(bonusExpiry);
+        user.PlanExpiresAt.Should().Be(bonusExpiry);
+        user.HasActivePaidSubscription.Should().BeTrue();
+        clock.Advance(TimeSpan.FromDays(2));
+        user.HasActivePaidSubscription.Should().BeFalse();
+        user.HasProAccess.Should().BeTrue();
+        clock.Advance(TimeSpan.FromDays(5));
+        user.HasProAccess.Should().BeFalse();
     }
 
     private sealed class Clock(DateTimeOffset now) : TimeProvider

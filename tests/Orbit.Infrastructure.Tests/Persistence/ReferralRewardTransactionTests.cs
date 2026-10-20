@@ -118,7 +118,7 @@ public class ReferralRewardTransactionTests
             if (Enabled && eventData.Context is { } db)
             {
                 SawBothEntitlementsAndReward = db.ChangeTracker.Entries<Referral>().Any(e => e.Entity.RewardGrantedAtUtc is not null)
-                    && db.ChangeTracker.Entries<User>().Count(e => e.Entity.IsBonusPro) == 2;
+                    && db.ChangeTracker.Entries<User>().Count(e => e.Entity.BonusProExpiresAtUtc.HasValue) == 2;
                 throw new InvalidOperationException("injected after SQL save");
             }
             return ValueTask.FromResult(result);

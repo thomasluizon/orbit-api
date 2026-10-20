@@ -26,10 +26,12 @@ public partial class User : Entity
     public bool HasTriedAstra { get; private set; } = false;
     public bool HasCompletedOnboardingChecklist { get; private set; } = false;
     public string? Language { get; private set; }
-    public UserPlan Plan { get; private set; } = UserPlan.Free;
+    public UserPlan SubscriptionPlan { get; private set; } = UserPlan.Free;
+
     public string? StripeCustomerId { get; private set; }
     public string? StripeSubscriptionId { get; private set; }
-    public DateTime? PlanExpiresAt { get; private set; }
+    public DateTime? SubscriptionExpiresAtUtc { get; private set; }
+
     public DateTime? BonusProExpiresAtUtc { get; private set; }
     public DateTime? TrialEndsAt { get; private set; }
     public bool IsLifetimePro { get; private set; } = false;
@@ -98,7 +100,18 @@ public partial class User : Entity
     public bool PublicProfileShowTopHabits { get; private set; } = false;
 
     [NotMapped]
-    public bool IsPro => IsLifetimePro || (Plan == UserPlan.Pro && PlanExpiresAt > _timeProvider.GetUtcNow().UtcDateTime);
+    public UserPlan Plan => BonusProExpiresAtUtc.HasValue ? UserPlan.Pro : SubscriptionPlan;
+
+    [NotMapped]
+    public DateTime? PlanExpiresAt => BonusProExpiresAtUtc.HasValue
+        && (!SubscriptionExpiresAtUtc.HasValue || BonusProExpiresAtUtc > SubscriptionExpiresAtUtc)
+            ? BonusProExpiresAtUtc
+            : SubscriptionExpiresAtUtc;
+
+    [NotMapped]
+    public bool IsPro => IsLifetimePro
+        || (SubscriptionPlan == UserPlan.Pro && SubscriptionExpiresAtUtc > _timeProvider.GetUtcNow().UtcDateTime)
+        || BonusProExpiresAtUtc > _timeProvider.GetUtcNow().UtcDateTime;
 
     [NotMapped]
     public bool IsTrialActive => !IsPro && TrialEndsAt > _timeProvider.GetUtcNow().UtcDateTime;
@@ -107,10 +120,8 @@ public partial class User : Entity
     public bool HasProAccess => IsPro || IsTrialActive;
 
     [NotMapped]
-    public bool IsBonusPro => Plan == UserPlan.Pro && PlanExpiresAt.HasValue && PlanExpiresAt == BonusProExpiresAtUtc;
-
-    [NotMapped]
-    public bool HasActivePaidSubscription => !IsBonusPro && Plan == UserPlan.Pro && PlanExpiresAt > _timeProvider.GetUtcNow().UtcDateTime
+    public bool HasActivePaidSubscription => SubscriptionPlan == UserPlan.Pro
+        && SubscriptionExpiresAtUtc > _timeProvider.GetUtcNow().UtcDateTime
         && (SubscriptionSource == Enums.SubscriptionSource.Stripe && !string.IsNullOrWhiteSpace(StripeSubscriptionId)
             || SubscriptionSource == Enums.SubscriptionSource.GooglePlay && !string.IsNullOrWhiteSpace(PlayPurchaseToken));
 
@@ -293,8 +304,6 @@ public partial class User : Entity
         var nowAtUtc = _timeProvider.GetUtcNow().UtcDateTime;
         var expiresAtUtc = PlanExpiresAt > nowAtUtc ? PlanExpiresAt.Value : nowAtUtc;
         var bonusExpiresAtUtc = expiresAtUtc.AddDays(days);
-        Plan = UserPlan.Pro;
-        PlanExpiresAt = bonusExpiresAtUtc;
         BonusProExpiresAtUtc = bonusExpiresAtUtc;
     }
 
@@ -310,9 +319,8 @@ public partial class User : Entity
         if (StripeSubscriptionId != subscriptionId)
             StripeRenewalStoppedByDeletion = false;
         StripeSubscriptionId = subscriptionId;
-        BonusProExpiresAtUtc = null;
-        PlanExpiresAt = expiresAt;
-        Plan = UserPlan.Pro;
+        SubscriptionExpiresAtUtc = expiresAt;
+        SubscriptionPlan = UserPlan.Pro;
         SubscriptionSource = Enums.SubscriptionSource.Stripe;
         SubscriptionLapseReason = null;
         SubscriptionEndedAtUtc = null;
@@ -328,9 +336,8 @@ public partial class User : Entity
         if (PlayPurchaseToken != purchaseToken)
             PlayRenewalStoppedByDeletion = false;
         PlayPurchaseToken = purchaseToken;
-        BonusProExpiresAtUtc = null;
-        PlanExpiresAt = expiresAt;
-        Plan = UserPlan.Pro;
+        SubscriptionExpiresAtUtc = expiresAt;
+        SubscriptionPlan = UserPlan.Pro;
         SubscriptionSource = Enums.SubscriptionSource.GooglePlay;
         SubscriptionLapseReason = isInGracePeriod ? Enums.SubscriptionLapseReason.PaymentFailed : null;
         SubscriptionEndedAtUtc = null;
@@ -390,7 +397,7 @@ public partial class User : Entity
         StripeSubscriptionId = null;
         StripeRenewalStoppedByDeletion = false;
         if (SubscriptionSource == Enums.SubscriptionSource.Stripe)
-            ClearEntitlement(reason);
+            ClearSubscriptionEntitlement(reason);
     }
 
     public void CancelPlaySubscription(SubscriptionLapseReason reason)
@@ -399,7 +406,7 @@ public partial class User : Entity
         PlayPurchaseToken = null;
         PlayRenewalStoppedByDeletion = false;
         if (SubscriptionSource == Enums.SubscriptionSource.GooglePlay)
-            ClearEntitlement(reason);
+            ClearSubscriptionEntitlement(reason);
     }
 
     public void RecordSubscriptionLapseReason(
@@ -420,14 +427,14 @@ public partial class User : Entity
         SubscriptionLapseReason = reason;
     }
 
-    private void ClearEntitlement(SubscriptionLapseReason reason)
+    private void ClearSubscriptionEntitlement(SubscriptionLapseReason reason)
     {
-        Plan = UserPlan.Free;
-        PlanExpiresAt = null;
+        SubscriptionPlan = UserPlan.Free;
+        SubscriptionExpiresAtUtc = null;
         SubscriptionInterval = null;
         SubscriptionSource = null;
         SubscriptionLapseReason = reason;
-        SubscriptionEndedAtUtc = DateTime.UtcNow;
+        SubscriptionEndedAtUtc = _timeProvider.GetUtcNow().UtcDateTime;
     }
 
     private static void EnsureValidLapseReason(SubscriptionLapseReason reason)
@@ -576,8 +583,9 @@ public partial class User : Entity
     public void CancelDeactivation()
     {
         PlayRenewalStoppedByDeletion = false;
-        if (!IsLifetimePro && PlanExpiresAt.HasValue && PlanExpiresAt.Value <= DateTime.UtcNow)
-            Plan = UserPlan.Free;
+        if (!IsLifetimePro && SubscriptionExpiresAtUtc.HasValue
+            && SubscriptionExpiresAtUtc.Value <= _timeProvider.GetUtcNow().UtcDateTime)
+            SubscriptionPlan = UserPlan.Free;
 
         IsDeactivated = false;
         ReminderPreferencesVersion++;

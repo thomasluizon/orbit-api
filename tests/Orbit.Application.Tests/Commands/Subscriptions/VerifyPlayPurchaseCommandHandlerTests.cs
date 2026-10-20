@@ -51,6 +51,28 @@ public class VerifyPlayPurchaseCommandHandlerTests
     private static VerifyPlayPurchaseCommand Command() => new(UserId, "orbit_pro", "play_token_123");
 
     [Fact]
+    public async Task Handle_PlayPurchaseDuringBonus_UsesPaidStripePeriodForOwnership()
+    {
+        var user = User.Create("Alex", "test@example.com").Value;
+        user.SetStripeSubscription("sub_old", DateTime.UtcNow.AddDays(-1));
+        user.GrantBonusProDays(7);
+        var bonusExpiry = user.BonusProExpiresAtUtc;
+        user.SetStripeSubscription("sub_new", DateTime.UtcNow.AddDays(2));
+        var playExpiry = DateTime.UtcNow.AddDays(3);
+        StubUser(user);
+        StubVerify(new PlaySubscriptionState(true, playExpiry, SubscriptionInterval.Monthly,
+            true, "orbit_pro", null, UserId.ToString()));
+
+        var result = await _handler.Handle(Command(), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.SubscriptionSource.Should().Be(SubscriptionSource.GooglePlay);
+        user.SubscriptionExpiresAtUtc.Should().Be(playExpiry);
+        user.BonusProExpiresAtUtc.Should().Be(bonusExpiry);
+        result.Value.PlanExpiresAt.Should().Be(bonusExpiry);
+    }
+
+    [Fact]
     public async Task Handle_LicenseTesterPurchase_GrantsPro()
     {
         var user = User.Create("Alex", "test@example.com").Value;

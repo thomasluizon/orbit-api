@@ -82,12 +82,12 @@ public class FeatureFlagAccountsMigrationTests
             "SignupLanguage", "SignupReferralCode", "SignupCompletedAtUtc",
             "SignupReferralCompletedAtUtc", "SignupAnalyticsCompletedAtUtc", "SignupWelcomeCompletedAtUtc");
         context.Database.HasPendingModelChanges().Should().BeFalse();
-        context.Database.GetMigrations().TakeLast(9).Should().Equal(
+        context.Database.GetMigrations().TakeLast(10).Should().Equal(
             "20261001074038_AddHabitSkipUndo", "20261017011939_AddFeatureFlagAccounts",
             "20261018093533_CascadeAccountabilityPairsOnUserDeletion", "20261018111350_AddDurableSignupWork",
             "20261018111711_RecordDeletionStoppedRenewals", "20261019011031_ContractHabitLogSlip",
             "20261019091925_AddOwedSubscriptionCancellations", "20261019165331_ExpandHabitScheduleAndStartDate",
-            "20261020023828_AddReferralProDayRewards");
+            "20261020023828_AddReferralProDayRewards", "20261020041243_SeparateBonusProEntitlement");
     }
 
     private static void AssertHabitExpandColumns(IReadOnlyList<MigrationOperation> differences)
