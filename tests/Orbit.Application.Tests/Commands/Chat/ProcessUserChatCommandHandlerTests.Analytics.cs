@@ -10,15 +10,15 @@ namespace Orbit.Application.Tests.Commands.Chat;
 public partial class ProcessUserChatCommandHandlerTests
 {
     [Theory]
-    [InlineData("free", false)]
-    [InlineData("trial", false)]
-    [InlineData("pro", false)]
-    [InlineData("free", true)]
+    [InlineData("Free", false)]
+    [InlineData("Trial", false)]
+    [InlineData("Pro", false)]
+    [InlineData("Free", true)]
     public async Task Handle_MessageAnalytics_UsesQuotaEntitlementAndModelRoundCounts(string plan, bool fails)
     {
         var user = User.Create("private-person", "private@example.com").Value;
-        user.StartTrial(DateTime.UtcNow.AddDays(plan == "trial" ? 1 : -1));
-        if (plan == "pro")
+        user.StartTrial(DateTime.UtcNow.AddDays(plan == "Trial" ? 1 : -1));
+        if (plan == "Pro")
             user.GrantLifetimePro();
         SetupUserAndPayGate(user);
         AiTurnTelemetry? telemetry = null;

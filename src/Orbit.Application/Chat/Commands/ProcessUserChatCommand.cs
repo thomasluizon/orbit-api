@@ -383,7 +383,7 @@ public partial class ProcessUserChatCommandHandler(
     }
 
     private static string GetAnalyticsPlan(User? user) =>
-        user is { IsPro: true } ? "pro" : user is { IsTrialActive: true } ? "trial" : "free";
+        user is { IsPro: true } ? nameof(UserPlan.Pro) : user is { IsTrialActive: true } ? "Trial" : nameof(UserPlan.Free);
 
     private static string? GetUserLanguage(User? user) => user?.Language;
 
