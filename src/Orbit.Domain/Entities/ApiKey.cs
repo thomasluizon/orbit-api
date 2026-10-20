@@ -54,7 +54,7 @@ public class ApiKey : Entity
             return Result.Failure<(ApiKey, string)>(DomainErrors.ApiKeyScopesInvalid);
 
         var rawKey = GenerateKey();
-        var keyHash = Hash(rawKey);
+        var keyHash = BCrypt.Net.BCrypt.HashPassword(rawKey);
         var keyPrefix = rawKey[..12];
         var apiKey = new ApiKey
         {
@@ -75,19 +75,13 @@ public class ApiKey : Entity
 
     public bool Verify(string rawKey)
     {
+        if (KeyHash.StartsWith("$2", StringComparison.Ordinal))
+            return BCrypt.Net.BCrypt.Verify(rawKey, KeyHash);
+
         if (KeyHash.Length != 64 || !KeyHash.All(Uri.IsHexDigit))
             return false;
         return CryptographicOperations.FixedTimeEquals(Convert.FromHexString(KeyHash), SHA256.HashData(Encoding.UTF8.GetBytes(rawKey)));
     }
-
-    public void UpgradeHash(string rawKey)
-    {
-        if (!rawKey.StartsWith(KeyPrefix, StringComparison.Ordinal))
-            throw new ArgumentException("Key prefix does not match.", nameof(rawKey));
-        KeyHash = Hash(rawKey);
-    }
-
-    private static string Hash(string rawKey) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawKey)));
 
     public void Revoke() => IsRevoked = true;
 
