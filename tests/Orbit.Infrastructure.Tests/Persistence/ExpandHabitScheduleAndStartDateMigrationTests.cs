@@ -24,12 +24,14 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
 
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
-        differences.Should().HaveCount(16);
+        differences.Should().HaveCount(22);
         RestoreProactivePreferenceMigrationTests.AssertRequiredPreference(differences);
+        ReferralRewardMigrationTests.AssertRewardColumns(differences);
+        MakeSubHabitsFreeMigrationTests.AssertFreeFeatureSeed(differences);
         differences.OfType<CreateTableOperation>().Select(table => table.Name)
             .Should().BeEquivalentTo("ConversationTurns", "OAuthStates", "AiBudgetCalls");
         differences.OfType<CreateIndexOperation>().Should().HaveCount(7);
-        differences.OfType<AddColumnOperation>().Should().HaveCount(3);
+        differences.OfType<AddColumnOperation>().Should().HaveCount(8);
         differences.OfType<InsertDataOperation>().Should().HaveCount(2);
         AssertAiSecurityAdditions(differences);
         ConversationMigrationTests.AssertConversationExpansion(differences);

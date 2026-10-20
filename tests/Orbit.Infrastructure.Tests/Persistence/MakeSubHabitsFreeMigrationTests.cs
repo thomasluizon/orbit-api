@@ -6,18 +6,23 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 
 public class MakeSubHabitsFreeMigrationTests
 {
-    [Fact]
-    public void Up_OnlyFreesFeatureAndDeletesObsoleteGateConfig()
+    internal static void AssertFreeFeatureSeed(IReadOnlyList<MigrationOperation> operations)
     {
-        var operations = new MakeSubHabitsFree().UpOperations;
-
-        operations.Should().HaveCount(2);
         var feature = operations.OfType<UpdateDataOperation>().Should().ContainSingle().Subject;
         feature.Table.Should().Be("AppFeatureFlags");
         feature.KeyColumns.Should().Equal("Key");
         feature.KeyValues[0, 0].Should().Be("sub_habits");
         feature.Columns.Should().Equal("PlanRequirement");
         feature.Values[0, 0].Should().BeNull();
+    }
+
+    [Fact]
+    public void Up_OnlyFreesFeatureAndDeletesObsoleteGateConfig()
+    {
+        var operations = new MakeSubHabitsFree().UpOperations;
+
+        operations.Should().HaveCount(2);
+        AssertFreeFeatureSeed(operations);
         var config = operations.OfType<DeleteDataOperation>().Should().ContainSingle().Subject;
         config.Table.Should().Be("AppConfigs");
         config.KeyColumns.Should().Equal("Key");
