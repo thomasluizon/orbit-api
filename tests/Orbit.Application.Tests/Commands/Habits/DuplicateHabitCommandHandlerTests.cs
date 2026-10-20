@@ -31,8 +31,6 @@ public class DuplicateHabitCommandHandlerTests
 
         _payGate.CanCreateHabits(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
-        _payGate.CanCreateSubHabits(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
         _unitOfWork.ExecuteInTransactionAsync(
                 Arg.Any<Func<CancellationToken, Task<Result<Guid>>>>(),
                 Arg.Any<CancellationToken>())
@@ -145,29 +143,6 @@ public class DuplicateHabitCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         await _habitRepo.Received(2).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
-        await _payGate.Received(1).CanCreateSubHabits(UserId, Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Handle_WithChildren_SubHabitPayGated_ReturnsFailure()
-    {
-        var parent = Habit.Create(new HabitCreateParams(
-            UserId, "Routine", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
-        var child = Habit.Create(new HabitCreateParams(
-            UserId, "Sub", FrequencyUnit.Day, 1,
-            ParentHabitId: parent.Id, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
-
-        SetupAllHabitsForUser(new List<Habit> { parent, child });
-
-        _payGate.CanCreateSubHabits(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Result.PayGateFailure("Sub-habits are a Pro feature"));
-
-        var command = new DuplicateHabitCommand(UserId, parent.Id);
-
-        var result = await _handler.Handle(command, CancellationToken.None);
-
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be("PAY_GATE");
     }
 
     [Fact]

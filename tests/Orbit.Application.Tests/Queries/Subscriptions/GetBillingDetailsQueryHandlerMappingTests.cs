@@ -85,6 +85,24 @@ public class GetBillingDetailsQueryHandlerMappingTests
     }
 
     [Fact]
+    public async Task Handle_RenewingSubscription_MapsRecurringAmountFromSeparatePreview()
+    {
+        CreateSubscribedUser();
+        _billingService.GetSubscriptionDetailsAsync("sub_test", Arg.Any<CancellationToken>())
+            .Returns(new BillingSubscriptionDetails("active", new DateTime(2027, 1, 1), false,
+                SubscriptionInterval.Monthly, 1000, "brl", null));
+        using var cts = new CancellationTokenSource();
+        _billingService.TryGetRecurringAmountPerPeriodAsync("sub_test", "brl", cts.Token).Returns(800L);
+
+        var result = await _handler.Handle(new GetBillingDetailsQuery(UserId), cts.Token);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AmountPerPeriod.Should().Be(1000);
+        result.Value.BilledAmountPerPeriod.Should().Be(800);
+        await _billingService.Received(1).TryGetRecurringAmountPerPeriodAsync("sub_test", "brl", cts.Token);
+    }
+
+    [Fact]
     public async Task Handle_MonthlyIntervalEnum_MapsToLowercaseString()
     {
         CreateSubscribedUser();

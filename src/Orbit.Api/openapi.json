@@ -7493,6 +7493,22 @@
             }
           },
           {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
             "name": "api-version",
             "in": "header",
             "schema": {
@@ -7753,6 +7769,104 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Habits/bulk/parent": {
+      "post": {
+        "tags": [
+          "Habits"
+        ],
+        "parameters": [
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkMoveHabitParentRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkMoveHabitParentRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkMoveHabitParentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkMoveHabitParentResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkMoveHabitParentResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkMoveHabitParentResult"
+                }
+              }
+            }
           },
           "400": {
             "description": "Bad Request",
@@ -11497,7 +11611,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingDetailsResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingDetailsResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingDetailsResponse"
+                }
+              }
+            }
           },
           "400": {
             "description": "Bad Request",
@@ -13608,6 +13739,71 @@
           }
         }
       },
+      "BillingDetailsResponse": {
+        "required": [
+          "status",
+          "currentPeriodEnd",
+          "cancelAtPeriodEnd",
+          "interval",
+          "amountPerPeriod",
+          "currency",
+          "paymentMethod",
+          "recentInvoices"
+        ],
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "currentPeriodEnd": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "cancelAtPeriodEnd": {
+            "type": "boolean"
+          },
+          "interval": {
+            "type": "string"
+          },
+          "amountPerPeriod": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "paymentMethod": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PaymentMethodDto"
+              }
+            ]
+          },
+          "recentInvoices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InvoiceDto"
+            }
+          },
+          "billedAmountPerPeriod": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Recurring subscription amount after Stripe-calculated discounts, before tax, in the subscription currency's minor units. Excludes prorations, one-time charges and customer balance. Null when no recurring preview is available, including trials, cancellation and pauses; clients fall back to AmountPerPeriod.",
+            "format": "int64"
+          }
+        }
+      },
       "BroadcastRequest": {
         "required": [
           "subjectEn",
@@ -13952,6 +14148,80 @@
               "string"
             ],
             "format": "int32"
+          }
+        }
+      },
+      "BulkMoveHabitParentItemResult": {
+        "required": [
+          "index",
+          "status",
+          "habitId"
+        ],
+        "type": "object",
+        "properties": {
+          "index": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "status": {
+            "$ref": "#/components/schemas/BulkItemStatus"
+          },
+          "habitId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "errorCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "BulkMoveHabitParentRequest": {
+        "required": [
+          "habitIds",
+          "parentId"
+        ],
+        "type": "object",
+        "properties": {
+          "habitIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "parentId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
+      "BulkMoveHabitParentResult": {
+        "required": [
+          "results"
+        ],
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BulkMoveHabitParentItemResult"
+            }
           }
         }
       },
@@ -15647,6 +15917,22 @@
               "string"
             ],
             "format": "date"
+          },
+          "scheduledStartDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "originalDayOfMonth": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -16399,6 +16685,57 @@
       "InstanceStatus": {
         "type": "integer"
       },
+      "InvoiceDto": {
+        "required": [
+          "id",
+          "date",
+          "amountPaid",
+          "currency",
+          "status",
+          "hostedInvoiceUrl",
+          "invoicePdf",
+          "billingReason"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "amountPaid": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "hostedInvoiceUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "invoicePdf": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "billingReason": {
+            "type": "string"
+          }
+        }
+      },
       "JoinWaitlistRequest": {
         "required": [
           "email"
@@ -16785,6 +17122,39 @@
             "format": "int32"
           },
           "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "PaymentMethodDto": {
+        "required": [
+          "brand",
+          "last4",
+          "expMonth",
+          "expYear"
+        ],
+        "type": "object",
+        "properties": {
+          "brand": {
+            "type": "string"
+          },
+          "last4": {
+            "type": "string"
+          },
+          "expMonth": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "expYear": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
               "integer",

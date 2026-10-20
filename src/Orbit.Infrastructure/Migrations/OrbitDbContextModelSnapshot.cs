@@ -556,7 +556,6 @@ namespace Orbit.Infrastructure.Migrations
                             Key = "sub_habits",
                             Description = "Sub-habit nesting",
                             Enabled = true,
-                            PlanRequirement = "Pro",
                             UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new

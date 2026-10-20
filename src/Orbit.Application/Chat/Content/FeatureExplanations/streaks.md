@@ -8,7 +8,7 @@ derived_from:
   - src/Orbit.Application/Habits/Services/HabitScheduleService.cs ComputeStreakAsOf
   - src/Orbit.Infrastructure/Services/UserStreakService.cs LoadStreakDataAsync
   - src/Orbit.Infrastructure/Services/UserStreakService.cs CalendarFallback
-  - src/Orbit.Application/Common/AppConstants.cs MaxStreakLookbackDays
+  - src/Orbit.Application/Common/AppConstants.cs StreakRepairWindowDays
 ---
 
 # Streaks
@@ -34,6 +34,6 @@ If you have no recurring habits at all yet, the streak falls back to simple **ca
 
 ## Lookback limit
 
-Streak calculation looks back at most **365** days (`MaxStreakLookbackDays`). Activity older than a year does not extend the current streak.
+Streak calculation looks back at most **732** days (`StreakRepairWindowDays`). This includes the completed occurrence before a repaired yearly gap. Activity outside this window does not extend the current streak.
 
 The longest streak is tracked separately by scanning your full scheduled-day history for the longest unbroken run; it never decreases when the current streak resets.

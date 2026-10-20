@@ -3,6 +3,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
+using Orbit.Api.ModelBinding;
 using Orbit.Api.RateLimiting;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
@@ -387,13 +388,20 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         });
     }
 
+    /// <summary>Returns recent logs, or every log in an inclusive range of at most 366 calendar days.</summary>
+    /// <param name="from">First date in the user's timezone (yyyy-MM-dd). Supply together with to.</param>
+    /// <param name="to">Last date in the user's timezone (yyyy-MM-dd). Supply together with from.</param>
     [HttpGet("{id:guid}/logs")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> GetLogs(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetLogs(
+        Guid id,
+        CancellationToken cancellationToken,
+        [FromQuery, ModelBinder(BinderType = typeof(IsoDateQueryModelBinder))] DateOnly? from = null,
+        [FromQuery, ModelBinder(BinderType = typeof(IsoDateQueryModelBinder))] DateOnly? to = null)
     {
-        var query = new GetHabitLogsQuery(HttpContext.GetUserId(), id);
+        var query = new GetHabitLogsQuery(HttpContext.GetUserId(), id, from, to);
         var result = await mediator.Send(query, cancellationToken);
         return result.ToPayGateAwareResult(v => Ok(v));
     }
@@ -449,6 +457,27 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
 
         if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             logger.LogBulkDeleted(request.HabitIds.Count, HttpContext.GetUserId());
+
+        return result.ToPayGateAwareResult(v => Ok(v));
+    }
+
+    [HttpPost("bulk/parent")]
+    [ProducesResponseType<BulkMoveHabitParentResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> BulkMoveHabitParent(
+        [FromBody] BulkMoveHabitParentRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new BulkMoveHabitParentCommand(
+            HttpContext.GetUserId(), request.HabitIds, request.ParentId), cancellationToken);
+
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
+        {
+            var count = result.Value.Results.Count(item => item.Status == BulkItemStatus.Success);
+            if (count > 0)
+                logger.LogBulkParentMoved(count, HttpContext.GetUserId());
+        }
 
         return result.ToPayGateAwareResult(v => Ok(v));
     }
@@ -653,4 +682,7 @@ internal static partial class HabitsControllerLogging
 
     [LoggerMessage(EventId = 8, Level = LogLevel.Information, Message = "Habit restored {HabitId} by user {UserId}")]
     internal static partial void LogHabitRestored(this ILogger logger, Guid habitId, Guid userId);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Information, Message = "Bulk moved {Count} habits to a new parent for user {UserId}")]
+    internal static partial void LogBulkParentMoved(this ILogger logger, int count, Guid userId);
 }

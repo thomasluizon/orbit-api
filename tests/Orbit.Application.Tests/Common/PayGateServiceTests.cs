@@ -30,7 +30,6 @@ public class PayGateServiceTests
                 AppConstants.DefaultFreeMaxHabits,
                 Arg.Any<CancellationToken>())
             .Returns(AppConstants.DefaultFreeMaxHabits);
-        _appConfig.GetAsync("SubHabitsProOnly", true, Arg.Any<CancellationToken>()).Returns(true);
         _appConfig.GetAsync("FreeAiMessagesPerDay", 5, Arg.Any<CancellationToken>()).Returns(5);
         _appConfig.GetAsync("ProAiMessagesPerDay", 50, Arg.Any<CancellationToken>()).Returns(50);
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
@@ -226,30 +225,6 @@ public class PayGateServiceTests
     }
 
     [Fact]
-    public async Task CanCreateSubHabits_ProUser_Success()
-    {
-        var user = CreateProUser();
-        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-
-        var result = await _sut.CanCreateSubHabits(UserId);
-
-        result.IsSuccess.Should().BeTrue();
-    }
-
-    [Fact]
-    public async Task CanCreateSubHabits_FreeUser_PayGateFailure()
-    {
-        var user = CreateFreeUser();
-        user.StartTrial(DateTime.UtcNow.AddDays(-1));
-        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-
-        var result = await _sut.CanCreateSubHabits(UserId);
-
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be("PAY_GATE");
-    }
-
-    [Fact]
     public async Task CanSendAiMessage_ProUserAtDailyLimit_PayGateFailure()
     {
         var user = CreateProUser();
@@ -262,19 +237,6 @@ public class PayGateServiceTests
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be("PAY_GATE");
         result.Error.Should().Be("You've reached your daily AI message limit (50).");
-    }
-
-    [Fact]
-    public async Task CanCreateSubHabits_ConfigDisabled_FreeUserAllowed()
-    {
-        var user = CreateFreeUser();
-        user.StartTrial(DateTime.UtcNow.AddDays(-1));
-        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-        _appConfig.GetAsync("SubHabitsProOnly", true, Arg.Any<CancellationToken>()).Returns(false);
-
-        var result = await _sut.CanCreateSubHabits(UserId);
-
-        result.IsSuccess.Should().BeTrue();
     }
 
     [Fact]
@@ -570,18 +532,6 @@ public class PayGateServiceTests
     }
 
     [Fact]
-    public async Task CanCreateSubHabits_TrialUser_HasProAccess()
-    {
-        var user = CreateFreeUser();
-        user.StartTrial(DateTime.UtcNow.AddDays(7));
-        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-
-        var result = await _sut.CanCreateSubHabits(UserId);
-
-        result.IsSuccess.Should().BeTrue();
-    }
-
-    [Fact]
     public async Task CanSendAiMessage_WithAdRewardBonus_StillUsesConfiguredLimit()
     {
         var user = CreateFreeUser();
@@ -640,17 +590,6 @@ public class PayGateServiceTests
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns((User?)null);
 
         var result = await _sut.CanSendAiMessage(UserId);
-
-        result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
-    }
-
-    [Fact]
-    public async Task CanCreateSubHabits_UserNotFound_Failure()
-    {
-        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns((User?)null);
-
-        var result = await _sut.CanCreateSubHabits(UserId);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
