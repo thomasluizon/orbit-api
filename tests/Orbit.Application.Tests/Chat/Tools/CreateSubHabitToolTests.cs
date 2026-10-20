@@ -23,6 +23,46 @@ public class CreateSubHabitToolTests
         _tool = new CreateSubHabitTool(_mediator);
     }
 
+    [Theory]
+    [InlineData("end_date", "\"2026-12-31\"")]
+    [InlineData("checklist_items", "[{\"text\":\"Shoes\",\"is_checked\":true}]")]
+    [InlineData("tag_ids", "[\"11111111-1111-1111-1111-111111111111\"]")]
+    public async Task ChildFields_AreForwardedToCommand(string field, string value)
+    {
+        CreateSubHabitCommand? captured = null;
+        _mediator.Send(Arg.Any<CreateSubHabitCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call => { captured = call.Arg<CreateSubHabitCommand>(); return Result.Success(Guid.NewGuid()); });
+        var result = await Execute($$"""{"parent_habit_id":"{{ParentId}}","title":"Book","frequency_unit":"Day","{{field}}":{{value}}}""");
+        result.Success.Should().BeTrue();
+        captured.Should().NotBeNull();
+        switch (field)
+        {
+            case "end_date": captured!.Options!.EndDate.Should().Be(new DateOnly(2026, 12, 31)); break;
+            case "checklist_items": captured!.Options!.ChecklistItems.Should().ContainSingle(); break;
+            case "tag_ids": captured!.TagIds.Should().ContainSingle(); break;
+        }
+    }
+
+    [Fact]
+    public async Task ExplicitNullFrequency_CreatesOneTimeChild()
+    {
+        _mediator.Send(Arg.Any<CreateSubHabitCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success(Guid.NewGuid()));
+        var result = await Execute($$"""{"parent_habit_id":"{{ParentId}}","title":"Book","frequency_unit":null}""");
+        result.Success.Should().BeTrue();
+        await _mediator.Received(1).Send(Arg.Is<CreateSubHabitCommand>(c => !c.InheritParentFrequency), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RelativeReminders_AreForwardedToCommand()
+    {
+        _mediator.Send(Arg.Any<CreateSubHabitCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success(Guid.NewGuid()));
+        var result = await Execute($$"""{"parent_habit_id":"{{ParentId}}","title":"Book","due_time":"09:00","relative_reminders":[{"minutes_before":30}]}""");
+        result.Success.Should().BeTrue();
+        await _mediator.Received(1).Send(Arg.Is<CreateSubHabitCommand>(c => c.Options != null
+            && c.Options.RelativeReminders != null && c.Options.RelativeReminders.Count == 1
+            && c.Options.RelativeReminders[0].MinutesBefore == 30), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task SuccessfulCreation_ReturnsSuccessWithId()
     {

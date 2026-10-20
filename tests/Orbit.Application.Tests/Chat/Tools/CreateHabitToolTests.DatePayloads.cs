@@ -224,7 +224,7 @@ public partial class CreateHabitToolTests
     }
 
     [Fact]
-    public async Task RecurringChild_WithTimingFields_CreatesUntimedHabit()
+    public async Task RecurringChild_WithTimingFields_PreservesChildTiming()
     {
         (await Execute("""
         {"title":"Aulas","frequency_unit":"Day","days":["Wednesday"],
@@ -233,7 +233,8 @@ public partial class CreateHabitToolTests
 
         var parent = AddedHabits().Single(habit => habit.ParentHabitId is null);
         var expected = Habit.Create(new HabitCreateParams(UserId, "Aula herdada", FrequencyUnit.Day, 1,
-            Today, Days: [DayOfWeek.Wednesday], ParentHabitId: parent.Id)).Value;
+            Today, Days: [DayOfWeek.Wednesday], ParentHabitId: parent.Id,
+            DueTime: new TimeOnly(8, 25), DueEndTime: new TimeOnly(11, 15))).Value;
         AddedHabits().Single(habit => habit.ParentHabitId is not null).Should().BeEquivalentTo(expected,
             options => options.ComparingByMembers<Habit>()
                 .Excluding(habit => habit.Id).Excluding(habit => habit.CreatedAtUtc).Excluding(habit => habit.UpdatedAtUtc));

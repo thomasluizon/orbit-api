@@ -35,6 +35,79 @@ public class UpdateHabitToolTests
         _tool = new UpdateHabitTool(_habitRepo, _userDateService, _unitOfWork, _payGate);
     }
 
+    [Theory]
+    [InlineData("due_end_time", "\"15:00\"")]
+    [InlineData("is_general", "true")]
+    [InlineData("slip_alert_enabled", "true")]
+    [InlineData("relative_reminders", "[{\"minutes_before\":30}]")]
+    public async Task NewFields_UpdateStoredValues(string field, string value)
+    {
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Read", null, null, Today,
+            DueTime: new TimeOnly(9, 0))).Value;
+        SetupHabitFound(habit);
+        _payGate.CanUseSlipAlerts(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        var result = await Execute($$"""{"habit_id":"{{habit.Id}}","{{field}}":{{value}}}""");
+        result.Success.Should().BeTrue();
+        switch (field)
+        {
+            case "due_end_time": habit.DueEndTime.Should().Be(new TimeOnly(15, 0)); break;
+            case "is_general": habit.IsGeneral.Should().BeTrue(); break;
+            case "slip_alert_enabled": habit.SlipAlertEnabled.Should().BeTrue(); break;
+            case "relative_reminders": habit.RelativeReminders.Should().Equal(new RelativeReminderTime(MinutesBefore: 30)); break;
+        }
+    }
+
+    [Fact]
+    public async Task ChildGeneralFlag_CannotDivergeFromParent()
+    {
+        var parent = CreateHabit("Parent", null, null);
+        var child = Habit.Create(new HabitCreateParams(UserId, "Child", null, null, Today, ParentHabitId: parent.Id)).Value;
+        _habitRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile()(child) ? child : parent);
+        var result = await Execute($$"""{"habit_id":"{{child.Id}}","is_general":true}""");
+        result.Success.Should().BeFalse();
+        child.IsGeneral.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("[{\"minutes_before\":30,\"when\":\"same_day\",\"time\":\"08:00\"}]")]
+    [InlineData("[{\"minutes_before\":-1440}]")]
+    [InlineData("[{\"when\":\"same_day\",\"time\":\"25:00\"}]")]
+    [InlineData("[{\"minutes_before\":30},{\"minutes_before\":30}]")]
+    public async Task InvalidRelativeReminders_FailBeforeMutation(string reminders)
+    {
+        var habit = CreateHabitWithTime("Read", FrequencyUnit.Day, 1, new TimeOnly(9, 0));
+        SetupHabitFound(habit);
+        var result = await Execute($$"""{"habit_id":"{{habit.Id}}","relative_reminders":{{reminders}}}""");
+        result.Success.Should().BeFalse();
+        habit.RelativeReminders.Should().BeEmpty();
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task EnablingSlipAlerts_RequiresPro()
+    {
+        var habit = CreateHabit("Read", FrequencyUnit.Day, 1);
+        SetupHabitFound(habit);
+        _payGate.CanUseSlipAlerts(UserId, Arg.Any<CancellationToken>()).Returns(Result.PayGateFailure("Pro required"));
+        var result = await Execute($$"""{"habit_id":"{{habit.Id}}","slip_alert_enabled":true}""");
+        result.Success.Should().BeFalse();
+        habit.SlipAlertEnabled.Should().BeFalse();
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DueEndTime_ExplicitNullClearsDeadline()
+    {
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Read", null, null, Today,
+            DueEndTime: new TimeOnly(15, 0))).Value;
+        SetupHabitFound(habit);
+        var result = await Execute($$"""{"habit_id":"{{habit.Id}}","due_end_time":null}""");
+        result.Success.Should().BeTrue();
+        habit.DueEndTime.Should().BeNull();
+    }
+
     [Fact]
     public async Task SuccessfulUpdate_ReturnsSuccess()
     {

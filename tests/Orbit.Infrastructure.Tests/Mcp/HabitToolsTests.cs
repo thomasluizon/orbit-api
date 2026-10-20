@@ -91,16 +91,76 @@ public class HabitToolsTests
             false, false, false, false, date, new TimeOnly(9, 0), new TimeOnly(15, 0), new DateOnly(2026, 12, 31),
             [DayOfWeek.Monday], null, true, [15], scheduled, checklist, DateTime.UnixEpoch, [],
             IntervalWeeks: 2, SlipAlertEnabled: true, RelativeReminders: relative);
+        var child = new HabitChildResponse(Guid.NewGuid(), "Child", detail.Description, FrequencyUnit.Day, 1,
+            false, false, false, false, detail.Days, date, detail.DueTime, detail.DueEndTime, detail.EndDate,
+            null, checklist, false, [], IntervalWeeks: 2, Tags: [new HabitTagItem(Guid.NewGuid(), "Health", "#123456")],
+            ReminderEnabled: true, ReminderTimes: [15], ScheduledReminders: scheduled, RelativeReminders: relative,
+            SlipAlertEnabled: true);
+        detail = detail with { Children = [child] };
+        var scheduleChild = new HabitScheduleChildItem(child.Id, child.Title, child.Description, FrequencyUnit.Day, 1,
+            false, false, false, false, child.Days, date, child.DueTime, child.DueEndTime, child.EndDate,
+            [date], false, null, checklist, child.Tags!, [], false, null, null, false, [], IntervalWeeks: 2,
+            ReminderEnabled: true, ReminderTimes: [15], ScheduledReminders: scheduled, RelativeReminders: relative,
+            SlipAlertEnabled: true);
         var item = new HabitScheduleItem(detail.Id, detail.Title, detail.Description, FrequencyUnit.Day, 1,
             false, false, false, false, detail.Days, null, DateTime.UnixEpoch, date, detail.DueTime, detail.DueEndTime,
-            detail.EndDate, [date], false, true, [15], scheduled, true, checklist, [], [], [], false,
+            detail.EndDate, [date], false, true, [15], scheduled, true, checklist, [], [], [scheduleChild], false,
             null, null, false, [], IntervalWeeks: 2, RelativeReminders: relative);
         _mediator.Send(Arg.Any<GetHabitByIdQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success(detail));
         _mediator.Send(Arg.Any<GetHabitScheduleQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new PaginatedResponse<HabitScheduleItem>([item], 1, 50, 1, 1)));
 
-        (await _tools.GetHabit(_user, detail.Id.ToString())).Should().Contain(expected);
-        (await _tools.ListHabits(_user, "2026-10-19", "2026-10-20")).Should().Contain(expected);
+        var detailText = await _tools.GetHabit(_user, detail.Id.ToString());
+        var listText = await _tools.ListHabits(_user, "2026-10-19", "2026-10-20");
+        detailText.Should().Contain(expected);
+        listText.Should().Contain(expected);
+        detailText.Split('\n').Single(line => line.Contains($"id: {child.Id}")).Should().Contain(expected).And.Contain("Health");
+        listText.Split('\n').Single(line => line.Contains($"id: {child.Id}")).Should().Contain(expected).And.Contain("Health");
+    }
+
+    [Theory]
+    [InlineData("dueEndTime", "due_end_time", "\"15:00\"")]
+    [InlineData("relativeReminders", "relative_reminders", "[{\"minutes_before\":30}]")]
+    [InlineData("endDate", "end_date", "\"2026-12-31\"")]
+    [InlineData("checklistItems", "checklist_items", "[{\"text\":\"Shoes\",\"is_checked\":true}]")]
+    public async Task CreateSubHabit_DomainFields_AreForwarded(string parameter, string field, string json)
+    {
+        StubExecutor(AgentOperationStatus.Succeeded);
+        var method = typeof(HabitTools).GetMethod(nameof(HabitTools.CreateSubHabit))!;
+        method.GetParameters().Should().Contain(p => p.Name == parameter);
+        var values = method.GetParameters().Select(p => p.Name switch
+        {
+            "user" => (object)_user,
+            "parentHabitId" => Guid.NewGuid().ToString(),
+            "title" => "Child",
+            _ when p.Name == parameter => json.StartsWith('[') ? json : JsonSerializer.Deserialize<string>(json),
+            _ => p.DefaultValue
+        }).ToArray();
+        var request = await CapturedRequestAsync(() => method.Invoke(_tools, values) is Task<string> task
+            ? task : throw new InvalidOperationException("Expected an asynchronous MCP create."));
+        request.Arguments.GetProperty(field).GetRawText().Should().Be(json);
+    }
+
+    [Fact]
+    public async Task UpdateHabit_NewFields_RouteThroughExecutorWithoutTitle()
+    {
+        StubExecutor(AgentOperationStatus.Succeeded);
+        var request = await CapturedRequestAsync(() => _tools.UpdateHabit(_user, Guid.NewGuid().ToString(),
+            dueEndTime: "15:00", isGeneral: true, slipAlertEnabled: true,
+            relativeReminders: """[{"minutes_before":30}]"""));
+        request.Arguments.TryGetProperty("title", out _).Should().BeFalse();
+        request.Arguments.GetProperty("due_end_time").GetString().Should().Be("15:00");
+        request.Arguments.GetProperty("is_general").GetBoolean().Should().BeTrue();
+        request.Arguments.GetProperty("slip_alert_enabled").GetBoolean().Should().BeTrue();
+        request.Arguments.GetProperty("relative_reminders")[0].GetProperty("minutes_before").GetInt32().Should().Be(30);
+    }
+
+    [Fact]
+    public async Task UpdateHabit_ExplicitNullDeadline_ForwardsClear()
+    {
+        StubExecutor(AgentOperationStatus.Succeeded);
+        var request = await CapturedRequestAsync(() => _tools.UpdateHabit(_user, Guid.NewGuid().ToString(), dueEndTime: null));
+        request.Arguments.GetProperty("due_end_time").ValueKind.Should().Be(JsonValueKind.Null);
     }
 
     [Fact]
@@ -109,8 +169,15 @@ public class HabitToolsTests
         StubExecutor(AgentOperationStatus.Succeeded);
         var method = typeof(HabitTools).GetMethod(nameof(HabitTools.UpdateHabit))!;
         method.GetParameters().Single(p => p.Name == "title").IsOptional.Should().BeTrue();
-        var request = await CapturedRequestAsync(() => _tools.UpdateHabit(_user, Guid.NewGuid().ToString(), title: null!));
-        var args = JsonDocument.Parse(request.ArgumentsJson).RootElement;
+        var arguments = method.GetParameters().Select(p => p.Name switch
+        {
+            "user" => (object)_user,
+            "habitId" => Guid.NewGuid().ToString(),
+            _ => p.HasDefaultValue ? p.DefaultValue : null
+        }).ToArray();
+        var request = await CapturedRequestAsync(() => method.Invoke(_tools, arguments) is Task<string> task
+            ? task : throw new InvalidOperationException("Expected an asynchronous MCP update."));
+        var args = request.Arguments;
         args.EnumerateObject().Select(p => p.Name).Should().Equal("habit_id");
     }
 

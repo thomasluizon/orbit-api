@@ -145,12 +145,12 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
             : $"More detail needed before creating '{title}': specify a frequency (e.g. Day, Week) or mark it as a one-time task.";
     }
 
-    [McpServerTool(Name = "update_habit"), Description("Update an existing habit's properties. Title is required (pass current title if unchanged). Only change fields you need to modify.")]
+    [McpServerTool(Name = "update_habit"), Description("Update an existing habit's properties. Omitted fields keep their current values.")]
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "UpdateHabit preserves nine flat habit update schema properties, including intervalWeeks and emoji. MCP schema generation requires these separate parameters.")]
     public async Task<string> UpdateHabit(
         ClaimsPrincipal user,
         [Description(HabitIdDescription)] string habitId,
-        [Description("Habit title (required, pass current title if not changing)")] string title,
+        [Description("New habit title. Omit to keep the current title.")] string? title = null,
         [Description("New description")] string? description = null,
         [Description("New frequency unit: Day, Week, Month, Year")] string? frequencyUnit = null,
         [Description("New frequency quantity")] int? frequencyQuantity = null,
@@ -158,21 +158,26 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         [Description("New due time in HH:mm format")] string? dueTime = null,
         [Description("New repeat interval in weeks. Use 1 for every week.")] int? intervalWeeks = null,
         [Description("Emoji icon. Omit to keep it, or pass null to clear it.")] string? emoji = "",
+        [Description("End time or deadline in HH:mm format. Omit to keep it; null clears it.")] string? dueEndTime = "",
+        [Description("Whether this is a general habit. Children must match their parent.")] bool? isGeneral = null,
+        [Description("Enable slip alerts. Requires Pro.")] bool? slipAlertEnabled = null,
+        [Description("JSON array of relative reminders: minutes_before, or when (day_before/same_day) and time (HH:mm). Empty array clears them.")] string? relativeReminders = null,
         CancellationToken cancellationToken = default)
     {
-        var arguments = new Dictionary<string, object?>
-        {
-            ["habit_id"] = habitId,
-            ["title"] = title,
-            ["description"] = description,
-            ["frequency_unit"] = frequencyUnit,
-            ["frequency_quantity"] = frequencyQuantity,
-            ["due_date"] = dueDate,
-            ["due_time"] = dueTime,
-            ["interval_weeks"] = intervalWeeks
-        };
-        if (emoji != string.Empty)
-            arguments["emoji"] = emoji;
+        var arguments = new Dictionary<string, object?> { ["habit_id"] = habitId };
+        if (title is not null) arguments["title"] = title;
+        if (description is not null) arguments["description"] = description;
+        if (frequencyUnit is not null) arguments["frequency_unit"] = frequencyUnit;
+        if (frequencyQuantity is not null) arguments["frequency_quantity"] = frequencyQuantity;
+        if (dueDate is not null) arguments["due_date"] = dueDate;
+        if (dueTime is not null) arguments["due_time"] = dueTime;
+        if (intervalWeeks is not null) arguments["interval_weeks"] = intervalWeeks;
+        if (emoji != string.Empty) arguments["emoji"] = emoji;
+        if (dueEndTime != string.Empty) arguments["due_end_time"] = dueEndTime;
+        if (isGeneral is not null) arguments["is_general"] = isGeneral;
+        if (slipAlertEnabled is not null) arguments["slip_alert_enabled"] = slipAlertEnabled;
+        if (relativeReminders is not null)
+            arguments["relative_reminders"] = JsonSerializer.Deserialize<JsonElement>(relativeReminders);
 
         var result = await executorBridge.ExecuteAsync(user, "update_habit", arguments, confirmationToken: null, cancellationToken);
 
@@ -351,6 +356,18 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         [Description("Whether this is a bad habit")] bool isBadHabit = false,
         [Description("Whether this is a flexible frequency habit")] bool isFlexible = false,
         [Description("Due date override in YYYY-MM-DD format")] string? dueDate = null,
+        [Description("End time or deadline in HH:mm format")] string? dueEndTime = null,
+        [Description("End date in YYYY-MM-DD format")] string? endDate = null,
+        [Description("Repeat interval in weeks")] int? intervalWeeks = null,
+        [Description("Emoji icon")] string? emoji = null,
+        [Description("Weekday names")] string[]? days = null,
+        [Description("Enable reminders")] bool reminderEnabled = false,
+        [Description("Minutes before due time")] int[]? reminderTimes = null,
+        [Description("Enable slip alerts")] bool slipAlertEnabled = false,
+        [Description("JSON array of scheduled reminders with when (day_before/same_day) and time (HH:mm)")] string? scheduledReminders = null,
+        [Description("JSON array of relative reminders with minutes_before, or when and time")] string? relativeReminders = null,
+        [Description("JSON array of checklist items with text and is_checked")] string? checklistItems = null,
+        [Description("Existing tag IDs")] string[]? tagIds = null,
         CancellationToken cancellationToken = default)
     {
         var result = await executorBridge.ExecuteAsync(user, "create_sub_habit", new
@@ -363,7 +380,19 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
             due_time = dueTime,
             is_bad_habit = isBadHabit,
             is_flexible = isFlexible,
-            due_date = dueDate
+            due_date = dueDate,
+            due_end_time = dueEndTime,
+            end_date = endDate,
+            interval_weeks = intervalWeeks,
+            emoji,
+            days,
+            reminder_enabled = reminderEnabled,
+            reminder_times = reminderTimes,
+            slip_alert_enabled = slipAlertEnabled,
+            scheduled_reminders = scheduledReminders is null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(scheduledReminders),
+            relative_reminders = relativeReminders is null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(relativeReminders),
+            checklist_items = checklistItems is null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(checklistItems),
+            tag_ids = tagIds
         }, confirmationToken: null, cancellationToken);
 
         return result.Succeeded

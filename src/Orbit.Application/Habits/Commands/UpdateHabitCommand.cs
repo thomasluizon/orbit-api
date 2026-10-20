@@ -74,8 +74,8 @@ public class UpdateHabitCommandHandler(
 
         if (request.IsGeneral.HasValue)
         {
-            var generalMismatch = await ValidateGeneralAgainstRelativesAsync(
-                habit, request.IsGeneral.Value, request.UserId, cancellationToken);
+            var generalMismatch = await HabitUpdateValidation.ValidateGeneralAsync(
+                habit, request.IsGeneral.Value, request.UserId, habitRepository, cancellationToken);
             if (generalMismatch.IsFailure)
                 return generalMismatch.PropagateError<UpdateState>();
         }
@@ -165,32 +165,6 @@ public class UpdateHabitCommandHandler(
         Habit Habit,
         HabitUpdateParams Update,
         DateOnly Today);
-
-    private async Task<Result> ValidateGeneralAgainstRelativesAsync(
-        Habit habit, bool newIsGeneral, Guid userId, CancellationToken cancellationToken)
-    {
-        if (habit.ParentHabitId is not null)
-        {
-            var parent = await habitRepository.FindOneTrackedAsync(
-                h => h.Id == habit.ParentHabitId && h.UserId == userId,
-                cancellationToken: cancellationToken);
-
-            return parent is not null && parent.IsGeneral != newIsGeneral
-                ? Result.Failure(ErrorMessages.GeneralMismatchWithParent)
-                : Result.Success();
-        }
-
-        var children = await habitRepository.FindAsync(
-            h => h.ParentHabitId == habit.Id && h.UserId == userId,
-            cancellationToken);
-
-        var activeMismatchedChild = children.Any(c =>
-            c.IsGeneral != newIsGeneral && !(c.IsCompleted && c.FrequencyUnit is null));
-
-        return activeMismatchedChild
-            ? Result.Failure(ErrorMessages.GeneralMismatchWithChildren)
-            : Result.Success();
-    }
 
     private async Task ClearTodaySentRemindersAsync(Guid userId, Guid habitId, CancellationToken cancellationToken)
     {

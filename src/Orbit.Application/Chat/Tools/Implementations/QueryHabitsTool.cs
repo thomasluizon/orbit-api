@@ -168,7 +168,7 @@ public class QueryHabitsTool(
         {
             var ids = habits.Select(habit => habit.Id).ToArray();
             habits = await habitRepository.FindAsync(habit => habit.UserId == userId && ids.Contains(habit.Id),
-                query => query.Include(habit => habit.Tags).Include(habit => habit.Logs).AsSplitQuery(), ct);
+                query => query.Include(habit => habit.Tags).Include(habit => habit.Goals).Include(habit => habit.Logs).AsSplitQuery(), ct);
         }
 
         if (f.Date is DateOnly date)
@@ -196,10 +196,11 @@ public class QueryHabitsTool(
                 && (!f.FrequencyOneTime || h.FrequencyUnit == null)
                 && (f.Frequency == null || h.FrequencyUnit == f.Frequency.Value)
                 && (!f.Date.HasValue || !h.IsGeneral),
-            q => deferMetrics ? q.Include(h => h.Tags) : includeMetrics
-                ? q.Include(h => h.Tags).Include(h => h.Logs).AsSplitQuery()
+            q => deferMetrics ? q.Include(h => h.Tags).Include(h => h.Goals) : includeMetrics
+                ? q.Include(h => h.Tags).Include(h => h.Goals).Include(h => h.Logs).AsSplitQuery()
                 : q
                     .Include(h => h.Tags)
+                    .Include(h => h.Goals)
                     .Include(h => h.Logs.Where(l => !l.IsDeleted && l.Date == today && l.Value > 0))
                     .AsSplitQuery(),
             ct);
@@ -289,6 +290,8 @@ public class QueryHabitsTool(
         if (habit.IsBadHabit) labels.Add("BAD HABIT");
         if (isCompleted) labels.Add("COMPLETED");
         if (habit.Tags.Count > 0) labels.Add($"Tags: {string.Join(", ", habit.Tags.Select(t => t.Name))}");
+
+        if (habit.Goals.Count > 0) labels.Add($"Goals: {string.Join(", ", habit.Goals.Select(g => $"{g.Title} ({g.Id})"))}");
 
         AddMetricLabels(labels, habit, today, weekStartDay, includeMetrics);
 

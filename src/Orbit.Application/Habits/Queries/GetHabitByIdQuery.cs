@@ -92,7 +92,10 @@ public class GetHabitByIdQueryHandler(
             h => h.Id == request.HabitId && h.UserId == request.UserId,
             q => q.Include(h => h.Goals).Include(h => h.Tags)
                 .Include(h => h.Children).ThenInclude(c => c.Tags)
-                .Include(h => h.Children).ThenInclude(c => c.Children).ThenInclude(c => c.Tags).AsSplitQuery(),
+                .Include(h => h.Children).ThenInclude(c => c.Children).ThenInclude(c => c.Tags)
+                .Include(h => h.Children).ThenInclude(c => c.Children).ThenInclude(c => c.Children).ThenInclude(c => c.Tags)
+                .Include(h => h.Children).ThenInclude(c => c.Children).ThenInclude(c => c.Children)
+                    .ThenInclude(c => c.Children).ThenInclude(c => c.Tags).AsSplitQuery(),
             cancellationToken);
 
         var habit = habits.Count > 0 ? habits[0] : null;

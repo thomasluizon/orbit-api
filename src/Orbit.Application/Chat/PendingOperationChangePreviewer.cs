@@ -5,6 +5,7 @@ using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Habits.Commands;
 using Orbit.Application.Habits.Validators;
+using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -27,7 +28,9 @@ public sealed class PendingOperationChangePreviewer(
     {
         "title", "description", "emoji", "frequency_unit", "frequency_quantity",
         "interval_weeks", "days", "due_date", "end_date", "due_time",
-        "is_bad_habit", "is_general", "is_flexible", "checklist_items", "sub_habits"
+        "is_bad_habit", "is_general", "is_flexible", "checklist_items", "sub_habits",
+        "due_end_time", "slip_alert_enabled", "reminder_enabled", "reminder_times",
+        "scheduled_reminders", "relative_reminders"
     };
 
     public async Task<PendingOperationChangePreview?> PreviewAsync(
@@ -308,6 +311,11 @@ public sealed class PendingOperationChangePreviewer(
         ["due_date"] = AgentArgumentPreview.Format(habit.DueDate),
         ["end_date"] = AgentArgumentPreview.Format(habit.EndDate),
         ["due_time"] = AgentArgumentPreview.Format(habit.DueTime),
+        ["due_end_time"] = AgentArgumentPreview.Format(habit.DueEndTime),
+        ["is_general"] = AgentArgumentPreview.Format(habit.IsGeneral),
+        ["slip_alert_enabled"] = AgentArgumentPreview.Format(habit.SlipAlertEnabled),
+        ["relative_reminders"] = string.Join(", ", habit.RelativeReminders.Select(HabitFieldSummary.FormatRelative)),
+        ["scheduled_reminders"] = string.Join(", ", habit.GetScheduledRemindersForLegacyClients().Select(FormatScheduledReminder)),
         ["is_bad_habit"] = AgentArgumentPreview.Format(habit.IsBadHabit),
         ["is_flexible"] = AgentArgumentPreview.Format(habit.IsFlexible),
         ["reminder_enabled"] = AgentArgumentPreview.Format(habit.ReminderEnabled),
@@ -576,6 +584,9 @@ public sealed class PendingOperationChangePreviewer(
             habit.IsCompleted,
             habit.DueDate,
             habit.DueTime,
+            habit.DueEndTime,
+            habit.IsGeneral,
+            habit.SlipAlertEnabled,
             habit.EndDate,
             habit.FrequencyUnit,
             habit.FrequencyQuantity,
@@ -618,6 +629,18 @@ public sealed class PendingOperationChangePreviewer(
         Add("due_date", habit.DueDate, effective.DueDate, "date");
         Add("end_date", habit.EndDate, effective.EndDate, "date");
         Add("due_time", habit.DueTime, effective.DueTime, "time");
+        Add("due_end_time", habit.DueEndTime, effective.DueEndTime, "time");
+        Add("is_general", habit.IsGeneral, effective.IsGeneral, "boolean");
+        Add("slip_alert_enabled", habit.SlipAlertEnabled, effective.SlipAlertEnabled, "boolean");
+        AddList("relative_reminders", habit.RelativeReminders, effective.RelativeReminders,
+            HabitFieldSummary.FormatRelative, JsonSerializer.SerializeToElement(effective.RelativeReminders.Select(item =>
+                item.MinutesBefore is { } minutes
+                    ? (object)new { minutes_before = minutes }
+                    : new
+                    {
+                        when = item.When == ScheduledReminderWhen.DayBefore ? "day_before" : "same_day",
+                        time = item.Time?.ToString("HH:mm", CultureInfo.InvariantCulture)
+                    })));
         Add("is_bad_habit", habit.IsBadHabit, effective.IsBadHabit, "boolean");
         Add("is_flexible", habit.IsFlexible, effective.IsFlexible, "boolean");
         Add("is_completed", habit.IsCompleted, effective.IsCompleted, "boolean");
@@ -653,7 +676,8 @@ public sealed class PendingOperationChangePreviewer(
         {
             "title" or "description" or "emoji" or "frequency_unit" or "frequency_quantity"
                 or "interval_weeks" or "due_date" or "due_time" or "is_bad_habit"
-                or "is_flexible" or "reminder_enabled" or "checklist_items" => true,
+                or "is_flexible" or "reminder_enabled" or "checklist_items"
+                or "due_end_time" or "is_general" or "slip_alert_enabled" or "relative_reminders" => true,
             "days" => !effective.IsFlexible,
             "end_date" => !habit.IsGeneral,
             "reminder_times" => effective.DueTime is null

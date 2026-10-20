@@ -42,6 +42,45 @@ public sealed class BulkUpdateHabitsCommandHandlerTests
             NullLogger<BulkUpdateHabitsCommandHandler>.Instance);
     }
 
+    [Theory]
+    [InlineData("due_end_time", "\"15:00\"")]
+    [InlineData("is_general", "true")]
+    [InlineData("slip_alert_enabled", "true")]
+    [InlineData("relative_reminders", "[{\"minutes_before\":30}]")]
+    public async Task NewFields_UpdateEachSelectedHabit(string field, string value)
+    {
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Read", null, null, Today,
+            DueTime: new TimeOnly(9, 0))).Value;
+        SetupHabits(habit);
+        _payGate.CanUseSlipAlerts(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        var (changes, error) = Orbit.Application.Chat.Tools.Implementations.BulkHabitToolArguments.ParseChanges(
+            System.Text.Json.JsonDocument.Parse($$$"""{"updates":{"{{{field}}}":{{{value}}}}}""").RootElement);
+        error.Should().BeNull();
+        var result = await _handler.Handle(new BulkUpdateHabitsCommand(UserId,
+            new BulkHabitFilter(true, []), changes!), CancellationToken.None);
+        result.IsSuccess.Should().BeTrue();
+        switch (field)
+        {
+            case "due_end_time": habit.DueEndTime.Should().Be(new TimeOnly(15, 0)); break;
+            case "is_general": habit.IsGeneral.Should().BeTrue(); break;
+            case "slip_alert_enabled": habit.SlipAlertEnabled.Should().BeTrue(); break;
+            case "relative_reminders": habit.RelativeReminders.Should().Equal(new RelativeReminderTime(MinutesBefore: 30)); break;
+        }
+    }
+
+    [Fact]
+    public async Task EnablingSlipAlerts_RequiresProBeforeAnyMutation()
+    {
+        var habit = CreateHabit("Read");
+        SetupHabits(habit);
+        _payGate.CanUseSlipAlerts(UserId, Arg.Any<CancellationToken>()).Returns(Result.PayGateFailure("Pro required"));
+        var result = await _handler.Handle(new BulkUpdateHabitsCommand(UserId, new BulkHabitFilter(true, []),
+            new BulkHabitChanges(HasSlipAlertEnabled: true, SlipAlertEnabled: true)), CancellationToken.None);
+        result.IsFailure.Should().BeTrue();
+        habit.SlipAlertEnabled.Should().BeFalse();
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task Handle_AllFilter_UpdatesEveryMatchBeyondPaginationCapInChunks()
     {

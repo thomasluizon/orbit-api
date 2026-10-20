@@ -27,6 +27,27 @@ public sealed class PendingOperationChangePreviewerTests
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>())
             .Returns(new DateOnly(2026, 9, 25));
 
+    [Theory]
+    [InlineData("due_end_time", "\"15:00\"", "15:00")]
+    [InlineData("is_general", "true", "true")]
+    [InlineData("slip_alert_enabled", "true", "true")]
+    [InlineData("relative_reminders", "[{\"minutes_before\":30}]", "30 minutes before")]
+    public async Task NewFields_PreviewEffectiveValueAndAllowRevision(string field, string value, string expected)
+    {
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Read", null, null, new DateOnly(2026, 9, 25),
+            DueTime: new TimeOnly(9, 0))).Value;
+        Setup([habit]);
+        var preview = await Preview("bulk_update_habits", $$$"""{"filter":{"all":true},"updates":{"{{{field}}}":{{{value}}}}}""");
+        preview.Should().NotBeNull();
+        var change = preview!.Items!.Single().Fields.Single(c => c.Field == field);
+        change.NewValue.Should().Be(expected);
+        change.IsEditable.Should().BeTrue();
+        change.ProposedValue.Should().NotBeNull();
+        habit.IsGeneral.Should().BeFalse();
+        habit.DueEndTime.Should().BeNull();
+        habit.RelativeReminders.Should().BeEmpty();
+    }
+
     [Fact]
     public async Task RoundThree_BulkDelete_UsesNormalizedTitleWordPrefixes()
     {
@@ -416,7 +437,7 @@ public sealed class PendingOperationChangePreviewerTests
 
         var preview = await Preview("bulk_update_habits", """{"filter":{"all":true},"updates":{"scheduled_reminders":[{"when":"same_day","time":"08:30"}]}}""");
 
-        preview!.Changes.Should().ContainSingle().Which.Should().Match<Orbit.Domain.Models.PendingOperationChange>(
+        preview!.Changes.Should().Contain(
             row => row.Field == "scheduled_reminders" && row.OldValue == "(none)" && row.NewValue == "same_day 08:30");
         preview.Items![0].Fields.Single(field => field.Field == "scheduled_reminders")
             .ProposedValue!.Value[0].GetProperty("time").GetString().Should().Be("08:30");

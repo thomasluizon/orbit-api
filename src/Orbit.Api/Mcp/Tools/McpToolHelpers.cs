@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Globalization;
 using System.Text.Json;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Enums;
@@ -77,7 +78,7 @@ internal static class McpToolHelpers
                 new HabitFieldSummary(c.Description, c.DueTime, c.DueEndTime, c.IntervalWeeks, c.Days,
                     c.EndDate, c.ReminderEnabled == true, c.ReminderTimes ?? [], c.ScheduledReminders ?? [],
                     c.RelativeReminders ?? [], c.SlipAlertEnabled == true, c.IsFlexible, c.ChecklistItems).Format()
-                    + $" | Due: {c.DueDate:yyyy-MM-dd}"), indent));
+                    + string.Create(CultureInfo.InvariantCulture, $" | Due: {c.DueDate:yyyy-MM-dd}")), indent));
             if (c.Children.Count > 0)
                 AppendChildren(lines, c.Children, indent + 1);
         }
@@ -94,7 +95,7 @@ internal static class McpToolHelpers
             lines.Add(FormatHabitLine(new HabitLineData(child.Id, child.Title, child.FrequencyUnit,
                 child.FrequencyQuantity, child.DueTime, child.IsCompleted, child.IsOverdue, child.IsBadHabit,
                 child.IsGeneral, child.IsFlexible, child.ChecklistItems, child.Tags ?? [], child.Emoji,
-                details + $" | Due: {child.DueDate:yyyy-MM-dd}"), indent));
+                details + string.Create(CultureInfo.InvariantCulture, $" | Due: {child.DueDate:yyyy-MM-dd}")), indent));
             AppendDetailChildren(lines, child.Children, indent + 1);
         }
     }

@@ -43,13 +43,22 @@ public sealed record BulkHabitChanges(
     bool HasChecklistItems = false,
     IReadOnlyList<ChecklistItem>? ChecklistItems = null,
     bool HasScheduledReminders = false,
-    IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null)
+    IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null,
+    bool HasDueEndTime = false,
+    TimeOnly? DueEndTime = null,
+    bool HasIsGeneral = false,
+    bool IsGeneral = false,
+    bool HasSlipAlertEnabled = false,
+    bool SlipAlertEnabled = false,
+    bool HasRelativeReminders = false,
+    IReadOnlyList<RelativeReminderTime>? RelativeReminders = null)
 {
     public bool HasAnyChange =>
         HasTitle || HasDescription || HasEmoji || HasFrequencyUnit || HasFrequencyQuantity
         || HasIntervalWeeks || HasDays || HasDueDate || HasEndDate || HasDueTime
         || HasIsBadHabit || HasIsFlexible || HasReminderEnabled || HasReminderTimes
-        || HasChecklistItems || HasScheduledReminders;
+        || HasChecklistItems || HasScheduledReminders || HasDueEndTime || HasIsGeneral
+        || HasSlipAlertEnabled || HasRelativeReminders;
 }
 
 public sealed record BulkUpdateHabitsCommand(
@@ -146,7 +155,11 @@ public sealed partial class BulkUpdateHabitsCommandHandler(
         var today = await dates.GetUserTodayAsync(request.UserId, ct);
         foreach (var habit in habits)
         {
-            var result = habit.ValidateUpdate(ResolveUpdate(habit, request.Changes, today));
+            var update = ResolveUpdate(habit, request.Changes, today);
+            var validation = await HabitUpdateValidation.ValidateAsync(request.UserId, habit, update, repository, ct);
+            if (validation.IsFailure)
+                return validation;
+            var result = habit.ValidateUpdate(update);
             if (result.IsFailure)
                 return result;
         }
@@ -173,9 +186,20 @@ public sealed partial class BulkUpdateHabitsCommandHandler(
 
         foreach (var item in updates)
         {
-            var validation = item.Habit.ValidateUpdate(item.Update);
+            var validation = await HabitUpdateValidation.ValidateAsync(userId, item.Habit, item.Update,
+                habitRepository, cancellationToken);
             if (validation.IsFailure)
                 return validation.PropagateError<int>();
+            validation = item.Habit.ValidateUpdate(item.Update);
+            if (validation.IsFailure)
+                return validation.PropagateError<int>();
+        }
+
+        if (updates.Any(item => item.Update.SlipAlertEnabled == true && !item.Habit.SlipAlertEnabled))
+        {
+            var slipGate = await payGate.CanUseSlipAlerts(userId, cancellationToken);
+            if (slipGate.IsFailure)
+                return slipGate.PropagateError<int>();
         }
 
         var liveRootEntries = updates.Count(item => HabitLiveRootEntry.FromUpdate(item.Habit, item.Update));
@@ -206,7 +230,7 @@ public sealed partial class BulkUpdateHabitsCommandHandler(
             habit.ReminderTimes,
             habit.ScheduledReminders);
 
-        return new HabitUpdateParams(
+        return ApplyExtendedFields(new HabitUpdateParams(
             changes.HasTitle ? changes.Title ?? habit.Title : habit.Title,
             changes.HasDescription ? changes.Description : habit.Description,
             changes.HasFrequencyUnit ? changes.FrequencyUnit : habit.FrequencyUnit,
@@ -225,6 +249,14 @@ public sealed partial class BulkUpdateHabitsCommandHandler(
             ScheduledReminders: scheduledReminders,
             Emoji: changes.HasEmoji ? changes.Emoji : habit.Emoji,
             UserToday: today,
-            IntervalWeeks: changes.HasIntervalWeeks ? changes.IntervalWeeks : habit.IntervalWeeks);
+            IntervalWeeks: changes.HasIntervalWeeks ? changes.IntervalWeeks : habit.IntervalWeeks), changes);
     }
+    private static HabitUpdateParams ApplyExtendedFields(HabitUpdateParams update, BulkHabitChanges changes) => update with
+    {
+        DueEndTime = changes.HasDueEndTime ? changes.DueEndTime : update.DueEndTime,
+        IsGeneral = changes.HasIsGeneral ? changes.IsGeneral : null,
+        SlipAlertEnabled = changes.HasSlipAlertEnabled ? changes.SlipAlertEnabled : null,
+        RelativeReminders = changes.HasRelativeReminders ? changes.RelativeReminders ?? [] : null
+    };
+
 }

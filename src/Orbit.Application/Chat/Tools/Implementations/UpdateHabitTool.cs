@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Common;
+using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -48,6 +49,10 @@ public class UpdateHabitTool(
             due_date = new { type = JsonSchemaTypes.String, description = "New due date (YYYY-MM-DD)" },
             end_date = new { type = JsonSchemaTypes.String, description = "New end date (YYYY-MM-DD). Set to null to clear. Habit stops after this date.", nullable = true },
             due_time = new { type = JsonSchemaTypes.String, description = "New due time (HH:mm). Set to null to clear.", nullable = true },
+            due_end_time = new { type = JsonSchemaTypes.String, description = "New end time or deadline (HH:mm). Set null to clear.", nullable = true },
+            is_general = new { type = JsonSchemaTypes.Boolean, description = "General habit without a schedule. Children must match their parent." },
+            slip_alert_enabled = new { type = JsonSchemaTypes.Boolean, description = "Enable slip alerts. Requires Pro." },
+            relative_reminders = BulkHabitToolArguments.RelativeRemindersSchema(),
             is_bad_habit = new { type = JsonSchemaTypes.Boolean, description = "Whether this is a bad habit" },
             is_flexible = new { type = JsonSchemaTypes.Boolean, description = "True for window-based tracking. Cannot have days set." },
             reminder_enabled = new { type = JsonSchemaTypes.Boolean, description = "Enable or disable reminders" },
@@ -127,7 +132,11 @@ public class UpdateHabitTool(
             return Result.Failure($"Habit {habitId} not found.");
 
         var today = await userDateService.GetUserTodayAsync(userId, ct);
-        var preview = habit.PreviewUpdate(ResolveUpdateParams(args, habit, today));
+        var update = ResolveUpdateParams(args, habit, today);
+        var validation = await HabitUpdateValidation.ValidateAsync(userId, habit, update, habitRepository, ct);
+        if (validation.IsFailure)
+            return validation;
+        var preview = habit.PreviewUpdate(update);
         return preview.IsFailure ? preview : Result.Success();
     }
 
@@ -137,13 +146,26 @@ public class UpdateHabitTool(
         Guid userId,
         CancellationToken cancellationToken)
     {
+        var fieldError = BulkHabitToolArguments.CheckHabitFields(args);
+        if (fieldError is not null)
+            return Result.Failure<UpdateToolState>(fieldError);
         var habit = await HabitToolHelpers.FindHabitAsync(
             habitRepository, habitId, userId, cancellationToken);
         if (habit is null)
             return Result.Failure<UpdateToolState>($"Habit {habitId} not found.");
 
         var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
-        return Result.Success(new UpdateToolState(habit, ResolveUpdateParams(args, habit, today)));
+        var update = ResolveUpdateParams(args, habit, today);
+        var validation = await HabitUpdateValidation.ValidateAsync(userId, habit, update, habitRepository, cancellationToken);
+        if (validation.IsFailure)
+            return validation.PropagateError<UpdateToolState>();
+        if (update.SlipAlertEnabled == true && !habit.SlipAlertEnabled)
+        {
+            var gate = await payGate.CanUseSlipAlerts(userId, cancellationToken);
+            if (gate.IsFailure)
+                return gate.PropagateError<UpdateToolState>();
+        }
+        return Result.Success(new UpdateToolState(habit, update));
     }
 
     private async Task<Result<ToolResult>> ApplyUpdateAsync(
@@ -190,7 +212,11 @@ public class UpdateHabitTool(
         return new HabitUpdateParams(
             title, description, frequencyUnit, frequencyQuantity, days, isBadHabit, dueDate,
             DueTime: dueTime,
-            DueEndTime: habit.DueEndTime,
+            DueEndTime: JsonArgumentParser.PropertyExists(args, "due_end_time")
+                ? JsonArgumentParser.ParseTimeOnly(args, "due_end_time") : habit.DueEndTime,
+            IsGeneral: ResolveOptionalBool(args, "is_general"),
+            SlipAlertEnabled: ResolveOptionalBool(args, "slip_alert_enabled"),
+            RelativeReminders: JsonArgumentParser.ParseRelativeReminders(args),
             ReminderEnabled: ResolveOptionalBool(args, "reminder_enabled"),
             ReminderTimes: reminderTimes,
             ChecklistItems: ResolveOptionalChecklist(args),
