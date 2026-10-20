@@ -14,5 +14,6 @@ public interface IAiUsageRecorder
         long completionTokens,
         long totalTokens,
         CancellationToken cancellationToken = default,
-        Guid? userId = null);
+        Guid? userId = null,
+        long cacheWriteTokens = 0);
 }

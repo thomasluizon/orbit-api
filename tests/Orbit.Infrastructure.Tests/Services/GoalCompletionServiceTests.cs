@@ -549,6 +549,9 @@ public class GoalCompletionServiceTests
             CancellationToken cancellationToken = default) =>
             inner.ExecuteOnceInTransactionAsync(operation, cancellationToken);
 
+        public Task<T> ExecuteInSavepointAsync<T>(Func<CancellationToken, Task<T>> operation,
+            CancellationToken cancellationToken = default) => inner.ExecuteInSavepointAsync(operation, cancellationToken);
+
         public Task AcquireAdvisoryLockAsync(string key, CancellationToken cancellationToken = default) =>
             inner.AcquireAdvisoryLockAsync(key, cancellationToken);
 
@@ -587,6 +590,9 @@ public class GoalCompletionServiceTests
         public Task ExecuteOnceInTransactionAsync(Func<CancellationToken, Task> operation,
             CancellationToken cancellationToken = default) =>
             inner.ExecuteOnceInTransactionAsync(operation, cancellationToken);
+
+        public Task<T> ExecuteInSavepointAsync<T>(Func<CancellationToken, Task<T>> operation,
+            CancellationToken cancellationToken = default) => inner.ExecuteInSavepointAsync(operation, cancellationToken);
 
         public Task AcquireAdvisoryLockAsync(string key, CancellationToken cancellationToken = default) =>
             inner.AcquireAdvisoryLockAsync(key, cancellationToken);
@@ -645,6 +651,9 @@ public class GoalCompletionServiceTests
         public Task ExecuteOnceInTransactionAsync(Func<CancellationToken, Task> operation,
             CancellationToken cancellationToken = default) =>
             inner.ExecuteOnceInTransactionAsync(operation, cancellationToken);
+
+        public Task<T> ExecuteInSavepointAsync<T>(Func<CancellationToken, Task<T>> operation,
+            CancellationToken cancellationToken = default) => inner.ExecuteInSavepointAsync(operation, cancellationToken);
 
         public Task AcquireAdvisoryLockAsync(string key, CancellationToken cancellationToken = default) =>
             inner.AcquireAdvisoryLockAsync(key, cancellationToken);

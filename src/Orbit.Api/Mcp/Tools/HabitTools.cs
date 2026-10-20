@@ -16,6 +16,7 @@ namespace Orbit.Api.Mcp.Tools;
 [McpServerToolType]
 public class HabitTools(IMediator mediator, IUserDateService userDateService, McpExecutorBridge executorBridge)
 {
+    private static readonly JsonSerializerOptions PayloadOptions = new(JsonSerializerDefaults.Web);
     private const string HabitIdDescription = "The habit ID (GUID)";
     private const string DateFromDescription = "Start date in YYYY-MM-DD format";
     private const string DateToDescription = "End date in YYYY-MM-DD format";
@@ -462,7 +463,13 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         if (!result.Succeeded)
             return result.Message;
 
-        if (result.Payload is not BulkCreateResult bulk)
+        var bulk = result.Payload switch
+        {
+            BulkCreateResult typed => typed,
+            JsonElement json => json.Deserialize<BulkCreateResult>(PayloadOptions),
+            _ => null
+        };
+        if (bulk is null)
             return $"Bulk create: {result.TargetName}";
 
         var successCount = bulk.Results.Count(x => x.Status == BulkItemStatus.Success);

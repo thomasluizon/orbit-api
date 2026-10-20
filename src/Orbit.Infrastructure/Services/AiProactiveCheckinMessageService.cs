@@ -16,7 +16,7 @@ public sealed partial class AiProactiveCheckinMessageService : IProactiveCheckin
     private readonly Func<string, string, double, CancellationToken, Task<string?>> _complete;
     private readonly ILogger<AiProactiveCheckinMessageService> _logger;
 
-    public AiProactiveCheckinMessageService(AiCompletionClient aiClient, ILogger<AiProactiveCheckinMessageService> logger)
+    public AiProactiveCheckinMessageService(BudgetedAiCompletionClient aiClient, ILogger<AiProactiveCheckinMessageService> logger)
         : this((system, prompt, temperature, ct) => aiClient.CompleteTextAsync(system, prompt,
             temperature: temperature, purpose: "proactive_item", cancellationToken: ct), logger)
     { }

@@ -884,6 +884,22 @@ public class HabitToolsTests
     }
 
     [Fact]
+    public async Task BulkCreateHabits_ReplayedPayload_PreservesFormattedResult()
+    {
+        var payload = new BulkCreateResult([new BulkCreateItemResult(0, BulkItemStatus.Success, Guid.NewGuid(), "Habit1")]);
+        var original = new AgentExecuteOperationResponse(new AgentOperationResult("bulk_create_habits", "bulk_create_habits",
+            AgentRiskClass.Destructive, AgentConfirmationRequirement.FreshConfirmation, AgentOperationStatus.Succeeded, Payload: payload));
+        var options = new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web);
+        var replay = System.Text.Json.JsonSerializer.Deserialize<AgentExecuteOperationResponse>(
+            System.Text.Json.JsonSerializer.Serialize(original, options), options)!;
+        _executor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>()).Returns(original, replay);
+        var first = await _tools.BulkCreateHabits(_user, """[{"title":"Habit1"}]""");
+        var second = await _tools.BulkCreateHabits(_user, """[{"title":"Habit1"}]""");
+        first.Should().Contain("1 succeeded, 0 failed").And.Contain("Habit1");
+        second.Should().Be(first);
+    }
+
+    [Fact]
     public async Task BulkCreateHabits_Failure_ReturnsError()
     {
         StubExecutor(AgentOperationStatus.Failed, policyReason: "Limit exceeded");

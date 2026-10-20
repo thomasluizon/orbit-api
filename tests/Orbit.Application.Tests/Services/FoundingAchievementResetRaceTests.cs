@@ -180,6 +180,9 @@ public class FoundingAchievementResetRaceTests
         public Task ExecuteOnceInTransactionAsync(Func<CancellationToken, Task> operation,
             CancellationToken cancellationToken = default) => ExecuteInTransactionAsync(operation, cancellationToken);
 
+        public Task<T> ExecuteInSavepointAsync<T>(Func<CancellationToken, Task<T>> operation,
+            CancellationToken cancellationToken = default) => operation(cancellationToken);
+
         public async Task AcquireAdvisoryLockAsync(string key, CancellationToken cancellationToken = default)
         {
             var transaction = _transaction.Value
