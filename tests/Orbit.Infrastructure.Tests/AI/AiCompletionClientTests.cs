@@ -2,6 +2,7 @@
 
 using System.ClientModel;
 using System.ClientModel.Primitives;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
@@ -231,13 +232,13 @@ public class AiCompletionClientTests
     [InlineData("stream")]
     public async Task NetworkTimeout_BufferedReasoningHasHeadroomWhileStreamingFailsPromptly(string kind)
     {
-        var handler = new SlowResponseHandler();
+        var handler = new SlowResponseHandler(waitForCancellation: kind == "stream");
         var settings = new AiSettings
         {
             ApiKey = "test-key",
             BaseUrl = "https://orbit.test/v1",
             NetworkTimeoutSeconds = 1,
-            BufferedNetworkTimeoutSeconds = 3,
+            BufferedNetworkTimeoutSeconds = 10,
             MaxRetries = 0
         };
         var usage = Substitute.For<IAiUsageRecorder>();
@@ -258,17 +259,26 @@ public class AiCompletionClientTests
             }
         };
 
-        var error = await Record.ExceptionAsync(() => call().WaitAsync(TimeSpan.FromSeconds(5)));
+        var elapsed = Stopwatch.StartNew();
+        var error = await Record.ExceptionAsync(() => call().WaitAsync(TimeSpan.FromSeconds(20)));
+        elapsed.Stop();
 
         if (kind != "stream")
+        {
             error.Should().BeNull();
-        else if (error is not null)
-            error.Should().BeAssignableTo<OperationCanceledException>();
+            elapsed.Elapsed.Should().BeGreaterThanOrEqualTo(TimeSpan.FromSeconds(2));
+        }
+        else
+        {
+            if (error is not null)
+                error.Should().BeAssignableTo<OperationCanceledException>();
+            elapsed.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(10));
+        }
         handler.CancellationObserved.Should().Be(kind == "stream");
         handler.RequestCount.Should().Be(1);
     }
 
-    private sealed class SlowResponseHandler : HttpMessageHandler
+    private sealed class SlowResponseHandler(bool waitForCancellation) : HttpMessageHandler
     {
         internal bool CancellationObserved { get; private set; }
         internal int RequestCount { get; private set; }
@@ -278,7 +288,7 @@ public class AiCompletionClientTests
             RequestCount++;
             try
             {
-                await Task.Delay(TimeSpan.FromMilliseconds(1250), cancellationToken);
+                await Task.Delay(waitForCancellation ? Timeout.InfiniteTimeSpan : TimeSpan.FromSeconds(3), cancellationToken);
             }
             catch (OperationCanceledException)
             {
