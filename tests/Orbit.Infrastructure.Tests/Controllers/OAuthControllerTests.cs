@@ -111,6 +111,8 @@ public class OAuthControllerTests : IDisposable
         minted.Scopes.Should().Equal(AgentScopes.ReadHabits);
         minted.IsReadOnly.Should().BeTrue();
         old.IsRevoked.Should().BeTrue();
+        var refreshedPayload = JsonSerializer.SerializeToElement(((OkObjectResult)refreshed).Value);
+        BCrypt.Net.BCrypt.Verify(refreshedPayload.GetProperty("access_token").GetString()!, minted.KeyHash).Should().BeTrue();
         (await _controller.Token("refresh_token", null, null, null, default, refresh)).Should().BeOfType<BadRequestObjectResult>();
     }
 
@@ -1076,6 +1078,7 @@ public class OAuthControllerTests : IDisposable
         using var doc = JsonDocument.Parse(JsonSerializer.Serialize(ok.Value));
         doc.RootElement.GetProperty("scope").GetString()!.Split(' ')
             .Should().BeEquivalentTo(AgentScopes.ClaudeDefaultScopes);
+        BCrypt.Net.BCrypt.Verify(doc.RootElement.GetProperty("access_token").GetString()!, created.KeyHash).Should().BeTrue();
     }
 
     [Fact]

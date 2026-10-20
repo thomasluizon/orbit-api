@@ -69,6 +69,17 @@ public class ApiKeyTests
     }
 
     [Fact]
+    public void Create_KeyHashRemainsReadableByRollbackVerifier()
+    {
+        var (key, rawKey) = ApiKey.Create(ValidUserId, "Rollback compatible").Value;
+
+        BCrypt.Net.BCrypt.Verify(rawKey, key.KeyHash).Should().BeTrue();
+        key.KeyHash.Should().StartWith("$2a$11$");
+        key.Verify(rawKey).Should().BeTrue();
+        key.Verify($"{rawKey[..^1]}!").Should().BeFalse();
+    }
+
+    [Fact]
     public void Create_GeneratesUniqueKeys()
     {
         var result1 = ApiKey.Create(ValidUserId, "Key 1");
