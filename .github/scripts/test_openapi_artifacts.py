@@ -133,14 +133,14 @@ class PublicationTests(unittest.TestCase):
         self.assertNotEqual(0, self.run_guard('freshness').returncode)
 
     def test_wrong_document_version_fails(self):
-        path = guard.artifact_path(self.rows[-1], self.repo)
+        path = self.repo / 'src/Orbit.Api/openapi_v2-r2.json'
         doc = json.loads(path.read_bytes())
         doc['info']['version'] = '1.0'
         path.write_text(json.dumps(doc))
         self.assertNotEqual(0, self.run_guard().returncode)
 
     def test_additive_endpoint_changes_remain_eligible_for_ordinary_diff(self):
-        path = guard.artifact_path(self.rows[0], self.repo)
+        path = self.repo / 'src/Orbit.Api/openapi.json'
         doc = json.loads(path.read_bytes())
         doc['paths']['/api/Additional'] = {'get': {'responses': {'200': {'description': 'OK'}}}}
         path.write_text(json.dumps(doc))
@@ -178,8 +178,9 @@ class PublicationTests(unittest.TestCase):
         cache = self.repo / 'src/Orbit.Api/obj/Orbit.Api.OpenApiFiles.cache'
         with tempfile.TemporaryDirectory() as outside:
             alias = pathlib.Path(outside) / 'alias.json'
-            alias.symlink_to(self.repo / 'src/Orbit.Api/openapi.json')
-            cache.write_text(cache.read_text().replace(str(self.repo / 'src/Orbit.Api/openapi.json'), str(alias)))
+            target = self.repo / 'src/Orbit.Api/openapi.json'
+            alias.symlink_to(target)
+            cache.write_text(cache.read_text().replace(str(target), str(alias)))
             result = self.run_guard('freshness')
             self.assertNotEqual(0, result.returncode, result.stdout)
             self.assertIn('Generator output', result.stderr)
@@ -187,18 +188,20 @@ class PublicationTests(unittest.TestCase):
     def test_invalid_target_refs_are_rejected_before_invoking_git(self):
         for ref in ('--help', '-c core.pager=anything', 'HEAD^{commit}', 'HEAD:src/Orbit.Api/openapi.json',
                     'origin/main\nHEAD', 'origin/ma\u0131n', 'https://example.com/main'):
-            with self.subTest(ref=ref), mock.patch.object(guard.subprocess, 'check_output',
-                                                        side_effect=AssertionError('Untrusted ref reached git')):
-                with self.assertRaisesRegex(ValueError, 'Invalid target ref'):
-                    guard.plan(ref)
+            with (self.subTest(ref=ref),
+                  mock.patch.object(guard.subprocess, 'check_output',
+                                    side_effect=AssertionError('Untrusted ref reached git')),
+                  self.assertRaisesRegex(ValueError, 'Invalid target ref')):
+                guard.plan(ref)
 
     def test_catalog_identity_digits_remain_ascii(self):
         for revision in ('2\u0663', '2\uff13'):
             row = self.rows[-1].copy()
             row.update(id='orbit-http-v2-r' + revision, revision='r' + revision,
                        documentName='v2-r' + revision, path='src/Orbit.Api/openapi_v2-r' + revision + '.json')
+            raw = json.dumps([*self.rows[:-1], row])
             with self.subTest(revision=revision), self.assertRaises(ValueError):
-                guard.catalog(json.dumps([*self.rows[:-1], row]))
+                guard.catalog(raw)
 
 
 if __name__ == '__main__':

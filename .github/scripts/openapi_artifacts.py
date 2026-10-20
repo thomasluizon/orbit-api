@@ -7,6 +7,7 @@ import subprocess
 import sys
 
 CATALOG = 'src/Orbit.Api/OpenApi/artifacts.json'
+FULL_COMMIT_PATTERN = r'[a-f\d]{40}'
 IDENTITY = ('id', 'httpVersion', 'revision', 'documentName', 'path')
 KEYS = set(IDENTITY) | {'deprecated', 'replacement'}
 LEGACY = [
@@ -22,19 +23,19 @@ def resolve_commit(ref):
     if not re.fullmatch(r'[A-Za-z\d][A-Za-z\d/._-]*', ref, re.ASCII):
         raise ValueError('Invalid target ref')
     commit = subprocess.check_output(['git', 'rev-parse', '--verify', '--end-of-options', ref + '^{commit}']).decode().strip()
-    if not re.fullmatch(r'[a-f\d]{40}', commit, re.ASCII):
+    if not re.fullmatch(FULL_COMMIT_PATTERN, commit, re.ASCII):
         raise ValueError('Git must return a full producer commit')
     return commit
 
 
 def tracked_files(commit):
-    if not re.fullmatch(r'[a-f\d]{40}', commit, re.ASCII):
+    if not re.fullmatch(FULL_COMMIT_PATTERN, commit, re.ASCII):
         raise ValueError('A full commit is required to list target files')
     return set(subprocess.check_output(['git', 'ls-tree', '-r', '--name-only', '--end-of-options', commit]).decode().splitlines())
 
 
 def committed_file(commit, path):
-    if not re.fullmatch(r'[a-f\d]{40}', commit, re.ASCII):
+    if not re.fullmatch(FULL_COMMIT_PATTERN, commit, re.ASCII):
         raise ValueError('A full commit is required to read target files')
     if path != CATALOG and not re.fullmatch(r'src/Orbit\.Api/openapi(?:_v2|_v[12]-r[1-9]\d*)?\.json', path, re.ASCII):
         raise ValueError('Only publication files can be read from git')
