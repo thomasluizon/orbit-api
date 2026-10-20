@@ -49,13 +49,18 @@ public sealed partial class AiCompletionClient
         CompletionTimeout = settings.CompletionTimeout;
         StreamingCompletionTimeout = settings.StreamingCompletionTimeout;
 
-        ResponsesClient CreateClient(int networkTimeoutSeconds) => new(new ApiKeyCredential(settings.ApiKey), new ResponsesClientOptions
+        ResponsesClient CreateClient(int networkTimeoutSeconds)
         {
-            Endpoint = new Uri(settings.BaseUrl),
-            NetworkTimeout = TimeSpan.FromSeconds(networkTimeoutSeconds),
-            Transport = transport,
-            RetryPolicy = new AiRetryLoggingPolicy(settings.MaxRetries, logger)
-        });
+            var clientOptions = new ResponsesClientOptions
+            {
+                Endpoint = new Uri(settings.BaseUrl),
+                NetworkTimeout = TimeSpan.FromSeconds(networkTimeoutSeconds),
+                Transport = transport,
+                RetryPolicy = new AiRetryLoggingPolicy(settings.MaxRetries, logger)
+            };
+            clientOptions.AddPolicy(new AiBudgetDispatchPolicy(), PipelinePosition.BeforeTransport);
+            return new ResponsesClient(new ApiKeyCredential(settings.ApiKey), clientOptions);
+        }
 
         _primaryModel = settings.Model;
         _responsesClient = CreateClient(settings.BufferedNetworkTimeoutSeconds);

@@ -24,17 +24,14 @@ public sealed class BudgetedAiCompletionClient(AiCompletionClient inner, IAiDail
         var reservedMicroDollars = await estimates.EstimateMicroDollarsAsync(requestJson, cancellationToken);
         var reservation = await budget.ReserveAsync(userId.Value, reservedMicroDollars, cancellationToken);
         using var context = AiCallContext.Begin(userId.Value);
-        var completed = false;
         try
         {
-            var result = await complete(inner);
-            completed = true;
-            return result;
+            return await complete(inner);
         }
         finally
         {
             using var settlement = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-            var chargedMicroDollars = context.ChargedMicroDollars ?? (completed ? reservedMicroDollars : 0);
+            var chargedMicroDollars = context.ChargedMicroDollars ?? (context.HasUnreportedDispatch ? reservedMicroDollars : 0);
             try { await budget.SettleAsync(reservation, chargedMicroDollars, settlement.Token); }
             catch (Exception exception)
             {

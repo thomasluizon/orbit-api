@@ -1,5 +1,6 @@
 #pragma warning disable OPENAI001
 
+using System.ClientModel;
 using System.ClientModel.Primitives;
 using System.Net;
 using System.Security.Claims;
@@ -175,6 +176,109 @@ public class AiDailyBudgetTests
         read.AiBudgetCalls.Single().ChargedMicroDollars.Should().Be(6546);
     }
 
+    [Theory]
+    [InlineData("cancel")]
+    [InlineData("sink")]
+    [InlineData("truncated")]
+    public async Task InterruptedStreamAfterOutput_RetainsConservativeSpend(string interruption)
+    {
+        using var fixture = new BudgetFixture();
+        fixture.Handler.OmitTerminalEvent = true;
+        var service = new AiIntentService(fixture.Client, fixture.Recorder, NullLogger<AiIntentService>.Instance);
+        using var cancellation = new CancellationTokenSource();
+        var deltas = 0;
+        var call = () => service.SendWithToolsAsync(new AiToolRequest("write", "system", [], fixture.User.Id),
+            update =>
+            {
+                if (update.Kind == AiStreamEventKind.Delta)
+                {
+                    deltas++;
+                    if (interruption == "cancel")
+                        cancellation.Cancel();
+                    if (interruption == "sink")
+                        throw new IOException("The response sink disconnected.");
+                }
+                return Task.CompletedTask;
+            }, cancellation.Token);
+
+        if (interruption == "cancel")
+            await call.Should().ThrowAsync<OperationCanceledException>();
+        else
+            (await call()).IsFailure.Should().BeTrue();
+
+        deltas.Should().Be(1);
+        fixture.Handler.Completions.Should().Be(1);
+        using var read = fixture.Database.CreateContext();
+        read.AiUsageDaily.Should().BeEmpty();
+        var charged = read.AiBudgetCalls.Single();
+        charged.ChargedMicroDollars.Should().Be(6546);
+        charged.IsSettled.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RepeatedDisconnectedStreams_HitDailyCeiling()
+    {
+        using var fixture = new BudgetFixture();
+        fixture.Handler.OmitTerminalEvent = true;
+        var service = new AiIntentService(fixture.Client, fixture.Recorder, NullLogger<AiIntentService>.Instance);
+        var deltas = 0;
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            var result = await service.SendWithToolsAsync(new AiToolRequest("write", "system", [], fixture.User.Id),
+                _ =>
+                {
+                    deltas++;
+                    throw new IOException("The response sink disconnected.");
+                });
+            result.IsFailure.Should().BeTrue();
+            result.ErrorCode.Should().Be(ErrorMessages.AiUnavailable.Code);
+        }
+
+        var blocked = await service.SendWithToolsAsync(new AiToolRequest("write", "system", [], fixture.User.Id),
+            _ => Task.CompletedTask);
+
+        blocked.ErrorCode.Should().Be(AiBudgetExceededException.Error.Code);
+        fixture.Handler.Completions.Should().Be(3);
+        deltas.Should().Be(3);
+        using var read = fixture.Database.CreateContext();
+        read.AiBudgetCalls.Sum(call => call.ChargedMicroDollars).Should().Be(19_638);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.BadRequest, 0)]
+    [InlineData(HttpStatusCode.TooManyRequests, 0)]
+    [InlineData(HttpStatusCode.InternalServerError, 6546)]
+    [InlineData(HttpStatusCode.BadGateway, 6546)]
+    [InlineData(HttpStatusCode.GatewayTimeout, 6546)]
+    public async Task UnreportedProviderFailure_ChargesUnlessExplicitlyRejected(HttpStatusCode status, long expectedSpend)
+    {
+        using var fixture = new BudgetFixture();
+        fixture.Handler.Fail = true;
+        fixture.Handler.FailureStatus = status;
+        var call = () => fixture.Client.CompleteTextAsync("system", "write");
+
+        var failure = await call.Should().ThrowAsync<ClientResultException>();
+
+        failure.Which.Status.Should().Be((int)status);
+        using var read = fixture.Database.CreateContext();
+        read.AiBudgetCalls.Single().ChargedMicroDollars.Should().Be(expectedSpend);
+    }
+
+    [Fact]
+    public async Task FailureBeforeProviderDispatch_ReleasesReservation()
+    {
+        using var fixture = new BudgetFixture();
+        var request = fixture.Client.Inner.SerializeTextRequest("system", "write", 0.7, 8192, AiModelTier.Primary);
+        var call = () => fixture.Client.RunAsync<string>(fixture.User.Id,
+            _ => Task.FromException<string>(new IOException("The completion was never dispatched.")), default, request);
+
+        await call.Should().ThrowAsync<IOException>();
+
+        fixture.Handler.Completions.Should().Be(0);
+        using var read = fixture.Database.CreateContext();
+        read.AiBudgetCalls.Single().ChargedMicroDollars.Should().Be(0);
+    }
+
     [Fact]
     public async Task DollarConfig_CanRaiseTheCeiling_AndPricesTheRequestedModel()
     {
@@ -343,10 +447,12 @@ public class AiDailyBudgetTests
         internal int InputTokens { get; set; } = 19_600;
         internal bool FullToolLoops { get; set; }
         internal bool Fail { get; set; }
+        internal HttpStatusCode FailureStatus { get; set; } = HttpStatusCode.ServiceUnavailable;
         internal bool FailCount { get; set; }
         internal bool WaitForCountCancellation { get; set; }
         internal bool ReportFailedUsage { get; set; }
         internal bool OmitUsage { get; set; }
+        internal bool OmitTerminalEvent { get; set; }
         internal Action? OnCompletion { get; set; }
         internal List<JsonElement> CountedRequests { get; } = [];
         internal List<JsonElement> CompletionRequests { get; } = [];
@@ -366,7 +472,7 @@ public class AiDailyBudgetTests
             OnCompletion?.Invoke();
             Completions++;
             if (Fail && !ReportFailedUsage)
-                return Response(request, HttpStatusCode.ServiceUnavailable, "{}");
+                return Response(request, FailureStatus, "{}");
             var response = ResponsesTestData.Response("{\"value\":\"ok\"}", InputTokens, FullToolLoops ? 8192 : 500,
                 FullToolLoops || Completions == 1 ? 0 : 17_350);
             response.Model = model;
@@ -382,6 +488,14 @@ public class AiDailyBudgetTests
                 response.OutputItems.Add(ResponseItem.CreateFunctionCallItem($"call_{Completions}", "noop", BinaryData.FromString("{}")));
             }
             var streaming = body.RootElement.TryGetProperty("stream", out var stream) && stream.GetBoolean();
+            if (streaming && OmitTerminalEvent)
+                return Response(request, HttpStatusCode.OK, ResponsesTestData.Event(new StreamingResponseOutputTextDeltaUpdate
+                {
+                    Delta = "done",
+                    ItemId = "msg_test",
+                    OutputIndex = 0,
+                    ContentIndex = 0
+                }), "text/event-stream");
             return Response(request, HttpStatusCode.OK, streaming ? ResponsesTestData.Stream(response, "done") : ModelReaderWriter.Write(response).ToString(),
                 streaming ? "text/event-stream" : "application/json");
         }

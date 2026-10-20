@@ -4,9 +4,11 @@ public sealed class AiCallContext : IDisposable
 {
     private static readonly AsyncLocal<AiCallContext?> Active = new();
     private readonly AiCallContext? _previous;
+    private int _unreportedDispatches;
     public Guid UserId { get; }
     public long? ChargedMicroDollars { get; private set; }
     public static AiCallContext? Current => Active.Value;
+    internal bool HasUnreportedDispatch => _unreportedDispatches > 0;
 
     private AiCallContext(Guid userId)
     {
@@ -18,6 +20,8 @@ public sealed class AiCallContext : IDisposable
     }
 
     public static AiCallContext Begin(Guid userId) => new(userId);
+    internal void MarkDispatched() => _unreportedDispatches++;
+    internal void MarkRejected() => _unreportedDispatches--;
     public void ReportCost(long microDollars)
     {
         if (microDollars < 0)
