@@ -246,12 +246,12 @@ public sealed partial class AiCompletionClient
                 await _usageRecorder.RecordAsync(purpose, options.Model,
                     usage?.InputTokenDetails?.CachedTokenCount ?? 0,
                     usage?.InputTokenCount ?? 0, usage?.OutputTokenCount ?? 0, usage?.TotalTokenCount ?? 0,
-                    CancellationToken.None, userId,
+                    cancellationToken, userId,
                     new AiCallTelemetry(traceId, stopwatch.Elapsed.TotalSeconds,
                         response is null || response.Status is not (ResponseStatus.Completed or ResponseStatus.Incomplete),
                         [], HasUsage: usage is not null));
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 LogUsageRecordFailed(_logger, options.Model, purpose, ex);
             }

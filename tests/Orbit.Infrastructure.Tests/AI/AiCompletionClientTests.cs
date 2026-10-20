@@ -23,6 +23,30 @@ namespace Orbit.Infrastructure.Tests.AI;
 public class AiCompletionClientTests
 {
     [Theory]
+    [InlineData("json")]
+    [InlineData("text")]
+    [InlineData("chat")]
+    public async Task CompletionDeadline_CancelsUsageWriteAfterSuccessfulResponse(string kind)
+    {
+        var usage = Substitute.For<IAiUsageRecorder>();
+        usage.RecordAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<long>(), Arg.Any<long>(),
+                Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>(), Arg.Any<Guid?>(), Arg.Any<AiCallTelemetry>())
+            .Returns(call => Task.Delay(Timeout.InfiniteTimeSpan, call.Arg<CancellationToken>()));
+        var client = new AiCompletionClient(BuildResponsesClient(new CapturingHandler()), NullLogger<AiCompletionClient>.Instance,
+            usage, TimeSpan.FromMilliseconds(50));
+        var intent = new AiIntentService(client, usage, NullLogger<AiIntentService>.Instance);
+        Func<Task> call = kind switch
+        {
+            "json" => async () => await client.CompleteJsonAsync<Probe>("system", "user"),
+            "text" => async () => await client.CompleteTextAsync("system", "user"),
+            _ => async () => await intent.SendWithToolsAsync(new AiToolRequest("user", "system", []))
+        };
+
+        Func<Task> bounded = () => call().WaitAsync(TimeSpan.FromSeconds(1));
+        await bounded.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Theory]
     [InlineData("text")]
     [InlineData("json")]
     public async Task BackgroundCalls_RecordPurposeLatencyAndOneTracePerRun(string kind)

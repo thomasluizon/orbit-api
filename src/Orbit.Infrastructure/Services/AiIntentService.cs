@@ -253,7 +253,7 @@ public sealed partial class AiIntentService(
             await RecordChatUsageAsync(observation.Response?.Usage, streamSink is null ? "buffered" : "streaming",
                 userId, new AiCallTelemetry(telemetry.TraceId, stopwatch.Elapsed.TotalSeconds,
                     observation.Response is null || observation.Response.Status is not (ResponseStatus.Completed or ResponseStatus.Incomplete),
-                    toolNames, telemetry.Plan, observation.Response?.Usage is not null));
+                    toolNames, telemetry.Plan, observation.Response?.Usage is not null), cancellationToken);
         }
     }
 
@@ -480,7 +480,8 @@ public sealed partial class AiIntentService(
         ResponseTokenUsage? usage,
         string phase,
         Guid? userId,
-        AiCallTelemetry telemetry)
+        AiCallTelemetry telemetry,
+        CancellationToken cancellationToken)
     {
         if (usage is null)
         {
@@ -497,7 +498,7 @@ public sealed partial class AiIntentService(
                 usage?.InputTokenCount ?? 0,
                 usage?.OutputTokenCount ?? 0,
                 usage?.TotalTokenCount ?? 0,
-                CancellationToken.None,
+                cancellationToken,
                 userId,
                 telemetry);
         }
