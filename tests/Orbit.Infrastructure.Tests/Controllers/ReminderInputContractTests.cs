@@ -14,7 +14,7 @@ using JsonOptions = Microsoft.AspNetCore.Mvc.JsonOptions;
 
 namespace Orbit.Infrastructure.Tests.Controllers;
 
-public class ReminderInputContractTests
+public partial class ReminderInputContractTests
 {
     internal static JsonSerializerOptions MvcOptions()
     {
@@ -30,6 +30,25 @@ public class ReminderInputContractTests
         baseline.Converters.Clear();
         baseline.Converters.Add(new JsonStringEnumConverter());
         return baseline;
+    }
+
+    [Theory]
+    [InlineData("same_day", ScheduledReminderWhen.SameDay, false)]
+    [InlineData("day_before", ScheduledReminderWhen.DayBefore, false)]
+    [InlineData("SameDay", ScheduledReminderWhen.SameDay, false)]
+    [InlineData("DayBefore", ScheduledReminderWhen.DayBefore, false)]
+    [InlineData("same_day", ScheduledReminderWhen.SameDay, true)]
+    [InlineData("day_before", ScheduledReminderWhen.DayBefore, true)]
+    [InlineData("SameDay", ScheduledReminderWhen.SameDay, true)]
+    [InlineData("DayBefore", ScheduledReminderWhen.DayBefore, true)]
+    public void MvcOptions_AcceptShippedAliasesAndExistingNames(string name, ScheduledReminderWhen expected, bool relative)
+    {
+        var json = $$"""{"when":"{{name}}","time":"08:00"}""";
+        var options = MvcOptions();
+        var actual = relative
+            ? JsonSerializer.Deserialize<RelativeReminderTime>(json, options)!.When
+            : JsonSerializer.Deserialize<ScheduledReminderTime>(json, options)!.When;
+        actual.Should().Be(expected);
     }
 
     [Theory]

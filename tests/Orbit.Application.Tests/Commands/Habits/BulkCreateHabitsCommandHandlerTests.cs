@@ -12,6 +12,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Tests.Commands.Habits;
 
@@ -119,6 +120,108 @@ public class BulkCreateHabitsCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Results.Should().ContainSingle()
             .Which.Status.Should().Be(BulkItemStatus.Failed);
+        await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(ScheduledReminderWhen.SameDay)]
+    [InlineData(ScheduledReminderWhen.DayBefore)]
+    public async Task Handle_DirectChild_PersistsOwnScheduledReminders(ScheduledReminderWhen when)
+    {
+        var (_, saved) = CaptureTagAndHabitAdds();
+        ScheduledReminderTime[] reminders = [new(when, new TimeOnly(8, 0))];
+        var item = new BulkHabitItem("Parent", null, FrequencyUnit.Day, 1,
+            ReminderTimes: [90], ScheduledReminders: [new(ScheduledReminderWhen.SameDay, new TimeOnly(7, 0))],
+            SubHabits: [new("Child", null, null, null,
+                ReminderEnabled: true, ReminderTimes: [30], ScheduledReminders: reminders)]);
+
+        var result = await _handler.Handle(new(UserId, [item]), CancellationToken.None);
+
+        result.Value.Results.Single().Status.Should().Be(BulkItemStatus.Success);
+        saved.Should().HaveCount(2);
+        var child = saved.Single(h => h.ParentHabitId != null);
+        child.ParentHabitId.Should().Be(saved.Single(h => h.ParentHabitId == null).Id);
+        child.Position.Should().Be(0);
+        child.ReminderEnabled.Should().BeTrue();
+        child.ReminderTimes.Should().Equal(30);
+        child.ScheduledReminders.Should().Equal(reminders);
+        child.GetScheduledRemindersForLegacyClients().Should().Equal(reminders);
+        child.RelativeReminders.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(ScheduledReminderWhen.SameDay)]
+    [InlineData(ScheduledReminderWhen.DayBefore)]
+    public async Task Handle_DirectChild_PersistsAndNormalizesTimedReminders(ScheduledReminderWhen when)
+    {
+        var (_, saved) = CaptureTagAndHabitAdds();
+        var scheduled = new ScheduledReminderTime(when, new TimeOnly(8, 0));
+        RelativeReminderTime[] relative = [new(15), new(When: when, Time: new TimeOnly(7, 0))];
+        var item = new BulkHabitItem("Parent", null, FrequencyUnit.Day, 1,
+            SubHabits: [new("Child", null, null, null, DueTime: new TimeOnly(9, 0),
+                ReminderEnabled: true, ReminderTimes: [45], ScheduledReminders: [scheduled], RelativeReminders: relative)]);
+
+        var result = await _handler.Handle(new(UserId, [item]), CancellationToken.None);
+
+        result.Value.Results.Single().Status.Should().Be(BulkItemStatus.Success);
+        var child = saved.Single(h => h.ParentHabitId != null);
+        child.ReminderEnabled.Should().BeTrue();
+        child.ReminderTimes.Should().Equal(45);
+        child.ScheduledReminders.Should().BeEmpty();
+        child.RelativeReminders.Should().Equal(relative.Append(RelativeReminderTime.FromScheduled(scheduled)));
+        child.GetScheduledRemindersForLegacyClients().Should().Equal(
+            new ScheduledReminderTime(when, new TimeOnly(7, 0)), scheduled);
+    }
+
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(false, false, true)]
+    [InlineData(true, false, false)]
+    [InlineData(true, true, false)]
+    public async Task Handle_DirectChild_PreservesFalseEmptyAndDomainDefaults(bool timed, bool clock, bool empty)
+    {
+        var (_, saved) = CaptureTagAndHabitAdds();
+        var childItem = new BulkHabitItem("Child", null, null, null,
+            DueTime: timed ? new TimeOnly(9, 0) : null,
+            ReminderEnabled: false, ReminderTimes: empty ? [] : null,
+            ScheduledReminders: [],
+            RelativeReminders: clock ? [new(When: ScheduledReminderWhen.DayBefore, Time: new TimeOnly(8, 0))] : []);
+        var item = new BulkHabitItem("Parent", null, FrequencyUnit.Day, 1,
+            ReminderEnabled: true, ReminderTimes: [90],
+            ScheduledReminders: [new(ScheduledReminderWhen.SameDay, new TimeOnly(7, 0))],
+            SubHabits: [childItem]);
+
+        var result = await _handler.Handle(new(UserId, [item]), CancellationToken.None);
+
+        result.Value.Results.Single().Status.Should().Be(BulkItemStatus.Success);
+        var child = saved.Single(h => h.ParentHabitId != null);
+        child.ReminderEnabled.Should().BeFalse();
+        child.ReminderTimes.Should().Equal(empty || clock ? Array.Empty<int>() : [15]);
+        child.ScheduledReminders.Should().BeEmpty();
+        child.RelativeReminders.Should().Equal(childItem.RelativeReminders!);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task InvalidLaterChildReminder_FailsWithoutAddingAnyPartOfItem(bool preflight)
+    {
+        var item = new BulkHabitItem("Parent", null, FrequencyUnit.Day, 1,
+            SubHabits: [new("Valid", null, null, null),
+                new("Invalid reminder", null, null, null, DueTime: new TimeOnly(9, 0),
+                    RelativeReminders: [new(MinutesBefore: 15, When: ScheduledReminderWhen.DayBefore, Time: new TimeOnly(8, 0))])]);
+        var command = new BulkCreateHabitsCommand(UserId, [item]);
+
+        if (preflight)
+        {
+            var result = await BulkCreateHabitsCommandHandler.CheckArgumentsAsync(command, _userDateService, CancellationToken.None);
+            result.IsFailure.Should().BeTrue();
+        }
+        else
+        {
+            var result = await _handler.Handle(command, CancellationToken.None);
+            result.Value.Results.Single().Status.Should().Be(BulkItemStatus.Failed);
+        }
         await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
     }
 
