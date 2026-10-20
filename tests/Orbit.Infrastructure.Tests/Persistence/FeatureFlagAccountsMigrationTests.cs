@@ -125,8 +125,9 @@ public class FeatureFlagAccountsMigrationTests
             "20261020030817_MakeSubHabitsFree",
             "20261020031718_AddAstraEvalTraceFlag",
             "20261020033359_RestoreRequiredProactiveAstraPreference",
-            "20261020041243_SeparateBonusProEntitlement");
-        context.Database.GetMigrations().Last().Should().EndWith("_SeparateBonusProEntitlement");
+            "20261020041243_SeparateBonusProEntitlement",
+            "20261020134743_AllowExplicitHabitStartDate");
+        context.Database.GetMigrations().Last().Should().EndWith("_AllowExplicitHabitStartDate");
         var preference = current.FindEntityType(typeof(User))!.FindProperty(nameof(User.ProactiveAstraEnabled))!;
         preference.ClrType.Should().Be(typeof(bool));
         preference.IsNullable.Should().BeFalse();

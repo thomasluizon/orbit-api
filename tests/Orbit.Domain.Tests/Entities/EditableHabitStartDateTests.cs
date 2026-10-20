@@ -91,10 +91,9 @@ public class EditableHabitStartDateTests
     public void Edit_ChangesSnapshotAndHydratedProjectionAnchor()
     {
         var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Read", FrequencyUnit.Day, 1, Today)).Value;
-        var read = Habit.FromScheduleSnapshot(HabitScheduleSnapshot.FromHabit(habit), habit.UserId);
         habit.Update(new HabitUpdateParams("Read", null, FrequencyUnit.Day, 1, null, false, null,
             StartDate: Today.AddDays(3), UserToday: Today)).IsSuccess.Should().BeTrue();
-        read.LoadScheduleFieldsForRead(habit);
+        var read = Habit.FromScheduleSnapshot(HabitScheduleSnapshot.FromHabit(habit), habit.UserId);
         read.StartDate.Should().Be(Today.AddDays(3));
         HabitScheduleSnapshot.FromHabit(read).StartDate.Should().Be(Today.AddDays(3));
     }

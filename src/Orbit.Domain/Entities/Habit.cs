@@ -201,8 +201,6 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         FrequencyQuantity = candidate.FrequencyQuantity;
         IntervalWeeks = candidate.IntervalWeeks;
         DueDate = candidate.DueDate;
-        StartDate = candidate.StartDate;
-        Schedule = candidate.Schedule;
         ScheduledStartDate = candidate.ScheduledStartDate;
         OriginalDayOfMonth = candidate.OriginalDayOfMonth;
         EndDate = candidate.EndDate;
