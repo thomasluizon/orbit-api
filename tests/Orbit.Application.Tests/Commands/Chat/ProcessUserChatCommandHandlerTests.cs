@@ -3086,7 +3086,7 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupAiResponse(new AiResponse { TextMessage = "ok" });
         var handler = CreateHandler(FakeTool("delete_habit"), FakeTool("assign_tags"), FakeTool("create_habit"));
 
-        await handler.Handle(new ProcessUserChatCommand(UserId, "Hello AI"), CancellationToken.None);
+        await handler.Handle(new ProcessUserChatCommand(UserId, "show my tags"), CancellationToken.None);
 
         await _aiIntentService.Received(1).SendWithToolsAsync(
             Arg.Is<AiToolRequest>(request =>
@@ -3342,7 +3342,7 @@ public partial class ProcessUserChatCommandHandlerTests
             _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
                 .Returns([FeatureFlagKeys.AstraPartsDisabled]);
         string? prompt = null;
-        _aiIntentService.SendWithToolsAsync(Arg.Do<AiToolRequest>(request => prompt = request.SystemPrompt),
+        _aiIntentService.SendWithToolsAsync(Arg.Do<AiToolRequest>(request => prompt = request.DynamicContext),
                 Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Ready." }));
         var instructions = new[]
@@ -3360,7 +3360,7 @@ public partial class ProcessUserChatCommandHandlerTests
         };
         var tools = CardPromptToolNames.Select(name => ReadTool(name, new ToolResult(true))).ToArray();
 
-        await CreateHandler(tools).Handle(new ProcessUserChatCommand(UserId, "Show goals calendar notifications and my week",
+        await CreateHandler(tools).Handle(new ProcessUserChatCommand(UserId, "Show goals calendar notifications daily summary metrics and my week",
             ClientContext: new AgentClientContext(SupportsParts: supportsParts,
                 PartKinds: declaresKinds ? instructions.Select(item => item.Kind).Distinct().ToList() : [],
                 SupportsHabitListCard: true, SupportsGoalListCard: true, SupportsMetricsCard: true,
@@ -3368,7 +3368,7 @@ public partial class ProcessUserChatCommandHandlerTests
                 SupportsCalendarCard: true, SupportsRecordListCard: true, SupportsAccountRowsCard: true,
                 SupportsFollowUps: true)), CancellationToken.None);
 
-        var expected = new List<string> { "static prompt", "static supplement", "dynamic prompt", "dynamic supplement" };
+        var expected = new List<string> { "dynamic prompt", "dynamic supplement" };
         if (supportsParts && !disabled)
         {
             expected.Add("Write the reply in reading order, placing each card directive on its own line where its block belongs. Use at most three directives and never repeat a block's figures in the text.");
@@ -3392,7 +3392,7 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupUserAndPayGate();
         string? capturedPrompt = null;
         _aiIntentService.SendWithToolsAsync(
-            Arg.Do<AiToolRequest>(request => capturedPrompt = request.SystemPrompt),
+            Arg.Do<AiToolRequest>(request => capturedPrompt = request.DynamicContext),
             Arg.Any<Func<AiStreamEvent, Task>?>(),
             Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "ok" }));
