@@ -14,7 +14,7 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 public class ExpandHabitScheduleAndStartDateMigrationTests
 {
     [Fact]
-    public void TargetModel_PreservesRedesignWithConversationAiSecurityAndEvalTraceAdditions()
+    public void TargetModel_IsMainDesignerPlusRedesignAndLaterAdditions()
     {
         using var context = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
             .UseNpgsql("Host=unused;Database=unused").Options);
@@ -24,20 +24,30 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
 
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
-        differences.Should().HaveCount(22);
-        RestoreProactivePreferenceMigrationTests.AssertRequiredPreference(differences);
+        differences.Should().HaveCount(39);
+        var preference = differences.OfType<AlterColumnOperation>().Should().ContainSingle().Subject;
+        preference.Table.Should().Be("Users");
+        preference.Name.Should().Be("ProactiveAstraEnabled");
+        preference.ClrType.Should().Be(typeof(bool));
+        preference.ColumnType.Should().Be("boolean");
+        preference.IsNullable.Should().BeFalse();
+        preference.OldColumn.IsNullable.Should().BeFalse();
+        preference.OldColumn.DefaultValue.Should().BeNull();
+        preference.DefaultValue.Should().Be(true);
         ReferralRewardMigrationTests.AssertRewardColumns(differences);
         MakeSubHabitsFreeMigrationTests.AssertFreeFeatureSeed(differences);
         differences.OfType<CreateTableOperation>().Select(table => table.Name)
-            .Should().BeEquivalentTo("ConversationTurns", "OAuthStates", "AiBudgetCalls");
-        differences.OfType<CreateIndexOperation>().Should().HaveCount(7);
+            .Should().BeEquivalentTo("AiBudgetCalls", "ConversationTurns", "IssuedAstraBlocks",
+                "NotionConnections", "NotionOAuthStates", "NotionTasks", "OAuthStates",
+                "ProactiveCalendarDays", "ProactiveItems");
+        differences.OfType<CreateIndexOperation>().Should().HaveCount(18);
         differences.OfType<AddColumnOperation>().Should().HaveCount(8);
         differences.OfType<InsertDataOperation>().Should().HaveCount(2);
         AssertAiSecurityAdditions(differences);
         ConversationMigrationTests.AssertConversationExpansion(differences);
         AssertEvalTraceSeed(differences);
         differences.OfType<InsertDataOperation>().Single(seed => seed.Table == "AppFeatureFlags")
-            .Values.GetLength(0).Should().Be(2);
+            .Values.GetLength(0).Should().Be(3);
         var schemaVersion = differences.OfType<AddColumnOperation>().Single(column => column.Name == "ArgumentSchemaVersion");
         schemaVersion.Table.Should().Be("PendingAgentOperations");
         schemaVersion.IsNullable.Should().BeFalse();
