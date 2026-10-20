@@ -9,6 +9,14 @@ namespace Orbit.Application.Tests.Commands.Habits;
 
 public class BulkReminderArgumentValidationTests
 {
+    private static IAppConfigService Config()
+    {
+        var config = Substitute.For<IAppConfigService>();
+        config.GetAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<int>(1));
+        return config;
+    }
+
     public static TheoryData<int[], string> InvalidReminderTimes => new()
     {
         { [-1], "VALIDATION_REMINDER_TIME_RANGE" },
@@ -30,7 +38,7 @@ public class BulkReminderArgumentValidationTests
                 new("Invalid later child", null, null, null, ReminderTimes: offsets)
             ])]);
 
-        var result = await BulkCreateHabitsCommandHandler.CheckArgumentsAsync(command, dates, CancellationToken.None);
+        var result = await BulkCreateHabitsCommandHandler.CheckArgumentsAsync(command, dates, Config(), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be(code);
@@ -53,7 +61,7 @@ public class BulkReminderArgumentValidationTests
                     RelativeReminders: [new(-1439), new(-1), new(10080)])
             ])]);
 
-        var result = await BulkCreateHabitsCommandHandler.CheckArgumentsAsync(command, dates, CancellationToken.None);
+        var result = await BulkCreateHabitsCommandHandler.CheckArgumentsAsync(command, dates, Config(), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
     }
@@ -81,7 +89,7 @@ public class BulkReminderArgumentValidationTests
         var command = new BulkCreateHabitsCommand(userId,
             [new("Root", null, null, null, SubHabits: [new("First child", null, null, null), child])]);
 
-        var result = await BulkCreateHabitsCommandHandler.CheckArgumentsAsync(command, dates, CancellationToken.None);
+        var result = await BulkCreateHabitsCommandHandler.CheckArgumentsAsync(command, dates, Config(), CancellationToken.None);
 
         result.IsSuccess.Should().Be(valid);
         if (!valid)

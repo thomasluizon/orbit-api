@@ -2,7 +2,6 @@ using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Calendar.Queries;
 using Orbit.Application.Common;
@@ -16,11 +15,12 @@ using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Tests.Commands.Habits;
 
-public class BulkCreateHabitsCommandHandlerTests
+public partial class BulkCreateHabitsCommandHandlerTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<GoogleCalendarSyncSuggestion> _suggestionRepo = Substitute.For<IGenericRepository<GoogleCalendarSyncSuggestion>>();
     private readonly IGenericRepository<Tag> _tagRepo = Substitute.For<IGenericRepository<Tag>>();
+    private readonly IAppConfigService _config = Substitute.For<IAppConfigService>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
@@ -36,7 +36,10 @@ public class BulkCreateHabitsCommandHandlerTests
     {
         _handler = new BulkCreateHabitsCommandHandler(
             new BulkCreateHabitsRepositories(_habitRepo, _suggestionRepo, _tagRepo), _payGate, _userDateService, _unitOfWork, _cache,
-            Substitute.For<ILogger<BulkCreateHabitsCommandHandler>>());
+            _config);
+
+        _config.GetAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<int>(1));
 
         _tagRepo.FindTrackedAsync(Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(new List<Tag>().AsReadOnly());
@@ -47,7 +50,7 @@ public class BulkCreateHabitsCommandHandlerTests
             .Returns(Today);
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(new List<Habit>().AsReadOnly());
-        _suggestionRepo.FindAsync(Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(), Arg.Any<CancellationToken>())
+        _suggestionRepo.FindTrackedAsync(Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(new List<GoogleCalendarSyncSuggestion>().AsReadOnly());
         _unitOfWork.ExecuteInTransactionAsync(
                 Arg.Any<Func<CancellationToken, Task<Result<BulkCreateResult>>>>(),
@@ -106,6 +109,28 @@ public class BulkCreateHabitsCommandHandlerTests
         result.Value.Results.Should().HaveCount(1);
         result.Value.Results[0].Status.Should().Be(BulkItemStatus.Success);
         await _habitRepo.Received(3).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ThreeNodeSubtree_PersistsEveryNodeWithImmediateParentIds()
+    {
+        var (_, saved) = CaptureTagAndHabitAdds();
+        var item = new BulkHabitItem("Parent", null, FrequencyUnit.Day, 1,
+            SubHabits: [new("Child", null, null, null,
+                SubHabits: [new("Grandchild", null, null, null)])]);
+
+        var result = await _handler.Handle(new(UserId, [item]), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var rootResult = result.Value.Results.Should().ContainSingle().Which;
+        rootResult.Status.Should().Be(BulkItemStatus.Success);
+        saved.Should().HaveCount(3);
+        var parent = saved.Single(h => h.Title == "Parent");
+        var child = saved.Single(h => h.Title == "Child");
+        var grandchild = saved.Single(h => h.Title == "Grandchild");
+        rootResult.HabitId.Should().Be(parent.Id);
+        child.ParentHabitId.Should().Be(parent.Id);
+        grandchild.ParentHabitId.Should().Be(child.Id);
     }
 
     [Fact]
@@ -214,7 +239,7 @@ public class BulkCreateHabitsCommandHandlerTests
 
         if (preflight)
         {
-            var result = await BulkCreateHabitsCommandHandler.CheckArgumentsAsync(command, _userDateService, CancellationToken.None);
+            var result = await BulkCreateHabitsCommandHandler.CheckArgumentsAsync(command, _userDateService, _config, CancellationToken.None);
             result.IsFailure.Should().BeTrue();
         }
         else
@@ -423,7 +448,7 @@ public class BulkCreateHabitsCommandHandlerTests
         result.Value.Results.Should().HaveCount(2)
             .And.OnlyContain(item => item.Status == BulkItemStatus.Success);
         addedHabits.Should().HaveCount(2).And.OnlyContain(habit => habit.GoogleEventId == null);
-        await _suggestionRepo.DidNotReceive().FindAsync(
+        await _suggestionRepo.DidNotReceive().FindTrackedAsync(
             Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(), Arg.Any<CancellationToken>());
         suggestion.ImportedAtUtc.Should().BeNull();
         suggestion.ImportedHabitId.Should().BeNull();
@@ -461,7 +486,7 @@ public class BulkCreateHabitsCommandHandlerTests
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(call => addedHabits
                 .Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).ToList().AsReadOnly());
-        _suggestionRepo.FindAsync(Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(), Arg.Any<CancellationToken>())
+        _suggestionRepo.FindTrackedAsync(Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(call => suggestions
                 .Where(call.Arg<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>().Compile()).ToList().AsReadOnly());
         return addedHabits;

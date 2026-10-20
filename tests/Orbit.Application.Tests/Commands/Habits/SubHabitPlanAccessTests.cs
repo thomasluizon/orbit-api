@@ -109,7 +109,7 @@ public sealed class SubHabitPlanAccessTests : IDisposable
             case "bulk":
                 var bulk = await new BulkCreateHabitsCommandHandler(
                     new BulkCreateHabitsRepositories(_habits, Substitute.For<IGenericRepository<GoogleCalendarSyncSuggestion>>(), _tags),
-                    _payGate, _dates, _unitOfWork, _cache, Substitute.For<ILogger<BulkCreateHabitsCommandHandler>>())
+                    _payGate, _dates, _unitOfWork, _cache, _config)
                     .Handle(new BulkCreateHabitsCommand(_user.Id,
                         [new("Parent", null, FrequencyUnit.Day, 1,
                             SubHabits: [new("Child", null, null, null, IsBadHabit: true), new("Second child", null, null, null)])]), CancellationToken.None);
