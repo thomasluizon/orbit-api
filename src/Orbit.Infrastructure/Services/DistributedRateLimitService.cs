@@ -1,6 +1,7 @@
 using System.Data;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Npgsql.EntityFrameworkCore.PostgreSQL;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
@@ -45,6 +46,8 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
         if (!Policies.TryGetValue(policyName, out var policy))
             throw new InvalidOperationException($"Unknown rate-limit policy '{policyName}'.");
 
+        cancellationToken.ThrowIfCancellationRequested();
+
         var useRelationalTransactionPath =
             dbContext.Database.IsRelational() &&
             dbContext.Database.ProviderName?.Contains("InMemory", StringComparison.OrdinalIgnoreCase) != true;
@@ -52,21 +55,10 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
         if (!useRelationalTransactionPath)
             return await TryAcquireCoreAsync(policyName, partitionKey, policy, cancellationToken);
 
-        const int maxAttempts = 3;
+        if (dbContext.ChangeTracker.HasChanges())
+            throw new InvalidOperationException("Rate-limit acquisition requires a context without pending changes.");
 
-        for (var attempt = 0; attempt < maxAttempts; attempt++)
-        {
-            try
-            {
-                return await ExecuteRelationalAttemptAsync(policyName, partitionKey, policy, cancellationToken);
-            }
-            catch (Exception ex) when (IsRetryableRateLimitConflict(ex))
-            {
-                dbContext.ChangeTracker.Clear();
-            }
-        }
-
-        throw new InvalidOperationException("Rate-limit acquisition failed after retrying transactional conflicts.");
+        return await ExecuteRelationalAttemptAsync(policyName, partitionKey, policy, cancellationToken);
     }
 
     public async Task<DistributedRateLimitDecision> TryAcquireLeaseAsync(
@@ -178,27 +170,38 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
         RateLimitPolicy policy,
         CancellationToken cancellationToken)
     {
-        var strategy = dbContext.Database.CreateExecutionStrategy();
+        var strategy = CreateAcquisitionStrategy();
 
-        return await strategy.ExecuteAsync(async () =>
+        return await strategy.ExecuteAsync(async token =>
         {
+            strategy.CommitStarted = false;
             await using var transaction = await dbContext.Database.BeginTransactionAsync(
                 IsolationLevel.Serializable,
-                cancellationToken);
+                token);
 
             try
             {
-                var decision = await TryAcquireCoreAsync(policyName, partitionKey, policy, cancellationToken);
-                await transaction.CommitAsync(cancellationToken);
+                await AcquireTransactionLockAsync(token);
+                var decision = await TryAcquireCoreAsync(policyName, partitionKey, policy, token);
+                strategy.CommitStarted = true;
+                await transaction.CommitAsync(token);
                 return decision;
             }
             catch
             {
-                dbContext.ChangeTracker.Clear();
+                foreach (var entry in dbContext.ChangeTracker.Entries<DistributedRateLimitBucket>().ToList())
+                    entry.State = EntityState.Detached;
                 throw;
             }
-        });
+        }, cancellationToken);
     }
+
+    internal virtual Task AcquireTransactionLockAsync(CancellationToken cancellationToken)
+        => dbContext.Database.IsNpgsql()
+            // https://www.postgresql.org/docs/17/sql-lock.html: lock before the first query establishes the Serializable snapshot.
+            ? dbContext.Database.ExecuteSqlRawAsync(
+                "LOCK TABLE \"DistributedRateLimitBuckets\" IN SHARE ROW EXCLUSIVE MODE", cancellationToken)
+            : Task.CompletedTask;
 
     private async Task<DistributedRateLimitDecision> TryAcquireCoreAsync(
         string policyName,
@@ -273,14 +276,21 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
             bucketExpiresAtUtc);
     }
 
-    private static bool IsRetryableRateLimitConflict(Exception exception)
+    internal virtual AcquisitionExecutionStrategy CreateAcquisitionStrategy() => new(dbContext);
+
+    internal class AcquisitionExecutionStrategy(OrbitDbContext context)
+        : NpgsqlRetryingExecutionStrategy(context, 2, TimeSpan.FromSeconds(5), [PostgresErrorCodes.UniqueViolation])
     {
-        return exception switch
-        {
-            DbUpdateException dbUpdateException => IsRetryableRateLimitConflict(dbUpdateException.InnerException ?? dbUpdateException),
-            PostgresException postgresException => postgresException.SqlState is PostgresErrorCodes.UniqueViolation or PostgresErrorCodes.SerializationFailure,
-            _ => false
-        };
+        public bool CommitStarted { get; set; }
+
+        protected override bool ShouldRetryOn(Exception? exception)
+            => CommitStarted
+                ? exception is PostgresException
+                {
+                    SqlState: PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.DeadlockDetected
+                        or PostgresErrorCodes.UniqueViolation
+                }
+                : base.ShouldRetryOn(exception);
     }
 
     private static bool IsLeaseUniqueViolation(Exception exception)

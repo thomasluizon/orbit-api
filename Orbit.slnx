@@ -9,6 +9,7 @@
   </Folder>
   <Folder Name="/bench/">
     <Project Path="bench/Orbit.Benchmarks/Orbit.Benchmarks.csproj" />
+    <Project Path="bench/Orbit.RateLimitProof/Orbit.RateLimitProof.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Orbit.Domain.Tests/Orbit.Domain.Tests.csproj" />
