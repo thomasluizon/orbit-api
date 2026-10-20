@@ -36,6 +36,7 @@ public sealed class BulkUpdateHabitsCommandValidator : AbstractValidator<BulkUpd
             .When(command => command.Changes.HasIntervalWeeks && command.Changes.IntervalWeeks.HasValue);
         SharedHabitRules.AddReminderTimesRules(RuleFor(command => command.Changes.ReminderTimes));
         SharedHabitRules.AddChecklistItemRules(RuleFor(command => command.Changes.ChecklistItems));
+        SharedHabitRules.AddRelativeReminderRules(RuleFor(command => command.Changes.RelativeReminders));
         SharedHabitRules.AddScheduledReminderRules(RuleFor(command => command.Changes.ScheduledReminders));
     }
 

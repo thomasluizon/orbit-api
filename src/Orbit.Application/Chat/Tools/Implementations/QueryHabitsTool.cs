@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Habits.Services;
+using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -20,7 +21,7 @@ public class QueryHabitsTool(
     public bool IsReadOnly => true;
 
     public string Description =>
-        "Read current-turn facts for habits: listings, schedules, metrics, streaks, completion percentages, descriptions, checklist items, and filtered searches by text, date, frequency, tag, or status. Call this before answering habit listing or schedule questions; prompt indexes alone do not ground the reply.";
+        "Read current-turn facts for habits: listings, schedules, metrics, streaks, completion percentages, descriptions, timing, reminders, tags, checklist item text, and filtered searches by text, date, frequency, tag, or status. Call this before answering habit listing or schedule questions; prompt indexes alone do not ground the reply.";
 
     public object GetParameterSchema() => new
     {
@@ -167,7 +168,7 @@ public class QueryHabitsTool(
         {
             var ids = habits.Select(habit => habit.Id).ToArray();
             habits = await habitRepository.FindAsync(habit => habit.UserId == userId && ids.Contains(habit.Id),
-                query => query.Include(habit => habit.Tags).Include(habit => habit.Logs).AsSplitQuery(), ct);
+                query => query.Include(habit => habit.Tags).Include(habit => habit.Goals).Include(habit => habit.Logs).AsSplitQuery(), ct);
         }
 
         if (f.Date is DateOnly date)
@@ -195,13 +196,19 @@ public class QueryHabitsTool(
                 && (!f.FrequencyOneTime || h.FrequencyUnit == null)
                 && (f.Frequency == null || h.FrequencyUnit == f.Frequency.Value)
                 && (!f.Date.HasValue || !h.IsGeneral),
-            q => deferMetrics ? q.Include(h => h.Tags) : includeMetrics
-                ? q.Include(h => h.Tags).Include(h => h.Logs).AsSplitQuery()
-                : q
-                    .Include(h => h.Tags)
-                    .Include(h => h.Logs.Where(l => !l.IsDeleted && l.Date == today && l.Value > 0))
-                    .AsSplitQuery(),
+            q => IncludeCandidates(q, today, includeMetrics, deferMetrics),
             ct);
+    }
+
+    private static IQueryable<Habit> IncludeCandidates(IQueryable<Habit> query, DateOnly today,
+        bool includeMetrics, bool deferMetrics)
+    {
+        var withRelations = query.Include(h => h.Tags).Include(h => h.Goals).AsSplitQuery();
+        if (deferMetrics)
+            return withRelations;
+        if (includeMetrics)
+            return withRelations.Include(h => h.Logs);
+        return withRelations.Include(h => h.Logs.Where(l => !l.IsDeleted && l.Date == today && l.Value > 0));
     }
 
     private static string? NormalizeSearchValue(string? value)
@@ -244,7 +251,7 @@ public class QueryHabitsTool(
                 schedule));
 
             if (includeSubs)
-                AppendChildren(sb, allHabits, habit.Id, today, includeMetrics, 1, schedule);
+                AppendChildren(sb, allHabits, habit.Id, new OutputContext(today, weekStartDay, includeMetrics, schedule), 1);
         }
 
         return sb.ToString();
@@ -261,8 +268,10 @@ public class QueryHabitsTool(
         var freqLabel = FormatFrequencyLabel(habit);
         var labels = BuildLabels(habit, today, weekStartDay, includeMetrics, schedule);
         var labelStr = labels.Count > 0 ? $" [{string.Join(" | ", labels)}]" : "";
+        var details = HabitFieldSummary.From(habit).Format();
+        var detailSuffix = details.Length == 0 ? string.Empty : $" | {details}";
         var emojiLabel = string.IsNullOrWhiteSpace(habit.Emoji) ? "No emoji" : $"Emoji: {habit.Emoji}";
-        return string.Create(CultureInfo.InvariantCulture, $"- \"{habit.Title}\"{dupSuffix} | ID: {habit.Id} | {emojiLabel} | {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{labelStr}");
+        return string.Create(CultureInfo.InvariantCulture, $"- \"{habit.Title}\"{dupSuffix} | ID: {habit.Id} | {emojiLabel} | {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{labelStr}{detailSuffix}");
     }
 
     private static List<string> BuildLabels(Habit habit, DateOnly today, int weekStartDay, bool includeMetrics, ScheduleContext? schedule)
@@ -282,11 +291,13 @@ public class QueryHabitsTool(
         {
             if (!habit.IsGeneral && !isCompleted && habit.DueDate < today) labels.Add("OVERDUE");
             if (!habit.IsGeneral && !isCompleted && habit.DueDate == today) labels.Add("DUE TODAY");
-            AddNotDueLabel(labels, habit, today);
         }
+        AddNotDueLabel(labels, habit, today);
         if (habit.IsBadHabit) labels.Add("BAD HABIT");
         if (isCompleted) labels.Add("COMPLETED");
         if (habit.Tags.Count > 0) labels.Add($"Tags: {string.Join(", ", habit.Tags.Select(t => t.Name))}");
+
+        if (habit.Goals.Count > 0) labels.Add($"Goals: {string.Join(", ", habit.Goals.Select(g => $"{g.Title} ({g.Id})"))}");
 
         AddMetricLabels(labels, habit, today, weekStartDay, includeMetrics);
 
@@ -294,7 +305,7 @@ public class QueryHabitsTool(
             labels.Add($"Checklist: {habit.ChecklistItems.Count(i => i.IsChecked)}/{habit.ChecklistItems.Count}");
 
         if (schedule is null && includeMetrics && habit.Logs.Any(l => l.Date == today))
-            labels.Add("DONE TODAY");
+            labels.Add("DONE");
 
         return labels;
     }
@@ -335,7 +346,9 @@ public class QueryHabitsTool(
             : $"Every {habit.FrequencyQuantity} {unitName}s";
     }
 
-    private static void AppendChildren(StringBuilder sb, IReadOnlyList<Habit> allHabits, Guid parentId, DateOnly today, bool includeMetrics, int depth, ScheduleContext? schedule)
+    private sealed record OutputContext(DateOnly Today, int WeekStartDay, bool IncludeMetrics, ScheduleContext? Schedule);
+
+    private static void AppendChildren(StringBuilder sb, IReadOnlyList<Habit> allHabits, Guid parentId, OutputContext context, int depth)
     {
         var indent = new string(' ', depth * 2);
         var children = allHabits
@@ -346,16 +359,9 @@ public class QueryHabitsTool(
 
         foreach (var child in children)
         {
-            var childLabels = new List<string>();
-            AddNotDueLabel(childLabels, child, today);
-            if (schedule is not null && schedule.Facts.DoneTodayIds.Contains(child.Id))
-                childLabels.Add(schedule.Date == today ? "DONE TODAY" : "DONE ON DATE");
-            else if (schedule is null && includeMetrics && child.Logs.Any(l => l.Date == today)) childLabels.Add("DONE");
-            if (GetResponseCompletion(child, today)) childLabels.Add("COMPLETED");
-            var childLabelStr = childLabels.Count > 0 ? $" [{string.Join(" | ", childLabels)}]" : "";
-            var emojiLabel = string.IsNullOrWhiteSpace(child.Emoji) ? "No emoji" : $"Emoji: {child.Emoji}";
-            sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}- \"{child.Title}\"{childSuffixes.GetValueOrDefault(child.Id, string.Empty)} | ID: {child.Id} | {emojiLabel}{childLabelStr}");
-            AppendChildren(sb, allHabits, child.Id, today, includeMetrics, depth + 1, schedule);
+            sb.AppendLine(indent + BuildHabitLine(child, context.Today, context.WeekStartDay, context.IncludeMetrics,
+                childSuffixes.GetValueOrDefault(child.Id, string.Empty), context.Schedule));
+            AppendChildren(sb, allHabits, child.Id, context, depth + 1);
         }
     }
 }

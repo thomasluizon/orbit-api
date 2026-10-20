@@ -32,11 +32,29 @@ public sealed class AgentArgumentPreviewTests
         var unitOfWork = Substitute.For<IUnitOfWork>();
         _tools = new AiToolRegistry([
             new CreateHabitTool(_habits, _tags, _goals, _dateService, payGate, unitOfWork),
-            new UpdateHabitTool(_habits, _dateService, unitOfWork, payGate),
+            new UpdateHabitTool(_habits, _dateService, Substitute.For<MediatR.IMediator>()),
             new UpdateGoalTool(_goals, unitOfWork)
         ]);
         _dateService.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>())
             .Returns(new DateOnly(2026, 9, 25));
+    }
+
+    [Theory]
+    [InlineData("due_end_time", "\"15:00\"")]
+    [InlineData("is_general", "true")]
+    [InlineData("slip_alert_enabled", "true")]
+    [InlineData("relative_reminders", "[{\"minutes_before\":30}]")]
+    public async Task NewHabitFields_AppearInCreateAndUpdateApproval(string field, string value)
+    {
+        var habit = Habit.Create(new HabitCreateParams(_userId, "Read", null, null, new DateOnly(2026, 9, 25))).Value;
+        SetupHabit(habit);
+        foreach (var operation in new[] { "create_habit", "update_habit" })
+        {
+            var preview = await Preview(operation, $$"""{"habit_id":"{{habit.Id}}","title":"Read","{{field}}":{{value}}}""");
+            var row = preview!.Items!.Single().Fields.Single(f => f.Field == field);
+            row.IsEditable.Should().BeTrue();
+            row.ProposedValue.Should().NotBeNull();
+        }
     }
 
     [Fact]

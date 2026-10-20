@@ -7,11 +7,25 @@ namespace Orbit.Application.Tests.Chat.Tools;
 
 public sealed class BulkHabitToolArgumentsTests
 {
+    [Theory]
+    [InlineData("due_end_time", "\"15:00\"")]
+    [InlineData("is_general", "true")]
+    [InlineData("slip_alert_enabled", "true")]
+    [InlineData("relative_reminders", "[{\"minutes_before\":30}]")]
+    public void NewUpdateFields_AreAccepted(string field, string value)
+    {
+        var args = JsonDocument.Parse($$$"""{"updates":{"{{{field}}}":{{{value}}}}}""").RootElement;
+        var (changes, error) = BulkHabitToolArguments.ParseChanges(args);
+        error.Should().BeNull();
+        changes.Should().NotBeNull();
+        changes!.HasAnyChange.Should().BeTrue();
+    }
+
     [Fact]
-    public void CheckHabitFields_DoesNotValidateUnsupportedDeadline()
+    public void CheckHabitFields_RejectsMalformedDeadline()
     {
         BulkHabitToolArguments.CheckHabitFields(Parse("""{"due_end_time":"25:00"}"""))
-            .Should().BeNull();
+            .Should().Contain("due_end_time");
     }
 
     [Fact]
@@ -70,8 +84,7 @@ public sealed class BulkHabitToolArgumentsTests
     [InlineData("{}", "updates is required")]
     [InlineData("{\"updates\":[]}", "updates is required")]
     [InlineData("{\"updates\":{\"unknown\":true}}", "unsupported field")]
-    [InlineData("""{"updates":{"due_end_time":"15:00"}}""", "unsupported field")]
-    [InlineData("""{"updates":{"due_end_time":"25:00"}}""", "unsupported field")]
+    [InlineData("""{"updates":{"due_end_time":"25:00"}}""", "HH:mm")]
     [InlineData("{\"updates\":{\"title\":1}}", "title must be a string")]
     [InlineData("{\"updates\":{\"description\":true}}", "description must be a string or null")]
     [InlineData("{\"updates\":{\"frequency_quantity\":\"one\"}}", "frequency_quantity must be an integer or null")]

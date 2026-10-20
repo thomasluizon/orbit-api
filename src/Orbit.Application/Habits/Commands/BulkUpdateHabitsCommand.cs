@@ -43,13 +43,22 @@ public sealed record BulkHabitChanges(
     bool HasChecklistItems = false,
     IReadOnlyList<ChecklistItem>? ChecklistItems = null,
     bool HasScheduledReminders = false,
-    IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null)
+    IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null,
+    bool HasDueEndTime = false,
+    TimeOnly? DueEndTime = null,
+    bool HasIsGeneral = false,
+    bool IsGeneral = false,
+    bool HasSlipAlertEnabled = false,
+    bool SlipAlertEnabled = false,
+    bool HasRelativeReminders = false,
+    IReadOnlyList<RelativeReminderTime>? RelativeReminders = null)
 {
     public bool HasAnyChange =>
         HasTitle || HasDescription || HasEmoji || HasFrequencyUnit || HasFrequencyQuantity
         || HasIntervalWeeks || HasDays || HasDueDate || HasEndDate || HasDueTime
         || HasIsBadHabit || HasIsFlexible || HasReminderEnabled || HasReminderTimes
-        || HasChecklistItems || HasScheduledReminders;
+        || HasChecklistItems || HasScheduledReminders || HasDueEndTime || HasIsGeneral
+        || HasSlipAlertEnabled || HasRelativeReminders;
 }
 
 public sealed record BulkUpdateHabitsCommand(
@@ -144,13 +153,8 @@ public sealed partial class BulkUpdateHabitsCommandHandler(
         if (habits.Count == 0)
             return Result.Failure("No matching habits found.");
         var today = await dates.GetUserTodayAsync(request.UserId, ct);
-        foreach (var habit in habits)
-        {
-            var result = habit.ValidateUpdate(ResolveUpdate(habit, request.Changes, today));
-            if (result.IsFailure)
-                return result;
-        }
-        return Result.Success();
+        var updates = habits.Select(habit => (Habit: habit, Update: HabitUpdateValidation.ResolveUpdate(habit, request.Changes, today))).ToList();
+        return await ValidateUpdatesAsync(request.UserId, updates, repository, ct);
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Bulk habit update chunk failed after {AppliedCount} of {TotalMatched} matches")]
@@ -167,15 +171,21 @@ public sealed partial class BulkUpdateHabitsCommandHandler(
             habit => habit.UserId == userId && habitIds.Contains(habit.Id),
             query => query,
             cancellationToken);
+        foreach (var habit in habits)
+            await habitRepository.ReloadAsync(habit, cancellationToken);
         var updates = habits
-            .Select(habit => (Habit: habit, Update: ResolveUpdate(habit, changes, today)))
+            .Select(habit => (Habit: habit, Update: HabitUpdateValidation.ResolveUpdate(habit, changes, today)))
             .ToList();
 
-        foreach (var item in updates)
+        var validation = await ValidateUpdatesAsync(userId, updates, habitRepository, cancellationToken);
+        if (validation.IsFailure)
+            return validation.PropagateError<int>();
+
+        if (updates.Any(item => item.Update.SlipAlertEnabled == true && !item.Habit.SlipAlertEnabled))
         {
-            var validation = item.Habit.ValidateUpdate(item.Update);
-            if (validation.IsFailure)
-                return validation.PropagateError<int>();
+            var slipGate = await payGate.CanUseSlipAlerts(userId, cancellationToken);
+            if (slipGate.IsFailure)
+                return slipGate.PropagateError<int>();
         }
 
         var liveRootEntries = updates.Count(item => HabitLiveRootEntry.FromUpdate(item.Habit, item.Update));
@@ -195,36 +205,24 @@ public sealed partial class BulkUpdateHabitsCommandHandler(
         return Result.Success(updates.Count);
     }
 
-    internal static HabitUpdateParams ResolveUpdate(Habit habit, BulkHabitChanges changes, DateOnly today)
+    private static async Task<Result> ValidateUpdatesAsync(Guid userId,
+        IReadOnlyList<(Habit Habit, HabitUpdateParams Update)> updates, IGenericRepository<Habit> repository,
+        CancellationToken ct)
     {
-        var dueTime = changes.HasDueTime ? changes.DueTime : habit.DueTime;
-        var (reminderTimes, scheduledReminders) = ReminderStoreNormalizer.NormalizeForUpdate(
-            dueTime,
-            habit.DueTime,
-            changes.HasReminderTimes ? changes.ReminderTimes?.ToList() ?? [] : null,
-            changes.HasScheduledReminders ? changes.ScheduledReminders?.ToList() ?? [] : null,
-            habit.ReminderTimes,
-            habit.ScheduledReminders);
-
-        return new HabitUpdateParams(
-            changes.HasTitle ? changes.Title ?? habit.Title : habit.Title,
-            changes.HasDescription ? changes.Description : habit.Description,
-            changes.HasFrequencyUnit ? changes.FrequencyUnit : habit.FrequencyUnit,
-            changes.HasFrequencyQuantity ? changes.FrequencyQuantity : habit.FrequencyQuantity,
-            changes.HasIsFlexible && changes.IsFlexible ? [] : changes.HasDays ? changes.Days : habit.Days.ToList(),
-            changes.HasIsBadHabit ? changes.IsBadHabit : habit.IsBadHabit,
-            changes.HasDueDate ? changes.DueDate : habit.DueDate,
-            DueTime: dueTime,
-            DueEndTime: habit.DueEndTime,
-            ReminderEnabled: changes.HasReminderEnabled ? changes.ReminderEnabled : null,
-            ReminderTimes: reminderTimes,
-            ChecklistItems: changes.HasChecklistItems ? changes.ChecklistItems : null,
-            IsFlexible: changes.HasIsFlexible ? changes.IsFlexible : null,
-            EndDate: changes.HasEndDate ? changes.EndDate : null,
-            ClearEndDate: changes.HasEndDate && changes.EndDate is null,
-            ScheduledReminders: scheduledReminders,
-            Emoji: changes.HasEmoji ? changes.Emoji : habit.Emoji,
-            UserToday: today,
-            IntervalWeeks: changes.HasIntervalWeeks ? changes.IntervalWeeks : habit.IntervalWeeks);
+        var related = updates.Any(item => item.Update.IsGeneral.HasValue)
+            ? await HabitUpdateValidation.LoadRelatedAsync(updates.Select(item => item.Habit).ToList(), userId, repository, ct)
+            : [];
+        foreach (var (habit, update) in updates)
+        {
+            var validation = await HabitUpdateValidation.ValidateAsync(userId, habit, update, repository, ct, related);
+            if (validation.IsFailure)
+                return validation;
+            validation = habit.ValidateUpdate(update);
+            if (validation.IsFailure)
+                return validation;
+        }
+        return Result.Success();
     }
+
+
 }

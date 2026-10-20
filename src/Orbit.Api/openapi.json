@@ -16349,6 +16349,59 @@
               "string"
             ],
             "format": "date"
+          },
+          "tags": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/HabitTagItem"
+            }
+          },
+          "reminderEnabled": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "reminderTimes": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          "scheduledReminders": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ScheduledReminderTime"
+            }
+          },
+          "relativeReminders": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/RelativeReminderTime"
+            }
+          },
+          "slipAlertEnabled": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         }
       },
@@ -16553,6 +16606,15 @@
               "string"
             ],
             "format": "date"
+          },
+          "tags": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/HabitTagItem"
+            }
           }
         }
       },
@@ -17012,6 +17074,50 @@
               "string"
             ],
             "format": "date"
+          },
+          "reminderEnabled": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "reminderTimes": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          "scheduledReminders": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ScheduledReminderTime"
+            }
+          },
+          "relativeReminders": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/RelativeReminderTime"
+            }
+          },
+          "slipAlertEnabled": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         }
       },

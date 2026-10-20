@@ -116,12 +116,13 @@ public class CreateSubHabitCommandHandlerTests
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<CancellationToken>())
             .Returns(new List<Habit> { parent }.AsReadOnly());
+        var foreignTag = Tag.Create(Guid.NewGuid(), "Foreign", "#123456").Value;
         _tagRepo.FindTrackedAsync(Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(new List<Tag>());
+            .Returns(call => new[] { foreignTag }.Where(call.Arg<Expression<Func<Tag, bool>>>().Compile()).ToList());
 
         var command = new CreateSubHabitCommand(
             UserId, parent.Id, "Child Task", null,
-            TagIds: new List<Guid> { Guid.NewGuid() });
+            TagIds: new List<Guid> { foreignTag.Id });
 
         var result = await _handler.Handle(command, CancellationToken.None);
 

@@ -29,6 +29,83 @@ public sealed class PendingOperationChangePreviewerTests
             .Returns(new DateOnly(2026, 9, 25));
 
     [Fact]
+    public async Task ChildCreation_PreviewsEverySuppliedFieldAndResolvesOwnedDependencies()
+    {
+        var parent = CreateHabit("Parent", null);
+        var tag = Tag.Create(UserId, "Health", "#123456").Value;
+        _habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns([parent]);
+        _tags.FindAsync(Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>()).Returns([tag]);
+        var args = JsonSerializer.SerializeToElement(new
+        {
+            parent_habit_id = parent.Id,
+            title = "Child",
+            description = "Outside",
+            emoji = "🏃",
+            frequency_unit = "Day",
+            frequency_quantity = 1,
+            interval_weeks = 2,
+            days = new[] { "Monday" },
+            due_date = "2026-10-19",
+            end_date = "2026-12-31",
+            due_time = "09:00",
+            due_end_time = "10:00",
+            is_bad_habit = false,
+            is_flexible = false,
+            reminder_enabled = true,
+            reminder_times = new[] { 15 },
+            slip_alert_enabled = true,
+            relative_reminders = new[] { new { minutes_before = 30 } },
+            scheduled_reminders = Array.Empty<object>(),
+            checklist_items = new[] { new { text = "Shoes", is_checked = true } },
+            tag_ids = new[] { tag.Id }
+        });
+        var previewer = new PendingOperationChangePreviewer(_habits, _goals, _tags, _userDateService,
+            new AiToolRegistry([new CreateSubHabitTool(Substitute.For<MediatR.IMediator>())]));
+        var preview = await previewer.PreviewAsync(UserId, "create_sub_habit", args);
+        preview.Should().NotBeNull();
+        var fields = preview!.Items!.Single().Fields;
+        fields.Select(f => f.Field).Should().BeEquivalentTo(args.EnumerateObject().Select(p => p.Name));
+        foreach (var property in args.EnumerateObject())
+            fields.Single(f => f.Field == property.Name).ProposedValue!.Value.GetRawText().Should().Be(property.Value.GetRawText());
+        fields.Single(f => f.Field == "parent_habit_id").NewValue.Should().Be("Parent");
+        fields.Single(f => f.Field == "tag_ids").NewValue.Should().Be("Health");
+        _tags.FindAsync(Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>()).Returns([]);
+        (await previewer.PreviewAsync(UserId, "create_sub_habit", args)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task InlineChildren_PreviewRetainsEverySuppliedChildValue()
+    {
+        var args = JsonDocument.Parse("""{"title":"Parent","frequency_unit":"Day","sub_habits":[{"title":"Child","due_time":"09:00","due_end_time":"10:00","relative_reminders":[{"minutes_before":30}],"checklist_items":[{"text":"Shoes","is_checked":true}],"tag_names":["Health"]}]}""").RootElement;
+        var preview = await Preview("create_habit", args.GetRawText());
+        preview.Should().NotBeNull();
+        var field = preview!.Items!.Single().Fields.Single(f => f.Field == "sub_habits");
+        field.ProposedValue!.Value.GetRawText().Should().Be(args.GetProperty("sub_habits").GetRawText());
+        field.NewValue.Should().Contain("09:00").And.Contain("10:00").And.Contain("minutes_before").And.Contain("Shoes").And.Contain("Health");
+    }
+
+    [Theory]
+    [InlineData("due_end_time", "\"15:00\"", "15:00")]
+    [InlineData("is_general", "true", "true")]
+    [InlineData("slip_alert_enabled", "true", "true")]
+    [InlineData("relative_reminders", "[{\"minutes_before\":30}]", "30 minutes before")]
+    public async Task NewFields_PreviewEffectiveValueAndAllowRevision(string field, string value, string expected)
+    {
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Read", null, null, new DateOnly(2026, 9, 25),
+            DueTime: new TimeOnly(9, 0))).Value;
+        Setup([habit]);
+        var preview = await Preview("bulk_update_habits", $$$"""{"filter":{"all":true},"updates":{"{{{field}}}":{{{value}}}}}""");
+        preview.Should().NotBeNull();
+        var change = preview!.Items!.Single().Fields.Single(c => c.Field == field);
+        change.NewValue.Should().Be(expected);
+        change.IsEditable.Should().BeTrue();
+        change.ProposedValue.Should().NotBeNull();
+        habit.IsGeneral.Should().BeFalse();
+        habit.DueEndTime.Should().BeNull();
+        habit.RelativeReminders.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Unlog_DefaultDate_PreviewShowsUserToday()
     {
         var habit = CreateHabit("Beber água", null);
@@ -472,7 +549,7 @@ public sealed class PendingOperationChangePreviewerTests
 
         var preview = await Preview("bulk_update_habits", """{"filter":{"all":true},"updates":{"scheduled_reminders":[{"when":"same_day","time":"08:30"}]}}""");
 
-        preview!.Changes.Should().ContainSingle().Which.Should().Match<Orbit.Domain.Models.PendingOperationChange>(
+        preview!.Changes.Should().Contain(
             row => row.Field == "scheduled_reminders" && row.OldValue == "(none)" && row.NewValue == "same_day 08:30");
         preview.Items![0].Fields.Single(field => field.Field == "scheduled_reminders")
             .ProposedValue!.Value[0].GetProperty("time").GetString().Should().Be("08:30");

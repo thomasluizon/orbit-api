@@ -81,7 +81,7 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
             _payGate, _unitOfWork);
         var emojiTool = new BulkUpdateHabitEmojisTool(_habitRepo, _emojiInference, _unitOfWork,
             NullLogger<BulkUpdateHabitEmojisTool>.Instance);
-        var updateTool = new UpdateHabitTool(_habitRepo, _userDateService, _unitOfWork, _payGate);
+        var updateTool = new UpdateHabitTool(_habitRepo, _userDateService, _mediator);
         var bulkUpdateTool = new BulkUpdateHabitsTool(_mediator);
         _toolRegistry = new AiToolRegistry([
             _createHabitTool,

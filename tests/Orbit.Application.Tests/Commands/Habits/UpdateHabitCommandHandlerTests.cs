@@ -614,6 +614,9 @@ public class UpdateHabitCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(habit, parent);
 
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns([parent]);
+
         var command = new UpdateHabitCommand(
             UserId, habit.Id, "Updated", null, FrequencyUnit.Day, 1,
             IsGeneral: parent.IsGeneral);
@@ -637,6 +640,9 @@ public class UpdateHabitCommandHandlerTests
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(habit, parent);
+
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns([parent]);
 
         var command = new UpdateHabitCommand(
             UserId, habit.Id, "Updated", null, FrequencyUnit.Day, 1,
