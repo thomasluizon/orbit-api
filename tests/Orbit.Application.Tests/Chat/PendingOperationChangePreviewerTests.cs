@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Tools;
@@ -232,13 +233,57 @@ public sealed class PendingOperationChangePreviewerTests
     [InlineData("{}")]
     [InlineData("{\"infer_from_title\":true}")]
     [InlineData("{\"emoji\":\"✅\",\"infer_from_title\":true}")]
-    public async Task PreviewAsync_InferredEmojis_DoNotOfferEditableItems(string arguments)
+    public async Task PreviewAsync_InferredEmojis_OffersExplicitEditableValues(string arguments)
     {
-        Setup([CreateHabit("One", null), CreateHabit("Two", null)]);
+        var habits = new[] { CreateHabit("One", null), CreateHabit("Two", null) };
+        Setup(habits);
+        var inference = Substitute.For<IHabitEmojiInferenceService>();
+        inference.InferAsync(UserId, Arg.Any<IReadOnlyList<HabitEmojiInferenceInput>>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success<IReadOnlyDictionary<Guid, string>>(
+                habits.ToDictionary(habit => habit.Id, _ => "📚")));
+        var tool = new BulkUpdateHabitEmojisTool(_habits, inference, Substitute.For<IUnitOfWork>(),
+            NullLogger<BulkUpdateHabitEmojisTool>.Instance);
 
-        var preview = await Preview("bulk_update_habit_emojis", arguments);
+        var preview = await new PendingOperationChangePreviewer(_habits, _goals, _tags, _userDateService,
+            new AiToolRegistry([tool])).PreviewAsync(UserId, tool.Name,
+            JsonSerializer.Deserialize<JsonElement>(arguments));
+
+        preview.Should().NotBeNull();
+        preview!.ChangeTargetCount.Should().Be(habits.Length);
+        preview.Items!.SelectMany(item => item.Fields).Should().OnlyContain(field =>
+            field.Field == "emoji" && field.NewValue == "📚" && field.IsEditable);
+        preview.ExecutionArguments!.Value.GetProperty("infer_from_title").GetBoolean().Should().BeFalse();
+        preview.ExecutionArguments.Value.GetProperty("revised_items").GetArrayLength().Should().Be(habits.Length);
+        JsonSerializer.SerializeToElement(preview, JsonSerializerOptions.Web)
+            .TryGetProperty("executionArguments", out _).Should().BeFalse();
+        habits.Should().OnlyContain(habit => habit.Emoji == null);
+    }
+
+    [Fact]
+    public async Task PreviewAsync_EmojiInferenceStopsMidway_OffersNoUninferredChangesAndWritesNothing()
+    {
+        var habits = Enumerable.Range(1, 55).Select(index => CreateHabit($"Habit {index}", null)).ToArray();
+        Setup(habits);
+        var inference = Substitute.For<IHabitEmojiInferenceService>();
+        var work = Substitute.For<IUnitOfWork>();
+        var count = 0;
+        inference.InferAsync(UserId, Arg.Any<IReadOnlyList<HabitEmojiInferenceInput>>(), Arg.Any<CancellationToken>())
+            .Returns(call => ++count == 2
+                ? Result.Failure<IReadOnlyDictionary<Guid, string>>("budget unavailable")
+                : Result.Success<IReadOnlyDictionary<Guid, string>>(call.ArgAt<IReadOnlyList<HabitEmojiInferenceInput>>(1)
+                    .ToDictionary(input => input.HabitId, _ => "📚")));
+        var tool = new BulkUpdateHabitEmojisTool(_habits, inference, work,
+            NullLogger<BulkUpdateHabitEmojisTool>.Instance);
+
+        var preview = await new PendingOperationChangePreviewer(_habits, _goals, _tags, _userDateService,
+            new AiToolRegistry([tool])).PreviewAsync(UserId, tool.Name,
+            JsonSerializer.Deserialize<JsonElement>("""{"infer_from_title":true}"""));
 
         preview.Should().BeNull();
+        count.Should().Be(2);
+        habits.Should().OnlyContain(habit => habit.Emoji == null);
+        await work.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _habits.DidNotReceiveWithAnyArgs().FindTrackedAsync(default!, default!, default);
     }
 
     [Fact]

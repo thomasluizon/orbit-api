@@ -198,6 +198,7 @@ public partial class AgentCatalogService
                 [
                     "create_habit",
                     "update_habit",
+                    "bulk_update_habit_emojis",
                     "log_habit",
                     "unlog_habit",
                     "skip_habit", "undo_skip_habit",

@@ -57,10 +57,8 @@ public sealed class PendingOperationChangePreviewer(
             return await PreviewOtherAsync(userId, operationId, arguments, cancellationToken);
         }
 
-        if (operationId == "bulk_update_habit_emojis"
-            && (JsonArgumentParser.GetOptionalBool(arguments, "infer_from_title")
-                ?? !JsonArgumentParser.PropertyExists(arguments, "emoji")))
-            return null;
+        if (RequiresEmojiInference(operationId, arguments))
+            return await PreviewInferredEmojisAsync(userId, arguments, cancellationToken);
 
         if (operationId == "delete_habit")
             return await PreviewSingleHabitAsync(userId, arguments, cancellationToken);
@@ -130,6 +128,23 @@ public sealed class PendingOperationChangePreviewer(
             arguments = JsonSerializer.SerializeToElement(resolved);
         }
         return arguments;
+    }
+
+    private static bool RequiresEmojiInference(string operationId, JsonElement arguments) =>
+        operationId == "bulk_update_habit_emojis"
+        && (JsonArgumentParser.GetOptionalBool(arguments, "infer_from_title")
+            ?? !JsonArgumentParser.PropertyExists(arguments, "emoji"));
+
+    private async Task<PendingOperationChangePreview?> PreviewInferredEmojisAsync(
+        Guid userId, JsonElement arguments, CancellationToken ct)
+    {
+        if (toolRegistry.GetTool("bulk_update_habit_emojis") is not BulkUpdateHabitEmojisTool emojiTool)
+            return null;
+        var prepared = await emojiTool.PreparePreviewArgumentsAsync(arguments, userId, ct);
+        if (prepared.IsFailure)
+            return null;
+        var preview = await PreviewAsync(userId, emojiTool.Name, prepared.Value, ct);
+        return preview is null ? null : preview with { ExecutionArguments = prepared.Value };
     }
 
     private async Task<PendingOperationChangePreview?> PreviewOtherAsync(Guid userId, string operationId,

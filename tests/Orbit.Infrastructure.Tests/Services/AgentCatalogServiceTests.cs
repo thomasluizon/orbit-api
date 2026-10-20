@@ -43,6 +43,7 @@ public class AgentCatalogServiceTests
     [InlineData("bulk_log_habits", AgentRiskClass.Low, AgentConfirmationRequirement.None)]
     [InlineData("bulk_skip_habits", AgentRiskClass.Low, AgentConfirmationRequirement.None)]
     [InlineData("bulk_update_habits", AgentRiskClass.Low, AgentConfirmationRequirement.None)]
+    [InlineData("bulk_update_habit_emojis", AgentRiskClass.Low, AgentConfirmationRequirement.None)]
     [InlineData("bulk_reschedule_habits", AgentRiskClass.Low, AgentConfirmationRequirement.None)]
     [InlineData("bulk_delete_habits", AgentRiskClass.Destructive, AgentConfirmationRequirement.FreshConfirmation)]
     [InlineData("delete_habit", AgentRiskClass.Destructive, AgentConfirmationRequirement.FreshConfirmation)]

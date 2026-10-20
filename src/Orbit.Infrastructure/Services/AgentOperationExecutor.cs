@@ -246,9 +246,11 @@ public partial class AgentOperationExecutor(
                     new ToolResult(false, Error: "stale_preview"), cancellationToken);
             }
 
-            var argumentsJson = execution.Arguments.GetRawText();
+            var expectedFingerprint = AgentOperationFingerprint.Compute(execution.Operation.Id,
+                execution.Arguments.GetRawText());
+            var argumentsJson = (preview.ExecutionArguments ?? execution.Arguments).GetRawText();
             var operationFingerprint = AgentOperationFingerprint.Compute(execution.Operation.Id, argumentsJson);
-            if (!pendingOperationStore.Revise(execution.Request.UserId, pending.Id, operationFingerprint,
+            if (!pendingOperationStore.Revise(execution.Request.UserId, pending.Id, expectedFingerprint,
                 argumentsJson, operationFingerprint, preview.PreviewFingerprint))
                 throw new InvalidOperationException("The pending operation preview binding could not be persisted.");
 
