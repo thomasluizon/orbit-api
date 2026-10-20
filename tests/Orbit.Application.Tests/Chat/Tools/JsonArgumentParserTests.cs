@@ -288,6 +288,19 @@ public class JsonArgumentParserTests
             result.Should().Be(expectedWhen);
     }
 
+    [Theory]
+    [InlineData("same_day", ScheduledReminderWhen.SameDay)]
+    [InlineData("day_before", ScheduledReminderWhen.DayBefore)]
+    public void ChatParser_PreservesSeparateSnakeCaseInterface(string wire, ScheduledReminderWhen expected)
+    {
+        using var document = JsonDocument.Parse($$"""{"scheduled_reminders":[{"when":"{{wire}}","time":"08:00"}],"relative_reminders":[{"when":"{{wire}}","time":"08:00"},{"minutes_before":15}]}""");
+        JsonArgumentParser.ParseScheduledReminders(document.RootElement).Should()
+            .Equal(new ScheduledReminderTime(expected, new TimeOnly(8, 0)));
+        JsonArgumentParser.ParseRelativeReminders(document.RootElement).Should()
+            .Equal(new RelativeReminderTime(When: expected, Time: new TimeOnly(8, 0)), new RelativeReminderTime(MinutesBefore: 15));
+        JsonArgumentParser.TryParseScheduledReminderWhen("SameDay", out _).Should().BeFalse();
+    }
+
     [Fact]
     public void PropertyExists_ExistingProperty_ReturnsTrue()
     {

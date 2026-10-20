@@ -13,6 +13,7 @@ using Microsoft.OpenApi;
 using Orbit.Api.Mcp.Tools;
 using Orbit.Api.Middleware;
 using Orbit.Api.OpenApi;
+using Orbit.Api.Serialization;
 using Orbit.Application.Common;
 using Orbit.Application.Chat;
 using Orbit.Domain.Enums;
@@ -302,6 +303,7 @@ public static partial class ServiceCollectionExtensions
             })
             .AddJsonOptions(options =>
             {
+                options.JsonSerializerOptions.Converters.Add(new ScheduledReminderWhenInputConverter());
                 options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
             });
 
@@ -355,6 +357,8 @@ public static partial class ServiceCollectionExtensions
                 schema.Type = JsonSchemaType.String;
                 schema.Enum = Enum.GetNames(type).Select(name => (JsonNode)JsonValue.Create(name)).ToList();
             }
+            if (type == typeof(ScheduledReminderWhen))
+                schema.Description = "MVC responses emit SameDay or DayBefore. MVC inputs also accept same_day and day_before, case-insensitive enum names and numeric enum forms. Reminder validation still applies. This component's enum retains the domain snake_case annotation and does not describe MVC response casing.";
             if (context.JsonPropertyInfo?.AttributeProvider is PropertyInfo property
                 && property.DeclaringType == typeof(ToolResultMessageParams) && property.PropertyType == typeof(int?))
             {
