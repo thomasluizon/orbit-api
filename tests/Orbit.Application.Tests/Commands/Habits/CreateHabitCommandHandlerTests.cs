@@ -53,6 +53,26 @@ public class CreateHabitCommandHandlerTests
             });
     }
 
+    [Fact]
+    public async Task Handle_ExplicitStartAtCalendarBoundary_ReturnsDomainFailure()
+    {
+        var command = new CreateHabitCommand(UserId, "Read", null, FrequencyUnit.Day, 1,
+            StartDate: DateOnly.MaxValue, Options: new HabitCommandOptions(Days: [DayOfWeek.Monday]));
+        (await _handler.Handle(command, CancellationToken.None)).IsFailure.Should().BeTrue();
+        await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ExplicitStart_PreservesSelectionBeforeWeekdayAlignment()
+    {
+        var selected = new DateOnly(2026, 10, 26);
+        var command = new CreateHabitCommand(UserId, "Read", null, FrequencyUnit.Day, 1,
+            StartDate: selected, Options: new HabitCommandOptions(Days: [DayOfWeek.Wednesday]));
+        (await _handler.Handle(command, CancellationToken.None)).IsSuccess.Should().BeTrue();
+        await _habitRepo.Received(1).AddAsync(Arg.Is<Habit>(habit => habit.StartDate == selected
+            && habit.DueDate == selected.AddDays(2) && habit.ScheduledStartDate == selected), Arg.Any<CancellationToken>());
+    }
+
     [Theory]
     [InlineData(HabitSchedule.OneTime)]
     [InlineData(HabitSchedule.Recurring)]

@@ -62,6 +62,23 @@ public class UpdateHabitCommandHandlerTests
         return habit;
     }
 
+    [Fact]
+    public async Task Handle_ExplicitStart_PassesAccountDayAndRetainsHistory()
+    {
+        var habit = CreateTestHabit();
+        habit.Log(Today).IsSuccess.Should().BeTrue();
+        _habitRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(habit);
+        var command = new UpdateHabitCommand(UserId, habit.Id, "Read", null, FrequencyUnit.Day, 1,
+            StartDate: Today.AddDays(-1));
+        (await _handler.Handle(command, CancellationToken.None)).IsSuccess.Should().BeTrue();
+        habit.StartDate.Should().Be(Today.AddDays(-1));
+        habit.DueDate.Should().Be(Today.AddDays(1));
+        habit.Logs.Should().ContainSingle();
+        (await _handler.Handle(command, CancellationToken.None)).IsSuccess.Should().BeTrue();
+        habit.DueDate.Should().Be(Today.AddDays(1));
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

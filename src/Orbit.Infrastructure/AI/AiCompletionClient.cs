@@ -207,7 +207,8 @@ public sealed partial class AiCompletionClient
         string purpose = "json",
         AiModelTier tier = AiModelTier.Primary,
         Guid? userId = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool requireComplete = false)
     {
         using var completionCancellation = CreateCompletionCancellation(cancellationToken);
         cancellationToken = completionCancellation.Token;
@@ -223,6 +224,8 @@ public sealed partial class AiCompletionClient
 
         var response = await ExecuteResponseAsync(options, purpose, cancellationToken, userId);
         EnsureSuccessful(response);
+        if (requireComplete && response.Status != ResponseStatus.Completed)
+            throw new InvalidOperationException("AI date interpretation did not complete.");
         var text = GetAssistantOutputText(response);
 
         if (string.IsNullOrWhiteSpace(text))

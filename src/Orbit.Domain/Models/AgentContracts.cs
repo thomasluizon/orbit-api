@@ -307,6 +307,7 @@ public record AgentAuditEntry(
 
 public static class AgentCapabilityIds
 {
+    public const string HabitDateInterpret = "habits.date.interpret";
     public const string ChatInteract = "chat.interact";
     public const string CatalogCapabilitiesRead = "catalog.capabilities.read";
     public const string CatalogDataRead = "catalog.data.read";

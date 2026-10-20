@@ -38,6 +38,32 @@ public class HabitsControllerTests
         };
     }
 
+    [Fact]
+    public async Task InterpretDate_UsesAuthenticatedAccountAndSerializesOwnedContract()
+    {
+        var reference = new DateOnly(2026, 10, 20);
+        _mediator.Send(Arg.Any<InterpretDateCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new DateInterpretation(reference.AddDays(6), reference)));
+        var result = await _controller.InterpretDate(new("next holiday", "en"), CancellationToken.None);
+        var body = result.Should().BeOfType<OkObjectResult>().Subject.Value;
+        JsonSerializer.Serialize(body, new JsonSerializerOptions(JsonSerializerDefaults.Web))
+            .Should().Be("""{"date":"2026-10-26","referenceDate":"2026-10-20"}""");
+        await _mediator.Received(1).Send(Arg.Is<InterpretDateCommand>(command => command.UserId == UserId
+            && command.Phrase == "next holiday" && command.Language == "en"), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CreateAndUpdate_ForwardExplicitStartDate()
+    {
+        var start = new DateOnly(2026, 10, 26);
+        _mediator.Send(Arg.Any<CreateHabitCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success(Guid.NewGuid()));
+        _mediator.Send(Arg.Any<UpdateHabitCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        await _controller.CreateHabit(new("Read", null, Orbit.Domain.Enums.FrequencyUnit.Day, 1, StartDate: start), CancellationToken.None);
+        await _controller.UpdateHabit(Guid.NewGuid(), new("Read", null, Orbit.Domain.Enums.FrequencyUnit.Day, 1, StartDate: start), CancellationToken.None);
+        await _mediator.Received(1).Send(Arg.Is<CreateHabitCommand>(command => command.StartDate == start), Arg.Any<CancellationToken>());
+        await _mediator.Received(1).Send(Arg.Is<UpdateHabitCommand>(command => command.StartDate == start), Arg.Any<CancellationToken>());
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

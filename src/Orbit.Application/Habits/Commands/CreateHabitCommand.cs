@@ -26,7 +26,8 @@ public record CreateHabitCommand(
     IReadOnlyList<Guid>? TagIds = null,
     IReadOnlyList<Guid>? GoalIds = null,
     string? Emoji = null,
-    int? IntervalWeeks = null) : IRequest<Result<Guid>>, IIdempotentCommand;
+    int? IntervalWeeks = null,
+    DateOnly? StartDate = null) : IRequest<Result<Guid>>, IIdempotentCommand;
 
 /// <summary>
 /// Groups repository dependencies for habit creation to reduce constructor parameter count (S107).
@@ -64,9 +65,9 @@ public partial class CreateHabitCommandHandler(
             return gateResult.PropagateError<Guid>();
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-        var dueDate = request.DueDate ?? today;
+        var dueDate = request.StartDate ?? request.DueDate ?? today;
 
-        if (opts.Days is { Count: > 0 } && !opts.Days.Contains(dueDate.DayOfWeek))
+        if (!request.StartDate.HasValue && opts.Days is { Count: > 0 } && !opts.Days.Contains(dueDate.DayOfWeek))
         {
             while (!opts.Days.Contains(dueDate.DayOfWeek))
                 dueDate = dueDate.AddDays(1);
@@ -79,6 +80,8 @@ public partial class CreateHabitCommandHandler(
             ? 0
             : siblings.Max(h => h.Position ?? -1) + 1;
 
+        var weekStartDay = request.StartDate.HasValue
+            ? await userDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken) : 1;
         var habitResult = Habit.Create(new HabitCreateParams(
             request.UserId,
             request.Title,
@@ -101,12 +104,25 @@ public partial class CreateHabitCommandHandler(
             ScheduledReminders: opts.ScheduledReminders,
             RelativeReminders: opts.RelativeReminders,
             Position: nextPosition,
-            IntervalWeeks: request.IntervalWeeks));
+            IntervalWeeks: request.IntervalWeeks,
+            StartDate: request.StartDate,
+            WeekStartDay: weekStartDay));
 
         if (habitResult.IsFailure)
             return habitResult.PropagateError<Guid>();
 
         var habit = habitResult.Value;
+        if (request.StartDate.HasValue)
+        {
+            if (!habit.IsFlexible)
+            {
+                var catchUp = habit.CatchUpDueDate(today, weekStartDay);
+                if (catchUp.IsFailure)
+                    return catchUp.PropagateError<Guid>();
+            }
+            else if (habit.DueDate < today)
+                habit.PostponeTo(today);
+        }
 
         var featureGate = await HabitCreationGates.CheckAsync(habit, payGate, cancellationToken);
         if (featureGate.IsFailure)

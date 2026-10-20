@@ -25,7 +25,8 @@ public record UpdateHabitCommand(
     UpdateHabitCommandOptions? Options = null,
     IReadOnlyList<Guid>? GoalIds = null,
     string? Emoji = null,
-    int? IntervalWeeks = null) : IRequest<Result>;
+    int? IntervalWeeks = null,
+    DateOnly? StartDate = null) : IRequest<Result>;
 
 public sealed record UpdateHabitFieldsCommand(
     Guid UserId,
@@ -95,6 +96,8 @@ public class UpdateHabitCommandHandler(
         await habitRepository.ReloadAsync(habit, cancellationToken);
         var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
         var update = resolveUpdate(habit, today);
+        if (update.StartDate.HasValue && update.StartDate != habit.StartDate)
+            update = update with { WeekStartDay = await userDateService.GetUserWeekStartDayAsync(userId, cancellationToken) };
         if (validateFields)
         {
             var validation = await HabitUpdateValidation.ValidateAsync(userId, habit, update, habitRepository, cancellationToken);
@@ -145,7 +148,8 @@ public class UpdateHabitCommandHandler(
             RelativeReminders: opts.RelativeReminders,
             Emoji: request.Emoji,
             UserToday: today,
-            IntervalWeeks: request.IntervalWeeks ?? habit.IntervalWeeks);
+            IntervalWeeks: request.IntervalWeeks ?? habit.IntervalWeeks,
+            StartDate: request.StartDate);
 
     }
 
