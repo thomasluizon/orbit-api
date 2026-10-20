@@ -24,7 +24,8 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
 
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
-        differences.Should().HaveCount(15);
+        differences.Should().HaveCount(16);
+        RestoreProactivePreferenceMigrationTests.AssertRequiredPreference(differences);
         differences.OfType<CreateTableOperation>().Select(table => table.Name)
             .Should().BeEquivalentTo("ConversationTurns", "OAuthStates", "AiBudgetCalls");
         differences.OfType<CreateIndexOperation>().Should().HaveCount(7);

@@ -124,6 +124,7 @@ public class AgentToolsTests
     [InlineData("emoji")]
     [InlineData("frequency_unit")]
     [InlineData("due_time")]
+    [InlineData("due_end_time")]
     [InlineData("end_date")]
     public async Task ExecuteAgentOperation_ExplicitNullHabitField_ClearsOnlyThatField(string field)
     {
@@ -132,7 +133,7 @@ public class AgentToolsTests
         DateOnly? endDate = field == "frequency_unit" ? null : today.AddDays(10);
         var habit = Habit.Create(new HabitCreateParams(
             UserId, "Read", FrequencyUnit.Day, 1, today, Description: "Keep description",
-            Emoji: "📚", DueTime: dueTime, EndDate: endDate)).Value;
+            Emoji: "📚", DueTime: dueTime, DueEndTime: new TimeOnly(15, 0), EndDate: endDate)).Value;
         var repository = Substitute.For<IGenericRepository<Habit>>();
         repository.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -142,11 +143,11 @@ public class AgentToolsTests
         userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(today);
         var unitOfWork = Substitute.For<IUnitOfWork>();
         unitOfWork.ExecuteInTransactionAsync(
-                Arg.Any<Func<CancellationToken, Task<Result<ToolResult>>>>(),
+                Arg.Any<Func<CancellationToken, Task<Result<string>>>>(),
                 Arg.Any<CancellationToken>())
-            .Returns(call => call.ArgAt<Func<CancellationToken, Task<Result<ToolResult>>>>(0)(
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<Result<string>>>>(0)(
                 call.ArgAt<CancellationToken>(1)));
-        var tool = new UpdateHabitTool(repository, userDateService, unitOfWork, Substitute.For<IPayGateService>());
+        var tool = SharedToolExecution.CreateHabitTool(repository, userDateService, unitOfWork);
         var executor = SharedToolExecution.Create(tool, unitOfWork);
         var tools = new AgentTools(_catalogService, executor, _pendingOperationStore, _stepUpService);
         var arguments = JsonSerializer.SerializeToElement(new Dictionary<string, object?>
@@ -164,6 +165,7 @@ public class AgentToolsTests
         habit.FrequencyUnit.Should().Be(field == "frequency_unit" ? null : FrequencyUnit.Day);
         habit.DueTime.Should().Be(field == "due_time" ? null : dueTime);
         habit.EndDate.Should().Be(field == "end_date" ? null : endDate);
+        habit.DueEndTime.Should().Be(field == "due_end_time" ? null : new TimeOnly(15, 0));
         await unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 

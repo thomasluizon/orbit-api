@@ -34,12 +34,14 @@ public class ConversationMigrationTests
         additions.Should().HaveCount(6);
         AssertConversationExpansion(additions);
         var remaining = differ.GetDifferences(target.GetRelationalModel(), model.GetRelationalModel());
-        var schemaVersion = remaining.Should().ContainSingle().Which.Should().BeOfType<AddColumnOperation>().Subject;
+        var schemaVersion = remaining.OfType<AddColumnOperation>().Should().ContainSingle().Subject;
         schemaVersion.Table.Should().Be("PendingAgentOperations");
         schemaVersion.Name.Should().Be("ArgumentSchemaVersion");
         schemaVersion.ClrType.Should().Be(typeof(int));
         schemaVersion.IsNullable.Should().BeFalse();
         schemaVersion.DefaultValue.Should().Be(0);
+        remaining.Should().HaveCount(2);
+        RestoreProactivePreferenceMigrationTests.AssertRequiredPreference(remaining);
     }
 
     internal static void AssertConversationExpansion(IReadOnlyList<MigrationOperation> operations)

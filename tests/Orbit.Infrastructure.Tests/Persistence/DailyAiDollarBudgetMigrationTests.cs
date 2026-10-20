@@ -47,7 +47,8 @@ public class DailyAiDollarBudgetMigrationTests
         schemaVersion.ClrType.Should().Be(typeof(int));
         schemaVersion.IsNullable.Should().BeFalse();
         schemaVersion.DefaultValue.Should().Be(0);
-        differences.Should().HaveCount(7);
+        differences.Should().HaveCount(8);
+        RestoreProactivePreferenceMigrationTests.AssertRequiredPreference(differences);
         ConversationMigrationTests.AssertConversationExpansion(differences);
         var entity = current.FindEntityType(typeof(AiBudgetCall))!;
         entity.FindProperty("ChargedTokens").Should().NotBeNull();

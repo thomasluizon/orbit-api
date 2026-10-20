@@ -2682,8 +2682,9 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<DateOnly?>("PreGapLastActiveDate")
                         .HasColumnType("date");
 
-                    b.Property<bool?>("ProactiveAstraEnabled")
-                        .HasColumnType("boolean");
+                    b.Property<bool>("ProactiveAstraEnabled")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<bool>("PublicProfileShowAchievements")
                         .HasColumnType("boolean");

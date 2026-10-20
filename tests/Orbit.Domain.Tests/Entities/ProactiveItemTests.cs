@@ -103,7 +103,7 @@ public sealed class ProactiveItemTests
         if (choice.HasValue) user.SetProactiveAstraEnabled(choice.Value);
         user.GrantLifetimePro();
         user.EffectiveProactivePushEnabled.Should().Be(expected);
-        user.ProactiveAstraEnabled.Should().Be(choice);
+        user.ProactiveAstraEnabled.Should().Be(choice ?? true);
         var free = User.Create("Free", "free@example.com").Value;
         free.StartTrial(DateTime.UtcNow.AddDays(-1));
         free.SetProactiveAstraEnabled(true);

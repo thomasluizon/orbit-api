@@ -25,7 +25,7 @@ public sealed class BulkHabitToolArgumentsTests
         explicitNull.Error.Should().BeNull();
         explicitNull.Changes.Should().BeEquivalentTo(absent.Changes);
         var before = OptionalParameterCases.HabitState(habit);
-        habit.Update(BulkUpdateHabitsCommandHandler.ResolveUpdate(habit, explicitNull.Changes!, new DateOnly(2027, 1, 1)))
+        habit.Update(HabitUpdateValidation.ResolveUpdate(habit, explicitNull.Changes!, new DateOnly(2027, 1, 1)))
             .IsSuccess.Should().BeTrue();
         OptionalParameterCases.HabitState(habit).Should().Be(before);
     }
@@ -54,11 +54,25 @@ public sealed class BulkHabitToolArgumentsTests
         explicitNull.Filter.Should().BeEquivalentTo(absent.Filter);
     }
 
+    [Theory]
+    [InlineData("due_end_time", "\"15:00\"")]
+    [InlineData("is_general", "true")]
+    [InlineData("slip_alert_enabled", "true")]
+    [InlineData("relative_reminders", "[{\"minutes_before\":30}]")]
+    public void NewUpdateFields_AreAccepted(string field, string value)
+    {
+        var args = JsonDocument.Parse($$$"""{"updates":{"{{{field}}}":{{{value}}}}}""").RootElement;
+        var (changes, error) = BulkHabitToolArguments.ParseChanges(args);
+        error.Should().BeNull();
+        changes.Should().NotBeNull();
+        changes!.HasAnyChange.Should().BeTrue();
+    }
+
     [Fact]
-    public void CheckHabitFields_DoesNotValidateUnsupportedDeadline()
+    public void CheckHabitFields_RejectsMalformedDeadline()
     {
         BulkHabitToolArguments.CheckHabitFields(Parse("""{"due_end_time":"25:00"}"""))
-            .Should().BeNull();
+            .Should().Contain("due_end_time");
     }
 
     [Fact]
@@ -118,8 +132,7 @@ public sealed class BulkHabitToolArgumentsTests
     [InlineData("{\"updates\":[]}", "updates is required")]
     [InlineData("{\"updates\":{\"unknown\":true}}", "unsupported field")]
     [InlineData("""{"updates":{"unknown":null}}""", "unsupported field")]
-    [InlineData("""{"updates":{"due_end_time":"15:00"}}""", "unsupported field")]
-    [InlineData("""{"updates":{"due_end_time":"25:00"}}""", "unsupported field")]
+    [InlineData("""{"updates":{"due_end_time":"25:00"}}""", "HH:mm")]
     [InlineData("{\"updates\":{\"title\":1}}", "title must be a string")]
     [InlineData("{\"updates\":{\"is_bad_habit\":null}}", "is_bad_habit must be a boolean")]
     [InlineData("{\"updates\":{\"due_date\":null}}", "due_date must be a date")]

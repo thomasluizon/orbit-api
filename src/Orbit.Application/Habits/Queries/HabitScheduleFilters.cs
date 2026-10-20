@@ -517,7 +517,12 @@ internal static class HabitScheduleFilters
             IntervalWeeks: c.IntervalWeeks,
             CreatedAtUtc: c.CreatedAtUtc,
             Schedule: c.Schedule,
-            StartDate: c.StartDate);
+            StartDate: c.StartDate,
+            ReminderEnabled: c.ReminderEnabled,
+            ReminderTimes: c.ReminderTimes,
+            ScheduledReminders: c.GetScheduledRemindersForLegacyClients(),
+            RelativeReminders: c.RelativeReminders,
+            SlipAlertEnabled: c.SlipAlertEnabled);
     }
 
     private static bool GetResponseCompletion(Habit habit, DateOnly? userToday)

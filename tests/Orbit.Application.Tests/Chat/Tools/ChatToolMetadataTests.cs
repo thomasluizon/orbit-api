@@ -59,7 +59,7 @@ public class ChatToolMetadataTests
         var updateGoalStatusTool = new UpdateGoalStatusTool(Repo<Goal>(), goalCompletionService, unitOfWork);
         var updateGoalTool = new UpdateGoalTool(Repo<Goal>(), unitOfWork);
         var updateHabitTool = new UpdateHabitTool(
-            Repo<Habit>(), userDateService, unitOfWork, Substitute.For<IPayGateService>());
+            Repo<Habit>(), userDateService, mediator);
         var listTagsTool = new ListTagsTool(mediator);
         var createTagTool = new CreateTagTool(mediator);
         var updateTagTool = new UpdateTagTool(mediator);

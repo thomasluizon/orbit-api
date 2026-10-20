@@ -22,6 +22,12 @@ public class AuthUserStoreTests
 
         var first = await store.UpsertAsync(candidate, CancellationToken.None);
         await context.SaveChangesAsync();
+        first.ProactiveAstraEnabled.Should().Be(true);
+        await using (var command = context.Database.GetDbConnection().CreateCommand())
+        {
+            command.CommandText = "SELECT \"ProactiveAstraEnabled\" FROM \"Users\"";
+            Convert.ToBoolean(await command.ExecuteScalarAsync()).Should().BeTrue();
+        }
         var signupSql = commands.Sql.ToArray();
         commands.Sql.Clear();
         var returning = await store.UpsertAsync(Candidate("Replacement", "en"), CancellationToken.None);
@@ -67,6 +73,7 @@ public class AuthUserStoreTests
         var context = database.Context;
         var original = Candidate("Original", "pt-BR");
         original.SetGoogleTokens("calendar-access", "calendar-refresh");
+        original.SetProactiveAstraEnabled(false);
         original.Deactivate(DateTime.UtcNow.AddDays(7));
         context.Users.Add(original);
         await context.SaveChangesAsync();

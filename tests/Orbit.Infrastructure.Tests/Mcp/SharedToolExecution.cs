@@ -1,4 +1,10 @@
 using System.Text.Json;
+using MediatR;
+using Microsoft.Extensions.Caching.Memory;
+using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Goals.Services;
+using Orbit.Application.Habits.Commands;
+using Orbit.Domain.Entities;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Orbit.Application.Chat.Tools;
@@ -10,6 +16,18 @@ namespace Orbit.Infrastructure.Tests.Mcp;
 
 internal static class SharedToolExecution
 {
+    internal static UpdateHabitTool CreateHabitTool(IGenericRepository<Habit> repository,
+        IUserDateService dates, IUnitOfWork unitOfWork)
+    {
+        var mediator = Substitute.For<IMediator>();
+        var handler = new UpdateHabitCommandHandler(repository, Substitute.For<IGenericRepository<SentReminder>>(),
+            Substitute.For<IGenericRepository<Goal>>(), Substitute.For<IPayGateService>(),
+            Substitute.For<IGoalCompletionService>(), dates, unitOfWork, new MemoryCache(new MemoryCacheOptions()));
+        mediator.Send(Arg.Any<UpdateHabitFieldsCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call => handler.Handle(call.Arg<UpdateHabitFieldsCommand>(), call.Arg<CancellationToken>()));
+        return new UpdateHabitTool(repository, dates, mediator);
+    }
+
     internal static AgentOperationExecutor Create(IAiTool tool, IUnitOfWork unitOfWork)
     {
         var catalog = new AgentCatalogService([tool]);

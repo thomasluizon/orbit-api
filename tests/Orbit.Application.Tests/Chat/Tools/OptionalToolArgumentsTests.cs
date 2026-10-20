@@ -85,7 +85,7 @@ public sealed class OptionalToolArgumentsTests
     {
         var arguments = JsonSerializer.Deserialize<JsonElement>("""
             {"updates":{"description":null,"emoji":null,"frequency_unit":null,"frequency_quantity":null,
-                        "interval_weeks":null,"end_date":null,"due_time":null}}
+                        "interval_weeks":null,"end_date":null,"due_time":null,"due_end_time":null}}
             """);
         var external = OptionalToolArguments.NormalizeExternalClears("bulk_update_habits", arguments);
 
@@ -107,6 +107,8 @@ public sealed class OptionalToolArgumentsTests
         changes.EndDate.Should().BeNull();
         changes.HasDueTime.Should().BeTrue();
         changes.DueTime.Should().BeNull();
+        changes.HasDueEndTime.Should().BeTrue();
+        changes.DueEndTime.Should().BeNull();
         changes.HasTitle.Should().BeFalse();
     }
 

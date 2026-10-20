@@ -33,11 +33,13 @@ public static class OptionalParameterCases
         habit.DueTime,
         habit.DueEndTime,
         habit.IsBadHabit,
+        habit.IsGeneral,
         habit.IsFlexible,
         habit.ReminderEnabled,
         habit.ReminderTimes,
         habit.ChecklistItems,
         habit.ScheduledReminders,
+        habit.RelativeReminders,
         habit.SlipAlertEnabled
     });
 }
