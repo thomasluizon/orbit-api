@@ -32,11 +32,59 @@ public sealed class AgentArgumentPreviewTests
         var unitOfWork = Substitute.For<IUnitOfWork>();
         _tools = new AiToolRegistry([
             new CreateHabitTool(_habits, _tags, _goals, _dateService, payGate, unitOfWork),
-            new UpdateHabitTool(_habits, _dateService, unitOfWork, payGate),
+            new UpdateHabitTool(_habits, _dateService, Substitute.For<MediatR.IMediator>()),
             new UpdateGoalTool(_goals, unitOfWork)
         ]);
         _dateService.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>())
             .Returns(new DateOnly(2026, 9, 25));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExplicitClears_ShowAndExecuteTheRevisedGoalValue(bool clear)
+    {
+        var goal = Goal.Create(new Goal.CreateGoalParams(_userId, "Read", 12, "books", "Keep")).Value;
+        _goals.FindAsync(Arg.Any<Expression<Func<Goal, bool>>>(), Arg.Any<CancellationToken>()).Returns([goal]);
+        _goals.FindOneTrackedAsync(Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>>(), Arg.Any<CancellationToken>()).Returns(goal);
+        var pendingId = Guid.NewGuid();
+        var args = Parse($$"""{"goal_id":"{{goal.Id}}","clear_fields":["description"],"title":null}""");
+        SetupExecution(pendingId, "update_goal", args);
+        JsonElement revised = default;
+        _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>())
+            .Returns(call => { revised = Parse(call.ArgAt<string>(3)); return true; });
+        var previewer = CreatePreviewer();
+        var preview = await previewer.PreviewAsync(_userId, "update_goal", args);
+        var row = preview!.Items![0].Fields.Single(field => field.Field == "description");
+        row.OldValue.Should().Be("Keep");
+        row.NewValue.Should().BeNull();
+        preview.Items[0].Fields.Should().NotContain(field => field.Field == "clear_fields" || field.Field == "title");
+        var edits = Parse(clear ? """{"description":null}""" : """{"description":"New"}""");
+        var result = await CreateService(previewer).ReviseAsync(_userId, pendingId,
+            new RevisePendingOperationRequest(preview.PreviewFingerprint!,
+                [new RevisedPendingOperationItem(preview.Items[0].ItemId, edits)]), CancellationToken.None);
+        result.IsSuccess.Should().BeTrue();
+        (await _tools.GetTool("update_goal")!.ExecuteAsync(revised, _userId, CancellationToken.None)).Success.Should().BeTrue();
+        goal.Description.Should().Be(clear ? null : "New");
+    }
+
+    [Theory]
+    [InlineData("due_end_time", "\"15:00\"")]
+    [InlineData("is_general", "true")]
+    [InlineData("slip_alert_enabled", "true")]
+    [InlineData("relative_reminders", "[{\"minutes_before\":30}]")]
+    public async Task NewHabitFields_AppearInCreateAndUpdateApproval(string field, string value)
+    {
+        var habit = Habit.Create(new HabitCreateParams(_userId, "Read", null, null, new DateOnly(2026, 9, 25))).Value;
+        SetupHabit(habit);
+        foreach (var operation in new[] { "create_habit", "update_habit" })
+        {
+            var preview = await Preview(operation, $$"""{"habit_id":"{{habit.Id}}","title":"Read","{{field}}":{{value}}}""");
+            var row = preview!.Items!.Single().Fields.Single(f => f.Field == field);
+            row.IsEditable.Should().BeTrue();
+            row.ProposedValue.Should().NotBeNull();
+        }
     }
 
     [Fact]

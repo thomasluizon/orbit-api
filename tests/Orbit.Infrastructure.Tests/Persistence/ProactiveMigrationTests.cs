@@ -89,6 +89,6 @@ public sealed class ProactiveMigrationTests
         factory.Context.Users.Add(user);
         await factory.Context.SaveChangesAsync();
         factory.Context.ChangeTracker.Clear();
-        (await factory.Context.Users.SingleAsync()).ProactiveAstraEnabled.Should().Be(choice);
+        (await factory.Context.Users.SingleAsync()).ProactiveAstraEnabled.Should().Be(choice ?? true);
     }
 }

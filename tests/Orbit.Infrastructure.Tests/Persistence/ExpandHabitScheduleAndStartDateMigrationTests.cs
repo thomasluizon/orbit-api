@@ -24,30 +24,44 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
 
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
-        differences.Should().HaveCount(14);
+        differences.Should().HaveCount(16);
+        RestoreProactivePreferenceMigrationTests.AssertRequiredPreference(differences);
         differences.OfType<CreateTableOperation>().Select(table => table.Name)
             .Should().BeEquivalentTo("ConversationTurns", "OAuthStates", "AiBudgetCalls");
         differences.OfType<CreateIndexOperation>().Should().HaveCount(7);
-        differences.OfType<AddColumnOperation>().Should().HaveCount(2);
+        differences.OfType<AddColumnOperation>().Should().HaveCount(3);
         differences.OfType<InsertDataOperation>().Should().HaveCount(2);
         AssertAiSecurityAdditions(differences);
         ConversationMigrationTests.AssertConversationExpansion(differences);
         AssertEvalTraceSeed(differences);
         differences.OfType<InsertDataOperation>().Single(seed => seed.Table == "AppFeatureFlags")
             .Values.GetLength(0).Should().Be(2);
+        var schemaVersion = differences.OfType<AddColumnOperation>().Single(column => column.Name == "ArgumentSchemaVersion");
+        schemaVersion.Table.Should().Be("PendingAgentOperations");
+        schemaVersion.IsNullable.Should().BeFalse();
+        schemaVersion.DefaultValue.Should().Be(0);
+
         context.Database.HasPendingModelChanges().Should().BeFalse();
     }
 
     [Fact]
-    public void EvalTraceTargetModel_MatchesCurrentModel()
+    public void EvalTraceTargetModel_PreservesTraceWithArgumentVersionAndRequiredPreferenceAdditions()
     {
         using var context = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
             .UseNpgsql("Host=unused;Database=unused").Options);
         var target = context.GetService<IModelRuntimeInitializer>()
             .Initialize(new AddAstraEvalTraceFlag().TargetModel, designTime: true);
         var current = context.GetService<IDesignTimeModel>().Model;
-        context.GetService<IMigrationsModelDiffer>()
-            .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel()).Should().BeEmpty();
+        var differences = context.GetService<IMigrationsModelDiffer>()
+            .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
+        differences.Should().HaveCount(2);
+        var schemaVersion = differences.OfType<AddColumnOperation>().Should().ContainSingle().Subject;
+        schemaVersion.Table.Should().Be("PendingAgentOperations");
+        schemaVersion.Name.Should().Be("ArgumentSchemaVersion");
+        schemaVersion.ClrType.Should().Be(typeof(int));
+        schemaVersion.IsNullable.Should().BeFalse();
+        schemaVersion.DefaultValue.Should().Be(0);
+        RestoreProactivePreferenceMigrationTests.AssertRequiredPreference(differences);
     }
 
     internal static void AssertEvalTraceSeed(IReadOnlyList<MigrationOperation> operations)

@@ -53,6 +53,7 @@ public static class AppConstants
     public const int PendingClarificationTtlMinutes = 30;
     public const int MaxChatHistoryLength = 50_000;
     public const int MaxChatHistoryMessages = 40;
+    public const int MaxAiModelHistoryMessages = 20;
     public const int MaxChatHistoryMessageLength = 4000;
     public const int MaxPromptHabitEntries = 300;
     public const int MaxAiHistoryTranscriptCharacters = 24_000;

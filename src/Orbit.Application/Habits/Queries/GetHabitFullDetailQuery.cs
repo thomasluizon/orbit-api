@@ -81,7 +81,9 @@ public class GetHabitFullDetailQueryHandler(
             SlipAlertEnabled: habit.ParentHabitId.HasValue ? habit.SlipAlertEnabled : null,
             RelativeReminders: habit.RelativeReminders,
             Schedule: habit.Schedule,
-            StartDate: habit.StartDate);
+            StartDate: habit.StartDate,
+            ScheduledStartDate: habit.ScheduledStartDate,
+            OriginalDayOfMonth: habit.OriginalDayOfMonth);
 
         var metrics = HabitMetricsCalculator.Calculate(
             habit,

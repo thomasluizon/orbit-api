@@ -17,7 +17,7 @@ public class GoalReviewTool(
     IGoalProgressReadSyncer goalProgressReadSyncer) : IAiTool
 {
     public string Name => "review_goals";
-    public string Description => "Review all active goals with progress metrics, projections, and linked habit performance. Use when user asks about their goals progress.";
+    public string Description => "Review active goals: progress metrics, projections and linked habit performance.";
     public bool IsReadOnly => true;
 
     public object GetParameterSchema() => new { type = JsonSchemaTypes.Object, properties = new { } };

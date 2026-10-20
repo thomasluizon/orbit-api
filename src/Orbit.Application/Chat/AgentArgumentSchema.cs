@@ -36,14 +36,17 @@ public static class AgentArgumentSchema
     private static bool AcceptsValue(JsonElement schema, string field, JsonElement value)
     {
         if (value.ValueKind == JsonValueKind.Null)
-            return schema.TryGetProperty("nullable", out var nullable) && nullable.ValueKind == JsonValueKind.True;
+            return (schema.TryGetProperty("nullable", out var nullable) && nullable.ValueKind == JsonValueKind.True)
+                || (schema.TryGetProperty("type", out var types) && types.ValueKind == JsonValueKind.Array
+                    && types.EnumerateArray().Any(type => type.GetString() == "null"));
 
         if (schema.TryGetProperty("enum", out var options)
             && !options.EnumerateArray().Any(option => JsonElement.DeepEquals(option, value)))
             return false;
 
-        var type = schema.TryGetProperty("type", out var declared) && declared.ValueKind == JsonValueKind.String
-            ? declared.GetString()
+        var type = schema.TryGetProperty("type", out var declared)
+            ? declared.ValueKind == JsonValueKind.String ? declared.GetString()
+                : declared.EnumerateArray().Select(value => value.GetString()).FirstOrDefault(value => value != "null")
             : null;
         return type switch
         {
@@ -70,8 +73,7 @@ public static class AgentArgumentSchema
             return false;
 
         return value.EnumerateObject().All(property =>
-            TryGetField(schema, property.Name, out var declared)
-            && AcceptsValue(declared, property.Name, property.Value));
+            Accepts(schema, property.Name, property.Value));
     }
 
     private static bool HasFormat(string field, string value)

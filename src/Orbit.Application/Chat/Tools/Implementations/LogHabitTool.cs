@@ -18,7 +18,7 @@ public class LogHabitTool(
     public string Name => "log_habit";
 
     public string Description =>
-        "Log a habit as completed for a specific date (defaults to today). Already logged dates return a failure. Use unlog_habit to undo a completion. Use the date parameter to log overdue instances.";
+        "Log habit completion for a date, defaulting to today. Already logged dates fail; use unlog_habit to undo. Overdue dates work.";
 
     public object GetParameterSchema() => HabitToolHelpers.SingleHabitDateSchema(
         "ID of the habit to log",

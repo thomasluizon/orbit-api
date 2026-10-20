@@ -15,6 +15,86 @@ public class RollingMigrationGateTests
     private const string DeployedCommit = "7472203c7450bdd914c68282fefa905d9b432653";
 
     [Fact]
+    public void BaseDeploymentEvidence_OnlyCoversUnchangedMigrationSource()
+    {
+        var current = Barriers(HistoricalId);
+        current[HistoricalId] = CompleteBarrier() with { DeployedCommit = "unreleased" };
+        var baseline = Barriers(HistoricalId);
+        var migration = new DailyAiQuotaByLocalDate { ActiveProvider = "Npgsql.EntityFrameworkCore.PostgreSQL" };
+        var unchanged = RollingMigrationGate.BarriersForRelease(current, baseline, new HashSet<string>());
+        RollingMigrationGate.Check(HistoricalId, migration.UpOperations, unchanged, (_, _) => true).Should().BeEmpty();
+
+        var modified = RollingMigrationGate.BarriersForRelease(current, baseline,
+            new HashSet<string> { $"src/Orbit.Infrastructure/Migrations/{HistoricalId}.cs" });
+        RollingMigrationGate.Check(HistoricalId, migration.UpOperations, modified, (_, _) => true).Should()
+            .ContainSingle().Which.Should().Contain("deployedCommit");
+        RollingMigrationGate.Check(HistoricalId, migration.UpOperations,
+                RollingMigrationGate.BarriersForRelease(current, new Dictionary<string, DeploymentBarrier>(), new HashSet<string>()), (_, _) => true)
+            .Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public void RequiredBooleanRestore_WithNullWriterTriggerAndBackfill_IsAccepted()
+    {
+        var restore = ProactiveRestore();
+        RollingMigrationGate.CheckRelease([("restore", restore)]).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void SameReleaseBooleanRelaxationAndCompatibleRestore_AreAccepted()
+    {
+        var expand = new ReplaceProactiveCheckinsWithItems { ActiveProvider = "Npgsql.EntityFrameworkCore.PostgreSQL" };
+        RollingMigrationGate.CheckRelease([("expand", expand.UpOperations), ("restore", ProactiveRestore())])
+            .Should().BeEmpty();
+        RollingMigrationGate.CheckRelease([("expand", expand.UpOperations)]).Should().NotBeEmpty();
+    }
+
+    [Theory]
+    [InlineData("trigger")]
+    [InlineData("backfill")]
+    [InlineData("type")]
+    [InlineData("default")]
+    [InlineData("order")]
+    [InlineData("transaction")]
+    [InlineData("trigger-body")]
+    [InlineData("schema")]
+    [InlineData("column")]
+    [InlineData("default-mismatch")]
+    public void BooleanRestore_WithoutCompleteCompatibilityProof_IsRejected(string defect)
+    {
+        var operations = ProactiveRestore().ToList();
+        var column = operations.OfType<AlterColumnOperation>().Single();
+        var trigger = operations.OfType<SqlOperation>().Single(sql => sql.Sql.Contains("CREATE TRIGGER", StringComparison.Ordinal));
+        var backfill = operations.OfType<SqlOperation>().Single(sql => sql.Sql.StartsWith("UPDATE", StringComparison.Ordinal));
+        switch (defect)
+        {
+            case "trigger": operations.Remove(trigger); break;
+            case "backfill": operations.Remove(backfill); break;
+            case "type": column.ColumnType = "text"; break;
+            case "default": column.DefaultValue = null; break;
+            case "order": operations.Remove(trigger); operations.Add(trigger); break;
+            case "transaction": trigger.SuppressTransaction = true; break;
+            case "trigger-body": trigger.Sql = trigger.Sql.Replace("COALESCE", "NULLIF", StringComparison.Ordinal); break;
+            case "schema": column.Schema = "archive"; break;
+            case "column": column.Name = "OtherPreference"; break;
+            case "default-mismatch": column.DefaultValue = false; break;
+        }
+        RollingMigrationGate.CheckRelease([("restore", operations)]).Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public void CompatibleBooleanRestore_DoesNotAuthorizeOtherContractions()
+    {
+        var operations = ProactiveRestore().ToList();
+        operations.Add(new DropTableOperation { Name = "Users" });
+        RollingMigrationGate.CheckRelease([("restore", operations)]).Should()
+            .ContainSingle().Which.Should().Contain(nameof(DropTableOperation));
+    }
+
+    private static IReadOnlyList<MigrationOperation> ProactiveRestore() =>
+        new RestoreRequiredProactiveAstraPreference { ActiveProvider = "Npgsql.EntityFrameworkCore.PostgreSQL" }.UpOperations;
+
+    [Fact]
     public void HistoricalQuotaMigration_WithoutBarrier_IsRejected()
     {
         var historicalCopy = new DailyAiQuotaByLocalDate
@@ -238,26 +318,32 @@ public class RollingMigrationGateTests
             return;
 
         var root = RepositoryRoot();
-        var changed = Git(root, "diff", "--name-only", "--diff-filter=ACMR", "-z", $"{baseRef}...HEAD", "--",
+        var changed = Git(root, "diff", "--name-only", "--diff-filter=ACMR", "-z", baseRef, "HEAD", "--",
             "src/Orbit.Infrastructure/Migrations/*.cs");
         changed.ExitCode.Should().Be(0, changed.Error);
-        var barriers = ReadBarriers(root);
-        var ids = RollingMigrationGate.MigrationIds(changed.Output.Split('\0', StringSplitOptions.RemoveEmptyEntries))
-            .Union(barriers.Keys, StringComparer.Ordinal);
+        var changedPaths = changed.Output.Split('\0', StringSplitOptions.RemoveEmptyEntries).ToHashSet(StringComparer.Ordinal);
+        var baseContracts = Git(root, "show", $"{baseRef}:.github/migration-contracts.json");
+        baseContracts.ExitCode.Should().Be(0, baseContracts.Error);
+        var barriers = RollingMigrationGate.BarriersForRelease(ReadBarriers(root), ParseBarriers(baseContracts.Output), changedPaths);
+        var ids = RollingMigrationGate.MigrationIds(changedPaths)
+            .Where(id => changedPaths.Contains($"src/Orbit.Infrastructure/Migrations/{id}.cs"))
+            .Union(barriers.Keys, StringComparer.Ordinal).Order(StringComparer.Ordinal);
         var migrations = typeof(DailyAiQuotaByLocalDate).Assembly.GetTypes()
             .Where(type => typeof(Migration).IsAssignableFrom(type) && !type.IsAbstract)
             .ToDictionary(type => type.GetCustomAttribute<MigrationAttribute>()?.Id
                 ?? throw new InvalidOperationException($"Migration {type.Name} has no ID."));
-        var failures = new List<string>();
+        var release = new List<(string Id, IReadOnlyList<MigrationOperation> Operations)>();
         foreach (var id in ids)
         {
             migrations.Should().ContainKey(id, "every changed migration must be compiled and inspected");
             var migration = Activator.CreateInstance(migrations[id]) as Migration
                 ?? throw new InvalidOperationException($"Cannot construct migration {id}.");
             migration.ActiveProvider = "Npgsql.EntityFrameworkCore.PostgreSQL";
-            failures.AddRange(RollingMigrationGate.Check(id, migration.UpOperations, barriers,
-                (commit, descendant) => Git(root, "merge-base", "--is-ancestor", commit, descendant).ExitCode == 0, baseRef));
+            release.Add((id, migration.UpOperations));
         }
+
+        var failures = RollingMigrationGate.CheckRelease(release, barriers,
+            (commit, descendant) => Git(root, "merge-base", "--is-ancestor", commit, descendant).ExitCode == 0, baseRef);
 
         failures.Should().BeEmpty("rolling deployment contracts require reviewed evidence: {0}", string.Join(Environment.NewLine, failures));
     }
@@ -265,8 +351,11 @@ public class RollingMigrationGateTests
     private static Dictionary<string, DeploymentBarrier> Barriers(string id) => new() { [id] = CompleteBarrier() };
 
     private static Dictionary<string, DeploymentBarrier> ReadBarriers(string root) =>
+        ParseBarriers(File.ReadAllText(Path.Combine(root, ".github", "migration-contracts.json")));
+
+    private static Dictionary<string, DeploymentBarrier> ParseBarriers(string json) =>
         JsonSerializer.Deserialize<Dictionary<string, DeploymentBarrier>>(
-            File.ReadAllText(Path.Combine(root, ".github", "migration-contracts.json")),
+            json,
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
         ?? throw new InvalidOperationException("Migration contracts must be a JSON object.");
 

@@ -10,7 +10,7 @@ public class ReorderGoalsTool(
     public string Name => "reorder_goals";
 
     public string Description =>
-        "Set new display positions for goals. Pass each goal ID with its target zero-based position.";
+        "Reorder goals by ID and zero-based position.";
 
     public object GetParameterSchema() => new
     {
@@ -26,7 +26,7 @@ public class ReorderGoalsTool(
                     type = JsonSchemaTypes.Object,
                     properties = new
                     {
-                        goal_id = new { type = JsonSchemaTypes.String, description = "ID of the goal to position" },
+                        goal_id = new { type = JsonSchemaTypes.String },
                         position = new { type = JsonSchemaTypes.Integer, description = "Zero-based target position" }
                     },
                     required = new[] { "goal_id", "position" }

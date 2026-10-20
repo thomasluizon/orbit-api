@@ -49,6 +49,25 @@ public class BulkUpdateHabitEmojisToolTests
             NullLogger<BulkUpdateHabitEmojisTool>.Instance);
     }
 
+    [Theory]
+    [MemberData(nameof(OptionalParameterCases.Fields), typeof(BulkUpdateHabitEmojisTool), "", MemberType = typeof(OptionalParameterCases))]
+    public async Task OptionalNull_InfersSameIconsAsAbsent(string field)
+    {
+        var habit = CreateHabit("Read", "📝");
+        SetupHabits(habit);
+        var body = field == "habit_ids"
+            ? new Dictionary<string, object?> { ["filter"] = new { all = true } }
+            : new Dictionary<string, object?> { ["habit_ids"] = new[] { habit.Id } };
+        (await Execute(JsonSerializer.Serialize(body))).Success.Should().BeTrue();
+        var before = OptionalParameterCases.HabitState(habit);
+        body[field] = null;
+        (await Execute(JsonSerializer.Serialize(body))).Success.Should().BeTrue();
+        OptionalParameterCases.HabitState(habit).Should().Be(before);
+        await _inferenceService.Received(2).InferAsync(UserId,
+            Arg.Is<IReadOnlyList<HabitEmojiInferenceInput>>(inputs => inputs.Count == 1 && inputs[0].HabitId == habit.Id),
+            Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task CheckArgumentsAsync_InferFromTitle_AcceptsWithoutInferenceOrWrites()
     {
@@ -136,7 +155,7 @@ public class BulkUpdateHabitEmojisToolTests
         var gym = CreateHabit("Gym", emoji: "🏋️");
         SetupHabits(gym);
 
-        var result = await Execute($$$"""{"habit_ids": ["{{{gym.Id}}}"], "emoji": null, "infer_from_title": false}""");
+        var result = await Execute($$$"""{"habit_ids": ["{{{gym.Id}}}"], "emoji_mode": "clear", "infer_from_title": false}""");
 
         result.Success.Should().BeTrue();
         gym.Emoji.Should().BeNull();

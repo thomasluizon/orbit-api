@@ -5,6 +5,9 @@ namespace Orbit.Domain.Entities;
 
 public class PendingAgentOperationState : Entity
 {
+    public const int CurrentArgumentSchemaVersion = 1;
+
+    public int ArgumentSchemaVersion { get; private set; }
     public Guid UserId { get; private set; }
     public string CapabilityId { get; private set; } = null!;
     public string OperationId { get; private set; } = null!;
@@ -30,6 +33,7 @@ public class PendingAgentOperationState : Entity
     {
         return new PendingAgentOperationState
         {
+            ArgumentSchemaVersion = CurrentArgumentSchemaVersion,
             UserId = request.UserId,
             CapabilityId = request.Capability.Id,
             OperationId = request.OperationId,
@@ -49,7 +53,7 @@ public class PendingAgentOperationState : Entity
 
     public bool IsUsable(string capabilityId, string operationFingerprint, bool requireStepUp, DateTime utcNow)
     {
-        if (ConsumedAtUtc.HasValue || IsExpired(utcNow))
+        if (ArgumentSchemaVersion != CurrentArgumentSchemaVersion || ConsumedAtUtc.HasValue || IsExpired(utcNow))
             return false;
 
         if (!string.Equals(CapabilityId, capabilityId, StringComparison.Ordinal) ||

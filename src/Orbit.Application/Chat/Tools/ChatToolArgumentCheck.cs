@@ -8,7 +8,9 @@ internal static class ChatToolArgumentCheck
 {
     public static async Task<Result> CheckAsync(IAiTool tool, JsonElement args, Func<Task<ToolResult>> prepare)
     {
-        var schema = JsonSerializer.SerializeToElement(tool.GetParameterSchema());
+        var parameterSchema = tool.GetParameterSchema();
+        args = OptionalToolArguments.OmitOptionalNulls(args, parameterSchema);
+        var schema = JsonSerializer.SerializeToElement(parameterSchema);
         if (args.ValueKind != JsonValueKind.Object
             || args.EnumerateObject().Any(field => field.Name != "preview_item_id"
                 && (!AgentArgumentSchema.Accepts(schema, field.Name, field.Value)
@@ -28,7 +30,7 @@ internal static class ChatToolArgumentCheck
                 ? PreservesListEntries(field, item) : !string.IsNullOrWhiteSpace(item.GetString()));
         if (field is "text" or "title" or "unit" && value.ValueKind == JsonValueKind.String)
             return !string.IsNullOrWhiteSpace(value.GetString());
-        return field != "is_read_only" || value.ValueKind != JsonValueKind.Null;
+        return true;
     }
 
     public static async Task<ToolResult> CheckCommandAsync(IMediator mediator, object command, CancellationToken ct)

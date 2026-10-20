@@ -865,6 +865,9 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
 
     public void SetParentHabitId(Guid? parentHabitId)
     {
+        if (parentHabitId == Id || parentHabitId == Guid.Empty)
+            throw new ArgumentException("A parent must identify a different habit.", nameof(parentHabitId));
+
         ParentHabitId = parentHabitId;
         UpdatedAtUtc = DateTime.UtcNow;
     }

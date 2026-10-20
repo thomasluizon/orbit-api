@@ -13,6 +13,38 @@ namespace Orbit.Infrastructure.Tests.Services;
 
 public class AstraHabitQueryRegressionTests
 {
+    [Theory]
+    [InlineData(2)]
+    [InlineData(10)]
+    public async Task FilteredMetrics_ReadsRelatedRowsWithoutCartesianMultiplication(int relationCount)
+    {
+        var counter = new CountingDbCommandInterceptor();
+        using var factory = new SqliteOrbitDbContextFactory(counter);
+        var db = factory.Context;
+        var user = User.Create("Test", "relations@example.com").Value;
+        var today = new DateOnly(2026, 10, 19);
+        var habit = Habit.Create(new HabitCreateParams(user.Id, "Read", FrequencyUnit.Day, 1, today)).Value;
+        for (var i = 0; i < relationCount; i++)
+        {
+            habit.AddTag(Tag.Create(user.Id, $"Tag {i}", "#123456").Value);
+            habit.AddGoal(Goal.Create(user.Id, $"Goal {i}", 10m, "books").Value);
+        }
+        db.Users.Add(user);
+        db.Habits.Add(habit);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        counter.Reset();
+        var dates = Substitute.For<IUserDateService>();
+        dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(today);
+        var tool = new QueryHabitsTool(new GenericRepository<Habit>(db), new GenericRepository<User>(db), dates,
+            Substitute.For<IHabitScheduleLogReader>());
+        var result = await tool.ExecuteAsync(JsonDocument.Parse("""{"search":"Read","include_metrics":true}""").RootElement,
+            user.Id, default);
+        result.Success.Should().BeTrue();
+        result.EntityName.Should().Contain("Read").And.Contain($"Tag {relationCount - 1}");
+        counter.Commands.Sum(command => command.Rows).Should().BeLessThanOrEqualTo(4 * relationCount + 5);
+    }
+
     [Fact]
     public async Task RoundThree_FilteredMetrics_MaterializesOnlyMatchingHistory()
     {

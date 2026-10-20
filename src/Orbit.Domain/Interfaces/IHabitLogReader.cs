@@ -3,9 +3,8 @@ using Orbit.Domain.Entities;
 namespace Orbit.Domain.Interfaces;
 
 /// <summary>
-/// DB-side read for a habit's recent logs that bounds the result set server-side, so the handler never
-/// materializes a habit's full log history to order and cap it in memory. The lookback window, newest-first
-/// ordering, and row cap all run inside the query, backed by the (HabitId, Date) index.
+/// DB-side reads for habit logs. Date bounds and newest-first ordering run server-side,
+/// backed by the (HabitId, Date) index. Recent reads also apply a row cap.
 /// </summary>
 public interface IHabitLogReader
 {
@@ -21,5 +20,12 @@ public interface IHabitLogReader
         Guid habitId,
         DateOnly since,
         int limit,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Loads every log in the inclusive date range, ordered newest-first.</summary>
+    Task<IReadOnlyList<HabitLog>> ReadRangeLogsAsync(
+        Guid habitId,
+        DateOnly from,
+        DateOnly to,
         CancellationToken cancellationToken = default);
 }

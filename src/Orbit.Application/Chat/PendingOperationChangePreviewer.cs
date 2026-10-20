@@ -5,6 +5,7 @@ using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Habits.Commands;
 using Orbit.Application.Habits.Validators;
+using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -22,6 +23,17 @@ public sealed class PendingOperationChangePreviewer(
     IDestructiveOperationPreviewer? destructivePreviewer = null,
     IGenericRepository<ChecklistTemplate>? templateRepository = null) : IPendingOperationChangePreviewer
 {
+    private const string IsBadHabitField = "is_bad_habit";
+    private const string IsGeneralField = "is_general";
+    private const string IsFlexibleField = "is_flexible";
+    private const string ChecklistItemsField = "checklist_items";
+    private const string SlipAlertEnabledField = "slip_alert_enabled";
+    private const string DueEndTimeField = "due_end_time";
+    private const string ReminderEnabledField = "reminder_enabled";
+    private const string ReminderTimesField = "reminder_times";
+    private const string ScheduledRemindersField = "scheduled_reminders";
+    private const string RelativeRemindersField = "relative_reminders";
+    private const string TimeFormat = "HH:mm";
     private const int MaxDisplayedEntries = 3;
     private const int MaxEntryLength = 60;
     private const string DateFormat = "yyyy-MM-dd";
@@ -29,7 +41,9 @@ public sealed class PendingOperationChangePreviewer(
     {
         "title", "description", "emoji", "frequency_unit", "frequency_quantity",
         "interval_weeks", "days", "due_date", "end_date", "due_time",
-        "is_bad_habit", "is_general", "is_flexible", "checklist_items", "sub_habits"
+        IsBadHabitField, IsGeneralField, IsFlexibleField, ChecklistItemsField, "sub_habits",
+        DueEndTimeField, SlipAlertEnabledField, ReminderEnabledField, ReminderTimesField,
+        ScheduledRemindersField, RelativeRemindersField
     };
 
     public async Task<PendingOperationChangePreview?> PreviewAsync(
@@ -38,6 +52,8 @@ public sealed class PendingOperationChangePreviewer(
         JsonElement arguments,
         CancellationToken cancellationToken = default)
     {
+        if (!arguments.TryGetProperty("revised_items", out _) && toolRegistry.GetTool(operationId) is { } tool)
+            arguments = OptionalToolArguments.OmitOptionalNulls(arguments, tool.GetParameterSchema());
         arguments = await ResolveUnlogDateAsync(userId, operationId, arguments, cancellationToken);
         if (HasLogDates(operationId, arguments))
         {
@@ -91,7 +107,7 @@ public sealed class PendingOperationChangePreviewer(
             var itemChanges = isRevised ? revisedChanges.GetValueOrDefault(habit.Id) : changes;
             if (itemChanges is not null)
             {
-                var update = BulkUpdateHabitsCommandHandler.ResolveUpdate(habit, itemChanges, today);
+                var update = HabitUpdateValidation.ResolveUpdate(habit, itemChanges, today);
                 var preview = habit.PreviewUpdate(update);
                 if (preview.IsFailure)
                     return null;
@@ -132,8 +148,7 @@ public sealed class PendingOperationChangePreviewer(
 
     private static bool RequiresEmojiInference(string operationId, JsonElement arguments) =>
         operationId == "bulk_update_habit_emojis"
-        && (JsonArgumentParser.GetOptionalBool(arguments, "infer_from_title")
-            ?? !JsonArgumentParser.PropertyExists(arguments, "emoji"));
+        && BulkUpdateHabitEmojisTool.ResolveEmojiOperation(arguments).Infer;
 
     private async Task<PendingOperationChangePreview?> PreviewInferredEmojisAsync(
         Guid userId, JsonElement arguments, CancellationToken ct)
@@ -354,11 +369,16 @@ public sealed class PendingOperationChangePreviewer(
         ["due_date"] = AgentArgumentPreview.Format(habit.DueDate),
         ["end_date"] = AgentArgumentPreview.Format(habit.EndDate),
         ["due_time"] = AgentArgumentPreview.Format(habit.DueTime),
-        ["is_bad_habit"] = AgentArgumentPreview.Format(habit.IsBadHabit),
-        ["is_flexible"] = AgentArgumentPreview.Format(habit.IsFlexible),
-        ["reminder_enabled"] = AgentArgumentPreview.Format(habit.ReminderEnabled),
-        ["reminder_times"] = string.Join(", ", habit.ReminderTimes),
-        ["checklist_items"] = string.Join(", ", habit.ChecklistItems.Select(FormatChecklistItem))
+        [DueEndTimeField] = AgentArgumentPreview.Format(habit.DueEndTime),
+        [IsGeneralField] = AgentArgumentPreview.Format(habit.IsGeneral),
+        [SlipAlertEnabledField] = AgentArgumentPreview.Format(habit.SlipAlertEnabled),
+        [RelativeRemindersField] = string.Join(", ", habit.RelativeReminders.Select(HabitFieldSummary.FormatRelative)),
+        [ScheduledRemindersField] = string.Join(", ", habit.GetScheduledRemindersForLegacyClients().Select(FormatScheduledReminder)),
+        [IsBadHabitField] = AgentArgumentPreview.Format(habit.IsBadHabit),
+        [IsFlexibleField] = AgentArgumentPreview.Format(habit.IsFlexible),
+        [ReminderEnabledField] = AgentArgumentPreview.Format(habit.ReminderEnabled),
+        [ReminderTimesField] = string.Join(", ", habit.ReminderTimes),
+        [ChecklistItemsField] = string.Join(", ", habit.ChecklistItems.Select(FormatChecklistItem))
     };
 
     private static bool HasTagArguments(JsonElement arguments) =>
@@ -622,6 +642,9 @@ public sealed class PendingOperationChangePreviewer(
             habit.IsCompleted,
             habit.DueDate,
             habit.DueTime,
+            habit.DueEndTime,
+            habit.IsGeneral,
+            habit.SlipAlertEnabled,
             habit.EndDate,
             habit.FrequencyUnit,
             habit.FrequencyQuantity,
@@ -664,23 +687,29 @@ public sealed class PendingOperationChangePreviewer(
         Add("due_date", habit.DueDate, effective.DueDate, "date");
         Add("end_date", habit.EndDate, effective.EndDate, "date");
         Add("due_time", habit.DueTime, effective.DueTime, "time");
-        Add("is_bad_habit", habit.IsBadHabit, effective.IsBadHabit, "boolean");
-        Add("is_flexible", habit.IsFlexible, effective.IsFlexible, "boolean");
-        Add("is_completed", habit.IsCompleted, effective.IsCompleted, "boolean");
-        Add("reminder_enabled", habit.ReminderEnabled, effective.ReminderEnabled, "boolean");
-        AddList("reminder_times", habit.ReminderTimes, effective.ReminderTimes,
+        Add(DueEndTimeField, habit.DueEndTime, effective.DueEndTime, "time");
+        Add(IsGeneralField, habit.IsGeneral, effective.IsGeneral, JsonSchemaTypes.Boolean);
+        Add(SlipAlertEnabledField, habit.SlipAlertEnabled, effective.SlipAlertEnabled, JsonSchemaTypes.Boolean);
+        AddList(RelativeRemindersField, habit.RelativeReminders, effective.RelativeReminders,
+            HabitFieldSummary.FormatRelative,
+            JsonSerializer.SerializeToElement(effective.RelativeReminders.Select(RelativeReminderValue)));
+        Add(IsBadHabitField, habit.IsBadHabit, effective.IsBadHabit, JsonSchemaTypes.Boolean);
+        Add(IsFlexibleField, habit.IsFlexible, effective.IsFlexible, JsonSchemaTypes.Boolean);
+        Add("is_completed", habit.IsCompleted, effective.IsCompleted, JsonSchemaTypes.Boolean);
+        Add(ReminderEnabledField, habit.ReminderEnabled, effective.ReminderEnabled, JsonSchemaTypes.Boolean);
+        AddList(ReminderTimesField, habit.ReminderTimes, effective.ReminderTimes,
             FormatReminderTime, JsonSerializer.SerializeToElement(effective.ReminderTimes));
-        AddList("checklist_items", habit.ChecklistItems, effective.ChecklistItems,
+        AddList(ChecklistItemsField, habit.ChecklistItems, effective.ChecklistItems,
             FormatChecklistItem, JsonSerializer.SerializeToElement(effective.ChecklistItems.Select(item =>
                 new { text = item.Text, is_checked = item.IsChecked })));
         var oldScheduledReminders = habit.GetScheduledRemindersForLegacyClients();
         var newScheduledReminders = effective.GetScheduledRemindersForLegacyClients();
-        AddList("scheduled_reminders", oldScheduledReminders, newScheduledReminders,
+        AddList(ScheduledRemindersField, oldScheduledReminders, newScheduledReminders,
             FormatScheduledReminder, JsonSerializer.SerializeToElement(newScheduledReminders.Select(item =>
                 new
                 {
                     when = item.When == ScheduledReminderWhen.DayBefore ? "day_before" : "same_day",
-                    time = item.Time.ToString("HH:mm", CultureInfo.InvariantCulture)
+                    time = item.Time.ToString(TimeFormat, CultureInfo.InvariantCulture)
                 })));
 
         void AddList<T>(string field, IReadOnlyList<T> oldValues, IReadOnlyList<T> newValues,
@@ -694,17 +723,29 @@ public sealed class PendingOperationChangePreviewer(
         }
     }
 
+    private static object RelativeReminderValue(RelativeReminderTime item)
+    {
+        if (item.MinutesBefore is { } minutes)
+            return new { minutes_before = minutes };
+        return new
+        {
+            when = item.When == ScheduledReminderWhen.DayBefore ? "day_before" : "same_day",
+            time = item.Time?.ToString(TimeFormat, CultureInfo.InvariantCulture)
+        };
+    }
+
     private static bool IsEditableUpdateField(string field, Habit habit, Habit effective,
         BulkHabitChanges changes) => field switch
         {
             "title" or "description" or "emoji" or "frequency_unit" or "frequency_quantity"
-                or "interval_weeks" or "due_date" or "due_time" or "is_bad_habit"
-                or "is_flexible" or "reminder_enabled" or "checklist_items" => true,
+                or "interval_weeks" or "due_date" or "due_time" or IsBadHabitField
+                or IsFlexibleField or ReminderEnabledField or ChecklistItemsField
+                or DueEndTimeField or IsGeneralField or SlipAlertEnabledField or RelativeRemindersField => true,
             "days" => !effective.IsFlexible,
             "end_date" => !habit.IsGeneral,
-            "reminder_times" => effective.DueTime is null
+            ReminderTimesField => effective.DueTime is null
                 || !changes.HasScheduledReminders || changes.ScheduledReminders is not { Count: > 0 },
-            "scheduled_reminders" => effective.DueTime is null,
+            ScheduledRemindersField => effective.DueTime is null,
             _ => false
         };
 
@@ -754,7 +795,7 @@ public sealed class PendingOperationChangePreviewer(
     private static string FormatReminderTime(int offset) => $"{offset} min before due";
 
     private static string FormatScheduledReminder(ScheduledReminderTime reminder) =>
-        $"{(reminder.When == ScheduledReminderWhen.DayBefore ? "day_before" : "same_day")} {reminder.Time.ToString("HH:mm", CultureInfo.InvariantCulture)}";
+        $"{(reminder.When == ScheduledReminderWhen.DayBefore ? "day_before" : "same_day")} {reminder.Time.ToString(TimeFormat, CultureInfo.InvariantCulture)}";
 
     private static string FormatChecklistItem(ChecklistItem item) =>
         item.IsChecked ? $"{item.Text} (checked)" : item.Text;
@@ -763,7 +804,7 @@ public sealed class PendingOperationChangePreviewer(
     {
         null => null,
         DateOnly date => date.ToString(DateFormat, CultureInfo.InvariantCulture),
-        TimeOnly time => time.ToString("HH:mm", CultureInfo.InvariantCulture),
+        TimeOnly time => time.ToString(TimeFormat, CultureInfo.InvariantCulture),
         bool boolean => boolean ? "true" : "false",
         IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture),
         _ => value.ToString()

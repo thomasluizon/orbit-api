@@ -1934,6 +1934,9 @@ namespace Orbit.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int>("ArgumentSchemaVersion")
+                        .HasColumnType("integer");
+
                     b.Property<string>("ArgumentsJson")
                         .IsRequired()
                         .HasColumnType("jsonb");
@@ -2686,8 +2689,9 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<DateOnly?>("PreGapLastActiveDate")
                         .HasColumnType("date");
 
-                    b.Property<bool?>("ProactiveAstraEnabled")
-                        .HasColumnType("boolean");
+                    b.Property<bool>("ProactiveAstraEnabled")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<bool>("PublicProfileShowAchievements")
                         .HasColumnType("boolean");
