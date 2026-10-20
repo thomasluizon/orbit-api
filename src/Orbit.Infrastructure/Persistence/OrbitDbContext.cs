@@ -341,6 +341,8 @@ public class OrbitDbContext : DbContext
         {
             entity.HasIndex(r => r.ReferrerId);
             entity.HasIndex(r => r.ReferredUserId).IsUnique();
+            entity.Property(r => r.ReferrerReward).HasDefaultValue(ReferralRewardKind.None);
+            entity.Property(r => r.ReferredReward).HasDefaultValue(ReferralRewardKind.None);
         });
     }
 
@@ -740,6 +742,8 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(u => u.PlayPurchaseToken).IsUnique().HasFilter("\"PlayPurchaseToken\" IS NOT NULL");
             entity.HasIndex(u => u.PublicProfileSlug).IsUnique().HasFilter("\"PublicProfileSlug\" IS NOT NULL");
 
+            entity.Property(u => u.SubscriptionPlan).HasColumnName("Plan");
+            entity.Property(u => u.SubscriptionExpiresAtUtc).HasColumnName("PlanExpiresAt");
             entity.Property(u => u.StripeRenewalStoppedByDeletion).HasDefaultValue(false);
             entity.Property(u => u.PlayRenewalStoppedByDeletion).HasDefaultValue(false);
             entity.Property(u => u.Handle).HasMaxLength(DomainConstants.HandleMaxLength);

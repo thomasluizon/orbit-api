@@ -27,6 +27,8 @@ public static class AppConstants
     public const int MaxGoalDescriptionLength = 500;
     public const int MaxGoalProgressNoteLength = 500;
     public const int ReferralDiscountPercent = 10;
+    public const int ReferralBonusProDays = 7;
+    public const int ReferralRewardCap = 5;
     public const int DefaultMaxReferrals = 10;
     public const int ReferralCompletionThreshold = 3;
     public const int ReferralCompletionWindowDays = 7;

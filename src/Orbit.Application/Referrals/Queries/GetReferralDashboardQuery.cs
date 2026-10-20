@@ -52,8 +52,9 @@ public class GetReferralDashboardQueryHandler(
             successful,
             pending,
             maxReferrals,
-            "discount",
-            AppConstants.ReferralDiscountPercent);
+            user.HasActivePaidSubscription ? "discount" : "pro_days",
+            AppConstants.ReferralDiscountPercent,
+            AppConstants.ReferralBonusProDays);
 
         return Result.Success(new ReferralDashboardResponse(code, link, stats));
     }

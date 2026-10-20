@@ -26,7 +26,7 @@ public class FeatureFlagAccountsMigrationTests
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
 
-        differences.Should().HaveCount(13).And.OnlyContain(operation =>
+        differences.Should().HaveCount(18).And.OnlyContain(operation =>
             operation is DropForeignKeyOperation || operation is AddForeignKeyOperation
             || operation is AddColumnOperation || operation is AlterColumnOperation
             || operation is CreateTableOperation || operation is CreateIndexOperation
@@ -50,12 +50,18 @@ public class FeatureFlagAccountsMigrationTests
         differences.OfType<AlterColumnOperation>().Should().ContainSingle().Which
             .Should().Match<AlterColumnOperation>(column => column.Table == "HabitLogs"
                 && column.Name == "IsSlip" && !column.IsNullable && column.OldColumn.IsNullable);
-        var renewalColumns = differences.OfType<AddColumnOperation>().Where(column => column.Table == "Users").ToArray();
+        var renewalColumns = differences.OfType<AddColumnOperation>()
+            .Where(column => column.Table == "Users" && column.ClrType == typeof(bool)).ToArray();
         renewalColumns.Should().HaveCount(2).And.OnlyContain(column =>
             column.Table == "Users" && column.ClrType == typeof(bool) && !column.IsNullable
             && Equals(column.DefaultValue, false));
         renewalColumns.Select(column => column.Name).Should().BeEquivalentTo(
             "StripeRenewalStoppedByDeletion", "PlayRenewalStoppedByDeletion");
+        var referralColumns = differences.OfType<AddColumnOperation>()
+            .Where(column => column.Table == "Referrals" || column.Name == "BonusProExpiresAtUtc").ToArray();
+        referralColumns.Should().HaveCount(5).And.OnlyContain(column => column.IsNullable || Equals(column.DefaultValue, 0));
+        referralColumns.Select(column => column.Name).Should().BeEquivalentTo(
+            "BonusProExpiresAtUtc", "ReferrerReward", "ReferredReward", "ReferrerRewardDeliveredAtUtc", "ReferredRewardDeliveredAtUtc");
         AssertHabitExpandColumns(differences);
         differences.OfType<DropForeignKeyOperation>().Select(operation => operation.Name).Should().BeEquivalentTo(
             "FK_AccountabilityPairs_Users_AddresseeId", "FK_AccountabilityPairs_Users_RequesterId");
@@ -83,12 +89,13 @@ public class FeatureFlagAccountsMigrationTests
             "SignupLanguage", "SignupReferralCode", "SignupCompletedAtUtc",
             "SignupReferralCompletedAtUtc", "SignupAnalyticsCompletedAtUtc", "SignupWelcomeCompletedAtUtc");
         context.Database.HasPendingModelChanges().Should().BeFalse();
-        context.Database.GetMigrations().TakeLast(9).Should().Equal(
+        context.Database.GetMigrations().TakeLast(11).Should().Equal(
             "20261001074038_AddHabitSkipUndo", "20261017011939_AddFeatureFlagAccounts",
             "20261018093533_CascadeAccountabilityPairsOnUserDeletion", "20261018111350_AddDurableSignupWork",
             "20261018111711_RecordDeletionStoppedRenewals", "20261019011031_ContractHabitLogSlip",
             "20261019091925_AddOwedSubscriptionCancellations", "20261019165331_ExpandHabitScheduleAndStartDate",
-            "20261020030817_MakeSubHabitsFree");
+            "20261020023828_AddReferralProDayRewards", "20261020030817_MakeSubHabitsFree",
+            "20261020041243_SeparateBonusProEntitlement");
     }
 
     private static void AssertHabitExpandColumns(IReadOnlyList<MigrationOperation> differences)

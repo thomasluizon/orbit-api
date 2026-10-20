@@ -1,8 +1,8 @@
+using Hangfire;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
-using Orbit.Application.Notifications;
+using Orbit.Application.Referrals.Jobs;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -12,9 +12,7 @@ namespace Orbit.Application.Referrals.Commands;
 
 public record CheckReferralCompletionCommand(Guid UserId) : IRequest<Result>;
 
-/// <summary>
-/// Groups repository dependencies for referral handling to reduce constructor parameter count (S107).
-/// </summary>
+/// <summary>Repository dependencies shared by referral qualification and delivery.</summary>
 public record ReferralRepositories(
     IGenericRepository<User> UserRepository,
     IGenericRepository<Referral> ReferralRepository,
@@ -22,195 +20,133 @@ public record ReferralRepositories(
     IGenericRepository<HabitLog> HabitLogRepository,
     IGenericRepository<Notification> NotificationRepository);
 
-public partial class CheckReferralCompletionCommandHandler(
+public class CheckReferralCompletionCommandHandler(
     ReferralRepositories repos,
-    IPushNotificationService pushNotificationService,
-    IReferralRewardService referralRewardService,
+    IBackgroundJobClient jobs,
+    IUserDateService dates,
     IUnitOfWork unitOfWork,
-    ILogger<CheckReferralCompletionCommandHandler> logger) : IRequestHandler<CheckReferralCompletionCommand, Result>
+    TimeProvider timeProvider) : IRequestHandler<CheckReferralCompletionCommand, Result>
 {
     public async Task<Result> Handle(CheckReferralCompletionCommand request, CancellationToken cancellationToken)
     {
-        var pendingReferrals = await repos.ReferralRepository.FindAsync(
-            r => r.ReferredUserId == request.UserId && r.Status == ReferralStatus.Pending,
-            cancellationToken: cancellationToken);
-
-        var referral = pendingReferrals.Count > 0 ? pendingReferrals[0] : null;
+        var pending = await repos.ReferralRepository.FindAsync(
+            r => r.ReferredUserId == request.UserId && r.Status == ReferralStatus.Pending && r.RewardGrantedAtUtc == null,
+            cancellationToken);
+        var referral = pending.FirstOrDefault();
         if (referral is null)
             return Result.Success();
 
-        var trackedReferral = await repos.ReferralRepository.FindOneTrackedAsync(
-            r => r.Id == referral.Id,
-            cancellationToken: cancellationToken);
-
-        if (trackedReferral is null || trackedReferral.Status != ReferralStatus.Pending)
-            return Result.Success();
-
-        var referredUser = await repos.UserRepository.FindOneTrackedAsync(
-            u => u.Id == request.UserId,
-            cancellationToken: cancellationToken);
-
-        if (referredUser is null)
-            return Result.Success();
-
-        if (DateTime.UtcNow > referredUser.CreatedAtUtc.AddDays(AppConstants.ReferralCompletionWindowDays))
-            return Result.Success();
-
-        var userHabits = await repos.HabitRepository.FindAsync(
-            h => h.UserId == request.UserId,
-            cancellationToken: cancellationToken);
-
-        var habitIds = userHabits.Select(h => h.Id).ToHashSet();
-        if (habitIds.Count == 0)
-            return Result.Success();
-
-        var logCount = await repos.HabitLogRepository.CountAsync(
-            l => habitIds.Contains(l.HabitId),
-            cancellationToken);
-
-        if (logCount < AppConstants.ReferralCompletionThreshold)
-            return Result.Success();
-
-        var referrer = await repos.UserRepository.FindOneTrackedAsync(
-            u => u.Id == trackedReferral.ReferrerId,
-            cancellationToken: cancellationToken);
-
-        trackedReferral.MarkCompleted();
-        trackedReferral.MarkRewarded();
+        Referral? changedReferral = null;
+        var changedUsers = new List<User>();
         try
         {
-            await unitOfWork.SaveChangesAsync(cancellationToken);
+            await unitOfWork.ExecuteInTransactionAsync(async ct =>
+            {
+                foreach (var userId in new[] { referral.ReferrerId, referral.ReferredUserId }.Order())
+                    await unitOfWork.AcquireAdvisoryLockAsync($"referral-rewards:{userId}", ct);
+
+                var tracked = await repos.ReferralRepository.FindOneTrackedAsync(r => r.Id == referral.Id, cancellationToken: ct);
+                if (tracked is null)
+                    return;
+                await repos.ReferralRepository.ReloadAsync(tracked, ct);
+                if (tracked.Status != ReferralStatus.Pending || tracked.RewardGrantedAtUtc is not null)
+                    return;
+
+                var referred = await repos.UserRepository.FindOneTrackedAsync(u => u.Id == request.UserId, cancellationToken: ct);
+                if (referred is null)
+                    return;
+                await repos.UserRepository.ReloadAsync(referred, ct);
+                if (!await QualifiesAsync(tracked, referred, ct))
+                    return;
+
+                var referrer = await repos.UserRepository.FindOneTrackedAsync(u => u.Id == tracked.ReferrerId, cancellationToken: ct);
+                if (referrer is not null)
+                    await repos.UserRepository.ReloadAsync(referrer, ct);
+                var referrerReward = await GetRewardAsync(referrer, ct);
+                var referredReward = await GetRewardAsync(referred, ct);
+
+                if (referrerReward != ReferralRewardKind.None || referredReward != ReferralRewardKind.None)
+                {
+                    // Enqueue before commit so queue failure rolls back the grant: https://docs.hangfire.io/en/latest/background-methods/calling-methods-in-background.html
+                    if (referrerReward != ReferralRewardKind.None)
+                        jobs.Enqueue<DeliverReferralRewardJob>(job => job.ExecuteAsync(tracked.Id, tracked.ReferrerId, CancellationToken.None));
+                    if (referredReward != ReferralRewardKind.None)
+                        jobs.Enqueue<DeliverReferralRewardJob>(job => job.ExecuteAsync(tracked.Id, tracked.ReferredUserId, CancellationToken.None));
+
+                    changedReferral = tracked;
+                    if (referrer is not null && referrerReward == ReferralRewardKind.ProDays)
+                    {
+                        changedUsers.Add(referrer);
+                        referrer.GrantBonusProDays(AppConstants.ReferralBonusProDays);
+                    }
+                    if (referredReward == ReferralRewardKind.ProDays)
+                    {
+                        changedUsers.Add(referred);
+                        referred.GrantBonusProDays(AppConstants.ReferralBonusProDays);
+                    }
+                    tracked.MarkRewarded(referrerReward, referredReward);
+                }
+                else
+                {
+                    changedReferral = tracked;
+                    tracked.MarkCompleted();
+                }
+                await unitOfWork.SaveChangesAsync(ct);
+            }, cancellationToken);
         }
         catch (DbUpdateConcurrencyException)
         {
-            return Result.Success();
+            await ReloadRewardStateAsync(changedReferral, changedUsers, cancellationToken);
         }
-
-        var pointerAssignments = new List<(User User, string CouponId)>();
-        if (referrer is not null)
-            await GrantCoupon(referrer, pointerAssignments, cancellationToken);
-
-        await GrantCoupon(referredUser, pointerAssignments, cancellationToken);
-
-        if (referrer is not null)
-            await SendNotification(referrer, isReferrer: true, cancellationToken);
-
-        await SendNotification(referredUser, isReferrer: false, cancellationToken);
-
-        await PersistCouponPointersWithRetryAsync(pointerAssignments, cancellationToken);
+        catch
+        {
+            await ReloadRewardStateAsync(changedReferral, changedUsers, cancellationToken);
+            throw;
+        }
         return Result.Success();
     }
 
-    private async Task PersistCouponPointersWithRetryAsync(
-        IReadOnlyList<(User User, string CouponId)> pointerAssignments, CancellationToken cancellationToken)
+    private async Task ReloadRewardStateAsync(Referral? referral, List<User> users, CancellationToken ct)
     {
-        var attempt = 1;
-        while (true)
-        {
-            try
-            {
-                await unitOfWork.SaveChangesAsync(cancellationToken);
-                return;
-            }
-            catch (DbUpdateConcurrencyException) when (attempt < MaxReferralAttempts)
-            {
-                foreach (var (user, couponId) in pointerAssignments)
-                {
-                    await repos.UserRepository.ReloadAsync(user, cancellationToken);
-                    user.SetReferralCoupon(couponId);
-                }
-            }
-
-            attempt++;
-        }
+        if (referral is not null)
+            await repos.ReferralRepository.ReloadAsync(referral, ct);
+        foreach (var user in users)
+            await repos.UserRepository.ReloadAsync(user, ct);
     }
 
-    private const int MaxReferralAttempts = 3;
-
-    /// <summary>
-    /// If user is Pro with active subscription, apply coupon to next invoice directly.
-    /// Otherwise, store coupon ID for checkout. A stored pointer is recorded in
-    /// <paramref name="pointerAssignments"/> so it can be re-applied if the persisting save
-    /// loses a concurrent update on the user's row.
-    /// </summary>
-    private async Task GrantCoupon(User user, List<(User User, string CouponId)> pointerAssignments, CancellationToken cancellationToken)
+    private async Task<bool> QualifiesAsync(Referral referral, User referred, CancellationToken ct)
     {
-        string couponId;
-        try
-        {
-            couponId = await referralRewardService.CreateReferralCouponAsync(
-                user.Id, cancellationToken: cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            LogCreateReferralCouponFailed(logger, ex, user.Id);
-            return;
-        }
+        var nowAtUtc = timeProvider.GetUtcNow().UtcDateTime;
+        var windowEndsAtUtc = referred.CreatedAtUtc.AddDays(AppConstants.ReferralCompletionWindowDays);
+        if (nowAtUtc > windowEndsAtUtc || nowAtUtc < referral.CreatedAtUtc)
+            return false;
 
-        if (user.IsPro && !string.IsNullOrEmpty(user.StripeSubscriptionId))
-        {
-            try
-            {
-                await referralRewardService.ApplyCouponToSubscriptionAsync(
-                    user.StripeSubscriptionId, couponId, cancellationToken);
-                return;
-            }
-            catch (Exception ex)
-            {
-                LogApplyReferralCouponFailed(logger, ex, couponId, user.StripeSubscriptionId, user.Id);
-            }
-        }
+        var timeZone = await dates.GetUserTimeZoneAsync(referred.Id, ct);
+        var firstDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(referral.CreatedAtUtc, timeZone));
+        var today = await dates.GetUserTodayAsync(referred.Id, ct);
+        var habits = await repos.HabitRepository.FindAsync(h => h.UserId == referred.Id, ct);
+        var habitIds = habits.Select(h => h.Id).ToArray();
+        if (habitIds.Length == 0)
+            return false;
 
-        user.SetReferralCoupon(couponId);
-        pointerAssignments.Add((user, couponId));
+        var logDates = await repos.HabitLogRepository.ProjectAsync(
+            l => habitIds.Contains(l.HabitId) && !l.IsDeleted && !l.IsSlip && l.Value > 0
+                && l.Date >= firstDate && l.Date <= today
+                && l.CreatedAtUtc >= referral.CreatedAtUtc && l.CreatedAtUtc <= nowAtUtc && l.CreatedAtUtc <= windowEndsAtUtc,
+            q => q.Select(l => l.Date).Distinct().Take(AppConstants.ReferralCompletionThreshold), ct);
+        return logDates.Count >= AppConstants.ReferralCompletionThreshold;
     }
 
-    private async Task SendNotification(User user, bool isReferrer, CancellationToken cancellationToken)
+    private async Task<ReferralRewardKind> GetRewardAsync(User? user, CancellationToken ct)
     {
-        var isPt = LocaleHelper.IsPortuguese(user.Language);
-
-        var (title, body) = GetNotificationContent(isReferrer, isPt, user.IsPro);
-
-        await repos.NotificationRepository.AddAsync(
-            Notification.Create(user.Id, title, body, NotificationUrls.Profile), cancellationToken);
-
-        _ = Task.Run(async () =>
-        {
-            try { await pushNotificationService.SendToUserAsync(user.Id, title, body, NotificationUrls.Profile, CancellationToken.None); }
-            catch (Exception ex) { LogReferralPushNotificationFailed(logger, ex, user.Id); }
-        }, CancellationToken.None);
+        if (user is null)
+            return ReferralRewardKind.None;
+        var earned = await repos.ReferralRepository.CountAsync(
+            r => r.RewardGrantedAtUtc != null
+                && (r.ReferrerId == user.Id && (r.ReferrerReward != ReferralRewardKind.None || r.ReferredReward == ReferralRewardKind.None)
+                    || r.ReferredUserId == user.Id && (r.ReferredReward != ReferralRewardKind.None || r.ReferrerReward == ReferralRewardKind.None)), ct);
+        if (earned >= AppConstants.ReferralRewardCap)
+            return ReferralRewardKind.None;
+        return user.HasActivePaidSubscription ? ReferralRewardKind.Coupon : ReferralRewardKind.ProDays;
     }
-
-    private static (string Title, string Body) GetNotificationContent(bool isReferrer, bool isPt, bool isPro)
-    {
-        if (isReferrer)
-        {
-            var title = isPt ? "Indica\u00e7\u00e3o conclu\u00edda" : "Referral completed";
-            var body = (isPt, isPro) switch
-            {
-                (true, true) => "Seu amigo come\u00e7ou a usar o Orbit. Sua pr\u00f3xima fatura ter\u00e1 10% de desconto.",
-                (true, false) => "Seu amigo come\u00e7ou a usar o Orbit e voc\u00ea ganhou um cupom de 10% de desconto no Pro.",
-                (false, true) => "Your friend joined Orbit. Your next invoice gets 10% off.",
-                (false, false) => "Your friend joined Orbit and you earned a 10% discount coupon for Pro."
-            };
-            return (title, body);
-        }
-        else
-        {
-            var title = isPt ? "Voc\u00ea ganhou um cupom" : "You earned a coupon";
-            var body = isPt
-                ? "Boas-vindas ao Orbit. Voc\u00ea ganhou um cupom de 10% de desconto no Pro."
-                : "Welcome to Orbit. You earned a 10% discount coupon for Pro.";
-            return (title, body);
-        }
-    }
-
-    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Failed to create referral coupon for user {UserId}")]
-    private static partial void LogCreateReferralCouponFailed(ILogger logger, Exception ex, Guid userId);
-
-    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Failed to apply referral coupon {CouponId} to subscription {SubscriptionId} for user {UserId}")]
-    private static partial void LogApplyReferralCouponFailed(ILogger logger, Exception ex, string couponId, string? subscriptionId, Guid userId);
-
-    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Failed to send referral push notification for user {UserId}")]
-    private static partial void LogReferralPushNotificationFailed(ILogger logger, Exception ex, Guid userId);
 }

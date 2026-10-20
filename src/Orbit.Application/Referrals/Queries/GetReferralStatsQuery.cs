@@ -15,7 +15,8 @@ public record ReferralStatsResponse(
     int PendingReferrals,
     int MaxReferrals,
     string RewardType,
-    int DiscountPercent);
+    int DiscountPercent,
+    int ProDaysPerReferral = 0);
 
 public record GetReferralStatsQuery(Guid UserId) : IRequest<Result<ReferralStatsResponse>>;
 
@@ -51,7 +52,8 @@ public class GetReferralStatsQueryHandler(
             successful,
             pending,
             maxReferrals,
-            "discount",
-            AppConstants.ReferralDiscountPercent));
+            user.HasActivePaidSubscription ? "discount" : "pro_days",
+            AppConstants.ReferralDiscountPercent,
+            AppConstants.ReferralBonusProDays));
     }
 }

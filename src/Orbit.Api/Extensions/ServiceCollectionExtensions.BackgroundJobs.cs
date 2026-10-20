@@ -2,6 +2,7 @@ using Hangfire;
 using Hangfire.PostgreSql;
 using Orbit.Application.Auth.Jobs;
 using Orbit.Application.Marketing.Jobs;
+using Orbit.Application.Referrals.Jobs;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Configuration;
@@ -85,6 +86,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<CancelSubscriptionOnDeletionJob>();
         builder.Services.AddScoped<OwedSubscriptionCancellationJob>();
         builder.Services.AddScoped<SendMarketingEmailJob>();
+        builder.Services.AddScoped<DeliverReferralRewardJob>();
     }
 
     internal static void AddDurableRecurringJobs(WebApplicationBuilder builder)

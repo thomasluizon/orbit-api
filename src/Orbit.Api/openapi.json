@@ -11034,7 +11034,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralStatsResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralStatsResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralStatsResponse"
+                }
+              }
+            }
           },
           "400": {
             "description": "Bad Request",
@@ -11095,7 +11112,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralDashboardResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralDashboardResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralDashboardResponse"
+                }
+              }
+            }
           },
           "400": {
             "description": "Bad Request",
@@ -18017,6 +18051,95 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "ReferralDashboardResponse": {
+        "required": [
+          "code",
+          "link",
+          "stats"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "link": {
+            "type": "string"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/ReferralStatsResponse"
+          }
+        }
+      },
+      "ReferralStatsResponse": {
+        "required": [
+          "referralCode",
+          "referralLink",
+          "successfulReferrals",
+          "pendingReferrals",
+          "maxReferrals",
+          "rewardType",
+          "discountPercent"
+        ],
+        "type": "object",
+        "properties": {
+          "referralCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "referralLink": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "successfulReferrals": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "pendingReferrals": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "maxReferrals": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "rewardType": {
+            "type": "string"
+          },
+          "discountPercent": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "proDaysPerReferral": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32",
+            "default": 0
           }
         }
       },
