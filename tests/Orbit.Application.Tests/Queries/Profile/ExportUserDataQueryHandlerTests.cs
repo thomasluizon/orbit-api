@@ -173,7 +173,8 @@ public class ExportUserDataQueryHandlerTests
         result.Value.Account.Email.Should().Be("test@example.com");
         result.Value.Account.Plan.Should().Be("free");
         result.Value.Settings.ProactiveAstraEnabled.Should().Be(user.EffectiveProactivePushEnabled);
-        result.Value.Settings.StoredProactiveAstraEnabled.Should().Be(user.ProactiveAstraEnabled);
+        result.Value.Settings.StoredProactiveAstraEnabled.Should().BeTrue();
+        result.Value.Settings.ProactiveAstraEnabled.Should().BeFalse();
         result.Value.Settings.Uses24HourClock.Should().BeNull();
         result.Value.Habits.Should().BeEmpty();
         result.Value.Goals.Should().BeEmpty();

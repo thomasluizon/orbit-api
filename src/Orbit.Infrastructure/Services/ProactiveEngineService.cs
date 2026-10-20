@@ -128,7 +128,7 @@ public sealed partial class ProactiveEngineService(
             using var aiUser = Orbit.Infrastructure.AI.AiCallContext.Begin(user.Id);
             var message = await messages.GenerateAsync(fact, user.Language ?? "en", ct);
             var shouldPush = !pushedToday && ProactiveRules.MayPush(fact.Trigger)
-                && (user.ProactiveAstraEnabled ?? true) && !ProactiveRules.IsQuiet(localHour);
+                && user.ProactiveAstraEnabled && !ProactiveRules.IsQuiet(localHour);
             var item = NewItem(user, today, nowUtc, fact, message);
             if (shouldPush) item.Push(nowUtc);
             var notification = shouldPush ? Notification.Create(user.Id, "Astra", item.Text, NotificationUrls.Chat) : null;
