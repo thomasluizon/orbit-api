@@ -1,6 +1,7 @@
 using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Chat.Commands;
+using Orbit.Application.Chat;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Models;
@@ -61,15 +62,26 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.AiMessage.Should().Be("reply");
     }
 
-    [Fact]
-    public async Task Handle_CrisisMessage_EmitsOneMessageEventWithZeroModelCalls()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_CrisisMessage_EmitsOneMessageEventWithZeroModelCalls(bool recordingEnabled)
     {
         SetupUserAndPayGate();
+        if (recordingEnabled)
+            EnableRecording();
 
-        await CreateHandler().Handle(new ProcessUserChatCommand(UserId, "I want to kill myself"), CancellationToken.None);
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(UserId, "I want to kill myself"), CancellationToken.None);
 
+        result.IsSuccess.Should().BeTrue();
         _productAnalytics.Received(1).CaptureUserEvent(UserId, "astra_message_sent", null,
             Arg.Is<IReadOnlyDictionary<string, object>>(properties => (int)properties["round_count"] == 0
                 && (int)properties["tool_call_count"] == 0));
+        if (recordingEnabled)
+            _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn => turn.UserId == UserId
+                && turn.UserContent == "I want to kill myself" && turn.AssistantContent == result.Value.AiMessage
+                && !turn.UsedModel && turn.ToolCallsJson == "[]"));
+        else
+            _conversationRecorder.DidNotReceiveWithAnyArgs().TryRecord(default!);
     }
 }

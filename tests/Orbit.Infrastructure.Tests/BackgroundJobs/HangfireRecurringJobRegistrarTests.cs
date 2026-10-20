@@ -25,6 +25,12 @@ public class HangfireRecurringJobRegistrarTests
             .GetMethod("AddBackgroundServices", BindingFlags.NonPublic | BindingFlags.Static)!
             .Invoke(null, [builder]);
 
+        using var provider = builder.Services.BuildServiceProvider();
+        var firstJob = builder.Services.First(descriptor => descriptor.ServiceType == typeof(IScheduledJob))
+            .ImplementationFactory!(provider);
+        firstJob.Should().BeOfType<Orbit.Infrastructure.Services.ConversationRetentionJob>()
+            .Which.Name.Should().Be("conversation-retention");
+        builder.Services.Should().ContainSingle(descriptor => descriptor.ServiceType == typeof(ScheduledJobRunner));
         builder.Services.Should().ContainSingle(descriptor => descriptor.ServiceType == typeof(IHostedService)
             && descriptor.ImplementationType == typeof(HangfireRecurringJobRegistrar));
     }
