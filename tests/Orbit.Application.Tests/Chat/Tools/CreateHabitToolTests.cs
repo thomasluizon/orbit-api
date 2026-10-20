@@ -31,7 +31,7 @@ public class CreateHabitToolTests
         _tool = new CreateHabitTool(_habitRepo, _tagRepo, _goalRepo, _userDateService, _payGate, _unitOfWork);
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
         _payGate.CanCreateHabits(UserId, Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
-        _payGate.CanCreateSubHabits(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _payGate.CanUseSlipAlerts(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
         _unitOfWork.ExecuteInTransactionAsync(
                 Arg.Any<Func<CancellationToken, Task<ToolResult>>>(),
                 Arg.Any<CancellationToken>())
@@ -625,24 +625,6 @@ public class CreateHabitToolTests
         await _habitRepo.Received(1).AddAsync(
             Arg.Is<Habit>(habit => habit.Title == "Push-ups" && habit.Emoji == "💪"),
             Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task SubHabitPayGateFails_ReturnsError()
-    {
-        _payGate.CanCreateSubHabits(UserId, Arg.Any<CancellationToken>())
-            .Returns(Domain.Common.Result.Failure("Sub-habit limit reached."));
-
-        var result = await Execute("""
-        {
-            "title": "Parent",
-            "frequency_unit": "Day",
-            "sub_habits": [{"title": "Child"}]
-        }
-        """);
-
-        result.Success.Should().BeFalse();
-        result.Error.Should().Contain("Sub-habit limit reached");
     }
 
     [Fact]

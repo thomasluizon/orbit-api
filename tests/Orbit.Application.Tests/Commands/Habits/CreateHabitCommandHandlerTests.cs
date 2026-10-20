@@ -39,8 +39,6 @@ public class CreateHabitCommandHandlerTests
 
         _payGate.CanCreateHabits(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
-        _payGate.CanCreateSubHabits(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
         _payGate.CanUseSlipAlerts(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
@@ -179,7 +177,6 @@ public class CreateHabitCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         await _habitRepo.Received(3).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
-        await _payGate.Received(1).CanCreateSubHabits(UserId, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -245,22 +242,6 @@ public class CreateHabitCommandHandlerTests
         result.ErrorCode.Should().Be("HABIT_LIMIT_REACHED");
         result.Error.Should().Be("You've reached the 1000 habit limit.");
         await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Handle_SubHabitsPayGated_ReturnsPayGateFailure()
-    {
-        _payGate.CanCreateSubHabits(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Result.PayGateFailure("Sub-habits are a Pro feature"));
-
-        var command = new CreateHabitCommand(
-            UserId, "Morning Routine", null, FrequencyUnit.Day, 1,
-            SubHabits: new List<string> { "Brush teeth" });
-
-        var result = await _handler.Handle(command, CancellationToken.None);
-
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be("PAY_GATE");
     }
 
     [Fact]

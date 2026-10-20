@@ -2,6 +2,7 @@ using System.Text.Json;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Common;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -205,6 +206,10 @@ public class CreateHabitTool(
 
         var habit = habitResult.Value;
 
+        var featureGate = await HabitCreationGates.CheckAsync(habit, payGate, ct);
+        if (featureGate.IsFailure)
+            return ToolResult.FromFailure(featureGate);
+
         var subError = await CreateInlineSubHabitsAsync(args, habit, userId, today, ct);
         if (subError is not null)
             return subError;
@@ -252,10 +257,6 @@ public class CreateHabitTool(
     {
         if (!args.TryGetProperty("sub_habits", out var subEl) || subEl.ValueKind != JsonValueKind.Array)
             return null;
-
-        var subGate = await payGate.CanCreateSubHabits(userId, ct);
-        if (subGate.IsFailure)
-            return ToolResult.FromFailure(subGate);
 
         var children = BuildChildHabits(args, subEl.EnumerateArray().ToList(), userId, parent, parentDueDate);
         if (children.IsFailure)

@@ -92,14 +92,6 @@ public partial class BulkCreateHabitsCommandHandler(
         if (habitGate.IsFailure)
             return habitGate.PropagateError<BulkCreateResult>();
 
-        var hasSubHabits = request.Habits.Any(h => h.SubHabits is { Count: > 0 });
-        if (hasSubHabits)
-        {
-            var subGate = await payGate.CanCreateSubHabits(request.UserId, cancellationToken);
-            if (subGate.IsFailure)
-                return subGate.PropagateError<BulkCreateResult>();
-        }
-
         var results = new List<BulkCreateItemResult>();
 
         var existingRoots = await repos.Habits.FindAsync(
