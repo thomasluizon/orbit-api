@@ -28,7 +28,7 @@ locals {
 
   production_api_values = {
     AI__BaseUrl                         = "https://api.openai.com/v1"
-    AI__Model                           = "gpt-6.1-sol"
+    AI__Model                           = "gpt-6-luna"
     AI__SubTaskModel                    = "gpt-6-luna"
     ASPNETCORE_ENVIRONMENT              = "Production"
     Cors__AllowedOrigins__0             = "https://app.useorbit.org"

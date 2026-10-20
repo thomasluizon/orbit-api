@@ -1,18 +1,25 @@
 using System.Globalization;
-using System.Text.Json;
+using System.Linq.Expressions;
 using System.Security.Claims;
+using System.Text.Json;
 using FluentAssertions;
 using MediatR;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Orbit.Api.Mcp;
 using Orbit.Api.Mcp.Tools;
+using Orbit.Application.Chat.Tools;
+using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Common;
+using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
+using Orbit.Domain.ValueObjects;
+using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Mcp;
 
@@ -248,6 +255,58 @@ public class HabitToolsTests
         var result = await _tools.UpdateHabit(_user, Guid.NewGuid().ToString(), "Title");
 
         result.Should().StartWith("Error: ");
+    }
+
+    [Fact]
+    public async Task UpdateHabit_TitleOnly_PreservesDeadlineThroughExecutorAndTool()
+    {
+        var userId = Guid.Parse(_user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var today = new DateOnly(2026, 4, 3);
+        var scheduledReminders = new List<ScheduledReminderTime>
+        {
+            new(ScheduledReminderWhen.SameDay, new TimeOnly(14, 0))
+        };
+        var habit = Habit.Create(new HabitCreateParams(
+            userId, "Read", null, null, today, DueEndTime: new TimeOnly(15, 0),
+            ReminderEnabled: true, SlipAlertEnabled: true, ScheduledReminders: scheduledReminders)).Value;
+        var repository = Substitute.For<IGenericRepository<Habit>>();
+        repository.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>()).Returns(habit);
+        _userDateService.GetUserTodayAsync(userId, Arg.Any<CancellationToken>()).Returns(today);
+        var unitOfWork = Substitute.For<IUnitOfWork>();
+        unitOfWork.ExecuteInTransactionAsync(
+                Arg.Any<Func<CancellationToken, Task<Result<ToolResult>>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<Result<ToolResult>>>>(0)(
+                call.ArgAt<CancellationToken>(1)));
+        var tool = new UpdateHabitTool(repository, _userDateService, unitOfWork, Substitute.For<IPayGateService>());
+        var catalog = new AgentCatalogService([tool]);
+        var policy = Substitute.For<IAgentPolicyEvaluator>();
+        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>()).Returns(new AgentPolicyDecision(
+            AgentPolicyDecisionStatus.Allowed, catalog.GetCapabilityByChatTool(tool.Name)!));
+        var ownership = Substitute.For<IAgentTargetOwnershipService>();
+        ownership.GetDenialReasonAsync(
+            Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+        var stepUp = Substitute.For<IAgentStepUpAuthorizationBridge>();
+        stepUp.GetRequiredConfirmationAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns((AgentConfirmationRequirement?)null);
+        var executor = new AgentOperationExecutor(
+            catalog, policy, Substitute.For<IAgentAuditService>(), ownership, stepUp,
+            new AiToolRegistry([tool]), Substitute.For<IPendingOperationChangePreviewer>(),
+            Substitute.For<IPendingAgentOperationStore>(), unitOfWork, NullLogger<AgentOperationExecutor>.Instance);
+        var tools = new HabitTools(_mediator, _userDateService, new McpExecutorBridge(executor));
+
+        var result = await tools.UpdateHabit(_user, habit.Id.ToString(), "Read daily");
+
+        result.Should().Be($"Updated habit {habit.Id}");
+        habit.Title.Should().Be("Read daily");
+        habit.DueEndTime.Should().Be(new TimeOnly(15, 0));
+        habit.SlipAlertEnabled.Should().BeTrue();
+        habit.ScheduledReminders.Should().Equal(scheduledReminders);
+        await unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
