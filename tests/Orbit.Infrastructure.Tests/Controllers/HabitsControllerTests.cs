@@ -332,6 +332,21 @@ public class HabitsControllerTests
     }
 
     [Fact]
+    public async Task GetLogs_Range_ForwardsUserHabitAndDates()
+    {
+        var habitId = Guid.NewGuid();
+        var from = new DateOnly(2025, 1, 1);
+        var to = new DateOnly(2025, 1, 31);
+        _mediator.Send(Arg.Any<GetHabitLogsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success<IReadOnlyList<HabitLogResponse>>([]));
+
+        var result = await _controller.GetLogs(habitId, CancellationToken.None, from, to);
+
+        result.Should().BeOfType<OkObjectResult>();
+        await _mediator.Received(1).Send(new GetHabitLogsQuery(UserId, habitId, from, to), CancellationToken.None);
+    }
+
+    [Fact]
     public async Task GetMetrics_Success_ReturnsOk()
     {
         _mediator.Send(Arg.Any<GetHabitMetricsQuery>(), Arg.Any<CancellationToken>())
