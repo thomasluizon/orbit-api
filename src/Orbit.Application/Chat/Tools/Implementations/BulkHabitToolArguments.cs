@@ -118,6 +118,11 @@ internal static class BulkHabitToolArguments
         if (!args.TryGetProperty("updates", out var updates) || updates.ValueKind != JsonValueKind.Object)
             return (null, "updates is required and must be an object.");
 
+        return ParseUpdateFields(updates);
+    }
+
+    public static (BulkHabitChanges? Changes, string? Error) ParseUpdateFields(JsonElement updates, bool allowHabitId = false)
+    {
         var allowed = new HashSet<string>(StringComparer.Ordinal)
         {
             "title", "description", "emoji", "frequency_unit", "frequency_quantity", "interval_weeks",
@@ -125,6 +130,7 @@ internal static class BulkHabitToolArguments
             IsGeneralField, SlipAlertEnabledField, RelativeRemindersField,
             "reminder_enabled", "reminder_times", "checklist_items", "scheduled_reminders"
         };
+        if (allowHabitId) allowed.Add("habit_id");
         if (updates.EnumerateObject().Any(property => !allowed.Contains(property.Name)))
             return (null, "updates contains an unsupported field.");
         var fieldError = CheckHabitFields(updates);

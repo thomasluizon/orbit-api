@@ -18,7 +18,7 @@ public sealed class HeldWriteRevisionTests
     public static TheoryData<string, string, string, string, string> EditableTools => new()
     {
         { "create_habit", """{"title":"Read"}""", "title", "\"Write\"", "Title" },
-        { "update_habit", """{"habit_id":"$habit","title":"Read"}""", "title", "\"Write\"", "Title" },
+        { "update_habit", """{"habit_id":"$habit","title":"Read"}""", "title", "\"Write\"", "Changes.Title" },
         { "assign_tags", """{"habit_id":"$habit","tag_names":["Study"]}""", "tag_names", """["Work"]""", "Tags.0.Name" },
         { "bulk_create_habits", """{"habits":[{"title":"Read"}]}""", "title", "\"Write\"", "Habits.0.Title" },
         { "bulk_update_habits", """{"filter":{"all":true},"updates":{"title":"Read"}}""", "title", "\"Write\"", "Changes.Title" },
@@ -83,6 +83,13 @@ public sealed class HeldWriteRevisionTests
             "suggest_breakdown" => execution,
             _ => context.Commands.Single()
         };
+        if (name == "update_habit")
+        {
+            var command = written.Should().BeOfType<UpdateHabitFieldsCommand>().Subject;
+            command.Changes.HasTitle.Should().BeTrue();
+            command.Changes.HasDueTime.Should().BeFalse();
+            command.Changes.HasDueEndTime.Should().BeFalse();
+        }
         var actual = AtPath(JsonSerializer.SerializeToElement(written), executionPath);
         var expected = name switch
         {

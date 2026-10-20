@@ -153,7 +153,7 @@ public sealed partial class BulkUpdateHabitsCommandHandler(
         if (habits.Count == 0)
             return Result.Failure("No matching habits found.");
         var today = await dates.GetUserTodayAsync(request.UserId, ct);
-        var updates = habits.Select(habit => (Habit: habit, Update: ResolveUpdate(habit, request.Changes, today))).ToList();
+        var updates = habits.Select(habit => (Habit: habit, Update: HabitUpdateValidation.ResolveUpdate(habit, request.Changes, today))).ToList();
         return await ValidateUpdatesAsync(request.UserId, updates, repository, ct);
     }
 
@@ -171,8 +171,10 @@ public sealed partial class BulkUpdateHabitsCommandHandler(
             habit => habit.UserId == userId && habitIds.Contains(habit.Id),
             query => query,
             cancellationToken);
+        foreach (var habit in habits)
+            await habitRepository.ReloadAsync(habit, cancellationToken);
         var updates = habits
-            .Select(habit => (Habit: habit, Update: ResolveUpdate(habit, changes, today)))
+            .Select(habit => (Habit: habit, Update: HabitUpdateValidation.ResolveUpdate(habit, changes, today)))
             .ToList();
 
         var validation = await ValidateUpdatesAsync(userId, updates, habitRepository, cancellationToken);
@@ -222,44 +224,5 @@ public sealed partial class BulkUpdateHabitsCommandHandler(
         return Result.Success();
     }
 
-    internal static HabitUpdateParams ResolveUpdate(Habit habit, BulkHabitChanges changes, DateOnly today)
-    {
-        var dueTime = changes.HasDueTime ? changes.DueTime : habit.DueTime;
-        var (reminderTimes, scheduledReminders) = ReminderStoreNormalizer.NormalizeForUpdate(
-            dueTime,
-            habit.DueTime,
-            changes.HasReminderTimes ? changes.ReminderTimes?.ToList() ?? [] : null,
-            changes.HasScheduledReminders ? changes.ScheduledReminders?.ToList() ?? [] : null,
-            habit.ReminderTimes,
-            habit.ScheduledReminders);
-
-        return ApplyExtendedFields(new HabitUpdateParams(
-            changes.HasTitle ? changes.Title ?? habit.Title : habit.Title,
-            changes.HasDescription ? changes.Description : habit.Description,
-            changes.HasFrequencyUnit ? changes.FrequencyUnit : habit.FrequencyUnit,
-            changes.HasFrequencyQuantity ? changes.FrequencyQuantity : habit.FrequencyQuantity,
-            changes.HasIsFlexible && changes.IsFlexible ? [] : changes.HasDays ? changes.Days : habit.Days.ToList(),
-            changes.HasIsBadHabit ? changes.IsBadHabit : habit.IsBadHabit,
-            changes.HasDueDate ? changes.DueDate : habit.DueDate,
-            DueTime: dueTime,
-            DueEndTime: habit.DueEndTime,
-            ReminderEnabled: changes.HasReminderEnabled ? changes.ReminderEnabled : null,
-            ReminderTimes: reminderTimes,
-            ChecklistItems: changes.HasChecklistItems ? changes.ChecklistItems : null,
-            IsFlexible: changes.HasIsFlexible ? changes.IsFlexible : null,
-            EndDate: changes.HasEndDate ? changes.EndDate : null,
-            ClearEndDate: changes.HasEndDate && changes.EndDate is null,
-            ScheduledReminders: scheduledReminders,
-            Emoji: changes.HasEmoji ? changes.Emoji : habit.Emoji,
-            UserToday: today,
-            IntervalWeeks: changes.HasIntervalWeeks ? changes.IntervalWeeks : habit.IntervalWeeks), changes);
-    }
-    private static HabitUpdateParams ApplyExtendedFields(HabitUpdateParams update, BulkHabitChanges changes) => update with
-    {
-        DueEndTime = changes.HasDueEndTime ? changes.DueEndTime : update.DueEndTime,
-        IsGeneral = changes.HasIsGeneral ? changes.IsGeneral : null,
-        SlipAlertEnabled = changes.HasSlipAlertEnabled ? changes.SlipAlertEnabled : null,
-        RelativeReminders = changes.HasRelativeReminders ? changes.RelativeReminders ?? [] : null
-    };
 
 }

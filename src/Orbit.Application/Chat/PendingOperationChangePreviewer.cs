@@ -103,7 +103,7 @@ public sealed class PendingOperationChangePreviewer(
             var itemChanges = isRevised ? revisedChanges.GetValueOrDefault(habit.Id) : changes;
             if (itemChanges is not null)
             {
-                var update = BulkUpdateHabitsCommandHandler.ResolveUpdate(habit, itemChanges, today);
+                var update = HabitUpdateValidation.ResolveUpdate(habit, itemChanges, today);
                 var preview = habit.PreviewUpdate(update);
                 if (preview.IsFailure)
                     return null;

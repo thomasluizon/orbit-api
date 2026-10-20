@@ -87,14 +87,14 @@ public class HabitToolsTests
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(habit);
         _userDateService.GetUserTodayAsync(userId, Arg.Any<CancellationToken>()).Returns(today);
         var unitOfWork = Substitute.For<IUnitOfWork>();
-        unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Result>>>(), Arg.Any<CancellationToken>())
-            .Returns(call => call.Arg<Func<CancellationToken, Task<Result>>>()(call.Arg<CancellationToken>()));
+        unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Result<string>>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<Result<string>>>>()(call.Arg<CancellationToken>()));
         var handler = new UpdateHabitCommandHandler(repository, Substitute.For<IGenericRepository<SentReminder>>(),
             Substitute.For<IGenericRepository<Goal>>(), Substitute.For<IPayGateService>(),
             Substitute.For<IGoalCompletionService>(), _userDateService, unitOfWork,
             new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()));
-        _mediator.Send(Arg.Any<UpdateHabitCommand>(), Arg.Any<CancellationToken>())
-            .Returns(call => handler.Handle(call.Arg<UpdateHabitCommand>(), call.Arg<CancellationToken>()));
+        _mediator.Send(Arg.Any<UpdateHabitFieldsCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call => handler.Handle(call.Arg<UpdateHabitFieldsCommand>(), call.Arg<CancellationToken>()));
         var tool = new UpdateHabitTool(repository, _userDateService, _mediator);
         _executor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>()).Returns(async call =>
         {
@@ -481,16 +481,16 @@ public class HabitToolsTests
         _userDateService.GetUserTodayAsync(userId, Arg.Any<CancellationToken>()).Returns(today);
         var unitOfWork = Substitute.For<IUnitOfWork>();
         unitOfWork.ExecuteInTransactionAsync(
-                Arg.Any<Func<CancellationToken, Task<Result>>>(),
+                Arg.Any<Func<CancellationToken, Task<Result<string>>>>(),
                 Arg.Any<CancellationToken>())
-            .Returns(call => call.ArgAt<Func<CancellationToken, Task<Result>>>(0)(
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<Result<string>>>>(0)(
                 call.ArgAt<CancellationToken>(1)));
         var handler = new UpdateHabitCommandHandler(repository, Substitute.For<IGenericRepository<SentReminder>>(),
             Substitute.For<IGenericRepository<Goal>>(), Substitute.For<IPayGateService>(),
             Substitute.For<IGoalCompletionService>(), _userDateService, unitOfWork,
             new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()));
-        _mediator.Send(Arg.Any<UpdateHabitCommand>(), Arg.Any<CancellationToken>())
-            .Returns(call => handler.Handle(call.Arg<UpdateHabitCommand>(), call.Arg<CancellationToken>()));
+        _mediator.Send(Arg.Any<UpdateHabitFieldsCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call => handler.Handle(call.Arg<UpdateHabitFieldsCommand>(), call.Arg<CancellationToken>()));
         var tool = new UpdateHabitTool(repository, _userDateService, _mediator);
         var catalog = new AgentCatalogService([tool]);
         var policy = Substitute.For<IAgentPolicyEvaluator>();

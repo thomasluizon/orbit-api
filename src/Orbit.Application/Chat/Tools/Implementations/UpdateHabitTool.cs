@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json;
 using MediatR;
 using Orbit.Application.Chat.Tools;
@@ -6,9 +5,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
-using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
-using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
@@ -101,18 +98,15 @@ public class UpdateHabitTool(
         if (!HabitToolHelpers.TryParseHabitId(args, out var habitId))
             return HabitToolHelpers.InvalidHabitIdResult();
 
-        var fieldError = BulkHabitToolArguments.CheckHabitFields(args);
-        if (fieldError is not null)
-            return new ToolResult(false, Error: fieldError);
-        var habit = await HabitToolHelpers.FindHabitAsync(habitRepository, habitId, userId, ct);
-        if (habit is null)
-            return new ToolResult(false, Error: $"Habit {habitId} not found.");
-        var today = await userDateService.GetUserTodayAsync(userId, ct);
-        var update = ResolveUpdateParams(args, habit, today);
-        var result = await mediator.Send(HabitUpdateValidation.ToCommand(userId, habit.Id, update), ct);
-        return result.IsFailure
-            ? ToolResult.FromFailure(result)
-            : new ToolResult(true, EntityId: habit.Id.ToString(), EntityName: habit.Title);
+        var (changes, error) = BulkHabitToolArguments.ParseUpdateFields(args, allowHabitId: true);
+        if (error is not null)
+            return new ToolResult(false, Error: error);
+        var result = await mediator.Send(new UpdateHabitFieldsCommand(userId, habitId, changes!), ct);
+        if (result.IsFailure)
+            return result.ErrorCode == ErrorMessages.HabitNotFound.Code
+                ? HabitToolHelpers.HabitNotFoundResult(habitId)
+                : ToolResult.FromFailure(result);
+        return new ToolResult(true, EntityId: habitId.ToString(), EntityName: result.Value);
     }
 
     public async Task<Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
@@ -120,9 +114,9 @@ public class UpdateHabitTool(
         if (!HabitToolHelpers.TryParseHabitId(args, out var habitId))
             return Result.Failure("habit_id is required and must be a valid GUID.");
 
-        var fieldError = BulkHabitToolArguments.CheckHabitFields(args);
-        if (fieldError is not null)
-            return Result.Failure(fieldError);
+        var (changes, error) = BulkHabitToolArguments.ParseUpdateFields(args, allowHabitId: true);
+        if (error is not null)
+            return Result.Failure(error);
 
         var habits = await habitRepository.FindAsync(
             habit => habit.Id == habitId && habit.UserId == userId, ct);
@@ -131,7 +125,7 @@ public class UpdateHabitTool(
             return Result.Failure($"Habit {habitId} not found.");
 
         var today = await userDateService.GetUserTodayAsync(userId, ct);
-        var update = ResolveUpdateParams(args, habit, today);
+        var update = HabitUpdateValidation.ResolveSingleUpdate(habit, changes!, today);
         var validation = await HabitUpdateValidation.ValidateAsync(userId, habit, update, habitRepository, ct);
         if (validation.IsFailure)
             return validation;
@@ -139,142 +133,4 @@ public class UpdateHabitTool(
         return preview.IsFailure ? preview : Result.Success();
     }
 
-    private static HabitUpdateParams ResolveUpdateParams(JsonElement args, Habit habit, DateOnly today)
-    {
-        var title = ResolveTitle(args, habit);
-        var description = ResolveDescription(args, habit);
-        var (frequencyUnit, frequencyQuantity) = ResolveFrequency(args, habit);
-        var intervalWeeks = ResolveIntervalWeeks(args, habit);
-        var days = ResolveDays(args, habit);
-        var isBadHabit = ResolveBoolField(args, "is_bad_habit", habit.IsBadHabit);
-        var dueDate = ResolveDueDate(args, habit);
-        var dueTime = ResolveDueTime(args, habit);
-        var (endDate, clearEndDate) = ResolveEndDate(args);
-
-        var (reminderTimes, scheduledReminders) = ReminderStoreNormalizer.NormalizeForUpdate(
-            newDueTime: dueTime,
-            previousDueTime: habit.DueTime,
-            suppliedReminderTimes: ResolveOptionalArray(args, "reminder_times"),
-            suppliedScheduledReminders: ResolveOptionalScheduledReminders(args),
-            existingReminderTimes: habit.ReminderTimes,
-            existingScheduledReminders: habit.ScheduledReminders);
-
-        return new HabitUpdateParams(
-            title, description, frequencyUnit, frequencyQuantity, days, isBadHabit, dueDate,
-            DueTime: dueTime,
-            DueEndTime: JsonArgumentParser.PropertyExists(args, "due_end_time")
-                ? JsonArgumentParser.ParseTimeOnly(args, "due_end_time") : habit.DueEndTime,
-            IsGeneral: ResolveOptionalBool(args, "is_general"),
-            SlipAlertEnabled: ResolveOptionalBool(args, "slip_alert_enabled"),
-            RelativeReminders: JsonArgumentParser.ParseRelativeReminders(args),
-            ReminderEnabled: ResolveOptionalBool(args, "reminder_enabled"),
-            ReminderTimes: reminderTimes,
-            ChecklistItems: ResolveOptionalChecklist(args),
-            IsFlexible: ResolveOptionalBool(args, "is_flexible"),
-            EndDate: endDate,
-            ClearEndDate: clearEndDate,
-            ScheduledReminders: scheduledReminders,
-            Emoji: ResolveEmoji(args, habit),
-            UserToday: today,
-            IntervalWeeks: intervalWeeks);
-    }
-
-    private static string ResolveTitle(JsonElement args, Habit habit) =>
-        JsonArgumentParser.PropertyExists(args, "title")
-            ? JsonArgumentParser.GetNullableString(args, "title") ?? habit.Title
-            : habit.Title;
-
-    private static string? ResolveDescription(JsonElement args, Habit habit) =>
-        JsonArgumentParser.PropertyExists(args, "description")
-            ? JsonArgumentParser.GetNullableString(args, "description")
-            : habit.Description;
-
-    private static string? ResolveEmoji(JsonElement args, Habit habit) =>
-        JsonArgumentParser.PropertyExists(args, "emoji")
-            ? JsonArgumentParser.GetNullableString(args, "emoji")
-            : habit.Emoji;
-
-    private static (FrequencyUnit? Unit, int? Quantity) ResolveFrequency(JsonElement args, Habit habit)
-    {
-        FrequencyUnit? frequencyUnit;
-        if (JsonArgumentParser.PropertyExists(args, "frequency_unit"))
-        {
-            var fuStr = JsonArgumentParser.GetNullableString(args, "frequency_unit");
-            frequencyUnit = fuStr is not null && Enum.TryParse<FrequencyUnit>(fuStr, ignoreCase: true, out var fu)
-                ? fu
-                : null;
-        }
-        else
-        {
-            frequencyUnit = habit.FrequencyUnit;
-        }
-
-        var frequencyQuantity = JsonArgumentParser.PropertyExists(args, "frequency_quantity")
-            ? JsonArgumentParser.GetOptionalInt(args, "frequency_quantity") ?? habit.FrequencyQuantity
-            : habit.FrequencyQuantity;
-
-        return (frequencyUnit, frequencyQuantity);
-    }
-
-    private static List<DayOfWeek>? ResolveDays(JsonElement args, Habit habit) =>
-        JsonArgumentParser.PropertyExists(args, "days")
-            ? JsonArgumentParser.ParseDays(args)
-            : habit.Days.ToList();
-
-    private static int? ResolveIntervalWeeks(JsonElement args, Habit habit) =>
-        JsonArgumentParser.PropertyExists(args, "interval_weeks")
-            ? JsonArgumentParser.GetOptionalInt(args, "interval_weeks") ?? habit.IntervalWeeks
-            : habit.IntervalWeeks;
-
-    private static bool ResolveBoolField(JsonElement args, string prop, bool currentValue) =>
-        JsonArgumentParser.PropertyExists(args, prop)
-            ? JsonArgumentParser.GetOptionalBool(args, prop) ?? currentValue
-            : currentValue;
-
-    private static DateOnly? ResolveDueDate(JsonElement args, Habit habit) =>
-        JsonArgumentParser.PropertyExists(args, "due_date")
-            ? JsonArgumentParser.ParseDateOnly(args, "due_date") ?? habit.DueDate
-            : habit.DueDate;
-
-    private static TimeOnly? ResolveDueTime(JsonElement args, Habit habit)
-    {
-        if (!JsonArgumentParser.PropertyExists(args, "due_time"))
-            return habit.DueTime;
-
-        var dtStr = JsonArgumentParser.GetNullableString(args, "due_time");
-        return dtStr is not null ? JsonArgumentParser.ParseTimeOnlyFromString(dtStr) : null;
-    }
-
-    private static (DateOnly? EndDate, bool? ClearEndDate) ResolveEndDate(JsonElement args)
-    {
-        if (!JsonArgumentParser.PropertyExists(args, "end_date"))
-            return (null, null);
-
-        var edStr = JsonArgumentParser.GetNullableString(args, "end_date");
-        if (edStr is null)
-            return (null, true);
-
-        var endDate = DateOnly.TryParseExact(edStr, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var ed) ? ed : (DateOnly?)null;
-        return (endDate, null);
-    }
-
-    private static bool? ResolveOptionalBool(JsonElement args, string prop) =>
-        JsonArgumentParser.PropertyExists(args, prop)
-            ? JsonArgumentParser.GetOptionalBool(args, prop)
-            : null;
-
-    private static List<int>? ResolveOptionalArray(JsonElement args, string prop) =>
-        JsonArgumentParser.PropertyExists(args, prop)
-            ? JsonArgumentParser.ParseIntArray(args, prop)
-            : null;
-
-    private static List<ChecklistItem>? ResolveOptionalChecklist(JsonElement args) =>
-        JsonArgumentParser.PropertyExists(args, "checklist_items")
-            ? JsonArgumentParser.ParseChecklistItems(args)
-            : null;
-
-    private static List<ScheduledReminderTime>? ResolveOptionalScheduledReminders(JsonElement args) =>
-        JsonArgumentParser.PropertyExists(args, "scheduled_reminders")
-            ? JsonArgumentParser.ParseScheduledReminders(args)
-            : null;
 }

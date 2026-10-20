@@ -834,11 +834,11 @@ public class UpdateHabitToolTests
         var handler = new UpdateHabitCommandHandler(repository, _sentReminders, Substitute.For<IGenericRepository<Goal>>(),
             gate, Substitute.For<IGoalCompletionService>(), _userDateService, unitOfWork,
             new MemoryCache(new MemoryCacheOptions()));
-        mediator.Send(Arg.Any<UpdateHabitCommand>(), Arg.Any<CancellationToken>()).Returns(async call =>
+        mediator.Send(Arg.Any<UpdateHabitFieldsCommand>(), Arg.Any<CancellationToken>()).Returns(async call =>
         {
-            var command = call.Arg<UpdateHabitCommand>();
-            var validation = await new UpdateHabitCommandValidator(repository).ValidateAsync(command, call.Arg<CancellationToken>());
-            return validation.IsValid ? await handler.Handle(command, call.Arg<CancellationToken>()) : Result.Failure(validation.ToString());
+            var command = call.Arg<UpdateHabitFieldsCommand>();
+            var validation = await new UpdateHabitFieldsCommandValidator().ValidateAsync(command, call.Arg<CancellationToken>());
+            return validation.IsValid ? await handler.Handle(command, call.Arg<CancellationToken>()) : Result.Failure<string>(validation.ToString());
         });
         return new UpdateHabitTool(repository, _userDateService, mediator);
     }
@@ -846,9 +846,9 @@ public class UpdateHabitToolTests
     private static void ConfigureTransaction(IUnitOfWork unitOfWork)
     {
         unitOfWork.ExecuteInTransactionAsync(
-                Arg.Any<Func<CancellationToken, Task<Result>>>(),
+                Arg.Any<Func<CancellationToken, Task<Result<string>>>>(),
                 Arg.Any<CancellationToken>())
-            .Returns(call => call.ArgAt<Func<CancellationToken, Task<Result>>>(0)(
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<Result<string>>>>(0)(
                 call.ArgAt<CancellationToken>(1)));
     }
 

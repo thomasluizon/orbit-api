@@ -1,3 +1,4 @@
+using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Validators;
 using Orbit.Domain.Common;
@@ -52,4 +53,53 @@ internal static class HabitUpdateValidation
             ? Result.Failure(ErrorMessages.GeneralMismatchWithChildren)
             : Result.Success();
     }
+
+    public static HabitUpdateParams ResolveSingleUpdate(Habit habit, BulkHabitChanges changes, DateOnly today) =>
+        ResolveUpdate(habit, changes, today) with
+        {
+            FrequencyQuantity = changes.HasFrequencyQuantity ? changes.FrequencyQuantity ?? habit.FrequencyQuantity : habit.FrequencyQuantity,
+            IntervalWeeks = changes.HasIntervalWeeks ? changes.IntervalWeeks ?? habit.IntervalWeeks : habit.IntervalWeeks,
+            Days = changes.HasDays ? changes.Days : habit.Days.ToList()
+        };
+
+    public static HabitUpdateParams ResolveUpdate(Habit habit, BulkHabitChanges changes, DateOnly today)
+    {
+        var dueTime = changes.HasDueTime ? changes.DueTime : habit.DueTime;
+        var (reminderTimes, scheduledReminders) = ReminderStoreNormalizer.NormalizeForUpdate(
+            dueTime,
+            habit.DueTime,
+            changes.HasReminderTimes ? changes.ReminderTimes?.ToList() ?? [] : null,
+            changes.HasScheduledReminders ? changes.ScheduledReminders?.ToList() ?? [] : null,
+            habit.ReminderTimes,
+            habit.ScheduledReminders);
+
+        return ApplyExtendedFields(new HabitUpdateParams(
+            changes.HasTitle ? changes.Title ?? habit.Title : habit.Title,
+            changes.HasDescription ? changes.Description : habit.Description,
+            changes.HasFrequencyUnit ? changes.FrequencyUnit : habit.FrequencyUnit,
+            changes.HasFrequencyQuantity ? changes.FrequencyQuantity : habit.FrequencyQuantity,
+            changes.HasIsFlexible && changes.IsFlexible ? [] : changes.HasDays ? changes.Days : habit.Days.ToList(),
+            changes.HasIsBadHabit ? changes.IsBadHabit : habit.IsBadHabit,
+            changes.HasDueDate ? changes.DueDate : habit.DueDate,
+            DueTime: dueTime,
+            DueEndTime: habit.DueEndTime,
+            ReminderEnabled: changes.HasReminderEnabled ? changes.ReminderEnabled : null,
+            ReminderTimes: reminderTimes,
+            ChecklistItems: changes.HasChecklistItems ? changes.ChecklistItems : null,
+            IsFlexible: changes.HasIsFlexible ? changes.IsFlexible : null,
+            EndDate: changes.HasEndDate ? changes.EndDate : null,
+            ClearEndDate: changes.HasEndDate && changes.EndDate is null,
+            ScheduledReminders: scheduledReminders,
+            Emoji: changes.HasEmoji ? changes.Emoji : habit.Emoji,
+            UserToday: today,
+            IntervalWeeks: changes.HasIntervalWeeks ? changes.IntervalWeeks : habit.IntervalWeeks), changes);
+    }
+    private static HabitUpdateParams ApplyExtendedFields(HabitUpdateParams update, BulkHabitChanges changes) => update with
+    {
+        DueEndTime = changes.HasDueEndTime ? changes.DueEndTime : update.DueEndTime,
+        IsGeneral = changes.HasIsGeneral ? changes.IsGeneral : null,
+        SlipAlertEnabled = changes.HasSlipAlertEnabled ? changes.SlipAlertEnabled : null,
+        RelativeReminders = changes.HasRelativeReminders ? changes.RelativeReminders ?? [] : null
+    };
+
 }
