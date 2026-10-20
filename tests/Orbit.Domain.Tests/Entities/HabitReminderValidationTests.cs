@@ -11,11 +11,11 @@ public class HabitReminderValidationTests
 
     public static TheoryData<int[], string, string> InvalidReminderTimes => new()
     {
-        { [-1], "VALIDATION_REMINDER_TIME_RANGE", "Reminder offsets must be between 0 and 10080 minutes." },
-        { [10081], "VALIDATION_REMINDER_TIME_RANGE", "Reminder offsets must be between 0 and 10080 minutes." },
-        { [15, -1], "VALIDATION_REMINDER_TIME_RANGE", "Reminder offsets must be between 0 and 10080 minutes." },
-        { [15, 10081], "VALIDATION_REMINDER_TIME_RANGE", "Reminder offsets must be between 0 and 10080 minutes." },
-        { [15, 15], "VALIDATION_REMINDER_TIMES_UNIQUE", "Reminder offsets must be unique." }
+        { [-1], "VALIDATION_REMINDER_TIME_RANGE", "Set reminders from 0 to 10080 minutes before the due time." },
+        { [10081], "VALIDATION_REMINDER_TIME_RANGE", "Set reminders from 0 to 10080 minutes before the due time." },
+        { [15, -1], "VALIDATION_REMINDER_TIME_RANGE", "Set reminders from 0 to 10080 minutes before the due time." },
+        { [15, 10081], "VALIDATION_REMINDER_TIME_RANGE", "Set reminders from 0 to 10080 minutes before the due time." },
+        { [15, 15], "VALIDATION_REMINDER_TIMES_UNIQUE", "Remove duplicate reminder times." }
     };
 
     [Theory]
