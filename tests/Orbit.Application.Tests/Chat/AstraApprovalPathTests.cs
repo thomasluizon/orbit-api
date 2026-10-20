@@ -90,10 +90,9 @@ public sealed class AstraApprovalPathTests : IDisposable
         var tags = new GenericRepository<Tag>(_db);
         var unit = new UnitOfWork(_db, new DatabaseConnectionSettings());
         var payGate = Substitute.For<IPayGateService>();
-        payGate.CanCreateSubHabits(_userId, Arg.Any<CancellationToken>()).Returns(Result.Success());
         var config = Substitute.For<IAppConfigService>();
         config.GetAsync(AppConfigKeys.MaxHabitDepth, AppConstants.MaxHabitDepth, Arg.Any<CancellationToken>()).Returns(AppConstants.MaxHabitDepth);
-        var handler = new CreateSubHabitCommandHandler(habits, tags, payGate, _dates, unit, config, _cache);
+        var handler = new CreateSubHabitCommandHandler(habits, tags, _dates, unit, config, payGate, _cache);
         var mediator = Substitute.For<IMediator>();
         mediator.Send(Arg.Any<CreateSubHabitCommand>(), Arg.Any<CancellationToken>())
             .Returns(call => handler.Handle(call.Arg<CreateSubHabitCommand>(), call.Arg<CancellationToken>()));

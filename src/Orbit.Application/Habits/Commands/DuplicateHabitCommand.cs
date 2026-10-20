@@ -45,12 +45,6 @@ public class DuplicateHabitCommandHandler(
 
         var childLookup = allHabits.ToLookup(h => h.ParentHabitId);
 
-        if (childLookup[original.Id].Any())
-        {
-            var canCreateSub = await payGateService.CanCreateSubHabits(request.UserId, cancellationToken);
-            if (!canCreateSub.IsSuccess) return canCreateSub.PropagateError<Guid>();
-        }
-
         var rootSiblings = allHabits.Where(h => h.ParentHabitId == original.ParentHabitId && !h.IsDeleted).ToList();
         var nextRootPosition = rootSiblings.Count == 0
             ? 0

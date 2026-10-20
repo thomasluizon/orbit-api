@@ -142,7 +142,6 @@ public class FeatureExplanationDriftTests
         var gate = new PayGateService(Substitute.For<IGenericRepository<Habit>>(), users, config,
             Substitute.For<IUserDateService>());
 
-        (await gate.CanCreateSubHabits(user.Id)).IsSuccess.Should().Be(pro);
         (await gate.CanUseDailySummary(user.Id)).IsSuccess.Should().Be(pro);
         (await gate.CanAccessCalendar(user.Id)).IsSuccess.Should().Be(pro);
         (await gate.CanUseRetrospective(user.Id)).IsSuccess.Should().Be(pro);
@@ -150,7 +149,7 @@ public class FeatureExplanationDriftTests
         var unlocks = Body("paygate").Split("## What Pro unlocks")[1]
             .Split('\n').Where(line => line.StartsWith("- ", StringComparison.Ordinal));
         unlocks.Should().BeEquivalentTo(
-            ["- Sub-habits", "- The daily AI summary", "- Calendar integration", "- Retrospectives"],
+            ["- The daily AI summary", "- Calendar integration", "- Retrospectives"],
             "paygate.md must list the features these default plan gates enforce");
     }
 

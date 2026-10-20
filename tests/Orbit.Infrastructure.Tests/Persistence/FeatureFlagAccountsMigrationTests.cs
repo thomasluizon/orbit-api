@@ -26,7 +26,7 @@ public class FeatureFlagAccountsMigrationTests
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
 
-        differences.Should().HaveCount(45);
+        differences.Should().HaveCount(46);
         ExpandHabitScheduleAndStartDateMigrationTests.AssertAiSecurityAdditions(differences);
         ConversationMigrationTests.AssertConversationExpansion(differences);
         var schemaVersion = differences.OfType<AddColumnOperation>().Should()
@@ -34,6 +34,13 @@ public class FeatureFlagAccountsMigrationTests
         schemaVersion.ClrType.Should().Be(typeof(int));
         schemaVersion.IsNullable.Should().BeFalse();
         schemaVersion.DefaultValue.Should().Be(0);
+
+        var subHabits = differences.OfType<UpdateDataOperation>().Should().ContainSingle().Subject;
+        subHabits.Table.Should().Be("AppFeatureFlags");
+        subHabits.KeyColumns.Should().Equal("Key");
+        subHabits.KeyValues[0, 0].Should().Be("sub_habits");
+        subHabits.Columns.Should().Equal("PlanRequirement");
+        subHabits.Values[0, 0].Should().BeNull();
 
         var owedCancellations = differences.OfType<CreateTableOperation>()
             .Should().ContainSingle(table => table.Name == "OwedSubscriptionCancellations").Subject;
@@ -108,6 +115,7 @@ public class FeatureFlagAccountsMigrationTests
             "20261020005707_PriceDailyAiBudgetsInUsd",
             "20261020014306_PersistConversationTurns",
             "20261020023110_VersionPendingToolArguments",
+            "20261020030817_MakeSubHabitsFree",
             "20261020033359_RestoreRequiredProactiveAstraPreference");
         context.Database.GetMigrations().Last().Should().EndWith("_RestoreRequiredProactiveAstraPreference");
         var preference = current.FindEntityType(typeof(User))!.FindProperty(nameof(User.ProactiveAstraEnabled))!;

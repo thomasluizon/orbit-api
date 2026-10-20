@@ -10,11 +10,6 @@ public interface IPayGateService
     Task<Result> CanCreateHabits(Guid userId, int count = 1, CancellationToken ct = default);
 
     /// <summary>
-    /// Checks if the user can create sub-habits (Pro-only feature).
-    /// </summary>
-    Task<Result> CanCreateSubHabits(Guid userId, CancellationToken ct = default);
-
-    /// <summary>
     /// Atomically consumes one AI message when the user has quota remaining.
     /// </summary>
     Task<Result> TryConsumeAiMessage(
