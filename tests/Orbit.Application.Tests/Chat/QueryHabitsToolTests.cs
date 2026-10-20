@@ -34,6 +34,55 @@ public class QueryHabitsToolTests
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
     }
 
+    [Theory]
+    [InlineData(-1, "OVERDUE")]
+    [InlineData(0, "DUE TODAY")]
+    [InlineData(1, "NOT DUE:")]
+    public async Task DueLabels_KeepDateStatesDistinct(int offset, string label)
+    {
+        SetupHabits(CreateHabit("Task", null, null, Today.AddDays(offset)));
+        var result = await Execute("{}");
+        result.EntityName.Should().Contain(label);
+        if (offset <= 0)
+            result.EntityName.Should().NotContain("NOT DUE:");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FutureChild_HasNotDueLabel_WhileGeneralHabitDoesNot(bool scheduled)
+    {
+        var parent = CreateHabit("Parent", FrequencyUnit.Day, 1, Today);
+        var child = CreateHabit("Future child", null, null, Today.AddDays(2), parentId: parent.Id);
+        var general = CreateHabit("General", null, null, Today.AddDays(2), isGeneral: true);
+        SetupHabits(parent, child, general);
+        var result = await Execute(scheduled
+            ? JsonSerializer.Serialize(new { date = Today.AddDays(2).ToString("yyyy-MM-dd") })
+            : "{}");
+        result.Success.Should().BeTrue();
+        result.EntityName.Should().Contain("\"Parent\"");
+        result.EntityName!.Split('\n').Single(line => line.Contains("Future child"))
+            .Should().Contain("NOT DUE:").And.Contain(Today.AddDays(2).ToString("yyyy-MM-dd"));
+        if (scheduled)
+            result.EntityName.Should().NotContain("\"General\"");
+        else
+            result.EntityName.Split('\n').Single(line => line.Contains("\"General\""))
+                .Should().Contain("GENERAL").And.NotContain("NOT DUE:");
+    }
+
+    [Fact]
+    public async Task RecordedFutureTask_CarriesNotDueLabelAndDate()
+    {
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new DateOnly(2026, 8, 6));
+        SetupHabits(CreateHabit("Aula extra de terça-feira", null, null, new DateOnly(2026, 8, 26)));
+
+        var result = await Execute("{}");
+
+        result.Success.Should().BeTrue();
+        result.EntityName.Should().Contain("NOT DUE: 2026-08-26");
+    }
+
     [Fact]
     public void IsReadOnly_ReturnsTrue() => _tool.IsReadOnly.Should().BeTrue();
 

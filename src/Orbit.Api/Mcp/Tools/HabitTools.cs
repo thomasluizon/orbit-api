@@ -183,7 +183,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         return result.Succeeded ? $"Deleted habit {habitId}" : result.Message;
     }
 
-    [McpServerTool(Name = "log_habit"), Description("Log a habit as completed (or toggle it off if already logged today).")]
+    [McpServerTool(Name = "log_habit"), Description("Log a habit as completed. Already logged dates fail; use unlog_habit to undo.")]
     public async Task<string> LogHabit(
         ClaimsPrincipal user,
         [Description(HabitIdDescription)] string habitId,
@@ -197,6 +197,21 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         }, confirmationToken: null, cancellationToken);
 
         return result.Succeeded ? $"Logged habit {habitId}" : result.Message;
+    }
+
+    [McpServerTool(Name = "unlog_habit"), Description("Undo a habit completion for a specific date (defaults to today). Fails if no completion exists.")]
+    public async Task<string> UnlogHabit(
+        ClaimsPrincipal user,
+        [Description(HabitIdDescription)] string habitId,
+        [Description("Date of the completion in YYYY-MM-DD format (defaults to today)")] string? date = null,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await executorBridge.ExecuteAsync(user, "unlog_habit", new
+        {
+            habit_id = habitId,
+            date
+        }, confirmationToken: null, cancellationToken);
+        return result.Succeeded ? $"Unlogged habit {habitId}" : result.Message;
     }
 
     [McpServerTool(Name = "get_habit_metrics"), Description("Get streak, completion rate, and other metrics for a habit.")]
