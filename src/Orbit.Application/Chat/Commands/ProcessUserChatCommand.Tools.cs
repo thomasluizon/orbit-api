@@ -34,7 +34,8 @@ public partial class ProcessUserChatCommandHandler
                 iteration);
         }
 
-        while (aiResponse.HasToolCalls && iteration < ChatTurnLimits.MaxToolIterations && !tokenBudgetExceeded)
+        while (aiResponse.HasToolCalls && !aiResponse.IsTruncated
+            && iteration < ChatTurnLimits.MaxToolIterations && !tokenBudgetExceeded)
         {
             iteration++;
             if (request.StreamSink is not null)
@@ -194,7 +195,7 @@ public partial class ProcessUserChatCommandHandler
         var writeCalls = orderedCalls
             .Where(call => call.Name != "ask" && ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly != true)
             .ToList();
-        var bulkRedirects = BulkToolRepeatGuard.FindRedirects(writeCalls);
+        var bulkRedirects = BulkToolRepeatGuard.FindRedirects(writeCalls, executionResults.PreviousWriteCalls);
         var resolvedWrites = writeCalls.ToDictionary(call => call.Id, call => ResolveHabitCall(call, executionResults));
         await CoalesceLogCallsAsync(writeCalls, resolvedWrites, request.UserId, executionResults, cancellationToken);
         CoalesceTagCalls(resolvedWrites, executionResults);
@@ -228,6 +229,11 @@ public partial class ProcessUserChatCommandHandler
                 ? await ExecuteBlockWriteAsync(resolved, request, executionResults, claim, cancellationToken)
                 : await ExecuteSingleToolCallAsync(
                     resolved, request, executionResults, execution.OperationExecutor, execution.PendingClarificationStore, cancellationToken);
+            if (outcome.ToolResult.Success)
+                executionResults.PreviousWriteCalls.Add(call);
+            else
+                executionResults.PreviewedCalls.Remove(
+                    Orbit.Domain.Common.AgentOperationFingerprint.Compute(resolved.Name, resolved.Args.GetRawText()));
             outcomesByCallId[call.Id] = outcome with { ToolResult = outcome.ToolResult with { Name = call.Name } };
         }
 
@@ -348,6 +354,8 @@ public partial class ProcessUserChatCommandHandler
         var toolResult = BuildToolCallResult(call, operationResult);
         LogToolCallOutcome(call, operationResult);
 
+        RegisterPendingWrite(request.UserId, tool, executionResponse, executionResults);
+
         if (operationResult.Status == AgentOperationStatus.Succeeded
             && operationResult.Payload is NeedsClarificationPayload payload)
         {
@@ -393,6 +401,53 @@ public partial class ProcessUserChatCommandHandler
                 executionResponse.PendingOperation)
         };
     }
+
+    private void RegisterPendingWrite(Guid userId, IAiTool tool,
+        AgentExecuteOperationResponse response, ToolExecutionAccumulator results)
+    {
+        if (tool.IsReadOnly || response.Operation.Status != AgentOperationStatus.PendingConfirmation
+            || response.PendingOperation is not { } replacement)
+            return;
+        foreach (var (id, previous) in results.PendingWriteCalls.ToArray())
+        {
+            if (id == replacement.Id || !BulkToolRepeatGuard.IsBulkAlternative(previous.ToolName, tool.Name)
+                || !CoversPendingChanges(replacement, previous.Preview))
+                continue;
+            var stored = execution.PendingOperationStore.GetExecution(userId, id);
+            if (stored is null)
+            {
+                results.SupersedePendingOperation(id);
+                continue;
+            }
+            if (stored.PreviewFingerprint != previous.Preview.PreviewFingerprint)
+                continue;
+            var fingerprint = AgentOperationFingerprint.Compute(
+                stored.OperationId, stored.Arguments.GetRawText());
+            if (execution.PendingOperationStore.Cancel(userId, id, fingerprint))
+                results.SupersedePendingOperation(id);
+        }
+        results.PendingWriteCalls[replacement.Id] = (tool.Name, replacement);
+    }
+
+    private static bool CoversPendingChanges(PendingAgentOperation replacement, PendingAgentOperation previous)
+    {
+        if (replacement.Items is not { Count: > 0 } || previous.Items is not { Count: > 0 })
+            return false;
+        return previous.Items.All(item =>
+        {
+            var fields = item.Fields.Where(field => field.Field != "habit_id").ToArray();
+            return item.EntityId is { } entityId && fields.Length > 0
+                && replacement.Items.Any(candidate => candidate.EntityId == entityId
+                    && fields.All(field => candidate.Fields.Any(proposed => proposed.Field == field.Field
+                        && SameProposedValue(field, proposed))));
+        });
+    }
+
+    private static bool SameProposedValue(PendingOperationChange previous, PendingOperationChange replacement) =>
+        previous.ProposedValue is { } oldValue && replacement.ProposedValue is { } newValue
+            ? AgentOperationFingerprint.Canonicalize(oldValue.GetRawText())
+                == AgentOperationFingerprint.Canonicalize(newValue.GetRawText())
+            : replacement.NewValue == previous.NewValue;
 
     private static ToolCallOutcome UnknownToolOutcome(AiToolCall call)
     {

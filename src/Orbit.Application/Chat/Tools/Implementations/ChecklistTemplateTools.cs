@@ -73,6 +73,56 @@ public class CreateChecklistTemplateTool(IMediator mediator) : IAiTool, IArgumen
     }
 }
 
+public class UpdateChecklistTemplateTool(IMediator mediator) : IAiTool, IArgumentCheckTool
+{
+    public string Name => "update_checklist_template";
+    public string Description => "Update a reusable checklist template's name, items, or both. Omitted fields stay unchanged.";
+
+    public object GetParameterSchema() => new
+    {
+        type = JsonSchemaTypes.Object,
+        properties = new
+        {
+            template_id = new { type = JsonSchemaTypes.String },
+            name = new { type = JsonSchemaTypes.String, nullable = true },
+            items = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String }, nullable = true }
+        },
+        required = new[] { "template_id" }
+    };
+
+    public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ExecuteCoreAsync(args, userId, ct, checkOnly: false);
+
+    public Task<Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ChatToolArgumentCheck.CheckAsync(this, args, () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+
+    private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
+    {
+        if (!Guid.TryParse(JsonArgumentParser.GetOptionalString(args, "template_id"), out var templateId))
+            return new ToolResult(false, Error: "template_id must be a valid GUID.");
+        var name = JsonArgumentParser.GetOptionalString(args, "name");
+        List<string>? items = null;
+        if (args.TryGetProperty("items", out var list) && list.ValueKind != JsonValueKind.Null)
+        {
+            if (list.ValueKind != JsonValueKind.Array
+                || list.EnumerateArray().Any(item => item.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(item.GetString())))
+                return new ToolResult(false, Error: "items must contain non-empty checklist item texts.");
+            items = list.EnumerateArray().Select(item => item.GetString()!).ToList();
+        }
+        if (name is null && items is null)
+            return new ToolResult(false, Error: "Provide a template name, items, or both.");
+
+        var command = new UpdateChecklistTemplateCommand(userId, templateId, name, items);
+        if (checkOnly)
+            return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
+        var result = await mediator.Send(command, ct);
+        return result.IsSuccess
+            ? new ToolResult(true, EntityId: templateId.ToString(), EntityName: name,
+                Payload: new { id = templateId, name, items })
+            : ToolResult.FromFailure(result, templateId.ToString());
+    }
+}
+
 public class DeleteChecklistTemplateTool(IMediator mediator) : IAiTool, IArgumentCheckTool
 {
     public string Name => "delete_checklist_template";

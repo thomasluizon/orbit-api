@@ -97,6 +97,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAiTool, ManageCalendarSyncTool>();
         builder.Services.AddScoped<IAiTool, GetChecklistTemplatesTool>();
         builder.Services.AddScoped<IAiTool, CreateChecklistTemplateTool>();
+        builder.Services.AddScoped<IAiTool, UpdateChecklistTemplateTool>();
         builder.Services.AddScoped<IAiTool, DeleteChecklistTemplateTool>();
         builder.Services.AddScoped<IAiTool, GetGamificationOverviewTool>();
         builder.Services.AddScoped<IAiTool, GetReferralOverviewTool>();
