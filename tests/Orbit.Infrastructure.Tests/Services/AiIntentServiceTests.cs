@@ -269,6 +269,20 @@ public class AiIntentServiceTests
         retainedContents.Should().OnlyContain(content => history.Any(message => message.Content == content));
     }
 
+    [Fact]
+    public void BuildHistoryTranscript_FortyValidMessages_SendsOnlyNewestTwenty()
+    {
+        var history = Enumerable.Range(0, 40)
+            .Select(index => new ChatHistoryMessage("user", $"history-{index:D2}"))
+            .ToList();
+
+        var transcript = AiIntentService.BuildHistoryTranscript(history, NullLogger<AiIntentService>.Instance);
+
+        transcript.Should().Contain("history-20").And.Contain("history-39");
+        transcript.Should().NotContain("history-19");
+        AppConstants.MaxChatHistoryMessages.Should().Be(40);
+    }
+
     private static object? InvokeConvertToSdkTool(object declaration)
     {
         var method = typeof(AiIntentService)

@@ -55,7 +55,7 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData(false, false, AgentAuthMethod.Jwt)]
     [InlineData(true, true, AgentAuthMethod.Jwt)]
     [InlineData(true, false, AgentAuthMethod.ApiKey)]
-    public async Task Ask_UnsupportedClientKillSwitchOrApiKey_IsNotOfferedAndFallsBackToText(bool supports, bool disabled, AgentAuthMethod auth)
+    public async Task Ask_UnsupportedClientKillSwitchOrApiKey_KeepsDeclarationAndFallsBackToText(bool supports, bool disabled, AgentAuthMethod auth)
     {
         SetupUserAndPayGate();
         if (disabled)
@@ -70,7 +70,8 @@ public partial class ProcessUserChatCommandHandlerTests
         var response = await CreateHandler(RealAskTool()).Handle(new(UserId, "Help me plan a walk", AuthMethod: auth,
             ClientContext: new(SupportsParts: true, PartKinds: supports ? ["choice"] : [])), default);
         response.IsSuccess.Should().BeTrue();
-        initial!.ToolDeclarations.Should().NotContain(tool => JsonSerializer.SerializeToElement(tool).GetProperty("name").GetString() == "ask");
+        initial!.ToolDeclarations.Should().Contain(tool => JsonSerializer.SerializeToElement(tool).GetProperty("name").GetString() == "ask");
+        initial.DynamicContext.Should().Contain("do not call ask");
         results.Should().ContainSingle().Which.Error.Should().Contain("plain text");
         response.Value.Parts?.OfType<ChatBlockPart>().Should().BeEmpty();
         await _blockStore.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
@@ -155,6 +156,9 @@ public partial class ProcessUserChatCommandHandlerTests
         _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn =>
             turn.UserContent == "When?\n" + message && turn.AssistantContent == result.Value.AiMessage
             && !turn.UsedModel && turn.ToolCallsJson == "[]"));
+        _productAnalytics.Received(1).CaptureUserEvent(UserId, "astra_message_sent", null,
+            Arg.Is<IReadOnlyDictionary<string, object>>(properties => (int)properties["round_count"] == 0
+                && (int)properties["tool_call_count"] == 0));
         await _moderation.DidNotReceiveWithAnyArgs().CheckTextAsync(default!, default);
         await _aiIntentService.DidNotReceiveWithAnyArgs().SendWithToolsAsync(default!, default, default);
         await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);

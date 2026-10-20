@@ -20,12 +20,10 @@ public class NotionTests
     private static readonly Guid UserId = Guid.NewGuid();
 
     [Fact]
-    public void ToolIsKeywordGatedAndRegistryResolvesIt()
+    public void ToolRegistryResolvesNotionTool()
     {
         var tool = new GetNotionTasksTool(Substitute.For<IMediator>());
         var registry = new AiToolRegistry([tool]);
-        ChatToolGroups.ResolveActiveToolNames(registry.GetAll().Select(t => t.Name), "log my run").Should().NotContain(tool.Name);
-        ChatToolGroups.ResolveActiveToolNames(registry.GetAll().Select(t => t.Name), "what is due in Notion this week").Should().Contain(tool.Name);
         registry.GetTool(tool.Name).Should().BeSameAs(tool);
     }
 

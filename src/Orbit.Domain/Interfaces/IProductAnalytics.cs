@@ -12,6 +12,6 @@ public interface IProductAnalytics
     void CaptureUserEvent(
         Guid userId,
         string eventName,
-        string plan,
+        string? plan,
         IReadOnlyDictionary<string, object>? properties = null);
 }
