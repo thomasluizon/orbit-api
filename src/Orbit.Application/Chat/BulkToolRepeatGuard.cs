@@ -10,7 +10,10 @@ public static class BulkToolRepeatGuard
     private static readonly IReadOnlyDictionary<string, string> BulkAlternatives =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
+            ["create_habit"] = "bulk_create_habits",
+            ["create_sub_habit"] = "bulk_create_habits",
             ["update_habit"] = "bulk_update_habits",
+            ["update_checklist"] = "bulk_update_habits",
             ["log_habit"] = "bulk_log_habits",
             ["skip_habit"] = "bulk_skip_habits",
             ["delete_habit"] = "bulk_delete_habits"

@@ -6,6 +6,8 @@ using NSubstitute;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Tools;
+using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Models;
 
@@ -58,6 +60,36 @@ public partial class ProcessUserChatCommandHandlerTests
             forwarded[^1].Error.Should().Contain("bulk_update_habits");
         await _operationExecutor.Received(distinctChanges ? habits.Length : habits.Length - 1)
             .ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("bulk_update_habits", "Change the description of all my habits", "{\"filter\":{\"all\":true},\"updates\":{\"description\":\"Shared\"}}")]
+    [InlineData("bulk_reschedule_habits", "Reschedule all to tomorrow", "{\"filter\":{\"all\":true},\"due_date\":\"2026-04-04\"}")]
+    public async Task Handle_FullSetBulkIntent_UsesOneApprovalPreviewBeyondPaginationCap(
+        string operationId, string message, string arguments)
+    {
+        SetupUserAndPayGate();
+        var habits = Enumerable.Range(1, 251).Select(index => CreateHabit($"Habit {index}")).ToArray();
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
+            .Returns(call => habits.Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).ToList());
+        IAiTool tool = operationId == "bulk_update_habits"
+            ? new BulkUpdateHabitsTool(_mediator) : new BulkRescheduleHabitsTool(_mediator);
+        var handler = CreateHandler(tool);
+        var held = HoldReplayWrites(tool);
+        SetupAiResponse(ToolResponse(operationId, "bulk", arguments));
+        ReplyToReplay("Review the proposed changes.");
+
+        var result = await handler.Handle(new ProcessUserChatCommand(UserId, message), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        held.Should().ContainSingle().Which.OperationId.Should().Be(operationId);
+        var preview = result.Value.PendingOperations.Should().ContainSingle().Subject;
+        preview.ChangeTargetCount.Should().Be(251);
+        preview.Items.Should().HaveCount(251);
+        preview.Items!.Select(item => item.EntityId).Should().BeEquivalentTo(habits.Select(habit => habit.Id));
+        habits.Should().OnlyContain(habit => habit.Description == null && habit.DueDate == Today);
+        await _mediator.DidNotReceive().Send(Arg.Any<BulkUpdateHabitsCommand>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
