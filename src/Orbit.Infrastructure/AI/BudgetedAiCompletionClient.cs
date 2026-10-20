@@ -54,13 +54,13 @@ public sealed class BudgetedAiCompletionClient(AiCompletionClient inner, IAiDail
 
     public async Task<T?> CompleteJsonAsync<T>(string systemPrompt, string userPrompt, double temperature = 0.1,
         int? maxOutputTokens = null, string purpose = "json", AiModelTier tier = AiModelTier.Primary,
-        Guid? userId = null, CancellationToken cancellationToken = default)
+        Guid? userId = null, CancellationToken cancellationToken = default, bool requireComplete = false)
     {
         using var completionCancellation = inner.CreateCompletionCancellation(cancellationToken);
         cancellationToken = completionCancellation.Token;
         var outputTokens = maxOutputTokens ?? AiCompletionClient.DefaultMaxOutputTokens;
         var request = inner.SerializeTextRequest(systemPrompt, userPrompt, temperature, outputTokens, tier, userId, json: true);
         return await RunAsync(userId, client => client.CompleteJsonAsync<T>(systemPrompt, userPrompt, temperature,
-            outputTokens, purpose, tier, userId, cancellationToken), cancellationToken, request);
+            outputTokens, purpose, tier, userId, cancellationToken, requireComplete), cancellationToken, request);
     }
 }
