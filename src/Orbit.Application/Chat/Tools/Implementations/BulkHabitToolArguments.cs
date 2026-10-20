@@ -180,6 +180,9 @@ internal static class BulkHabitToolArguments
             ?? ParseNullableTime(fields, "due_time").Error
             ?? ParseFrequency(fields).Error;
 
+    public static string? CheckCreateHabitFields(JsonElement fields) =>
+        CheckHabitFields(fields) ?? ParseNullableTime(fields, "due_end_time").Error;
+
     public static object FilterSchema() => new
     {
         type = JsonSchemaTypes.Object,
