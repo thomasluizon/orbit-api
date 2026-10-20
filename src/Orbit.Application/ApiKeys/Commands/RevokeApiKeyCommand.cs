@@ -1,4 +1,5 @@
 ﻿using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.ApiKeys.Services;
 using Orbit.Application.Common;
@@ -29,19 +30,40 @@ public class RevokeApiKeyCommandHandler(
         if (requiresStepUp && !authorization.HasGrant(request.UserId))
             return Result.Failure(ErrorMessages.ApiKeyCreationChallengeRequired);
 
-        var keys = await apiKeyRepository.FindTrackedAsync(
-            k => k.Id == request.KeyId && k.UserId == request.UserId,
-            cancellationToken);
-
-        var apiKey = keys.Count > 0 ? keys[0] : null;
+        var apiKey = await FindKeyAsync(request, cancellationToken);
         if (apiKey is null)
             return Result.Failure(ErrorMessages.ApiKeyNotFound);
 
-        apiKey.Revoke();
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        for (var attempt = 0; attempt < 2 && !apiKey.IsRevoked; attempt++)
+        {
+            apiKey.Revoke();
+            try
+            {
+                await unitOfWork.SaveChangesAsync(cancellationToken);
+                break;
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                unitOfWork.ResetTracking();
+                apiKey = await FindKeyAsync(request, cancellationToken);
+                if (apiKey is null)
+                    return Result.Failure(ErrorMessages.ApiKeyNotFound);
+                if (apiKey.IsRevoked)
+                    break;
+                if (attempt > 0)
+                    throw;
+            }
+        }
 
         cache.Remove(ReferenceCacheKeys.ApiKeys(request.UserId));
 
         return Result.Success();
+    }
+
+    private async Task<ApiKey?> FindKeyAsync(RevokeApiKeyCommand request, CancellationToken cancellationToken)
+    {
+        var keys = await apiKeyRepository.FindTrackedAsync(
+            key => key.Id == request.KeyId && key.UserId == request.UserId, cancellationToken);
+        return keys.Count > 0 ? keys[0] : null;
     }
 }

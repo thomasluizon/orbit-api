@@ -1,4 +1,5 @@
 ﻿using System.Linq.Expressions;
+using Microsoft.EntityFrameworkCore;
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
@@ -219,6 +220,66 @@ public class RevokeApiKeyCommandHandlerTests
         revokeResult.IsSuccess.Should().BeTrue();
         listedAfter.IsSuccess.Should().BeTrue();
         listedAfter.Value.Should().ContainSingle(key => key.Id == survivor.Id);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Handle_ConcurrentRevokeOrRotation_ReloadsAndRevokesCurrentKey(bool alreadyRevoked)
+    {
+        var (original, _) = ApiKey.Create(UserId, "Key").Value;
+        var (current, _) = ApiKey.Create(UserId, "Key").Value;
+        if (alreadyRevoked)
+            current.Revoke();
+        _apiKeyRepo.FindTrackedAsync(Arg.Any<Expression<Func<ApiKey, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<ApiKey> { original }, new List<ApiKey> { current });
+        var saves = 0;
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            if (++saves == 1)
+                throw new DbUpdateConcurrencyException();
+            return Task.FromResult(1);
+        });
+
+        var result = await _handler.Handle(new(UserId, original.Id), default);
+
+        result.IsSuccess.Should().BeTrue();
+        current.IsRevoked.Should().BeTrue();
+        _unitOfWork.Received(1).ResetTracking();
+        saves.Should().Be(alreadyRevoked ? 1 : 2);
+    }
+
+    [Fact]
+    public async Task Handle_RetryRacesAnotherRevoke_ReturnsSuccessWhenStoredKeyIsRevoked()
+    {
+        var (first, _) = ApiKey.Create(UserId, "Key").Value;
+        var (second, _) = ApiKey.Create(UserId, "Key").Value;
+        var (revoked, _) = ApiKey.Create(UserId, "Key").Value;
+        revoked.Revoke();
+        _apiKeyRepo.FindTrackedAsync(Arg.Any<Expression<Func<ApiKey, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<ApiKey> { first }, new List<ApiKey> { second }, new List<ApiKey> { revoked });
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns<int>(_ => throw new DbUpdateConcurrencyException());
+
+        var result = await _handler.Handle(new(UserId, first.Id), default);
+
+        result.IsSuccess.Should().BeTrue();
+        await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_RepeatedConcurrencyConflict_RetriesOnlyOnce()
+    {
+        var (key, _) = ApiKey.Create(UserId, "Key").Value;
+        _apiKeyRepo.FindTrackedAsync(Arg.Any<Expression<Func<ApiKey, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(_ => new List<ApiKey> { ApiKey.Create(UserId, "Key").Value.Item1 });
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns<int>(_ => throw new DbUpdateConcurrencyException());
+
+        Func<Task> revoke = () => _handler.Handle(new(UserId, key.Id), default);
+
+        await revoke.Should().ThrowAsync<DbUpdateConcurrencyException>();
+        await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     private void AuthorizeManagement() => _challengeService.AuthorizeOnce(

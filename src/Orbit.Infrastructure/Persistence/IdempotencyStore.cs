@@ -23,11 +23,16 @@ public sealed class IdempotencyStore(OrbitDbContext context) : IIdempotencyStore
     {
         var record = ProcessedRequest.Create(userId, idempotencyKey, requestType, requestOrdinal);
         context.ProcessedRequests.Add(record);
-        return new Reservation(record);
+        return new Reservation(context, record);
     }
 
-    private sealed class Reservation(ProcessedRequest record) : IIdempotencyReservation
+    private sealed class Reservation(OrbitDbContext context, ProcessedRequest record) : IIdempotencyReservation
     {
-        public void SetResponseBody(string responseBody) => record.SetResponseBody(responseBody);
+        public void SetResponseBody(string responseBody)
+        {
+            if (context.Entry(record).State == EntityState.Detached)
+                context.ProcessedRequests.Attach(record);
+            record.SetResponseBody(responseBody);
+        }
     }
 }

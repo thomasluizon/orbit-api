@@ -916,7 +916,7 @@ public class AiSummaryServiceTests
                     new HttpClient(new JsonResponseHandler(modelJsonContent, captureRequest))),
             });
         var aiClient = new AiCompletionClient(chatClient, NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
-        return new AiSummaryService(aiClient, NullLogger<AiSummaryService>.Instance);
+        return new AiSummaryService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(aiClient), NullLogger<AiSummaryService>.Instance);
     }
 
     private static Task<Result<DailySummaryContent>> InvokeGenerateSummaryAsync(AiSummaryService service) =>

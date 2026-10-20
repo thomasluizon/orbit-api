@@ -125,6 +125,7 @@ public sealed partial class ProactiveEngineService(
             if (fact.Trigger == ProactiveTrigger.GoalBehind && items.Any(i => i.Trigger == fact.Trigger
                 && i.GoalId == fact.GoalId && i.LocalDate > today.AddDays(-ProactiveRules.GoalCooldownDays))) continue;
 
+            using var aiUser = Orbit.Infrastructure.AI.AiCallContext.Begin(user.Id);
             var message = await messages.GenerateAsync(fact, user.Language ?? "en", ct);
             var shouldPush = !pushedToday && ProactiveRules.MayPush(fact.Trigger)
                 && (user.ProactiveAstraEnabled ?? true) && !ProactiveRules.IsQuiet(localHour);
