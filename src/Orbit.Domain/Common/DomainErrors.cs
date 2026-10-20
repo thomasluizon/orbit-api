@@ -82,6 +82,8 @@ public static class DomainErrors
     public static readonly AppError EndDateBeforeStartDate = new("END_DATE_BEFORE_START", "End date must be on or after the start date.");
     public static readonly AppError MaxScheduledReminders = new("MAX_SCHEDULED_REMINDERS", "A habit can have at most {0} scheduled reminders.");
     public static readonly AppError MaxReminderTimes = new("MAX_REMINDER_TIMES", "A habit can have at most {0} reminder times.");
+    public static readonly AppError ReminderTimeOutOfRange = new("VALIDATION_REMINDER_TIME_RANGE", "Reminder offsets must be between 0 and {0} minutes.");
+    public static readonly AppError DuplicateReminderTimes = new("VALIDATION_REMINDER_TIMES_UNIQUE", "Reminder offsets must be unique.");
     public static readonly AppError DuplicateScheduledReminders = new("DUPLICATE_SCHEDULED_REMINDERS", "Scheduled reminders must not contain duplicate entries.");
     public static readonly AppError InvalidScheduledReminderWhen = new("VALIDATION_SCHEDULED_REMINDER_WHEN", "Scheduled reminders must use a defined timing value.");
     public static readonly AppError InvalidRelativeReminders = new("INVALID_RELATIVE_REMINDERS", "Relative reminders must be unique and have a valid offset or local time.");

@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Orbit.Api.Controllers;
 using Orbit.Application.Habits.Commands;
+using Orbit.Application.Habits.Queries;
 using Orbit.Application.Habits.Validators;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -29,6 +30,9 @@ public class BulkReminderValidationContractTests
         var cases = new TheoryData<string, bool>();
         foreach (var mixed in new[] { false, true })
         {
+            cases.Add("\"reminderTimes\":[-1]", mixed);
+            cases.Add("\"reminderTimes\":[10081]", mixed);
+            cases.Add("\"reminderTimes\":[15,15]", mixed);
             foreach (var token in new[] { "99", "2", "-1", "\"99\"", "\"2\"", "\"-1\"" })
             {
                 cases.Add($$"""
@@ -66,7 +70,9 @@ public class BulkReminderValidationContractTests
     {
         using var fixture = new Fixture();
         var affected = $$"""{"title":"Affected root","subHabits":[{"title":"Valid first child","scheduledReminders":[{"when":"same_day","time":"07:00"}]},{"title":"Invalid later child",{{fields}}}]}""";
-        var items = mixed ? $$"""{"title":"Before"},{{affected}},{"title":"After"}""" : affected;
+        var items = mixed
+            ? $$"""{"title":"Before","reminderTimes":[0,10080]},{{affected}},{"title":"After","reminderTimes":[45]}"""
+            : affected;
 
         var result = await fixture.Create($$"""{"habits":[{{items}}]}""");
 
@@ -87,9 +93,72 @@ public class BulkReminderValidationContractTests
         {
             result.Results[0].Status.Should().Be(BulkItemStatus.Success);
             result.Results[2].Status.Should().Be(BulkItemStatus.Success);
+            result.Results[0].HabitId.Should().Be(saved.Single(h => h.Title == "Before").Id);
+            result.Results[2].HabitId.Should().Be(saved.Single(h => h.Title == "After").Id);
+            saved.Single(h => h.Title == "Before").ReminderTimes.Should().Equal(0, 10080);
+            saved.Single(h => h.Title == "After").ReminderTimes.Should().Equal(45);
         }
         fixture.Database.Context.ChangeTracker.Entries<Habit>().Should()
             .NotContain(entry => entry.Entity.Title == "Affected root" || entry.Entity.ParentHabitId != null);
+    }
+
+    public static TheoryData<string, int[]> ValidReminderTimes => new()
+    {
+        { "null", [] },
+        { "[]", [] },
+        { "[0]", [0] },
+        { "[10080]", [10080] },
+        { "[10080,0,15]", [10080, 0, 15] }
+    };
+
+    [Theory]
+    [MemberData(nameof(ValidReminderTimes))]
+    public async Task BulkCreate_ValidChildOffsets_ReadBackWithIndependentReminderSettings(string offsets, int[] expected)
+    {
+        using var fixture = new Fixture();
+        var result = await fixture.Create($$"""
+            {"habits":[{"title":"Root","reminderEnabled":false,"reminderTimes":[30],"scheduledReminders":[{"when":"day_before","time":"07:00"}],"subHabits":[
+                {"title":"Scheduled first child","reminderEnabled":true,"reminderTimes":[45],"scheduledReminders":[{"when":0,"time":"08:00"}]},
+                {"title":"Offset child","reminderEnabled":true,"dueTime":"09:00","reminderTimes":{{offsets}},"relativeReminders":[
+                    {"minutesBefore":-1439},{"minutesBefore":-1},{"minutesBefore":10080},{"when":1,"time":"08:00"}]}]}]}
+            """);
+
+        var item = result.Results.Should().ContainSingle().Subject;
+        item.Status.Should().Be(BulkItemStatus.Success);
+        item.HabitId.Should().NotBeNull();
+        result.AppliedCount.Should().Be(1);
+        result.TotalMatched.Should().Be(1);
+        result.SkippedCount.Should().Be(0);
+        result.Partial.Should().BeFalse();
+        using var readback = fixture.Database.CreateContext();
+        var root = await readback.Habits.AsNoTracking().SingleAsync(h => h.Id == item.HabitId);
+        (await readback.Habits.CountAsync()).Should().Be(3);
+        var dates = Substitute.For<IUserDateService>();
+        dates.GetUserTodayAsync(root.UserId, Arg.Any<CancellationToken>()).Returns(new DateOnly(2026, 4, 3));
+        var detail = await new GetHabitByIdQueryHandler(new GenericRepository<Habit>(readback),
+            new GenericRepository<HabitLog>(readback), dates).Handle(new(root.UserId, root.Id), CancellationToken.None);
+
+        detail.IsSuccess.Should().BeTrue();
+        detail.Value.ReminderEnabled.Should().BeFalse();
+        detail.Value.ReminderTimes.Should().Equal(30);
+        detail.Value.ScheduledReminders.Should().Equal(new ScheduledReminderTime(ScheduledReminderWhen.DayBefore, new TimeOnly(7, 0)));
+        detail.Value.Children.Should().HaveCount(2);
+        var first = detail.Value.Children.Single(h => h.Title == "Scheduled first child");
+        first.ReminderEnabled.Should().BeTrue();
+        first.ReminderTimes.Should().Equal(45);
+        first.ScheduledReminders.Should().Equal(new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(8, 0)));
+        var child = detail.Value.Children.Single(h => h.Title == "Offset child");
+        child.ReminderEnabled.Should().BeTrue();
+        child.ReminderTimes.Should().Equal(expected);
+        child.RelativeReminders.Should().Equal(new RelativeReminderTime(-1439), new RelativeReminderTime(-1),
+            new RelativeReminderTime(10080), new RelativeReminderTime(When: ScheduledReminderWhen.DayBefore, Time: new TimeOnly(8, 0)));
+        using var output = JsonDocument.Parse(JsonSerializer.Serialize(detail.Value, ReminderInputContractTests.MvcOptions()));
+        var outputChild = output.RootElement.GetProperty("children").EnumerateArray().Single(h => h.GetProperty("title").GetString() == "Offset child");
+        outputChild.GetProperty("reminderTimes").EnumerateArray().Select(v => v.GetInt32()).Should().Equal(expected);
+        var relative = outputChild.GetProperty("relativeReminders");
+        relative[1].GetProperty("minutesBefore").GetInt32().Should().Be(-1);
+        relative[3].GetProperty("when").GetString().Should().Be("DayBefore");
+        relative[3].GetProperty("time").GetString().Should().Be("08:00:00");
     }
 
     public static TheoryData<string, ScheduledReminderWhen> ValidWhenInputs => new()
@@ -117,8 +186,8 @@ public class BulkReminderValidationContractTests
                 {"title":"Folded","dueTime":"09:00","reminderEnabled":true,"reminderTimes":[60],"scheduledReminders":[{"when":{{token}},"time":"07:00"}]},
                 {"title":"Relative","dueTime":"10:00","reminderEnabled":true,"reminderTimes":[],"relativeReminders":[{"when":{{token}},"time":"06:00"},{"minutesBefore":15}]},
                 {"title":"Omitted"},
-                {"title":"Null","scheduledReminders":null,"relativeReminders":null},
-                {"title":"Empty","scheduledReminders":[],"relativeReminders":[]}
+                {"title":"Null","reminderTimes":null,"scheduledReminders":null,"relativeReminders":null},
+                {"title":"Empty","reminderTimes":[],"scheduledReminders":[],"relativeReminders":[]}
             ]}]}
             """);
 
@@ -149,6 +218,9 @@ public class BulkReminderValidationContractTests
             child.ScheduledReminders.Should().BeEmpty();
             child.RelativeReminders.Should().BeEmpty();
         }
+        children[3].ReminderTimes.Should().Equal(15);
+        children[4].ReminderTimes.Should().Equal(15);
+        children[5].ReminderTimes.Should().BeEmpty();
         var options = ReminderInputContractTests.MvcOptions();
         using var output = JsonDocument.Parse(JsonSerializer.Serialize(children[0].ScheduledReminders, options));
         output.RootElement[0].GetProperty("when").GetString().Should().Be(expected.ToString());

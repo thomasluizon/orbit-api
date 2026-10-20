@@ -95,6 +95,12 @@ internal static class HabitInvariants
         if (reminderTimes.Count > DomainConstants.MaxReminderTimes)
             return DomainErrors.MaxReminderTimes.Format(DomainConstants.MaxReminderTimes);
 
+        if (reminderTimes.Any(minutes => minutes is < 0 or > DomainConstants.MaxReminderMinutesBefore))
+            return DomainErrors.ReminderTimeOutOfRange.Format(DomainConstants.MaxReminderMinutesBefore);
+
+        if (reminderTimes.Distinct().Count() != reminderTimes.Count)
+            return DomainErrors.DuplicateReminderTimes;
+
         return null;
     }
 
