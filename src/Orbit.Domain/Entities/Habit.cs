@@ -789,22 +789,29 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     {
         var startValidation = HabitInvariants.ValidateStartDate(p.StartDate, effectiveIsGeneral, p.FrequencyUnit,
             p.ClearEndDate == true ? null : p.EndDate ?? EndDate);
-        if (p.StartDate.HasValue && p.StartDate != StartDate && !p.UserToday.HasValue)
+        if (RequiresScheduleReanchor(p) && !p.UserToday.HasValue)
             return DomainErrors.InvalidStartDate;
         return startValidation;
     }
+
+    public bool RequiresScheduleReanchor(HabitUpdateParams p) =>
+        p.StartDate.HasValue && (p.StartDate.Value != StartDate || RecurrenceChanged(p));
+
+    private bool RecurrenceChanged(HabitUpdateParams p) =>
+        FrequencyUnit != p.FrequencyUnit
+        || FrequencyQuantity != p.FrequencyQuantity
+        || IntervalWeeks != p.IntervalWeeks
+        || IsFlexible != (p.IsFlexible ?? IsFlexible)
+        || !Days.ToHashSet().SetEquals((p.IsFlexible ?? IsFlexible) ? [] : p.Days ?? []);
 
     private Result ApplyRequiredUpdates(HabitUpdateParams p)
     {
         var effectiveIsFlexible = p.IsFlexible ?? IsFlexible;
         var effectiveDays = effectiveIsFlexible ? [] : (p.Days?.ToList() ?? []);
         var effectiveDueDate = p.StartDate.HasValue ? DueDate : p.DueDate ?? DueDate;
-        var startChanged = p.StartDate.HasValue && p.StartDate.Value != StartDate;
+        var reanchorSchedule = RequiresScheduleReanchor(p);
         var dueChanged = effectiveDueDate != DueDate;
-        var recurrencePhaseChanged = FrequencyUnit != p.FrequencyUnit
-            || FrequencyQuantity != p.FrequencyQuantity
-            || IntervalWeeks != p.IntervalWeeks
-            || !Days.ToHashSet().SetEquals(effectiveDays);
+        var recurrencePhaseChanged = RecurrenceChanged(p);
 
         Title = p.Title.Trim();
         Description = p.Description?.Trim();
@@ -817,7 +824,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         DueTime = p.DueTime;
         DueEndTime = p.DueEndTime;
 
-        if (startChanged)
+        if (reanchorSchedule)
         {
             var reanchor = Reanchor(p, effectiveIsFlexible);
             if (reanchor.IsFailure)
@@ -830,7 +837,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         }
 
         if (FrequencyUnit is Enums.FrequencyUnit.Month or Enums.FrequencyUnit.Year)
-            OriginalDayOfMonth = startChanged ? StartDate.Day
+            OriginalDayOfMonth = reanchorSchedule ? StartDate.Day
                 : recurrencePhaseChanged || dueChanged ? effectiveDueDate.Day
                 : OriginalDayOfMonth ?? DueDate.Day;
         else

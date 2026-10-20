@@ -8,6 +8,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -75,8 +76,9 @@ public class AiCompletionClientTests
                     throw;
                 }
             });
+        var clock = new CompletionTestClock();
         var client = new AiCompletionClient(BuildResponsesClient(new CapturingHandler()), NullLogger<AiCompletionClient>.Instance,
-            usage, TimeSpan.FromSeconds(1));
+            usage, TimeSpan.FromSeconds(1), timeProvider: clock);
         var intent = new AiIntentService(AiBudgetTestDouble.Wrap(client), usage, NullLogger<AiIntentService>.Instance);
         Func<Task> call = kind switch
         {
@@ -90,6 +92,10 @@ public class AiCompletionClientTests
         recording.Telemetry.HasUsage.Should().BeTrue();
         recording.Telemetry.IsError.Should().BeFalse();
         recording.Token.CanBeCanceled.Should().BeTrue();
+        clock.Advance(TimeSpan.FromSeconds(1) - TimeSpan.FromTicks(1));
+        recording.Token.IsCancellationRequested.Should().BeFalse();
+        clock.Advance(TimeSpan.FromTicks(1));
+        recording.Token.IsCancellationRequested.Should().BeTrue();
         await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
         recording.Token.IsCancellationRequested.Should().BeTrue();
         Func<Task> bounded = () => completion.WaitAsync(TimeSpan.FromSeconds(5));
@@ -217,38 +223,36 @@ public class AiCompletionClientTests
         AiModelTier tier, string primary, string subTask, bool expected)
         => AiCompletionClient.ShouldApplyTemperature(tier, primary, subTask).Should().Be(expected);
 
-    public static IEnumerable<object[]> CompletionDeadlineCases()
-    {
-        for (var iteration = 0; iteration < 200; iteration++)
-            yield return ["json", iteration];
-        foreach (var kind in new[] { "text", "chat", "stream" })
-            yield return [kind, 0];
-    }
-
     [Theory]
-    [MemberData(nameof(CompletionDeadlineCases))]
-    public async Task CompletionDeadline_CancelsTheWholeCallIncludingRetryWaits(string kind, int iteration)
+    [InlineData("json")]
+    [InlineData("text")]
+    [InlineData("chat")]
+    [InlineData("stream")]
+    public async Task CompletionDeadline_CancelsTheWholeCallIncludingRetryWaits(string kind)
     {
         using var handler = new WaitingHandler();
-        var client = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance,
-            Substitute.For<IAiUsageRecorder>(), TimeSpan.FromMilliseconds(50));
-        var intent = new AiIntentService(AiBudgetTestDouble.Wrap(client), Substitute.For<IAiUsageRecorder>(), NullLogger<AiIntentService>.Instance);
-        Func<Task> call = kind switch
-        {
-            "json" => async () => await client.CompleteJsonAsync<Probe>("system", "user"),
-            "text" => async () => await client.CompleteTextAsync("system", "user"),
-            _ => async () => await intent.SendWithToolsAsync(new AiToolRequest("user", "system", [], Guid.NewGuid()),
-                kind == "stream" ? _ => Task.CompletedTask : null)
-        };
+        var clock = new CompletionTestClock();
+        var retry = new ObservingRetryPolicy();
+        var usage = Substitute.For<IAiUsageRecorder>();
+        usage.RecordAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<long>(), Arg.Any<long>(),
+                Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>(), Arg.Any<Guid?>(), Arg.Any<AiCallTelemetry>(), Arg.Any<long>())
+            .Returns(Task.FromException(new OperationCanceledException("usage recording canceled")));
+        var client = new AiCompletionClient(BuildResponsesClient(handler, retry), NullLogger<AiCompletionClient>.Instance,
+            usage, TimeSpan.FromMilliseconds(50), timeProvider: clock);
+        using var caller = new CancellationTokenSource();
+        var call = StartCompletion(client, usage, kind, caller.Token);
 
-        Func<Task> boundedCall = () => call().WaitAsync(TimeSpan.FromSeconds(5));
-        await boundedCall.Should().ThrowAsync<OperationCanceledException>($"deadline case {kind}/{iteration} must cancel");
+        await AssertDeadlineDuringRetryAsync(call, retry, clock, client.CompletionTimeout, caller, kind);
+        handler.RequestCount.Should().Be(1);
+        clock.ActiveTimers.Should().Be(0);
+        AssertFailedUsage(usage);
     }
 
     [Theory]
     [InlineData("json")]
     [InlineData("text")]
     [InlineData("chat")]
+    [InlineData("stream")]
     public async Task CompletionDeadline_ConfiguredBound_CancelsBufferedCallsDuringRetryWait(string kind)
     {
         var settings = new AiSettings
@@ -259,24 +263,196 @@ public class AiCompletionClientTests
         };
         var usage = Substitute.For<IAiUsageRecorder>();
         using var handler = new WaitingHandler();
+        var clock = new CompletionTestClock();
+        var retry = new ObservingRetryPolicy();
         var client = new AiCompletionClient(Options.Create(settings), NullLogger<AiCompletionClient>.Instance,
-            usage, new HttpClientPipelineTransport(new HttpClient(handler)));
-        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(client), usage, NullLogger<AiIntentService>.Instance);
-        Func<Task> call = kind switch
-        {
-            "json" => async () => await client.CompleteJsonAsync<Probe>("system", "user"),
-            "text" => async () => await client.CompleteTextAsync("system", "user"),
-            _ => async () => await service.SendWithToolsAsync(new AiToolRequest("user", "system", []))
-        };
+            usage, new HttpClientPipelineTransport(new HttpClient(handler)), clock, retry);
+        using var caller = new CancellationTokenSource();
+        var call = StartCompletion(client, usage, kind, caller.Token);
 
-        Func<Task> boundedCall = () => call().WaitAsync(TimeSpan.FromSeconds(5));
-        await boundedCall.Should().ThrowAsync<OperationCanceledException>();
+        await AssertDeadlineDuringRetryAsync(call, retry, clock,
+            kind == "stream" ? client.StreamingCompletionTimeout : client.CompletionTimeout, caller, kind);
         client.CompletionTimeout.Should().Be(TimeSpan.FromSeconds(1));
         client.StreamingCompletionTimeout.Should().Be(TimeSpan.FromSeconds(75));
-        var metadata = (AiCallTelemetry)usage.ReceivedCalls().Single().GetArguments()[8]!;
+        handler.RequestCount.Should().Be(1);
+        clock.ActiveTimers.Should().Be(0);
+        AssertFailedUsage(usage);
+    }
+
+    [Theory]
+    [InlineData("text")]
+    [InlineData("json")]
+    [InlineData("chat")]
+    [InlineData("stream")]
+    [InlineData("budget-text")]
+    [InlineData("budget-json")]
+    public async Task CompletionDeadline_CallerCancellation_ReleasesTimersWithoutRetry(string kind)
+    {
+        using var handler = new WaitingHandler();
+        var clock = new CompletionTestClock();
+        var retry = new ObservingRetryPolicy();
+        var usage = Substitute.For<IAiUsageRecorder>();
+        var client = new AiCompletionClient(BuildResponsesClient(handler, retry), NullLogger<AiCompletionClient>.Instance,
+            usage, timeProvider: clock);
+        using var caller = new CancellationTokenSource();
+        var call = StartCompletion(client, usage, kind, caller.Token);
+        var token = await retry.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        caller.Cancel();
+
+        token.IsCancellationRequested.Should().BeTrue();
+        Func<Task> bounded = () => call.WaitAsync(TimeSpan.FromSeconds(5));
+        await bounded.Should().ThrowAsync<OperationCanceledException>();
+        clock.ActiveTimers.Should().Be(0);
+        handler.RequestCount.Should().Be(1);
+        AssertFailedUsage(usage);
+    }
+
+    [Theory]
+    [InlineData("text")]
+    [InlineData("json")]
+    [InlineData("chat")]
+    [InlineData("stream")]
+    public async Task CompletionDeadline_PreCanceledCaller_DoesNotDispatch(string kind)
+    {
+        using var handler = new WaitingHandler();
+        var clock = new CompletionTestClock();
+        var usage = Substitute.For<IAiUsageRecorder>();
+        var client = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance,
+            usage, timeProvider: clock);
+        using var caller = new CancellationTokenSource();
+        caller.Cancel();
+
+        Func<Task> call = () => StartCompletion(client, usage, kind, caller.Token);
+
+        await call.Should().ThrowAsync<OperationCanceledException>();
+        handler.RequestCount.Should().Be(0);
+        clock.ActiveTimers.Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData("text")]
+    [InlineData("json")]
+    [InlineData("chat")]
+    [InlineData("budget-text")]
+    [InlineData("budget-json")]
+    public async Task CompletionDeadline_RepeatedSuccess_ReleasesTimersAndCallerRegistrations(string kind)
+    {
+        var clock = new CompletionTestClock();
+        var usage = Substitute.For<IAiUsageRecorder>();
+        var client = new AiCompletionClient(BuildResponsesClient(new CapturingHandler()), NullLogger<AiCompletionClient>.Instance,
+            usage, timeProvider: clock);
+        using var caller = new CancellationTokenSource();
+        for (var index = 0; index < 2; index++)
+        {
+            await StartCompletion(client, usage, kind, caller.Token);
+            clock.ActiveTimers.Should().Be(0);
+        }
+        var tokens = usage.ReceivedCalls().Select(call => (CancellationToken)call.GetArguments()[6]!).ToArray();
+        tokens.Should().HaveCount(2);
+
+        caller.Cancel();
+        clock.Advance(client.CompletionTimeout);
+
+        tokens.Should().OnlyContain(token => !token.IsCancellationRequested,
+            "completed scopes must detach their caller registrations and deadline timers");
+    }
+
+    [Fact]
+    public void CompletionDeadline_ServiceRegistration_UsesRegisteredClock()
+    {
+        var clock = new CompletionTestClock();
+        using var services = new ServiceCollection()
+            .AddSingleton<TimeProvider>(clock)
+            .AddSingleton(Options.Create(new AiSettings { ApiKey = "test-key" }))
+            .AddSingleton<Microsoft.Extensions.Logging.ILogger<AiCompletionClient>>(NullLogger<AiCompletionClient>.Instance)
+            .AddSingleton(Substitute.For<IAiUsageRecorder>())
+            .AddSingleton<AiCompletionClient>()
+            .BuildServiceProvider();
+        var client = services.GetRequiredService<AiCompletionClient>();
+        using var scope = client.CreateCompletionCancellation(CancellationToken.None);
+
+        clock.Advance(client.CompletionTimeout);
+
+        scope.Token.IsCancellationRequested.Should().BeTrue();
+    }
+
+    [Fact]
+    public void CompletionDeadline_ConcurrentScopes_KeepIndependentDeadlines()
+    {
+        var clock = new CompletionTestClock();
+        var client = new AiCompletionClient(BuildResponsesClient(new CapturingHandler()), NullLogger<AiCompletionClient>.Instance,
+            Substitute.For<IAiUsageRecorder>(), TimeSpan.FromSeconds(1), timeProvider: clock);
+        using var caller = new CancellationTokenSource();
+        using var first = client.CreateCompletionCancellation(caller.Token);
+        clock.Advance(TimeSpan.FromMilliseconds(500));
+        using var second = client.CreateCompletionCancellation(caller.Token);
+
+        clock.Advance(TimeSpan.FromMilliseconds(500));
+
+        first.Token.IsCancellationRequested.Should().BeTrue();
+        second.Token.IsCancellationRequested.Should().BeFalse();
+        clock.Advance(TimeSpan.FromMilliseconds(500));
+        second.Token.IsCancellationRequested.Should().BeTrue();
+    }
+
+    private static Task StartCompletion(AiCompletionClient client, IAiUsageRecorder usage, string kind, CancellationToken token)
+    {
+        var service = new AiIntentService(AiBudgetTestDouble.Wrap(client), usage, NullLogger<AiIntentService>.Instance);
+        return kind switch
+        {
+            "budget-text" => AiBudgetTestDouble.Wrap(client).CompleteTextAsync("system", "user", cancellationToken: token),
+            "budget-json" => AiBudgetTestDouble.Wrap(client).CompleteJsonAsync<Probe>("system", "user", cancellationToken: token),
+            "json" => client.CompleteJsonAsync<Probe>("system", "user", cancellationToken: token),
+            "text" => client.CompleteTextAsync("system", "user", cancellationToken: token),
+            _ => service.SendWithToolsAsync(new AiToolRequest("user", "system", []),
+                kind == "stream" ? _ => Task.CompletedTask : null, cancellationToken: token)
+        };
+    }
+
+    private static async Task AssertDeadlineDuringRetryAsync(Task call, ObservingRetryPolicy retry,
+        CompletionTestClock clock, TimeSpan timeout, CancellationTokenSource caller, string kind)
+    {
+        try
+        {
+            var token = await retry.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            token.IsCancellationRequested.Should().BeFalse($"{kind} must enter the real retry wait before its deadline");
+            clock.Advance(timeout - TimeSpan.FromTicks(1));
+            token.IsCancellationRequested.Should().BeFalse($"{kind} must remain active just before its deadline");
+            call.IsCompleted.Should().BeFalse();
+            clock.Advance(TimeSpan.FromTicks(1));
+            token.IsCancellationRequested.Should().BeTrue($"{kind} must forward cancellation at its controlled deadline");
+            Func<Task> bounded = () => call.WaitAsync(TimeSpan.FromSeconds(5));
+            var exception = (await bounded.Should().ThrowAsync<OperationCanceledException>()).Which;
+            exception.CancellationToken.Should().Be(token, "failed usage recording must preserve the SDK cancellation");
+        }
+        finally
+        {
+            caller.Cancel();
+            try { await call.WaitAsync(TimeSpan.FromSeconds(5)); }
+            catch (OperationCanceledException) { caller.IsCancellationRequested.Should().BeTrue(); }
+        }
+    }
+
+    private static void AssertFailedUsage(IAiUsageRecorder usage)
+    {
+        var arguments = usage.ReceivedCalls().Single().GetArguments();
+        arguments.Skip(2).Take(4).Should().OnlyContain(value => (long)value! == 0);
+        var metadata = (AiCallTelemetry)arguments[8]!;
         metadata.IsError.Should().BeTrue();
         metadata.HasUsage.Should().BeFalse();
-        metadata.LatencySeconds.Should().BeGreaterThan(0);
+    }
+
+    private sealed class ObservingRetryPolicy() : AiRetryLoggingPolicy(2, NullLogger.Instance)
+    {
+        internal TaskCompletionSource<CancellationToken> Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        protected override Task WaitAsync(TimeSpan delay, CancellationToken cancellationToken)
+        {
+            var wait = base.WaitAsync(delay, cancellationToken);
+            Entered.TrySetResult(cancellationToken);
+            return wait;
+        }
     }
 
     [Theory]
@@ -479,9 +655,11 @@ public class AiCompletionClientTests
     private sealed class WaitingHandler : HttpMessageHandler
     {
         private readonly List<Stream> _buffers = [];
+        internal int RequestCount { get; private set; }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            RequestCount++;
             var buffer = new MemoryStream(Encoding.UTF8.GetBytes("{}"));
             _buffers.Add(buffer);
             var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests)
@@ -523,12 +701,13 @@ public class AiCompletionClientTests
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
-    private static ResponsesClient BuildResponsesClient(HttpMessageHandler handler) =>
+    private static ResponsesClient BuildResponsesClient(HttpMessageHandler handler, ClientRetryPolicy? retryPolicy = null) =>
         new(
             credential: new ApiKeyCredential("test-key"),
             options: new ResponsesClientOptions
             {
                 Endpoint = new Uri("https://orbit.test/v1"),
+                RetryPolicy = retryPolicy,
                 Transport = new HttpClientPipelineTransport(new HttpClient(handler)),
             });
 

@@ -11,6 +11,62 @@ public class EditableHabitStartDateTests
     private static readonly DateOnly Today = new(2026, 10, 20);
 
     [Fact]
+    public void UnchangedAnchor_ChangedWeekdayRecomputesEligibleOccurrence()
+    {
+        var anchor = new DateOnly(2026, 10, 26);
+        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Read", FrequencyUnit.Day, 1,
+            anchor, Days: [DayOfWeek.Monday], StartDate: anchor)).Value;
+        habit.Update(new("Read", null, FrequencyUnit.Day, 1, [DayOfWeek.Wednesday], false, anchor.AddDays(2),
+            StartDate: anchor, UserToday: Today)).IsSuccess.Should().BeTrue();
+        habit.DueDate.Should().Be(anchor.AddDays(2));
+        habit.StartDate.Should().Be(anchor);
+        habit.ScheduledStartDate.Should().Be(anchor);
+    }
+
+    [Theory]
+    [InlineData(0, "2026-10-26")]
+    [InlineData(1, "2026-11-02")]
+    public void UnchangedAnchor_IntervalEditUsesAccountWeekStart(int weekStart, string expected)
+    {
+        var anchor = new DateOnly(2026, 10, 25);
+        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Read", FrequencyUnit.Day, 1,
+            anchor, Days: [DayOfWeek.Monday], StartDate: anchor)).Value;
+        habit.Update(new("Read", null, FrequencyUnit.Day, 1, [DayOfWeek.Monday], false, null,
+            StartDate: anchor, UserToday: Today, IntervalWeeks: 2, WeekStartDay: weekStart)).IsSuccess.Should().BeTrue();
+        habit.DueDate.Should().Be(DateOnly.Parse(expected));
+        habit.ScheduledStartDate.Should().Be(anchor);
+    }
+
+    [Fact]
+    public void UnchangedAnchor_EveryNEditCatchesUpFromSelection()
+    {
+        var anchor = Today.AddDays(-8);
+        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Read", FrequencyUnit.Day, 1,
+            anchor, StartDate: anchor)).Value;
+        habit.CatchUpDueDate(Today).IsSuccess.Should().BeTrue();
+        habit.Update(new("Read", null, FrequencyUnit.Day, 3, null, false, null,
+            StartDate: anchor, UserToday: Today)).IsSuccess.Should().BeTrue();
+        habit.DueDate.Should().Be(Today.AddDays(1));
+        habit.ScheduledStartDate.Should().Be(anchor);
+    }
+
+    [Fact]
+    public void UnchangedAnchor_MonthIntervalEditRetainsMonthEndPhase()
+    {
+        var anchor = new DateOnly(2028, 1, 31);
+        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Read", FrequencyUnit.Month, 1,
+            anchor, StartDate: anchor)).Value;
+        habit.Log(anchor).IsSuccess.Should().BeTrue();
+        habit.Update(new("Read", null, FrequencyUnit.Month, 2, null, false, null,
+            StartDate: anchor, UserToday: new DateOnly(2028, 2, 1))).IsSuccess.Should().BeTrue();
+        habit.DueDate.Should().Be(new DateOnly(2028, 3, 31));
+        habit.ScheduledStartDate.Should().Be(anchor);
+        habit.OriginalDayOfMonth.Should().Be(31);
+        habit.Log(habit.DueDate).IsSuccess.Should().BeTrue();
+        habit.DueDate.Should().Be(new DateOnly(2028, 5, 31));
+    }
+
+    [Fact]
     public void Create_StoresSelectedDaySeparatelyFromFirstWeekday()
     {
         var anchor = new DateOnly(2026, 10, 26);

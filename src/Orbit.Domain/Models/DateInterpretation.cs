@@ -31,9 +31,13 @@ public sealed partial record DateInterpretationInput
     {
         if (NumericDate().IsMatch(IsoDate().Replace(Phrase, "")) || Instructions().IsMatch(Phrase))
             return true;
+        var explicitDates = new HashSet<(int Year, int Month, int Day)>();
         foreach (Match match in IsoDate().Matches(Phrase))
-            if (!TryParseDate(match.Value, out _))
+        {
+            if (!TryParseDate(match.Value, out var date))
                 return true;
+            explicitDates.Add((date.Year, date.Month, date.Day));
+        }
 
         var normalized = RemoveAccents(Phrase.ToLowerInvariant());
         var culture = CultureInfo.GetCultureInfo(Language);
@@ -42,17 +46,20 @@ public sealed partial record DateInterpretationInput
             var name = RemoveAccents(culture.DateTimeFormat.GetMonthName(month).ToLowerInvariant());
             var abbreviation = RemoveAccents(culture.DateTimeFormat.GetAbbreviatedMonthName(month).ToLowerInvariant()).TrimEnd('.');
             var monthPattern = $"(?:{Regex.Escape(name)}|{Regex.Escape(abbreviation)}\\.?)";
-            var pattern = $@"(?:\b(?<day>\d{{1,2}})(?:st|nd|rd|th|º|°)?\s+(?:(?:de|of)\s+)?{monthPattern}\b|\b{monthPattern}\s+(?:the\s+)?(?<day>\d{{1,2}})(?:st|nd|rd|th|º|°)?\b)(?:\s*(?:,|de)?\s*(?<year>\d{{4}})\b)?";
+            var pattern = $@"(?:\b(?<day>\d{{1,2}})(?:st|nd|rd|th|º|°)?\s+(?:(?:de|of)\s+)?{monthPattern}\b|\b{monthPattern}\s+(?:the\s+)?(?<day>\d{{1,2}})(?:st|nd|rd|th|º|°)?\b)(?:\s*(?:,|de)?\s*(?<year>[+-]?\d+)\b)?";
             foreach (Match match in Regex.Matches(normalized, pattern, RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(50)))
             {
                 var day = int.Parse(match.Groups["day"].Value, CultureInfo.InvariantCulture);
-                var year = match.Groups["year"].Success
-                    ? int.Parse(match.Groups["year"].Value, CultureInfo.InvariantCulture) : 2000;
-                if (year < 1 || day < 1 || day > DateTime.DaysInMonth(year, month))
+                var year = 2000;
+                if (match.Groups["year"].Success
+                    && !int.TryParse(match.Groups["year"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out year))
                     return true;
+                if (year is < 1 or > 9999 || day < 1 || day > DateTime.DaysInMonth(year, month))
+                    return true;
+                explicitDates.Add((match.Groups["year"].Success ? year : 0, month, day));
             }
         }
-        return false;
+        return explicitDates.Count > 1;
     }
 
     public static bool TryParseDate(string? value, out DateOnly date) =>

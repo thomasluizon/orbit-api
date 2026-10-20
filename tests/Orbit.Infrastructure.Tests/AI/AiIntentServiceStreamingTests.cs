@@ -491,6 +491,37 @@ public class AiIntentServiceStreamingTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task SendWithToolsAsync_RepeatedSuccess_DisposesDeadlineAndCallerRegistrations(bool streaming)
+    {
+        var body = streaming ? TextStream("Done", "Done") : ResponsesTestData.Text("Done");
+        var handler = new SequenceSseHandler(body, body);
+        var clock = new CompletionTestClock();
+        var usage = Substitute.For<IAiUsageRecorder>();
+        var client = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance,
+            usage, timeProvider: clock);
+        var service = new AiIntentService(AiBudgetTestDouble.Wrap(client), usage, NullLogger<AiIntentService>.Instance);
+        using var caller = new CancellationTokenSource();
+        for (var index = 0; index < 2; index++)
+        {
+            var result = await service.SendWithToolsAsync(new AiToolRequest("user", "system", []),
+                streaming ? _ => Task.CompletedTask : null, caller.Token);
+            result.IsSuccess.Should().BeTrue();
+            clock.ActiveTimers.Should().Be(0);
+        }
+        var tokens = usage.ReceivedCalls().Select(call => (CancellationToken)call.GetArguments()[6]!).ToArray();
+        tokens.Should().HaveCount(2);
+
+        caller.Cancel();
+        clock.Advance(client.CompletionTimeout + client.StreamingCompletionTimeout);
+
+        tokens.Should().OnlyContain(token => !token.IsCancellationRequested);
+        client.CompletionTimeout.Should().Be(TimeSpan.FromSeconds(185));
+        client.StreamingCompletionTimeout.Should().Be(TimeSpan.FromSeconds(75));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task SendWithToolsAsync_DefaultModels_UseShippedPrimary(bool streaming)
     {
         var handler = new SequenceSseHandler(streaming ? TextStream("Done", "Done") : ResponsesTestData.Text("Done"));

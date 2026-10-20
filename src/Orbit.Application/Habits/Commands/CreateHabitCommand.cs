@@ -128,7 +128,7 @@ public partial class CreateHabitCommandHandler(
         if (featureGate.IsFailure)
             return featureGate.PropagateError<Guid>();
 
-        var subResult = await CreateSubHabitsAsync(request, habit.Id, dueDate, opts, cancellationToken);
+        var subResult = await CreateSubHabitsAsync(request, habit, opts, cancellationToken);
         if (subResult.IsFailure)
             return subResult.PropagateError<Guid>();
 
@@ -161,7 +161,7 @@ public partial class CreateHabitCommandHandler(
     }
 
     private async Task<Result> CreateSubHabitsAsync(
-        CreateHabitCommand request, Guid parentId, DateOnly dueDate,
+        CreateHabitCommand request, Habit parent,
         HabitCommandOptions opts, CancellationToken cancellationToken)
     {
         if (request.SubHabits is not { Count: > 0 })
@@ -175,15 +175,19 @@ public partial class CreateHabitCommandHandler(
                 subTitle,
                 request.FrequencyUnit,
                 request.FrequencyQuantity,
-                request.DueDate ?? dueDate,
-                ParentHabitId: parentId,
+                request.StartDate ?? request.DueDate ?? parent.DueDate,
+                ParentHabitId: parent.Id,
                 IsGeneral: request.IsGeneral,
                 EndDate: opts.EndDate,
                 Position: subPosition++,
-                IntervalWeeks: request.IntervalWeeks));
+                IntervalWeeks: request.IntervalWeeks,
+                StartDate: request.StartDate));
 
             if (childResult.IsFailure)
                 return childResult.PropagateError();
+
+            if (request.StartDate.HasValue)
+                childResult.Value.PostponeTo(parent.DueDate);
 
             await repos.HabitRepository.AddAsync(childResult.Value, cancellationToken);
         }

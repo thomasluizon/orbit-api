@@ -96,8 +96,15 @@ public class UpdateHabitCommandHandler(
         await habitRepository.ReloadAsync(habit, cancellationToken);
         var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
         var update = resolveUpdate(habit, today);
-        if (update.StartDate.HasValue && update.StartDate != habit.StartDate)
+        if (habit.RequiresScheduleReanchor(update))
+        {
             update = update with { WeekStartDay = await userDateService.GetUserWeekStartDayAsync(userId, cancellationToken) };
+            var through = update.ClearEndDate == true ? DateOnly.MaxValue : update.EndDate ?? habit.EndDate ?? DateOnly.MaxValue;
+            await habitRepository.FindOneTrackedAsync(
+                h => h.Id == habitId && h.UserId == userId,
+                q => q.Include(h => h.Logs.Where(log => !log.IsDeleted && log.Date >= today && log.Date <= through)),
+                cancellationToken);
+        }
         if (validateFields)
         {
             var validation = await HabitUpdateValidation.ValidateAsync(userId, habit, update, habitRepository, cancellationToken);

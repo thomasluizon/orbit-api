@@ -69,6 +69,18 @@ public class AiDateInterpretationServiceTests
     }
 
     [Fact]
+    public async Task HardUnresolvedInput_CanonicalProposalCannotOverridePreflight()
+    {
+        var handler = new ResponseHandler("{\"date\":\"2026-10-26\"}");
+        var result = await Build(handler).InterpretAsync(UserId,
+            DateInterpretationInput.Create("February 29, 10000", "en").Value,
+            Reference, TimeZoneInfo.Utc, CancellationToken.None);
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeNull();
+        handler.Calls.Should().Be(0);
+    }
+
+    [Fact]
     public async Task SpendRefusal_RetainsTypedErrorWithoutDispatch()
     {
         var handler = new ResponseHandler("{\"date\":\"2026-10-26\"}");
