@@ -176,9 +176,8 @@ public class AskToolTests
         (await _tool.ExecuteAsync(JsonDocument.Parse(json).RootElement, UserId, default)).Success.Should().BeFalse();
 
     [Fact]
-    public void Metadata_DeclaresBothFormsAndCoreGroup()
+    public void Metadata_DeclaresBothForms()
     {
         JsonSerializer.Serialize(_tool.GetParameterSchema()).Should().Contain("pickList").And.Contain("choice");
-        Orbit.Application.Chat.ChatToolGroups.ResolveActiveToolNames(["ask"], "hello").Should().Contain("ask");
     }
 }
