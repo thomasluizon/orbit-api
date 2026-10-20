@@ -193,12 +193,13 @@ public partial class AgentCatalogService
                 IsMutation: true,
                 IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                ChatToolNames: ["create_habit", "update_habit", "bulk_update_habit_emojis", "create_sub_habit", "duplicate_habit", "move_habit", "move_habit_parent", "log_habit", "skip_habit", "undo_skip_habit", "suggest_breakdown", "update_checklist", "reorder_habits", "link_goals_to_habit"],
+                ChatToolNames: ["create_habit", "update_habit", "bulk_update_habit_emojis", "create_sub_habit", "duplicate_habit", "move_habit", "move_habit_parent", "log_habit", "unlog_habit", "skip_habit", "undo_skip_habit", "suggest_breakdown", "update_checklist", "reorder_habits", "link_goals_to_habit"],
                 McpToolNames:
                 [
                     "create_habit",
                     "update_habit",
                     "log_habit",
+                    "unlog_habit",
                     "skip_habit", "undo_skip_habit",
                     "update_checklist",
                     "create_sub_habit",

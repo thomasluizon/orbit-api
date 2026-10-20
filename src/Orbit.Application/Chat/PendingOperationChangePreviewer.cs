@@ -36,6 +36,7 @@ public sealed class PendingOperationChangePreviewer(
         JsonElement arguments,
         CancellationToken cancellationToken = default)
     {
+        arguments = await ResolveUnlogDateAsync(userId, operationId, arguments, cancellationToken);
         if (HasLogDates(operationId, arguments))
         {
             var expanded = await BulkHabitLogArguments.ExpandAsync(arguments, habitRepository,
@@ -113,6 +114,20 @@ public sealed class PendingOperationChangePreviewer(
         }
 
         return BuildPreview(operationId, rows, items);
+    }
+
+    private async Task<JsonElement> ResolveUnlogDateAsync(Guid userId, string operationId,
+        JsonElement arguments, CancellationToken cancellationToken)
+    {
+        if (operationId == "unlog_habit" && arguments.ValueKind == JsonValueKind.Object
+            && !arguments.TryGetProperty("date", out _))
+        {
+            var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
+            var resolved = arguments.EnumerateObject().ToDictionary(property => property.Name, property => property.Value);
+            resolved["date"] = JsonSerializer.SerializeToElement(today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+            arguments = JsonSerializer.SerializeToElement(resolved);
+        }
+        return arguments;
     }
 
     private async Task<PendingOperationChangePreview?> PreviewOtherAsync(Guid userId, string operationId,

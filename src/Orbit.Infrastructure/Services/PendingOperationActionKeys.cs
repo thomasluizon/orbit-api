@@ -41,6 +41,7 @@ public static class PendingOperationActionKeys
             "move_habit_parent" => "moveHabitParent",
             "reorder_habits" => "reorderHabits",
             "log_habit" => "logHabit",
+            "unlog_habit" => "unlogHabit",
             "skip_habit" => "skipHabit",
             "undo_skip_habit" => "undoSkipHabit",
             "update_checklist" => "updateChecklist",

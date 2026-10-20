@@ -51,6 +51,7 @@ public static partial class ServiceCollectionExtensions
     private static void AddAiChatTools(WebApplicationBuilder builder)
     {
         builder.Services.AddScoped<IAiTool, LogHabitTool>();
+        builder.Services.AddScoped<IAiTool, UnlogHabitTool>();
         builder.Services.AddScoped<IAiTool, SkipHabitTool>();
         builder.Services.AddScoped<IAiTool, UndoSkipHabitTool>();
         builder.Services.AddScoped<IAiTool, CreateHabitTool>();

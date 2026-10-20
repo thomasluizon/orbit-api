@@ -47,6 +47,8 @@ public class ChatToolMetadataTests
         var goalReviewTool = new GoalReviewTool(Repo<Goal>(), userDateService, goalProgressReadSyncer);
         var linkHabitsTool = new LinkHabitsToGoalTool(Substitute.For<IMediator>(), Repo<Goal>());
         var logHabitTool = new LogHabitTool(Substitute.For<IMediator>(), Repo<Habit>(), userDateService);
+        var unlogHabitTool = new UnlogHabitTool(Repo<Habit>(), userDateService, unitOfWork,
+            payGateService, Substitute.For<IUserStreakService>(), goalCompletionService);
         var moveHabitTool = new MoveHabitTool(mediator, Repo<Habit>());
         var queryGoalsTool = new QueryGoalsTool(Repo<Goal>(), userDateService, goalProgressReadSyncer);
         var queryHabitsTool = new QueryHabitsTool(Repo<Habit>(), Repo<User>(), userDateService, Substitute.For<IHabitScheduleLogReader>());
@@ -90,6 +92,8 @@ public class ChatToolMetadataTests
         AssertTool(getHabitMetricsTool, "get_habit_metrics", "metrics", "habit_id", expectReadOnly: true);
         AssertTool(goalReviewTool, "review_goals", "review", "properties", expectReadOnly: true);
         AssertTool(linkHabitsTool, "link_habits_to_goal", "Link", "habit_ids");
+        AssertTool(unlogHabitTool, "unlog_habit", "Undo", "habit_id");
+        JsonSerializer.Serialize(unlogHabitTool.GetParameterSchema()).Should().Contain("date");
         AssertTool(logHabitTool, "log_habit", "habit", "date");
         AssertTool(moveHabitTool, "move_habit", "parent", "new_parent_id");
         AssertTool(queryGoalsTool, "query_goals", "goals", "include_linked_habits", expectReadOnly: true);

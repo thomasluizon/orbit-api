@@ -38,6 +38,7 @@ public class AgentCatalogServiceTests
     }
 
     [Theory]
+    [InlineData("unlog_habit", AgentRiskClass.Low, AgentConfirmationRequirement.None)]
     [InlineData("bulk_create_habits", AgentRiskClass.Low, AgentConfirmationRequirement.None)]
     [InlineData("bulk_log_habits", AgentRiskClass.Low, AgentConfirmationRequirement.None)]
     [InlineData("bulk_skip_habits", AgentRiskClass.Low, AgentConfirmationRequirement.None)]
