@@ -28,6 +28,7 @@ public class FeatureFlagAccountsMigrationTests
 
         differences.Should().HaveCount(51);
         ExpandHabitScheduleAndStartDateMigrationTests.AssertAiSecurityAdditions(differences);
+        ExpandHabitScheduleAndStartDateMigrationTests.AssertEvalTraceSeed(differences);
         ConversationMigrationTests.AssertConversationExpansion(differences);
         var schemaVersion = differences.OfType<AddColumnOperation>().Should()
             .ContainSingle(column => column.Table == "PendingAgentOperations" && column.Name == "ArgumentSchemaVersion").Subject;
@@ -122,6 +123,7 @@ public class FeatureFlagAccountsMigrationTests
             "20261020023110_VersionPendingToolArguments",
             "20261020023828_AddReferralProDayRewards",
             "20261020030817_MakeSubHabitsFree",
+            "20261020031718_AddAstraEvalTraceFlag",
             "20261020033359_RestoreRequiredProactiveAstraPreference",
             "20261020041243_SeparateBonusProEntitlement");
         context.Database.GetMigrations().Last().Should().EndWith("_SeparateBonusProEntitlement");
@@ -156,6 +158,21 @@ public class FeatureFlagAccountsMigrationTests
         var seed = builder.Operations.OfType<InsertDataOperation>().Should().ContainSingle().Subject;
         seed.Values[0, Array.IndexOf(seed.Columns, "Key")].Should().Be("redesign");
         seed.Values[0, Array.IndexOf(seed.Columns, "Enabled")].Should().Be(false);
+    }
+
+    [Fact]
+    public void Up_AddsOnlyDisabledEvalTraceSeed()
+    {
+        var builder = new MigrationBuilder("Npgsql.EntityFrameworkCore.PostgreSQL");
+        typeof(AddAstraEvalTraceFlag).GetMethod("Up", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(new AddAstraEvalTraceFlag(), [builder]);
+
+        var seed = builder.Operations.Should().ContainSingle().Which.Should().BeOfType<InsertDataOperation>().Subject;
+        seed.Table.Should().Be("AppFeatureFlags");
+        seed.Values.GetLength(0).Should().Be(1);
+        seed.Values[0, Array.IndexOf(seed.Columns, "Key")].Should().Be("astra_eval_trace");
+        seed.Values[0, Array.IndexOf(seed.Columns, "Enabled")].Should().Be(false);
+        seed.Values[0, Array.IndexOf(seed.Columns, "PlanRequirement")].Should().BeNull();
     }
 
     [Fact]

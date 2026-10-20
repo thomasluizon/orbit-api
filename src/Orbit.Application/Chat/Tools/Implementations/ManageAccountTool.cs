@@ -16,7 +16,7 @@ public class ManageAccountTool(IMediator mediator) : IAiTool, IArgumentCheckTool
         properties = new
         {
             action = new { type = JsonSchemaTypes.String, @enum = new[] { "reset_account", "request_deletion", "confirm_deletion" } },
-            code = new { type = new[] { JsonSchemaTypes.String, "null" } }
+            code = new { type = new[] { JsonSchemaTypes.String, "null" }, sensitive = true }
         },
         required = new[] { "action" }
     };

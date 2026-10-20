@@ -15,7 +15,7 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Infrastructure.Tests.Controllers;
 
-public class ChatControllerTests
+public partial class ChatControllerTests
 {
     private readonly IMediator _mediator = Substitute.For<IMediator>();
     private readonly IImageValidationService _imageValidation = Substitute.For<IImageValidationService>();

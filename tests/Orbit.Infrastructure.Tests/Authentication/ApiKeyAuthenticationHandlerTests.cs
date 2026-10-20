@@ -4,7 +4,6 @@ using System.Text.Encodings.Web;
 using FluentAssertions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -28,19 +27,11 @@ public class ApiKeyAuthenticationHandlerTests
         string? authorizationHeader,
         string path = "/mcp",
         IReadOnlyList<ApiKey>? candidates = null,
-        Result? payGateResult = null,
-        bool conflictOnUpgrade = false)
+        Result? payGateResult = null)
     {
         var apiKeyRepo = Substitute.For<IGenericRepository<ApiKey>>();
         var payGate = Substitute.For<IPayGateService>();
         var unitOfWork = Substitute.For<IUnitOfWork>();
-        unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
-            .Returns(call => call.Arg<Func<CancellationToken, Task>>()(call.Arg<CancellationToken>()));
-
-        if (conflictOnUpgrade)
-            unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
-                .Returns<int>(_ => throw new DbUpdateConcurrencyException("The credential was revoked during upgrade."));
-
         payGate.CanReadApiKeys(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(payGateResult ?? Result.Success()));
         apiKeyRepo.FindTrackedAsync(
@@ -78,32 +69,37 @@ public class ApiKeyAuthenticationHandlerTests
             .GetArguments()[0]!;
 
     [Fact]
-    public async Task LegacyKey_IsUpgradedOnce_AndSubsequentAuthenticationDoesNotWriteHash()
+    public async Task LegacyKey_RepeatedAuthentication_PreservesRollbackReadableHash()
     {
         var (key, raw) = ApiKey.Create(Guid.NewGuid(), "Legacy").Value;
         var legacyHash = BCrypt.Net.BCrypt.HashPassword(raw);
         legacyHash.Should().StartWith("$2");
         typeof(ApiKey).GetProperty(nameof(ApiKey.KeyHash))!.SetValue(key, legacyHash);
-        var first = await RunHandler($"Bearer {raw}", candidates: [key]);
-        first.Result.Succeeded.Should().BeTrue();
-        key.Verify(raw).Should().BeTrue();
-        key.KeyHash.Should().HaveLength(64).And.NotStartWith("$2");
-        await first.UnitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
-        var second = await RunHandler($"Bearer {raw}", candidates: [key]);
-        second.Result.Succeeded.Should().BeTrue();
-        await second.UnitOfWork.DidNotReceive().ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>());
-        await second.UnitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        for (var i = 0; i < 3; i++)
+        {
+            var run = await RunHandler($"Bearer {raw}", candidates: [key]);
+
+            run.Result.Succeeded.Should().BeTrue();
+            BCrypt.Net.BCrypt.Verify(raw, key.KeyHash).Should().BeTrue();
+            key.KeyHash.Should().Be(legacyHash);
+            await run.UnitOfWork.DidNotReceive().ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>());
+            await run.UnitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+            await run.ApiKeyRepo.DidNotReceive().ReloadAsync(key, Arg.Any<CancellationToken>());
+        }
     }
 
     [Fact]
-    public async Task LegacyKey_RevokedDuringUpgrade_RejectsAuthentication()
+    public async Task LegacyKey_WrongKey_RejectsAuthenticationWithoutWritingHash()
     {
         var (key, raw) = ApiKey.Create(Guid.NewGuid(), "Legacy").Value;
-        typeof(ApiKey).GetProperty(nameof(ApiKey.KeyHash))!.SetValue(key, BCrypt.Net.BCrypt.HashPassword(raw));
+        var legacyHash = BCrypt.Net.BCrypt.HashPassword(raw);
+        typeof(ApiKey).GetProperty(nameof(ApiKey.KeyHash))!.SetValue(key, legacyHash);
 
-        var run = await RunHandler($"Bearer {raw}", candidates: [key], conflictOnUpgrade: true);
+        var run = await RunHandler($"Bearer {raw[..^1]}!", candidates: [key]);
 
         run.Result.Succeeded.Should().BeFalse();
+        key.KeyHash.Should().Be(legacyHash);
+        await run.UnitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -120,11 +116,34 @@ public class ApiKeyAuthenticationHandlerTests
     }
 
     [Fact]
-    public async Task NewKey_UsesSha256_AndTamperingFails()
+    public async Task NewKey_RemainsReadableByRollbackVerifier_AndTamperingFails()
     {
         var (key, raw) = ApiKey.Create(Guid.NewGuid(), "Hash").Value;
-        key.KeyHash.Should().Be(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(raw))));
+        BCrypt.Net.BCrypt.Verify(raw, key.KeyHash).Should().BeTrue();
         (await RunHandler($"Bearer {raw}", candidates: [key])).Result.Succeeded.Should().BeTrue();
+        (await RunHandler($"Bearer {raw[..^1]}!", candidates: [key])).Result.Succeeded.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StagingSha256Key_AuthenticatesWithoutWritingHash(bool lowercase)
+    {
+        var (key, raw) = ApiKey.Create(Guid.NewGuid(), "Staging").Value;
+        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(raw)));
+        if (lowercase)
+            hash = hash.ToLowerInvariant();
+        typeof(ApiKey).GetProperty(nameof(ApiKey.KeyHash))!.SetValue(key, hash);
+
+        for (var i = 0; i < 3; i++)
+        {
+            var run = await RunHandler($"Bearer {raw}", candidates: [key]);
+
+            run.Result.Succeeded.Should().BeTrue();
+            key.KeyHash.Should().Be(hash);
+            await run.UnitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        }
+
         (await RunHandler($"Bearer {raw[..^1]}!", candidates: [key])).Result.Succeeded.Should().BeFalse();
     }
 

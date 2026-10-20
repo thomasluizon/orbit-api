@@ -89,7 +89,8 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
             HttpContext.User.GetAgentAuthMethod(),
             HttpContext.User.GetGrantedAgentScopes(),
             HttpContext.User.IsReadOnlyCredential(),
-            HttpContext.TraceIdentifier, BlockAnswer: answer);
+            HttpContext.TraceIdentifier, BlockAnswer: answer,
+            EvalTraceRequested: Request.Headers["X-Orbit-Eval-Trace"].ToString() == "1");
 
         var result = await mediator.Send(command, cancellationToken);
 
@@ -142,7 +143,8 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
             HttpContext.User.IsReadOnlyCredential(),
             HttpContext.TraceIdentifier,
             answer is null ? streamEvent => WriteEventAsync(streamEvent, cancellationToken) : null,
-            answer);
+            answer,
+            EvalTraceRequested: Request.Headers["X-Orbit-Eval-Trace"].ToString() == "1");
 
         if (answer is not null)
         {

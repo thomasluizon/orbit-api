@@ -45,7 +45,8 @@ public record ProcessUserChatCommand(
     bool IsReadOnlyCredential = false,
     string? CorrelationId = null,
     Func<ChatStreamEvent, Task>? StreamSink = null,
-    AstraBlockAnswer? BlockAnswer = null) : IRequest<Result<ChatResponse>>;
+    AstraBlockAnswer? BlockAnswer = null,
+    bool EvalTraceRequested = false) : IRequest<Result<ChatResponse>>;
 
 public record ChatResponse(
     string? AiMessage,
@@ -65,7 +66,8 @@ public record ChatResponse(
     IReadOnlyList<RecordListCard>? RecordLists = null,
     AccountRowsCard? AccountRows = null,
     IReadOnlyList<string>? FollowUps = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ChatResponsePart>? Parts = null)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ChatResponsePart>? Parts = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ChatEvalTrace? EvalTrace = null)
 {
     [JsonIgnore]
     public TurnFactSet GroundingFacts { get; init; } = TurnFactSet.Empty;
@@ -189,12 +191,22 @@ public partial class ProcessUserChatCommandHandler(
         ProcessUserChatCommand request,
         CancellationToken cancellationToken)
     {
+        ChatEvalTraceCollector? evalTrace = null;
+        if (request.EvalTraceRequested)
+        {
+            var flags = await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, cancellationToken);
+            if (flags.Contains(FeatureFlagKeys.AstraEvalTrace, StringComparer.Ordinal))
+                evalTrace = new ChatEvalTraceCollector(request.CorrelationId ?? Guid.NewGuid().ToString("N"), ai.ToolRegistry);
+        }
+
         var recording = new ConversationRecordingState();
         Result<ChatResponse>? response = null;
         try
         {
-            response = await HandleCoreAsync(request, recording, cancellationToken);
-            return response;
+            response = await HandleCoreAsync(request, recording, evalTrace, cancellationToken);
+            return response.IsSuccess && evalTrace is not null
+                ? Result.Success(response.Value with { EvalTrace = evalTrace.Build() })
+                : response;
         }
         finally
         {
@@ -203,7 +215,7 @@ public partial class ProcessUserChatCommandHandler(
     }
 
     private async Task<Result<ChatResponse>> HandleCoreAsync(ProcessUserChatCommand request,
-        ConversationRecordingState recording, CancellationToken cancellationToken)
+        ConversationRecordingState recording, ChatEvalTraceCollector? evalTrace, CancellationToken cancellationToken)
     {
         if (request.BlockAnswer is not null)
         {
@@ -219,7 +231,7 @@ public partial class ProcessUserChatCommandHandler(
             return await answerService.ExecuteAsync(request, prepared =>
                 prepared.Crisis != CrisisLocales.None
                     ? HandleCrisisTurnAsync(request with { Message = prepared.Message }, prepared.Crisis, captureMessage: true)
-                    : HandleTurnAsync(request with { Message = prepared.Message }, recording, cancellationToken, prepared.AnsweredAtUtc), cancellationToken,
+                    : HandleTurnAsync(request with { Message = prepared.Message }, recording, evalTrace, cancellationToken, prepared.AnsweredAtUtc), cancellationToken,
                 (_, token) => ModerateInputAsync(request, token));
         }
         var crisis = CrisisSupportGuard.Detect(request.Message);
@@ -240,7 +252,7 @@ public partial class ProcessUserChatCommandHandler(
             await execution.UnitOfWork.AcquireAdvisoryLockAsync($"astra-blocks:{request.UserId}", token);
             await execution.BlockStore.InvalidateOpenAsync(request.UserId, token);
         }, cancellationToken);
-        return await HandleTurnAsync(request, recording, cancellationToken);
+        return await HandleTurnAsync(request, recording, evalTrace, cancellationToken);
     }
 
     private async Task<Result> ModerateInputAsync(ProcessUserChatCommand request, CancellationToken cancellationToken)
@@ -263,7 +275,8 @@ public partial class ProcessUserChatCommandHandler(
         return cancellation;
     }
 
-    private async Task<Result<ChatResponse>> HandleTurnAsync(ProcessUserChatCommand request, ConversationRecordingState recording, CancellationToken cancellationToken,
+    private async Task<Result<ChatResponse>> HandleTurnAsync(ProcessUserChatCommand request, ConversationRecordingState recording,
+        ChatEvalTraceCollector? evalTrace, CancellationToken cancellationToken,
         DateTime? answeredAtUtc = null)
     {
         using var turnCancellation = CreateBlockTurnCancellation(cancellationToken, answeredAtUtc);
@@ -281,7 +294,7 @@ public partial class ProcessUserChatCommandHandler(
         var telemetry = new AiTurnTelemetry(request.CorrelationId, plan);
         try
         {
-            return await HandleLoadedTurnAsync(request, context, recording, telemetry, totalStopwatch, answeredAtUtc, cancellationToken);
+            return await HandleLoadedTurnAsync(request, context, recording, evalTrace, telemetry, totalStopwatch, answeredAtUtc, cancellationToken);
         }
         finally
         {
@@ -290,7 +303,7 @@ public partial class ProcessUserChatCommandHandler(
     }
 
     private async Task<Result<ChatResponse>> HandleLoadedTurnAsync(
-        ProcessUserChatCommand request, ChatContext context, ConversationRecordingState recording, AiTurnTelemetry telemetry,
+        ProcessUserChatCommand request, ChatContext context, ConversationRecordingState recording, ChatEvalTraceCollector? evalTrace, AiTurnTelemetry telemetry,
         System.Diagnostics.Stopwatch totalStopwatch, DateTime? answeredAtUtc, CancellationToken cancellationToken)
     {
         var detectedCrisisLocales = CrisisSupportGuard.Detect(request.Message);
@@ -326,6 +339,7 @@ public partial class ProcessUserChatCommandHandler(
         {
             AnsweredAtUtc = answeredAtUtc,
             Recording = recording,
+            EvalTrace = evalTrace,
             Habits = context.ActiveHabits,
             AllHabits = context.UserHabits,
             IsTaggingIntent = IsTagOnlyIntent(request.Message),

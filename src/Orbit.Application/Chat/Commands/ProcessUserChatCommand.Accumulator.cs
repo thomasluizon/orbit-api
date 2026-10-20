@@ -36,6 +36,7 @@ public partial class ProcessUserChatCommandHandler
         public Dictionary<Guid, (string ToolName, PendingAgentOperation Preview)> PendingWriteCalls { get; } = [];
 
         public DateTime? AnsweredAtUtc { get; init; }
+        public ChatEvalTraceCollector? EvalTrace { get; init; }
         public List<ActionResult> CommittedActions { get; } = [];
         public List<PendingAgentOperation> CommittedPendingOperations { get; } = [];
 
