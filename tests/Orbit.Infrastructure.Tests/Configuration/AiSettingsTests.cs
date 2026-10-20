@@ -81,6 +81,9 @@ public class AiSettingsTests
             Path.Combine(directory!.FullName, "src", "Orbit.Api", "appsettings.json")));
         var ai = document.RootElement.GetProperty("AI");
         var defaults = new AiSettings();
+        var pricing = ai.GetProperty("Pricing");
+        pricing.GetProperty("gpt-6-luna").GetProperty("CacheWritePerMillionUsd").GetDecimal().Should().Be(0.125m);
+        pricing.GetProperty("gpt-6.1-sol").GetProperty("CacheWritePerMillionUsd").GetDecimal().Should().Be(2.50m);
         foreach (var model in new[] { defaults.Model, defaults.SubTaskModel, ai.GetProperty("Model").GetString(), ai.GetProperty("SubTaskModel").GetString() })
         {
             ai.GetProperty("Pricing").TryGetProperty(model!, out var price).Should().BeTrue($"{model} must record a nonzero cost");

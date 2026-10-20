@@ -13,6 +13,8 @@ internal static class AiBudgetTestDouble
     {
         var http = new HttpContextAccessor { HttpContext = new DefaultHttpContext() };
         http.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString())], "Test"));
-        return new BudgetedAiCompletionClient(client, Substitute.For<IAiDailyBudget>(), http, NullLogger<BudgetedAiCompletionClient>.Instance);
+        var estimates = Substitute.For<IAiRequestCostEstimator>();
+        estimates.EstimateMicroDollarsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(1000L);
+        return new BudgetedAiCompletionClient(client, Substitute.For<IAiDailyBudget>(), http, NullLogger<BudgetedAiCompletionClient>.Instance, estimates);
     }
 }

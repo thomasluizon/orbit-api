@@ -281,6 +281,11 @@ namespace Orbit.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<long>("ChargedMicroDollars")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L);
+
                     b.Property<long>("ChargedTokens")
                         .HasColumnType("bigint");
 
@@ -525,15 +530,15 @@ namespace Orbit.Infrastructure.Migrations
                         },
                         new
                         {
-                            Key = "FreeAiTokensPerDay",
-                            Description = "Daily AI token safety budget for Free users",
-                            Value = "40000"
+                            Key = "FreeAiMicroDollarsPerDay",
+                            Description = "Daily AI safety budget for Free users in USD micro-dollars",
+                            Value = "20000"
                         },
                         new
                         {
-                            Key = "ProAiTokensPerDay",
-                            Description = "Daily AI token safety budget for Pro users",
-                            Value = "240000"
+                            Key = "ProAiMicroDollarsPerDay",
+                            Description = "Daily AI safety budget for Pro users in USD micro-dollars",
+                            Value = "120000"
                         },
                         new
                         {

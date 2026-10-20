@@ -6,24 +6,24 @@ namespace Orbit.Domain.Tests.Entities;
 public class McpSecurityStateTests
 {
     [Fact]
-    public void BudgetReservation_RejectsInvalidUserAndTokens()
+    public void BudgetReservation_RejectsInvalidUserAndSpend()
     {
         var today = new DateOnly(2026, 1, 1);
         Action emptyUser = () => AiBudgetCall.Reserve(Guid.Empty, today, 10);
-        Action emptyTokens = () => AiBudgetCall.Reserve(Guid.NewGuid(), today, 0);
+        Action emptySpend = () => AiBudgetCall.Reserve(Guid.NewGuid(), today, 0);
         emptyUser.Should().Throw<ArgumentException>();
-        emptyTokens.Should().Throw<ArgumentException>();
+        emptySpend.Should().Throw<ArgumentException>();
     }
 
     [Fact]
-    public void BudgetSettlement_IsOnceOnlyAndRejectsNegativeTokens()
+    public void BudgetSettlement_IsOnceOnlyAndRejectsNegativeSpend()
     {
         var call = AiBudgetCall.Reserve(Guid.NewGuid(), new DateOnly(2026, 1, 1), 120000);
         Action negative = () => call.Settle(-1);
         negative.Should().Throw<ArgumentOutOfRangeException>();
         call.Settle(30);
         call.Settle(60);
-        call.ChargedTokens.Should().Be(30);
+        call.ChargedMicroDollars.Should().Be(30);
         call.IsSettled.Should().BeTrue();
     }
 

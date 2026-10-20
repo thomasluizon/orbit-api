@@ -144,6 +144,8 @@ public class OrbitDbContext : DbContext
         ConfigureApiKeyEntity(modelBuilder);
         modelBuilder.Entity<AiBudgetCall>(entity =>
         {
+            entity.Property<long>("ChargedTokens");
+            entity.Property(call => call.ChargedMicroDollars).HasDefaultValue(0L);
             entity.HasIndex(call => new { call.UserId, call.LocalDate });
             entity.HasOne<User>().WithMany().HasForeignKey(call => call.UserId).OnDelete(DeleteBehavior.Cascade);
         });
@@ -576,8 +578,8 @@ public class OrbitDbContext : DbContext
                 AppConfig.Create("MinSupportedVersion", "1.3.11", "Minimum supported client app version; clients below this receive HTTP 426"),
                 AppConfig.Create("FreeAiCallsPerDay", "45", "Daily AI call safety budget for Free users"),
                 AppConfig.Create("ProAiCallsPerDay", "450", "Daily AI call safety budget for Pro users"),
-                AppConfig.Create("FreeAiTokensPerDay", "40000", "Daily AI token safety budget for Free users"),
-                AppConfig.Create("ProAiTokensPerDay", "240000", "Daily AI token safety budget for Pro users"),
+                AppConfig.Create("FreeAiMicroDollarsPerDay", "20000", "Daily AI safety budget for Free users in USD micro-dollars"),
+                AppConfig.Create("ProAiMicroDollarsPerDay", "120000", "Daily AI safety budget for Pro users in USD micro-dollars"),
                 AppConfig.Create("RequireApiKeyCreationStepUp", "false", "Turn on once a client build carrying the API key creation challenge flow is live in the Play fleet"));
         });
     }

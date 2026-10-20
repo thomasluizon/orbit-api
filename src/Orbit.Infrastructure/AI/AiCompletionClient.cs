@@ -100,10 +100,37 @@ public sealed partial class AiCompletionClient
 
     internal string ChatModel => _primaryModel;
 
-    internal long EstimateTextTokens(string systemPrompt, string userPrompt, int maxOutputTokens, AiModelTier tier)
+    internal const int DefaultMaxOutputTokens = 8192;
+
+    internal string SerializeTextRequest(string systemPrompt, string userPrompt, double temperature, int maxOutputTokens,
+        AiModelTier tier, Guid? userId = null, bool json = false)
     {
-        var options = CreateOptions(tier, maxOutputTokens: maxOutputTokens);
-        return AiTokenReservation.Estimate([ResponseItem.CreateSystemMessageItem(systemPrompt), ResponseItem.CreateUserMessageItem(userPrompt)], options);
+        var options = CreateOptions(tier, temperature, maxOutputTokens, userId);
+        options.InputItems.Add(ResponseItem.CreateSystemMessageItem(systemPrompt));
+        options.InputItems.Add(ResponseItem.CreateUserMessageItem(userPrompt));
+        if (json)
+            options.TextOptions = new ResponseTextOptions { TextFormat = ResponseTextFormat.CreateJsonObjectFormat() };
+        return ModelReaderWriter.Write(options).ToString();
+    }
+
+    internal async Task<long> CountInputTokensAsync(string requestJson, CancellationToken cancellationToken)
+    {
+        using var request = JsonDocument.Parse(requestJson);
+        var allowed = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "model", "input", "tools", "text", "reasoning", "instructions", "tool_choice",
+            "parallel_tool_calls", "previous_response_id", "conversation", "truncation"
+        };
+        var fields = request.RootElement.EnumerateObject().Where(property => allowed.Contains(property.Name))
+            .ToDictionary(property => property.Name, property => property.Value);
+        using var content = BinaryContent.Create(BinaryData.FromObjectAsJson(fields));
+        var result = await _responsesClient.GetInputTokenCountAsync(content, "application/json",
+            new RequestOptions { CancellationToken = cancellationToken });
+        using var response = JsonDocument.Parse(result.GetRawResponse().Content);
+        var tokens = response.RootElement.GetProperty("input_tokens").GetInt64();
+        if (tokens < 0)
+            throw new InvalidOperationException("The provider returned an invalid input token count.");
+        return tokens;
     }
 
     internal CreateResponseOptions CreateOptions(
@@ -254,7 +281,8 @@ public sealed partial class AiCompletionClient
             usage.OutputTokenCount,
             usage.TotalTokenCount,
             cancellationToken,
-            userId);
+            userId,
+            usage.InputTokenDetails?.CacheWriteTokenCount ?? 0);
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Calling AI API for text completion...")]
@@ -275,30 +303,4 @@ public sealed partial class AiCompletionClient
     [LoggerMessage(EventId = 6, Level = LogLevel.Debug, Message = "AI token usage ({Purpose} via {Model}): cached={CachedTokens}, prompt={PromptTokens}, completion={CompletionTokens}, total={TotalTokens}")]
     private static partial void LogAiTokenUsage(ILogger logger, string purpose, string model, int cachedTokens, int promptTokens, int completionTokens, int totalTokens);
 
-}
-
-/// <summary>
-/// Reserves one token per serialized UTF-8 byte, message framing, and the full output allowance.
-/// Byte-level tokenization cannot exceed the byte count for text; JSON and framing overcount input.
-/// Media retains the request-wide worst-case reservation because encoded bytes do not bound vision tokens.
-/// </summary>
-internal static class AiTokenReservation
-{
-    internal const int DefaultMaxOutputTokens = 8192;
-
-    internal static long Estimate(IReadOnlyList<ResponseItem> messages, CreateResponseOptions options)
-    {
-        options.MaxOutputTokenCount ??= DefaultMaxOutputTokens;
-        var tokens = checked(1024L + options.MaxOutputTokenCount.Value
-            + ModelReaderWriter.Write(options).ToMemory().Length);
-        foreach (var message in messages)
-        {
-            tokens = checked(tokens + 64 + ModelReaderWriter.Write(message).ToMemory().Length);
-            if (message is MessageResponseItem item)
-                foreach (var part in item.Content)
-                    if (part.Kind == ResponseContentPartKind.InputImage)
-                        tokens = checked(tokens + Orbit.Application.Common.AppConstants.MaxAiRequestTotalTokens);
-        }
-        return tokens;
-    }
 }

@@ -9,10 +9,17 @@ namespace Orbit.Infrastructure.AI;
 
 public sealed class AiDailyBudget(IServiceScopeFactory scopes) : IAiDailyBudget
 {
-    public async Task<Guid> ReserveAsync(Guid userId, long reservedTokens, CancellationToken cancellationToken)
+    /// <summary>
+    /// Legacy rows lack the input/output split; $10 per million is the highest configured legacy rate.
+    /// The original token column remains readable during rolling deployments.
+    /// https://developers.openai.com/api/docs/models/gpt-6.1-sol
+    /// </summary>
+    private const long LegacyMaxMicroDollarsPerToken = 10;
+
+    public async Task<Guid> ReserveAsync(Guid userId, long reservedMicroDollars, CancellationToken cancellationToken)
     {
-        if (reservedTokens <= 0)
-            throw new ArgumentOutOfRangeException(nameof(reservedTokens));
+        if (reservedMicroDollars <= 0)
+            throw new ArgumentOutOfRangeException(nameof(reservedMicroDollars));
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
         var work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
@@ -23,32 +30,35 @@ public sealed class AiDailyBudget(IServiceScopeFactory scopes) : IAiDailyBudget
         var pro = user.HasProAccess;
         var callLimit = await config.GetAsync(pro ? AppConfigKeys.ProAiCallsPerDay : AppConfigKeys.FreeAiCallsPerDay,
             pro ? AppConfigKeys.DefaultProAiCallsPerDay : AppConfigKeys.DefaultFreeAiCallsPerDay, cancellationToken);
-        var tokenLimit = await config.GetAsync(pro ? AppConfigKeys.ProAiTokensPerDay : AppConfigKeys.FreeAiTokensPerDay,
-            pro ? AppConfigKeys.DefaultProAiTokensPerDay : AppConfigKeys.DefaultFreeAiTokensPerDay, cancellationToken);
-        tokenLimit = Math.Min(tokenLimit, pro ? AppConfigKeys.DefaultProAiTokensPerDay : AppConfigKeys.DefaultFreeAiTokensPerDay);
+        var spendLimit = await config.GetAsync(pro ? AppConfigKeys.ProAiMicroDollarsPerDay : AppConfigKeys.FreeAiMicroDollarsPerDay,
+            pro ? AppConfigKeys.DefaultProAiMicroDollarsPerDay : AppConfigKeys.DefaultFreeAiMicroDollarsPerDay, cancellationToken);
         return await work.ExecuteInTransactionAsync(async token =>
         {
             await work.AcquireAdvisoryLockAsync($"ai-budget:{userId}:{localDate:yyyy-MM-dd}", token);
             var query = db.AiBudgetCalls.Where(call => call.UserId == userId && call.LocalDate == localDate);
             var totals = await query.GroupBy(call => call.UserId)
-                .Select(group => new { Calls = group.Count(), Tokens = group.Sum(call => call.ChargedTokens) }).SingleOrDefaultAsync(token);
-            if ((totals?.Calls ?? 0) >= callLimit || reservedTokens > tokenLimit - (totals?.Tokens ?? 0))
+                .Select(group => new
+                {
+                    Calls = group.Count(),
+                    MicroDollars = group.Sum(call => call.ChargedMicroDollars == 0
+                    ? EF.Property<long>(call, "ChargedTokens") * LegacyMaxMicroDollarsPerToken
+                    : call.ChargedMicroDollars)
+                }).SingleOrDefaultAsync(token);
+            if ((totals?.Calls ?? 0) >= callLimit || reservedMicroDollars > spendLimit - (totals?.MicroDollars ?? 0))
                 throw new AiBudgetExceededException();
-            var call = AiBudgetCall.Reserve(userId, localDate, reservedTokens);
+            var call = AiBudgetCall.Reserve(userId, localDate, reservedMicroDollars);
             db.AiBudgetCalls.Add(call);
             await work.SaveChangesAsync(token);
             return call.Id;
         }, cancellationToken);
     }
 
-    public async Task SettleAsync(Guid callId, long? tokens, CancellationToken cancellationToken)
+    public async Task SettleAsync(Guid callId, long microDollars, CancellationToken cancellationToken)
     {
-        if (tokens is null)
-            return;
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
         var call = await db.AiBudgetCalls.SingleAsync(call => call.Id == callId, cancellationToken);
-        call.Settle(tokens.Value);
+        call.Settle(microDollars);
         await db.SaveChangesAsync(cancellationToken);
     }
 }

@@ -1,15 +1,25 @@
+#pragma warning disable OPENAI001
+
+using System.ClientModel.Primitives;
+using System.Net;
 using System.Security.Claims;
+using System.Text;
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
+using OpenAI.Responses;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using Orbit.Infrastructure.AI;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
+using Orbit.Infrastructure.Services;
 using Orbit.Infrastructure.Tests.Persistence;
 
 namespace Orbit.Infrastructure.Tests.AI;
@@ -19,132 +29,364 @@ public class AiDailyBudgetTests
     private static readonly DateOnly Today = new(2026, 1, 2);
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task ExhaustedUser_IsRefusedBeforeModel_WhileOtherUserProceeds(bool tokensExhausted)
+    [InlineData(false, 5)]
+    [InlineData(true, 50)]
+    public async Task TypicalWrites_FitUnderDailySpendCeiling(bool pro, int messages)
     {
-        using var database = new SqliteOrbitDbContextFactory();
-        var first = User.Create("First", "first@example.com").Value;
-        var second = User.Create("Second", "second@example.com").Value;
-        first.StartTrial(DateTime.UtcNow.AddDays(-1));
-        second.StartTrial(DateTime.UtcNow.AddDays(-1));
-        database.Context.Users.AddRange(first, second);
-        var row = AiBudgetCall.Reserve(first.Id, Today, tokensExhausted ? AppConfigKeys.DefaultFreeAiTokensPerDay : 1);
-        row.Settle(tokensExhausted ? AppConfigKeys.DefaultFreeAiTokensPerDay : 1);
-        database.Context.AiBudgetCalls.Add(row);
-        var config = Substitute.For<IAppConfigService>();
-        config.GetAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns(call => tokensExhausted ? call.ArgAt<int>(1) : 1);
-        config.GetAsync(Arg.Any<string>(), Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(call => call.ArgAt<long>(1));
-        var dates = Substitute.For<IUserDateService>();
-        dates.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
-        await database.Context.SaveChangesAsync();
-        using var provider = new ServiceCollection()
-            .AddScoped(_ => database.CreateContext())
-            .AddScoped<IUnitOfWork>(scope => new UnitOfWork(scope.GetRequiredService<OrbitDbContext>(), new DatabaseConnectionSettings()))
-            .AddSingleton(config).AddSingleton(dates).BuildServiceProvider();
-        var budget = new AiDailyBudget(provider.GetRequiredService<IServiceScopeFactory>());
-        var raw = new AiCompletionClient(Microsoft.Extensions.Options.Options.Create(new AiSettings { ApiKey = "test-key" }),
-            NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
-        var client = new BudgetedAiCompletionClient(raw, budget, new HttpContextAccessor(), NullLogger<BudgetedAiCompletionClient>.Instance);
-        var calls = 0;
-        var recorder = new BudgetAwareAiUsageRecorder(new AiUsageRecorder(provider.GetRequiredService<IServiceScopeFactory>(),
-            Microsoft.Extensions.Options.Options.Create(new AiSettings()), NullLogger<AiUsageRecorder>.Instance), new HttpContextAccessor());
-        async Task<int> Model(AiCompletionClient _)
-        {
-            calls++;
-            await recorder.RecordAsync("chat", "model", 0, 20, 3, 23);
-            return 42;
-        }
-        Func<Task> exhausted = async () => await client.RunAsync(first.Id, Model, default, 1_000);
-        await exhausted.Should().ThrowAsync<AiBudgetExceededException>();
-        calls.Should().Be(0);
-        var summary = new Orbit.Infrastructure.Services.AiSummaryService(client,
-            NullLogger<Orbit.Infrastructure.Services.AiSummaryService>.Instance);
-        for (var i = 0; i < 4; i++)
-        {
-            var context = new DailySummaryContext(Today.AddDays(-i), Today.AddDays(i), Today,
-                i % 2 == 0 ? "en" : "pt-BR", null, 0, 0, new Dictionary<Guid, DateOnly>(), UserId: first.Id);
-            var result = await summary.GenerateSummaryAsync([], context);
-            result.ErrorCode.Should().Be(AiBudgetExceededException.Error.Code);
-        }
-        (await client.RunAsync(second.Id, Model, default, 1_000)).Should().Be(42);
-        calls.Should().Be(1);
-        using var read = database.CreateContext();
-        read.AiBudgetCalls.Single(call => call.UserId == second.Id).ChargedTokens.Should().Be(23);
-        read.AiUsageDaily.Single().UserId.Should().Be(second.Id);
-        read.AiUsageDaily.Single().TotalTokens.Should().Be(23);
-    }
+        (pro ? AppConfigKeys.DefaultProAiMicroDollarsPerDay : AppConfigKeys.DefaultFreeAiMicroDollarsPerDay)
+            .Should().Be(pro ? 120_000 : 20_000);
+        using var fixture = new BudgetFixture(pro);
+        for (var call = 0; call < messages * 2; call++)
+            await fixture.Client.CompleteTextAsync("system", "a typical write");
 
-    [Theory]
-    [InlineData(false, 40_000L, 0.02, false)]
-    [InlineData(true, 240_000L, 0.12, false)]
-    [InlineData(false, 40_000L, 0.02, true)]
-    [InlineData(true, 240_000L, 0.12, true)]
-    public async Task DailySpendCeiling_RefusesNextCompletionWithExistingQuotaResponse(bool pro, long tokenCeiling, decimal dollars, bool oversizedConfig)
-    {
-        (pro ? AppConfigKeys.DefaultProAiTokensPerDay : AppConfigKeys.DefaultFreeAiTokensPerDay)
-            .Should().Be(tokenCeiling);
-        (tokenCeiling * 0.50m / 1_000_000).Should().Be(dollars);
-        using var database = new SqliteOrbitDbContextFactory();
-        var user = User.Create("Budget", "budget@example.com").Value;
-        if (pro)
-            user.StartTrial(DateTime.UtcNow.AddDays(1));
-        else
-            user.StartTrial(DateTime.UtcNow.AddDays(-1));
-        database.Context.Users.Add(user);
-        var usage = AiBudgetCall.Reserve(user.Id, Today, tokenCeiling - 1_000);
-        usage.Settle(tokenCeiling - 1_000);
-        database.Context.AiBudgetCalls.Add(usage);
-        await database.Context.SaveChangesAsync();
-        var config = Substitute.For<IAppConfigService>();
-        config.GetAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(call => call.ArgAt<int>(1));
-        config.GetAsync(Arg.Any<string>(), Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(call => oversizedConfig ? long.MaxValue : call.ArgAt<long>(1));
-        var dates = Substitute.For<IUserDateService>();
-        dates.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
-        using var provider = new ServiceCollection()
-            .AddScoped(_ => database.CreateContext())
-            .AddScoped<IUnitOfWork>(scope => new UnitOfWork(scope.GetRequiredService<OrbitDbContext>(), new DatabaseConnectionSettings()))
-            .AddSingleton(config).AddSingleton(dates).BuildServiceProvider();
-        var budget = new AiDailyBudget(provider.GetRequiredService<IServiceScopeFactory>());
-        var raw = new AiCompletionClient(Microsoft.Extensions.Options.Options.Create(new AiSettings { ApiKey = "test-key" }),
-            NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
-        var client = new BudgetedAiCompletionClient(raw, budget, new HttpContextAccessor(), NullLogger<BudgetedAiCompletionClient>.Instance);
-        var summary = new Orbit.Infrastructure.Services.AiSummaryService(client,
-            NullLogger<Orbit.Infrastructure.Services.AiSummaryService>.Instance);
-
-        var calls = 0;
-        await client.RunAsync(user.Id, _ =>
-        {
-            calls++;
-            AiCallContext.Current!.Report(1_000);
-            return Task.FromResult(42);
-        }, default, 1_000);
-        var response = await summary.GenerateSummaryAsync([], new DailySummaryContext(Today, Today, Today,
-            "en", null, 0, 0, new Dictionary<Guid, DateOnly>(), UserId: user.Id));
-
-        response.ErrorCode.Should().Be(AiBudgetExceededException.Error.Code);
-        response.Error.Should().Be(AiBudgetExceededException.Error.Message);
-        using var read = database.CreateContext();
-        read.AiBudgetCalls.Count().Should().Be(2);
-        read.AiBudgetCalls.Sum(call => call.ChargedTokens).Should().Be(tokenCeiling);
-        calls.Should().Be(1);
+        using var read = fixture.Database.CreateContext();
+        read.AiBudgetCalls.Count().Should().Be(messages * 2);
+        read.AiBudgetCalls.Sum(call => call.ChargedMicroDollars).Should().Be(2644 + (messages * 2 - 1) * 649);
+        read.AiBudgetCalls.Sum(call => call.ChargedMicroDollars).Should().BeLessThan(pro ? 120_000 : 20_000);
+        read.AiUsageDaily.Single().TotalTokens.Should().Be(messages * 2 * 20_100);
+        fixture.Handler.Completions.Should().Be(messages * 2);
     }
 
     [Fact]
-    public async Task Gateway_AlwaysChargesFailure_AndRequiresUser()
+    public async Task Reservation_SettlesToActualUsageIncludingCacheWritesAndReasoning()
     {
-        var budget = Substitute.For<IAiDailyBudget>();
-        var userId = Guid.NewGuid();
-        var reservation = Guid.NewGuid();
-        budget.ReserveAsync(userId, Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(reservation);
-        var raw = new AiCompletionClient(Microsoft.Extensions.Options.Options.Create(new AiSettings { ApiKey = "test-key" }),
-            NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
-        var client = new BudgetedAiCompletionClient(raw, budget, new HttpContextAccessor(), NullLogger<BudgetedAiCompletionClient>.Instance);
-        Func<Task> failed = () => client.RunAsync<int>(userId, _ => throw new InvalidOperationException("provider"), default);
-        await failed.Should().ThrowAsync<InvalidOperationException>();
-        await budget.Received(1).SettleAsync(reservation, null, Arg.Any<CancellationToken>());
-        Func<Task> anonymous = () => client.RunAsync<int>(null, _ => Task.FromResult(1), default);
+        using var fixture = new BudgetFixture();
+        long reserved = 0;
+        fixture.Handler.OnCompletion = () =>
+        {
+            using var read = fixture.Database.CreateContext();
+            reserved = read.AiBudgetCalls.Single().ChargedMicroDollars;
+        };
+
+        await fixture.Client.CompleteTextAsync("system", "write");
+
+        reserved.Should().Be(6546);
+        using var read = fixture.Database.CreateContext();
+        var call = read.AiBudgetCalls.Single();
+        call.ChargedMicroDollars.Should().Be(2644);
+        call.IsSettled.Should().BeTrue();
+        read.AiUsageDaily.Single().CostUsd.Should().Be(0.00264375m);
+        JsonElement.DeepEquals(fixture.Handler.CountedRequests.Single().GetProperty("input"),
+            fixture.Handler.CompletionRequests.Single().GetProperty("input")).Should().BeTrue();
+        fixture.Handler.CountedRequests.Single().TryGetProperty("max_output_tokens", out _).Should().BeFalse();
+        fixture.Handler.CompletionRequests.Single().GetProperty("max_output_tokens").GetInt32().Should().Be(8192);
+    }
+
+    [Fact]
+    public async Task SixCallToolLoops_StopAtDollarCeilingBeforeNextCompletion()
+    {
+        using var fixture = new BudgetFixture(pro: true);
+        fixture.Handler.FullToolLoops = true;
+        var service = new AiIntentService(fixture.Client, fixture.Recorder, NullLogger<AiIntentService>.Instance);
+        var loops = 0;
+        while (true)
+        {
+            var result = await service.SendWithToolsAsync(new AiToolRequest("write", "system", [], fixture.User.Id));
+            while (result.IsSuccess && result.Value.HasToolCalls)
+                result = await service.ContinueWithToolResultsAsync(result.Value.ConversationContext!,
+                    result.Value.ToolCalls!.Select(call => new AiToolCallResult(call.Name, call.Id, true, null, null, null)).ToList());
+            if (result.IsFailure)
+            {
+                result.ErrorCode.Should().Be(AiBudgetExceededException.Error.Code);
+                break;
+            }
+            loops++;
+            loops.Should().BeLessThan(10);
+        }
+
+        loops.Should().Be(3, $"provider calls: {fixture.Handler.Completions}");
+        fixture.Handler.Completions.Should().Be(18);
+        using var read = fixture.Database.CreateContext();
+        read.AiBudgetCalls.Count().Should().Be(18);
+        read.AiBudgetCalls.Sum(call => call.ChargedMicroDollars).Should().Be(117_828);
+    }
+
+    [Fact]
+    public async Task FreeImageMessage_UsesProviderImageCountAndFitsCeiling()
+    {
+        using var fixture = new BudgetFixture();
+        fixture.Handler.InputTokens = 20_829;
+        var service = new AiIntentService(fixture.Client, fixture.Recorder, NullLogger<AiIntentService>.Instance);
+        var image = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a0ckAAAAASUVORK5CYII=");
+
+        var result = await service.SendWithToolsAsync(new AiToolRequest("describe", "system", [], fixture.User.Id,
+            image, "image/png"));
+
+        result.IsSuccess.Should().BeTrue();
+        fixture.Handler.Completions.Should().Be(1);
+        fixture.Handler.CountedRequests.Single().GetProperty("input").GetRawText().Should().Contain("input_image");
+        JsonElement.DeepEquals(fixture.Handler.CountedRequests.Single().GetProperty("input"),
+            fixture.Handler.CompletionRequests.Single().GetProperty("input")).Should().BeTrue();
+        using var read = fixture.Database.CreateContext();
+        read.AiBudgetCalls.Single().ChargedMicroDollars.Should().BeLessThan(20_000);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExhaustedUser_IsRefusedBeforeModel_WhileOtherUserProceeds(bool callsExhausted)
+    {
+        using var fixture = new BudgetFixture();
+        var row = AiBudgetCall.Reserve(fixture.User.Id, Today, callsExhausted ? 1 : 20_000);
+        fixture.Database.Context.AiBudgetCalls.Add(row);
+        await fixture.Database.Context.SaveChangesAsync();
+        if (callsExhausted)
+            fixture.Config.GetAsync(AppConfigKeys.FreeAiCallsPerDay, Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(1);
+        var blocked = () => fixture.Client.CompleteTextAsync("system", "write");
+        await blocked.Should().ThrowAsync<AiBudgetExceededException>();
+        fixture.Handler.Completions.Should().Be(0);
+        var other = User.Create("Other", "other@example.com").Value;
+        other.StartTrial(DateTime.UtcNow.AddDays(-1));
+        fixture.Database.Context.Users.Add(other);
+        await fixture.Database.Context.SaveChangesAsync();
+        fixture.SetUser(other.Id);
+
+        await fixture.Client.CompleteTextAsync("system", "write");
+
+        fixture.Handler.Completions.Should().Be(1);
+        using var read = fixture.Database.CreateContext();
+        read.AiUsageDaily.Single().UserId.Should().Be(other.Id);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FailedProvider_ReleasesUnreportedSpendOrSettlesReportedUsage(bool reportedUsage)
+    {
+        using var fixture = new BudgetFixture();
+        fixture.Handler.Fail = true;
+        fixture.Handler.ReportFailedUsage = reportedUsage;
+        var call = () => fixture.Client.CompleteTextAsync("system", "write");
+
+        await call.Should().ThrowAsync<Exception>();
+
+        using var read = fixture.Database.CreateContext();
+        read.AiBudgetCalls.Single().ChargedMicroDollars.Should().Be(reportedUsage ? 2644 : 0);
+        read.AiBudgetCalls.Single().IsSettled.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SuccessfulProviderWithoutUsage_RetainsReservation()
+    {
+        using var fixture = new BudgetFixture();
+        fixture.Handler.OmitUsage = true;
+        await fixture.Client.CompleteTextAsync("system", "write");
+        using var read = fixture.Database.CreateContext();
+        read.AiBudgetCalls.Single().ChargedMicroDollars.Should().Be(6546);
+    }
+
+    [Fact]
+    public async Task DollarConfig_CanRaiseTheCeiling_AndPricesTheRequestedModel()
+    {
+        using var fixture = new BudgetFixture(model: "gpt-6.1-sol");
+        var blocked = () => fixture.Client.CompleteTextAsync("system", "write");
+        await blocked.Should().ThrowAsync<AiBudgetExceededException>();
+        fixture.Handler.Completions.Should().Be(0);
+        fixture.Config.GetAsync(AppConfigKeys.FreeAiMicroDollarsPerDay, Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(200_000L);
+
+        await fixture.Client.CompleteTextAsync("system", "write");
+
+        using var read = fixture.Database.CreateContext();
+        read.AiBudgetCalls.Single().ChargedMicroDollars.Should().Be(52_875);
+    }
+
+    [Fact]
+    public async Task LegacyTokenRows_StillCountDuringRollingDeployments()
+    {
+        using var fixture = new BudgetFixture();
+        var legacy = AiBudgetCall.Reserve(fixture.User.Id, Today, 1);
+        legacy.Settle(0);
+        fixture.Database.Context.AiBudgetCalls.Add(legacy);
+        fixture.Database.Context.Entry(legacy).Property<long>("ChargedTokens").CurrentValue = 20_100;
+        await fixture.Database.Context.SaveChangesAsync();
+        var blocked = () => fixture.Client.CompleteTextAsync("system", "write");
+
+        await blocked.Should().ThrowAsync<AiBudgetExceededException>();
+
+        fixture.Handler.Completions.Should().Be(0);
+        using var read = fixture.Database.CreateContext();
+        read.Entry(read.AiBudgetCalls.Single()).Property<long>("ChargedTokens").CurrentValue.Should().Be(20_100);
+    }
+
+    [Fact]
+    public async Task UnknownModelPricing_RefusesBeforeCountingOrCompleting()
+    {
+        using var fixture = new BudgetFixture(model: "unpriced-model");
+        var call = () => fixture.Client.CompleteTextAsync("system", "write");
+        await call.Should().ThrowAsync<InvalidOperationException>().WithMessage("*pricing*");
+        fixture.Handler.CountedRequests.Should().BeEmpty();
+        fixture.Handler.Completions.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task CountingFailure_RefusesCompletion_AndAnonymousUserIsRefused()
+    {
+        using var fixture = new BudgetFixture();
+        fixture.Handler.FailCount = true;
+        var failed = () => fixture.Client.CompleteTextAsync("system", "write");
+        await failed.Should().ThrowAsync<Exception>();
+        fixture.Handler.Completions.Should().Be(0);
+        fixture.Http.HttpContext!.User = new ClaimsPrincipal();
+        var anonymous = () => fixture.Client.CompleteTextAsync("system", "write");
         await anonymous.Should().ThrowAsync<InvalidOperationException>().WithMessage("*authenticated user*");
+    }
+
+    [Fact]
+    public async Task CountingRequest_UsesTheWholeCompletionDeadline()
+    {
+        using var fixture = new BudgetFixture(completionTimeoutSeconds: 1);
+        fixture.Handler.WaitForCountCancellation = true;
+        var call = () => fixture.Client.CompleteTextAsync("system", "write").WaitAsync(TimeSpan.FromSeconds(5));
+
+        await call.Should().ThrowAsync<OperationCanceledException>();
+
+        fixture.Handler.Completions.Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData("text")]
+    [InlineData("json")]
+    [InlineData("chat")]
+    [InlineData("stream")]
+    public async Task CompletionShapes_ReserveTheSameCountedInputAndTools(string kind)
+    {
+        using var fixture = new BudgetFixture();
+        if (kind == "text")
+            await fixture.Client.CompleteTextAsync("system", "write", maxOutputTokens: 2048);
+        else if (kind == "json")
+            await fixture.Client.CompleteJsonAsync<Probe>("system JSON", "write", maxOutputTokens: 2048);
+        else
+        {
+            var declaration = new { name = "noop", description = "noop", parameters = new { type = "object", properties = new { } } };
+            var service = new AiIntentService(fixture.Client, fixture.Recorder, NullLogger<AiIntentService>.Instance);
+            var result = await service.SendWithToolsAsync(new AiToolRequest("write", "system", [declaration], fixture.User.Id),
+                kind == "stream" ? _ => Task.CompletedTask : null);
+            result.IsSuccess.Should().BeTrue();
+        }
+        var counted = fixture.Handler.CountedRequests.Single();
+        var completed = fixture.Handler.CompletionRequests.Single();
+        counted.GetProperty("input").GetRawText().Should().Be(completed.GetProperty("input").GetRawText());
+        if (kind is "chat" or "stream")
+            counted.GetProperty("tools").GetRawText().Should().Be(completed.GetProperty("tools").GetRawText());
+        using var read = fixture.Database.CreateContext();
+        read.AiBudgetCalls.Single().IsSettled.Should().BeTrue();
+    }
+
+    private sealed record Probe(string Value);
+
+    private sealed class BudgetFixture : IDisposable
+    {
+        internal SqliteOrbitDbContextFactory Database { get; } = new();
+        internal User User { get; }
+        internal IAppConfigService Config { get; } = Substitute.For<IAppConfigService>();
+        internal HttpContextAccessor Http { get; } = new() { HttpContext = new DefaultHttpContext() };
+        internal ModelHandler Handler { get; }
+        internal BudgetedAiCompletionClient Client { get; }
+        internal IAiUsageRecorder Recorder { get; }
+        private readonly ServiceProvider _provider;
+
+        internal BudgetFixture(bool pro = false, string model = "gpt-6-luna", int completionTimeoutSeconds = 185)
+        {
+            User = User.Create("Writer", "writer@example.com").Value;
+            User.StartTrial(DateTime.UtcNow.AddDays(pro ? 1 : -1));
+            Database.Context.Users.Add(User);
+            Database.Context.SaveChanges();
+            SetUser(User.Id);
+            Config.GetAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(call => call.ArgAt<int>(1));
+            Config.GetAsync(Arg.Any<string>(), Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(call => call.ArgAt<long>(1));
+            var dates = Substitute.For<IUserDateService>();
+            dates.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
+            _provider = new ServiceCollection()
+                .AddScoped(_ => Database.CreateContext())
+                .AddScoped<IUnitOfWork>(scope => new UnitOfWork(scope.GetRequiredService<OrbitDbContext>(), new DatabaseConnectionSettings()))
+                .AddSingleton(Config).AddSingleton(dates).BuildServiceProvider();
+            var options = Options.Create(new AiSettings
+            {
+                ApiKey = "test-key",
+                BaseUrl = "https://orbit.test/v1",
+                Model = model,
+                MaxRetries = 0,
+                CompletionTimeoutSeconds = completionTimeoutSeconds,
+                Pricing = new Dictionary<string, AiModelPrice>
+                {
+                    ["gpt-6-luna"] = new() { InputPerMillionUsd = 0.10m, CachedInputPerMillionUsd = 0.01m, CacheWritePerMillionUsd = 0.125m, OutputPerMillionUsd = 0.50m },
+                    ["gpt-6.1-sol"] = new() { InputPerMillionUsd = 2m, CachedInputPerMillionUsd = 0.10m, CacheWritePerMillionUsd = 2.50m, OutputPerMillionUsd = 10m }
+                }
+            });
+            Handler = new ModelHandler(model);
+            Recorder = new BudgetAwareAiUsageRecorder(new AiUsageRecorder(_provider.GetRequiredService<IServiceScopeFactory>(),
+                options, NullLogger<AiUsageRecorder>.Instance), Http, options);
+            var raw = new AiCompletionClient(options, NullLogger<AiCompletionClient>.Instance, Recorder,
+                new HttpClientPipelineTransport(new HttpClient(Handler)));
+            Client = new BudgetedAiCompletionClient(raw, new AiDailyBudget(_provider.GetRequiredService<IServiceScopeFactory>()),
+                Http, NullLogger<BudgetedAiCompletionClient>.Instance, new AiRequestCostEstimator(raw, options));
+        }
+
+        internal void SetUser(Guid userId) => Http.HttpContext!.User = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, userId.ToString())], "Test"));
+
+        public void Dispose()
+        {
+            _provider.Dispose();
+            Database.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Count payload follows TokenCountsResource in the provider schema:
+    /// https://github.com/openai/openai-openapi/blob/main/openapi.json
+    /// Completion payloads are serialized by the installed Responses SDK.
+    /// </summary>
+    private sealed class ModelHandler(string model) : HttpMessageHandler
+    {
+        internal int Completions { get; private set; }
+        internal int InputTokens { get; set; } = 19_600;
+        internal bool FullToolLoops { get; set; }
+        internal bool Fail { get; set; }
+        internal bool FailCount { get; set; }
+        internal bool WaitForCountCancellation { get; set; }
+        internal bool ReportFailedUsage { get; set; }
+        internal bool OmitUsage { get; set; }
+        internal Action? OnCompletion { get; set; }
+        internal List<JsonElement> CountedRequests { get; } = [];
+        internal List<JsonElement> CompletionRequests { get; } = [];
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(cancellationToken));
+            if (request.RequestUri!.AbsolutePath.EndsWith("/input_tokens", StringComparison.Ordinal))
+            {
+                CountedRequests.Add(body.RootElement.Clone());
+                if (WaitForCountCancellation)
+                    await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                return Response(request, FailCount ? HttpStatusCode.ServiceUnavailable : HttpStatusCode.OK,
+                    FailCount ? "{}" : JsonSerializer.Serialize(new { @object = "response.input_tokens", input_tokens = InputTokens }));
+            }
+            CompletionRequests.Add(body.RootElement.Clone());
+            OnCompletion?.Invoke();
+            Completions++;
+            if (Fail && !ReportFailedUsage)
+                return Response(request, HttpStatusCode.ServiceUnavailable, "{}");
+            var response = ResponsesTestData.Response("{\"value\":\"ok\"}", InputTokens, FullToolLoops ? 8192 : 500,
+                FullToolLoops || Completions == 1 ? 0 : 17_350);
+            response.Model = model;
+            response.Usage.InputTokenDetails.CacheWriteTokenCount = FullToolLoops ? InputTokens : Completions == 1 ? 17_350 : 0;
+            response.Usage.OutputTokenDetails = new ResponseOutputTokenUsageDetails { ReasoningTokenCount = 200 };
+            if (Fail)
+                response.Status = ResponseStatus.Failed;
+            if (OmitUsage)
+                response.Usage = null;
+            if (FullToolLoops && Completions % 6 != 0)
+            {
+                response.OutputItems.Clear();
+                response.OutputItems.Add(ResponseItem.CreateFunctionCallItem($"call_{Completions}", "noop", BinaryData.FromString("{}")));
+            }
+            var streaming = body.RootElement.TryGetProperty("stream", out var stream) && stream.GetBoolean();
+            return Response(request, HttpStatusCode.OK, streaming ? ResponsesTestData.Stream(response, "done") : ModelReaderWriter.Write(response).ToString(),
+                streaming ? "text/event-stream" : "application/json");
+        }
+
+        private static HttpResponseMessage Response(HttpRequestMessage request, HttpStatusCode status, string content, string mediaType = "application/json")
+            => new(status) { RequestMessage = request, Content = new StringContent(content, Encoding.UTF8, mediaType) };
     }
 }

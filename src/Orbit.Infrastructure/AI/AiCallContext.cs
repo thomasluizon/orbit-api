@@ -5,7 +5,7 @@ public sealed class AiCallContext : IDisposable
     private static readonly AsyncLocal<AiCallContext?> Active = new();
     private readonly AiCallContext? _previous;
     public Guid UserId { get; }
-    public long? Tokens { get; private set; }
+    public long? ChargedMicroDollars { get; private set; }
     public static AiCallContext? Current => Active.Value;
 
     private AiCallContext(Guid userId)
@@ -18,6 +18,11 @@ public sealed class AiCallContext : IDisposable
     }
 
     public static AiCallContext Begin(Guid userId) => new(userId);
-    public void Report(long tokens) => Tokens = Math.Max(Tokens ?? 0, tokens);
+    public void ReportCost(long microDollars)
+    {
+        if (microDollars < 0)
+            throw new ArgumentOutOfRangeException(nameof(microDollars));
+        ChargedMicroDollars = checked((ChargedMicroDollars ?? 0) + microDollars);
+    }
     public void Dispose() => Active.Value = _previous;
 }

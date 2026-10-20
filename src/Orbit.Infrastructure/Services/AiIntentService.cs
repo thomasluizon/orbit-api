@@ -1,6 +1,7 @@
 #pragma warning disable OPENAI001
 
 using System.Text;
+using System.ClientModel.Primitives;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -147,7 +148,7 @@ public sealed partial class AiIntentService(
             var round = await aiClient.RunAsync(userId, client => streamSink is null
                 ? CompleteBufferedRoundAsync(client, messages, options, userId, cancellationToken)
                 : CompleteStreamingRoundAsync(client, messages, options, userId, streamSink, stopwatch, cancellationToken),
-                cancellationToken, AiTokenReservation.Estimate(messages, options));
+                cancellationToken, ModelReaderWriter.Write(options).ToString());
 
             stopwatch.Stop();
             if (logger.IsEnabled(LogLevel.Debug))
@@ -448,7 +449,8 @@ public sealed partial class AiIntentService(
                 usage.OutputTokenCount,
                 usage.TotalTokenCount,
                 cancellationToken,
-                userId);
+                userId,
+                usage.InputTokenDetails?.CacheWriteTokenCount ?? 0);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

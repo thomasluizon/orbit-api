@@ -19,6 +19,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.Configure<AgentPlatformSettings>(
             builder.Configuration.GetSection(AgentPlatformSettings.SectionName));
         builder.Services.AddSingleton<AiCompletionClient>();
+        builder.Services.AddSingleton<IAiRequestCostEstimator, AiRequestCostEstimator>();
         builder.Services.AddSingleton<AiUsageRecorder>();
         builder.Services.AddSingleton<IAiUsageRecorder, BudgetAwareAiUsageRecorder>();
         builder.Services.AddSingleton<IAiDailyBudget, AiDailyBudget>();
