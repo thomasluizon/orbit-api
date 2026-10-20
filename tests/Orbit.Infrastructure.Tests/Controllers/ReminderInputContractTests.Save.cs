@@ -128,7 +128,7 @@ public partial class ReminderInputContractTests
                 goals, payGate, goalCompletion, _dates, UnitOfWork, _cache);
             var sub = new CreateSubHabitCommandHandler(_habits, tags, _dates, UnitOfWork, config, payGate, _cache);
             var bulk = new BulkCreateHabitsCommandHandler(new(_habits, Substitute.For<IGenericRepository<GoogleCalendarSyncSuggestion>>(), tags),
-                payGate, _dates, UnitOfWork, _cache, Substitute.For<ILogger<BulkCreateHabitsCommandHandler>>());
+                payGate, _dates, UnitOfWork, _cache, config);
             var mediator = Substitute.For<IMediator>();
             mediator.Send(Arg.Any<CreateHabitCommand>(), Arg.Any<CancellationToken>()).Returns(call =>
             {

@@ -265,10 +265,13 @@ public class BulkReminderValidationContractTests
             dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(new DateOnly(2026, 4, 3));
             var payGate = Substitute.For<IPayGateService>();
             payGate.CanCreateHabits(user.Id, Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+            var config = Substitute.For<IAppConfigService>();
+            config.GetAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+                .Returns(call => call.ArgAt<int>(1));
             var handler = new BulkCreateHabitsCommandHandler(new(new GenericRepository<Habit>(db),
                     new GenericRepository<GoogleCalendarSyncSuggestion>(db), new GenericRepository<Tag>(db)),
                 payGate, dates, new UnitOfWork(db, new DatabaseConnectionSettings()), _cache,
-                NullLogger<BulkCreateHabitsCommandHandler>.Instance);
+                config);
             var mediator = Substitute.For<IMediator>();
             mediator.Send(Arg.Any<BulkCreateHabitsCommand>(), Arg.Any<CancellationToken>()).Returns(call =>
             {

@@ -223,7 +223,8 @@ public sealed class CheckChatCommandQueryHandler(IServiceProvider services) : IR
             services.GetRequiredService<IUserDateService>(), ct);
 
     private Task<Result> CheckBulkCreateAsync(BulkCreateHabitsCommand command, CancellationToken ct) =>
-        BulkCreateHabitsCommandHandler.CheckArgumentsAsync(command, services.GetRequiredService<IUserDateService>(), ct);
+        BulkCreateHabitsCommandHandler.CheckArgumentsAsync(command, services.GetRequiredService<IUserDateService>(),
+            services.GetRequiredService<IAppConfigService>(), ct);
 
     private Task<Result> CheckBulkUpdateAsync(BulkUpdateHabitsCommand command, CancellationToken ct) =>
         BulkUpdateHabitsCommandHandler.CheckArgumentsAsync(command, Repository<Habit>(), services.GetRequiredService<IUserDateService>(), ct);

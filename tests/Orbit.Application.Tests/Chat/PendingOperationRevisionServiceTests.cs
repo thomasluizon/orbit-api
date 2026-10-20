@@ -345,7 +345,11 @@ public sealed class PendingOperationRevisionServiceTests
     public async Task ReviseAsync_InvalidCreateCanBeApprovedAfterEditingOrRemovingItem(bool remove)
     {
         SetupHabits([]);
+        var config = Substitute.For<IAppConfigService>();
+        config.GetAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<int>(1));
         using var services = new ServiceCollection()
+            .AddSingleton(config)
             .AddSingleton<IValidator<BulkCreateHabitsCommand>>(new BulkCreateHabitsCommandValidator())
             .AddSingleton(_dateService).BuildServiceProvider();
         var mediator = Substitute.For<IMediator>();

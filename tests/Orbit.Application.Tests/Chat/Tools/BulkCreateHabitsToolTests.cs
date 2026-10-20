@@ -173,6 +173,17 @@ public class BulkCreateHabitsToolTests
         captured!.Habits[0].SubHabits.Should().ContainSingle().Which.FrequencyQuantity.Should().Be(1);
     }
 
+    [Fact]
+    public void Schema_AdvertisesExactlyOneInlineChildLevel()
+    {
+        var schema = JsonSerializer.SerializeToElement(_tool.GetParameterSchema());
+        var root = schema.GetProperty("properties").GetProperty("habits").GetProperty("items").GetProperty("properties");
+        var child = root.GetProperty("sub_habits").GetProperty("items").GetProperty("properties");
+
+        child.TryGetProperty("sub_habits", out _).Should().BeFalse();
+        child.GetProperty("title").GetProperty("type").GetString().Should().Be("string");
+    }
+
     private async Task<ToolResult> Execute(string json) =>
         await _tool.ExecuteAsync(JsonDocument.Parse(json).RootElement, UserId, CancellationToken.None);
 }
