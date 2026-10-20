@@ -481,3 +481,5 @@ public static class AgentScopes
         ReadSubscriptions
     ];
 }
+
+public sealed record PendingHabitCreation(string Title, Guid? ParentHabitId = null);

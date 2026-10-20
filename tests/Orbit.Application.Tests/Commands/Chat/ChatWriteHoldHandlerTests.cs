@@ -184,8 +184,8 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
             _userId, "Crie o habito"), CancellationToken.None);
 
         var pending = result.Value.PendingOperations.Should().ContainSingle().Subject;
-        pending.Items.Should().BeNull();
-        pending.PreviewFingerprint.Should().BeNull();
+        pending.Items.Should().ContainSingle();
+        pending.PreviewFingerprint.Should().NotBeNullOrWhiteSpace();
         await _habitRepo.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
     }
 
