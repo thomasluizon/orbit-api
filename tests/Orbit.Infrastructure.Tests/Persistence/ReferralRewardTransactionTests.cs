@@ -63,6 +63,50 @@ public class ReferralRewardTransactionTests
         (await db.Referrals.AsNoTracking().SingleAsync()).Status.Should().Be(ReferralStatus.Rewarded);
     }
 
+    [Fact]
+    public async Task Handle_QueueFailureInAmbientTransaction_PreservesCallerTracking()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var db = factory.Context;
+        var nowAtUtc = DateTime.UtcNow;
+        var referred = User.Create("Referred", "referred@example.com").Value;
+        var referrer = User.Create("Referrer", "referrer@example.com").Value;
+        var caller = User.Create("Caller", "caller@example.com").Value;
+        var referral = Referral.Create(referrer.Id, referred.Id);
+        typeof(User).GetProperty("CreatedAtUtc")!.SetValue(referred, nowAtUtc.AddDays(-3));
+        typeof(Referral).GetProperty("CreatedAtUtc")!.SetValue(referral, nowAtUtc.AddDays(-3));
+        var habit = Habit.Create(new HabitCreateParams(referred.Id, "Habit", FrequencyUnit.Day, 1,
+            DueDate: DateOnly.FromDateTime(nowAtUtc))).Value;
+        db.AddRange(referrer, referred, caller, referral, habit);
+        for (var offset = 0; offset < 3; offset++)
+            db.HabitLogs.Add(HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id,
+                DateOnly.FromDateTime(nowAtUtc).AddDays(-offset), 1, 0, nowAtUtc.AddDays(-offset).AddMinutes(-1)));
+        await db.SaveChangesAsync();
+        var work = new UnitOfWork(db, new DatabaseConnectionSettings());
+        var dates = Substitute.For<IUserDateService>();
+        dates.GetUserTimeZoneAsync(referred.Id, Arg.Any<CancellationToken>()).Returns(TimeZoneInfo.Utc);
+        dates.GetUserTodayAsync(referred.Id, Arg.Any<CancellationToken>()).Returns(DateOnly.FromDateTime(nowAtUtc));
+        var jobs = Substitute.For<IBackgroundJobClient>();
+        jobs.Create(Arg.Any<Job>(), Arg.Any<IState>()).Returns(_ => throw new InvalidOperationException("queue unavailable"));
+        var repos = new ReferralRepositories(new GenericRepository<User>(db), new GenericRepository<Referral>(db),
+            new GenericRepository<Habit>(db), new GenericRepository<HabitLog>(db), new GenericRepository<Notification>(db));
+        var handler = new CheckReferralCompletionCommandHandler(repos, jobs, dates, work, TimeProvider.System);
+        await using var ambient = await db.Database.BeginTransactionAsync();
+        db.Notifications.Add(Notification.Create(caller.Id, "Caller work", "Pending caller work", "/profile"));
+
+        var attempt = () => handler.Handle(new CheckReferralCompletionCommand(referred.Id), CancellationToken.None);
+        await attempt.Should().ThrowAsync<InvalidOperationException>().WithMessage("queue unavailable");
+        caller.SetLanguage("pt-BR");
+        await work.SaveChangesAsync();
+        await ambient.CommitAsync();
+        db.ChangeTracker.Clear();
+
+        (await db.Users.SingleAsync(u => u.Id == caller.Id)).Language.Should().Be("pt-BR");
+        (await db.Notifications.CountAsync()).Should().Be(1);
+        (await db.Referrals.SingleAsync()).Status.Should().Be(ReferralStatus.Pending);
+        (await db.Users.SingleAsync(u => u.Id == referred.Id)).PlanExpiresAt.Should().BeNull();
+    }
+
     private sealed class FailAfterRewardSave : SaveChangesInterceptor
     {
         public bool Enabled { get; set; }

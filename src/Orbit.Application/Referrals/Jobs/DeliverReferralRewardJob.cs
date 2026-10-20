@@ -36,7 +36,8 @@ public sealed class DeliverReferralRewardJob(
             if (kind == ReferralRewardKind.Coupon)
             {
                 var couponId = await rewards.CreateReferralCouponAsync(userId, $"referral-reward-{referralId}-{userId}", ct);
-                if (user.HasActivePaidSubscription && !string.IsNullOrWhiteSpace(user.StripeSubscriptionId))
+                if (user.HasActivePaidSubscription && user.SubscriptionSource == SubscriptionSource.Stripe
+                    && !string.IsNullOrWhiteSpace(user.StripeSubscriptionId))
                     await rewards.ApplyCouponToSubscriptionAsync(user.StripeSubscriptionId, couponId, ct);
                 else
                     user.SetReferralCoupon(couponId);

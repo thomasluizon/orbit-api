@@ -36,6 +36,8 @@ public class CheckReferralCompletionCommandHandler(
         if (referral is null)
             return Result.Success();
 
+        Referral? changedReferral = null;
+        var changedUsers = new List<User>();
         try
         {
             await unitOfWork.ExecuteInTransactionAsync(async ct =>
@@ -44,7 +46,7 @@ public class CheckReferralCompletionCommandHandler(
                     await unitOfWork.AcquireAdvisoryLockAsync($"referral-rewards:{userId}", ct);
 
                 var tracked = await repos.ReferralRepository.FindOneTrackedAsync(r => r.Id == referral.Id, cancellationToken: ct);
-                if (tracked is null || tracked.Status != ReferralStatus.Pending || tracked.RewardGrantedAtUtc is not null)
+                if (tracked is null)
                     return;
                 await repos.ReferralRepository.ReloadAsync(tracked, ct);
                 if (tracked.Status != ReferralStatus.Pending || tracked.RewardGrantedAtUtc is not null)
@@ -63,34 +65,53 @@ public class CheckReferralCompletionCommandHandler(
                 var referrerReward = await GetRewardAsync(referrer, ct);
                 var referredReward = await GetRewardAsync(referred, ct);
 
-                tracked.MarkCompleted();
                 if (referrerReward != ReferralRewardKind.None || referredReward != ReferralRewardKind.None)
                 {
-                    if (referrer is not null && referrerReward == ReferralRewardKind.ProDays)
-                        referrer.GrantBonusProDays(AppConstants.ReferralBonusProDays);
-                    if (referredReward == ReferralRewardKind.ProDays)
-                        referred.GrantBonusProDays(AppConstants.ReferralBonusProDays);
-                    tracked.MarkRewarded(referrerReward, referredReward);
-
                     // Enqueue before commit so queue failure rolls back the grant: https://docs.hangfire.io/en/latest/background-methods/calling-methods-in-background.html
                     if (referrerReward != ReferralRewardKind.None)
                         jobs.Enqueue<DeliverReferralRewardJob>(job => job.ExecuteAsync(tracked.Id, tracked.ReferrerId, CancellationToken.None));
                     if (referredReward != ReferralRewardKind.None)
                         jobs.Enqueue<DeliverReferralRewardJob>(job => job.ExecuteAsync(tracked.Id, tracked.ReferredUserId, CancellationToken.None));
+
+                    changedReferral = tracked;
+                    if (referrer is not null && referrerReward == ReferralRewardKind.ProDays)
+                    {
+                        changedUsers.Add(referrer);
+                        referrer.GrantBonusProDays(AppConstants.ReferralBonusProDays);
+                    }
+                    if (referredReward == ReferralRewardKind.ProDays)
+                    {
+                        changedUsers.Add(referred);
+                        referred.GrantBonusProDays(AppConstants.ReferralBonusProDays);
+                    }
+                    tracked.MarkRewarded(referrerReward, referredReward);
+                }
+                else
+                {
+                    changedReferral = tracked;
+                    tracked.MarkCompleted();
                 }
                 await unitOfWork.SaveChangesAsync(ct);
             }, cancellationToken);
         }
         catch (DbUpdateConcurrencyException)
         {
-            unitOfWork.ResetTracking();
+            await ReloadRewardStateAsync(changedReferral, changedUsers, cancellationToken);
         }
         catch
         {
-            unitOfWork.ResetTracking();
+            await ReloadRewardStateAsync(changedReferral, changedUsers, cancellationToken);
             throw;
         }
         return Result.Success();
+    }
+
+    private async Task ReloadRewardStateAsync(Referral? referral, List<User> users, CancellationToken ct)
+    {
+        if (referral is not null)
+            await repos.ReferralRepository.ReloadAsync(referral, ct);
+        foreach (var user in users)
+            await repos.UserRepository.ReloadAsync(user, ct);
     }
 
     private async Task<bool> QualifiesAsync(Referral referral, User referred, CancellationToken ct)

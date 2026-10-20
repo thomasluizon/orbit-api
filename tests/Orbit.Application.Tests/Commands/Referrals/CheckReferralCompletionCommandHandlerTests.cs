@@ -53,7 +53,6 @@ public class CheckReferralCompletionCommandHandlerTests : IDisposable
                 await _beforeSaveAsync();
             return await _db.SaveChangesAsync(call.Arg<CancellationToken>());
         });
-        _work.When(w => w.ResetTracking()).Do(_ => _db.ChangeTracker.Clear());
         _dates.GetUserTimeZoneAsync(_referred.Id, Arg.Any<CancellationToken>()).Returns(TimeZoneInfo.Utc);
         _dates.GetUserTodayAsync(_referred.Id, Arg.Any<CancellationToken>()).Returns(DateOnly.FromDateTime(_nowAtUtc));
         _jobs.Create(Arg.Any<Job>(), Arg.Any<IState>()).Returns("job-id");
@@ -218,15 +217,15 @@ public class CheckReferralCompletionCommandHandlerTests : IDisposable
         };
         var first = () => RunAsync();
         await first.Should().ThrowAsync<InvalidOperationException>();
-        var persisted = await _db.Referrals.SingleAsync();
+        var persisted = await _db.Referrals.AsNoTracking().SingleAsync();
         persisted.Status.Should().Be(ReferralStatus.Pending);
         persisted.RewardGrantedAtUtc.Should().BeNull();
-        (await _db.Users.SingleAsync(u => u.Id == _referrer.Id)).PlanExpiresAt.Should().BeNull();
+        (await _db.Users.AsNoTracking().SingleAsync(u => u.Id == _referrer.Id)).PlanExpiresAt.Should().BeNull();
         fail = false;
         await RunAsync();
-        var expiry = (await _db.Users.SingleAsync(u => u.Id == _referrer.Id)).PlanExpiresAt;
+        var expiry = (await _db.Users.AsNoTracking().SingleAsync(u => u.Id == _referrer.Id)).PlanExpiresAt;
         await RunAsync();
-        (await _db.Users.SingleAsync(u => u.Id == _referrer.Id)).PlanExpiresAt.Should().Be(expiry);
+        (await _db.Users.AsNoTracking().SingleAsync(u => u.Id == _referrer.Id)).PlanExpiresAt.Should().Be(expiry);
     }
 
     [Fact]
@@ -236,8 +235,8 @@ public class CheckReferralCompletionCommandHandlerTests : IDisposable
         _jobs.Create(Arg.Any<Job>(), Arg.Any<IState>()).Returns(_ => throw new InvalidOperationException("queue unavailable"));
         var run = () => RunAsync();
         await run.Should().ThrowAsync<InvalidOperationException>();
-        (await _db.Referrals.SingleAsync()).Status.Should().Be(ReferralStatus.Pending);
-        (await _db.Users.SingleAsync(u => u.Id == _referred.Id)).PlanExpiresAt.Should().BeNull();
+        (await _db.Referrals.AsNoTracking().SingleAsync()).Status.Should().Be(ReferralStatus.Pending);
+        (await _db.Users.AsNoTracking().SingleAsync(u => u.Id == _referred.Id)).PlanExpiresAt.Should().BeNull();
     }
 
     [Fact]
@@ -270,12 +269,11 @@ public class CheckReferralCompletionCommandHandlerTests : IDisposable
             releaseLoser.TrySetResult();
         }
         (await loser).IsSuccess.Should().BeTrue();
-        _work.Received().ResetTracking();
-        var expiry = (await _db.Users.SingleAsync(u => u.Id == _referred.Id)).PlanExpiresAt;
+        var expiry = (await _db.Users.AsNoTracking().SingleAsync(u => u.Id == _referred.Id)).PlanExpiresAt;
         expiry.Should().BeCloseTo(DateTime.UtcNow.AddDays(7), TimeSpan.FromSeconds(5));
         _beforeSaveAsync = null;
         await RunAsync();
-        (await _db.Users.SingleAsync(u => u.Id == _referred.Id)).PlanExpiresAt.Should().Be(expiry);
+        (await _db.Users.AsNoTracking().SingleAsync(u => u.Id == _referred.Id)).PlanExpiresAt.Should().Be(expiry);
     }
 
     [Fact]
@@ -322,14 +320,14 @@ public class CheckReferralCompletionCommandHandlerTests : IDisposable
         var first = () => job.ExecuteAsync(_referral.Id, _referrer.Id, CancellationToken.None);
         await first.Should().ThrowAsync<InvalidOperationException>();
         _db.ChangeTracker.Clear();
-        (await _db.Users.SingleAsync(u => u.Id == _referred.Id)).PlanExpiresAt.Should().Be(bonusExpiry);
-        (await _db.Referrals.SingleAsync()).ReferrerRewardDeliveredAtUtc.Should().BeNull();
+        (await _db.Users.AsNoTracking().SingleAsync(u => u.Id == _referred.Id)).PlanExpiresAt.Should().Be(bonusExpiry);
+        (await _db.Referrals.AsNoTracking().SingleAsync()).ReferrerRewardDeliveredAtUtc.Should().BeNull();
         fail = false;
         await job.ExecuteAsync(_referral.Id, _referrer.Id, CancellationToken.None);
         await job.ExecuteAsync(_referral.Id, _referrer.Id, CancellationToken.None);
         await rewards.Received(2).CreateReferralCouponAsync(_referrer.Id, key, Arg.Any<CancellationToken>());
         await rewards.Received(1).ApplyCouponToSubscriptionAsync("sub_paid", "coupon_paid", Arg.Any<CancellationToken>());
-        (await _db.Users.SingleAsync(u => u.Id == _referrer.Id)).PlanExpiresAt.Should().Be(paidExpiry);
+        (await _db.Users.AsNoTracking().SingleAsync(u => u.Id == _referrer.Id)).PlanExpiresAt.Should().Be(paidExpiry);
         (await _db.Notifications.CountAsync()).Should().Be(1);
         await push.Received(1).SendToUserAsync(_referrer.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
@@ -356,6 +354,25 @@ public class CheckReferralCompletionCommandHandlerTests : IDisposable
         _referral.ReferrerRewardDeliveredAtUtc.Should().NotBeNull();
         _referral.ReferredRewardDeliveredAtUtc.Should().NotBeNull();
         await push.Received(2).SendToUserAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_PlaySubscriberWithRetainedStripeId_StoresCouponForPlay()
+    {
+        _referrer.SetStripeSubscription("sub_old", _nowAtUtc.AddDays(-1));
+        _referrer.SetPlaySubscription("play_current", _nowAtUtc.AddDays(30));
+        await _db.SaveChangesAsync();
+        await QualifyingLogsAsync();
+        await RunAsync();
+        var rewards = Substitute.For<IReferralRewardService>();
+        var key = $"referral-reward-{_referral.Id}-{_referrer.Id}";
+        rewards.CreateReferralCouponAsync(_referrer.Id, key, Arg.Any<CancellationToken>()).Returns("coupon_play");
+        var job = new DeliverReferralRewardJob(_repos, rewards, Substitute.For<IPushNotificationService>(), _work);
+
+        await job.ExecuteAsync(_referral.Id, _referrer.Id, CancellationToken.None);
+
+        _referrer.ReferralCouponId.Should().Be("coupon_play");
+        await rewards.DidNotReceive().ApplyCouponToSubscriptionAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
