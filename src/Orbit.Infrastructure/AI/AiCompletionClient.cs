@@ -49,13 +49,18 @@ public sealed partial class AiCompletionClient
         CompletionTimeout = settings.CompletionTimeout;
         StreamingCompletionTimeout = settings.StreamingCompletionTimeout;
 
-        ResponsesClient CreateClient(int networkTimeoutSeconds) => new(new ApiKeyCredential(settings.ApiKey), new ResponsesClientOptions
+        ResponsesClient CreateClient(int networkTimeoutSeconds)
         {
-            Endpoint = new Uri(settings.BaseUrl),
-            NetworkTimeout = TimeSpan.FromSeconds(networkTimeoutSeconds),
-            Transport = transport,
-            RetryPolicy = new AiRetryLoggingPolicy(settings.MaxRetries, logger)
-        });
+            var clientOptions = new ResponsesClientOptions
+            {
+                Endpoint = new Uri(settings.BaseUrl),
+                NetworkTimeout = TimeSpan.FromSeconds(networkTimeoutSeconds),
+                Transport = transport,
+                RetryPolicy = new AiRetryLoggingPolicy(settings.MaxRetries, logger)
+            };
+            clientOptions.AddPolicy(new AiBudgetDispatchPolicy(), PipelinePosition.BeforeTransport);
+            return new ResponsesClient(new ApiKeyCredential(settings.ApiKey), clientOptions);
+        }
 
         _primaryModel = settings.Model;
         _responsesClient = CreateClient(settings.BufferedNetworkTimeoutSeconds);
@@ -82,7 +87,7 @@ public sealed partial class AiCompletionClient
         ILogger<AiCompletionClient> logger,
         IAiUsageRecorder usageRecorder,
         TimeSpan? completionTimeout = null,
-        string primaryModel = "gpt-6.1-sol",
+        string primaryModel = "gpt-6-luna",
         string subTaskModel = "gpt-6-luna")
     {
         CompletionTimeout = completionTimeout ?? new AiSettings().CompletionTimeout;
@@ -99,6 +104,39 @@ public sealed partial class AiCompletionClient
     internal ResponsesClient StreamingResponsesClient => _streamingResponsesClient;
 
     internal string ChatModel => _primaryModel;
+
+    internal const int DefaultMaxOutputTokens = 8192;
+
+    internal string SerializeTextRequest(string systemPrompt, string userPrompt, double temperature, int maxOutputTokens,
+        AiModelTier tier, Guid? userId = null, bool json = false)
+    {
+        var options = CreateOptions(tier, temperature, maxOutputTokens, userId);
+        options.InputItems.Add(ResponseItem.CreateSystemMessageItem(systemPrompt));
+        options.InputItems.Add(ResponseItem.CreateUserMessageItem(userPrompt));
+        if (json)
+            options.TextOptions = new ResponseTextOptions { TextFormat = ResponseTextFormat.CreateJsonObjectFormat() };
+        return ModelReaderWriter.Write(options).ToString();
+    }
+
+    internal async Task<long> CountInputTokensAsync(string requestJson, CancellationToken cancellationToken)
+    {
+        using var request = JsonDocument.Parse(requestJson);
+        var allowed = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "model", "input", "tools", "text", "reasoning", "instructions", "tool_choice",
+            "parallel_tool_calls", "previous_response_id", "conversation", "truncation"
+        };
+        var fields = request.RootElement.EnumerateObject().Where(property => allowed.Contains(property.Name))
+            .ToDictionary(property => property.Name, property => property.Value);
+        using var content = BinaryContent.Create(BinaryData.FromObjectAsJson(fields));
+        var result = await _responsesClient.GetInputTokenCountAsync(content, "application/json",
+            new RequestOptions { CancellationToken = cancellationToken });
+        using var response = JsonDocument.Parse(result.GetRawResponse().Content);
+        var tokens = response.RootElement.GetProperty("input_tokens").GetInt64();
+        if (tokens < 0)
+            throw new InvalidOperationException("The provider returned an invalid input token count.");
+        return tokens;
+    }
 
     internal CreateResponseOptions CreateOptions(
         AiModelTier tier = AiModelTier.Primary,
@@ -248,7 +286,8 @@ public sealed partial class AiCompletionClient
             usage.OutputTokenCount,
             usage.TotalTokenCount,
             cancellationToken,
-            userId);
+            userId,
+            usage.InputTokenDetails?.CacheWriteTokenCount ?? 0);
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Calling AI API for text completion...")]

@@ -259,11 +259,13 @@ public class WebApplicationExtensionsMcpTests
         var authentication = Substitute.For<IAuthenticationService>();
         authentication.AuthenticateAsync(Arg.Any<HttpContext>(), Arg.Any<string?>())
             .Returns(call => AuthenticateResult.Success(new AuthenticationTicket(call.Arg<HttpContext>().User, "ApiKey")));
+        var moderation = ModerationTestDouble.Clean();
         var catalog = new AgentCatalogService();
         var policy = Substitute.For<IAgentPolicyEvaluator>();
         policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
             .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, catalog.GetCapabilityByMcpTool("get_daily_summary")));
         await using var services = new ServiceCollection()
+            .AddSingleton(moderation)
             .AddSingleton(limiter)
             .AddSingleton(authentication)
             .AddSingleton<IAgentCatalogService>(catalog)
@@ -325,6 +327,7 @@ public class WebApplicationExtensionsMcpTests
         counts[(WebApplicationExtensions.McpRateLimitPolicy, $"api-key:{secondKey}")].Should().Be(1);
         counts[(WebApplicationExtensions.McpAiRateLimitPolicy, $"api-key:{secondKey}")].Should().Be(1);
         await authentication.Received(3).AuthenticateAsync(Arg.Any<HttpContext>(), Arg.Any<string?>());
+        await moderation.Received(2).CheckTextAsync(Encoding.UTF8.GetString(body), Arg.Any<CancellationToken>());
     }
 
     [Fact]

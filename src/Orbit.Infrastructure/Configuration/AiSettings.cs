@@ -4,7 +4,7 @@ public sealed class AiSettings
 {
     public const string SectionName = "AI";
     public string ApiKey { get; init; } = string.Empty;
-    public string Model { get; init; } = "gpt-6.1-sol";
+    public string Model { get; init; } = "gpt-6-luna";
     public string SubTaskModel { get; init; } = "gpt-6-luna";
     public string TranscriptionModel { get; init; } = "whisper-1";
     public string BaseUrl { get; init; } = "https://api.openai.com/v1";
@@ -30,5 +30,6 @@ public sealed class AiModelPrice
 {
     public decimal InputPerMillionUsd { get; init; }
     public decimal CachedInputPerMillionUsd { get; init; }
+    public decimal? CacheWritePerMillionUsd { get; init; }
     public decimal OutputPerMillionUsd { get; init; }
 }

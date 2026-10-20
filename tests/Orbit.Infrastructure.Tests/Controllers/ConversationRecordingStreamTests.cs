@@ -66,7 +66,7 @@ public class ConversationRecordingStreamTests
                 Substitute.For<IServiceScopeFactory>(), Substitute.For<IAgentOperationExecutor>(), Substitute.For<IPendingClarificationStore>(),
                 progress, Substitute.For<IGamificationService>(), mediator, Substitute.For<IProductAnalytics>(),
                 Substitute.For<IHabitScheduleLogReader>(), Substitute.For<IIssuedAstraBlockStore>(), Substitute.For<IPendingAgentOperationStore>()),
-            NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>(), recorder);
+            NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>(), ModerationTestDouble.Clean(), recorder);
         mediator.Send(Arg.Any<ProcessUserChatCommand>(), Arg.Any<CancellationToken>())
             .Returns(call => handler.Handle(call.Arg<ProcessUserChatCommand>(), call.Arg<CancellationToken>()));
         using var body = new MemoryStream();

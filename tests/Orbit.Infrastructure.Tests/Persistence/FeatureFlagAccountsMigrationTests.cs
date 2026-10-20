@@ -26,7 +26,9 @@ public class FeatureFlagAccountsMigrationTests
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
 
-        differences.Should().HaveCount(36);
+        differences.Should().HaveCount(44);
+        ExpandHabitScheduleAndStartDateMigrationTests.AssertAiSecurityAdditions(differences);
+        ConversationMigrationTests.AssertConversationExpansion(differences);
         var owedCancellations = differences.OfType<CreateTableOperation>()
             .Should().ContainSingle(table => table.Name == "OwedSubscriptionCancellations").Subject;
         owedCancellations.Name.Should().Be("OwedSubscriptionCancellations");
@@ -93,7 +95,12 @@ public class FeatureFlagAccountsMigrationTests
             "20261019011031_ContractHabitLogSlip",
             "20261019091925_AddOwedSubscriptionCancellations",
             "20261019124138_AddAstraBlockAnswerReplay",
-            "20261019165331_ExpandHabitScheduleAndStartDate");
+            "20261019165331_ExpandHabitScheduleAndStartDate",
+            "20261019213159_HardenMcpOAuthState",
+            "20261019213536_AddDailyAiSafetyBudget",
+            "20261019223729_TrackMcpRefreshTokenFamilies",
+            "20261020005707_PriceDailyAiBudgetsInUsd");
+        context.Database.GetMigrations().Last().Should().EndWith("_PersistConversationTurns");
     }
 
     private static void AssertHabitExpandColumns(IReadOnlyList<MigrationOperation> differences)

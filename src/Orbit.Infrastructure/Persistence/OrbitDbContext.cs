@@ -50,6 +50,8 @@ public class OrbitDbContext : DbContext
     public DbSet<XpAwardLog> XpAwardLogs => Set<XpAwardLog>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
     public DbSet<UserSessionRefreshToken> UserSessionRefreshTokens => Set<UserSessionRefreshToken>();
+    public DbSet<AiBudgetCall> AiBudgetCalls => Set<AiBudgetCall>();
+    public DbSet<OAuthState> OAuthStates => Set<OAuthState>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
     public DbSet<PendingAgentOperationState> PendingAgentOperations => Set<PendingAgentOperationState>();
     public DbSet<IssuedAstraBlock> IssuedAstraBlocks => Set<IssuedAstraBlock>();
@@ -156,6 +158,21 @@ public class OrbitDbContext : DbContext
         ConfigureUserSessionEntity(modelBuilder);
         ConfigureUserSessionRefreshTokenEntity(modelBuilder);
         ConfigureApiKeyEntity(modelBuilder);
+        modelBuilder.Entity<AiBudgetCall>(entity =>
+        {
+            entity.Property<long>("ChargedTokens");
+            entity.Property(call => call.ChargedMicroDollars).HasDefaultValue(0L);
+            entity.HasIndex(call => new { call.UserId, call.LocalDate });
+            entity.HasOne<User>().WithMany().HasForeignKey(call => call.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<OAuthState>(entity =>
+        {
+            entity.HasIndex(state => state.SecretHash).IsUnique();
+            entity.HasIndex(state => new { state.Kind, state.ExpiresAtUtc });
+            entity.Property(state => state.SecretHash).HasMaxLength(64);
+            entity.Property(state => state.Kind).HasMaxLength(30);
+            entity.Property(state => state.Payload).HasConversion(encConverter).HasColumnType("text");
+        });
         ConfigurePendingAgentOperationEntity(modelBuilder);
         ConfigureAgentStepUpChallengeEntity(modelBuilder);
         ConfigurePendingClarificationEntity(modelBuilder);
@@ -464,6 +481,8 @@ public class OrbitDbContext : DbContext
         {
             entity.HasIndex(k => k.KeyPrefix);
             entity.HasIndex(k => k.UserId);
+            entity.HasIndex(k => k.OAuthFamilyId);
+            entity.Property(k => k.IsRevoked).IsConcurrencyToken();
             entity.HasOne<User>().WithMany().HasForeignKey(k => k.UserId).OnDelete(DeleteBehavior.Cascade);
             entity.Property(k => k.Name).HasMaxLength(50);
             entity.Property(k => k.KeyPrefix).HasMaxLength(12);
@@ -573,6 +592,10 @@ public class OrbitDbContext : DbContext
                 AppConfig.Create("ReferralRewardDays", "10", "Days of Pro added per successful referral"),
                 AppConfig.Create("MaxReferrals", "10", "Maximum successful referrals per user"),
                 AppConfig.Create("MinSupportedVersion", "1.3.11", "Minimum supported client app version; clients below this receive HTTP 426"),
+                AppConfig.Create("FreeAiCallsPerDay", "45", "Daily AI call safety budget for Free users"),
+                AppConfig.Create("ProAiCallsPerDay", "450", "Daily AI call safety budget for Pro users"),
+                AppConfig.Create("FreeAiMicroDollarsPerDay", "20000", "Daily AI safety budget for Free users in USD micro-dollars"),
+                AppConfig.Create("ProAiMicroDollarsPerDay", "120000", "Daily AI safety budget for Pro users in USD micro-dollars"),
                 AppConfig.Create("RequireApiKeyCreationStepUp", "false", "Turn on once a client build carrying the API key creation challenge flow is live in the Play fleet"));
         });
     }

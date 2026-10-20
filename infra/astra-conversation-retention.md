@@ -16,6 +16,12 @@ replies have no model. Content and the complete tool-call JSON use the existing 
 encryption converters. Recording requires configured encryption and never falls back
 to plaintext.
 
+Normal messages refused by input moderation before context loading are not recorded.
+Crisis replies follow the recording flag and have no model. Block answers retain
+their existing diagnostic queue behavior, including preparation refusals; the
+consumer checks the recording flag before storage. Replayed block answers are not
+recorded again.
+
 ## Retention and capacity
 
 The retention window is 30 days: this allows investigation after a delayed failure

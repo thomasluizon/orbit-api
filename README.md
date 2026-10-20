@@ -13,7 +13,7 @@ The backend for **Orbit** -- an AI-powered habit tracker. Provides a REST API fo
 | CQRS | [MediatR 14](https://github.com/jbogard/MediatR) |
 | Validation | [FluentValidation 12](https://docs.fluentvalidation.net) |
 | Auth | JWT Bearer + email verification codes + Google OAuth authorization code exchange |
-| AI | [OpenAI](https://platform.openai.com) via the Responses API and OpenAI .NET SDK 2.14.0; `gpt-6.1-sol` (primary), `gpt-6-luna` (sub-tasks), both at low reasoning |
+| AI | [OpenAI](https://platform.openai.com) via the Responses API and OpenAI .NET SDK 2.14.0; `gpt-6-luna` for chat and sub-tasks at low reasoning |
 | Email | [Amazon SES](https://aws.amazon.com/ses/) (verification codes, contacts) |
 | Push | [Firebase Admin SDK](https://firebase.google.com/docs/admin/setup) (FCM, native Android) + [WebPush](https://github.com/nichelaboratory/Lib.Net.Http.WebPush) (VAPID, browsers) |
 | Payments | [Stripe](https://stripe.com) (web) + Google Play Billing (native Android) |

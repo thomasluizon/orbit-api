@@ -87,7 +87,7 @@ public class BlockAnswerWriteRetryTests
             new(dates, Substitute.For<IUserStreakService>(), quota, work, Substitute.For<IServiceScopeFactory>(), executor,
                 Substitute.For<IPendingClarificationStore>(), Substitute.For<IGoalProgressReadSyncer>(), Substitute.For<IGamificationService>(),
                 Substitute.For<IMediator>(), analytics, Substitute.For<IHabitScheduleLogReader>(), new IssuedAstraBlockStore(db), pending),
-            NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>());
+            NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>(), Orbit.Infrastructure.Tests.ModerationTestDouble.Clean());
         var request = new ProcessUserChatCommand(user.Id, "Evening", BlockAnswer: new(block.Id, ["b"]));
 
         var first = await handler.Handle(request, default);

@@ -14,7 +14,7 @@ public class AiSettingsTests
 
         settings.NetworkTimeoutSeconds.Should().Be(15);
         settings.MaxRetries.Should().Be(2);
-        settings.Model.Should().Be("gpt-6.1-sol");
+        settings.Model.Should().Be("gpt-6-luna");
         settings.BaseUrl.Should().Be("https://api.openai.com/v1");
     }
 
@@ -63,7 +63,7 @@ public class AiSettingsTests
 
         var production = Regex.Match(terraform, @"(?ms)^  production_api_values\s*=\s*\{(?<values>.*?)^  \}");
         production.Success.Should().BeTrue();
-        production.Groups["values"].Value.Should().MatchRegex("(?m)^\\s*AI__Model\\s*=\\s*\"gpt-6\\.1-sol\"\\s*$");
+        production.Groups["values"].Value.Should().MatchRegex("(?m)^\\s*AI__Model\\s*=\\s*\"gpt-6-luna\"\\s*$");
         production.Groups["values"].Value.Should().MatchRegex("(?m)^\\s*AI__SubTaskModel\\s*=\\s*\"gpt-6-luna\"\\s*$");
 
         var staging = Regex.Match(terraform, @"(?ms)^  staging_api_values\s*=\s*merge\(local\.production_api_values,\s*\{(?<overrides>.*?)^  \}\)");
@@ -80,7 +80,12 @@ public class AiSettingsTests
         using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(
             Path.Combine(directory!.FullName, "src", "Orbit.Api", "appsettings.json")));
         var ai = document.RootElement.GetProperty("AI");
+        ai.GetProperty("Model").GetString().Should().Be("gpt-6-luna");
+        ai.GetProperty("SubTaskModel").GetString().Should().Be("gpt-6-luna");
         var defaults = new AiSettings();
+        var pricing = ai.GetProperty("Pricing");
+        pricing.GetProperty("gpt-6-luna").GetProperty("CacheWritePerMillionUsd").GetDecimal().Should().Be(0.125m);
+        pricing.GetProperty("gpt-6.1-sol").GetProperty("CacheWritePerMillionUsd").GetDecimal().Should().Be(2.50m);
         foreach (var model in new[] { defaults.Model, defaults.SubTaskModel, ai.GetProperty("Model").GetString(), ai.GetProperty("SubTaskModel").GetString() })
         {
             ai.GetProperty("Pricing").TryGetProperty(model!, out var price).Should().BeTrue($"{model} must record a nonzero cost");

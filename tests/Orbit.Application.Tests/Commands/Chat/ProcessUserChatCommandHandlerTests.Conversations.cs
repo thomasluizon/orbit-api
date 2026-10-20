@@ -6,7 +6,10 @@ using Orbit.Application.Chat.Commands;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Models;
+using Orbit.Domain.Entities;
+using Orbit.Domain.Interfaces;
 using Orbit.Application.Chat.Tools;
+using Orbit.Application.Tests.Common;
 
 namespace Orbit.Application.Tests.Commands.Chat;
 
@@ -46,6 +49,45 @@ public partial class ProcessUserChatCommandHandlerTests
         var result = await CreateHandler().Handle(new ProcessUserChatCommand(UserId, "Hello"), CancellationToken.None);
         result.IsSuccess.Should().BeTrue();
         _conversationRecorder.DidNotReceiveWithAnyArgs().TryRecord(default!);
+    }
+
+    [Fact]
+    public async Task ConversationRecorder_CrisisWithFlagOff_DoesNotRecord()
+    {
+        SetupUserAndPayGate();
+
+        var result = await CreateHandler().Handle(new(UserId, "I want to hurt myself"), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessage.Should().Contain(CrisisSupportGuard.EnglishResource);
+        _conversationRecorder.DidNotReceiveWithAnyArgs().TryRecord(default!);
+        await _moderation.DidNotReceiveWithAnyArgs().CheckTextAsync(default!, default);
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task ConversationRecorder_ModeratedBlockRefusal_QueuesDiagnosticWithoutRunningTurn(bool flagged, bool unavailable)
+    {
+        SetupUserAndPayGate();
+        EnableRecording();
+        _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
+        var block = IssuedAstraBlock.Create(UserId, new("choice", "When?",
+            [new("a", "Morning"), new("b", "Evening")], []));
+        _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
+        _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult(flagged, unavailable, []));
+
+        var result = await CreateHandler().Handle(new(UserId, "My answer", BlockAnswer: new(block.Id, ["b"])), default);
+
+        result.IsFailure.Should().BeTrue();
+        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn =>
+            turn.UserId == UserId && turn.UserContent == "My answer" && turn.AssistantContent == null
+            && !turn.UsedModel && turn.ToolCallsJson == "[]"));
+        await _moderation.Received(1).CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _blockStore.DidNotReceiveWithAnyArgs().MarkAnsweredAsync(default, default, default, default);
+        await _aiIntentService.DidNotReceiveWithAnyArgs().SendWithToolsAsync(default!, default, default);
+        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
     }
 
     [Fact]
