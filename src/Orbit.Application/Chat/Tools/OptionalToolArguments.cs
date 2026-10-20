@@ -3,7 +3,7 @@ using System.Text.Json.Nodes;
 
 namespace Orbit.Application.Chat.Tools;
 
-internal static class OptionalToolArguments
+public static class OptionalToolArguments
 {
     internal static readonly string[] HabitClearFields = ["description", "emoji", "frequency_unit", "end_date", "due_time"];
     internal static readonly string[] GoalClearFields = ["description", "deadline"];
@@ -16,6 +16,66 @@ internal static class OptionalToolArguments
         "bulk_update_habits" => BulkHabitClearFields,
         _ => []
     };
+
+    /// <summary>
+    /// Converts external callers' explicit null clears to the shared tools' clear contract.
+    /// Chat placeholder nulls must not pass through this boundary conversion.
+    /// </summary>
+    public static JsonElement NormalizeExternalClears(string operationId, JsonElement arguments)
+    {
+        if (arguments.ValueKind != JsonValueKind.Object)
+            return arguments;
+        operationId = operationId.ToLowerInvariant();
+        var fields = ClearableFields(operationId);
+        if (fields.Length == 0 && operationId != "bulk_update_habit_emojis")
+            return arguments;
+        var node = JsonNode.Parse(arguments.GetRawText())!.AsObject();
+        if (operationId == "bulk_update_habits")
+            TranslateBulkNullClears(node, fields);
+        else if (operationId == "bulk_update_habit_emojis")
+            TranslateEmojiNullClear(node);
+        else
+            TranslateNullClears(node, fields);
+        return JsonSerializer.SerializeToElement(node);
+    }
+
+    private static void TranslateBulkNullClears(JsonObject node, string[] fields)
+    {
+        if (node["updates"] is JsonObject updates)
+            TranslateNullClears(updates, fields);
+        if (node["revised_items"] is JsonArray items)
+            foreach (var item in items.OfType<JsonObject>())
+                TranslateNullClears(item, fields);
+    }
+
+    private static void TranslateEmojiNullClear(JsonObject node)
+    {
+        if (!node.ContainsKey("emoji") || node["emoji"] is not null || node["emoji_mode"] is not null)
+            return;
+        if (node["infer_from_title"] is JsonValue value
+            && (!value.TryGetValue<bool>(out var inferFromTitle) || inferFromTitle))
+            return;
+        node.Remove("emoji");
+        node["emoji_mode"] = "clear";
+    }
+
+    private static void TranslateNullClears(JsonObject node, string[] fields)
+    {
+        var nullFields = fields.Where(field => node.ContainsKey(field) && node[field] is null).ToArray();
+        if (nullFields.Length == 0 || node["clear_fields"] is not null and not JsonArray)
+            return;
+        if (node["clear_fields"] is not JsonArray clears)
+        {
+            clears = [];
+            node["clear_fields"] = clears;
+        }
+        foreach (var field in nullFields)
+        {
+            node.Remove(field);
+            if (!clears.Any(value => value is JsonValue item && item.TryGetValue<string>(out var name) && name == field))
+                clears.Add(field);
+        }
+    }
 
     public static JsonElement OmitOptionalNulls(JsonElement arguments, object parameterSchema)
     {

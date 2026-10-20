@@ -1,9 +1,14 @@
 using System.Security.Claims;
+using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
 using NSubstitute;
 using Orbit.Api.Mcp.Tools;
+using Orbit.Application.Chat.Tools;
+using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Domain.Common;
+using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
@@ -87,6 +92,79 @@ public class AgentToolsTests
                 request.Arguments.ValueKind == JsonValueKind.Object &&
                 !request.Arguments.EnumerateObject().Any()),
             Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("update_goal")]
+    [InlineData("UPDATE_GOAL")]
+    public async Task ExecuteAgentOperation_ExplicitNullDeadline_ClearsDeadlineThroughSharedTool(string operationId)
+    {
+        var goal = Goal.Create(new Goal.CreateGoalParams(
+            UserId, "Read", 12, "books", "Keep description", new DateOnly(2027, 1, 1))).Value;
+        var repository = Substitute.For<IGenericRepository<Goal>>();
+        repository.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>()).Returns(goal);
+        var unitOfWork = Substitute.For<IUnitOfWork>();
+        var executor = SharedToolExecution.Create(new UpdateGoalTool(repository, unitOfWork), unitOfWork);
+        var tools = new AgentTools(_catalogService, executor, _pendingOperationStore, _stepUpService);
+        var arguments = JsonSerializer.SerializeToElement(new { goal_id = goal.Id, deadline = (string?)null });
+
+        var result = await tools.ExecuteAgentOperation(CreateUser(), operationId, arguments);
+
+        result.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
+        goal.Deadline.Should().BeNull();
+        goal.Description.Should().Be("Keep description");
+        await unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("description")]
+    [InlineData("emoji")]
+    [InlineData("frequency_unit")]
+    [InlineData("due_time")]
+    [InlineData("end_date")]
+    public async Task ExecuteAgentOperation_ExplicitNullHabitField_ClearsOnlyThatField(string field)
+    {
+        var today = new DateOnly(2026, 4, 3);
+        var dueTime = new TimeOnly(8, 0);
+        DateOnly? endDate = field == "frequency_unit" ? null : today.AddDays(10);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Read", FrequencyUnit.Day, 1, today, Description: "Keep description",
+            Emoji: "📚", DueTime: dueTime, EndDate: endDate)).Value;
+        var repository = Substitute.For<IGenericRepository<Habit>>();
+        repository.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>()).Returns(habit);
+        var userDateService = Substitute.For<IUserDateService>();
+        userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(today);
+        var unitOfWork = Substitute.For<IUnitOfWork>();
+        unitOfWork.ExecuteInTransactionAsync(
+                Arg.Any<Func<CancellationToken, Task<Result<ToolResult>>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<Result<ToolResult>>>>(0)(
+                call.ArgAt<CancellationToken>(1)));
+        var tool = new UpdateHabitTool(repository, userDateService, unitOfWork, Substitute.For<IPayGateService>());
+        var executor = SharedToolExecution.Create(tool, unitOfWork);
+        var tools = new AgentTools(_catalogService, executor, _pendingOperationStore, _stepUpService);
+        var arguments = JsonSerializer.SerializeToElement(new Dictionary<string, object?>
+        {
+            ["habit_id"] = habit.Id,
+            [field] = null
+        });
+
+        var result = await tools.ExecuteAgentOperation(CreateUser(), "update_habit", arguments);
+
+        result.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
+        habit.Title.Should().Be("Read");
+        habit.Description.Should().Be(field == "description" ? null : "Keep description");
+        habit.Emoji.Should().Be(field == "emoji" ? null : "📚");
+        habit.FrequencyUnit.Should().Be(field == "frequency_unit" ? null : FrequencyUnit.Day);
+        habit.DueTime.Should().Be(field == "due_time" ? null : dueTime);
+        habit.EndDate.Should().Be(field == "end_date" ? null : endDate);
+        await unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]

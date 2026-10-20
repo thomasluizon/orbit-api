@@ -332,14 +332,34 @@ public class HabitToolsTests
     }
 
     [Fact]
-    public async Task UpdateHabit_ExplicitNullEmoji_ForwardsNull()
+    public async Task UpdateHabit_ExplicitNullEmoji_ClearsEmojiThroughSharedTool()
     {
-        StubExecutor(AgentOperationStatus.Succeeded);
+        var userId = Guid.Parse(_user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var today = new DateOnly(2026, 4, 3);
+        var habit = Habit.Create(new HabitCreateParams(
+            userId, "Read", FrequencyUnit.Day, 1, today, Emoji: "📚")).Value;
+        var repository = Substitute.For<IGenericRepository<Habit>>();
+        repository.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>()).Returns(habit);
+        _userDateService.GetUserTodayAsync(userId, Arg.Any<CancellationToken>()).Returns(today);
+        var unitOfWork = Substitute.For<IUnitOfWork>();
+        unitOfWork.ExecuteInTransactionAsync(
+                Arg.Any<Func<CancellationToken, Task<Result<ToolResult>>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<Result<ToolResult>>>>(0)(
+                call.ArgAt<CancellationToken>(1)));
+        var tool = new UpdateHabitTool(repository, _userDateService, unitOfWork, Substitute.For<IPayGateService>());
+        var executor = SharedToolExecution.Create(tool, unitOfWork);
+        var tools = new HabitTools(_mediator, _userDateService, new McpExecutorBridge(executor));
 
-        var request = await CapturedRequestAsync(async () =>
-            await _tools.UpdateHabit(_user, Guid.NewGuid().ToString(), "Read", emoji: null));
+        var result = await tools.UpdateHabit(_user, habit.Id.ToString(), "Read", emoji: null);
 
-        request.Arguments.GetProperty("emoji").ValueKind.Should().Be(System.Text.Json.JsonValueKind.Null);
+        result.Should().Be($"Updated habit {habit.Id}");
+        habit.Emoji.Should().BeNull();
+        habit.FrequencyUnit.Should().Be(FrequencyUnit.Day);
+        await unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -401,6 +421,26 @@ public class HabitToolsTests
         var result = await _tools.LogHabit(_user, Guid.NewGuid().ToString());
 
         result.Should().StartWith("Error: ");
+    }
+
+    [Fact]
+    public async Task UnlogHabit_Success_RoutesDateAndHabitThroughExecutor()
+    {
+        var habitId = Guid.NewGuid();
+        StubExecutor(AgentOperationStatus.Succeeded, targetId: habitId.ToString());
+        var request = await CapturedRequestAsync(() => _tools.UnlogHabit(_user, habitId.ToString(), "2026-08-06"));
+        request.OperationId.Should().Be("unlog_habit");
+        request.Surface.Should().Be(AgentExecutionSurface.Mcp);
+        request.Arguments.GetProperty("habit_id").GetString().Should().Be(habitId.ToString());
+        request.Arguments.GetProperty("date").GetString().Should().Be("2026-08-06");
+    }
+
+    [Fact]
+    public async Task UnlogHabit_Failure_ReturnsError()
+    {
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "No log for date");
+        var result = await _tools.UnlogHabit(_user, Guid.NewGuid().ToString());
+        result.Should().StartWith("Error: ").And.Contain("No log for date");
     }
 
     [Fact]
@@ -740,7 +780,10 @@ public class HabitToolsTests
         if (mode == "infer")
             request.Arguments.TryGetProperty("emoji", out _).Should().BeFalse();
         else if (mode == "clear")
-            request.Arguments.GetProperty("emoji").ValueKind.Should().Be(JsonValueKind.Null);
+        {
+            request.Arguments.GetProperty("emoji_mode").GetString().Should().Be("clear");
+            request.Arguments.TryGetProperty("emoji", out _).Should().BeFalse();
+        }
         else
             request.Arguments.GetProperty("emoji").GetString().Should().Be("💊");
         output.Should().Contain("\"applied_count\":225");

@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using ModelContextProtocol.Server;
 using Orbit.Api.Extensions;
+using Orbit.Application.Chat.Tools;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
@@ -40,7 +41,7 @@ public class AgentTools(
         return operationExecutor.ExecuteAsync(new AgentExecuteOperationRequest(
             user.GetUserId(),
             operationId,
-            arguments?.Clone() ?? EmptyArguments,
+            OptionalToolArguments.NormalizeExternalClears(operationId, arguments?.Clone() ?? EmptyArguments),
             AgentExecutionSurface.Mcp,
             user.GetAgentAuthMethod(),
             user.GetGrantedAgentScopes(),

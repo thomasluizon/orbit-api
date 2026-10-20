@@ -46,6 +46,10 @@ public class MoveHabitParentTool(
             parentId = parsedParentId;
         }
 
+        var habit = await HabitToolHelpers.FindHabitAsync(habitRepository, habitId, userId, ct);
+        if (habit is null)
+            return HabitToolHelpers.HabitNotFoundResult(habitId);
+
         var command = new MoveHabitParentCommand(userId, habitId, parentId);
         if (checkOnly)
             return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
@@ -54,11 +58,9 @@ public class MoveHabitParentTool(
         if (result.IsFailure)
             return ToolResult.FromFailure(result);
 
-        var habits = await habitRepository.FindAsync(
-            habit => habit.Id == habitId && habit.UserId == userId, ct);
         return new ToolResult(
             true,
             EntityId: habitId.ToString(),
-            EntityName: habits.FirstOrDefault()?.Title);
+            EntityName: habit.Title);
     }
 }

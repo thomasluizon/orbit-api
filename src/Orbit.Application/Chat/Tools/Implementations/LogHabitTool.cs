@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Text.Json;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
+using Orbit.Domain.Common;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Entities;
@@ -16,7 +18,7 @@ public class LogHabitTool(
     public string Name => "log_habit";
 
     public string Description =>
-        "Toggle habit completion for a date, defaulting to today. Already logged dates are unlogged; overdue dates work.";
+        "Log habit completion for a date, defaulting to today. Already logged dates fail; use unlog_habit to undo. Overdue dates work.";
 
     public object GetParameterSchema() => HabitToolHelpers.SingleHabitDateSchema(
         "ID of the habit to log",
@@ -33,13 +35,6 @@ public class LogHabitTool(
         if (!HabitToolHelpers.TryParseHabitId(args, out var habitId))
             return HabitToolHelpers.InvalidHabitIdResult();
 
-        var habit = await habitRepository.GetByIdAsync(habitId, ct);
-        if (habit is null)
-            return new ToolResult(false, Error: $"Habit {habitId} not found.");
-
-        if (habit.UserId != userId)
-            return new ToolResult(false, Error: ErrorMessages.HabitNotOwned.Message);
-
         var today = await userDateService.GetUserTodayAsync(userId, ct);
 
         DateOnly targetDate = today;
@@ -54,7 +49,18 @@ public class LogHabitTool(
         if (targetDate > today)
             return new ToolResult(false, Error: ErrorMessages.CannotLogFutureDate.Message);
 
-        var command = new LogHabitCommand(userId, habitId, targetDate);
+        var habit = await habitRepository.FindOneTrackedAsync(
+            h => h.Id == habitId,
+            query => query.Include(h => h.Logs.Where(log => log.Date == targetDate)), ct);
+        if (habit is null)
+            return HabitToolHelpers.HabitNotFoundResult(habitId);
+        if (habit.UserId != userId)
+            return new ToolResult(false, Error: ErrorMessages.HabitNotOwned.Message);
+        if (!habit.IsFlexible && !habit.IsBadHabit
+            && habit.Logs.Any(log => log.Date == targetDate && !log.IsDeleted))
+            return ToolResult.FromFailure(Result.Failure(DomainErrors.AlreadyLoggedForDate));
+
+        var command = new LogHabitCommand(userId, habitId, targetDate, ToggleExisting: false);
         if (checkOnly)
             return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
 
