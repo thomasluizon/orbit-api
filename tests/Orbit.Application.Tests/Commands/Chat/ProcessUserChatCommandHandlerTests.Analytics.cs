@@ -14,12 +14,16 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData("Trial", false)]
     [InlineData("Pro", false)]
     [InlineData("Free", true)]
-    public async Task Handle_MessageAnalytics_UsesQuotaEntitlementAndModelRoundCounts(string plan, bool fails)
+    [InlineData("Subscribed", false)]
+    [InlineData("Expired", false)]
+    public async Task Handle_MessageAnalytics_UsesStoredPlanAndModelRoundCounts(string plan, bool fails)
     {
         var user = User.Create("private-person", "private@example.com").Value;
         user.StartTrial(DateTime.UtcNow.AddDays(plan == "Trial" ? 1 : -1));
         if (plan == "Pro")
             user.GrantLifetimePro();
+        if (plan is "Subscribed" or "Expired")
+            user.SetStripeSubscription("sub-test", DateTime.UtcNow.AddDays(plan == "Subscribed" ? 1 : -1));
         SetupUserAndPayGate(user);
         AiTurnTelemetry? telemetry = null;
         _aiIntentService.SendWithToolsAsync(Arg.Do<AiToolRequest>(request =>
@@ -35,10 +39,11 @@ public partial class ProcessUserChatCommandHandlerTests
 
         telemetry.Should().NotBeNull();
         telemetry!.TraceId.Should().Be("correlation-1");
-        telemetry.Plan.Should().Be(plan);
-        _productAnalytics.Received(1).CaptureUserEvent(UserId, "astra_message_sent", plan,
+        var storedPlan = user.Plan.ToString();
+        telemetry.Plan.Should().Be(storedPlan);
+        _productAnalytics.Received(1).CaptureUserEvent(UserId, "astra_message_sent", storedPlan,
             Arg.Is<IReadOnlyDictionary<string, object>>(properties => properties.Count == 3
-                && (string)properties["plan"] == plan && (int)properties["round_count"] == 2
+                && (string)properties["plan"] == storedPlan && (int)properties["round_count"] == 2
                 && (int)properties["tool_call_count"] == 2));
     }
 
@@ -63,7 +68,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         await CreateHandler().Handle(new ProcessUserChatCommand(UserId, "I want to kill myself"), CancellationToken.None);
 
-        _productAnalytics.Received(1).CaptureUserEvent(UserId, "astra_message_sent", Arg.Any<string>(),
+        _productAnalytics.Received(1).CaptureUserEvent(UserId, "astra_message_sent", null,
             Arg.Is<IReadOnlyDictionary<string, object>>(properties => (int)properties["round_count"] == 0
                 && (int)properties["tool_call_count"] == 0));
     }

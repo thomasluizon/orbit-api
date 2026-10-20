@@ -3,6 +3,13 @@
 using System.ClientModel;
 using System.ClientModel.Primitives;
 using System.Net;
+using System.Linq.Expressions;
+using MediatR;
+using Microsoft.Extensions.DependencyInjection;
+using Orbit.Application.Chat.Commands;
+using Orbit.Application.Common;
+using Orbit.Application.Goals.Services;
+using Orbit.Domain.Common;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
@@ -12,6 +19,7 @@ using NSubstitute;
 using OpenAI.Responses;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Tools;
+using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Entities;
 using Orbit.Domain.ValueObjects;
@@ -26,163 +34,133 @@ public class AiInputBudgetTests(ITestOutputHelper output)
 {
     private static IReadOnlyList<IAiTool> RegisteredTools() => new AiToolRegistry(typeof(IAiTool).Assembly.GetTypes()
         .Where(type => type.IsClass && !type.IsAbstract && typeof(IAiTool).IsAssignableFrom(type))
-        .Select(type => (IAiTool)RuntimeHelpers.GetUninitializedObject(type))).GetAll();
+        .Select(CreateRegisteredTool)).GetAll();
 
-    private static object Declare(IAiTool tool) => new { name = tool.Name, description = tool.Description, parameters = tool.GetParameterSchema() };
-
-    [Fact]
-    public void KeywordlessTurn_DeclaresFewerThanTwentyToolsIncludingLoader()
+    private static IAiTool CreateRegisteredTool(Type type)
     {
-        var tools = RegisteredTools();
-        var active = ChatToolGroups.ResolveActiveToolNames(tools.Select(tool => tool.Name), "please help me");
-        active.Order().Should().BeEquivalentTo(new[]
-        {
-            "ask", "create_goal", "create_habit", "delete_habit", "describe_feature", "get_gamification_overview",
-            "get_profile", "log_habit", "move_habit", "query_goals", "query_habits", "skip_habit",
-            "update_goal", "update_goal_progress", "update_habit"
-        });
-        (active.Count + 1).Should().BeLessThan(20);
+        if (type != typeof(AskTool))
+            return (IAiTool)RuntimeHelpers.GetUninitializedObject(type);
+        var mediator = Substitute.For<IMediator>();
+        var habits = Substitute.For<IGenericRepository<Habit>>();
+        var dates = Substitute.For<IUserDateService>();
+        var planner = new BulkHabitReplayPlanner(Substitute.For<IIdempotencyContext>(), Substitute.For<IIdempotencyStore>(),
+            Substitute.For<IUnitOfWork>());
+        return new AskTool(new BulkCreateHabitsTool(mediator), new BulkLogHabitsTool(mediator, habits, dates, planner),
+            new BulkSkipHabitsTool(mediator, habits, dates, planner), dates);
     }
 
     [Fact]
     public async Task Requests_TwoUsersAndTwoTurns_ShareIdenticalToolsAndStaticMessage()
     {
-        var handler = new SequenceHandler(ResponsesTestData.Text("done"));
-        var service = BuildService(handler);
-        var builder = new SystemPromptBuilder();
-        var catalog = new AgentCatalogService();
-        var userA = Guid.NewGuid();
-        var userB = Guid.NewGuid();
-        var tools = RegisteredTools().Where(tool => tool.Name != "ask").ToList();
-        var active = ChatToolGroups.ResolveActiveToolNames(tools.Select(tool => tool.Name), "log my run");
-        for (var index = 0; index < 3; index++)
+        var transport = new SequenceHandler(ResponsesTestData.Text("done"));
+        var service = BuildService(transport);
+        var tools = RegisteredTools();
+        var users = new[] { User.Create("private-person-a", "a@example.com").Value,
+            User.Create("private-person-b", "b@example.com").Value };
+        users[0].SetLanguage("en-US");
+        users[1].SetLanguage("pt-BR");
+        string? prefix = null;
+        for (var index = 0; index < 4; index++)
         {
-            var userId = index == 2 ? userB : userA;
+            var user = users[index / 2];
             var date = new DateOnly(2026, 1, 1).AddDays(index);
-            var habit = Habit.Create(new HabitCreateParams(userId, $"private-habit-{index}", null, null, DueDate: date)).Value;
-            var prompt = new PromptBuildRequest([habit], UserToday: date);
-            var result = await service.SendWithToolsAsync(new AiToolRequest($"log my run {index}",
-                builder.BuildStatic(prompt) + catalog.BuildStaticSupplement(),
-                tools.Where(tool => active.Contains(tool.Name)).OrderBy(tool => tool.Name).Select(Declare).ToList(),
-                userId,
-                History: [new("user", $"history-{index}")])
-            {
-                DynamicContext = builder.BuildDynamic(prompt) + $"private-facts-{index}",
-                AvailableToolDeclarations = tools.OrderBy(tool => tool.Name).Select(Declare).ToList()
-            });
-            result.IsSuccess.Should().BeTrue();
-        }
+            var habit = Habit.Create(new HabitCreateParams(user.Id, $"private-habit-{index}", null, null, DueDate: date)).Value;
+            var handler = BuildHandler(service, tools, user, [habit], date);
+            var command = new ProcessUserChatCommand(user.Id,
+                index % 2 == 0 ? "Hello AI" : "sincronizar com o Google e duplicar meu hábito",
+                History: [new("user", $"private-history-{index}")],
+                ClientContext: index % 2 == 0 ? null : new AgentClientContext(
+                    SupportsParts: true, PartKinds: ["choice", "pickList"], SupportsFollowUps: true));
 
-        var documents = handler.Bodies.Select(body => JsonDocument.Parse(body)).ToList();
-        try
-        {
-            var prefixes = documents.Select(document => document.RootElement.GetProperty("tools").GetRawText()
-                + document.RootElement.GetProperty("input")[0].GetRawText()).ToList();
-            Encoding.UTF8.GetBytes(prefixes[0]).Should().Equal(Encoding.UTF8.GetBytes(prefixes[1]));
-            Encoding.UTF8.GetBytes(prefixes[0]).Should().Equal(Encoding.UTF8.GetBytes(prefixes[2]));
-            documents.Select(document => document.RootElement.GetProperty("input")[1].GetRawText()).Distinct().Should().HaveCount(3);
-            documents[0].RootElement.GetProperty("input")[2].GetRawText().Should().Contain("history-0");
-            for (var index = 0; index < documents.Count; index++)
-            {
-                documents[index].RootElement.GetProperty("input")[1].GetRawText().Should().Contain($"private-habit-{index}");
-                prefixes[index].Should().NotContain("private-habit").And.NotContain("private-facts");
-            }
-        }
-        finally { documents.ForEach(document => document.Dispose()); }
-    }
+            (await handler.Handle(command, default)).IsSuccess.Should().BeTrue();
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task ToolMissingFromKeywords_CanBeLoadedAndCalled(bool mixedWithCoreCall)
-    {
-        var first = ResponsesTestData.Response();
-        first.OutputItems.Add(ResponseItem.CreateFunctionCallItem("load_1", "load_tools", BinaryData.FromString("{\"tool_names\":[\"duplicate_habit\"]}")));
-        if (mixedWithCoreCall)
-            first.OutputItems.Add(ResponseItem.CreateFunctionCallItem("query_1", "query_habits", BinaryData.FromString("{}")));
-        var second = ResponsesTestData.Response();
-        second.OutputItems.Add(ResponseItem.CreateFunctionCallItem("duplicate_1", "duplicate_habit", BinaryData.FromString("{}")));
-        var handler = new SequenceHandler(ModelReaderWriter.Write(first).ToString(), ModelReaderWriter.Write(second).ToString());
-        var service = BuildService(handler);
-        var tools = RegisteredTools().Where(tool => tool.Name != "ask").ToList();
-        var result = await service.SendWithToolsAsync(new AiToolRequest("make another one just like it", "static",
-            tools.Where(tool => tool.Name == "query_habits").Select(Declare).ToList())
-        {
-            AvailableToolDeclarations = tools.Select(Declare).ToList()
-        });
-        if (mixedWithCoreCall)
-        {
-            result.Value.ToolCalls!.Should().ContainSingle(call => call.Name == "query_habits");
-            result = await service.ContinueWithToolResultsAsync(result.Value.ConversationContext!,
-                [new("query_habits", "query_1", true, null, null, null)]);
+            using var document = JsonDocument.Parse(transport.Bodies[^1]);
+            var root = document.RootElement;
+            var input = root.GetProperty("input");
+            var body = transport.Bodies[^1];
+            body.IndexOf("\"tools\":", StringComparison.Ordinal).Should().BeLessThan(body.IndexOf("\"input\":", StringComparison.Ordinal));
+            body.IndexOf(input[0].GetRawText(), StringComparison.Ordinal).Should().BeLessThan(body.IndexOf(input[1].GetRawText(), StringComparison.Ordinal));
+            var names = root.GetProperty("tools").EnumerateArray().Select(tool => tool.GetProperty("name").GetString()).ToList();
+            names.Should().Equal(tools.Select(tool => tool.Name).Order(StringComparer.Ordinal));
+            var currentPrefix = CacheablePrefix(root);
+            prefix ??= currentPrefix;
+            Encoding.UTF8.GetBytes(currentPrefix).Should().Equal(Encoding.UTF8.GetBytes(prefix));
+            input.GetArrayLength().Should().Be(4);
+            input[0].GetProperty("role").GetString().Should().Be("system");
+            input[1].GetRawText().Should().Contain($"private-habit-{index}").And.Contain(date.ToString("yyyy-MM-dd"));
+            input[2].GetRawText().Should().Contain($"private-history-{index}");
+            input[3].GetProperty("role").GetString().Should().Be("user");
+            currentPrefix.Should().NotContain("private-").And.NotContain(user.Id.ToString())
+                .And.NotContain(date.ToString("yyyy-MM-dd")).And.NotContain(user.Language!);
+            root.GetProperty("prompt_cache_key").GetString().Should().Be(user.Id.ToString("N"));
         }
-        result.IsSuccess.Should().BeTrue();
-        result.Value.ToolCalls!.Should().ContainSingle(call => call.Name == "duplicate_habit");
-        using var initial = JsonDocument.Parse(handler.Bodies[0]);
-        using var loaded = JsonDocument.Parse(handler.Bodies[1]);
-        initial.RootElement.GetProperty("tools").EnumerateArray().Select(tool => tool.GetProperty("name").GetString())
-            .Should().NotContain("duplicate_habit");
-        loaded.RootElement.GetProperty("tools").EnumerateArray().Select(tool => tool.GetProperty("name").GetString())
-            .Should().Contain("duplicate_habit").And.NotContain("ask");
     }
 
     [Fact]
-    public async Task ToolLoader_RejectsNamesOutsideServerCatalogAndBoundsLoadingRounds()
-    {
-        var response = ResponsesTestData.Response();
-        response.OutputItems.Add(ResponseItem.CreateFunctionCallItem("load_1", "load_tools",
-            BinaryData.FromString("{\"tool_names\":[\"ask\"]}")));
-        var handler = new SequenceHandler(ModelReaderWriter.Write(response).ToString());
-
-        var result = await BuildService(handler).SendWithToolsAsync(new AiToolRequest("help me", "static", [])
-        {
-            AvailableToolDeclarations = [new { name = "duplicate_habit" }]
-        });
-
-        result.IsFailure.Should().BeTrue();
-        handler.Bodies.Should().HaveCount(3);
-        using var last = JsonDocument.Parse(handler.Bodies[^1]);
-        last.RootElement.GetProperty("tools").EnumerateArray().Select(tool => tool.GetProperty("name").GetString())
-            .Should().NotContain("ask");
-        last.RootElement.GetProperty("input").EnumerateArray().Where(item =>
-                item.TryGetProperty("type", out var type) && type.GetString() == "function_call_output")
-            .Should().OnlyContain(item => item.GetProperty("output").GetString()!.Contains("false"));
-    }
-
-    [Fact]
-    public async Task FixedTurns_SerializedRequestTokenEstimate_DropsAtLeastThirtyPercent()
+    public async Task FixedTurns_SerializedRequestSizeAndCacheablePrefixEstimate()
     {
         string[] turns = ["obrigado", "log my run today", "create a habit every wednesday and sunday",
             "criar um hábito toda quarta e domingo", "log my run and show my progress", "bulk log all habits today"];
-        var tools = RegisteredTools().Where(tool => tool.Name != "ask").ToList();
-        var promptRequest = new PromptBuildRequest([], UserToday: new DateOnly(2026, 1, 1));
-        var builder = new SystemPromptBuilder();
-        var staticPrompt = builder.BuildStatic(promptRequest) + new AgentCatalogService().BuildStaticSupplement();
-        var dynamicPrompt = builder.BuildDynamic(promptRequest);
-        long beforeTotal = 0, afterTotal = 0;
+        var tools = RegisteredTools();
+        var user = User.Create("Writer", "writer@example.com").Value;
+        var transport = new SequenceHandler(ResponsesTestData.Text("done"));
+        var handler = BuildHandler(BuildService(transport), tools, user, [], new DateOnly(2026, 1, 1));
+        string? prefix = null;
         foreach (var turn in turns)
         {
-            var fullHandler = new SequenceHandler(ResponsesTestData.Text("done"));
-            var gatedHandler = new SequenceHandler(ResponsesTestData.Text("done"));
-            var active = ChatToolGroups.ResolveActiveToolNames(tools.Select(tool => tool.Name), turn);
-            var full = tools.OrderBy(tool => tool.Name).Select(Declare).ToList();
-            var selected = ChatIntentRouter.IsNoToolTurn(turn) ? [] : tools.Where(tool => active.Contains(tool.Name)).OrderBy(tool => tool.Name).Select(Declare).ToList();
-            await BuildService(fullHandler).SendWithToolsAsync(new AiToolRequest(turn, staticPrompt + dynamicPrompt, full));
-            await BuildService(gatedHandler).SendWithToolsAsync(new AiToolRequest(turn, staticPrompt, selected)
-            {
-                DynamicContext = dynamicPrompt,
-                AvailableToolDeclarations = selected.Count == 0 ? [] : full
-            });
-            var before = EstimateTokens(fullHandler.Bodies.Single());
-            var after = EstimateTokens(gatedHandler.Bodies.Single());
-            beforeTotal += before;
-            afterTotal += after;
-            output.WriteLine($"{turn}: {before} -> {after} estimated tokens ({selected.Count} selected tools)");
+            (await handler.Handle(new(user.Id, turn), default)).IsSuccess.Should().BeTrue();
+            var body = transport.Bodies[^1];
+            using var document = JsonDocument.Parse(body);
+            var currentPrefix = CacheablePrefix(document.RootElement);
+            prefix ??= currentPrefix;
+            currentPrefix.Should().Be(prefix);
+            var requestBytes = Encoding.UTF8.GetByteCount(body);
+            var prefixBytes = Encoding.UTF8.GetByteCount(currentPrefix);
+            output.WriteLine($"{turn}: request {requestBytes} bytes (~{requestBytes / 4d:F2} tokens); "
+                + $"cacheable prefix {prefixBytes} bytes (~{prefixBytes / 4d:F2} tokens); {tools.Count} tools. Estimate: UTF-8 bytes / 4, not provider token usage.");
         }
-        afterTotal.Should().BeLessThan((long)(beforeTotal * 0.70));
     }
 
-    private static long EstimateTokens(string request) => (Encoding.UTF8.GetByteCount(request) + 3L) / 4;
+    private static string CacheablePrefix(JsonElement request) =>
+        request.GetProperty("tools").GetRawText() + request.GetProperty("input")[0].GetRawText();
+
+    private static ProcessUserChatCommandHandler BuildHandler(IAiIntentService service,
+        IReadOnlyList<IAiTool> tools, User user, IReadOnlyList<Habit> habits, DateOnly date)
+    {
+        var habitRepo = Substitute.For<IGenericRepository<Habit>>();
+        habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(habits);
+        var goalRepo = Substitute.For<IGenericRepository<Goal>>();
+        goalRepo.FindAsync(Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<Goal>());
+        var users = Substitute.For<IGenericRepository<User>>();
+        users.GetByIdAsync(user.Id, Arg.Any<CancellationToken>()).Returns(user);
+        var tags = Substitute.For<IGenericRepository<Tag>>();
+        tags.FindAsync(Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<Tag>());
+        var templates = Substitute.For<IGenericRepository<ChecklistTemplate>>();
+        templates.FindAsync(Arg.Any<Expression<Func<ChecklistTemplate, bool>>>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<ChecklistTemplate>());
+        var flags = Substitute.For<IFeatureFlagService>();
+        flags.GetEnabledKeysForUserAsync(user.Id, Arg.Any<CancellationToken>()).Returns(Array.Empty<string>());
+        var dates = Substitute.For<IUserDateService>();
+        dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(date);
+        dates.GetUserWeekStartDayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(1);
+        var progress = Substitute.For<IGoalProgressReadSyncer>();
+        progress.ComputeFreshValuesAsync(user.Id, date, Arg.Any<CancellationToken>()).Returns(new Dictionary<Guid, int>());
+        var quota = Substitute.For<IPayGateService>();
+        quota.TryConsumeAiMessage(user.Id, Arg.Any<IUnitOfWork>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        var logs = Substitute.For<IHabitScheduleLogReader>();
+        logs.ReadDaysAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(),
+            Arg.Any<CancellationToken>()).Returns(Array.Empty<HabitScheduleLogDay>());
+        return new ProcessUserChatCommandHandler(
+            new(habitRepo, goalRepo, users, tags, templates, flags),
+            new(service, new AiToolRegistry(tools), new SystemPromptBuilder(), new AgentCatalogService()),
+            new(dates, Substitute.For<IUserStreakService>(), quota, Substitute.For<IUnitOfWork>(),
+                Substitute.For<IServiceScopeFactory>(), Substitute.For<IAgentOperationExecutor>(),
+                Substitute.For<IPendingClarificationStore>(), progress, Substitute.For<IGamificationService>(),
+                Substitute.For<IMediator>(), Substitute.For<IProductAnalytics>(), logs,
+                Substitute.For<IIssuedAstraBlockStore>(), Substitute.For<IPendingAgentOperationStore>()),
+            NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>(), ModerationTestDouble.Clean());
+    }
 
     private static AiIntentService BuildService(HttpMessageHandler handler)
     {

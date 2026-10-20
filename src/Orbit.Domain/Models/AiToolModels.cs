@@ -20,7 +20,6 @@ public sealed record AiToolRequest(
     IReadOnlyList<ChatHistoryMessage>? History = null)
 {
     public string? DynamicContext { get; init; }
-    public IReadOnlyList<object> AvailableToolDeclarations { get; init; } = [];
     public AiTurnTelemetry Telemetry { get; init; } = new();
 }
 
@@ -45,7 +44,6 @@ public sealed class AiConversationContext
     public object Options { get; init; } = null!;
     /// <summary>User attributed to each model round in this conversation.</summary>
     public Guid? UserId { get; init; }
-    public object? AvailableTools { get; init; }
     public AiTurnTelemetry Telemetry { get; init; } = new();
 }
 

@@ -16,7 +16,6 @@ public partial class ProcessUserChatCommandHandler
         ProcessUserChatCommand request,
         ChatContext context,
         Func<AiStreamEvent, Task>? aiStreamSink,
-        bool skipTools,
         AiTurnTelemetry telemetry,
         CancellationToken cancellationToken)
     {
@@ -50,44 +49,31 @@ public partial class ProcessUserChatCommandHandler
             ai.PromptBuilder.BuildDynamic(promptRequest),
             ai.CatalogService.BuildDynamicSupplement(agentSnapshot));
 
-        var activeToolNames = ChatToolGroups.ResolveActiveToolNames(
-            ai.ToolRegistry.GetAll().Select(t => t.Name),
-            BuildConversationText(request),
-            GetEntryPointIntent(request));
+        var toolNames = ai.ToolRegistry.GetAll().Select(tool => tool.Name).ToArray();
 
         var askEnabled = request.AuthMethod == AgentAuthMethod.Jwt
             && request.ClientContext?.SupportsParts == true
             && request.ClientContext.PartKinds?.Any(kind => kind is AstraBlockKinds.Choice or AstraBlockKinds.PickList) == true
             && !context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraAskBlocksDisabled);
+        if (!askEnabled && toolNames.Contains("ask"))
+            dynamicContext = string.Join(Environment.NewLine, dynamicContext,
+                "The client cannot display ask blocks on this turn. Ask clarification questions in prose and do not call ask.");
         if (askEnabled)
             dynamicContext = string.Join(Environment.NewLine, dynamicContext,
                 "Use ask when one short answer decides the next step, or several suggested items can be acted on together. Never use ask for a yes/no question the write preview already asks. At most one ask block per reply. An ask call ends the tool round: put it last and make no further tool calls. Supported ask forms: "
                 + string.Join(", ", request.ClientContext!.PartKinds!.Where(kind => kind is AstraBlockKinds.Choice or AstraBlockKinds.PickList)));
 
-        dynamicContext = AppendCardPromptInstructions(dynamicContext, request, context, activeToolNames);
+        dynamicContext = AppendCardPromptInstructions(dynamicContext, request, context, toolNames);
         if (request.ClientContext?.SupportsFollowUps == true)
             dynamicContext = string.Join(Environment.NewLine, dynamicContext,
                 request.ClientContext.SupportsParts == true
                     ? "After the reply's text and blocks, end with [[orbit:followups]] followed by two or three short next questions, one per line. Do not add other text after them."
                     : "After any card directive, end your reply with [[orbit:followups]] followed by two or three short next questions, one per line. Do not add other text after them.");
 
-        var availableTools = ai.ToolRegistry.GetAll()
-            .Where(t => t.Name != "ask" || askEnabled)
-            .OrderBy(t => t.Name, StringComparer.Ordinal)
-            .Select(t => (object)new { name = t.Name, description = t.Description, parameters = t.GetParameterSchema() })
+        var toolDeclarations = ai.ToolRegistry.GetAll()
+            .OrderBy(tool => tool.Name, StringComparer.Ordinal)
+            .Select(tool => (object)new { name = tool.Name, description = tool.Description, parameters = tool.GetParameterSchema() })
             .ToList();
-        var toolDeclarations = skipTools
-            ? new List<object>()
-            : ai.ToolRegistry.GetAll()
-                .Where(t => activeToolNames.Contains(t.Name) && (t.Name != "ask" || askEnabled))
-                .OrderBy(t => t.Name, StringComparer.Ordinal)
-                .Select(t => (object)new
-                {
-                    name = t.Name,
-                    description = t.Description,
-                    parameters = t.GetParameterSchema()
-                })
-                .ToList();
 
         LogCallingAiIntentService(logger, toolDeclarations.Count);
 
@@ -109,8 +95,7 @@ public partial class ProcessUserChatCommandHandler
                 request.History)
             {
                 Telemetry = telemetry,
-                DynamicContext = dynamicContext,
-                AvailableToolDeclarations = skipTools ? [] : availableTools
+                DynamicContext = dynamicContext
             },
             aiStreamSink,
             cancellationToken);
@@ -211,17 +196,6 @@ public partial class ProcessUserChatCommandHandler
             ? string.Join(Environment.NewLine, prompt, partsInstruction)
             : prompt;
     }
-
-    private static string BuildConversationText(ProcessUserChatCommand request)
-    {
-        if (request.History is not { Count: > 0 })
-            return request.Message;
-
-        return request.Message + " " + string.Join(" ", request.History.Select(message => message.Content));
-    }
-
-    private static string? GetEntryPointIntent(ProcessUserChatCommand request) =>
-        request.ClientContext?.EntryPointIntent;
 
     private sealed record AgentSnapshotInputs(
         IReadOnlyList<string> FeatureFlags,

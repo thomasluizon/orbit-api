@@ -276,6 +276,7 @@ public sealed partial class AiCompletionClient
         {
             stopwatch.Stop();
             var usage = response?.Usage;
+            var failed = response is null || response.Status is not (ResponseStatus.Completed or ResponseStatus.Incomplete);
             if (usage is not null)
                 LogAiTokenUsage(_logger, purpose, options.Model, usage.InputTokenDetails?.CachedTokenCount ?? 0,
                     usage.InputTokenCount, usage.OutputTokenCount, usage.TotalTokenCount);
@@ -286,11 +287,11 @@ public sealed partial class AiCompletionClient
                     usage?.InputTokenCount ?? 0, usage?.OutputTokenCount ?? 0, usage?.TotalTokenCount ?? 0,
                     cancellationToken, userId,
                     new AiCallTelemetry(traceId, stopwatch.Elapsed.TotalSeconds,
-                        response is null || response.Status is not (ResponseStatus.Completed or ResponseStatus.Incomplete),
+                        failed,
                         [], HasUsage: usage is not null),
                     cacheWriteTokens: usage?.InputTokenDetails?.CacheWriteTokenCount ?? 0);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (failed || ex is not OperationCanceledException)
             {
                 LogUsageRecordFailed(_logger, options.Model, purpose, ex);
             }

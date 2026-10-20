@@ -195,14 +195,14 @@ public partial class ProcessUserChatCommandHandler(
                 data.FeatureFlagService, execution.PendingOperationStore, logger, execution.PendingOperationPreviewer, execution.BlockAnswerTimeout);
             return await answerService.ExecuteAsync(request, prepared =>
                 prepared.Crisis != CrisisLocales.None
-                    ? HandleCrisisTurnAsync(request with { Message = prepared.Message }, prepared.Crisis)
+                    ? HandleCrisisTurnAsync(request with { Message = prepared.Message }, prepared.Crisis, captureMessage: true)
                     : HandleTurnAsync(request with { Message = prepared.Message }, cancellationToken, prepared.AnsweredAtUtc), cancellationToken,
                 (_, token) => ModerateInputAsync(request, token));
         }
         var crisis = CrisisSupportGuard.Detect(request.Message);
         if (crisis != CrisisLocales.None && CrisisSupportGuard.IsEnabled(crisis,
             await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, cancellationToken)))
-            return await HandleCrisisTurnAsync(request, crisis);
+            return await HandleCrisisTurnAsync(request, crisis, captureMessage: true);
         var inputCheck = await ModerateInputAsync(request, cancellationToken);
         if (inputCheck.IsFailure)
             return inputCheck.PropagateError<ChatResponse>();
@@ -255,13 +255,7 @@ public partial class ProcessUserChatCommandHandler(
         }
         finally
         {
-            AnalyticsCapture.SafeCaptureUserEvent(execution.ProductAnalytics, logger, request.UserId, plan,
-                "astra_message_sent", new Dictionary<string, object>
-                {
-                    ["plan"] = plan,
-                    ["round_count"] = telemetry.RoundCount,
-                    ["tool_call_count"] = telemetry.ToolCallCount
-                });
+            CaptureMessageAnalytics(request.UserId, plan, telemetry);
         }
     }
 
@@ -289,15 +283,8 @@ public partial class ProcessUserChatCommandHandler(
         if (cachedFaqAnswer is not null)
             return Result.Success(new ChatResponse(cachedFaqAnswer, [], CorrelationId: request.CorrelationId));
 
-        var skipTools = request.ImageData is null
-            && request.ConfirmationToken is null
-            && (request.History is null || request.History.Count == 0)
-            && ChatIntentRouter.IsNoToolTurn(
-                request.Message,
-                ChatToolGroups.IsKnownEntryPointIntent(GetEntryPointIntent(request)));
-
         var aiStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var response = await RequestInitialAiResponseAsync(request, context, aiStreamSink, skipTools, telemetry, cancellationToken);
+        var response = await RequestInitialAiResponseAsync(request, context, aiStreamSink, telemetry, cancellationToken);
         aiStopwatch.Stop();
         LogAiIntentServiceCompleted(logger, aiStopwatch.ElapsedMilliseconds);
 
@@ -400,8 +387,21 @@ public partial class ProcessUserChatCommandHandler(
         { GroundingFacts = groundedReply.Facts });
     }
 
+    private void CaptureMessageAnalytics(Guid userId, string? plan, AiTurnTelemetry telemetry)
+    {
+        var properties = new Dictionary<string, object>
+        {
+            ["round_count"] = telemetry.RoundCount,
+            ["tool_call_count"] = telemetry.ToolCallCount
+        };
+        if (plan is not null)
+            properties["plan"] = plan;
+        AnalyticsCapture.SafeCaptureUserEvent(execution.ProductAnalytics, logger, userId, plan,
+            "astra_message_sent", properties);
+    }
+
     private static string GetAnalyticsPlan(User? user) =>
-        user is { IsPro: true } ? nameof(UserPlan.Pro) : user is { IsTrialActive: true } ? "Trial" : nameof(UserPlan.Free);
+        user?.Plan.ToString() ?? nameof(UserPlan.Free);
 
     private static string? GetUserLanguage(User? user) => user?.Language;
 
@@ -581,8 +581,11 @@ public partial class ProcessUserChatCommandHandler(
 
     private async Task<Result<ChatResponse>> HandleCrisisTurnAsync(
         ProcessUserChatCommand request,
-        CrisisLocales locales)
+        CrisisLocales locales,
+        bool captureMessage = false)
     {
+        if (captureMessage)
+            CaptureMessageAnalytics(request.UserId, null, new AiTurnTelemetry(request.CorrelationId));
         var message = await CompleteCrisisReplyAsync(
             request, CrisisSupportGuard.FallbackMessage(locales), locales,
             request.StreamSink is null ? "batch" : "stream");
