@@ -1,0 +1,16 @@
+{
+  "status": "Healthy",
+  "commit": "49c0442128380129c5bfe7749c7baf62c4e5bcf9",
+  "checks": [
+    {
+      "name": "background-services",
+      "status": "Healthy",
+      "description": "All background services running"
+    },
+    {
+      "name": "database",
+      "status": "Healthy",
+      "description": "Database reachable"
+    }
+  ]
+}
