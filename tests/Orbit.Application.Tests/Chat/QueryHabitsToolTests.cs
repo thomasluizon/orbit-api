@@ -47,18 +47,27 @@ public class QueryHabitsToolTests
             result.EntityName.Should().NotContain("NOT DUE:");
     }
 
-    [Fact]
-    public async Task FutureChild_HasNotDueLabel_WhileGeneralHabitDoesNot()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FutureChild_HasNotDueLabel_WhileGeneralHabitDoesNot(bool scheduled)
     {
         var parent = CreateHabit("Parent", FrequencyUnit.Day, 1, Today);
         var child = CreateHabit("Future child", null, null, Today.AddDays(2), parentId: parent.Id);
         var general = CreateHabit("General", null, null, Today.AddDays(2), isGeneral: true);
         SetupHabits(parent, child, general);
-        var result = await Execute("{}");
+        var result = await Execute(scheduled
+            ? JsonSerializer.Serialize(new { date = Today.AddDays(2).ToString("yyyy-MM-dd") })
+            : "{}");
+        result.Success.Should().BeTrue();
+        result.EntityName.Should().Contain("\"Parent\"");
         result.EntityName!.Split('\n').Single(line => line.Contains("Future child"))
             .Should().Contain("NOT DUE:").And.Contain(Today.AddDays(2).ToString("yyyy-MM-dd"));
-        result.EntityName.Split('\n').Single(line => line.Contains("\"General\""))
-            .Should().Contain("GENERAL").And.NotContain("NOT DUE:");
+        if (scheduled)
+            result.EntityName.Should().NotContain("\"General\"");
+        else
+            result.EntityName.Split('\n').Single(line => line.Contains("\"General\""))
+                .Should().Contain("GENERAL").And.NotContain("NOT DUE:");
     }
 
     [Fact]

@@ -45,7 +45,7 @@ public class LogHabitToolTests
         result.Success.Should().BeTrue();
         result.EntityName.Should().Be("Water");
         await _mediator.Received(1).Send(
-            Arg.Is<LogHabitCommand>(command => command.HabitId == habit.Id && command.Date == Today && !command.ToggleExisting),
+            Arg.Is<LogHabitCommand>(command => command.HabitId == habit.Id && command.Date == Today),
             Arg.Any<CancellationToken>());
     }
 
@@ -208,6 +208,25 @@ public class LogHabitToolTests
             .Which.IsDeleted.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task SuccessfulLog_DisablesToggleForTheRequestedDate()
+    {
+        var habit = CreateHabit("Water", FrequencyUnit.Day, 1);
+        SetupHabitFound(habit);
+        var date = Today.AddDays(-1);
+
+        var result = await _tool.ExecuteAsync(JsonSerializer.SerializeToElement(new
+        {
+            habit_id = habit.Id,
+            date = date.ToString("yyyy-MM-dd")
+        }), UserId, default);
+
+        result.Success.Should().BeTrue();
+        await _mediator.Received(1).Send(Arg.Is<LogHabitCommand>(command =>
+            command.HabitId == habit.Id && command.Date == date && !command.ToggleExisting),
+            Arg.Any<CancellationToken>());
+    }
+
     private static Habit CreateHabit(string title, FrequencyUnit? freq, int? qty)
     {
         return Habit.Create(new HabitCreateParams(UserId, title, freq, qty, DueDate: Today)).Value;
@@ -215,6 +234,7 @@ public class LogHabitToolTests
 
     private void SetupHabitFound(Habit habit)
     {
+        _habitRepo.GetByIdAsync(habit.Id, Arg.Any<CancellationToken>()).Returns(habit);
         _habitRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
                 Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
             .Returns(call => call.Arg<Expression<Func<Habit, bool>>>().Compile()(habit) ? habit : null);

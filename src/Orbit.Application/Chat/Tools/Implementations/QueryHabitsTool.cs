@@ -347,8 +347,7 @@ public class QueryHabitsTool(
         foreach (var child in children)
         {
             var childLabels = new List<string>();
-            if (schedule is null)
-                AddNotDueLabel(childLabels, child, today);
+            AddNotDueLabel(childLabels, child, today);
             if (schedule is not null && schedule.Facts.DoneTodayIds.Contains(child.Id))
                 childLabels.Add(schedule.Date == today ? "DONE TODAY" : "DONE ON DATE");
             else if (schedule is null && includeMetrics && child.Logs.Any(l => l.Date == today)) childLabels.Add("DONE");
