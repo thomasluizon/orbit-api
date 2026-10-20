@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Subscriptions.Queries;
@@ -20,7 +21,8 @@ public partial class GetBillingDetailsQueryHandler(
         if (user is null)
             return Result.Failure<BillingDetailsResponse>(ErrorMessages.UserNotFound);
 
-        if (string.IsNullOrEmpty(user.StripeSubscriptionId) || string.IsNullOrEmpty(user.StripeCustomerId))
+        if (user.SubscriptionSource == SubscriptionSource.GooglePlay
+            || string.IsNullOrEmpty(user.StripeSubscriptionId) || string.IsNullOrEmpty(user.StripeCustomerId))
             return Result.Failure<BillingDetailsResponse>(ErrorMessages.NoActiveSubscription);
 
         try
@@ -30,6 +32,9 @@ public partial class GetBillingDetailsQueryHandler(
                 return Result.Failure<BillingDetailsResponse>(ErrorMessages.SubscriptionNotFound);
 
             var invoices = await billingService.ListInvoicesAsync(user.StripeCustomerId, limit: 12, cancellationToken);
+            var recurringAmount = !subscription.CancelAtPeriodEnd && subscription.Status is "active" or "past_due"
+                ? await billingService.TryGetRecurringAmountPerPeriodAsync(user.StripeSubscriptionId, subscription.Currency, cancellationToken)
+                : null;
 
             var paymentMethod = subscription.PaymentMethod is null
                 ? null
@@ -55,7 +60,8 @@ public partial class GetBillingDetailsQueryHandler(
                     inv.Status,
                     inv.HostedUrl,
                     inv.PdfUrl,
-                    inv.BillingReason)).ToList()));
+                    inv.BillingReason)).ToList(),
+                recurringAmount));
         }
         catch (BillingProviderException ex)
         {

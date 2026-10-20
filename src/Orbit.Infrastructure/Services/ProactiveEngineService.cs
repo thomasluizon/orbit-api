@@ -51,7 +51,8 @@ public sealed partial class ProactiveEngineService(
     internal async Task<Batch> LoadAsync(Guid? userId, DateTime nowUtc, CancellationToken ct)
     {
         var users = await db.Users.AsNoTracking().Where(u => (!userId.HasValue || u.Id == userId.Value)
-            && (u.IsLifetimePro || (u.Plan == UserPlan.Pro && u.PlanExpiresAt > nowUtc) || u.TrialEndsAt > nowUtc))
+            && (u.IsLifetimePro || u.BonusProExpiresAtUtc > nowUtc
+                || (u.SubscriptionPlan == UserPlan.Pro && u.SubscriptionExpiresAtUtc > nowUtc) || u.TrialEndsAt > nowUtc))
             .ToListAsync(ct);
         if (users.Count == 0) return new(users, new Dictionary<Guid, IReadOnlyList<string>>(), [], [], [], []);
         var flags = await featureFlags.GetEnabledKeysForUsersAsync(users, ct);

@@ -34,13 +34,16 @@ public class ConversationMigrationTests
         additions.Should().HaveCount(6);
         AssertConversationExpansion(additions);
         var remaining = differ.GetDifferences(target.GetRelationalModel(), model.GetRelationalModel());
-        var schemaVersion = remaining.OfType<AddColumnOperation>().Should().ContainSingle().Subject;
+        var schemaVersion = remaining.OfType<AddColumnOperation>().Should().ContainSingle(column => column.Table == "PendingAgentOperations").Subject;
         schemaVersion.Table.Should().Be("PendingAgentOperations");
         schemaVersion.Name.Should().Be("ArgumentSchemaVersion");
         schemaVersion.ClrType.Should().Be(typeof(int));
         schemaVersion.IsNullable.Should().BeFalse();
         schemaVersion.DefaultValue.Should().Be(0);
-        remaining.Should().HaveCount(3);
+        remaining.Should().HaveCount(9);
+        remaining.OfType<AddColumnOperation>().Should().HaveCount(6);
+        ReferralRewardMigrationTests.AssertRewardColumns(remaining);
+        MakeSubHabitsFreeMigrationTests.AssertFreeFeatureSeed(remaining);
         RestoreProactivePreferenceMigrationTests.AssertRequiredPreference(remaining);
         ExpandHabitScheduleAndStartDateMigrationTests.AssertEvalTraceSeed(remaining);
     }

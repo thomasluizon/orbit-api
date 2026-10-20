@@ -143,6 +143,18 @@ public class SubscriptionToolsTests
     }
 
     [Fact]
+    public async Task GetReferralStats_ProDays_ReportsDaysWithoutDiscountWording()
+    {
+        var stats = new ReferralStatsResponse("CODE123", "https://app.useorbit.org/r/CODE123", 1, 0, 10, "pro_days", 10, 7);
+        _mediator.Send(Arg.Any<GetReferralStatsQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success(stats));
+
+        var result = await _tools.GetReferralStats(_user);
+
+        result.Should().Contain("Reward: 7 days of Pro (pro_days)");
+        result.Should().NotContain("discount");
+    }
+
+    [Fact]
     public async Task GetReferralStats_NoCode_OmitsCodeAndLink()
     {
         var stats = new ReferralStatsResponse(

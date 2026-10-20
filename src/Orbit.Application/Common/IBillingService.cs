@@ -34,6 +34,15 @@ public interface IBillingService
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Preview the discounted recurring amount before tax, in the subscription currency's minor units.
+    /// Returns null when the preview is unavailable. Only renewing active or past-due subscriptions are supported.
+    /// </summary>
+    Task<long?> TryGetRecurringAmountPerPeriodAsync(
+        string subscriptionId,
+        string currency,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Stops or restores renewal while preserving the current paid period. Cancellation records
     /// the deletion owner in provider metadata; restoration removes that marker.
     /// </summary>

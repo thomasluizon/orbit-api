@@ -71,6 +71,35 @@ public sealed class CalendarAutoSyncServiceTests : IDisposable
         _dispatchedUserIds.Should().Equal(user.Id);
     }
 
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    public async Task RunAsync_ProviderCanceledWithBonus_UsesIndependentBonusExpiry(bool play, bool activeBonus)
+    {
+        var clock = new FakeTimeProvider();
+        var user = User.Create("Bonus", "bonus@example.com", clock).Value;
+        user.StartTrial(NowUtc.AddDays(-30));
+        if (play)
+            user.SetPlaySubscription("play-token", NowUtc.AddDays(-1));
+        else
+            user.SetStripeSubscription("subscription", NowUtc.AddDays(-1));
+        user.GrantBonusProDays(7);
+        if (play)
+            user.CancelPlaySubscription(SubscriptionLapseReason.Expired);
+        else
+            user.CancelStripeSubscription(SubscriptionLapseReason.Expired);
+        user.SetGoogleTokens("access", "refresh");
+        user.EnableCalendarAutoSync().IsSuccess.Should().BeTrue();
+        if (!activeBonus)
+            _db.Entry(user).Property(u => u.BonusProExpiresAtUtc).CurrentValue = NowUtc;
+
+        await SeedAndRunAsync(user);
+
+        _dispatchedUserIds.Should().Equal(activeBonus ? new[] { user.Id } : []);
+    }
+
     [Fact]
     public async Task RunAsync_AutoSyncDisabled_DoesNotDispatchUser()
     {
@@ -100,7 +129,7 @@ public sealed class CalendarAutoSyncServiceTests : IDisposable
     {
         var user = CreateEligibleUser();
         _db.Users.Add(user);
-        _db.Entry(user).Property(u => u.Plan).CurrentValue = UserPlan.Free;
+        _db.Entry(user).Property(u => u.SubscriptionPlan).CurrentValue = UserPlan.Free;
         user.GoogleCalendarAutoSyncEnabled.Should().BeTrue();
         user.PlanExpiresAt.Should().BeAfter(NowUtc);
 
@@ -127,7 +156,7 @@ public sealed class CalendarAutoSyncServiceTests : IDisposable
     {
         var user = CreateEligibleUser();
         _db.Users.Add(user);
-        _db.Entry(user).Property(u => u.PlanExpiresAt).CurrentValue = null;
+        _db.Entry(user).Property(u => u.SubscriptionExpiresAtUtc).CurrentValue = null;
         user.Plan.Should().Be(UserPlan.Pro);
 
         await SeedAndRunAsync();

@@ -27,6 +27,8 @@ public static class AppConstants
     public const int MaxGoalDescriptionLength = 500;
     public const int MaxGoalProgressNoteLength = 500;
     public const int ReferralDiscountPercent = 10;
+    public const int ReferralBonusProDays = 7;
+    public const int ReferralRewardCap = 5;
     public const int DefaultMaxReferrals = 10;
     public const int ReferralCompletionThreshold = 3;
     public const int ReferralCompletionWindowDays = 7;
@@ -71,6 +73,8 @@ public static class AppConstants
     public const int MaxStreakFreezesAccumulated = 3;
     public const int StreakDaysPerFreeze = 7;
     public const int MaxStreakLookbackDays = 365;
+    /// <summary>Two annual intervals retain a completed predecessor while a repaired yearly occurrence remains current.</summary>
+    public const int StreakRepairWindowDays = 2 * 366;
     public const int MaxSyncWindowDays = 30;
     public const int SyncCleanupMarginDays = 1;
     public const int MaxChallengeTitleLength = 200;

@@ -630,7 +630,6 @@ namespace Orbit.Infrastructure.Migrations
                             Key = "sub_habits",
                             Description = "Sub-habit nesting",
                             Enabled = true,
-                            PlanRequirement = "Pro",
                             UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
@@ -2300,11 +2299,27 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("ReferredReward")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTime?>("ReferredRewardDeliveredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Guid>("ReferredUserId")
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("ReferrerId")
                         .HasColumnType("uuid");
+
+                    b.Property<int>("ReferrerReward")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTime?>("ReferrerRewardDeliveredAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("RewardGrantedAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -2551,6 +2566,9 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<bool>("AiSummaryEnabled")
                         .HasColumnType("boolean");
 
+                    b.Property<DateTime?>("BonusProExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("ColorScheme")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
@@ -2669,12 +2687,6 @@ namespace Orbit.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<int>("Plan")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("PlanExpiresAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<string>("PlayPurchaseToken")
                         .HasColumnType("text");
 
@@ -2766,12 +2778,20 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<DateTime?>("SubscriptionEndedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("SubscriptionExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("PlanExpiresAt");
+
                     b.Property<int?>("SubscriptionInterval")
                         .HasColumnType("integer");
 
                     b.Property<string>("SubscriptionLapseReason")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
+
+                    b.Property<int>("SubscriptionPlan")
+                        .HasColumnType("integer")
+                        .HasColumnName("Plan");
 
                     b.Property<int?>("SubscriptionSource")
                         .HasColumnType("integer");

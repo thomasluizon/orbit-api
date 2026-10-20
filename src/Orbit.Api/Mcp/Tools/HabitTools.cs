@@ -385,7 +385,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         return $"Logs for {grouped.Count} habits (total_logs: {totalLogs}, returned_logs: {returnedLogCount}, partial: {partial.ToString().ToLowerInvariant()}):\n{string.Join("\n", lines)}";
     }
 
-    [McpServerTool(Name = "create_sub_habit"), Description("Create a sub-habit under an existing parent habit. Requires Pro subscription.")]
+    [McpServerTool(Name = "create_sub_habit"), Description("Create a sub-habit under an existing parent habit.")]
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "CreateSubHabit preserves flat child-habit schema properties, including parentHabitId, reminders and checklist items. MCP schema generation requires these separate parameters.")]
     public async Task<string> CreateSubHabit(
         ClaimsPrincipal user,

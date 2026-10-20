@@ -165,6 +165,26 @@ public class CancelSubscriptionOnDeletionJobTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_RestorationWithOnlyBonus_DoesNotRestartExpiredSubscription()
+    {
+        _user.StartTrial(DateTime.UtcNow.AddDays(-30));
+        _user.SetStripeSubscription("sub_paid", DateTime.UtcNow.AddDays(-1));
+        _user.GrantBonusProDays(7);
+        var bonusExpiry = _user.BonusProExpiresAtUtc;
+        _user.Deactivate(DateTime.UtcNow.AddDays(14));
+        await RunAsync();
+        _user.CancelDeactivation();
+
+        await _job.ExecuteAsync(_user.Id, "sub_paid", null, false, CancellationToken.None);
+
+        await _stripe.DidNotReceive().SetSubscriptionCancelAtPeriodEndAsync(
+            "sub_paid", false, Arg.Any<CancellationToken>());
+        _user.HasProAccess.Should().BeTrue();
+        _user.HasActivePaidSubscription.Should().BeFalse();
+        _user.BonusProExpiresAtUtc.Should().Be(bonusExpiry);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_CancelAfterReactivation_DoesNotStopRenewal()
     {
         _user.SetStripeSubscription("sub_paid", DateTime.UtcNow.AddDays(20));

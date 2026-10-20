@@ -28,7 +28,7 @@ public sealed class AuthUserStore(OrbitDbContext context) : IAuthUserStore
                 {candidate.Id}, {candidate.Name}, {candidate.Email}, {candidate.AiMemoryEnabled},
                 {candidate.AiSummaryEnabled}, {candidate.ProactiveAstraEnabled}, {candidate.HasCompletedOnboarding}, {candidate.HasCompletedTour},
                 {candidate.HasCreatedFirstHabit}, {candidate.HasLoggedFirstHabit}, {candidate.HasTriedAstra}, {candidate.HasCompletedOnboardingChecklist},
-                {(int)candidate.Plan}, {candidate.IsLifetimePro}, {candidate.AiMessagesUsedToday}, {candidate.CreatedAtUtc},
+                {(int)candidate.SubscriptionPlan}, {candidate.IsLifetimePro}, {candidate.AiMessagesUsedToday}, {candidate.CreatedAtUtc},
                 {candidate.HasImportedCalendar}, {candidate.HasSeenImportPrompt}, {candidate.GoogleCalendarAutoSyncEnabled}, {candidate.IsDeactivated},
                 {candidate.WeekStartDay}, {candidate.ReminderPreferencesVersion}, {candidate.SocialOptIn}, {candidate.IsAdmin},
                 {candidate.TotalXp}, {candidate.Level}, {candidate.AdRewardBonusMessages}, {candidate.AdRewardsClaimedToday},

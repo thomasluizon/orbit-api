@@ -24,12 +24,14 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
 
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
-        differences.Should().HaveCount(16);
+        differences.Should().HaveCount(22);
         RestoreProactivePreferenceMigrationTests.AssertRequiredPreference(differences);
+        ReferralRewardMigrationTests.AssertRewardColumns(differences);
+        MakeSubHabitsFreeMigrationTests.AssertFreeFeatureSeed(differences);
         differences.OfType<CreateTableOperation>().Select(table => table.Name)
             .Should().BeEquivalentTo("ConversationTurns", "OAuthStates", "AiBudgetCalls");
         differences.OfType<CreateIndexOperation>().Should().HaveCount(7);
-        differences.OfType<AddColumnOperation>().Should().HaveCount(3);
+        differences.OfType<AddColumnOperation>().Should().HaveCount(8);
         differences.OfType<InsertDataOperation>().Should().HaveCount(2);
         AssertAiSecurityAdditions(differences);
         ConversationMigrationTests.AssertConversationExpansion(differences);
@@ -45,7 +47,7 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
     }
 
     [Fact]
-    public void EvalTraceTargetModel_PreservesTraceWithArgumentVersionAndRequiredPreferenceAdditions()
+    public void EvalTraceTargetModel_PreservesTraceWithArgumentVersionRewardsFreeSubHabitsAndRequiredPreferenceAdditions()
     {
         using var context = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
             .UseNpgsql("Host=unused;Database=unused").Options);
@@ -54,8 +56,12 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
         var current = context.GetService<IDesignTimeModel>().Model;
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
-        differences.Should().HaveCount(2);
-        var schemaVersion = differences.OfType<AddColumnOperation>().Should().ContainSingle().Subject;
+        differences.Should().HaveCount(8);
+        differences.OfType<AddColumnOperation>().Should().HaveCount(6);
+        ReferralRewardMigrationTests.AssertRewardColumns(differences);
+        MakeSubHabitsFreeMigrationTests.AssertFreeFeatureSeed(differences);
+        var schemaVersion = differences.OfType<AddColumnOperation>().Should()
+            .ContainSingle(column => column.Table == "PendingAgentOperations").Subject;
         schemaVersion.Table.Should().Be("PendingAgentOperations");
         schemaVersion.Name.Should().Be("ArgumentSchemaVersion");
         schemaVersion.ClrType.Should().Be(typeof(int));

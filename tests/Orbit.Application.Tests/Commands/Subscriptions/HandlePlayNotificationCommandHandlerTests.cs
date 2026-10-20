@@ -204,6 +204,44 @@ public class HandlePlayNotificationCommandHandlerTests
         user.SubscriptionEndedAtUtc.Should().BeNull();
     }
 
+    [Theory]
+    [InlineData("SUBSCRIPTION_STATE_EXPIRED", 13)]
+    [InlineData("SUBSCRIPTION_STATE_ON_HOLD", 5)]
+    [InlineData("SUBSCRIPTION_STATE_PAUSED", 10)]
+    public async Task Handle_TerminalPlayState_PreservesBonusUntilExpiry(string state, int notificationType)
+    {
+        var clock = new BonusClock(DateTimeOffset.UtcNow);
+        var user = User.Create("Alex", "test@example.com", clock).Value;
+        user.StartTrial(DateTime.UtcNow.AddDays(-30));
+        var expired = clock.GetUtcNow().UtcDateTime.AddDays(-1);
+        user.SetPlaySubscription("tok_old", expired, SubscriptionInterval.Monthly);
+        user.GrantBonusProDays(7);
+        var bonusExpiry = user.BonusProExpiresAtUtc;
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
+            Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Expression<Func<User, bool>>>().Compile()(user) ? user : null);
+        using var play = new PlayBillingTestClient(state, expired, user.Id, Settings);
+        StubVerify(await play.Billing.VerifyAsync("orbit_pro", "tok_old", CancellationToken.None));
+        var command = new HandlePlayNotificationCommand(BuildPushBody(notificationType, "tok_old", "orbit_pro"));
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _unitOfWork.Received().SaveChangesAsync(Arg.Any<CancellationToken>());
+        user.HasProAccess.Should().BeTrue();
+        user.IsTrialActive.Should().BeFalse();
+        user.Plan.Should().Be(UserPlan.Pro);
+        user.PlanExpiresAt.Should().Be(bonusExpiry);
+        user.PlayPurchaseToken.Should().BeNull();
+        user.SubscriptionSource.Should().BeNull();
+        user.HasActivePaidSubscription.Should().BeFalse();
+        clock.Advance(TimeSpan.FromDays(7));
+        user.HasProAccess.Should().BeFalse();
+        await _handler.Handle(command, CancellationToken.None);
+        user.HasProAccess.Should().BeFalse();
+        user.BonusProExpiresAtUtc.Should().Be(bonusExpiry);
+    }
+
     [Fact]
     public async Task Handle_InactiveState_CancelsSubscription()
     {
@@ -467,6 +505,29 @@ public class HandlePlayNotificationCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_PlayPurchaseDuringBonus_UsesPaidStripePeriodForOwnership()
+    {
+        var user = User.Create("Alex", "test@example.com").Value;
+        user.SetStripeSubscription("sub_old", DateTime.UtcNow.AddDays(-1));
+        user.GrantBonusProDays(7);
+        var bonusExpiry = user.BonusProExpiresAtUtc;
+        user.SetStripeSubscription("sub_new", DateTime.UtcNow.AddDays(2));
+        var playExpiry = DateTime.UtcNow.AddDays(3);
+        StubUser(user);
+        StubVerify(new PlaySubscriptionState(true, playExpiry, SubscriptionInterval.Monthly,
+            true, "orbit_pro", null, user.Id.ToString()));
+
+        var result = await _handler.Handle(
+            new HandlePlayNotificationCommand(BuildPushBody(4, "tok_new", "orbit_pro")), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.SubscriptionSource.Should().Be(SubscriptionSource.GooglePlay);
+        user.SubscriptionExpiresAtUtc.Should().Be(playExpiry);
+        user.BonusProExpiresAtUtc.Should().Be(bonusExpiry);
+        user.PlanExpiresAt.Should().Be(bonusExpiry);
+    }
+
+    [Fact]
     public async Task Handle_StripeCoversLaterPeriod_LinksTokenWithoutDowngradingStripeEntitlement()
     {
         var user = User.Create("Alex", "test@example.com").Value;
@@ -571,4 +632,10 @@ public class HandlePlayNotificationCommandHandlerTests
         user.PlayPurchaseToken.Should().Be("tok_renew");
         _unitOfWork.Received(1).ResetTracking();
     }
+    private sealed class BonusClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+        public void Advance(TimeSpan duration) => now += duration;
+    }
+
 }
