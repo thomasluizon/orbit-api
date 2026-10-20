@@ -330,7 +330,7 @@ public class AstraBlockAnswerRecoveryTests
                 executor, Substitute.For<IPendingClarificationStore>(), syncer, Substitute.For<IGamificationService>(),
                 Substitute.For<IMediator>(), Substitute.For<IProductAnalytics>(), Substitute.For<IHabitScheduleLogReader>(),
                 store, Substitute.For<IPendingAgentOperationStore>()),
-            NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>());
+            NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>(), Orbit.Infrastructure.Tests.ModerationTestDouble.Clean());
 
         var response = await handler.Handle(new(user.Id, "Evening", BlockAnswer: new(block.Id, ["b"])), default);
 

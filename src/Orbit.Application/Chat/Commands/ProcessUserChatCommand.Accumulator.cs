@@ -14,6 +14,7 @@ public partial class ProcessUserChatCommandHandler
         private readonly HashSet<string> _seenRelatedSurfaces = new(StringComparer.Ordinal);
         private readonly HashSet<string> _calledToolNames = new(StringComparer.Ordinal);
         private readonly HashSet<(string Domain, string Access)> _seenToolSteps = [];
+        private readonly HashSet<Guid> _supersededPendingIds = [];
         private readonly SemaphoreSlim _toolStepGate = new(1, 1);
 
         public IReadOnlyList<Orbit.Domain.Entities.Habit> Habits { get; init; } = [];
@@ -30,6 +31,8 @@ public partial class ProcessUserChatCommandHandler
         public HashSet<string> MissingHabitNames { get; } = new(StringComparer.OrdinalIgnoreCase);
         public HashSet<string> PreviewedCalls { get; } = new(StringComparer.Ordinal);
         public HashSet<string> MergedCallIds { get; } = new(StringComparer.Ordinal);
+        public List<AiToolCall> PreviousWriteCalls { get; } = [];
+        public Dictionary<Guid, (string ToolName, PendingAgentOperation Preview)> PendingWriteCalls { get; } = [];
 
         public DateTime? AnsweredAtUtc { get; init; }
         public List<ActionResult> CommittedActions { get; } = [];
@@ -115,9 +118,18 @@ public partial class ProcessUserChatCommandHandler
             if (policyDenial is not null)
                 PolicyDenials.Add(policyDenial);
 
-            if (pendingOperation is not null && PendingOperations.All(item => item.Id != pendingOperation.Id)
+            if (pendingOperation is not null && !_supersededPendingIds.Contains(pendingOperation.Id)
+                && PendingOperations.All(item => item.Id != pendingOperation.Id)
                 && pendingOperation.ChangeTargetCount != 0 && pendingOperation.Items is not { Count: 0 })
                 PendingOperations.Add(pendingOperation);
+        }
+
+        public void SupersedePendingOperation(Guid id)
+        {
+            _supersededPendingIds.Add(id);
+            PendingWriteCalls.Remove(id);
+            PendingOperations.RemoveAll(item => item.Id == id);
+            CommittedPendingOperations.RemoveAll(item => item.Id == id);
         }
 
         private void CollectRelatedSurfaces(AgentOperationResult operationResult)

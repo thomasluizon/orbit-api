@@ -170,7 +170,11 @@ public record PendingOperationChangePreview(
     IReadOnlyList<PendingOperationChange> Changes,
     int ChangeTargetCount,
     IReadOnlyList<PendingOperationItem>? Items = null,
-    string? PreviewFingerprint = null);
+    string? PreviewFingerprint = null)
+{
+    [JsonIgnore]
+    public JsonElement? ExecutionArguments { get; init; }
+}
 
 public record PendingAgentOperationConfirmation(
     Guid PendingOperationId,

@@ -1,3 +1,5 @@
+using Orbit.Infrastructure.Tests.Persistence;
+using Orbit.Infrastructure.Persistence;
 using System.Security.Cryptography;
 using System.Text;
 using FluentAssertions;
@@ -8,11 +10,17 @@ namespace Orbit.Infrastructure.Tests.Services;
 
 public class OAuthAuthorizationStoreTests : IDisposable
 {
-    private readonly OAuthAuthorizationStore _store = new(NullLogger<OAuthAuthorizationStore>.Instance);
+    private readonly SqliteOrbitDbContextFactory _oauthDb = new();
+    private readonly OAuthAuthorizationStore _store;
+
+    public OAuthAuthorizationStoreTests()
+    {
+        _store = new OAuthAuthorizationStore(new OAuthStateStore(_oauthDb.Context, TimeProvider.System), TimeProvider.System);
+    }
 
     public void Dispose()
     {
-        _store.Dispose();
+        _oauthDb.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -226,7 +234,7 @@ public class OAuthAuthorizationStoreTests : IDisposable
     public void GoogleRequest_ExpiredStateCannotBeConsumed()
     {
         var time = new MutableTimeProvider();
-        using var store = new OAuthAuthorizationStore(NullLogger<OAuthAuthorizationStore>.Instance, time);
+        var store = new OAuthAuthorizationStore(new OAuthStateStore(_oauthDb.Context, time), time);
         var created = store.TryCreateGoogleRequest("client", "https://claude.ai/callback", "state",
             "challenge", null, "https://api.useorbit.org/oauth/google/callback", "en");
 
@@ -248,7 +256,7 @@ public class OAuthAuthorizationStoreTests : IDisposable
     public void TryCreateGoogleRequest_EvictsExpiredEntriesOnInsertAndFreesTheCap()
     {
         var time = new MutableTimeProvider();
-        using var store = new OAuthAuthorizationStore(NullLogger<OAuthAuthorizationStore>.Instance, time);
+        var store = new OAuthAuthorizationStore(new OAuthStateStore(_oauthDb.Context, time), time);
         var first = CreatePending(store);
         for (var i = 1; i < OAuthAuthorizationStore.MaxPendingGoogleRequests; i++)
             CreatePending(store).Should().NotBeNull();

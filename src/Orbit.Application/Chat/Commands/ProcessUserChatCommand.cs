@@ -159,7 +159,8 @@ public partial class ProcessUserChatCommandHandler(
     ChatAiDependencies ai,
     ChatExecutionDependencies execution,
     ILogger<ProcessUserChatCommandHandler> logger,
-    IAppConfigService appConfig) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
+    IAppConfigService appConfig,
+    IContentModerationService moderation) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
 {
     private static class PartKinds
     {
@@ -195,14 +196,31 @@ public partial class ProcessUserChatCommandHandler(
             return await answerService.ExecuteAsync(request, prepared =>
                 prepared.Crisis != CrisisLocales.None
                     ? HandleCrisisTurnAsync(request with { Message = prepared.Message }, prepared.Crisis)
-                    : HandleTurnAsync(request with { Message = prepared.Message }, cancellationToken, prepared.AnsweredAtUtc), cancellationToken);
+                    : HandleTurnAsync(request with { Message = prepared.Message }, cancellationToken, prepared.AnsweredAtUtc), cancellationToken,
+                (_, token) => ModerateInputAsync(request, token));
         }
+        var crisis = CrisisSupportGuard.Detect(request.Message);
+        if (crisis != CrisisLocales.None && CrisisSupportGuard.IsEnabled(crisis,
+            await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, cancellationToken)))
+            return await HandleCrisisTurnAsync(request, crisis);
+        var inputCheck = await ModerateInputAsync(request, cancellationToken);
+        if (inputCheck.IsFailure)
+            return inputCheck.PropagateError<ChatResponse>();
         await execution.UnitOfWork.ExecuteInTransactionAsync(async token =>
         {
             await execution.UnitOfWork.AcquireAdvisoryLockAsync($"astra-blocks:{request.UserId}", token);
             await execution.BlockStore.InvalidateOpenAsync(request.UserId, token);
         }, cancellationToken);
         return await HandleTurnAsync(request, cancellationToken);
+    }
+
+    private async Task<Result> ModerateInputAsync(ProcessUserChatCommand request, CancellationToken cancellationToken)
+    {
+        var input = JsonSerializer.Serialize(new { request.Message, request.History, request.BlockAnswer });
+        var check = await moderation.CheckTextAsync(input, cancellationToken);
+        if (check.Unavailable)
+            return Result.Failure(ErrorMessages.AiUnavailable);
+        return check.Flagged ? Result.Failure("This input was refused by content moderation.") : Result.Success();
     }
 
     private CancellationTokenSource CreateBlockTurnCancellation(CancellationToken token, DateTime? answeredAtUtc)
@@ -305,8 +323,8 @@ public partial class ProcessUserChatCommandHandler(
             cancellationToken);
         var aiResponse = toolLoopResult.FinalResponse;
         var iterations = toolLoopResult.Iterations;
-        if (request.BlockAnswer is not null && (toolLoopResult.HadToolFailure || aiResponse.HasToolCalls))
-            return Result.Failure<ChatResponse>(ErrorMessages.AiUnavailable);
+        if (MustFailToolTurn(request, toolLoopResult))
+            return Result.Failure<ChatResponse>(toolLoopResult.ProviderError ?? ErrorMessages.AiUnavailable);
         if (toolLoopResult.HadToolFailure)
             executionResults.SanitizeFailedActions(ToolFailureMessage(userLanguage));
         if (aiStreamFilter is not null)

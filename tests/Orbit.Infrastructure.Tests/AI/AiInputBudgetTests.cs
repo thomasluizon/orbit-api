@@ -192,7 +192,7 @@ public class AiInputBudgetTests(ITestOutputHelper output)
             Transport = new HttpClientPipelineTransport(new HttpClient(handler))
         });
         var usage = Substitute.For<IAiUsageRecorder>();
-        return new AiIntentService(new AiCompletionClient(responses, NullLogger<AiCompletionClient>.Instance, usage),
+        return new AiIntentService(AiBudgetTestDouble.Wrap(new AiCompletionClient(responses, NullLogger<AiCompletionClient>.Instance, usage)),
             usage, NullLogger<AiIntentService>.Instance);
     }
 

@@ -29,9 +29,10 @@ public sealed partial class AiUsageRecorder(
         long totalTokens,
         CancellationToken cancellationToken = default,
         Guid? userId = null,
-        AiCallTelemetry? telemetry = null)
+        AiCallTelemetry? telemetry = null,
+        long cacheWriteTokens = 0)
     {
-        var costUsd = ComputeCostUsd(_pricing.GetValueOrDefault(model), cachedTokens, promptTokens, completionTokens);
+        var costUsd = ComputeCostUsd(_pricing.GetValueOrDefault(model), cachedTokens, promptTokens, completionTokens, cacheWriteTokens);
 #pragma warning disable ORBIT0004 // AiUsageDaily.Date partitions model cost counters by UTC accounting day; it is not the user quota or schedule date. https://github.com/thomasluizon/orbit-tickets/issues/230
         var date = DateOnly.FromDateTime(DateTime.UtcNow);
 #pragma warning restore ORBIT0004
@@ -62,7 +63,7 @@ public sealed partial class AiUsageRecorder(
         finally
         {
             var price = _pricing.GetValueOrDefault(model);
-            var inputCost = ComputeCostUsd(price, cachedTokens, promptTokens, 0);
+            var inputCost = ComputeCostUsd(price, cachedTokens, promptTokens, 0, cacheWriteTokens);
             var outputCost = ComputeCostUsd(price, 0, 0, completionTokens);
             var properties = new Dictionary<string, object>
             {
@@ -93,15 +94,16 @@ public sealed partial class AiUsageRecorder(
     /// Returns 0 when the model has no configured price (the daily summary flags such models as unpriced).
     /// </summary>
     internal static decimal ComputeCostUsd(
-        AiModelPrice? price, long cachedTokens, long promptTokens, long completionTokens)
+        AiModelPrice? price, long cachedTokens, long promptTokens, long completionTokens, long cacheWriteTokens = 0)
     {
         if (price is null)
             return 0m;
 
-        var uncachedInputTokens = promptTokens - cachedTokens;
+        var uncachedInputTokens = promptTokens - cachedTokens - cacheWriteTokens;
 
         return uncachedInputTokens / TokensPerMillion * price.InputPerMillionUsd
             + cachedTokens / TokensPerMillion * price.CachedInputPerMillionUsd
+            + cacheWriteTokens / TokensPerMillion * (price.CacheWritePerMillionUsd ?? price.InputPerMillionUsd)
             + completionTokens / TokensPerMillion * price.OutputPerMillionUsd;
     }
 

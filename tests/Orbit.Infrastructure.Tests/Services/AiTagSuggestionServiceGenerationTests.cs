@@ -102,7 +102,7 @@ public class AiTagSuggestionServiceGenerationTests
             });
         var aiClient = new AiCompletionClient(
             chatClient, NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
-        return new AiTagSuggestionService(aiClient, NullLogger<AiTagSuggestionService>.Instance);
+        return new AiTagSuggestionService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(aiClient), NullLogger<AiTagSuggestionService>.Instance);
     }
 
     private sealed class CannedChatHandler(string content, HttpStatusCode status) : HttpMessageHandler

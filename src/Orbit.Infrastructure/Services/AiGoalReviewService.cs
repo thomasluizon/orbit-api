@@ -8,7 +8,7 @@ using Orbit.Infrastructure.Services.Prompts;
 namespace Orbit.Infrastructure.Services;
 
 public sealed partial class AiGoalReviewService(
-    AiCompletionClient aiClient,
+    BudgetedAiCompletionClient aiClient,
     ILogger<AiGoalReviewService> logger) : IGoalReviewService
 {
     private const int MaxGoalDataLineLength = 500;
@@ -63,6 +63,10 @@ public sealed partial class AiGoalReviewService(
             if (logger.IsEnabled(LogLevel.Debug))
                 LogGoalReviewGenerated(logger, trimmed.Length);
             return Result.Success(trimmed);
+        }
+        catch (AiBudgetExceededException)
+        {
+            return Result.Failure<string>(AiBudgetExceededException.Error);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

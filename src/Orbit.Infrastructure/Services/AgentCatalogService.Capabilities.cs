@@ -198,6 +198,7 @@ public partial class AgentCatalogService
                 [
                     "create_habit",
                     "update_habit",
+                    "bulk_update_habit_emojis",
                     "log_habit",
                     "skip_habit", "undo_skip_habit",
                     "update_checklist",
@@ -462,7 +463,7 @@ public partial class AgentCatalogService
                 IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
                 ChatToolNames: ["update_profile_preferences"],
-                McpToolNames: ["set_timezone", "set_language", "set_week_start_day", "set_clock_format"],
+                McpToolNames: ["set_name", "set_timezone", "set_language", "set_week_start_day", "set_clock_format"],
                 ControllerActionKeys:
                 [
                     "ProfileController.SetName",
@@ -627,7 +628,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.None,
                 FeatureFlagKeys: ["calendar_integration"],
                 ChatToolNames: ["get_calendar_overview"],
-                McpToolNames: ["get_calendar_events"],
+                McpToolNames: ["get_calendar_events", "get_calendar_overview"],
                 ControllerActionKeys:
                 [
                     "CalendarController.GetEvents",
@@ -647,7 +648,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.FreshConfirmation,
                 FeatureFlagKeys: ["calendar_integration"],
                 ChatToolNames: ["manage_calendar_sync"],
-                McpToolNames: ["manage_calendar_sync"],
+                McpToolNames: ["manage_calendar_sync", "set_selected_calendars"],
                 ControllerActionKeys:
                 [
                     "CalendarController.GetAutoSyncState",
@@ -751,7 +752,7 @@ public partial class AgentCatalogService
             new AgentCapability(
                 AgentCapabilityIds.ChecklistTemplatesWrite,
                 "Write Checklist Templates",
-                "Creates and deletes checklist templates.",
+                "Creates, updates, and deletes checklist templates.",
                 "checklists",
                 AgentScopes.WriteChecklistTemplates,
                 AgentRiskClass.Low,
@@ -759,8 +760,8 @@ public partial class AgentCatalogService
                 IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
                 FeatureFlagKeys: ["checklist_templates"],
-                ChatToolNames: ["create_checklist_template", "delete_checklist_template"],
-                McpToolNames: ["create_checklist_template", "delete_checklist_template"],
+                ChatToolNames: ["create_checklist_template", "update_checklist_template", "delete_checklist_template"],
+                McpToolNames: ["create_checklist_template", "update_checklist_template", "delete_checklist_template"],
                 ControllerActionKeys: ["ChecklistTemplatesController.CreateTemplate", "ChecklistTemplatesController.DeleteTemplate"])
         ];
     }
@@ -1001,6 +1002,8 @@ public partial class AgentCatalogService
                     "OAuthController.GoogleStart",
                     "OAuthController.GoogleCallback",
                     "OAuthController.Token",
+                    "OAuthController.Consent",
+                    "OAuthController.GrantConsent",
                     "WaitlistController.Join",
                     "WaitlistController.Confirm"
                 ]),

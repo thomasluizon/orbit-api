@@ -34,7 +34,7 @@ public class AiCompletionClientTests
             .Returns(call => Task.Delay(Timeout.InfiniteTimeSpan, call.Arg<CancellationToken>()));
         var client = new AiCompletionClient(BuildResponsesClient(new CapturingHandler()), NullLogger<AiCompletionClient>.Instance,
             usage, TimeSpan.FromMilliseconds(50));
-        var intent = new AiIntentService(client, usage, NullLogger<AiIntentService>.Instance);
+        var intent = new AiIntentService(AiBudgetTestDouble.Wrap(client), usage, NullLogger<AiIntentService>.Instance);
         Func<Task> call = kind switch
         {
             "json" => async () => await client.CompleteJsonAsync<Probe>("system", "user"),
@@ -178,7 +178,7 @@ public class AiCompletionClientTests
         {
             var client = new AiCompletionClient(BuildResponsesClient(new WaitingHandler()), NullLogger<AiCompletionClient>.Instance,
                 Substitute.For<IAiUsageRecorder>(), TimeSpan.FromMilliseconds(50));
-            var intent = new AiIntentService(client, Substitute.For<IAiUsageRecorder>(), NullLogger<AiIntentService>.Instance);
+            var intent = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(client), Substitute.For<IAiUsageRecorder>(), NullLogger<AiIntentService>.Instance);
             Func<Task> call = kind switch
             {
                 "json" => async () => await client.CompleteJsonAsync<Probe>("system", "user"),
@@ -207,7 +207,7 @@ public class AiCompletionClientTests
         var usage = Substitute.For<IAiUsageRecorder>();
         var client = new AiCompletionClient(Options.Create(settings), NullLogger<AiCompletionClient>.Instance,
             usage, new HttpClientPipelineTransport(new HttpClient(new WaitingHandler())));
-        var service = new AiIntentService(client, usage, NullLogger<AiIntentService>.Instance);
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(client), usage, NullLogger<AiIntentService>.Instance);
         Func<Task> call = kind switch
         {
             "json" => async () => await client.CompleteJsonAsync<Probe>("system", "user"),
@@ -295,7 +295,7 @@ public class AiCompletionClientTests
         var usage = Substitute.For<IAiUsageRecorder>();
         var client = new AiCompletionClient(Options.Create(settings), NullLogger<AiCompletionClient>.Instance,
             usage, new HttpClientPipelineTransport(new HttpClient(handler)));
-        var service = new AiIntentService(client, usage, NullLogger<AiIntentService>.Instance);
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(client), usage, NullLogger<AiIntentService>.Instance);
         Func<Task> call = async () =>
         {
             if (kind == "text")

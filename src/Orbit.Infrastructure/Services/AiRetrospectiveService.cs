@@ -12,7 +12,7 @@ using Orbit.Infrastructure.AI;
 namespace Orbit.Infrastructure.Services;
 
 public sealed partial class AiRetrospectiveService(
-    AiCompletionClient aiClient,
+    BudgetedAiCompletionClient aiClient,
     ILogger<AiRetrospectiveService> logger) : IRetrospectiveService
 {
     public async Task<Result<RetrospectiveNarrative>> GenerateRetrospectiveAsync(
@@ -50,6 +50,10 @@ public sealed partial class AiRetrospectiveService(
             if (logger.IsEnabled(LogLevel.Debug))
                 LogRetrospectiveGenerated(logger, trimmed.Length);
             return Result.Success(narrative);
+        }
+        catch (AiBudgetExceededException)
+        {
+            return Result.Failure<RetrospectiveNarrative>(AiBudgetExceededException.Error);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

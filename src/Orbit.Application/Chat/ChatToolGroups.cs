@@ -41,7 +41,7 @@ public static class ChatToolGroups
             ["support", "contact the team", "report a bug", "suporte", "fale conosco"]),
         new("account", ["manage_account"],
             ["my account", "delete account", "export data", "change password", "minha conta", "excluir conta", "senha"]),
-        new("checklist_templates", ["get_checklist_templates", "create_checklist_template", "delete_checklist_template"],
+        new("checklist_templates", ["get_checklist_templates", "create_checklist_template", "update_checklist_template", "delete_checklist_template"],
             ["template", "checklist template", "reusable checklist", "modelo"]),
         new("notifications", ["get_notifications", "update_notifications", "delete_notifications"],
             ["notification", "notificacao", "push alert", "reminder settings"]),

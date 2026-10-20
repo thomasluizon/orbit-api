@@ -17,5 +17,6 @@ public interface IAiUsageRecorder
         long totalTokens,
         CancellationToken cancellationToken = default,
         Guid? userId = null,
-        AiCallTelemetry? telemetry = null);
+        AiCallTelemetry? telemetry = null,
+        long cacheWriteTokens = 0);
 }

@@ -231,7 +231,8 @@ async function verifyCode() {
       codeChallenge: request.codeChallenge,
       redirectUri: request.redirectUri,
       clientId: request.clientId,
-      nonce: request.nonce
+      nonce: request.nonce,
+      scope: request.scope
     });
     if (!result.ok) {
       setCodeError(result.data.error || copy.verifyFailed);

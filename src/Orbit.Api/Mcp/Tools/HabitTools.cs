@@ -16,6 +16,7 @@ namespace Orbit.Api.Mcp.Tools;
 [McpServerToolType]
 public class HabitTools(IMediator mediator, IUserDateService userDateService, McpExecutorBridge executorBridge)
 {
+    private static readonly JsonSerializerOptions PayloadOptions = new(JsonSerializerDefaults.Web);
     private const string HabitIdDescription = "The habit ID (GUID)";
     private const string DateFromDescription = "Start date in YYYY-MM-DD format";
     private const string DateToDescription = "End date in YYYY-MM-DD format";
@@ -390,8 +391,14 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         if (!result.Succeeded)
             return result.Message;
 
-        if (result.Payload is not BulkCreateResult bulk)
-            return $"Bulk create: {result.TargetName}";
+        var bulk = result.Payload switch
+        {
+            BulkCreateResult typed => typed,
+            JsonElement json => json.Deserialize<BulkCreateResult>(PayloadOptions),
+            _ => null
+        };
+        if (bulk is null)
+            return FormatBulkMutationResult(result);
 
         var successCount = bulk.Results.Count(x => x.Status == BulkItemStatus.Success);
         var failCount = bulk.Results.Count(x => x.Status == BulkItemStatus.Failed);
@@ -400,7 +407,14 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
                 ? $"- OK: {x.Title} (id: {x.HabitId})"
                 : $"- FAILED: {x.Title} - {x.Error}");
 
-        return $"Bulk create: {successCount} succeeded, {failCount} failed\n{string.Join("\n", lines)}";
+        var coverage = JsonSerializer.Serialize(new
+        {
+            applied_count = bulk.AppliedCount,
+            total_matched = bulk.TotalMatched,
+            skipped_count = bulk.SkippedCount,
+            partial = bulk.Partial
+        });
+        return $"Bulk create: {successCount} succeeded, {failCount} failed\n{string.Join("\n", lines)}\n{coverage}";
     }
 
     [McpServerTool(Name = "bulk_delete_habits"), Description("Delete multiple habits at once.")]
@@ -420,10 +434,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
             filter
         }, confirmationToken, cancellationToken);
 
-        if (!result.Succeeded)
-            return result.Message;
-
-        return result.TargetName ?? "Bulk delete completed.";
+        return FormatBulkMutationResult(result);
     }
 
     [McpServerTool(Name = "bulk_update_habits"), Description("Update the full server-side set of habits matching a JSON filter in one operation.")]
@@ -442,7 +453,29 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
             updates
         }, confirmationToken, cancellationToken);
 
-        return result.Succeeded ? result.TargetName ?? "Bulk habit update completed." : result.Message;
+        return FormatBulkMutationResult(result);
+    }
+
+    [McpServerTool(Name = "bulk_update_habit_emojis"), Description("Update emojis for the full server-side set matching a filter. Infer from each title in bounded AI batches, apply an explicit emoji, or pass null to clear. Returns applied_count, total_matched and partial.")]
+    public async Task<string> BulkUpdateHabitEmojis(
+        ClaimsPrincipal user,
+        [Description("JSON filter with all, habit_ids, tag, search, is_completed, is_general, is_bad_habit, or frequency")] string filterJson,
+        [Description("Emoji to apply, null to clear, or omit to infer from titles")] string? emoji = "",
+        [Description("Infer one relevant emoji per habit. Defaults to true when emoji is omitted.")] bool? inferFromTitle = null,
+        [Description("Confirmation token returned by confirm_agent_operation_v2")] string? confirmationToken = null,
+        CancellationToken cancellationToken = default)
+    {
+        var arguments = new Dictionary<string, object?>
+        {
+            ["filter"] = JsonSerializer.Deserialize<JsonElement>(filterJson),
+            ["infer_from_title"] = inferFromTitle ?? emoji == string.Empty
+        };
+        if (emoji != string.Empty)
+            arguments["emoji"] = emoji;
+
+        var result = await executorBridge.ExecuteAsync(user, "bulk_update_habit_emojis", arguments,
+            confirmationToken, cancellationToken);
+        return FormatBulkMutationResult(result);
     }
 
     [McpServerTool(Name = "bulk_reschedule_habits"), Description("Reschedule the full server-side set of habits matching a JSON filter in one operation.")]
@@ -460,7 +493,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
             due_date = dueDate
         }, confirmationToken, cancellationToken);
 
-        return result.Succeeded ? result.TargetName ?? "Bulk habit reschedule completed." : result.Message;
+        return FormatBulkMutationResult(result);
     }
 
     [McpServerTool(Name = "bulk_log_habits"), Description("Log multiple habits as completed at once.")]
@@ -502,7 +535,16 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
             date
         }, confirmationToken, cancellationToken);
 
-        return result.Succeeded ? result.TargetName ?? "Bulk habit operation completed." : result.Message;
+        return FormatBulkMutationResult(result);
+    }
+
+    private static string FormatBulkMutationResult(McpExecutorResult result)
+    {
+        if (!result.Succeeded)
+            return result.Message;
+        if (result.Payload is null)
+            return result.TargetName ?? "Bulk habit coverage is unavailable.";
+        return $"{result.TargetName ?? "Bulk habit result"}\n{JsonSerializer.Serialize(result.Payload)}";
     }
 
     [McpServerTool(Name = "reorder_habits"), Description("Reorder habits by setting new positions.")]
