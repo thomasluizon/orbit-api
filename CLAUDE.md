@@ -4,7 +4,7 @@
 
 ## Stack
 
-.NET 10, C# 14 (net10.0's default language version), PostgreSQL via EF Core 10, MediatR 14, FluentValidation 12, JWT Bearer, OpenAI .NET SDK 2.14.0 Responses API with GPT-6.1 Sol (primary) and GPT-6 Luna (sub-tasks) at low reasoning, BCrypt, Firebase Admin SDK (FCM), Lib.Net.Http.WebPush (VAPID).
+.NET 10, C# 14 (net10.0's default language version), PostgreSQL via EF Core 10, MediatR 14, FluentValidation 12, JWT Bearer, OpenAI .NET SDK 2.14.0 Responses API with GPT-6 Luna for chat and sub-tasks at low reasoning, BCrypt, Firebase Admin SDK (FCM), Lib.Net.Http.WebPush (VAPID).
 
 ## Architecture (one-pager)
 

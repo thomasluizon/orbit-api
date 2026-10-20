@@ -42,7 +42,7 @@ public class AiSummaryServiceTests
 
         result.IsSuccess.Should().BeTrue();
         using var document = JsonDocument.Parse(body!);
-        document.RootElement.GetProperty("model").GetString().Should().Be("gpt-6.1-sol");
+        document.RootElement.GetProperty("model").GetString().Should().Be("gpt-6-luna");
         document.RootElement.GetProperty("reasoning").GetProperty("effort").GetString().Should().Be("low");
         document.RootElement.GetProperty("max_output_tokens").GetInt32().Should().Be(8192);
     }

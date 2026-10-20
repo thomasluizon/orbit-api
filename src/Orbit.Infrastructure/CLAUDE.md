@@ -26,7 +26,7 @@ AI/                       - top-level AI service entry points
 
 ## AI services (OpenAI)
 
-- `OpenAI .NET SDK 2.14.0` via the Responses API, with `gpt-6.1-sol` as primary and `gpt-6-luna` for sub-tasks, both at low reasoning. Model selection is configurable.
+- `OpenAI .NET SDK 2.14.0` via the Responses API, with `gpt-6-luna` for chat and sub-tasks at low reasoning. Model selection is configurable.
 - Prompts composed from `Services/Prompts/Sections/*` — dynamic sections (HabitCountSection, TodayDateSection, RoutinePatternsSection) compose at runtime based on user state.
 - Structured output via JSON schema — define the response type, the SDK enforces shape.
 - Cache results in `IMemoryCache` keyed by user + date + version. Invalidate via `CacheInvalidationHelper` in Application (never directly here).

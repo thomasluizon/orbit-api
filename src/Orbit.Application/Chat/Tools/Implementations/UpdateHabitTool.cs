@@ -190,6 +190,7 @@ public class UpdateHabitTool(
         return new HabitUpdateParams(
             title, description, frequencyUnit, frequencyQuantity, days, isBadHabit, dueDate,
             DueTime: dueTime,
+            DueEndTime: habit.DueEndTime,
             ReminderEnabled: ResolveOptionalBool(args, "reminder_enabled"),
             ReminderTimes: reminderTimes,
             ChecklistItems: ResolveOptionalChecklist(args),

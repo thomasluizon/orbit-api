@@ -13,7 +13,7 @@ internal static class ResponsesTestData
         {
             Id = "resp_test",
             CreatedAt = DateTimeOffset.FromUnixTimeSeconds(1700000000),
-            Model = "gpt-6.1-sol",
+            Model = "gpt-6-luna",
             Status = ResponseStatus.Completed,
             Usage = new ResponseTokenUsage
             {
