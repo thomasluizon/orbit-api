@@ -81,7 +81,7 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
             _payGate, _unitOfWork);
         var emojiTool = new BulkUpdateHabitEmojisTool(_habitRepo, _emojiInference, _unitOfWork,
             NullLogger<BulkUpdateHabitEmojisTool>.Instance);
-        var updateTool = new UpdateHabitTool(_habitRepo, _userDateService, _unitOfWork, _payGate);
+        var updateTool = new UpdateHabitTool(_habitRepo, _userDateService, _mediator);
         var bulkUpdateTool = new BulkUpdateHabitsTool(_mediator);
         _toolRegistry = new AiToolRegistry([
             _createHabitTool,
@@ -464,6 +464,39 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
         executed.Operation.TargetName.Should().Be("Beber agua");
         await _habitRepo.Received(1).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
         _pendingOperationStore.GetExecution(_userId, pendingId).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_ApprovalAfterTwentyFiveMessages_ExecutesTheHeldOperationOnce()
+    {
+        ScriptToolCall("""{"title":"Beber agua","frequency_unit":"Day","frequency_quantity":1}""");
+        var handler = CreateHandler();
+        var held = await handler.Handle(new(_userId, "Crie o habito",
+            ClientContext: new AgentClientContext(SupportsPendingOperationChanges: true)), default);
+        var pending = held.Value.PendingOperations.Should().ContainSingle().Subject;
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Continuing our conversation." }));
+        var history = new List<ChatHistoryMessage> { new("user", "Crie o habito") };
+        for (var index = 0; index < 25; index++)
+        {
+            var message = $"Another routine question {index}";
+            (await handler.Handle(new(_userId, message, History: history.ToList()), default)).IsSuccess.Should().BeTrue();
+            history.Add(new("user", message));
+        }
+        history.Count.Should().BeGreaterThan(AppConstants.MaxAiModelHistoryMessages);
+        await _habitRepo.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
+        var execution = _pendingOperationStore.GetExecution(_userId, pending.Id)!;
+        execution.PreviewFingerprint.Should().Be(pending.PreviewFingerprint);
+        var confirmation = _pendingOperationStore.Confirm(_userId, pending.Id)!;
+
+        var executed = await _executor.ExecuteAsync(new(_userId, execution.OperationId, execution.Arguments,
+            execution.Surface, AgentAuthMethod.Jwt, ConfirmationToken: confirmation.ConfirmationToken), default);
+
+        executed.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
+        executed.Operation.TargetName.Should().Be("Beber agua");
+        await _habitRepo.Received(1).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+        _pendingOperationStore.GetExecution(_userId, pending.Id).Should().BeNull();
     }
 
     [Fact]

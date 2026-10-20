@@ -15,7 +15,7 @@ public class ManageSubscriptionTool(IMediator mediator) : IAiTool, IArgumentChec
         properties = new
         {
             action = new { type = JsonSchemaTypes.String, @enum = new[] { "create_checkout", "create_portal" } },
-            interval = new { type = JsonSchemaTypes.String, nullable = true, @enum = new[] { "monthly", "yearly" } }
+            interval = new { type = new[] { JsonSchemaTypes.String, "null" }, @enum = new[] { "monthly", "yearly" } }
         },
         required = new[] { "action" }
     };

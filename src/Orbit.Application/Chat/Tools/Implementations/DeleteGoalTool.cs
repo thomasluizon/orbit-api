@@ -11,14 +11,14 @@ public class DeleteGoalTool(
     public string Name => "delete_goal";
 
     public string Description =>
-        "Delete an existing goal. Use this only when the user clearly wants a goal removed.";
+        "Delete a goal only when requested.";
 
     public object GetParameterSchema() => new
     {
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            goal_id = new { type = JsonSchemaTypes.String, description = "ID of the goal to delete." }
+            goal_id = new { type = JsonSchemaTypes.String }
         },
         required = new[] { "goal_id" }
     };

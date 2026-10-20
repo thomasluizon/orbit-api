@@ -419,7 +419,7 @@ public class AiDailyBudgetTests
             });
             Handler = new ModelHandler(model);
             Recorder = new BudgetAwareAiUsageRecorder(new AiUsageRecorder(_provider.GetRequiredService<IServiceScopeFactory>(),
-                options, NullLogger<AiUsageRecorder>.Instance), Http, options);
+                options, Substitute.For<IProductAnalytics>(), NullLogger<AiUsageRecorder>.Instance), Http, options);
             var raw = new AiCompletionClient(options, NullLogger<AiCompletionClient>.Instance, Recorder,
                 new HttpClientPipelineTransport(new HttpClient(Handler)));
             Client = new BudgetedAiCompletionClient(raw, new AiDailyBudget(_provider.GetRequiredService<IServiceScopeFactory>()),

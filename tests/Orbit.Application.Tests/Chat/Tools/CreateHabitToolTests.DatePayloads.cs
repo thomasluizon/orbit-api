@@ -63,7 +63,7 @@ public partial class CreateHabitToolTests
             "due_end_time":"11:15",
             "sub_habits":[{
                 "title":"Aula extra",
-                "frequency_unit":null,
+                "frequency_unit":"OneTime",
                 "due_date":"2026-08-26"
             }]
         }
@@ -130,7 +130,7 @@ public partial class CreateHabitToolTests
         var clarification = result.Payload.Should().BeOfType<NeedsClarificationPayload>().Subject;
         var action = clarification.QuickActions!.Single(action => action.Label == "habits.clarification.quickAction.oneTime");
         using var patch = JsonDocument.Parse(action.Value);
-        patch.RootElement.GetProperty("frequency_unit").ValueKind.Should().Be(JsonValueKind.Null);
+        patch.RootElement.GetProperty("frequency_unit").GetString().Should().Be("OneTime");
         patch.RootElement.GetProperty("due_date").GetString().Should().Be("2026-08-26");
     }
 
@@ -224,7 +224,7 @@ public partial class CreateHabitToolTests
     }
 
     [Fact]
-    public async Task RecurringChild_WithTimingFields_CreatesUntimedHabit()
+    public async Task RecurringChild_WithTimingFields_PreservesChildTiming()
     {
         (await Execute("""
         {"title":"Aulas","frequency_unit":"Day","days":["Wednesday"],
@@ -233,7 +233,8 @@ public partial class CreateHabitToolTests
 
         var parent = AddedHabits().Single(habit => habit.ParentHabitId is null);
         var expected = Habit.Create(new HabitCreateParams(UserId, "Aula herdada", FrequencyUnit.Day, 1,
-            Today, Days: [DayOfWeek.Wednesday], ParentHabitId: parent.Id)).Value;
+            Today, Days: [DayOfWeek.Wednesday], ParentHabitId: parent.Id,
+            DueTime: new TimeOnly(8, 25), DueEndTime: new TimeOnly(11, 15))).Value;
         AddedHabits().Single(habit => habit.ParentHabitId is not null).Should().BeEquivalentTo(expected,
             options => options.ComparingByMembers<Habit>()
                 .Excluding(habit => habit.Id).Excluding(habit => habit.CreatedAtUtc).Excluding(habit => habit.UpdatedAtUtc));

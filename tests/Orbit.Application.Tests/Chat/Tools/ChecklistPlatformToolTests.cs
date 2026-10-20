@@ -306,8 +306,9 @@ public class ChecklistPlatformToolTests
         result.Error.Should().Be("profile_failed");
     }
 
-    [Fact]
-    public async Task GetGamificationOverviewTool_ReturnsSuccessForAllSections()
+    [Theory]
+    [MemberData(nameof(OptionalParameterCases.Fields), typeof(GetGamificationOverviewTool), "", MemberType = typeof(OptionalParameterCases))]
+    public async Task GetGamificationOverviewTool_ReturnsSuccessForAllSections(string field)
     {
         var mediator = Substitute.For<IMediator>();
         mediator.Send(Arg.Any<GetGamificationProfileQuery>(), Arg.Any<CancellationToken>())
@@ -340,6 +341,9 @@ public class ChecklistPlatformToolTests
         var result = await tool.ExecuteAsync(Parse("{}"), UserId, CancellationToken.None);
 
         result.Success.Should().BeTrue();
+        var explicitNull = await tool.ExecuteAsync(JsonSerializer.SerializeToElement(
+            new Dictionary<string, object?> { [field] = null }), UserId, default);
+        explicitNull.Should().BeEquivalentTo(result);
     }
 
     [Fact]
@@ -421,8 +425,9 @@ public class ChecklistPlatformToolTests
         await mediator.DidNotReceiveWithAnyArgs().Send(default!, default);
     }
 
-    [Fact]
-    public async Task GetSubscriptionOverviewTool_ReturnsFullSuccessPayload()
+    [Theory]
+    [MemberData(nameof(OptionalParameterCases.Fields), typeof(GetSubscriptionOverviewTool), "", MemberType = typeof(OptionalParameterCases))]
+    public async Task GetSubscriptionOverviewTool_ReturnsFullSuccessPayload(string field)
     {
         var mediator = Substitute.For<IMediator>();
         mediator.Send(Arg.Any<GetSubscriptionStatusQuery>(), Arg.Any<CancellationToken>())
@@ -449,6 +454,9 @@ public class ChecklistPlatformToolTests
         var result = await tool.ExecuteAsync(Parse("{}"), UserId, CancellationToken.None);
 
         result.Success.Should().BeTrue();
+        var explicitNull = await tool.ExecuteAsync(JsonSerializer.SerializeToElement(
+            new Dictionary<string, object?> { [field] = null }), UserId, default);
+        explicitNull.Should().BeEquivalentTo(result);
     }
 
     [Fact]

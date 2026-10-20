@@ -19,6 +19,29 @@ public class BulkCreateHabitsToolTests
     public BulkCreateHabitsToolTests() => _tool = new BulkCreateHabitsTool(_mediator);
 
     [Fact]
+    public async Task NullParent_CreatesTheSameRootsAsAbsentParent()
+    {
+        var commands = new List<BulkCreateHabitsCommand>();
+        _mediator.Send(Arg.Do<BulkCreateHabitsCommand>(commands.Add), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new BulkCreateResult([])));
+        (await Execute("""{"habits":[{"title":"Read"}]}""")).Success.Should().BeTrue();
+        (await Execute("""{"parent_habit_id":null,"habits":[{"title":"Read"}]}""")).Success.Should().BeTrue();
+        commands.Should().HaveCount(2);
+        commands[1].Should().BeEquivalentTo(commands[0]);
+        commands[1].Habits.Should().ContainSingle(item => item.Title == "Read");
+    }
+
+    [Theory]
+    [MemberData(nameof(OptionalParameterCases.Fields), typeof(BulkCreateHabitsTool), "habits.items", MemberType = typeof(OptionalParameterCases))]
+    public void OptionalNull_BulkItemHasSameDomainInputsAsAbsent(string field)
+    {
+        var absent = JsonSerializer.Deserialize<JsonElement>("""{"title":"Read"}""");
+        var explicitNull = JsonSerializer.SerializeToElement(new Dictionary<string, object?> { ["title"] = "Read", [field] = null });
+        BulkCreateHabitsTool.ParseBulkHabitItem(explicitNull).Should()
+            .BeEquivalentTo(BulkCreateHabitsTool.ParseBulkHabitItem(absent));
+    }
+
+    [Fact]
     public void Metadata_And_Schema_AreExposed()
     {
         _tool.Name.Should().Be("bulk_create_habits");

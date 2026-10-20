@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Orbit.Api.Extensions;
+using Orbit.Application.Chat.Tools;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
@@ -22,6 +23,7 @@ public class McpExecutorBridge(IAgentOperationExecutor operationExecutor)
         CancellationToken cancellationToken)
     {
         var argumentsElement = JsonSerializer.SerializeToElement(arguments, ArgumentSerializerOptions);
+        argumentsElement = OptionalToolArguments.NormalizeExternalClears(operationId, argumentsElement);
 
         var response = await operationExecutor.ExecuteAsync(new AgentExecuteOperationRequest(
             user.GetUserId(),

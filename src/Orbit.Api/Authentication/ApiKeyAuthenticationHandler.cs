@@ -2,7 +2,6 @@ using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
-using Microsoft.EntityFrameworkCore;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
@@ -32,7 +31,6 @@ public class ApiKeyAuthenticationHandler(
         using var scope = serviceProvider.CreateScope();
         var apiKeyRepository = scope.ServiceProvider.GetRequiredService<IGenericRepository<ApiKey>>();
         var payGate = scope.ServiceProvider.GetRequiredService<IPayGateService>();
-        var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
         var usageTracker = scope.ServiceProvider.GetRequiredService<IApiKeyUsageTracker>();
 
         var candidates = await apiKeyRepository.FindTrackedAsync(
@@ -45,33 +43,7 @@ public class ApiKeyAuthenticationHandler(
         if (candidate.HasExpired())
             return AuthenticateResult.Fail("API key expired.");
 
-        var verified = candidate.Verify(rawKey);
-        if (!verified && candidate.KeyHash.StartsWith("$2", StringComparison.Ordinal))
-        {
-            try
-            {
-                await unitOfWork.ExecuteInTransactionAsync(async token =>
-                {
-                    await unitOfWork.AcquireAdvisoryLockAsync($"api-key-upgrade:{candidate.Id}", token);
-                    await apiKeyRepository.ReloadAsync(candidate, token);
-                    if (candidate.IsRevoked || candidate.HasExpired())
-                        return;
-                    verified = candidate.Verify(rawKey);
-                    if (!verified && candidate.KeyHash.StartsWith("$2", StringComparison.Ordinal)
-                        && BCrypt.Net.BCrypt.Verify(rawKey, candidate.KeyHash))
-                    {
-                        candidate.UpgradeHash(rawKey);
-                        await unitOfWork.SaveChangesAsync(token);
-                        verified = true;
-                    }
-                }, Context.RequestAborted);
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                return AuthenticateResult.Fail("API key was revoked during verification.");
-            }
-        }
-        if (!verified)
+        if (!candidate.Verify(rawKey))
             return AuthenticateResult.Fail("Invalid API key.");
 
         var gateCheck = await payGate.CanReadApiKeys(candidate.UserId, Context.RequestAborted);

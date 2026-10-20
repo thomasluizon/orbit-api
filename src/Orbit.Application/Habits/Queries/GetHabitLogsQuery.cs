@@ -12,7 +12,11 @@ public record HabitLogResponse(
     decimal Value,
     DateTime CreatedAtUtc);
 
-public record GetHabitLogsQuery(Guid UserId, Guid HabitId) : IRequest<Result<IReadOnlyList<HabitLogResponse>>>;
+public record GetHabitLogsQuery(
+    Guid UserId,
+    Guid HabitId,
+    DateOnly? From = null,
+    DateOnly? To = null) : IRequest<Result<IReadOnlyList<HabitLogResponse>>>;
 
 public class GetHabitLogsQueryHandler(
     IGenericRepository<Habit> habitRepository,
@@ -28,14 +32,21 @@ public class GetHabitLogsQueryHandler(
         if (habit is null)
             return Result.Failure<IReadOnlyList<HabitLogResponse>>(ErrorMessages.HabitNotFound);
 
-        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-        var cutoff = userToday.AddDays(-AppConstants.HabitLogsLookbackDays);
-
-        var logs = await habitLogReader.ReadRecentLogsAsync(
-            request.HabitId,
-            cutoff,
-            AppConstants.MaxHabitLogsReturned,
-            cancellationToken);
+        IReadOnlyList<HabitLog> logs;
+        if (request.From is { } from && request.To is { } to)
+        {
+            logs = await habitLogReader.ReadRangeLogsAsync(request.HabitId, from, to, cancellationToken);
+        }
+        else
+        {
+            var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+            var cutoff = userToday.AddDays(-AppConstants.HabitLogsLookbackDays);
+            logs = await habitLogReader.ReadRecentLogsAsync(
+                request.HabitId,
+                cutoff,
+                AppConstants.MaxHabitLogsReturned,
+                cancellationToken);
+        }
 
         var result = logs
             .Select(l => new HabitLogResponse(l.Id, l.Date, l.Value, l.CreatedAtUtc))

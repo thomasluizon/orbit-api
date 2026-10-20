@@ -59,7 +59,7 @@ public class ChatToolMetadataTests
         var updateGoalStatusTool = new UpdateGoalStatusTool(Repo<Goal>(), goalCompletionService, unitOfWork);
         var updateGoalTool = new UpdateGoalTool(Repo<Goal>(), unitOfWork);
         var updateHabitTool = new UpdateHabitTool(
-            Repo<Habit>(), userDateService, unitOfWork, Substitute.For<IPayGateService>());
+            Repo<Habit>(), userDateService, mediator);
         var listTagsTool = new ListTagsTool(mediator);
         var createTagTool = new CreateTagTool(mediator);
         var updateTagTool = new UpdateTagTool(mediator);
@@ -79,8 +79,8 @@ public class ChatToolMetadataTests
         AssertTool(bulkUpdateHabitEmojisTool, "bulk_update_habit_emojis", "emojis", "infer_from_title");
         AssertTool(bulkUpdateHabitsTool, "bulk_update_habits", "complete", "updates");
         AssertTool(bulkRescheduleHabitsTool, "bulk_reschedule_habits", "reschedule", "due_date");
-        AssertTool(bulkLogHabitsTool, "bulk_log_habits", "multiple", "habit_ids");
-        AssertTool(bulkSkipHabitsTool, "bulk_skip_habits", "multiple", "habit_ids");
+        AssertTool(bulkLogHabitsTool, "bulk_log_habits", "matching", "habit_ids");
+        AssertTool(bulkSkipHabitsTool, "bulk_skip_habits", "matching", "habit_ids");
         AssertTool(createGoalTool, "create_goal", "goal", "goal_type");
         AssertTool(createHabitTool, "create_habit", "habit", "checklist_items");
         AssertTool(createSubHabitTool, "create_sub_habit", "sub-habit", "parent_habit_id");

@@ -575,6 +575,13 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasData(
                         new
                         {
+                            Key = "astra_eval_trace",
+                            Description = "Opt-in tool-call traces for Astra evaluation accounts",
+                            Enabled = false,
+                            UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
                             Key = "redesign",
                             Description = "Serve the redesigned web and Android builds to this account",
                             Enabled = false,
@@ -1927,6 +1934,9 @@ namespace Orbit.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int>("ArgumentSchemaVersion")
+                        .HasColumnType("integer");
+
                     b.Property<string>("ArgumentsJson")
                         .IsRequired()
                         .HasColumnType("jsonb");
@@ -2679,8 +2689,9 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<DateOnly?>("PreGapLastActiveDate")
                         .HasColumnType("date");
 
-                    b.Property<bool?>("ProactiveAstraEnabled")
-                        .HasColumnType("boolean");
+                    b.Property<bool>("ProactiveAstraEnabled")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<bool>("PublicProfileShowAchievements")
                         .HasColumnType("boolean");

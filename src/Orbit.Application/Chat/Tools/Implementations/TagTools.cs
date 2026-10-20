@@ -36,7 +36,7 @@ public class CreateTagTool(IMediator mediator) : IAiTool, IArgumentCheckTool
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            name = new { type = JsonSchemaTypes.String, description = "Tag name" },
+            name = new { type = JsonSchemaTypes.String },
             color = new { type = JsonSchemaTypes.String, description = "Hex color code, e.g. #FF5733" }
         },
         required = new[] { "name", "color" }
@@ -76,7 +76,7 @@ public class UpdateTagTool(IMediator mediator) : IAiTool, IArgumentCheckTool
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            tag_id = new { type = JsonSchemaTypes.String, description = "ID of the tag to update" },
+            tag_id = new { type = JsonSchemaTypes.String },
             name = new { type = JsonSchemaTypes.String, description = "New tag name" },
             color = new { type = JsonSchemaTypes.String, description = "New hex color code, e.g. #FF5733" }
         },
@@ -121,7 +121,7 @@ public class DeleteTagTool(IMediator mediator) : IAiTool, IArgumentCheckTool
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            tag_id = new { type = JsonSchemaTypes.String, description = "ID of the tag to delete" }
+            tag_id = new { type = JsonSchemaTypes.String }
         },
         required = new[] { "tag_id" }
     };

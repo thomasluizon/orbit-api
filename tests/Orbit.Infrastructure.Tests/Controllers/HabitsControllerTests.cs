@@ -38,6 +38,29 @@ public class HabitsControllerTests
         };
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BulkMoveHabitParent_ReturnsOkWithPerItemResults(bool promote)
+    {
+        var habitId = Guid.NewGuid();
+        var foreignId = Guid.NewGuid();
+        Guid? parentId = promote ? null : Guid.NewGuid();
+        var response = new BulkMoveHabitParentResult([
+            new(0, BulkItemStatus.Success, habitId),
+            new(1, BulkItemStatus.Failed, foreignId, ErrorMessages.HabitNotFound.Message, ErrorCodes.HabitNotFound)
+        ]);
+        _mediator.Send(Arg.Any<BulkMoveHabitParentCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(response));
+
+        var result = await _controller.BulkMoveHabitParent(new([habitId, foreignId], parentId), CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(response);
+        await _mediator.Received(1).Send(Arg.Is<BulkMoveHabitParentCommand>(command =>
+            command.UserId == UserId && command.ParentId == parentId
+            && command.HabitIds.SequenceEqual(new[] { habitId, foreignId })), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task GetHabits_Success_ReturnsOk()
     {
@@ -329,6 +352,21 @@ public class HabitsControllerTests
             .Returns(Result.Failure<IReadOnlyList<HabitLogResponse>>("Error"));
         var result = await _controller.GetLogs(Guid.NewGuid(), CancellationToken.None);
         result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
+    }
+
+    [Fact]
+    public async Task GetLogs_Range_ForwardsUserHabitAndDates()
+    {
+        var habitId = Guid.NewGuid();
+        var from = new DateOnly(2025, 1, 1);
+        var to = new DateOnly(2025, 1, 31);
+        _mediator.Send(Arg.Any<GetHabitLogsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success<IReadOnlyList<HabitLogResponse>>([]));
+
+        var result = await _controller.GetLogs(habitId, CancellationToken.None, from, to);
+
+        result.Should().BeOfType<OkObjectResult>();
+        await _mediator.Received(1).Send(new GetHabitLogsQuery(UserId, habitId, from, to), CancellationToken.None);
     }
 
     [Fact]

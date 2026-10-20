@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Orbit.Domain.Common;
+using Orbit.Application.Chat.Tools;
 using Orbit.Domain.Models;
 
 namespace Orbit.Application.Chat;
@@ -41,6 +42,16 @@ public static class AgentArgumentPreview
     {
         if (arguments.ValueKind != JsonValueKind.Object)
             return null;
+
+        if (editableSchema.ValueKind == JsonValueKind.Object)
+            arguments = OptionalToolArguments.OmitOptionalNulls(arguments, editableSchema);
+        if (operationId is "update_habit" or "update_goal")
+        {
+            var (prepared, error) = OptionalToolArguments.ResolveClears(arguments, OptionalToolArguments.ClearableFields(operationId));
+            if (error is not null)
+                return null;
+            arguments = prepared;
+        }
 
         var itemId = target is null ? "0" : target.EntityId.ToString();
         var entityId = target?.EntityId ?? Guid.Empty;

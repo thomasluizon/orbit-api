@@ -1,12 +1,18 @@
+using System.Data.Common;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using NSubstitute;
+using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
+using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Persistence;
+using Xunit.Abstractions;
 
 namespace Orbit.Infrastructure.Tests.Persistence;
 
-public class HabitLogReaderTests
+public class HabitLogReaderTests(ITestOutputHelper output)
 {
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly DateOnly Anchor = new(2026, 7, 1);
@@ -23,6 +29,107 @@ public class HabitLogReaderTests
     {
         typeof(HabitLog).GetProperty(nameof(HabitLog.CreatedAtUtc))!.SetValue(log, createdAtUtc);
         return log;
+    }
+
+    [Fact]
+    public async Task Handle_ExplicitPastRange_ReturnsOnlyInclusiveRangeWithoutLegacyCap()
+    {
+        await using var context = CreateInMemoryDbContext();
+        var habit = RecurringHabit();
+        var other = RecurringHabit();
+        var from = new DateOnly(2025, 1, 1);
+        var to = new DateOnly(2025, 1, 31);
+        var createdAtUtc = new DateTime(2025, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+        var expected = Enumerable.Range(0, 1001)
+            .Select(i => HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, from, 1, i, createdAtUtc.AddSeconds(i)))
+            .ToList();
+        expected.Add(HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, to, 1, 0, createdAtUtc));
+        var deleted = HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, from, 1, 1002, createdAtUtc);
+        deleted.SoftDelete();
+        context.Habits.AddRange(habit, other);
+        context.HabitLogs.AddRange(expected);
+        context.HabitLogs.AddRange(
+            deleted,
+            HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, from.AddDays(-1), 1, 0, createdAtUtc),
+            HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, to.AddDays(1), 1, 0, createdAtUtc),
+            HabitLog.FromScheduleRead(Guid.NewGuid(), other.Id, from, 1, 0, createdAtUtc));
+        await context.SaveChangesAsync();
+        var dates = Substitute.For<IUserDateService>();
+        dates.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Anchor);
+        var handler = new GetHabitLogsQueryHandler(
+            new GenericRepository<Habit>(context), new HabitLogReader(context), dates);
+
+        var result = await handler.Handle(new GetHabitLogsQuery(UserId, habit.Id, from, to), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Select(log => log.Id).Should().Equal(expected
+            .OrderByDescending(log => log.Date).ThenByDescending(log => log.CreatedAtUtc).Select(log => log.Id));
+    }
+
+    [Fact]
+    public async Task ReadRangeLogsAsync_UsesExistingDateIndex()
+    {
+        var plan = new RangePlanInterceptor();
+        using var factory = new SqliteOrbitDbContextFactory(plan);
+        var user = User.Create("Range User", "range@example.com").Value;
+        var from = new DateOnly(2025, 1, 1);
+        var to = new DateOnly(2025, 1, 31);
+        var habit = Habit.Create(new HabitCreateParams(user.Id, "Range", FrequencyUnit.Day, 1, from)).Value;
+        Log(habit, from.AddDays(-1));
+        Log(habit, from);
+        Log(habit, to);
+        Log(habit, to.AddDays(1));
+        factory.Context.Users.Add(user);
+        factory.Context.Habits.Add(habit);
+        await factory.Context.SaveChangesAsync();
+        plan.Enabled = true;
+
+        var result = await new HabitLogReader(factory.Context).ReadRangeLogsAsync(habit.Id, from, to);
+
+        output.WriteLine(plan.Sql);
+        output.WriteLine(plan.Plan);
+        result.Select(log => log.Date).Should().Equal(to, from);
+        plan.Plan.Should().Contain("IX_HabitLogs_HabitId_Date");
+    }
+
+    private sealed class RangePlanInterceptor : DbCommandInterceptor
+    {
+        public bool Enabled { get; set; }
+        public string Sql { get; private set; } = "";
+        public string Plan { get; private set; } = "";
+
+        public override async ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (!Enabled)
+                return result;
+
+            Sql = command.CommandText;
+            await using var explain = command.Connection!.CreateCommand();
+            explain.CommandText = "EXPLAIN QUERY PLAN " + command.CommandText;
+            foreach (DbParameter parameter in command.Parameters)
+            {
+                var copy = explain.CreateParameter();
+                copy.ParameterName = parameter.ParameterName;
+                copy.Value = parameter.Value;
+                copy.DbType = parameter.DbType;
+                explain.Parameters.Add(copy);
+            }
+
+            await using var reader = await explain.ExecuteReaderAsync(cancellationToken);
+            var rows = new List<string>();
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var values = new object[reader.FieldCount];
+                reader.GetValues(values);
+                rows.Add(string.Join(" | ", values));
+            }
+            Plan = string.Join(Environment.NewLine, rows);
+            return result;
+        }
     }
 
     [Fact]

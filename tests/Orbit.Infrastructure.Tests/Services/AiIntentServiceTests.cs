@@ -11,110 +11,12 @@ namespace Orbit.Infrastructure.Tests.Services;
 
 /// <summary>
 /// Tests the pure helper methods of AiIntentService:
-/// NormalizeSchemaTypes, ConvertToSdkTool, and SerializeOptions behavior.
+/// Tool conversion and serialization options.
 /// </summary>
 public class AiIntentServiceTests
 {
     private static readonly BindingFlags PrivateStatic =
         BindingFlags.NonPublic | BindingFlags.Static;
-
-    [Fact]
-    public void NormalizeSchemaTypes_UppercaseTypes_ConvertsToLowercase()
-    {
-        var input = """{"type": "OBJECT", "properties": {"name": {"type": "STRING"}}}""";
-        var result = InvokeNormalizeSchemaTypes(input);
-
-        result.Should().Contain("\"object\"");
-        result.Should().Contain("\"string\"");
-        result.Should().NotContain("\"OBJECT\"");
-        result.Should().NotContain("\"STRING\"");
-    }
-
-    [Fact]
-    public void NormalizeSchemaTypes_LowercaseTypes_RemainsUnchanged()
-    {
-        var input = """{"type": "object", "items": {"type": "string"}}""";
-        var result = InvokeNormalizeSchemaTypes(input);
-
-        result.Should().Be(input);
-    }
-
-    [Fact]
-    public void NormalizeSchemaTypes_MixedTypes_NormalizesAll()
-    {
-        var input = """{"type": "ARRAY", "items": {"type": "NUMBER"}, "meta": {"type": "BOOLEAN"}, "id": {"type": "INTEGER"}}""";
-        var result = InvokeNormalizeSchemaTypes(input);
-
-        result.Should().Contain("\"array\"");
-        result.Should().Contain("\"number\"");
-        result.Should().Contain("\"boolean\"");
-        result.Should().Contain("\"integer\"");
-    }
-
-    [Fact]
-    public void NormalizeSchemaTypes_NoTypeFields_RemainsUnchanged()
-    {
-        var input = """{"name": "test", "value": 42}""";
-        var result = InvokeNormalizeSchemaTypes(input);
-
-        result.Should().Be(input);
-    }
-
-    [Fact]
-    public void NormalizeSchemaTypes_EmptyJson_RemainsUnchanged()
-    {
-        var input = "{}";
-        var result = InvokeNormalizeSchemaTypes(input);
-
-        result.Should().Be("{}");
-    }
-
-    [Theory]
-    [InlineData("OBJECT", "object")]
-    [InlineData("STRING", "string")]
-    [InlineData("ARRAY", "array")]
-    [InlineData("NUMBER", "number")]
-    [InlineData("BOOLEAN", "boolean")]
-    [InlineData("INTEGER", "integer")]
-    public void NormalizeSchemaTypes_EachType_NormalizesIndividually(string uppercase, string expected)
-    {
-        var input = "{\"type\": \"" + uppercase + "\"}";
-        var result = InvokeNormalizeSchemaTypes(input);
-
-        result.Should().Contain($"\"{expected}\"");
-    }
-
-    [Fact]
-    public void NormalizeSchemaTypes_TypeInValue_NotInTypeField_Unchanged()
-    {
-        var input = """{"name": "OBJECT", "desc": "STRING value"}""";
-        var result = InvokeNormalizeSchemaTypes(input);
-
-        result.Should().Be(input);
-    }
-
-    [Fact]
-    public void NormalizeSchemaTypes_DeeplyNested_NormalizesAll()
-    {
-        var input = """{"type": "OBJECT", "properties": {"items": {"type": "ARRAY", "items": {"type": "OBJECT", "properties": {"value": {"type": "NUMBER"}}}}}}""";
-        var result = InvokeNormalizeSchemaTypes(input);
-
-        result.Should().NotContain("OBJECT");
-        result.Should().NotContain("ARRAY");
-        result.Should().NotContain("NUMBER");
-        result.Should().Contain("\"object\"");
-        result.Should().Contain("\"array\"");
-        result.Should().Contain("\"number\"");
-    }
-
-    [Fact]
-    public void NormalizeSchemaTypes_ExtraWhitespace_StillMatches()
-    {
-        var input = """{"type"  :  "STRING"}""";
-        var result = InvokeNormalizeSchemaTypes(input);
-
-        result.Should().Contain("\"string\"");
-    }
 
     [Fact]
     public void ConvertToSdkTool_ValidDeclaration_ReturnsChatTool()
@@ -125,10 +27,10 @@ public class AiIntentServiceTests
             description = "Creates a new habit",
             parameters = new
             {
-                type = "OBJECT",
+                type = "object",
                 properties = new
                 {
-                    title = new { type = "STRING", description = "Habit title" }
+                    title = new { type = "string", description = "Habit title" }
                 }
             }
         };
@@ -191,17 +93,17 @@ public class AiIntentServiceTests
             description = "Update an existing habit",
             parameters = new
             {
-                type = "OBJECT",
+                type = "object",
                 properties = new
                 {
-                    habit_id = new { type = "STRING", description = "Habit ID" },
-                    title = new { type = "STRING", description = "New title" },
-                    frequency_quantity = new { type = "INTEGER", description = "Quantity" },
-                    is_bad_habit = new { type = "BOOLEAN", description = "Is bad habit" },
+                    habit_id = new { type = "string", description = "Habit ID" },
+                    title = new { type = "string", description = "New title" },
+                    frequency_quantity = new { type = "integer", description = "Quantity" },
+                    is_bad_habit = new { type = "boolean", description = "Is bad habit" },
                     days = new
                     {
-                        type = "ARRAY",
-                        items = new { type = "STRING" }
+                        type = "array",
+                        items = new { type = "string" }
                     }
                 },
                 required = new[] { "habit_id" }
@@ -214,7 +116,7 @@ public class AiIntentServiceTests
     }
 
     [Fact]
-    public void ConvertToSdkTool_ComplexSchema_AllTypesNormalized()
+    public void ConvertToSdkTool_ComplexSchema_ReturnsTool()
     {
         var declaration = new
         {
@@ -222,22 +124,22 @@ public class AiIntentServiceTests
             description = "Create a habit",
             parameters = new
             {
-                type = "OBJECT",
+                type = "object",
                 properties = new
                 {
-                    title = new { type = "STRING" },
-                    count = new { type = "NUMBER" },
+                    title = new { type = "string" },
+                    count = new { type = "number" },
                     items = new
                     {
-                        type = "ARRAY",
+                        type = "array",
                         items = new
                         {
-                            type = "OBJECT",
+                            type = "object",
                             properties = new
                             {
-                                text = new { type = "STRING" },
-                                done = new { type = "BOOLEAN" },
-                                order = new { type = "INTEGER" }
+                                text = new { type = "string" },
+                                done = new { type = "boolean" },
+                                order = new { type = "integer" }
                             }
                         }
                     }
@@ -250,31 +152,6 @@ public class AiIntentServiceTests
     }
 
     [Fact]
-    public void NormalizeSchemaTypes_MultipleOccurrencesOfSameType_AllNormalized()
-    {
-        var input = """{"type": "STRING", "nested": {"type": "STRING", "inner": {"type": "STRING"}}}""";
-        var result = InvokeNormalizeSchemaTypes(input);
-
-        result.Should().NotContain("STRING");
-        var count = result.Split("\"string\"").Length - 1;
-        count.Should().Be(3);
-    }
-
-    [Fact]
-    public void NormalizeSchemaTypes_AdjacentTypeFields_AllNormalized()
-    {
-        var input = """{"a": {"type": "OBJECT"}, "b": {"type": "ARRAY"}, "c": {"type": "STRING"}}""";
-        var result = InvokeNormalizeSchemaTypes(input);
-
-        result.Should().Contain("\"object\"");
-        result.Should().Contain("\"array\"");
-        result.Should().Contain("\"string\"");
-        result.Should().NotContain("OBJECT");
-        result.Should().NotContain("ARRAY");
-        result.Should().NotContain("STRING");
-    }
-
-    [Fact]
     public void ConvertToSdkTool_PascalCaseProperties_SerializedAsCamelCase()
     {
         var declaration = new
@@ -283,11 +160,11 @@ public class AiIntentServiceTests
             description = "Test",
             parameters = new
             {
-                type = "OBJECT",
+                type = "object",
                 properties = new
                 {
-                    FirstName = new { type = "STRING" },
-                    LastName = new { type = "STRING" }
+                    FirstName = new { type = "string" },
+                    LastName = new { type = "string" }
                 }
             }
         };
@@ -310,17 +187,6 @@ public class AiIntentServiceTests
     }
 
     [Fact]
-    public void NormalizeSchemaTypes_WithDescriptions_OnlyChangesTypeFields()
-    {
-        var input = """{"type": "OBJECT", "description": "An OBJECT that does STRING things", "properties": {"name": {"type": "STRING"}}}""";
-        var result = InvokeNormalizeSchemaTypes(input);
-
-        result.Should().Contain("\"object\"");
-        result.Should().Contain("\"string\"");
-        result.Should().Contain("An OBJECT that does STRING things");
-    }
-
-    [Fact]
     public void ConvertToSdkTool_WithEnumProperty_ReturnsTool()
     {
         var declaration = new
@@ -329,12 +195,12 @@ public class AiIntentServiceTests
             description = "Create",
             parameters = new
             {
-                type = "OBJECT",
+                type = "object",
                 properties = new
                 {
                     frequency_unit = new
                     {
-                        type = "STRING",
+                        type = "string",
                         @enum = new[] { "Day", "Week", "Month", "Year" }
                     }
                 }
@@ -343,24 +209,6 @@ public class AiIntentServiceTests
 
         var result = InvokeConvertToSdkTool(declaration);
         result.Should().NotBeNull();
-    }
-
-    [Fact]
-    public void NormalizeSchemaTypes_CompactJson_NormalizesCorrectly()
-    {
-        var input = """{"type":"BOOLEAN"}""";
-        var result = InvokeNormalizeSchemaTypes(input);
-
-        result.Should().Contain("\"boolean\"");
-    }
-
-    [Fact]
-    public void NormalizeSchemaTypes_MixedCaseNotInEnum_Unchanged()
-    {
-        var input = """{"type": "Object"}""";
-        var result = InvokeNormalizeSchemaTypes(input);
-
-        result.Should().Contain("\"Object\"");
     }
 
     [Fact]
@@ -421,11 +269,18 @@ public class AiIntentServiceTests
         retainedContents.Should().OnlyContain(content => history.Any(message => message.Content == content));
     }
 
-    private static string InvokeNormalizeSchemaTypes(string json)
+    [Fact]
+    public void BuildHistoryTranscript_FortyValidMessages_SendsOnlyNewestTwenty()
     {
-        var method = typeof(AiIntentService)
-            .GetMethod("NormalizeSchemaTypes", PrivateStatic)!;
-        return (string)method.Invoke(null, [json])!;
+        var history = Enumerable.Range(0, 40)
+            .Select(index => new ChatHistoryMessage("user", $"history-{index:D2}"))
+            .ToList();
+
+        var transcript = AiIntentService.BuildHistoryTranscript(history, NullLogger<AiIntentService>.Instance);
+
+        transcript.Should().Contain("history-20").And.Contain("history-39");
+        transcript.Should().NotContain("history-19");
+        AppConstants.MaxChatHistoryMessages.Should().Be(40);
     }
 
     private static object? InvokeConvertToSdkTool(object declaration)

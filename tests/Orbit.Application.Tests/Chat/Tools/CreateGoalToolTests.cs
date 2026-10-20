@@ -24,6 +24,19 @@ public class CreateGoalToolTests
         _tool = new CreateGoalTool(_goalRepo, _unitOfWork, _habitRepo);
     }
 
+    [Theory]
+    [MemberData(nameof(OptionalParameterCases.Fields), typeof(CreateGoalTool), "", MemberType = typeof(OptionalParameterCases))]
+    public async Task OptionalNull_CreatesSameGoalAsAbsent(string field)
+    {
+        var saved = new List<Goal>();
+        await _goalRepo.AddAsync(Arg.Do<Goal>(saved.Add), Arg.Any<CancellationToken>());
+        (await Execute("""{"title":"Read"}""")).Success.Should().BeTrue();
+        (await Execute($$"""{"title":"Read","{{field}}":null}""")).Success.Should().BeTrue();
+        saved.Should().HaveCount(2);
+        saved[1].Should().BeEquivalentTo(saved[0], options => options.ComparingByMembers<Goal>()
+            .Excluding(goal => goal.Id).Excluding(goal => goal.CreatedAtUtc).Excluding(goal => goal.UpdatedAtUtc));
+    }
+
     [Fact]
     public async Task SuccessfulCreation_ReturnsSuccessWithTitle()
     {

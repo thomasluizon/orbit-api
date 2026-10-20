@@ -40,6 +40,26 @@ public class BulkLogHabitsToolTests
             });
     }
 
+    [Theory]
+    [MemberData(nameof(OptionalParameterCases.Fields), typeof(BulkLogHabitsTool), "", MemberType = typeof(OptionalParameterCases))]
+    public async Task OptionalNull_LogsSameHabitsAndDatesAsAbsent(string field)
+    {
+        var habit = CreateHabit("Read");
+        SetupHabitsFound(habit);
+        var commands = new List<BulkLogHabitsCommand>();
+        _mediator.Send(Arg.Do<BulkLogHabitsCommand>(commands.Add), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new BulkLogResult([])));
+        var body = field == "habit_ids"
+            ? new Dictionary<string, object?> { ["filter"] = new { all = true } }
+            : new Dictionary<string, object?> { ["habit_ids"] = new[] { habit.Id } };
+        (await Execute(JsonSerializer.Serialize(body))).Success.Should().BeTrue();
+        body[field] = null;
+        (await Execute(JsonSerializer.Serialize(body))).Success.Should().BeTrue();
+        commands.Should().HaveCount(2);
+        commands[1].Should().BeEquivalentTo(commands[0]);
+        commands[1].Items.Should().ContainSingle(item => item.HabitId == habit.Id && item.Date == Today);
+    }
+
     [Fact]
     public async Task LogMultiple_ReturnsHonestCounts()
     {

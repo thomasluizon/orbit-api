@@ -17,8 +17,8 @@ public class ManageFeatureFlagsTool(IMediator mediator) : IAiTool, IMcpOnlyAiToo
         {
             action = new { type = JsonSchemaTypes.String, @enum = FeatureFlagActions.Writes },
             key = new { type = JsonSchemaTypes.String },
-            emails = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String }, nullable = true },
-            description = new { type = JsonSchemaTypes.String, nullable = true }
+            emails = new { type = new[] { JsonSchemaTypes.Array, "null" }, items = new { type = JsonSchemaTypes.String } },
+            description = new { type = new[] { JsonSchemaTypes.String, "null" } }
         },
         required = new[] { "action", "key" }
     };

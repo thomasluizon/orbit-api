@@ -24,6 +24,7 @@ public partial class ProcessUserChatCommandHandler
         long totalReportedTokens = initialResponse.ReportedTokenCount;
         var tokenBudgetExceeded = totalReportedTokens > AppConstants.MaxAiRequestTotalTokens;
         var hadToolFailure = false;
+        var hasUnexecutedCalls = aiResponse.HasToolCalls;
 
         if (tokenBudgetExceeded)
         {
@@ -41,6 +42,7 @@ public partial class ProcessUserChatCommandHandler
             if (request.StreamSink is not null)
                 await request.StreamSink(ChatStreamEvent.Round(iteration));
 
+            hasUnexecutedCalls = false;
             var roundResult = await ProcessToolCallsAsync(
                 aiResponse,
                 request,
@@ -54,6 +56,7 @@ public partial class ProcessUserChatCommandHandler
                 return new ToolLoopResult(aiResponse, iteration, tokenBudgetExceeded, hadToolFailure, roundResult.ProviderError);
 
             aiResponse = roundResult.Response;
+            hasUnexecutedCalls = aiResponse.HasToolCalls;
             if (roundResult.HadToolFailure)
             {
                 hadToolFailure = true;
@@ -70,6 +73,12 @@ public partial class ProcessUserChatCommandHandler
                     AppConstants.MaxAiRequestTotalTokens,
                     iteration);
             }
+        }
+
+        if (hasUnexecutedCalls && executionResults.EvalTrace is { } remainingTrace)
+        {
+            foreach (var call in aiResponse.ToolCalls!)
+                remainingTrace.Record(call, null, null, ai.ToolRegistry.GetTool(call.Name) is IMcpOnlyAiTool);
         }
 
         return new ToolLoopResult(
@@ -112,7 +121,19 @@ public partial class ProcessUserChatCommandHandler
 
         if (askCall is not null)
             orderedCalls.Add(askCall);
+        orderedCalls = orderedCalls.Select(call => ai.ToolRegistry.GetTool(call.Name) is { } tool
+            ? call with { Args = OptionalToolArguments.OmitOptionalNulls(call.Args, tool.GetParameterSchema()) }
+            : call).ToList();
         var outcomesByCallId = await ExecuteToolCallsAsync(orderedCalls, request, executionResults, language, cancellationToken);
+        if (executionResults.EvalTrace is { } evalTrace)
+        {
+            foreach (var call in aiResponse.ToolCalls!)
+            {
+                outcomesByCallId.TryGetValue(call.Id, out var outcome);
+                evalTrace.Record(call, outcome?.ToolResult, outcome?.TraceStatus ?? outcome?.OperationResult?.Status,
+                    ai.ToolRegistry.GetTool(call.Name) is IMcpOnlyAiTool);
+            }
+        }
 
         var toolResults = new List<AiToolCallResult>(orderedCalls.Count);
         var hadToolFailure = false;
@@ -389,7 +410,8 @@ public partial class ProcessUserChatCommandHandler
                 null,
                 null,
                 executionResponse.PolicyDenial,
-                executionResponse.PendingOperation),
+                executionResponse.PendingOperation,
+                AgentOperationStatus.PendingConfirmation),
             AgentOperationStatus.Denied or AgentOperationStatus.UnsupportedByPolicy => new ToolCallOutcome(
                 toolResult,
                 tool.IsReadOnly ? null : new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: toolResult.Error).WithToolResultMessage(call),
@@ -600,5 +622,6 @@ public partial class ProcessUserChatCommandHandler
         ActionResult? ActionResult,
         AgentOperationResult? OperationResult,
         AgentPolicyDenial? PolicyDenial,
-        PendingAgentOperation? PendingOperation);
+        PendingAgentOperation? PendingOperation,
+        AgentOperationStatus? TraceStatus = null);
 }

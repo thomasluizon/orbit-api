@@ -509,6 +509,7 @@ public class OrbitDbContext : DbContext
             entity.Property(item => item.Summary).HasMaxLength(500);
             entity.Property(item => item.OperationFingerprint).HasMaxLength(256);
             entity.Property(item => item.PreviewFingerprint).HasMaxLength(256);
+            entity.Property(item => item.ArgumentSchemaVersion).IsRequired();
             entity.Property(item => item.RevisionNumber).IsConcurrencyToken();
             entity.Property(item => item.ConfirmationTokenHash).HasMaxLength(64);
             entity.Property(item => item.ConsumedAtUtc).IsConcurrencyToken();
@@ -661,6 +662,7 @@ public class OrbitDbContext : DbContext
             entity.Property(f => f.PlanRequirement).HasMaxLength(50);
 
             entity.HasData(
+                new { Key = "astra_eval_trace", Enabled = false, PlanRequirement = (string?)null, Description = (string?)"Opt-in tool-call traces for Astra evaluation accounts", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "redesign", Enabled = false, PlanRequirement = (string?)null, Description = (string?)"Serve the redesigned web and Android builds to this account", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "offline_mode", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Enable offline mode with background sync", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "astra_conversation_recording", Enabled = false, PlanRequirement = (string?)null, Description = (string?)"Record encrypted Astra conversations for failure diagnosis for 30 days after privacy disclosure is published", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
@@ -856,6 +858,7 @@ public class OrbitDbContext : DbContext
 
             entity.Property(u => u.StripeRenewalStoppedByDeletion).HasDefaultValue(false);
             entity.Property(u => u.PlayRenewalStoppedByDeletion).HasDefaultValue(false);
+            entity.Property(u => u.ProactiveAstraEnabled).HasDefaultValue(true).ValueGeneratedNever();
             entity.Property(u => u.Handle).HasMaxLength(DomainConstants.HandleMaxLength);
             entity.Property(u => u.PublicProfileSlug).HasMaxLength(32);
 

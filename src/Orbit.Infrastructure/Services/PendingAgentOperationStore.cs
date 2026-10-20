@@ -31,6 +31,7 @@ public class PendingAgentOperationStore(
 
         var existing = dbContext.PendingAgentOperations
             .Where(item =>
+                item.ArgumentSchemaVersion == PendingAgentOperationState.CurrentArgumentSchemaVersion &&
                 item.UserId == userId &&
                 item.CapabilityId == capability.Id &&
                 item.OperationFingerprint == operationFingerprint &&
@@ -65,7 +66,8 @@ public class PendingAgentOperationStore(
         var entity = dbContext.PendingAgentOperations
             .FirstOrDefault(item => item.Id == pendingOperationId && item.UserId == userId);
 
-        if (entity is null || entity.IsExpired(DateTime.UtcNow) || entity.ConsumedAtUtc.HasValue)
+        if (entity is null || entity.ArgumentSchemaVersion != PendingAgentOperationState.CurrentArgumentSchemaVersion
+            || entity.IsExpired(DateTime.UtcNow) || entity.ConsumedAtUtc.HasValue)
             return null;
 
         var confirmationToken = GenerateToken();
@@ -101,7 +103,8 @@ public class PendingAgentOperationStore(
             parsedArguments,
             entity.Surface,
             entity.ConfirmationRequirement,
-            entity.PreviewFingerprint);
+            entity.PreviewFingerprint,
+            entity.ArgumentSchemaVersion);
     }
 
     public IReadOnlyList<PendingHabitCreation> GetPendingHabitCreations(Guid userId)
@@ -178,7 +181,8 @@ public class PendingAgentOperationStore(
         var entity = dbContext.PendingAgentOperations.FirstOrDefault(item =>
             item.Id == pendingOperationId && item.UserId == userId);
         var checkedAtUtc = DateTime.UtcNow;
-        if (entity is null || entity.OperationFingerprint != expectedFingerprint
+        if (entity is null || entity.ArgumentSchemaVersion != PendingAgentOperationState.CurrentArgumentSchemaVersion
+            || entity.OperationFingerprint != expectedFingerprint
             || !entity.Revise(argumentsJson, operationFingerprint, previewFingerprint, checkedAtUtc))
             return false;
 
@@ -225,7 +229,7 @@ public class PendingAgentOperationStore(
             && item.ConsumedAtUtc == null && item.ExpiresAtUtc > checkedAtUtc);
         return entity is null ? null : new PendingAgentOperationExecution(entity.Id, entity.CapabilityId,
             entity.OperationId, ParseArguments(entity.ArgumentsJson), entity.Surface,
-            entity.ConfirmationRequirement, entity.PreviewFingerprint);
+            entity.ConfirmationRequirement, entity.PreviewFingerprint, entity.ArgumentSchemaVersion);
     }
 
     public bool TryConsumeFreshConfirmation(

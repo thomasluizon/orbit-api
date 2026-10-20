@@ -26,9 +26,16 @@ public class FeatureFlagAccountsMigrationTests
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
 
-        differences.Should().HaveCount(44);
+        differences.Should().HaveCount(45);
         ExpandHabitScheduleAndStartDateMigrationTests.AssertAiSecurityAdditions(differences);
+        ExpandHabitScheduleAndStartDateMigrationTests.AssertEvalTraceSeed(differences);
         ConversationMigrationTests.AssertConversationExpansion(differences);
+        var schemaVersion = differences.OfType<AddColumnOperation>().Should()
+            .ContainSingle(column => column.Table == "PendingAgentOperations" && column.Name == "ArgumentSchemaVersion").Subject;
+        schemaVersion.ClrType.Should().Be(typeof(int));
+        schemaVersion.IsNullable.Should().BeFalse();
+        schemaVersion.DefaultValue.Should().Be(0);
+
         var owedCancellations = differences.OfType<CreateTableOperation>()
             .Should().ContainSingle(table => table.Name == "OwedSubscriptionCancellations").Subject;
         owedCancellations.Name.Should().Be("OwedSubscriptionCancellations");
@@ -99,8 +106,16 @@ public class FeatureFlagAccountsMigrationTests
             "20261019213159_HardenMcpOAuthState",
             "20261019213536_AddDailyAiSafetyBudget",
             "20261019223729_TrackMcpRefreshTokenFamilies",
-            "20261020005707_PriceDailyAiBudgetsInUsd");
-        context.Database.GetMigrations().Last().Should().EndWith("_PersistConversationTurns");
+            "20261020005707_PriceDailyAiBudgetsInUsd",
+            "20261020014306_PersistConversationTurns",
+            "20261020023110_VersionPendingToolArguments",
+            "20261020031718_AddAstraEvalTraceFlag",
+            "20261020033359_RestoreRequiredProactiveAstraPreference");
+        context.Database.GetMigrations().Last().Should().EndWith("_RestoreRequiredProactiveAstraPreference");
+        var preference = current.FindEntityType(typeof(User))!.FindProperty(nameof(User.ProactiveAstraEnabled))!;
+        preference.ClrType.Should().Be(typeof(bool));
+        preference.IsNullable.Should().BeFalse();
+        preference.GetDefaultValue().Should().Be(true);
     }
 
     private static void AssertHabitExpandColumns(IReadOnlyList<MigrationOperation> differences)
@@ -128,6 +143,21 @@ public class FeatureFlagAccountsMigrationTests
         var seed = builder.Operations.OfType<InsertDataOperation>().Should().ContainSingle().Subject;
         seed.Values[0, Array.IndexOf(seed.Columns, "Key")].Should().Be("redesign");
         seed.Values[0, Array.IndexOf(seed.Columns, "Enabled")].Should().Be(false);
+    }
+
+    [Fact]
+    public void Up_AddsOnlyDisabledEvalTraceSeed()
+    {
+        var builder = new MigrationBuilder("Npgsql.EntityFrameworkCore.PostgreSQL");
+        typeof(AddAstraEvalTraceFlag).GetMethod("Up", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(new AddAstraEvalTraceFlag(), [builder]);
+
+        var seed = builder.Operations.Should().ContainSingle().Which.Should().BeOfType<InsertDataOperation>().Subject;
+        seed.Table.Should().Be("AppFeatureFlags");
+        seed.Values.GetLength(0).Should().Be(1);
+        seed.Values[0, Array.IndexOf(seed.Columns, "Key")].Should().Be("astra_eval_trace");
+        seed.Values[0, Array.IndexOf(seed.Columns, "Enabled")].Should().Be(false);
+        seed.Values[0, Array.IndexOf(seed.Columns, "PlanRequirement")].Should().BeNull();
     }
 
     [Fact]

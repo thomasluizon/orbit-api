@@ -9,7 +9,7 @@ namespace Orbit.Application.Common;
 /// produced it. This is a sanctioned boundary swallow: the Stripe webhook contract and the auth flow
 /// outrank analytics, and a capture failure must not turn into a retried webhook or a failed login.
 /// </summary>
-internal static partial class AnalyticsCapture
+public static partial class AnalyticsCapture
 {
     public static void SafeCaptureAggregateEvent(
         IProductAnalytics analytics,
@@ -42,7 +42,7 @@ internal static partial class AnalyticsCapture
         IProductAnalytics analytics,
         ILogger logger,
         Guid userId,
-        string plan,
+        string? plan,
         string eventName,
         IReadOnlyDictionary<string, object>? properties = null)
     {

@@ -26,7 +26,7 @@ public class ClarificationGuidanceSection : IPromptSection
 
             ### How to avoid the clarification in the first place
             - Prefer to ask the schedule INLINE in your text BEFORE calling `create_habit` when the user describes something as a "habit"/"rotina"/"hábito" without a schedule (see Structuring Strategy). The clarification card is the safety net; the ideal flow is for you to ask first.
-            - When the user clearly described a one-time task ("just once", "this Friday only", "uma vez"), call `create_habit` with no `frequency_unit`. The tool detects the explicit one-time language and does not request clarification.
+            - When the user clearly described a one-time task ("just once", "this Friday only", "uma vez"), call `create_habit` with `frequency_unit=OneTime`. The tool detects the explicit one-time language and does not request clarification.
 
             """);
         return sb.ToString();

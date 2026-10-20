@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -13,6 +14,7 @@ using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
+using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
@@ -47,6 +49,7 @@ public class BlockAnswerWriteRetryTests
         var executor = Substitute.For<IAgentOperationExecutor>();
         var tool = Substitute.For<IAiTool>();
         tool.Name.Returns("create_habit");
+        tool.GetParameterSchema().Returns(((IAiTool)RuntimeHelpers.GetUninitializedObject(typeof(CreateHabitTool))).GetParameterSchema());
         tool.ExecuteAsync(Arg.Any<JsonElement>(), user.Id, Arg.Any<CancellationToken>()).Returns(async call =>
         {
             var habit = Habit.Create(new HabitCreateParams(user.Id, "Walk", FrequencyUnit.Day, 1,

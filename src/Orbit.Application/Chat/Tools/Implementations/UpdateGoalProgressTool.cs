@@ -13,14 +13,14 @@ public class UpdateGoalProgressTool(
     IUnitOfWork unitOfWork) : IAiTool, IConcurrencyRetryableTool, IArgumentCheckTool
 {
     public string Name => "update_goal_progress";
-    public string Description => "Update progress on an existing goal. Identify the goal by goal_id, or by fuzzy goal_name match, then set the new current value.";
+    public string Description => "Set goal progress by goal_id or fuzzy goal_name.";
 
     public object GetParameterSchema() => new
     {
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            goal_id = new { type = JsonSchemaTypes.String, description = "ID of the goal to update. Provide either goal_id OR goal_name." },
+            goal_id = new { type = JsonSchemaTypes.String },
             goal_name = new { type = JsonSchemaTypes.String, description = "Name or partial name of the goal to update. Provide either goal_id OR goal_name." },
             current_value = new { type = "number", description = "New current progress value" },
             note = new { type = JsonSchemaTypes.String, description = "Optional note about this progress update" }

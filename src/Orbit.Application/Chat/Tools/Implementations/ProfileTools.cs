@@ -10,7 +10,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 public class GetProfileTool(IMediator mediator) : IAiTool
 {
     public string Name => "get_profile";
-    public string Description => "Read the user's profile, plan, AI settings, timezone, clock format, light or dark mode, and calendar sync status. Orbit uses one accent.";
+    public string Description => "Read profile, plan, AI preferences and calendar sync. Orbit uses one accent.";
     public bool IsReadOnly => true;
 
     public object GetParameterSchema() => new
@@ -54,12 +54,12 @@ public class UpdateProfilePreferencesTool(IMediator mediator) : IAiTool, IArgume
                     "reset_tour"
                 }
             },
-            name = new { type = JsonSchemaTypes.String, nullable = true },
-            timezone = new { type = JsonSchemaTypes.String, nullable = true },
-            language = new { type = JsonSchemaTypes.String, nullable = true },
-            week_start_day = new { type = JsonSchemaTypes.Integer, nullable = true },
-            uses_24_hour_clock = new { type = JsonSchemaTypes.Boolean, nullable = true },
-            theme_preference = new { type = JsonSchemaTypes.String, nullable = true }
+            name = new { type = new[] { JsonSchemaTypes.String, "null" } },
+            timezone = new { type = new[] { JsonSchemaTypes.String, "null" } },
+            language = new { type = new[] { JsonSchemaTypes.String, "null" }, @enum = Orbit.Application.Common.AppConstants.SupportedLanguages },
+            week_start_day = new { type = new[] { JsonSchemaTypes.Integer, "null" }, @enum = new[] { 0, 1 } },
+            uses_24_hour_clock = new { type = new[] { JsonSchemaTypes.Boolean, "null" } },
+            theme_preference = new { type = new[] { JsonSchemaTypes.String, "null" }, @enum = new[] { "dark", "light", "system" } }
         },
         required = new[] { "action" }
     };
@@ -139,11 +139,11 @@ public class UpdateProfilePreferencesTool(IMediator mediator) : IAiTool, IArgume
 
     private async Task<ToolResult> SetThemePreferenceAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
-        if (!JsonArgumentParser.PropertyExists(args, "theme_preference"))
+        if (JsonArgumentParser.GetOptionalString(args, "theme_preference") is null)
             return new ToolResult(false, Error: "theme_preference is required.");
 
         var themePreference = JsonArgumentParser.GetNullableString(args, "theme_preference");
-        return await ExecuteAsync(new SetThemePreferenceCommand(userId, themePreference), userId, "Theme preference updated", ct, checkOnly);
+        return await ExecuteAsync(new SetThemePreferenceCommand(userId, themePreference == "system" ? null : themePreference), userId, "Theme preference updated", ct, checkOnly);
     }
 
     private async Task<ToolResult> ExecuteAsync(IRequest<Orbit.Domain.Common.Result> command, Guid userId, string entityName, CancellationToken ct, bool checkOnly)
