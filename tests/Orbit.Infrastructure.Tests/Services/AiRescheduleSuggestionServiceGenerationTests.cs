@@ -1,3 +1,5 @@
+#pragma warning disable OPENAI001
+
 using System.ClientModel;
 using System.ClientModel.Primitives;
 using System.Net;
@@ -6,14 +8,15 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
-using OpenAI;
-using OpenAI.Chat;
+using OpenAI.Responses;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.AI;
 using Orbit.Infrastructure.Services;
+
+using Orbit.Infrastructure.Tests.AI;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
@@ -22,6 +25,22 @@ public class AiRescheduleSuggestionServiceGenerationTests
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly DateOnly Today = new(2026, 7, 13);
     private static readonly string[] SuggestedDayNames = new[] { "Monday", "Tuesday" };
+
+    [Fact]
+    public async Task GenerateAsync_ReservesOutputTokensForReasoningAndJson()
+    {
+        string? body = null;
+        var service = BuildService("{\"dueDate\":\"2026-07-20\",\"rationale\":\"Restart gently.\"}",
+            captureRequest: request => body = request);
+
+        var result = await service.GenerateAsync(OverdueHabit(), Today, "en");
+
+        result.IsSuccess.Should().BeTrue();
+        using var document = JsonDocument.Parse(body!);
+        document.RootElement.GetProperty("model").GetString().Should().Be("gpt-6-luna");
+        document.RootElement.GetProperty("reasoning").GetProperty("effort").GetString().Should().Be("low");
+        document.RootElement.GetProperty("max_output_tokens").GetInt32().Should().Be(8192);
+    }
 
     [Fact]
     public async Task GenerateAsync_ValidPayload_ReturnsClampedSuggestion()
@@ -112,44 +131,41 @@ public class AiRescheduleSuggestionServiceGenerationTests
         Habit.Create(new HabitCreateParams(
             UserId, "Evening run", FrequencyUnit.Day, 1, DueDate: Today.AddDays(-5))).Value;
 
-    private static AiRescheduleSuggestionService BuildService(string content, HttpStatusCode status = HttpStatusCode.OK)
+    private static AiRescheduleSuggestionService BuildService(string content, HttpStatusCode status = HttpStatusCode.OK,
+        Action<string>? captureRequest = null)
     {
-        var chatClient = new ChatClient(
-            model: "gpt-test",
+        var chatClient = new ResponsesClient(
             credential: new ApiKeyCredential("test-key"),
-            options: new OpenAIClientOptions
+            options: new ResponsesClientOptions
             {
                 Endpoint = new Uri("https://orbit.test/v1"),
                 Transport = new HttpClientPipelineTransport(
-                    new HttpClient(new CannedChatHandler(content, status))),
+                    new HttpClient(new CannedChatHandler(content, status, captureRequest))),
             });
         var aiClient = new AiCompletionClient(
             chatClient, NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
         return new AiRescheduleSuggestionService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(aiClient), NullLogger<AiRescheduleSuggestionService>.Instance);
     }
 
-    private sealed class CannedChatHandler(string content, HttpStatusCode status) : HttpMessageHandler
+    private sealed class CannedChatHandler(string content, HttpStatusCode status, Action<string>? captureRequest) : HttpMessageHandler
     {
-        protected override Task<HttpResponseMessage> SendAsync(
+        protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            captureRequest?.Invoke(await request.Content!.ReadAsStringAsync(cancellationToken));
             if (status != HttpStatusCode.OK)
-                return Task.FromResult(new HttpResponseMessage(status)
+                return new HttpResponseMessage(status)
                 {
                     RequestMessage = request,
                     Content = new StringContent("{\"error\":{\"message\":\"bad\"}}", Encoding.UTF8, "application/json"),
-                });
+                };
 
-            var escaped = JsonSerializer.Serialize(content);
-            var body =
-                "{\"id\":\"chatcmpl-test\",\"object\":\"chat.completion\",\"created\":1700000000,\"model\":\"gpt-test\","
-                + "\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":" + escaped + "},\"finish_reason\":\"stop\"}],"
-                + "\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":2,\"total_tokens\":3}}";
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            var body = ResponsesTestData.Text(content);
+            return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 RequestMessage = request,
                 Content = new StringContent(body, Encoding.UTF8, "application/json"),
-            });
+            };
         }
     }
 }

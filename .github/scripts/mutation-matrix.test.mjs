@@ -7,7 +7,8 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const selector = fileURLToPath(new URL("./mutation-matrix.mjs", import.meta.url));
-const allShards = ["domain-habit-freeze", "domain-user-invariants", "application", "infrastructure"];
+const domainShards = ["domain-habit-create-log", "domain-habit-schedule", "domain-habit-update-freeze", "domain-user-invariants"];
+const allShards = [...domainShards, "application", "infrastructure"];
 
 function select(changed) {
   const output = execFileSync(process.execPath, [selector, ...(changed === undefined ? [] : ["--stdin"])], {
@@ -72,7 +73,7 @@ test("unrelated projects select no shards", () => {
 });
 
 for (const [project, expected] of [
-  ["Domain", allShards.slice(0, 2)],
+  ["Domain", domainShards],
   ["Application", ["application"]],
   ["Infrastructure", ["infrastructure"]],
 ]) {
@@ -88,12 +89,12 @@ test("changes across projects select their union without duplicate shards", () =
     "src/Orbit.Domain/Entities/Habit.cs",
     "tests/Orbit.Domain.Tests/HabitTests.cs",
     "src/Orbit.Infrastructure/Services/UserStreakService.cs",
-  ])), [allShards[0], allShards[1], "infrastructure"]);
+  ])), [...domainShards, "infrastructure"]);
 });
 
 test("NUL separators preserve spaces and newlines within paths", () => {
   assert.deepEqual(names(selectPaths(["src/Orbit.Domain/Entities/Habit notes\nREADME.md"])), []);
-  assert.deepEqual(names(selectPaths(["src/Orbit.Domain/Entities/Habit notes\nChanged.cs"])), allShards.slice(0, 2));
+  assert.deepEqual(names(selectPaths(["src/Orbit.Domain/Entities/Habit notes\nChanged.cs"])), domainShards);
 });
 
 test("renames select both the old and new project, and deletions select the old project", (t) => {
@@ -137,6 +138,43 @@ test("a project-specific Stryker config selects only that project", () => {
 test("nightly and manual runs keep all shards and their mutation scopes without input", () => {
   const matrix = select();
   assert.deepEqual(names(matrix), allShards);
-  assert.deepEqual(matrix[0].mutate, ["**/Entities/Habit.cs", "**/Entities/StreakFreeze.cs"]);
-  assert.deepEqual(matrix[1].mutate, ["**/Entities/User.cs", "**/Entities/HabitInvariants.cs"]);
+  assert.deepEqual(matrix.filter(({ project }) => project === "domain").map(({ mutate }) => mutate), [
+    ["**/Entities/Habit.cs{0..15181}"],
+    ["**/Entities/Habit.cs{0..25215}", "!**/Entities/Habit.cs{0..15181}"],
+    ["**/Entities/Habit.cs", "!**/Entities/Habit.cs{0..25215}", "**/Entities/StreakFreeze.cs"],
+    ["**/Entities/User.cs", "**/Entities/HabitInvariants.cs"],
+  ]);
+});
+
+for (const file of ["Habit.cs", "StreakFreeze.cs", "User.cs", "HabitInvariants.cs"]) {
+  test(`a change to ${file} selects every domain shard`, () => {
+    assert.deepEqual(names(selectPaths([`src/Orbit.Domain/Entities/${file}`])), domainShards);
+  });
+}
+
+test("domain Stryker configuration changes select every domain shard", () => {
+  assert.deepEqual(names(selectPaths(["stryker-config.domain.json"])), domainShards);
+});
+
+test("Habit mutation spans have one owner at boundaries and after file growth", () => {
+  const habit = "**/Entities/Habit.cs";
+  const scopes = select().filter(({ mutate }) => mutate?.some((pattern) => pattern.startsWith(habit)));
+  const boundaries = scopes.flatMap(({ mutate }) => mutate.flatMap((pattern) => {
+    const range = pattern.match(/\{(\d+)\.\.(\d+)\}/);
+    return range ? [Number(range[1]), Number(range[2])] : [];
+  }));
+  const positions = [...new Set([0, ...boundaries.flatMap((value) => [value, value + 1]), 1_000_000])];
+  const matches = (pattern, start, end) => {
+    if (!pattern.replace(/^!/, "").startsWith(habit)) return false;
+    const range = pattern.match(/\{(\d+)\.\.(\d+)\}/);
+    return !range || (start >= Number(range[1]) && end <= Number(range[2]));
+  };
+  for (const start of positions) {
+    for (const end of positions.filter((value) => value >= start)) {
+      const owners = scopes.filter(({ mutate }) =>
+        mutate.some((pattern) => !pattern.startsWith("!") && matches(pattern, start, end))
+        && !mutate.some((pattern) => pattern.startsWith("!") && matches(pattern, start, end)));
+      assert.equal(owners.length, 1, `Mutant span {${start}..${end}} must belong to one shard`);
+    }
+  }
 });

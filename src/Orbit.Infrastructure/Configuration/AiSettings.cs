@@ -4,18 +4,22 @@ public sealed class AiSettings
 {
     public const string SectionName = "AI";
     public string ApiKey { get; init; } = string.Empty;
-    public string Model { get; init; } = "gpt-4.1-mini";
-    public string SubTaskModel { get; init; } = "gpt-5.4-nano";
+    public string Model { get; init; } = "gpt-6.1-sol";
+    public string SubTaskModel { get; init; } = "gpt-6-luna";
     public string TranscriptionModel { get; init; } = "whisper-1";
     public string BaseUrl { get; init; } = "https://api.openai.com/v1";
     public int NetworkTimeoutSeconds { get; init; } = 15;
+    public int BufferedNetworkTimeoutSeconds { get; init; } = 90;
     public int MaxRetries { get; init; } = 2;
 
     /// <summary>
-    /// Bounds the whole completion, including every network attempt and retry wait.
-    /// Each retry has one network-timeout allowance for its request and one for its wait.
+    /// Bounds buffered calls independently of per-attempt timeouts and retry count.
+    /// Allows a 90-second failed attempt, a 90-second successful retry and five seconds for
+    /// retry wait and processing. Longer server-directed retry waits consume this same deadline.
     /// </summary>
-    public TimeSpan CompletionTimeout => TimeSpan.FromSeconds((long)NetworkTimeoutSeconds * (2L * MaxRetries + 1));
+    public int CompletionTimeoutSeconds { get; init; } = 185;
+    public TimeSpan CompletionTimeout => TimeSpan.FromSeconds(CompletionTimeoutSeconds);
+    public TimeSpan StreamingCompletionTimeout => TimeSpan.FromSeconds((long)NetworkTimeoutSeconds * (2L * MaxRetries + 1));
     public Dictionary<string, AiModelPrice> Pricing { get; init; } = new();
 }
 

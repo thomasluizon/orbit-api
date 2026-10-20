@@ -3615,7 +3615,9 @@ public partial class ProcessUserChatCommandHandlerTests
                 clarification.Question,
                 clarificationId,
                 clarification.MissingArgumentKey,
-                quickActions)));
+                quickActions),
+            MessageKey: "chat.toolResult.needsClarification",
+            Params: new ToolResultMessageParams()));
     }
 
     [Fact]
@@ -3977,6 +3979,10 @@ public partial class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         forwardedResults.Should().HaveCount(3);
         forwardedResults.Should().OnlyContain(item => !item.Success && item.Error!.Contains("bulk_update_habits"));
+        var expectedParams = new ToolResultMessageParams(ToolName: "update_habit", BulkTool: "bulk_update_habits");
+        result.Value.Actions.Should().HaveCount(3).And.OnlyContain(action =>
+            action.MessageKey == "chat.toolResult.repeatedSingleEntity"
+            && action.Params == expectedParams);
         await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
         await updateTool.DidNotReceiveWithAnyArgs().ExecuteAsync(default, default, default);
     }
@@ -4048,6 +4054,8 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.Actions.Should().HaveCount(1);
         result.Value.Actions[0].Status.Should().Be(ActionStatus.Failed);
         result.Value.Actions[0].Error.Should().Contain("Unknown tool");
+        result.Value.Actions[0].MessageKey.Should().Be("chat.toolResult.unknownTool");
+        result.Value.Actions[0].Params.Should().Be(new ToolResultMessageParams(ToolName: "nonexistent_tool"));
     }
 
     [Fact]
@@ -4178,6 +4186,8 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.Actions.Should().HaveCount(1);
         result.Value.Actions[0].Status.Should().Be(ActionStatus.Suggestion);
         result.Value.Actions[0].Type.Should().Be("SuggestBreakdown");
+        result.Value.Actions[0].MessageKey.Should().Be("chat.toolResult.suggestedBreakdown");
+        result.Value.Actions[0].Params.Should().Be(new ToolResultMessageParams(EntityName: "Morning Routine"));
         result.Value.Actions[0].SuggestedSubHabits.Should().NotBeNull();
         result.Value.Actions[0].SuggestedSubHabits!.Count.Should().Be(1);
         result.Value.Actions[0].SuggestedSubHabits![0].Title.Should().Be("Stretch");

@@ -27,7 +27,6 @@ public class AstraBlockAnswerServiceTests
     {
         _work.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Result<PreparedAstraBlockAnswer>>>>(), Arg.Any<CancellationToken>())
             .Returns(call => call.Arg<Func<CancellationToken, Task<Result<PreparedAstraBlockAnswer>>>>()(default));
-        _quota.CanSendAiMessage(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
         _quota.TryConsumeAiMessage(UserId, _work, Arg.Any<CancellationToken>()).Returns(Result.Success());
         _store.MarkAnsweredAsync(Arg.Any<Guid>(), UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
     }
@@ -79,13 +78,16 @@ public class AstraBlockAnswerServiceTests
     }
 
     [Fact]
-    public async Task ChoiceAtDailyLimit_IsNotClaimedOrCharged()
+    public async Task ChoiceAtDailyLimit_ClaimsAnswerButDoesNotRecordResponse()
     {
         var block = Choice();
-        _quota.CanSendAiMessage(UserId, Arg.Any<CancellationToken>()).Returns(Result.PayGateFailure("Daily limit"));
-        (await Service.PrepareAsync(Request(block.Id, ["a"]), default)).ErrorCode.Should().Be(Result.PayGateErrorCode);
-        await _store.DidNotReceiveWithAnyArgs().MarkAnsweredAsync(default, default, default, default);
-        await _quota.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
+        _quota.TryConsumeAiMessage(UserId, _work, Arg.Any<CancellationToken>()).Returns(Result.PayGateFailure("Daily limit"));
+        var result = await Service.PrepareAsync(Request(block.Id, ["a"]), default);
+        result.ErrorCode.Should().Be(Result.PayGateErrorCode);
+        result.Error.Should().Be("Daily limit");
+        await _store.Received(1).MarkAnsweredAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
+        await _quota.Received(1).TryConsumeAiMessage(UserId, _work, Arg.Any<CancellationToken>());
+        await _store.DidNotReceiveWithAnyArgs().RecordAnswerAsync(default, default, default, string.Empty, null, null, default);
     }
 
     [Fact]
@@ -111,7 +113,7 @@ public class AstraBlockAnswerServiceTests
                 : JsonSerializer.SerializeToElement(new { habit_id = Guid.NewGuid(), date = "2026-04-03" }))).ToArray();
         var block = IssuedAstraBlock.Create(UserId, new("pickList", "Choose", [], items, true, Action: action));
         _store.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
-        _quota.CanSendAiMessage(UserId, Arg.Any<CancellationToken>()).Returns(Result.PayGateFailure("Daily limit"));
+        _quota.TryConsumeAiMessage(UserId, _work, Arg.Any<CancellationToken>()).Returns(Result.PayGateFailure("Daily limit"));
         AgentExecuteOperationRequest? captured = null;
         var pending = new PendingAgentOperation(Guid.NewGuid(), "habits", "Habits", "Preview",
             AgentRiskClass.Low, AgentConfirmationRequirement.FreshConfirmation, block.ExpiresAtUtc,
@@ -128,7 +130,6 @@ public class AstraBlockAnswerServiceTests
         var arguments = captured.Arguments.GetProperty(action == "create_habits" ? "habits" : "revised_items");
         arguments.EnumerateArray().Select(item => item.GetRawText()).Should().Equal(items[1].Arguments.GetRawText(), items[3].Arguments.GetRawText());
         await _quota.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
-        await _quota.DidNotReceiveWithAnyArgs().CanSendAiMessage(default, default);
         await _executor.Received(1).ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>());
     }
 
@@ -149,7 +150,7 @@ public class AstraBlockAnswerServiceTests
     public async Task ConcurrentCrisisAnswers_ExactlyOneSucceedsWithoutQuota()
     {
         var block = Choice(free: true);
-        _quota.CanSendAiMessage(UserId, Arg.Any<CancellationToken>()).Returns(Result.PayGateFailure("Daily limit"));
+        _quota.TryConsumeAiMessage(UserId, _work, Arg.Any<CancellationToken>()).Returns(Result.PayGateFailure("Daily limit"));
         var claims = 0;
         _store.MarkAnsweredAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
             .Returns(_ => Interlocked.Increment(ref claims) == 1);
@@ -159,7 +160,6 @@ public class AstraBlockAnswerServiceTests
 
         results.Should().ContainSingle(result => result.IsSuccess).Which.Value.Crisis.Should().Be(CrisisLocales.English);
         results.Should().ContainSingle(result => result.ErrorCode == ErrorCodes.AstraBlockAnswered);
-        await _quota.DidNotReceiveWithAnyArgs().CanSendAiMessage(default, default);
         await _quota.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
     }
 
@@ -174,7 +174,6 @@ public class AstraBlockAnswerServiceTests
 
         result.ErrorCode.Should().Be(code);
         await _store.DidNotReceiveWithAnyArgs().MarkAnsweredAsync(default, default, default, default);
-        await _quota.DidNotReceiveWithAnyArgs().CanSendAiMessage(default, default);
         await _quota.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
     }
     [Theory]

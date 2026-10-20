@@ -184,12 +184,6 @@ public sealed class AstraBlockAnswerService(
                     if (inputCheck.IsFailure)
                         return inputCheck.PropagateError<PreparedAstraBlockAnswer>();
                 }
-                if (isChoice && crisis == CrisisLocales.None)
-                {
-                    var allowance = await payGate.CanSendAiMessage(request.UserId, token);
-                    if (allowance.IsFailure)
-                        return allowance.PropagateError<PreparedAstraBlockAnswer>();
-                }
                 var now = TimeProvider.System.GetUtcNow().UtcDateTime;
                 var answeredAtUtc = now.AddTicks(-(now.Ticks % TimeSpan.TicksPerMicrosecond));
                 if (!await store.MarkAnsweredAsync(block.Id, request.UserId, answeredAtUtc, token))

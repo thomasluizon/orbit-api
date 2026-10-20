@@ -89,7 +89,6 @@ public partial class ProcessUserChatCommandHandlerTests
     public async Task ChoiceAnswer_ReachesModelWithStoredQuestionAndOneDailyCharge()
     {
         SetupUserAndPayGate();
-        _payGate.CanSendAiMessage(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
         _unitOfWork.PassThroughTransactions<Result<Orbit.Application.Chat.PreparedAstraBlockAnswer>>();
         var block = IssuedAstraBlock.Create(UserId, new("choice", "When?", [new("a", "Morning"), new("b", "Evening")], []));
         _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
@@ -112,8 +111,6 @@ public partial class ProcessUserChatCommandHandlerTests
         string freeText, string support, string resource, bool allowanceRemaining)
     {
         SetupUserAndPayGate(payGatePass: allowanceRemaining);
-        _payGate.CanSendAiMessage(UserId, Arg.Any<CancellationToken>())
-            .Returns(allowanceRemaining ? Result.Success() : Result.PayGateFailure("AI message limit reached."));
         _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
         var block = IssuedAstraBlock.Create(UserId, new("choice", "When?",
             [new("a", "Morning"), new("b", "Evening")], [], AllowFreeText: true));
@@ -126,7 +123,6 @@ public partial class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.AiMessage.Should().Be(support + "\n\n" + resource);
         await _blockStore.Received(1).MarkAnsweredAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
-        await _payGate.DidNotReceiveWithAnyArgs().CanSendAiMessage(default, default);
         await _payGate.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
         await _aiIntentService.DidNotReceiveWithAnyArgs().SendWithToolsAsync(default!, default, default);
         await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
@@ -181,7 +177,6 @@ public partial class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.AiMessage.Should().Contain(resource);
         await _moderation.DidNotReceiveWithAnyArgs().CheckTextAsync(default!, default);
-        await _payGate.DidNotReceiveWithAnyArgs().CanSendAiMessage(default, default);
         await _payGate.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
         await _aiIntentService.DidNotReceiveWithAnyArgs().SendWithToolsAsync(default!, default, default);
         await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
@@ -204,7 +199,6 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsFailure.Should().BeTrue();
         await _blockStore.DidNotReceiveWithAnyArgs().MarkAnsweredAsync(default, default, default, default);
-        await _payGate.DidNotReceiveWithAnyArgs().CanSendAiMessage(default, default);
         await _payGate.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
         await _aiIntentService.DidNotReceiveWithAnyArgs().SendWithToolsAsync(default!, default, default);
         await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
@@ -216,8 +210,6 @@ public partial class ProcessUserChatCommandHandlerTests
     public async Task ChoiceAnswer_DisabledCrisisGuard_UsesNormalQuotaAndModelPath(bool allowanceRemaining)
     {
         SetupUserAndPayGate(payGatePass: allowanceRemaining);
-        _payGate.CanSendAiMessage(UserId, Arg.Any<CancellationToken>())
-            .Returns(allowanceRemaining ? Result.Success() : Result.PayGateFailure("AI message limit reached."));
         _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
             .Returns([FeatureFlagKeys.AstraCrisisResourcesDisabled]);
         _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
@@ -231,10 +223,9 @@ public partial class ProcessUserChatCommandHandlerTests
             BlockAnswer: new(block.Id, [], "I want to hurt myself")), default);
 
         result.IsSuccess.Should().Be(allowanceRemaining);
-        await _payGate.Received(1).CanSendAiMessage(UserId, Arg.Any<CancellationToken>());
-        await _blockStore.Received(allowanceRemaining ? 1 : 0)
+        await _blockStore.Received(1)
             .MarkAnsweredAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
-        await _payGate.Received(allowanceRemaining ? 1 : 0)
+        await _payGate.Received(1)
             .TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>());
         await _aiIntentService.ReceivedWithAnyArgs(allowanceRemaining ? 1 : 0)
             .SendWithToolsAsync(default!, default, default);

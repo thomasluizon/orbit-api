@@ -67,7 +67,6 @@ public class BlockAnswerWriteRetryTests
         var dates = Substitute.For<IUserDateService>();
         dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(new DateOnly(2026, 4, 3));
         var quota = Substitute.For<IPayGateService>();
-        quota.CanSendAiMessage(user.Id, Arg.Any<CancellationToken>()).Returns(Result.Success());
         quota.TryConsumeAiMessage(user.Id, work, Arg.Any<CancellationToken>()).Returns(Result.Success());
         var ai = Substitute.For<IAiIntentService>();
         ai.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())

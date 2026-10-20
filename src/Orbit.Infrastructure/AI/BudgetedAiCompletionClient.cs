@@ -1,7 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
-using OpenAI.Chat;
 using Orbit.Application.Common;
 using Orbit.Domain.Interfaces;
 
@@ -10,7 +9,8 @@ namespace Orbit.Infrastructure.AI;
 public sealed class BudgetedAiCompletionClient(AiCompletionClient inner, IAiDailyBudget budget,
     IHttpContextAccessor http, ILogger<BudgetedAiCompletionClient> logger)
 {
-    internal CancellationTokenSource CreateCompletionCancellation(CancellationToken token) => inner.CreateCompletionCancellation(token);
+    internal CancellationTokenSource CreateCompletionCancellation(CancellationToken token, bool streaming = false) => inner.CreateCompletionCancellation(token, streaming);
+    internal AiCompletionClient Inner => inner;
     internal string ChatModel => inner.ChatModel;
 
     public async Task<T> RunAsync<T>(Guid? userId, Func<AiCompletionClient, Task<T>> complete, CancellationToken cancellationToken,
@@ -42,23 +42,19 @@ public sealed class BudgetedAiCompletionClient(AiCompletionClient inner, IAiDail
         int? maxOutputTokens = null, string purpose = "text", AiModelTier tier = AiModelTier.Primary,
         CancellationToken cancellationToken = default)
     {
-        var options = new ChatCompletionOptions { MaxOutputTokenCount = maxOutputTokens ?? AiTokenReservation.DefaultMaxOutputTokens };
-        var reservation = AiTokenReservation.Estimate([new SystemChatMessage(systemPrompt), new UserChatMessage(userPrompt)], options);
+        var outputTokens = maxOutputTokens ?? AiTokenReservation.DefaultMaxOutputTokens;
+        var reservation = inner.EstimateTextTokens(systemPrompt, userPrompt, outputTokens, tier);
         return RunAsync(null, client => client.CompleteTextAsync(systemPrompt, userPrompt, temperature,
-            options.MaxOutputTokenCount, purpose, tier, cancellationToken), cancellationToken, reservation);
+            outputTokens, purpose, tier, cancellationToken), cancellationToken, reservation);
     }
 
     public Task<T?> CompleteJsonAsync<T>(string systemPrompt, string userPrompt, double temperature = 0.1,
         int? maxOutputTokens = null, string purpose = "json", AiModelTier tier = AiModelTier.Primary,
         Guid? userId = null, CancellationToken cancellationToken = default)
     {
-        var options = new ChatCompletionOptions
-        {
-            MaxOutputTokenCount = maxOutputTokens ?? AiTokenReservation.DefaultMaxOutputTokens,
-            ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
-        };
-        var reservation = AiTokenReservation.Estimate([new SystemChatMessage(systemPrompt), new UserChatMessage(userPrompt)], options);
+        var outputTokens = maxOutputTokens ?? AiTokenReservation.DefaultMaxOutputTokens;
+        var reservation = inner.EstimateTextTokens(systemPrompt, userPrompt, outputTokens, tier);
         return RunAsync(userId, client => client.CompleteJsonAsync<T>(systemPrompt, userPrompt, temperature,
-            options.MaxOutputTokenCount, purpose, tier, userId, cancellationToken), cancellationToken, reservation);
+            outputTokens, purpose, tier, userId, cancellationToken), cancellationToken, reservation);
     }
 }

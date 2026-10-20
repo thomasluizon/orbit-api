@@ -14019,6 +14019,22 @@
                 "$ref": "#/components/schemas/ClarificationRequest"
               }
             ]
+          },
+          "messageKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "params": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ToolResultMessageParams"
+              }
+            ]
           }
         }
       },
@@ -20699,6 +20715,112 @@
           "updatedAtUtc": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "ToolResultMessageParams": {
+        "type": "object",
+        "properties": {
+          "entityName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "count": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "totalCount": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "skippedCount": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "partial": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "weekStartDay": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "hours": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "toolName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "bulkTool": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "policyReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "timeZone": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "language": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "referralCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fieldName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "actionName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "entityId": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

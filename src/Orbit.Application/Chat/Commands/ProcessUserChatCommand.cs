@@ -107,7 +107,9 @@ public record ActionResult(
     string? Error = null,
     string? Field = null,
     IReadOnlyList<AiAction>? SuggestedSubHabits = null,
-    ClarificationRequest? ClarificationRequest = null);
+    ClarificationRequest? ClarificationRequest = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? MessageKey = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ToolResultMessageParams? Params = null);
 
 public enum ActionStatus { Success, Failed, Suggestion, NeedsClarification }
 
