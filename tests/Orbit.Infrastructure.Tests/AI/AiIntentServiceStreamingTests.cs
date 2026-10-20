@@ -8,12 +8,14 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using OpenAI.Responses;
 using Orbit.Application.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.AI;
+using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.AI;
@@ -109,7 +111,7 @@ public class AiIntentServiceStreamingTests
         result.IsSuccess.Should().BeTrue();
         result.Value.ReportedTokenCount.Should().Be(18);
         await usageRecorder.Received(1).RecordAsync(
-            "chat", "gpt-6.1-sol", 3, 11, 7, 18, Arg.Any<CancellationToken>(), userId);
+            "chat", "gpt-6-luna", 3, 11, 7, 18, Arg.Any<CancellationToken>(), userId);
     }
 
     [Fact]
@@ -129,7 +131,7 @@ public class AiIntentServiceStreamingTests
         result.Value.ReportedTokenCount.Should().Be(18);
         handler.LastRequestBody.Should().Contain("\"stream\":true");
         await usageRecorder.Received(1).RecordAsync(
-            "chat", "gpt-6.1-sol", 3, 11, 7, 18, Arg.Any<CancellationToken>(), userId);
+            "chat", "gpt-6-luna", 3, 11, 7, 18, Arg.Any<CancellationToken>(), userId);
     }
 
     [Fact]
@@ -195,7 +197,7 @@ public class AiIntentServiceStreamingTests
         second.IsSuccess.Should().BeTrue();
         second.Value.TextMessage.Should().Be("Done");
         await usageRecorder.Received(2).RecordAsync(
-            "chat", "gpt-6.1-sol", 3, 11, 7, 18, Arg.Any<CancellationToken>(), userId);
+            "chat", "gpt-6-luna", 3, 11, 7, 18, Arg.Any<CancellationToken>(), userId);
     }
 
     [Fact]
@@ -353,7 +355,7 @@ public class AiIntentServiceStreamingTests
             streaming ? TextStream("Done", "Done") : ResponsesTestData.Text("Done"));
         var usage = Substitute.For<IAiUsageRecorder>();
         var client = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance,
-            usage, primaryModel: "gpt-6.1-sol");
+            usage);
         var service = new AiIntentService(client, usage, NullLogger<AiIntentService>.Instance);
         Func<AiStreamEvent, Task>? sink = streaming ? _ => Task.CompletedTask : null;
         var userId = Guid.NewGuid();
@@ -367,6 +369,12 @@ public class AiIntentServiceStreamingTests
              new AiToolCallResult("query_goals", "call_2", true, null, null, null)], sink);
 
         second.IsSuccess.Should().BeTrue();
+        foreach (var body in handler.RequestBodies)
+        {
+            using var request = JsonDocument.Parse(body);
+            request.RootElement.GetProperty("model").GetString().Should().Be("gpt-6-luna");
+            request.RootElement.GetProperty("reasoning").GetProperty("effort").GetString().Should().Be("low");
+        }
         using var document = JsonDocument.Parse(handler.RequestBodies[1]);
         var root = document.RootElement;
         root.GetProperty("reasoning").GetProperty("effort").GetString().Should().Be("low");
@@ -389,13 +397,20 @@ public class AiIntentServiceStreamingTests
     public async Task SendWithToolsAsync_DefaultModels_UseShippedPrimary(bool streaming)
     {
         var handler = new SequenceSseHandler(streaming ? TextStream("Done", "Done") : ResponsesTestData.Text("Done"));
-        var (service, sink) = BuildService(handler);
+        var usage = Substitute.For<IAiUsageRecorder>();
+        var settings = new AiSettings { ApiKey = "test-key", BaseUrl = "https://orbit.test/v1" };
+        var client = new AiCompletionClient(Options.Create(settings), NullLogger<AiCompletionClient>.Instance,
+            usage, new HttpClientPipelineTransport(new HttpClient(handler)));
+        var service = new AiIntentService(client, usage, NullLogger<AiIntentService>.Instance);
+        var declaration = new { name = "query_habits", parameters = new { type = "object", properties = new { } } };
 
-        var result = await service.SendWithToolsAsync(new AiToolRequest("hello", "system", []), streaming ? sink.Handle : null);
+        var result = await service.SendWithToolsAsync(new AiToolRequest("look up my habits", "system", [declaration]),
+            streaming ? _ => Task.CompletedTask : null);
 
         result.IsSuccess.Should().BeTrue();
         using var document = JsonDocument.Parse(handler.RequestBodies.Single());
-        document.RootElement.GetProperty("model").GetString().Should().Be("gpt-6.1-sol");
+        document.RootElement.GetProperty("tools")[0].GetProperty("name").GetString().Should().Be("query_habits");
+        document.RootElement.GetProperty("model").GetString().Should().Be("gpt-6-luna");
         document.RootElement.GetProperty("reasoning").GetProperty("effort").GetString().Should().Be("low");
         document.RootElement.TryGetProperty("temperature", out _).Should().BeFalse();
     }

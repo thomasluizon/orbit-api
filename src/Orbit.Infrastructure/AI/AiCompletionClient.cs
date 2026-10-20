@@ -82,7 +82,7 @@ public sealed partial class AiCompletionClient
         ILogger<AiCompletionClient> logger,
         IAiUsageRecorder usageRecorder,
         TimeSpan? completionTimeout = null,
-        string primaryModel = "gpt-6.1-sol",
+        string primaryModel = "gpt-6-luna",
         string subTaskModel = "gpt-6-luna")
     {
         CompletionTimeout = completionTimeout ?? new AiSettings().CompletionTimeout;
