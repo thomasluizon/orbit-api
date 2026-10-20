@@ -108,13 +108,83 @@ public class UpdateHabitToolTests
     [Fact]
     public async Task UpdateTitleOnly_KeepsOtherProperties()
     {
-        var habit = CreateHabit("Water", FrequencyUnit.Day, 1);
+        var relativeReminders = new List<RelativeReminderTime>
+        {
+            new(MinutesBefore: 30),
+            new(When: ScheduledReminderWhen.DayBefore, Time: new TimeOnly(18, 0))
+        };
+        var checklist = new List<ChecklistItem> { new("Fill bottle", true) };
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Water", FrequencyUnit.Day, 1, Today,
+            Description: "Two litres", Days: [DayOfWeek.Monday, DayOfWeek.Wednesday],
+            IsBadHabit: true, DueTime: new TimeOnly(9, 0), DueEndTime: new TimeOnly(15, 0),
+            ReminderEnabled: true, ReminderTimes: [10, 20], SlipAlertEnabled: true,
+            ChecklistItems: checklist, EndDate: Today.AddDays(30), Emoji: "💧", IntervalWeeks: 2,
+            RelativeReminders: relativeReminders)).Value;
         SetupHabitFound(habit);
 
         var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "title": "Drink Water"}""");
 
         result.Success.Should().BeTrue();
+        habit.Title.Should().Be("Drink Water");
+        habit.Description.Should().Be("Two litres");
+        habit.Emoji.Should().Be("💧");
         habit.FrequencyUnit.Should().Be(FrequencyUnit.Day);
+        habit.FrequencyQuantity.Should().Be(1);
+        habit.IntervalWeeks.Should().Be(2);
+        habit.Days.Should().BeEquivalentTo([DayOfWeek.Monday, DayOfWeek.Wednesday]);
+        habit.IsBadHabit.Should().BeTrue();
+        habit.DueDate.Should().Be(Today);
+        habit.DueTime.Should().Be(new TimeOnly(9, 0));
+        habit.DueEndTime.Should().Be(new TimeOnly(15, 0));
+        habit.ReminderEnabled.Should().BeTrue();
+        habit.ReminderTimes.Should().Equal(10, 20);
+        habit.SlipAlertEnabled.Should().BeTrue();
+        habit.ChecklistItems.Should().Equal(checklist);
+        habit.EndDate.Should().Be(Today.AddDays(30));
+        habit.RelativeReminders.Should().Equal(relativeReminders);
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("""{"emoji":"📚"}""")]
+    [InlineData("""{"due_date":"2026-06-15"}""")]
+    [InlineData("""{"due_time":null}""")]
+    public async Task PartialUpdate_KeepsDueEndTime(string updates)
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Read", FrequencyUnit.Day, 1, Today,
+            DueTime: new TimeOnly(9, 0), DueEndTime: new TimeOnly(15, 0))).Value;
+        SetupHabitFound(habit);
+        var fields = JsonSerializer.Deserialize<Dictionary<string, object?>>(updates)!;
+        fields["habit_id"] = habit.Id;
+
+        var result = await Execute(JsonSerializer.Serialize(fields));
+
+        result.Success.Should().BeTrue();
+        habit.DueEndTime.Should().Be(new TimeOnly(15, 0));
+    }
+
+    [Fact]
+    public async Task UpdateTitleOnly_WithoutDueTime_KeepsDeadlineAndScheduledReminders()
+    {
+        var scheduledReminders = new List<ScheduledReminderTime>
+        {
+            new(ScheduledReminderWhen.SameDay, new TimeOnly(14, 0))
+        };
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Read", null, null, Today, DueEndTime: new TimeOnly(15, 0),
+            ReminderEnabled: true, ScheduledReminders: scheduledReminders)).Value;
+        SetupHabitFound(habit);
+
+        var result = await Execute($$$"""{"habit_id":"{{{habit.Id}}}","title":"Read daily"}""");
+
+        result.Success.Should().BeTrue();
+        habit.Title.Should().Be("Read daily");
+        habit.DueTime.Should().BeNull();
+        habit.DueEndTime.Should().Be(new TimeOnly(15, 0));
+        habit.ScheduledReminders.Should().Equal(scheduledReminders);
     }
 
     [Fact]
