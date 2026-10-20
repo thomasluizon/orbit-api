@@ -26,7 +26,7 @@ public class FeatureFlagAccountsMigrationTests
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
 
-        differences.Should().HaveCount(45);
+        differences.Should().HaveCount(51);
         ExpandHabitScheduleAndStartDateMigrationTests.AssertAiSecurityAdditions(differences);
         ExpandHabitScheduleAndStartDateMigrationTests.AssertEvalTraceSeed(differences);
         ConversationMigrationTests.AssertConversationExpansion(differences);
@@ -35,6 +35,13 @@ public class FeatureFlagAccountsMigrationTests
         schemaVersion.ClrType.Should().Be(typeof(int));
         schemaVersion.IsNullable.Should().BeFalse();
         schemaVersion.DefaultValue.Should().Be(0);
+
+        var subHabits = differences.OfType<UpdateDataOperation>().Should().ContainSingle().Subject;
+        subHabits.Table.Should().Be("AppFeatureFlags");
+        subHabits.KeyColumns.Should().Equal("Key");
+        subHabits.KeyValues[0, 0].Should().Be("sub_habits");
+        subHabits.Columns.Should().Equal("PlanRequirement");
+        subHabits.Values[0, 0].Should().BeNull();
 
         var owedCancellations = differences.OfType<CreateTableOperation>()
             .Should().ContainSingle(table => table.Name == "OwedSubscriptionCancellations").Subject;
@@ -56,12 +63,17 @@ public class FeatureFlagAccountsMigrationTests
         differences.OfType<AddColumnOperation>().Should().ContainSingle(column => column.Table == "Users"
             && column.Name == "ConversationHistoryClearedAtUtc" && column.IsNullable && column.ClrType == typeof(DateTime));
         var renewalColumns = differences.OfType<AddColumnOperation>()
-            .Where(column => column.Table == "Users" && column.Name != "ConversationHistoryClearedAtUtc").ToArray();
+            .Where(column => column.Table == "Users" && column.ClrType == typeof(bool)).ToArray();
         renewalColumns.Should().HaveCount(2).And.OnlyContain(column =>
             column.ClrType == typeof(bool) && !column.IsNullable
             && Equals(column.DefaultValue, false));
         renewalColumns.Select(column => column.Name).Should().BeEquivalentTo(
             "StripeRenewalStoppedByDeletion", "PlayRenewalStoppedByDeletion");
+        var referralColumns = differences.OfType<AddColumnOperation>()
+            .Where(column => column.Table == "Referrals" || column.Name == "BonusProExpiresAtUtc").ToArray();
+        referralColumns.Should().HaveCount(5).And.OnlyContain(column => column.IsNullable || Equals(column.DefaultValue, 0));
+        referralColumns.Select(column => column.Name).Should().BeEquivalentTo(
+            "BonusProExpiresAtUtc", "ReferrerReward", "ReferredReward", "ReferrerRewardDeliveredAtUtc", "ReferredRewardDeliveredAtUtc");
         AssertHabitExpandColumns(differences);
         differences.OfType<DropForeignKeyOperation>().Select(operation => operation.Name).Should().BeEquivalentTo(
             "FK_AccountabilityPairs_Users_AddresseeId", "FK_AccountabilityPairs_Users_RequesterId");
@@ -109,9 +121,12 @@ public class FeatureFlagAccountsMigrationTests
             "20261020005707_PriceDailyAiBudgetsInUsd",
             "20261020014306_PersistConversationTurns",
             "20261020023110_VersionPendingToolArguments",
+            "20261020023828_AddReferralProDayRewards",
+            "20261020030817_MakeSubHabitsFree",
             "20261020031718_AddAstraEvalTraceFlag",
-            "20261020033359_RestoreRequiredProactiveAstraPreference");
-        context.Database.GetMigrations().Last().Should().EndWith("_RestoreRequiredProactiveAstraPreference");
+            "20261020033359_RestoreRequiredProactiveAstraPreference",
+            "20261020041243_SeparateBonusProEntitlement");
+        context.Database.GetMigrations().Last().Should().EndWith("_SeparateBonusProEntitlement");
         var preference = current.FindEntityType(typeof(User))!.FindProperty(nameof(User.ProactiveAstraEnabled))!;
         preference.ClrType.Should().Be(typeof(bool));
         preference.IsNullable.Should().BeFalse();

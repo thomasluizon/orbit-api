@@ -420,6 +420,8 @@ public class OrbitDbContext : DbContext
         {
             entity.HasIndex(r => r.ReferrerId);
             entity.HasIndex(r => r.ReferredUserId).IsUnique();
+            entity.Property(r => r.ReferrerReward).HasDefaultValue(ReferralRewardKind.None);
+            entity.Property(r => r.ReferredReward).HasDefaultValue(ReferralRewardKind.None);
         });
     }
 
@@ -669,7 +671,7 @@ public class OrbitDbContext : DbContext
                 new { Key = "ai_chat", Enabled = true, PlanRequirement = (string?)"Free", Description = (string?)"AI chat assistant", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "ai_summary", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"AI daily summary", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "ai_retrospective", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"AI retrospective analysis", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
-                new { Key = "sub_habits", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"Sub-habit nesting", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { Key = "sub_habits", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Sub-habit nesting", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "goal_tracking", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Goal tracking with progress", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "push_notifications", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Push notification reminders", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "scheduled_reminders", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Custom scheduled reminders", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
@@ -856,6 +858,8 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(u => u.PlayPurchaseToken).IsUnique().HasFilter("\"PlayPurchaseToken\" IS NOT NULL");
             entity.HasIndex(u => u.PublicProfileSlug).IsUnique().HasFilter("\"PublicProfileSlug\" IS NOT NULL");
 
+            entity.Property(u => u.SubscriptionPlan).HasColumnName("Plan");
+            entity.Property(u => u.SubscriptionExpiresAtUtc).HasColumnName("PlanExpiresAt");
             entity.Property(u => u.StripeRenewalStoppedByDeletion).HasDefaultValue(false);
             entity.Property(u => u.PlayRenewalStoppedByDeletion).HasDefaultValue(false);
             entity.Property(u => u.ProactiveAstraEnabled).HasDefaultValue(true).ValueGeneratedNever();

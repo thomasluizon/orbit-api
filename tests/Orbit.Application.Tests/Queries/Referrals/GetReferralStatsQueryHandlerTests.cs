@@ -50,7 +50,7 @@ public class GetReferralStatsQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_NoReferrals_ReturnsZeroCountsWithDiscountInfo()
+    public async Task Handle_NoReferrals_ReturnsZeroCountsWithProDays()
     {
         var user = CreateTestUser();
         user.SetReferralCode("CODE1234");
@@ -70,6 +70,21 @@ public class GetReferralStatsQueryHandlerTests
         result.Value.SuccessfulReferrals.Should().Be(0);
         result.Value.PendingReferrals.Should().Be(0);
         result.Value.MaxReferrals.Should().Be(AppConstants.DefaultMaxReferrals);
+        result.Value.RewardType.Should().Be("pro_days");
+        result.Value.ProDaysPerReferral.Should().Be(AppConstants.ReferralBonusProDays);
+        result.Value.DiscountPercent.Should().Be(AppConstants.ReferralDiscountPercent);
+    }
+
+    [Fact]
+    public async Task Handle_ActivePaidSubscriber_ReportsCouponReward()
+    {
+        var user = CreateTestUser();
+        user.SetStripeSubscription("sub_paid", DateTime.UtcNow.AddDays(30));
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _referralRepo.FindAsync(Arg.Any<Expression<Func<Referral, bool>>>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<Referral>());
+
+        var result = await _handler.Handle(new GetReferralStatsQuery(UserId), CancellationToken.None);
+
         result.Value.RewardType.Should().Be("discount");
         result.Value.DiscountPercent.Should().Be(AppConstants.ReferralDiscountPercent);
     }
@@ -100,7 +115,7 @@ public class GetReferralStatsQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.SuccessfulReferrals.Should().Be(2);        result.Value.PendingReferrals.Should().Be(2);
+        result.Value.SuccessfulReferrals.Should().Be(2); result.Value.PendingReferrals.Should().Be(2);
     }
 
     [Fact]

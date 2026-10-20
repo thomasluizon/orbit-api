@@ -305,21 +305,33 @@ public class StreakGapRepairTests
         response.Value.RepairableGapDates.Should().BeEmpty();
     }
 
-    [Fact]
-    public async Task GapOpeningLookbackWindow_ReturnsNoGap()
+    [Theory]
+    [InlineData(732, true)]
+    [InlineData(733, false)]
+    public async Task GapPredecessor_Respects732DayLookback(int predecessorDaysAgo, bool isRepairable)
     {
-        var firstDate = _today.AddDays(-AppConstants.MaxStreakLookbackDays);
-        var habit = Habit.Create(new HabitCreateParams(_user.Id, "Long gap", FrequencyUnit.Day, 1,
+        var firstDate = _today.AddDays(-predecessorDaysAgo);
+        var habit = Habit.Create(new HabitCreateParams(_user.Id, "Long interval", FrequencyUnit.Day, predecessorDaysAgo - 1,
             DueDate: firstDate)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(habit,
             firstDate.ToDateTime(new TimeOnly(12, 0), DateTimeKind.Utc));
-        _habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns([habit]);
-        _logs.FindAsync(Arg.Any<Expression<Func<HabitLog, bool>>>(), Arg.Any<CancellationToken>()).Returns([]);
+        habit.Log(firstDate, advanceDueDate: false);
         StubStreakData(habit);
 
+        var state = await _service.EvaluateGapRepairAsync(_user.Id, _today, [_today.AddDays(-1)]);
         var response = await ReadStreakInfoAsync();
 
-        response.Value.RepairableGapDates.Should().BeEmpty();
+        if (isRepairable)
+        {
+            state.Should().NotBeNull();
+            state!.PrecedingScheduledDate.Should().Be(firstDate);
+            response.Value.RepairableGapDates.Should().Equal(_today.AddDays(-1));
+        }
+        else
+        {
+            state.Should().BeNull();
+            response.Value.RepairableGapDates.Should().BeEmpty();
+        }
     }
 
     [Fact]
@@ -370,7 +382,7 @@ public class StreakGapRepairTests
     [Fact]
     public async Task GapOpeningLookbackWindow_IsNotReturned()
     {
-        _habit = SetHistory(_today, AppConstants.MaxStreakLookbackDays, precedingCompletions: 0);
+        _habit = SetHistory(_today, AppConstants.StreakRepairWindowDays, precedingCompletions: 0);
 
         var streak = await GetStreakInfo();
 
@@ -387,12 +399,65 @@ public class StreakGapRepairTests
         (await _service.EvaluateGapRepairAsync(_user.Id, _today, [_today.AddDays(-1)])).Should().BeNull();
     }
 
-    [Fact]
-    public async Task YearlyGapWhosePredecessorSitsBeyondTheStreakWindow_IsRefused()
+    [Theory]
+    [InlineData(2024, 9, 6, FrequencyUnit.Year, 366)]
+    [InlineData(2026, 9, 6, FrequencyUnit.Year, 365)]
+    [InlineData(2026, 9, 6, FrequencyUnit.Day, 365)]
+    [InlineData(2024, 3, 1, FrequencyUnit.Year, 366)]
+    public async Task YearlyGapWhosePredecessorSitsBeyondTheOrdinaryWindow_IsRepairable(
+        int year, int month, int day, FrequencyUnit unit, int intervalDays)
     {
-        _habit = SetYearlyHistory();
+        var today = new DateOnly(year, month, day);
+        _dateService.GetUserTodayAsync(_user.Id, Arg.Any<CancellationToken>()).Returns(today);
+        _habit = SetYearlyHistory(today, unit);
+        var gapDate = today.AddDays(-1);
+        var precedingDate = _habit.Logs.Single().Date;
+        (gapDate.DayNumber - precedingDate.DayNumber).Should().Be(intervalDays);
 
-        (await _service.EvaluateGapRepairAsync(_user.Id, _today, [_today.AddDays(-1)])).Should().BeNull();
+        var state = await _service.EvaluateGapRepairAsync(_user.Id, today, [gapDate]);
+
+        state.Should().NotBeNull();
+        state!.CurrentStreak.Should().Be(1);
+        state.PrecedingScheduledDate.Should().Be(precedingDate);
+        (await GetStreakInfo()).RepairableGapDates.Should().Equal(gapDate);
+    }
+
+    [Theory]
+    [InlineData(9, 6, 0)]
+    [InlineData(9, 6, 1)]
+    [InlineData(9, 6, 364)]
+    [InlineData(3, 1, 0)]
+    [InlineData(3, 1, 364)]
+    public async Task RepairedYearlyGap_RecalculationPersistsTheStreak(int month, int day, int daysAfterRepair)
+    {
+        var today = new DateOnly(2024, month, day);
+        _dateService.GetUserTodayAsync(_user.Id, Arg.Any<CancellationToken>()).Returns(today);
+        _habit = SetYearlyHistory(today);
+        SetUserProperty(nameof(User.StreakFreezesAccumulated), 1);
+        var options = new DbContextOptionsBuilder<OrbitDbContext>()
+            .UseInMemoryDatabase($"YearlyGap_{Guid.NewGuid()}").Options;
+        await using var context = new OrbitDbContext(options);
+        context.Users.Add(_user);
+        await context.SaveChangesAsync();
+        var (handler, _) = BuildRepairHandler();
+
+        var repaired = await handler.Handle(new(_user.Id, [today.AddDays(-1)]), CancellationToken.None);
+
+        repaired.IsSuccess.Should().BeTrue();
+        repaired.Value.CurrentStreak.Should().Be(1);
+        repaired.Value.StreakFreezesAccumulated.Should().Be(0);
+        _persistedFreezes.Select(freeze => freeze.UsedOnDate).Should().Equal(today.AddDays(-1));
+        await context.SaveChangesAsync();
+
+        _dateService.GetUserTodayAsync(_user.Id, Arg.Any<CancellationToken>()).Returns(today.AddDays(daysAfterRepair));
+        await _service.RecalculateAsync(_user.Id);
+        await context.SaveChangesAsync();
+
+        await using var reloaded = new OrbitDbContext(options);
+        var persistedUser = await reloaded.Users.SingleAsync(user => user.Id == _user.Id);
+        persistedUser.CurrentStreak.Should().Be(1);
+        persistedUser.LastActiveDate.Should().Be(today.AddDays(-1));
+        persistedUser.StreakFreezesAccumulated.Should().Be(0);
     }
 
     /// <summary>
@@ -613,15 +678,15 @@ public class StreakGapRepairTests
     }
 
     /// <summary>
-    /// A yearly habit occurring on yesterday and on the same day a year earlier, the earlier one
-    /// completed. Its predecessor is 366 days before the gap, which is the boundary the 365-day
-    /// history window used to cut off.
+    /// A yearly habit anchored to yesterday, with the previous year's occurrence completed.
+    /// A Feb 29 anchor uses Feb 28 in the previous year. The daily cadence spaces occurrences 365 days apart.
     /// </summary>
-    private Habit SetYearlyHistory()
+    private Habit SetYearlyHistory(DateOnly? today = null, FrequencyUnit unit = FrequencyUnit.Year)
     {
-        var firstOccurrence = _today.AddDays(-1).AddYears(-1);
-        var habit = Habit.Create(new HabitCreateParams(_user.Id, "Annual review", FrequencyUnit.Year, 1,
-            DueDate: firstOccurrence)).Value;
+        var gapDate = (today ?? _today).AddDays(-1);
+        var firstOccurrence = unit == FrequencyUnit.Year ? gapDate.AddYears(-1) : gapDate.AddDays(-365);
+        var habit = Habit.Create(new HabitCreateParams(_user.Id, "Annual review", unit, unit == FrequencyUnit.Year ? 1 : 365,
+            DueDate: gapDate)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(habit,
             firstOccurrence.ToDateTime(new TimeOnly(12, 0), DateTimeKind.Utc));
         habit.Log(firstOccurrence, advanceDueDate: false);

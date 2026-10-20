@@ -141,12 +141,11 @@ public class HabitToolsTests
         habits.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(parent);
         var gate = Substitute.For<IPayGateService>();
-        gate.CanCreateSubHabits(userId, Arg.Any<CancellationToken>()).Returns(Result.Success());
         var config = Substitute.For<IAppConfigService>();
         config.GetAsync("MaxHabitDepth", 5, Arg.Any<CancellationToken>()).Returns(5);
         _userDateService.GetUserTodayAsync(userId, Arg.Any<CancellationToken>()).Returns(today);
-        var handler = new CreateSubHabitCommandHandler(habits, Substitute.For<IGenericRepository<Tag>>(), gate,
-            _userDateService, Substitute.For<IUnitOfWork>(), config,
+        var handler = new CreateSubHabitCommandHandler(habits, Substitute.For<IGenericRepository<Tag>>(),
+            _userDateService, Substitute.For<IUnitOfWork>(), config, gate,
             new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()));
         _mediator.Send(Arg.Any<CreateSubHabitCommand>(), Arg.Any<CancellationToken>())
             .Returns(call => handler.Handle(call.Arg<CreateSubHabitCommand>(), call.Arg<CancellationToken>()));

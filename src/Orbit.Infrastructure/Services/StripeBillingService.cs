@@ -174,6 +174,46 @@ public sealed partial class StripeBillingService(
         }
     }
 
+    public async Task<long?> TryGetRecurringAmountPerPeriodAsync(string subscriptionId, string currency, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var invoice = await StripeRetryPolicy.ExecuteWithRetryAsync(
+                () => clients.Invoices.CreatePreviewAsync(new InvoiceCreatePreviewOptions
+                {
+                    Subscription = subscriptionId,
+                    PreviewMode = "next",
+                }, cancellationToken: cancellationToken),
+                cancellationToken);
+            if (invoice.Currency != currency || invoice.Lines is not { HasMore: false, Data: not null })
+            {
+                LogRecurringPreviewIncomplete(logger, subscriptionId);
+                return null;
+            }
+
+            var recurringLines = invoice.Lines.Data
+                .Where(line => line.Parent?.SubscriptionItemDetails is { Proration: false } parent
+                    && parent.Subscription == subscriptionId)
+                .ToList();
+            if (recurringLines.Count == 0 || recurringLines.Any(line => line.Currency != currency))
+            {
+                LogRecurringPreviewIncomplete(logger, subscriptionId);
+                return null;
+            }
+
+            return recurringLines.Sum(line => line.Subtotal - (line.DiscountAmounts?.Sum(discount => discount.Amount) ?? 0));
+        }
+        catch (StripeException ex) when (ex.StripeError?.Code == "invoice_upcoming_none")
+        {
+            return null;
+        }
+        catch (Exception ex) when (IsProviderFailure(ex, cancellationToken))
+        {
+            LogRecurringPreviewFailed(logger, ex, subscriptionId);
+            return null;
+        }
+    }
+
     public Task SetSubscriptionCancelAtPeriodEndAsync(
         string subscriptionId, bool cancelAtPeriodEnd, CancellationToken cancellationToken,
         string? deletionOwner = null) =>
@@ -278,4 +318,10 @@ public sealed partial class StripeBillingService(
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Failed to fetch coupon {CouponId}")]
     private static partial void LogCouponFetchFailed(ILogger logger, Exception ex, string couponId);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Failed to preview recurring amount for subscription {SubscriptionId}")]
+    private static partial void LogRecurringPreviewFailed(ILogger logger, Exception ex, string subscriptionId);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Recurring preview is incomplete or has a different currency for subscription {SubscriptionId}")]
+    private static partial void LogRecurringPreviewIncomplete(ILogger logger, string subscriptionId);
 }

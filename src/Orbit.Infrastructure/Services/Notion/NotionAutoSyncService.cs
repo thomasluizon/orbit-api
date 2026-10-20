@@ -23,7 +23,8 @@ public sealed class NotionAutoSyncService(IServiceScopeFactory scopeFactory, Tim
         var cutoff = nowUtc.AddMinutes(-15);
         var userIds = await db.NotionConnections.AsNoTracking()
             .Where(c => c.Status != NotionConnectionStatus.ReconnectRequired && (c.LastPollAtUtc == null || c.LastPollAtUtc <= cutoff))
-            .Join(db.Users.Where(u => u.IsLifetimePro || (u.Plan == UserPlan.Pro && u.PlanExpiresAt > nowUtc) || u.TrialEndsAt > nowUtc),
+            .Join(db.Users.Where(u => u.IsLifetimePro || u.BonusProExpiresAtUtc > nowUtc
+                || (u.SubscriptionPlan == UserPlan.Pro && u.SubscriptionExpiresAtUtc > nowUtc) || u.TrialEndsAt > nowUtc),
                 c => c.UserId, u => u.Id, (c, u) => c.UserId).ToListAsync(cancellationToken);
         foreach (var userId in userIds)
         {

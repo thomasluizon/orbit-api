@@ -31,7 +31,7 @@ public sealed class CancelSubscriptionOnDeletionJob(
 
     public static void EnqueueRestoration(IBackgroundJobClient jobs, User user)
     {
-        if (!string.IsNullOrWhiteSpace(user.StripeSubscriptionId) && HasUnexpiredPaidPeriod(user))
+        if (!string.IsNullOrWhiteSpace(user.StripeSubscriptionId) && user.HasActivePaidSubscription)
             jobs.Enqueue<CancelSubscriptionOnDeletionJob>(job =>
                 job.ExecuteAsync(user.Id, user.StripeSubscriptionId, null, false, CancellationToken.None));
     }
@@ -142,7 +142,7 @@ public sealed class CancelSubscriptionOnDeletionJob(
             await billingService.SetSubscriptionCancelAtPeriodEndAsync(stripeId, true, cancellationToken, user.Id.ToString());
         else if (!cancel && !subscription.CancelAtPeriodEnd)
             user.ReleaseStripeDeletionCancellation(stripeId);
-        else if (!cancel && HasUnexpiredPaidPeriod(user))
+        else if (!cancel && user.HasActivePaidSubscription)
         {
             await billingService.SetSubscriptionCancelAtPeriodEndAsync(stripeId, false, cancellationToken);
             user.RecordStripeRenewalRestored(stripeId);
@@ -165,12 +165,6 @@ public sealed class CancelSubscriptionOnDeletionJob(
     {
         if (failures.Count > 0)
             ExceptionDispatchInfo.Capture(failures[0]).Throw();
-    }
-
-    private static bool HasUnexpiredPaidPeriod(User user)
-    {
-        var nowAtUtc = DateTime.UtcNow;
-        return user.IsPro && user.PlanExpiresAt > nowAtUtc;
     }
 
     private async Task<bool> StripeCanRenewAsync(string stripeSubscriptionId, CancellationToken cancellationToken)
