@@ -95,7 +95,7 @@ public class ErrorCopyTests
     [Fact]
     public void TheDaysRequireQuantityOneLeakResolvesToWrittenCopyInBothLanguages()
     {
-        const string developerSentence = "Days can only be set when frequency quantity is 1.";
+        const string developerSentence = "Specific weekdays require frequency unit Day and frequency quantity 1.";
         DomainErrors.DaysRequireQuantityOne.Message.Should().Be(developerSentence);
 
         ErrorCopy.TryResolve(DomainErrors.DaysRequireQuantityOne.Code, isPtBr: false, [], out var english)
@@ -105,8 +105,8 @@ public class ErrorCopyTests
 
         english.Should().NotBe(developerSentence);
         portuguese.Should().NotBe(developerSentence);
-        english.Should().Contain("once a day");
-        portuguese.Should().Contain("uma vez ao dia");
+        english.Should().Be("To choose specific weekdays, the habit must repeat every day, once a day. Change the frequency or clear the weekdays.");
+        portuguese.Should().Be("Para escolher dias da semana, o hábito precisa se repetir todos os dias, uma vez por dia. Ajuste a frequência ou remova os dias selecionados.");
     }
 
     [Theory]

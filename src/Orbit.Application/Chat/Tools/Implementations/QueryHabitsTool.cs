@@ -27,7 +27,7 @@ public class QueryHabitsTool(
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            search = new { type = JsonSchemaTypes.String, description = "Search habits by title (case-insensitive contains match)" },
+            search = new { type = JsonSchemaTypes.String, description = "Search titles by word prefixes, ignoring case and accents. Every search word must start a title word; word order does not matter." },
             date = new { type = JsonSchemaTypes.String, description = "Return the canonical schedule for this date (YYYY-MM-DD), including entries already done on that date. Use 'today' for the user's current date. Omit is_completed for the full schedule." },
             include_overdue = new { type = JsonSchemaTypes.Boolean, description = "When filtering by date, also include habits overdue before that date. Default: true when date is 'today', false otherwise." },
             is_general = new { type = JsonSchemaTypes.Boolean, description = "Filter by general/timeless habits (true) or non-general habits (false). Omit to include both." },
@@ -156,22 +156,19 @@ public class QueryHabitsTool(
         var normalizedSearch = NormalizeSearchValue(f.Search);
         var normalizedTag = NormalizeSearchValue(f.Tag);
 
-        var habits = await habitRepository.FindAsync(
-            h => h.UserId == userId
-                && (f.IsGeneral == null || h.IsGeneral == f.IsGeneral.Value)
-                && (f.IsBadHabit == null || h.IsBadHabit == f.IsBadHabit.Value)
-                && (!f.FrequencyOneTime || h.FrequencyUnit == null)
-                && (f.Frequency == null || h.FrequencyUnit == f.Frequency.Value)
-                && (!f.Date.HasValue || !h.IsGeneral)
-                && (normalizedSearch == null || h.Title.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase))
-                && (normalizedTag == null || h.Tags.Any(t => t.Name.Contains(normalizedTag, StringComparison.OrdinalIgnoreCase))),
-            q => includeMetrics
-                ? q.Include(h => h.Tags).Include(h => h.Logs).AsSplitQuery()
-                : q
-                    .Include(h => h.Tags)
-                    .Include(h => h.Logs.Where(l => !l.IsDeleted && l.Date == today && l.Value > 0))
-                    .AsSplitQuery(),
-            ct);
+        var deferMetrics = includeMetrics && (normalizedSearch is not null || normalizedTag is not null);
+        var habits = await LoadCandidatesAsync(userId, f, today, includeMetrics, deferMetrics, ct);
+
+        habits = habits.Where(habit => normalizedSearch is null || HabitNameMatcher.Matches(habit.Title, normalizedSearch))
+            .Where(habit => normalizedTag is null || habit.Tags.Any(tag => HabitNameMatcher.Matches(tag.Name, normalizedTag)))
+            .ToList();
+
+        if (deferMetrics && habits.Count > 0)
+        {
+            var ids = habits.Select(habit => habit.Id).ToArray();
+            habits = await habitRepository.FindAsync(habit => habit.UserId == userId && ids.Contains(habit.Id),
+                query => query.Include(habit => habit.Tags).Include(habit => habit.Logs).AsSplitQuery(), ct);
+        }
 
         if (f.Date is DateOnly date)
         {
@@ -186,6 +183,25 @@ public class QueryHabitsTool(
         return new HabitQueryResult(habits
             .Where(h => GetResponseCompletion(h, today) == expectedCompletion)
             .ToList(), null);
+    }
+
+    private async Task<IReadOnlyList<Habit>> LoadCandidatesAsync(Guid userId, HabitFilters f,
+        DateOnly today, bool includeMetrics, bool deferMetrics, CancellationToken ct)
+    {
+        return await habitRepository.FindAsync(
+            h => h.UserId == userId
+                && (f.IsGeneral == null || h.IsGeneral == f.IsGeneral.Value)
+                && (f.IsBadHabit == null || h.IsBadHabit == f.IsBadHabit.Value)
+                && (!f.FrequencyOneTime || h.FrequencyUnit == null)
+                && (f.Frequency == null || h.FrequencyUnit == f.Frequency.Value)
+                && (!f.Date.HasValue || !h.IsGeneral),
+            q => deferMetrics ? q.Include(h => h.Tags) : includeMetrics
+                ? q.Include(h => h.Tags).Include(h => h.Logs).AsSplitQuery()
+                : q
+                    .Include(h => h.Tags)
+                    .Include(h => h.Logs.Where(l => !l.IsDeleted && l.Date == today && l.Value > 0))
+                    .AsSplitQuery(),
+            ct);
     }
 
     private static string? NormalizeSearchValue(string? value)

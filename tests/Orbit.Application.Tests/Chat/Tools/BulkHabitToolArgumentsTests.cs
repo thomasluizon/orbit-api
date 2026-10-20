@@ -8,6 +8,13 @@ namespace Orbit.Application.Tests.Chat.Tools;
 public sealed class BulkHabitToolArgumentsTests
 {
     [Fact]
+    public void CheckHabitFields_DoesNotValidateUnsupportedDeadline()
+    {
+        BulkHabitToolArguments.CheckHabitFields(Parse("""{"due_end_time":"25:00"}"""))
+            .Should().BeNull();
+    }
+
+    [Fact]
     public void ParseChanges_AllSupportedFields_MapsEveryPresenceFlagAndValue()
     {
         var args = Parse("""
@@ -63,6 +70,8 @@ public sealed class BulkHabitToolArgumentsTests
     [InlineData("{}", "updates is required")]
     [InlineData("{\"updates\":[]}", "updates is required")]
     [InlineData("{\"updates\":{\"unknown\":true}}", "unsupported field")]
+    [InlineData("""{"updates":{"due_end_time":"15:00"}}""", "unsupported field")]
+    [InlineData("""{"updates":{"due_end_time":"25:00"}}""", "unsupported field")]
     [InlineData("{\"updates\":{\"title\":1}}", "title must be a string")]
     [InlineData("{\"updates\":{\"description\":true}}", "description must be a string or null")]
     [InlineData("{\"updates\":{\"frequency_quantity\":\"one\"}}", "frequency_quantity must be an integer or null")]

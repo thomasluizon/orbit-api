@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -8,7 +9,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 public class AssignTagsTool(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<Tag> tagRepository,
-    IUnitOfWork unitOfWork) : IAiTool, IArgumentCheckTool
+    IUnitOfWork unitOfWork) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
     public string Name => "assign_tags";
 
@@ -23,6 +24,7 @@ public class AssignTagsTool(
         properties = new
         {
             habit_id = new { type = JsonSchemaTypes.String, description = "ID of the habit to tag" },
+            habit_ids = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String }, description = "IDs of all existing habits to tag in one approval. Use instead of habit_id for multiple habits." },
             tag_names = new
             {
                 type = JsonSchemaTypes.Array,
@@ -36,16 +38,32 @@ public class AssignTagsTool(
                 items = new { type = JsonSchemaTypes.String }
             }
         },
-        required = new[] { "habit_id" }
+        required = Array.Empty<string>()
     };
 
     public async Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
+        if (args.TryGetProperty("habit_ids", out _))
+        {
+            var batch = SingleHabitArguments(args);
+            if (batch is null)
+                return Orbit.Domain.Common.Result.Failure("Provide a non-empty habit_ids array without habit_id.");
+            var habitIds = batch.Select(value => Guid.Parse(value.GetProperty("habit_id").GetString()!)).ToArray();
+            var batchHabits = await habitRepository.FindAsync(habit => habit.UserId == userId && habitIds.Contains(habit.Id), ct);
+            if (batchHabits.Count != habitIds.Length)
+                return Orbit.Domain.Common.Result.Failure("Habit not found.");
+            return await CheckTagsAsync(args, userId, ct);
+        }
         if (!HabitToolHelpers.TryParseHabitId(args, out var habitId))
             return Orbit.Domain.Common.Result.Failure("Invalid habit_id.");
         var habits = await habitRepository.FindAsync(h => h.Id == habitId && h.UserId == userId, ct);
         if (habits.Count == 0)
             return Orbit.Domain.Common.Result.Failure("Habit not found.");
+        return await CheckTagsAsync(args, userId, ct);
+    }
+
+    private async Task<Orbit.Domain.Common.Result> CheckTagsAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
         var hasIds = args.TryGetProperty("tag_ids", out var ids);
         var hasNames = args.TryGetProperty("tag_names", out var names);
         if (hasIds == hasNames)
@@ -81,6 +99,9 @@ public class AssignTagsTool(
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
+        if (args.TryGetProperty("habit_ids", out _))
+            return await AssignBatchAsync(args, userId, ct);
+
         if (!args.TryGetProperty("habit_id", out var habitIdEl) ||
             !Guid.TryParse(habitIdEl.GetString(), out var habitId))
             return new ToolResult(false, Error: "habit_id is required and must be a valid GUID.");
@@ -92,6 +113,65 @@ public class AssignTagsTool(
             return await AssignByNamesAsync(habitId, tagNamesEl, userId, ct);
 
         return new ToolResult(false, Error: "Provide either tag_ids or tag_names.");
+    }
+
+    private async Task<ToolResult> AssignBatchAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
+        var batch = SingleHabitArguments(args);
+        if (batch is null)
+            return new ToolResult(false, Error: "Provide a non-empty habit_ids array without habit_id.");
+        var validation = await CheckTagsAsync(args, userId, ct);
+        if (validation.IsFailure)
+            return ToolResult.FromFailure(validation);
+        var ids = batch.Select(value => Guid.Parse(value.GetProperty("habit_id").GetString()!)).ToArray();
+        var habits = await habitRepository.FindTrackedAsync(habit => habit.UserId == userId && ids.Contains(habit.Id), IncludeTags, ct);
+        if (habits.Count != ids.Length)
+            return new ToolResult(false, Error: "Habit not found.");
+        List<Tag> resolvedTags;
+        if (args.TryGetProperty("tag_ids", out _))
+        {
+            var tagIds = JsonArgumentParser.ParseGuidArray(args, "tag_ids")!;
+            resolvedTags = tagIds.Count == 0 ? [] : (await tagRepository.FindTrackedAsync(tag =>
+                tag.UserId == userId && tagIds.Contains(tag.Id), ct)).ToList();
+            if (resolvedTags.Count != tagIds.Distinct().Count())
+                return new ToolResult(false, Error: "Tag not found.");
+        }
+        else
+            resolvedTags = await HabitToolHelpers.ResolveOrCreateTagsAsync(tagRepository,
+                args.GetProperty("tag_names").EnumerateArray().Select(value => value.GetString()!), userId, ct);
+        foreach (var habit in habits)
+        {
+            foreach (var tag in habit.Tags.ToList())
+                habit.RemoveTag(tag);
+            foreach (var tag in resolvedTags)
+                habit.AddTag(tag);
+        }
+        await unitOfWork.SaveChangesAsync(ct);
+        return new ToolResult(true, EntityName: $"{habits.Count} habits tagged", Payload: new
+        {
+            habit_count = habits.Count,
+            habits = habits.Select(habit => new { id = habit.Id, title = habit.Title }).ToArray()
+        });
+    }
+
+    internal static IReadOnlyList<JsonElement>? SingleHabitArguments(JsonElement args)
+    {
+        if (args.TryGetProperty("habit_id", out _) || !args.TryGetProperty("habit_ids", out var ids)
+            || ids.ValueKind != JsonValueKind.Array || ids.GetArrayLength() == 0
+            || ids.GetArrayLength() > Orbit.Application.Common.AppConstants.MaxBulkOperationSize)
+            return null;
+        var results = new List<JsonElement>();
+        var seen = new HashSet<Guid>();
+        foreach (var value in ids.EnumerateArray())
+        {
+            if (value.ValueKind != JsonValueKind.String || !Guid.TryParse(value.GetString(), out var id) || !seen.Add(id))
+                return null;
+            var single = JsonNode.Parse(args.GetRawText())!.AsObject();
+            single.Remove("habit_ids");
+            single["habit_id"] = id.ToString();
+            results.Add(JsonSerializer.SerializeToElement(single));
+        }
+        return results;
     }
 
     private async Task<ToolResult> AssignByIdsAsync(Guid habitId, JsonElement args, Guid userId, CancellationToken ct)

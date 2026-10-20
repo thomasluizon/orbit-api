@@ -20,7 +20,7 @@ public partial class ProcessUserChatCommandHandler
 
         var userHabits = await data.HabitRepository.FindAsync(
             h => h.UserId == request.UserId,
-            q => q,
+            q => q.Include(habit => habit.Tags),
             cancellationToken);
         var activeHabits = userHabits.Where(habit => !habit.IsCompleted).ToList();
         var userToday = await execution.UserDateService.GetUserTodayAsync(request.UserId, cancellationToken);
@@ -69,6 +69,7 @@ public partial class ProcessUserChatCommandHandler
         LogContextLoaded(logger, dbStopwatch.ElapsedMilliseconds, activeHabits.Count);
 
         return Result.Success(new ChatContext(
+            userHabits,
             activeHabits,
             todayHabits,
             promptHabitIndex.Habits,
@@ -189,6 +190,7 @@ public partial class ProcessUserChatCommandHandler
         IReadOnlySet<Guid> DoneTodayHabitIds);
 
     private sealed record ChatContext(
+        IReadOnlyList<Habit> UserHabits,
         List<Habit> ActiveHabits,
         List<Habit> TodayHabits,
         List<Habit> PromptHabits,

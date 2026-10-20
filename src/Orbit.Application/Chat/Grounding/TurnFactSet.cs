@@ -31,8 +31,11 @@ public sealed record TurnFactSet(IReadOnlyList<GroundingFact> Facts)
         switch (element.ValueKind)
         {
             case JsonValueKind.Object:
+                var proposedField = element.TryGetProperty("Field", out var field) && field.ValueKind == JsonValueKind.String
+                    ? field.GetString() : null;
                 foreach (var child in element.EnumerateObject())
-                    ReadPayload(child.Value, child.Name, result, facts);
+                    ReadPayload(child.Value, child.Name == "ProposedValue" && proposedField is not null
+                        ? proposedField : child.Name, result, facts);
                 break;
             case JsonValueKind.Array:
                 foreach (var child in element.EnumerateArray())
@@ -42,7 +45,7 @@ public sealed record TurnFactSet(IReadOnlyList<GroundingFact> Facts)
                 AddText(element.GetRawText(), false, result, facts);
                 break;
             case JsonValueKind.String:
-                AddText(element.GetString(), key is "TITLE" or "NAME" or "HABITTITLE" or "GOALTITLE" or "HABITNAME" or "GOALNAME" or "TAGNAME", result, facts);
+                AddText(element.GetString(), key is "ENTITYNAME" or "TITLE" or "NAME" or "HABITTITLE" or "GOALTITLE" or "HABITNAME" or "GOALNAME" or "TAGNAME" or "TAGNAMES", result, facts);
                 break;
         }
     }

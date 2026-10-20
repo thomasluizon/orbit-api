@@ -13,7 +13,7 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Tests.Chat.Tools;
 
-public class CreateHabitToolTests
+public partial class CreateHabitToolTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<Tag> _tagRepo = Substitute.For<IGenericRepository<Tag>>();
@@ -757,6 +757,8 @@ public class CreateHabitToolTests
         {
             "title": "Project",
             "frequency_unit": "Day",
+            "frequency_quantity": 1,
+            "days": ["Wednesday"],
             "sub_habits": [
                 {"title": "Phase 1", "due_date": "2026-06-01"}
             ]
@@ -764,7 +766,16 @@ public class CreateHabitToolTests
         """);
 
         result.Success.Should().BeTrue();
-        await _habitRepo.Received(2).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+        var habits = AddedHabits();
+        habits.Should().HaveCount(2);
+        var parent = habits.Single(habit => habit.ParentHabitId is null);
+        parent.Days.Should().Equal(DayOfWeek.Wednesday);
+        var child = habits.Single(habit => habit.ParentHabitId == parent.Id);
+        child.DueDate.Should().Be(new DateOnly(2026, 6, 1));
+        child.Schedule.Should().Be(HabitSchedule.Recurring);
+        child.FrequencyUnit.Should().Be(parent.FrequencyUnit).And.Be(FrequencyUnit.Day);
+        child.FrequencyQuantity.Should().Be(parent.FrequencyQuantity).And.Be(1);
+        child.Days.Should().BeEmpty();
     }
 
     [Fact]
