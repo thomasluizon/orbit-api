@@ -113,22 +113,6 @@ public sealed class HeldWriteRevisionTests
         context.Added.Should().BeEmpty();
     }
 
-    [Theory]
-    [InlineData("update_goal", """{"goal_id":"$goal","title":"Read"}""", """{"title":null}""")]
-    [InlineData("manage_api_keys", """{"action":"create","name":"Key","is_read_only":false}""", """{"is_read_only":null}""")]
-    public async Task OptionalNullRevision_UsesCurrentOrDefaultDomainValue(string name, string arguments, string edits)
-    {
-        using var context = new HeldWriteTestContext();
-        var tool = context.Tool(name);
-        var (revision, revised) = await context.ReviseAsync(tool, arguments, edits);
-        revision.IsSuccess.Should().BeTrue();
-        (await tool.ExecuteAsync(revised, context.UserId, default)).Success.Should().BeTrue();
-        if (name == "update_goal")
-            context.Goal.Title.Should().Be("Books");
-        else
-            context.Commands.OfType<CreateApiKeyCommand>().Should().ContainSingle().Which.IsReadOnly.Should().BeFalse();
-    }
-
     public static TheoryData<string, string, string> InvalidValues => new()
     {
         { "assign_tags", """{"habit_id":"$habit","tag_names":["Study"]}""", """{"tag_names":[""]}""" },
@@ -153,7 +137,7 @@ public sealed class HeldWriteRevisionTests
         { "update_notifications", """{"action":"subscribe_push","endpoint":"https://fcm.googleapis.com/fcm/send/a","p256dh":"key","auth":"secret"}""", """{"endpoint":"http://example.com/b"}""" },
         { "manage_subscription", """{"action":"create_checkout","interval":"monthly"}""", """{"interval":"weekly"}""" },
         { "manage_api_keys", """{"action":"create","name":"Key","scopes":["read_habits"]}""", """{"scopes":["invented:write"]}""" },
-        { "manage_api_keys", """{"action":"create","name":"Key","is_read_only":false}""", """{"is_read_only":"false"}""" },
+        { "manage_api_keys", """{"action":"create","name":"Key","is_read_only":false}""", """{"is_read_only":null}""" },
         { "manage_account", """{"action":"confirm_deletion","code":"$code"}""", """{"code":"000000"}""" },
         { "send_support_request", """{"name":"Reader","email":"reader@example.com","subject":"Help","message":"Read"}""", """{"email":"invalid"}""" },
         { "update_checklist", """{"habit_id":"$habit","checklist_items":[{"text":"Read"}]}""", """{"checklist_items":[{"text":""}]}""" },
@@ -164,6 +148,7 @@ public sealed class HeldWriteRevisionTests
         { "update_tag", """{"tag_id":"$tag","name":"Read","color":"#7c3aed"}""", """{"name":""}""" },
         { "update_goal", """{"goal_id":"$goal","target_value":1}""", """{"target_value":0}""" },
         { "update_goal", """{"goal_id":"$goal","title":"Read"}""", """{"title":""}""" },
+        { "update_goal", """{"goal_id":"$goal","title":"Read"}""", """{"title":null}""" },
         { "update_goal_progress", """{"goal_id":"$goal","current_value":1}""", """{"current_value":-1}""" },
         { "update_goal_status", """{"goal_id":"$goal","status":"Completed"}""", """{"status":"Active"}""" }
     };

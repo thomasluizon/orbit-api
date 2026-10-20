@@ -39,8 +39,14 @@ public class DailyAiDollarBudgetMigrationTests
             .UseNpgsql("Host=unused;Database=unused").Options);
         var target = context.GetService<IModelRuntimeInitializer>().Initialize(migration.TargetModel, designTime: true);
         var current = context.GetService<IDesignTimeModel>().Model;
-        context.GetService<IMigrationsModelDiffer>().GetDifferences(target.GetRelationalModel(), current.GetRelationalModel())
-            .Should().BeEmpty();
+        var differences = context.GetService<IMigrationsModelDiffer>()
+            .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
+        var schemaVersion = differences.Should().ContainSingle().Which.Should().BeOfType<AddColumnOperation>().Subject;
+        schemaVersion.Table.Should().Be("PendingAgentOperations");
+        schemaVersion.Name.Should().Be("ArgumentSchemaVersion");
+        schemaVersion.ClrType.Should().Be(typeof(int));
+        schemaVersion.IsNullable.Should().BeFalse();
+        schemaVersion.DefaultValue.Should().Be(0);
         var entity = current.FindEntityType(typeof(AiBudgetCall))!;
         entity.FindProperty("ChargedTokens").Should().NotBeNull();
         entity.FindProperty(nameof(AiBudgetCall.ChargedMicroDollars)).Should().NotBeNull();

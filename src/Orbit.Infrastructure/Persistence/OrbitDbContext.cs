@@ -493,6 +493,7 @@ public class OrbitDbContext : DbContext
             entity.Property(item => item.Summary).HasMaxLength(500);
             entity.Property(item => item.OperationFingerprint).HasMaxLength(256);
             entity.Property(item => item.PreviewFingerprint).HasMaxLength(256);
+            entity.Property(item => item.ArgumentSchemaVersion).IsRequired();
             entity.Property(item => item.RevisionNumber).IsConcurrencyToken();
             entity.Property(item => item.ConfirmationTokenHash).HasMaxLength(64);
             entity.Property(item => item.ConsumedAtUtc).IsConcurrencyToken();

@@ -28,7 +28,7 @@ public sealed class AskTool(
             properties = new
             {
                 form = new { type = "string", @enum = new[] { "choice", "pickList" } },
-                question = new { type = "string", maxLength = 120 },
+                question = new { type = "string", maxLength = 120, description = "Question, at most 120 characters." },
                 title = new { type = "string" },
                 multiSelect = new { type = "boolean" },
                 allowFreeText = new { type = "boolean" },
@@ -43,8 +43,8 @@ public sealed class AskTool(
                         properties = new
                         {
                             id = new { type = "string" },
-                            label = new { type = "string", maxLength = 20 },
-                            description = new { type = "string", maxLength = 24 }
+                            label = new { type = "string", maxLength = 20, description = "Option label, at most 20 characters." },
+                            description = new { type = "string", maxLength = 24, description = "Supporting text, at most 24 characters." }
                         },
                         required = new[] { "id", "label" }
                     }
@@ -62,7 +62,7 @@ public sealed class AskTool(
                         {
                             id = new { type = "string" },
                             label = new { type = "string" },
-                            detail = new { type = "string", maxLength = 24 },
+                            detail = new { type = "string", maxLength = 24, description = "Supporting text, at most 24 characters." },
                             arguments = new
                             {
                                 description = "One bulk item: a habit definition for create_habits, or {habit_id, date} for log_habits/skip_habits. Dates use YYYY-MM-DD.",
@@ -93,6 +93,10 @@ public sealed class AskTool(
         {
             return new ToolResult(false, Error: "Invalid ask arguments.");
         }
+        if (input is not null && (input.Question?.Length > 120
+            || input.Options?.Any(option => option is not null && (option.Label?.Length > 20 || option.Description?.Length > 24)) == true
+            || input.Items?.Any(item => item is not null && item.Detail?.Length > 24) == true))
+            return new ToolResult(false, Error: "ask text is too long: question max 120, option label max 20, option description and item detail max 24 characters. Shorten the text and retry.");
         if (input is null || !(await new AskToolArgumentsValidator().ValidateAsync(input, ct)).IsValid)
             return new ToolResult(false, Error: "Invalid ask form, question, options, items, or action.");
         var definition = AskToolArgumentsValidator.ToDefinition(input);

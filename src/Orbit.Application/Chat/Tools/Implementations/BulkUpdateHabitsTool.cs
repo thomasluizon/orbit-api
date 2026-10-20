@@ -11,7 +11,7 @@ public sealed class BulkUpdateHabitsTool(IMediator mediator) : IAiTool, IArgumen
     public string Name => "bulk_update_habits";
 
     public string Description =>
-        "Update the complete matching habit set in one call.";
+        "Update the complete matching habit set in one call. Null keeps values; use clear_fields to clear them.";
 
     public object GetParameterSchema() => new
     {
@@ -27,15 +27,15 @@ public sealed class BulkUpdateHabitsTool(IMediator mediator) : IAiTool, IArgumen
                 {
                     clear_fields = OptionalToolArguments.ClearFieldsSchema(OptionalToolArguments.BulkHabitClearFields),
                     title = new { type = JsonSchemaTypes.String },
-                    description = new { type = JsonSchemaTypes.String, nullable = true },
-                    emoji = new { type = JsonSchemaTypes.String, nullable = true },
-                    frequency_unit = new { type = JsonSchemaTypes.String, nullable = true, @enum = JsonSchemaTypes.FrequencyUnitEnum },
-                    frequency_quantity = new { type = JsonSchemaTypes.Integer, nullable = true },
-                    interval_weeks = new { type = JsonSchemaTypes.Integer, nullable = true },
+                    description = new { description = "Use clear_fields to clear description.", type = new[] { JsonSchemaTypes.String, "null" } },
+                    emoji = new { description = "Use clear_fields to clear emoji.", type = new[] { JsonSchemaTypes.String, "null" } },
+                    frequency_unit = new { description = "Use clear_fields to clear frequency_unit.", type = new[] { JsonSchemaTypes.String, "null" }, @enum = JsonSchemaTypes.FrequencyUnitEnum },
+                    frequency_quantity = new { description = "Use clear_fields to clear frequency_quantity.", type = new[] { JsonSchemaTypes.Integer, "null" } },
+                    interval_weeks = new { description = "Use clear_fields to clear interval_weeks.", type = new[] { JsonSchemaTypes.Integer, "null" } },
                     days = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String, @enum = JsonSchemaTypes.WeekdayEnum } },
                     due_date = new { type = JsonSchemaTypes.String },
-                    end_date = new { type = JsonSchemaTypes.String, nullable = true },
-                    due_time = new { type = JsonSchemaTypes.String, nullable = true },
+                    end_date = new { description = "Use clear_fields to clear end_date.", type = new[] { JsonSchemaTypes.String, "null" } },
+                    due_time = new { description = "Use clear_fields to clear due_time.", type = new[] { JsonSchemaTypes.String, "null" } },
                     is_bad_habit = new { type = JsonSchemaTypes.Boolean },
                     is_flexible = new { type = JsonSchemaTypes.Boolean },
                     reminder_enabled = new { type = JsonSchemaTypes.Boolean },
@@ -88,6 +88,7 @@ public sealed class BulkUpdateHabitsTool(IMediator mediator) : IAiTool, IArgumen
         if (args.TryGetProperty("revised_items", out var revisedItems))
             return await ExecuteRevisedAsync(mediator, revisedItems, userId, "Updated", ct, checkOnly);
 
+        args = OptionalToolArguments.OmitOptionalNulls(args, GetParameterSchema());
         var (filter, filterError) = BulkHabitToolArguments.ParseRequiredFilter(args);
         if (filterError is not null)
             return new ToolResult(false, Error: filterError);

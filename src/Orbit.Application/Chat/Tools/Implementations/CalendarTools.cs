@@ -24,10 +24,10 @@ public class GetCalendarOverviewTool(IMediator mediator) : IAiTool
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            include_calendars = new { type = JsonSchemaTypes.Boolean },
-            include_events = new { type = JsonSchemaTypes.Boolean },
-            include_auto_sync_state = new { type = JsonSchemaTypes.Boolean },
-            include_suggestions = new { type = JsonSchemaTypes.Boolean }
+            include_calendars = new { type = new[] { JsonSchemaTypes.Boolean, "null" } },
+            include_events = new { type = new[] { JsonSchemaTypes.Boolean, "null" } },
+            include_auto_sync_state = new { type = new[] { JsonSchemaTypes.Boolean, "null" } },
+            include_suggestions = new { type = new[] { JsonSchemaTypes.Boolean, "null" } }
         }
     };
 
@@ -88,9 +88,9 @@ public class ManageCalendarSyncTool(IMediator mediator) : IAiTool, IArgumentChec
                 type = JsonSchemaTypes.String,
                 @enum = new[] { "set_selected_calendars", "set_auto_sync", "dismiss_import", "dismiss_suggestion", "run_sync" }
             },
-            calendar_ids = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String }, nullable = true },
-            enabled = new { type = JsonSchemaTypes.Boolean, nullable = true },
-            suggestion_id = new { type = JsonSchemaTypes.String, nullable = true }
+            calendar_ids = new { type = new[] { JsonSchemaTypes.Array, "null" }, items = new { type = JsonSchemaTypes.String } },
+            enabled = new { type = new[] { JsonSchemaTypes.Boolean, "null" } },
+            suggestion_id = new { type = new[] { JsonSchemaTypes.String, "null" } }
         },
         required = new[] { "action" }
     };

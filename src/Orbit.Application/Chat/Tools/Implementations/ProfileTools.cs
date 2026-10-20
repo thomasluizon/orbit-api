@@ -54,12 +54,12 @@ public class UpdateProfilePreferencesTool(IMediator mediator) : IAiTool, IArgume
                     "reset_tour"
                 }
             },
-            name = new { type = JsonSchemaTypes.String, nullable = true },
-            timezone = new { type = JsonSchemaTypes.String, nullable = true },
-            language = new { type = JsonSchemaTypes.String, nullable = true, @enum = Orbit.Application.Common.AppConstants.SupportedLanguages },
-            week_start_day = new { type = JsonSchemaTypes.Integer, nullable = true, @enum = new[] { 0, 1 } },
-            uses_24_hour_clock = new { type = JsonSchemaTypes.Boolean, nullable = true },
-            theme_preference = new { type = JsonSchemaTypes.String, nullable = true, @enum = new[] { "dark", "light", "system" } }
+            name = new { type = new[] { JsonSchemaTypes.String, "null" } },
+            timezone = new { type = new[] { JsonSchemaTypes.String, "null" } },
+            language = new { type = new[] { JsonSchemaTypes.String, "null" }, @enum = Orbit.Application.Common.AppConstants.SupportedLanguages },
+            week_start_day = new { type = new[] { JsonSchemaTypes.Integer, "null" }, @enum = new[] { 0, 1 } },
+            uses_24_hour_clock = new { type = new[] { JsonSchemaTypes.Boolean, "null" } },
+            theme_preference = new { type = new[] { JsonSchemaTypes.String, "null" }, @enum = new[] { "dark", "light", "system" } }
         },
         required = new[] { "action" }
     };

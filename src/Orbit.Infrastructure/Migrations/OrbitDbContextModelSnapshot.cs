@@ -1877,6 +1877,9 @@ namespace Orbit.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int>("ArgumentSchemaVersion")
+                        .HasColumnType("integer");
+
                     b.Property<string>("ArgumentsJson")
                         .IsRequired()
                         .HasColumnType("jsonb");

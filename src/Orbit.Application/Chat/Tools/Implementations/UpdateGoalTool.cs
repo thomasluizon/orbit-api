@@ -21,11 +21,11 @@ public class UpdateGoalTool(
         {
             clear_fields = OptionalToolArguments.ClearFieldsSchema(OptionalToolArguments.GoalClearFields),
             goal_id = new { type = JsonSchemaTypes.String },
-            title = new { type = JsonSchemaTypes.String, nullable = true },
-            description = new { type = JsonSchemaTypes.String, description = "Description; clear via clear_fields.", nullable = true },
+            title = new { type = new[] { JsonSchemaTypes.String, "null" } },
+            description = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "Description; clear via clear_fields." },
             target_value = new { type = "number" },
             unit = new { type = JsonSchemaTypes.String },
-            deadline = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD deadline; clear via clear_fields.", nullable = true }
+            deadline = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "YYYY-MM-DD deadline; clear via clear_fields." }
         },
         required = new[] { "goal_id" }
     };

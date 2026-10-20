@@ -244,13 +244,35 @@ public partial class CreateHabitToolTests
             .IntervalWeeks.Should().Be(1);
     }
 
-    [Fact]
-    public async Task InvalidFrequencyUnit_CreatesOneTimeTask()
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData("OneTime", false)]
+    public async Task HabitRecurrence_ExplicitOneTimeCreatesWhileNullRequestsClarification(string? frequency, bool clarifies)
     {
-        var result = await Execute("""{"title": "Task", "frequency_unit": "InvalidUnit"}""");
+        var result = await Execute(JsonSerializer.Serialize(new { title = "Exercise habit", frequency_unit = frequency }));
+        result.Success.Should().BeTrue(result.Error);
+        if (clarifies)
+        {
+            result.Payload.Should().NotBeNull();
+            await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+        }
+        else
+        {
+            result.EntityId.Should().NotBeNull();
+            await _habitRepo.Received(1).AddAsync(Arg.Is<Habit>(habit => habit.FrequencyUnit == null), Arg.Any<CancellationToken>());
+        }
+    }
 
-        result.Success.Should().BeTrue();
-        result.EntityName.Should().Be("Task");
+    [Theory]
+    [InlineData("InvalidUnit")]
+    [InlineData("99")]
+    [InlineData("0")]
+    public async Task InvalidFrequencyUnit_ReturnsCorrectableToolError(string value)
+    {
+        var result = await Execute(JsonSerializer.Serialize(new { title = "Task", frequency_unit = value }));
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("frequency_unit");
     }
 
     [Fact]

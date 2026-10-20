@@ -27,7 +27,7 @@ public sealed partial class BulkUpdateHabitEmojisTool(
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            emoji_mode = new { type = JsonSchemaTypes.String, @enum = new[] { "infer", "set", "clear" }, description = "Defaults to infer. Use set with emoji, or clear to remove icons." },
+            emoji_mode = new { type = new[] { JsonSchemaTypes.String, "null" }, @enum = new[] { "infer", "set", "clear" }, description = "Defaults to infer. Use set with emoji, or clear to remove icons." },
             filter = BulkHabitToolArguments.FilterSchema(),
             habit_ids = new
             {
@@ -37,18 +37,17 @@ public sealed partial class BulkUpdateHabitEmojisTool(
             },
             emoji = new
             {
-                type = JsonSchemaTypes.String,
-                description = "Requested icon. Null uses the default mode; clear via emoji_mode.",
-                nullable = true
+                type = new[] { JsonSchemaTypes.String, "null" },
+                description = "Requested icon. Null uses the default mode; clear via emoji_mode."
             },
             infer_from_title = new
             {
-                type = JsonSchemaTypes.Boolean,
+                type = new[] { JsonSchemaTypes.Boolean, "null" },
                 description = "Infer one sensible emoji from each title and description. Defaults to true when emoji is omitted."
             },
             include_completed = new
             {
-                type = JsonSchemaTypes.Boolean,
+                type = new[] { JsonSchemaTypes.Boolean, "null" },
                 description = "Legacy selection option. Include completed habits when filter is omitted. Defaults to false."
             }
         },

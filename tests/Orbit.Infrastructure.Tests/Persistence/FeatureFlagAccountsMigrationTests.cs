@@ -26,7 +26,12 @@ public class FeatureFlagAccountsMigrationTests
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
 
-        differences.Should().HaveCount(39);
+        differences.Should().HaveCount(40);
+        var schemaVersion = differences.OfType<AddColumnOperation>().Should()
+            .ContainSingle(column => column.Table == "PendingAgentOperations" && column.Name == "ArgumentSchemaVersion").Subject;
+        schemaVersion.ClrType.Should().Be(typeof(int));
+        schemaVersion.IsNullable.Should().BeFalse();
+        schemaVersion.DefaultValue.Should().Be(0);
         differences.OfType<CreateTableOperation>().Should().Contain(table => table.Name == "OAuthStates")
             .And.Contain(table => table.Name == "AiBudgetCalls");
         var owedCancellations = differences.OfType<CreateTableOperation>()
@@ -93,7 +98,8 @@ public class FeatureFlagAccountsMigrationTests
             "20261019011031_ContractHabitLogSlip",
             "20261019091925_AddOwedSubscriptionCancellations",
             "20261019124138_AddAstraBlockAnswerReplay",
-            "20261019165331_ExpandHabitScheduleAndStartDate");
+            "20261019165331_ExpandHabitScheduleAndStartDate",
+            "20261020023110_VersionPendingToolArguments");
     }
 
     private static void AssertHabitExpandColumns(IReadOnlyList<MigrationOperation> differences)

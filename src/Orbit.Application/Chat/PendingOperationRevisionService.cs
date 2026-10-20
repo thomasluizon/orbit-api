@@ -34,6 +34,9 @@ public sealed class PendingOperationRevisionService(
         if (execution is null)
             return Failure("pending_operation_not_found");
 
+        if (execution.RequiresReproposal)
+            return Failure("pending_operation_schema_changed");
+
         var preview = await previewer.PreviewAsync(userId, execution.OperationId,
             execution.Arguments, cancellationToken);
         if (preview?.Items is null || string.IsNullOrWhiteSpace(preview.PreviewFingerprint))
@@ -62,6 +65,9 @@ public sealed class PendingOperationRevisionService(
         var execution = store.GetExecution(userId, pendingOperationId);
         if (execution is null)
             return Failure("pending_operation_not_found");
+
+        if (execution.RequiresReproposal)
+            return Failure("pending_operation_schema_changed");
 
         var original = await previewer.PreviewAsync(userId, execution.OperationId,
             execution.Arguments, cancellationToken);
@@ -122,6 +128,8 @@ public sealed class PendingOperationRevisionService(
     public async Task<bool> IsCurrentAsync(Guid userId, PendingAgentOperationExecution execution,
         CancellationToken cancellationToken)
     {
+        if (execution.RequiresReproposal)
+            return false;
         if (string.IsNullOrWhiteSpace(execution.PreviewFingerprint))
             return execution.Surface != AgentExecutionSurface.Chat
                 || toolRegistry.GetTool(execution.OperationId)?.IsReadOnly == true;
@@ -133,6 +141,8 @@ public sealed class PendingOperationRevisionService(
     public async Task<bool> CanApproveAsync(Guid userId, PendingAgentOperationExecution execution,
         CancellationToken cancellationToken)
     {
+        if (execution.RequiresReproposal)
+            return false;
         if (execution.OperationId != "bulk_create_habits")
             return true;
 
@@ -153,6 +163,9 @@ public sealed class PendingOperationRevisionService(
         var edits = items.Where(HasEdits).SelectMany(item => item.Edits!.Value.EnumerateObject()).ToList();
         if (edits.Count == 0)
             return true;
+        if (edits.Any(edit => edit.Value.ValueKind == JsonValueKind.Null
+            && !OptionalToolArguments.ClearableFields(operationId).Contains(edit.Name)))
+            return false;
         var tool = toolRegistry.GetTool(operationId);
         if (tool is null)
             return false;

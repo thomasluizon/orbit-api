@@ -301,7 +301,10 @@ public partial class ProcessUserChatCommandHandlerTests
         await _aiIntentService.Received(1).ContinueWithToolResultsAsync(TestConversationContext,
             Arg.Is<IReadOnlyList<AiToolCallResult>>(results => results.Count == 1 && results[0].Name == "ask"
                 && results[0].Id == "ask1" && !results[0].Success
-                && results[0].Error == "Invalid ask form, question, options, items, or action. Ask in plain text instead."),
+                && (results[0].Error ?? string.Empty).Contains("question max 120")
+                && (results[0].Error ?? string.Empty).Contains("option label max 20")
+                && (results[0].Error ?? string.Empty).Contains("option description and item detail max 24")
+                && (results[0].Error ?? string.Empty).Contains("Shorten the text and retry.")),
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 

@@ -188,7 +188,11 @@ public record PendingAgentOperationExecution(
     JsonElement Arguments,
     AgentExecutionSurface Surface,
     AgentConfirmationRequirement ConfirmationRequirement,
-    string? PreviewFingerprint = null);
+    string? PreviewFingerprint = null,
+    int ArgumentSchemaVersion = Orbit.Domain.Entities.PendingAgentOperationState.CurrentArgumentSchemaVersion)
+{
+    public bool RequiresReproposal => ArgumentSchemaVersion != Orbit.Domain.Entities.PendingAgentOperationState.CurrentArgumentSchemaVersion;
+}
 
 public record AgentStepUpChallenge(
     Guid ChallengeId,

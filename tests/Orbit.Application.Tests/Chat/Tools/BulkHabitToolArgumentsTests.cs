@@ -4,6 +4,7 @@ using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Entities;
 using Orbit.Application.Habits.Commands;
+using Orbit.Application.Chat.Tools;
 
 namespace Orbit.Application.Tests.Chat.Tools;
 
@@ -17,7 +18,9 @@ public sealed class BulkHabitToolArgumentsTests
             DueDate: new DateOnly(2027, 1, 1), Description: "Keep description", Emoji: "📖",
             Days: [DayOfWeek.Monday], DueTime: new TimeOnly(8, 0), EndDate: new DateOnly(2027, 2, 1))).Value;
         var absent = BulkHabitToolArguments.ParseChanges(Parse("""{"updates":{}}"""));
-        var explicitNull = BulkHabitToolArguments.ParseChanges(Parse("{\"updates\":{\"" + field + "\":null}}"));
+        var modelArguments = OptionalToolArguments.OmitOptionalNulls(Parse("{\"updates\":{\"" + field + "\":null}}"),
+            new BulkUpdateHabitsTool(NSubstitute.Substitute.For<MediatR.IMediator>()).GetParameterSchema());
+        var explicitNull = BulkHabitToolArguments.ParseChanges(modelArguments);
         absent.Error.Should().BeNull();
         explicitNull.Error.Should().BeNull();
         explicitNull.Changes.Should().BeEquivalentTo(absent.Changes);
@@ -118,6 +121,8 @@ public sealed class BulkHabitToolArgumentsTests
     [InlineData("""{"updates":{"due_end_time":"15:00"}}""", "unsupported field")]
     [InlineData("""{"updates":{"due_end_time":"25:00"}}""", "unsupported field")]
     [InlineData("{\"updates\":{\"title\":1}}", "title must be a string")]
+    [InlineData("{\"updates\":{\"is_bad_habit\":null}}", "is_bad_habit must be a boolean")]
+    [InlineData("{\"updates\":{\"due_date\":null}}", "due_date must be a date")]
     [InlineData("{\"updates\":{\"description\":true}}", "description must be a string or null")]
     [InlineData("{\"updates\":{\"frequency_quantity\":\"one\"}}", "frequency_quantity must be an integer or null")]
     [InlineData("{\"updates\":{\"interval_weeks\":1.5}}", "interval_weeks must be an integer or null")]

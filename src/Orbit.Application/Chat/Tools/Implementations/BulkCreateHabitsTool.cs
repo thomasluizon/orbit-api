@@ -124,7 +124,10 @@ public class BulkCreateHabitsTool(
             }
         }
 
-        var frequencyUnit = JsonArgumentParser.ParseFrequencyUnit(el);
+        var parsedFrequency = JsonArgumentParser.ParseFrequencyUnit(el);
+        if (parsedFrequency.IsFailure)
+            return null;
+        var frequencyUnit = parsedFrequency.Value;
         var frequencyQuantity = JsonArgumentParser.GetOptionalInt(el, "frequency_quantity")
             ?? (frequencyUnit is not null ? 1 : (int?)null);
 
@@ -152,13 +155,13 @@ public class BulkCreateHabitsTool(
         {
             [TitleProperty] = new { type = JsonSchemaTypes.String },
             ["description"] = new { type = JsonSchemaTypes.String },
-            ["emoji"] = new { type = JsonSchemaTypes.String, description = "Emoji icon. Pick a relevant one when clear.", nullable = true },
-            ["frequency_unit"] = new { type = JsonSchemaTypes.String, description = "Recurrence unit. Omit for one-time tasks.", nullable = true, @enum = JsonSchemaTypes.FrequencyUnitEnum },
+            ["emoji"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "Emoji icon. Pick a relevant one when clear." },
+            ["frequency_unit"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "Recurrence unit. Omit for one-time tasks.", @enum = JsonSchemaTypes.FrequencyUnitEnum },
             ["frequency_quantity"] = new { type = JsonSchemaTypes.Integer, description = "How often. Defaults to 1." },
             ["interval_weeks"] = new { type = JsonSchemaTypes.Integer, description = "Repeat interval in weeks. Omit for every week. Minimum 1." },
             ["days"] = new { type = JsonSchemaTypes.Array, description = "Specific weekdays. Only when frequency_quantity is 1.", items = new { type = JsonSchemaTypes.String, @enum = JsonSchemaTypes.WeekdayEnum } },
             ["due_date"] = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD. Defaults to today." },
-            ["end_date"] = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD. Optional end date.", nullable = true },
+            ["end_date"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "YYYY-MM-DD. Optional end date." },
             ["due_time"] = new { type = JsonSchemaTypes.String, description = "HH:mm" },
             ["is_bad_habit"] = new { type = JsonSchemaTypes.Boolean, description = "Whether this is a bad habit to reduce. Defaults to false." },
             ["is_general"] = new { type = JsonSchemaTypes.Boolean, description = "Whether this is a general habit with no schedule. Defaults to false." },

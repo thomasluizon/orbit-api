@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Orbit.Domain.Enums;
+using Orbit.Domain.Common;
 using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Chat.Tools;
@@ -35,11 +36,20 @@ internal static class JsonArgumentParser
         return null;
     }
 
-    public static FrequencyUnit? ParseFrequencyUnit(JsonElement el)
+    public static Result<FrequencyUnit?> ParseFrequencyUnit(JsonElement el)
     {
-        var str = GetOptionalString(el, "frequency_unit");
-        if (str is null) return null;
-        return Enum.TryParse<FrequencyUnit>(str, ignoreCase: true, out var unit) ? unit : null;
+        if (!el.TryGetProperty("frequency_unit", out var value) || value.ValueKind == JsonValueKind.Null)
+            return Result.Success<FrequencyUnit?>(null);
+        if (value.ValueKind == JsonValueKind.String)
+        {
+            var name = value.GetString();
+            if (name == "OneTime")
+                return Result.Success<FrequencyUnit?>(null);
+            if (Enum.TryParse<FrequencyUnit>(name, ignoreCase: true, out var unit) && Enum.IsDefined(unit)
+                && !int.TryParse(name, out _))
+                return Result.Success<FrequencyUnit?>(unit);
+        }
+        return Result.Failure<FrequencyUnit?>("frequency_unit must be Day, Week, Month, Year, or OneTime.");
     }
 
     public static List<DayOfWeek>? ParseDays(JsonElement el)

@@ -15,7 +15,7 @@ public static class AgentArgumentSchema
         TryGetField(schema, field, out _);
 
     public static bool Accepts(JsonElement schema, string field, JsonElement value) =>
-        TryGetField(schema, field, out var declared) && AcceptsValue(declared, field, value, IsOptional(schema, field));
+        TryGetField(schema, field, out var declared) && AcceptsValue(declared, field, value);
 
     public static bool IsDateField(string field) =>
         field is "date" or "deadline" || field.EndsWith("_date", StringComparison.Ordinal);
@@ -33,21 +33,20 @@ public static class AgentArgumentSchema
             && declared.ValueKind == JsonValueKind.Object;
     }
 
-    private static bool IsOptional(JsonElement schema, string field) =>
-        !schema.TryGetProperty("required", out var required)
-        || !required.EnumerateArray().Any(name => name.GetString() == field);
-
-    private static bool AcceptsValue(JsonElement schema, string field, JsonElement value, bool optional = false)
+    private static bool AcceptsValue(JsonElement schema, string field, JsonElement value)
     {
         if (value.ValueKind == JsonValueKind.Null)
-            return optional || (schema.TryGetProperty("nullable", out var nullable) && nullable.ValueKind == JsonValueKind.True);
+            return (schema.TryGetProperty("nullable", out var nullable) && nullable.ValueKind == JsonValueKind.True)
+                || (schema.TryGetProperty("type", out var types) && types.ValueKind == JsonValueKind.Array
+                    && types.EnumerateArray().Any(type => type.GetString() == "null"));
 
         if (schema.TryGetProperty("enum", out var options)
             && !options.EnumerateArray().Any(option => JsonElement.DeepEquals(option, value)))
             return false;
 
-        var type = schema.TryGetProperty("type", out var declared) && declared.ValueKind == JsonValueKind.String
-            ? declared.GetString()
+        var type = schema.TryGetProperty("type", out var declared)
+            ? declared.ValueKind == JsonValueKind.String ? declared.GetString()
+                : declared.EnumerateArray().Select(value => value.GetString()).FirstOrDefault(value => value != "null")
             : null;
         return type switch
         {

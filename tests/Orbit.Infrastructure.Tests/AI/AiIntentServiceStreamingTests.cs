@@ -23,6 +23,34 @@ namespace Orbit.Infrastructure.Tests.AI;
 public class AiIntentServiceStreamingTests
 {
     [Fact]
+    public async Task SendWithToolsAsync_AllChatToolsHaveStrictWireDeclarations()
+    {
+        var registry = new Orbit.Application.Chat.Tools.AiToolRegistry(StrictChatToolSchemaTests.AllTools());
+        var tools = registry.GetAll().Select(tool => (object)new
+        {
+            name = tool.Name,
+            description = tool.Description,
+            parameters = tool.GetParameterSchema()
+        }).ToList();
+        var handler = new SequenceSseHandler(ResponsesTestData.Text("Done"));
+        var (service, _) = BuildService(handler);
+        var result = await service.SendWithToolsAsync(new AiToolRequest("Review my tools", "system", tools));
+        result.IsSuccess.Should().BeTrue();
+        using var request = JsonDocument.Parse(handler.RequestBodies.Single());
+        var wireTools = request.RootElement.GetProperty("tools");
+        wireTools.EnumerateArray().Select(tool => tool.GetProperty("name").GetString())
+            .Should().BeEquivalentTo(registry.GetAll().Select(tool => tool.Name));
+        foreach (var tool in wireTools.EnumerateArray())
+        {
+            tool.GetProperty("strict").GetBoolean().Should().BeTrue();
+            StrictChatToolSchemaTests.AssertStrict(tool.GetProperty("parameters"));
+        }
+        var capturePath = Environment.GetEnvironmentVariable("ORBIT_STRICT_TOOLS_CAPTURE_PATH");
+        if (!string.IsNullOrWhiteSpace(capturePath))
+            await File.WriteAllTextAsync(capturePath, wireTools.GetRawText());
+    }
+
+    [Fact]
     public async Task SendWithToolsAsync_StreamingTextRound_EmitsDeltasAndReturnsFullText()
     {
         var body = TextStream("Hello!", "Hel", "lo!");

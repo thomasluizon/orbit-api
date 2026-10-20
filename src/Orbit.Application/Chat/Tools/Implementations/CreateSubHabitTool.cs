@@ -24,7 +24,7 @@ public class CreateSubHabitTool(
             parent_habit_id = new { type = JsonSchemaTypes.String },
             title = new { type = JsonSchemaTypes.String },
             description = new { type = JsonSchemaTypes.String },
-            emoji = new { type = JsonSchemaTypes.String, description = "Requested or relevant icon emoji.", nullable = true },
+            emoji = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "Requested or relevant icon emoji." },
             frequency_unit = new
             {
                 type = JsonSchemaTypes.String,

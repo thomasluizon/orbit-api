@@ -9,6 +9,22 @@ namespace Orbit.Application.Tests.Chat.Tools;
 
 public sealed class OptionalToolArgumentsTests
 {
+    [Theory]
+    [InlineData("update_habit")]
+    [InlineData("update_goal")]
+    [InlineData("bulk_update_habits")]
+    public void ClearableFields_ExplainTheExplicitClearContract(string operation)
+    {
+        using var context = new HeldWriteTestContext();
+        var tool = context.Tool(operation);
+        tool.Description.Should().Contain("clear_fields");
+        var schema = JsonSerializer.SerializeToElement(tool.GetParameterSchema());
+        if (operation == "bulk_update_habits") schema = schema.GetProperty("properties").GetProperty("updates");
+        foreach (var field in OptionalToolArguments.ClearableFields(operation))
+            schema.GetProperty("properties").GetProperty(field).GetProperty("description").GetString()
+                .Should().Contain("clear_fields");
+    }
+
     [Fact]
     public void ModelNulls_LeaveRequiredAndUnknownArgumentsForRuntimeValidation()
     {

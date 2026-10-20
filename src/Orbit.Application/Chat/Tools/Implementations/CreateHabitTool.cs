@@ -24,7 +24,7 @@ public class CreateHabitTool(
     public int Order => 0;
 
     public string Description =>
-        "Create habits or dated tasks with tags, goals, checklists and children inline. Single dated events are one-time, even when a weekday is named. Separate dated extras from recurring classes. Dated children inherit parent frequency without its weekdays; use OneTime for a one-time child. Preserve requested weekdays. Use checklist_items for steps done together and sub_habits for independent tracking.";
+        "Use frequency_unit: OneTime for one-time tasks; null leaves recurrence unspecified and may require clarification. Create habits or dated tasks with tags, goals, checklists and children inline. Single dated events are one-time, even when a weekday is named. Separate dated extras from recurring classes. Dated children inherit parent frequency without its weekdays; use OneTime for a one-time child. Preserve requested weekdays. Use checklist_items for steps done together and sub_habits for independent tracking.";
 
     public object GetParameterSchema() => new
     {
@@ -33,12 +33,11 @@ public class CreateHabitTool(
         {
             title = new { type = JsonSchemaTypes.String },
             description = new { type = JsonSchemaTypes.String },
-            emoji = new { type = JsonSchemaTypes.String, description = "Icon emoji. Use the requested emoji or a relevant one.", nullable = true },
+            emoji = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "Icon emoji. Use the requested emoji or a relevant one." },
             frequency_unit = new
             {
-                type = JsonSchemaTypes.String,
+                type = new[] { JsonSchemaTypes.String, "null" },
                 description = "OneTime for explicit one-time tasks; null leaves recurrence unspecified.",
-                nullable = true,
                 @enum = JsonSchemaTypes.FrequencyOrOneTimeEnum
             },
             frequency_quantity = new { type = JsonSchemaTypes.Integer, description = "How often (e.g. every 2 days). Defaults to 1." },
@@ -50,9 +49,9 @@ public class CreateHabitTool(
                 items = new { type = JsonSchemaTypes.String, @enum = JsonSchemaTypes.WeekdayEnum }
             },
             due_date = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD. One-time due date or recurrence start. Defaults to today." },
-            end_date = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD. Optional end date. Habit stops appearing after this date. Only for recurring habits.", nullable = true },
-            due_time = new { type = JsonSchemaTypes.String, description = "HH:mm start time. Omit when there is only a deadline.", nullable = true },
-            due_end_time = new { type = JsonSchemaTypes.String, description = "HH:mm end time or deadline. For 'before 15h' without a fixed start, set 15:00 and omit due_time.", nullable = true },
+            end_date = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "YYYY-MM-DD. Optional end date. Habit stops appearing after this date. Only for recurring habits." },
+            due_time = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "HH:mm start time. Omit when there is only a deadline." },
+            due_end_time = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "HH:mm end time or deadline. For 'before 15h' without a fixed start, set 15:00 and omit due_time." },
             is_bad_habit = new { type = JsonSchemaTypes.Boolean, description = "Whether this is a bad habit to reduce. Defaults to false." },
             is_flexible = new { type = JsonSchemaTypes.Boolean, description = "True for window-based tracking (e.g. '3x per week, any days'). Cannot have days set. Requires frequency_unit." },
             slip_alert_enabled = new { type = JsonSchemaTypes.Boolean, description = "Enable slip pattern alerts. Defaults to true for bad habits." },
@@ -116,8 +115,8 @@ public class CreateHabitTool(
                     {
                         title = new { type = JsonSchemaTypes.String },
                         description = new { type = JsonSchemaTypes.String },
-                        emoji = new { type = JsonSchemaTypes.String, description = "Relevant icon emoji.", nullable = true },
-                        frequency_unit = new { type = JsonSchemaTypes.String, description = "Override parent recurrence. Use OneTime for a one-time task; null inherits. Otherwise the parent's unit and quantity are inherited.", nullable = true, @enum = JsonSchemaTypes.FrequencyOrOneTimeEnum },
+                        emoji = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "Relevant icon emoji." },
+                        frequency_unit = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "Override parent recurrence. Use OneTime for a one-time task; null inherits. Otherwise the parent's unit and quantity are inherited.", @enum = JsonSchemaTypes.FrequencyOrOneTimeEnum },
                         frequency_quantity = new { type = JsonSchemaTypes.Integer },
                         interval_weeks = new { type = JsonSchemaTypes.Integer, description = "Repeat interval in weeks. Minimum 1." },
                         days = new { type = JsonSchemaTypes.Array, description = "Recurring weekdays with Day (or Week normalized to Day) and quantity 1. Omit for dated one-time tasks.", items = new { type = JsonSchemaTypes.String, @enum = JsonSchemaTypes.WeekdayEnum } },
@@ -223,7 +222,10 @@ public class CreateHabitTool(
     private static Domain.Common.Result<Habit> BuildParentHabit(
         JsonElement args, Guid userId, string title, DateOnly today)
     {
-        var frequencyUnit = JsonArgumentParser.ParseFrequencyUnit(args);
+        var parsedFrequency = JsonArgumentParser.ParseFrequencyUnit(args);
+        if (parsedFrequency.IsFailure)
+            return parsedFrequency.PropagateError<Habit>();
+        var frequencyUnit = parsedFrequency.Value;
         int? frequencyQuantity = JsonArgumentParser.GetOptionalInt(args, "frequency_quantity")
             ?? (frequencyUnit is not null ? 1 : null);
         var dueDate = JsonArgumentParser.ParseDateOnly(args, "due_date");
@@ -311,7 +313,10 @@ public class CreateHabitTool(
         FrequencyUnit? parentFreqUnit, int? parentFreqQty,
         List<DayOfWeek>? parentDays, DateOnly parentDueDate, int? parentIntervalWeeks)
     {
-        var subFrequencyUnit = JsonArgumentParser.ParseFrequencyUnit(sub);
+        var parsedFrequency = JsonArgumentParser.ParseFrequencyUnit(sub);
+        if (parsedFrequency.IsFailure)
+            return parsedFrequency.PropagateError<Habit>();
+        var subFrequencyUnit = parsedFrequency.Value;
         var subFrequencyQuantity = JsonArgumentParser.GetOptionalInt(sub, "frequency_quantity");
         var subIntervalWeeks = JsonArgumentParser.GetOptionalInt(sub, "interval_weeks");
         var subDays = JsonArgumentParser.ParseDays(sub);

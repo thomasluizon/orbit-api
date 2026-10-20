@@ -4,6 +4,13 @@ namespace Orbit.Infrastructure.AI;
 
 internal static class StrictToolSchema
 {
+    private static readonly HashSet<string> SupportedKeywords = new(StringComparer.Ordinal)
+    {
+        "type", "description", "title", "properties", "required", "additionalProperties", "items", "enum",
+        "anyOf", "$defs", "$ref", "pattern", "format", "multipleOf", "maximum", "exclusiveMaximum",
+        "minimum", "exclusiveMinimum", "minItems", "maxItems"
+    };
+
     public static BinaryData Create(string json)
     {
         var schema = JsonNode.Parse(json)!.AsObject();
@@ -14,7 +21,12 @@ internal static class StrictToolSchema
     private static void Normalize(JsonObject schema, bool optional = false)
     {
         var nullable = schema.Remove("nullable", out var marker) && marker?.GetValue<bool>() == true;
-        schema.Remove("sensitive");
+        foreach (var keyword in schema.Select(property => property.Key).Where(key => !SupportedKeywords.Contains(key)).ToArray())
+            schema.Remove(keyword);
+        if (schema["type"] is JsonValue type && type.GetValue<string>() == "object" && schema["properties"] is null)
+            schema["properties"] = new JsonObject();
+        if (schema["$defs"] is JsonObject definitions)
+            foreach (var definition in definitions) Normalize(definition.Value!.AsObject());
         if (schema["properties"] is JsonObject properties)
         {
             var required = schema["required"]?.AsArray().Select(value => value!.GetValue<string>()).ToHashSet()

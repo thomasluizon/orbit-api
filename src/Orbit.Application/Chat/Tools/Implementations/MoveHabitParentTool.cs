@@ -21,7 +21,7 @@ public class MoveHabitParentTool(
         properties = new
         {
             habit_id = new { type = JsonSchemaTypes.String },
-            parent_id = new { type = JsonSchemaTypes.String, nullable = true }
+            parent_id = new { type = new[] { JsonSchemaTypes.String, "null" } }
         },
         required = new[] { "habit_id" }
     };

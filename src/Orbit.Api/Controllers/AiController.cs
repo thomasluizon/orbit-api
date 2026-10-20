@@ -178,6 +178,8 @@ public class AiController(
 
         var userId = HttpContext.GetUserId();
         var execution = pendingStores.OperationStore.GetExecution(userId, id);
+        if (execution?.RequiresReproposal == true)
+            return Conflict(new { error = "pending_operation_schema_changed", message = "This approval uses an older tool schema. Ask Astra to propose the change again." });
         var invalid = execution is not null
             && !await revisionService.CanApproveAsync(userId, execution, cancellationToken);
         var confirmation = invalid ? null : pendingStores.OperationStore.Confirm(userId, id);
@@ -305,6 +307,9 @@ public class AiController(
 
             return NotFound(ErrorMessages.PendingOperationNotFound.ToErrorBody());
         }
+
+        if (pendingExecution.RequiresReproposal)
+            return Conflict(new { error = "pending_operation_schema_changed", message = "This approval uses an older tool schema. Ask Astra to propose the change again." });
 
         if (!await revisionService.CanApproveAsync(userId, pendingExecution, cancellationToken))
             return BadRequest(ErrorMessages.ValidationError.ToErrorBody());

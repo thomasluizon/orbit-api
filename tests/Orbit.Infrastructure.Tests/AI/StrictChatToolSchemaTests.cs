@@ -20,9 +20,7 @@ public sealed class StrictChatToolSchemaTests(ITestOutputHelper output)
     [Fact]
     public void RegistryTools_SerializeWithStrictSchemas()
     {
-        var tools = typeof(IAiTool).Assembly.GetTypes()
-            .Where(type => type.IsClass && !type.IsAbstract && typeof(IAiTool).IsAssignableFrom(type))
-            .Select(CreateTool);
+        var tools = AllTools();
         var registry = new AiToolRegistry(tools);
         registry.GetAll().Should().NotBeEmpty();
         output.WriteLine($"Chat tools: {registry.GetAll().Count}");
@@ -47,6 +45,68 @@ public sealed class StrictChatToolSchemaTests(ITestOutputHelper output)
             """);
         var check = () => AssertStrict(malformed.RootElement);
         check.Should().Throw<Xunit.Sdk.XunitException>();
+    }
+
+    [Theory]
+    [InlineData("maxLength")]
+    [InlineData("minLength")]
+    [InlineData("nullable")]
+    [InlineData("sensitive")]
+    [InlineData("allOf")]
+    [InlineData("not")]
+    [InlineData("dependentRequired")]
+    [InlineData("dependentSchemas")]
+    [InlineData("if")]
+    [InlineData("then")]
+    [InlineData("else")]
+    [InlineData("patternProperties")]
+    [InlineData("uniqueItems")]
+    [InlineData("default")]
+    public void Invariant_RejectsUnsupportedKeyword(string keyword)
+    {
+        var schema = JsonSerializer.SerializeToElement(new Dictionary<string, object> { ["type"] = "string", [keyword] = 1 });
+        var check = () => AssertStrict(schema);
+        check.Should().Throw<Xunit.Sdk.XunitException>();
+    }
+
+    [Fact]
+    public void Invariant_RejectsObjectWithoutProperties()
+    {
+        var check = () => AssertStrict(JsonSerializer.Deserialize<JsonElement>("""{"type":"object"}"""));
+        check.Should().Throw<Xunit.Sdk.XunitException>();
+    }
+
+    [Theory]
+    [InlineData("maxLength")]
+    [InlineData("minLength")]
+    [InlineData("allOf")]
+    [InlineData("default")]
+    [InlineData("patternProperties")]
+    [InlineData("unknownKeyword")]
+    public void Conversion_StripsUnsupportedKeywordsAndPreservesInternalRules(string keyword)
+    {
+        var schema = JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            properties = new Dictionary<string, object>
+            {
+                ["value"] = new Dictionary<string, object> { ["type"] = "string", [keyword] = 3 }
+            }
+        });
+        var method = typeof(AiIntentService).GetMethod("ConvertToSdkTool", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var tool = (ResponseTool)method.Invoke(null, [new { name = "keyword_test", parameters = schema }])!;
+        using var wire = JsonDocument.Parse(ModelReaderWriter.Write(tool).ToString());
+        AssertStrict(wire.RootElement.GetProperty("parameters"));
+        schema.GetProperty("properties").GetProperty("value").GetProperty(keyword).GetInt32().Should().Be(3);
+    }
+
+    [Fact]
+    public void InstalledSdk_ExposesNullableBooleanStrictMode()
+    {
+        var method = typeof(ResponseTool).GetMethods().Single(method => method.Name == "CreateFunctionTool");
+        foreach (var parameter in method.GetParameters()) output.WriteLine($"{parameter.Name}: {parameter.ParameterType}");
+        var strict = method.GetParameters().Single(parameter => parameter.Name == "strictModeEnabled");
+        strict.ParameterType.Should().Be(typeof(bool?));
     }
 
     [Fact]
@@ -98,7 +158,13 @@ public sealed class StrictChatToolSchemaTests(ITestOutputHelper output)
                 AssertOptionalFields(pair.First, pair.Second);
     }
 
-    private static IAiTool CreateTool(Type type) => type == typeof(AskTool)
+    internal static IReadOnlyList<IAiTool> AllTools() =>
+        new[] { typeof(IAiTool).Assembly, typeof(AiIntentService).Assembly, typeof(Orbit.Api.Controllers.AiController).Assembly }
+            .SelectMany(assembly => assembly.GetTypes())
+            .Where(type => type.IsClass && !type.IsAbstract && typeof(IAiTool).IsAssignableFrom(type))
+            .Select(CreateTool).ToArray();
+
+    internal static IAiTool CreateTool(Type type) => type == typeof(AskTool)
         ? new AskTool((BulkCreateHabitsTool)RuntimeHelpers.GetUninitializedObject(typeof(BulkCreateHabitsTool)), (BulkLogHabitsTool)RuntimeHelpers.GetUninitializedObject(typeof(BulkLogHabitsTool)),
             (BulkSkipHabitsTool)RuntimeHelpers.GetUninitializedObject(typeof(BulkSkipHabitsTool)), Substitute.For<IUserDateService>())
         : (IAiTool)RuntimeHelpers.GetUninitializedObject(type);
@@ -120,8 +186,15 @@ public sealed class StrictChatToolSchemaTests(ITestOutputHelper output)
 
     internal static void AssertStrict(JsonElement schema)
     {
-        schema.TryGetProperty("nullable", out _).Should().BeFalse();
-        schema.TryGetProperty("sensitive", out _).Should().BeFalse();
+        string[] supported = ["type", "description", "title", "properties", "required", "additionalProperties",
+            "items", "enum", "anyOf", "$defs", "$ref", "pattern", "format", "multipleOf", "maximum",
+            "exclusiveMaximum", "minimum", "exclusiveMinimum", "minItems", "maxItems"];
+        foreach (var keyword in schema.EnumerateObject())
+            supported.Should().Contain(keyword.Name, $"unsupported keyword {keyword.Name}");
+        if (schema.TryGetProperty("type", out var objectType)
+            && (objectType.ValueKind == JsonValueKind.String && objectType.GetString() == "object"
+                || objectType.ValueKind == JsonValueKind.Array && objectType.EnumerateArray().Any(type => type.GetString() == "object")))
+            schema.TryGetProperty("properties", out _).Should().BeTrue("objects must declare properties");
         if (schema.TryGetProperty("properties", out var properties))
         {
             schema.GetProperty("additionalProperties").GetBoolean().Should().BeFalse();
@@ -135,6 +208,8 @@ public sealed class StrictChatToolSchemaTests(ITestOutputHelper output)
             foreach (var type in values)
                 type.GetString().Should().BeOneOf("string", "number", "integer", "boolean", "object", "array", "null");
         }
+        if (schema.TryGetProperty("$defs", out var definitions))
+            foreach (var definition in definitions.EnumerateObject()) AssertStrict(definition.Value);
         if (schema.TryGetProperty("items", out var items)) AssertStrict(items);
         if (schema.TryGetProperty("anyOf", out var alternatives))
             foreach (var alternative in alternatives.EnumerateArray()) AssertStrict(alternative);

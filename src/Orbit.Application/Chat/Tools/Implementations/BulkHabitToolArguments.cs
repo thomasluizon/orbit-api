@@ -101,8 +101,7 @@ internal static class BulkHabitToolArguments
             },
             date = new
             {
-                type = JsonSchemaTypes.String,
-                nullable = true,
+                type = new[] { JsonSchemaTypes.String, "null" },
                 description = dateDescription
             }
         },
@@ -122,6 +121,9 @@ internal static class BulkHabitToolArguments
         };
         if (updates.EnumerateObject().Any(property => !allowed.Contains(property.Name)))
             return (null, "updates contains an unsupported field.");
+        var rawError = CheckHabitFields(updates);
+        if (rawError is not null)
+            return (null, rawError);
         var (resolvedUpdates, argumentError) = OptionalToolArguments.ResolveClears(updates,
             OptionalToolArguments.BulkHabitClearFields);
         if (argumentError is not null)
@@ -180,7 +182,6 @@ internal static class BulkHabitToolArguments
     /// </summary>
     public static string? CheckHabitFields(JsonElement fields)
     {
-        fields = OptionalToolArguments.OmitNulls(fields);
         return ValidateUpdateKinds(fields)
             ?? ParseNullableDate(fields, "due_date", allowNull: false).Error
             ?? ParseNullableDate(fields, "end_date", allowNull: true).Error

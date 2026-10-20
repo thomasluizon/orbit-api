@@ -76,11 +76,14 @@ public partial class AgentOperationExecutor(
         if (ownershipDenialReason is not null)
             return await DenyOwnershipAsync(execution, ownershipDenialReason, cancellationToken);
 
-        if (operation.IsMutation && request.Surface == AgentExecutionSurface.Chat && request.ConfirmationToken is { } token)
+        if (operation.IsMutation && request.ConfirmationToken is { } token)
         {
             var confirmed = pendingOperationStore.GetConfirmedExecution(request.UserId, capability.Id,
                 AgentOperationFingerprint.Compute(operation.Id, arguments.GetRawText()), token);
-            if (confirmed is not null)
+            if (confirmed?.RequiresReproposal == true)
+                return await DenyByPolicyAsync(execution, new AgentPolicyDecision(
+                    AgentPolicyDecisionStatus.Denied, capability, "pending_operation_schema_changed"), cancellationToken);
+            if (confirmed is not null && request.Surface == AgentExecutionSurface.Chat)
             {
                 var current = await changePreviewer.TryPreviewAsync(request.UserId, operation.Id,
                     arguments, logger, cancellationToken);
