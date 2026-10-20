@@ -15,7 +15,8 @@ internal static class ChatToolArgumentCheck
                     || !PreservesListEntries(field.Name, field.Value))))
             return Result.Failure("Invalid tool arguments.");
         var result = await prepare();
-        return result.Success ? Result.Success() : Result.Failure(result.Error!);
+        return result.Success ? Result.Success()
+            : result.ErrorCode is { } code ? Result.Failure(result.Error!, code) : Result.Failure(result.Error!);
     }
 
     private static bool PreservesListEntries(string field, JsonElement value)

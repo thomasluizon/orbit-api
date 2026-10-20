@@ -247,4 +247,23 @@ public class ChecklistTemplateTests
 
         template.UserId.Should().Be(originalUserId);
     }
+    [Theory]
+    [InlineData("blank")]
+    [InlineData("count")]
+    [InlineData("length")]
+    public void CreateAndUpdate_RejectInvalidItemBoundsWithoutMutation(string kind)
+    {
+        string[] items = kind switch
+        {
+            "blank" => [" "],
+            "count" => Enumerable.Repeat("Item", Orbit.Domain.Common.DomainConstants.MaxChecklistItems + 1).ToArray(),
+            _ => [new string('a', Orbit.Domain.Common.DomainConstants.MaxChecklistItemTextLength + 1)]
+        };
+        var template = CreateValidTemplate();
+        ChecklistTemplate.Create(ValidUserId, "New", items).IsFailure.Should().BeTrue();
+        template.Update("New", items).IsFailure.Should().BeTrue();
+        template.Name.Should().Be("Morning Routine");
+        template.Items.Should().Equal(ValidItems);
+    }
+
 }

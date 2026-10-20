@@ -112,6 +112,11 @@ public class BulkCreateHabitsToolTests
         result.Success.Should().BeTrue();
         result.EntityName.Should().Be("1/2 habits created");
         result.Payload.Should().BeOfType<BulkCreateResult>();
+        var payload = JsonSerializer.SerializeToElement(result.Payload);
+        payload.GetProperty("applied_count").GetInt32().Should().Be(1);
+        payload.GetProperty("total_matched").GetInt32().Should().Be(2);
+        payload.GetProperty("skipped_count").GetInt32().Should().Be(1);
+        payload.GetProperty("partial").GetBoolean().Should().BeTrue();
         captured!.Habits.Should().HaveCount(2);
         captured.Habits[0].IntervalWeeks.Should().Be(2);
         captured.Habits[0].SubHabits.Should().ContainSingle().Which.Title.Should().Be("Make bed");

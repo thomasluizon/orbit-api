@@ -89,6 +89,19 @@ public class HttpIdempotencyContextTests
         retry.NextRequestOrdinal("BulkLogHabitsCommand").Should().Be(0);
     }
 
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("explicit-retry", true)]
+    public void McpSessionlessRequest_RequiresExplicitKeyAndIgnoresUnvalidatedSessionHeader(string? explicitKey, bool expected)
+    {
+        var context = BuildContext(explicitKey, Guid.NewGuid().ToString());
+        context.Request.Headers["Mcp-Session-Id"] = "unvalidated-session";
+        context.Items[HttpIdempotencyContext.McpRequestKey] = new McpReplayIdentity("credential", "1", "fingerprint");
+        var sut = CreateSut(context);
+
+        sut.TryGetRequestKey(out _, out _).Should().Be(expected);
+    }
+
     private static HttpIdempotencyContext CreateSut(HttpContext? httpContext)
     {
         var httpContextAccessor = Substitute.For<IHttpContextAccessor>();

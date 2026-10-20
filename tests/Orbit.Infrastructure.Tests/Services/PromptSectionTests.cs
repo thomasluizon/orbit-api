@@ -207,6 +207,8 @@ public class GlobalRulesSectionTests
         result.Should().Contain("partial=false");
         result.Should().Contain("applied_count equals total_matched");
         result.Should().Contain("Never loop update_habit");
+        result.Should().NotContain("call the tool for BOTH the parent and each sub-habit separately");
+        result.Should().Contain("one bulk call including the parent and every requested sub-habit");
     }
 }
 

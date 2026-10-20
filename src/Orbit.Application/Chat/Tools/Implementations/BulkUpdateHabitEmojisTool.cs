@@ -68,8 +68,8 @@ public sealed partial class BulkUpdateHabitEmojisTool(
         if (modeError is not null)
             return Result.Failure(modeError);
         var emoji = JsonArgumentParser.GetNullableString(args, "emoji");
-        if (infer || (!hasEmoji && overrides.Count != filter!.HabitIds.Count))
-            return Result.Failure("An edited emoji must be explicit.");
+        if (!infer && !hasEmoji && overrides.Count != filter!.HabitIds.Count)
+            return Result.Failure("Provide emoji or set infer_from_title to true.");
         if (emoji is not null && !IsSingleEmojiGrapheme(emoji))
             return Result.Failure("Invalid emoji.");
         var habits = await BulkHabitSelection.LoadAsync(habitRepository, userId, filter!, ct);
@@ -79,11 +79,49 @@ public sealed partial class BulkUpdateHabitEmojisTool(
             return ownership;
         foreach (var habit in habits)
         {
+            if (infer && !overrides.ContainsKey(habit.Id))
+                continue;
             var validation = habit.ValidateUpdate(EmojiUpdate(habit, overrides.GetValueOrDefault(habit.Id, emoji)));
             if (validation.IsFailure)
                 return validation;
         }
         return habits.Count == 0 ? Result.Failure("No matching habits found.") : Result.Success();
+    }
+
+    internal async Task<Result<JsonElement>> PreparePreviewArgumentsAsync(
+        JsonElement args, Guid userId, CancellationToken ct)
+    {
+        var emojis = new Dictionary<Guid, string?>();
+        var (filter, error) = args.TryGetProperty("revised_items", out var items)
+            ? ParseRevisedItems(items, emojis) : BulkHabitToolArguments.ParseEmojiFilter(args);
+        if (error is not null)
+            return Result.Failure<JsonElement>(error);
+        var habits = await BulkHabitSelection.LoadAsync(habitRepository, userId, filter!, ct);
+        if (habits.Count == 0)
+            return Result.Failure<JsonElement>("No matching habits found.");
+        var ownership = Orbit.Application.Common.OwnershipValidation.AllResolved(filter!.HabitIds, habits,
+            habit => habit.Id, Orbit.Application.Common.ErrorMessages.HabitNotFound);
+        if (ownership.IsFailure)
+            return Result.Failure<JsonElement>(ownership.Error);
+        var inputs = habits.Where(habit => !emojis.ContainsKey(habit.Id))
+            .Select(habit => new HabitEmojiInferenceInput(habit.Id, habit.Title, habit.Description));
+        foreach (var chunk in inputs.Chunk(InferenceChunkSize))
+        {
+            var inferred = await inferenceService.InferAsync(userId, chunk, ct);
+            if (inferred.IsFailure)
+                return Result.Failure<JsonElement>(inferred.Error);
+            foreach (var input in chunk)
+            {
+                if (!inferred.Value.TryGetValue(input.HabitId, out var emoji) || !IsSingleEmojiGrapheme(emoji))
+                    return Result.Failure<JsonElement>("preview_unavailable");
+                emojis[input.HabitId] = emoji;
+            }
+        }
+        return Result.Success(JsonSerializer.SerializeToElement(new
+        {
+            infer_from_title = false,
+            revised_items = habits.Select(habit => new { habit_id = habit.Id, emoji = emojis[habit.Id] }).ToArray()
+        }));
     }
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)

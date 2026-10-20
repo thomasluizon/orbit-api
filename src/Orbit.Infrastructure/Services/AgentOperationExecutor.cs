@@ -19,7 +19,7 @@ public partial class AgentOperationExecutor(
     IPendingOperationChangePreviewer changePreviewer,
     IPendingAgentOperationStore pendingOperationStore,
     IUnitOfWork unitOfWork,
-    ILogger<AgentOperationExecutor> logger) : IAgentOperationExecutor
+    ILogger<AgentOperationExecutor> logger) : IAgentOperationExecutor, Orbit.Application.Chat.Commands.IAgentMutationRunner
 {
     private const int MaxToolConcurrencyAttempts = 3;
     private const string UnknownOperationCapabilityId = "unknown";
@@ -246,9 +246,11 @@ public partial class AgentOperationExecutor(
                     new ToolResult(false, Error: "stale_preview"), cancellationToken);
             }
 
-            var argumentsJson = execution.Arguments.GetRawText();
+            var expectedFingerprint = AgentOperationFingerprint.Compute(execution.Operation.Id,
+                execution.Arguments.GetRawText());
+            var argumentsJson = (preview.ExecutionArguments ?? execution.Arguments).GetRawText();
             var operationFingerprint = AgentOperationFingerprint.Compute(execution.Operation.Id, argumentsJson);
-            if (!pendingOperationStore.Revise(execution.Request.UserId, pending.Id, operationFingerprint,
+            if (!pendingOperationStore.Revise(execution.Request.UserId, pending.Id, expectedFingerprint,
                 argumentsJson, operationFingerprint, preview.PreviewFingerprint))
                 throw new InvalidOperationException("The pending operation preview binding could not be persisted.");
 
@@ -279,10 +281,13 @@ public partial class AgentOperationExecutor(
 
         try
         {
-            return tool is ITransactionalAiTool
-                ? await unitOfWork.ExecuteInTransactionAsync(
+            if (tool is not ITransactionalAiTool)
+                return await ExecutePolicyAndToolAsync(execution, tool, policyState, cancellationToken);
+            return unitOfWork.HasActiveTransaction
+                ? await unitOfWork.ExecuteInSavepointAsync(
                     ct => ExecutePolicyAndToolAsync(execution, tool, policyState, ct), cancellationToken)
-                : await ExecutePolicyAndToolAsync(execution, tool, policyState, cancellationToken);
+                : await unitOfWork.ExecuteInTransactionAsync(
+                    ct => ExecutePolicyAndToolAsync(execution, tool, policyState, ct), cancellationToken);
         }
         catch (ToolOutcomeRollbackException ex)
         {
@@ -301,6 +306,14 @@ public partial class AgentOperationExecutor(
         CancellationToken cancellationToken)
     {
         policyState.Decision = null;
+        if (RequiresArgumentCheck(execution.Operation.Id, execution.Arguments) && tool is IArgumentCheckTool check)
+        {
+            var validation = await check.CheckArgumentsAsync(execution.Arguments, execution.Request.UserId, cancellationToken);
+            if (validation.IsFailure)
+                return await DenyByPolicyAsync(execution, new AgentPolicyDecision(
+                    AgentPolicyDecisionStatus.Denied, execution.Capability, validation.ErrorCode ?? validation.Error), cancellationToken);
+        }
+
         var policyDecision = EvaluatePolicy(execution);
         policyState.Decision = policyDecision;
 
@@ -341,6 +354,20 @@ public partial class AgentOperationExecutor(
             throw new ToolOutcomeRollbackException(policyDecision, result);
 
         return await BuildToolOutcomeResponseAsync(execution, policyDecision, result, executionCancellationToken);
+    }
+
+    private static bool RequiresArgumentCheck(string operationId, JsonElement arguments)
+    {
+        var action = arguments.ValueKind == JsonValueKind.Object
+            && arguments.TryGetProperty("action", out var value) && value.ValueKind == JsonValueKind.String
+                ? value.GetString() : null;
+        return operationId switch
+        {
+            "update_checklist_template" => true,
+            "update_profile_preferences" => action == "set_name",
+            "manage_calendar_sync" => action == "set_selected_calendars",
+            _ => false
+        };
     }
 
     private async Task<AgentExecuteOperationResponse> FailOperationAsync(

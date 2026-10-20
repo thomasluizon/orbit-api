@@ -80,6 +80,60 @@ public partial class ProcessUserChatCommandHandlerTests
         {"title":"Perspirex Strong - Semana 2 em diante (Manutenção)","description":"Passe apenas DOMINGO À NOITE e QUARTA À NOITE. Hora e jeito: à noite, axila 100% seca, 2 passadas pra cima e 2 pra baixo. Acordou: Lave a axila com água e sabão no banho da manhã.","emoji":"🧴","frequency_unit":"Week","frequency_quantity":1,"days":["Sunday","Wednesday"],"due_date":"2026-09-15"}
         """;
 
+    private readonly IContentModerationService _moderation = Substitute.For<IContentModerationService>();
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task Moderation_RefusesBeforeCallingModel(bool flagged, bool unavailable)
+    {
+        _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult(flagged, unavailable, []));
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(User.Create("Test", "test@example.com").Value);
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Allowed" }));
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(UserId, "screen this input"), CancellationToken.None);
+        result.IsFailure.Should().BeTrue();
+        await _blockStore.DidNotReceiveWithAnyArgs().InvalidateOpenAsync(default, default);
+        await _unitOfWork.DidNotReceiveWithAnyArgs().AcquireAdvisoryLockAsync(default!, default);
+        await _aiIntentService.DidNotReceive().SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("I want to hurt myself", "988", true, false)]
+    [InlineData("I want to hurt myself", "988", false, true)]
+    [InlineData("Quero me machucar", "188", true, false)]
+    [InlineData("Quero me machucar", "188", false, true)]
+    public async Task CrisisDisclosure_BypassesModerationRefusal(string message, string resource, bool flagged, bool unavailable)
+    {
+        SetupUserAndPayGate();
+        _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult(flagged, unavailable, []));
+
+        var result = await CreateHandler().Handle(new(UserId, message), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessage.Should().Contain(resource);
+        await _moderation.DidNotReceiveWithAnyArgs().CheckTextAsync(default!, default);
+        await _aiIntentService.DidNotReceiveWithAnyArgs().SendWithToolsAsync(default!, default, default);
+        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+    }
+
+    [Fact]
+    public async Task ContinuationProviderFailure_FailsTurnExplicitly()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(ToolResponse("get_habits", "call_1", "{}"));
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure<AiResponse>(ErrorMessages.AiUnavailable));
+        var tool = ReadTool("get_habits", new ToolResult(true, Payload: new { habits = Array.Empty<object>() }));
+        var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(UserId, "Show my habits"), default);
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(ErrorMessages.AiUnavailable.Message);
+    }
+
     private static Habit CreateHabit(string title, bool isCompleted = false)
     {
         var habit = Habit.Create(new HabitCreateParams(
@@ -123,11 +177,12 @@ public partial class ProcessUserChatCommandHandlerTests
             _scheduleLogReader, _blockStore, _pendingOperationStore);
 
         return new ProcessUserChatCommandHandler(
-            dataDeps, aiDeps, executionDeps, _logger, _appConfig);
+            dataDeps, aiDeps, executionDeps, _logger, _appConfig, _moderation);
     }
 
     public ProcessUserChatCommandHandlerTests()
     {
+        _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(new ModerationResult(false, false, []));
         _scheduleLogReader.ReadDaysAsync(
             Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(),
             Arg.Any<CancellationToken>()).Returns(Array.Empty<HabitScheduleLogDay>());
@@ -825,12 +880,26 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.AiMessage.Should().Be("Model reply");
     }
 
-    [Fact]
-    public async Task Handle_TruncatedAiResponse_AppendsExplicitPartialNotice()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_TruncatedAiResponse_AppendsExplicitPartialNotice(bool hasToolCalls)
     {
         SetupUserAndPayGate();
-        SetupAiResponse(new AiResponse { TextMessage = "First part", IsTruncated = true });
-        var handler = CreateHandler();
+        SetupAiResponse(new AiResponse
+        {
+            TextMessage = "First part",
+            IsTruncated = true,
+            ToolCalls = hasToolCalls ? [new AiToolCall("update_habit", "cut_off", ParseArguments("{}"))] : null,
+            ConversationContext = TestConversationContext
+        });
+        var tool = FakeTool("update_habit");
+        tool.IsReadOnly.Returns(false);
+        tool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>()).Returns(new ToolResult(true));
+        var handler = CreateHandler(tool);
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "First part", IsTruncated = true }));
 
         var result = await handler.Handle(
             new ProcessUserChatCommand(UserId, "List everything"),
@@ -840,6 +909,8 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.AiMessage.Should().Contain("First part");
         result.Value.AiMessage.Should().Contain("cut off before completion");
         result.Value.AiMessage.Should().Contain("partial");
+        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+        await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
     }
 
     [Fact]
@@ -4177,7 +4248,7 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ContinueWithToolResultsFails_StopsAndReturnsPartialResult()
+    public async Task Handle_ContinueWithToolResultsFails_ReturnsExplicitFailure()
     {
         SetupUserAndPayGate();
 
@@ -4206,8 +4277,8 @@ public partial class ProcessUserChatCommandHandlerTests
         var command = new ProcessUserChatCommand(UserId, "Create habit");
         var result = await handler.Handle(command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeTrue();
-        result.Value.Actions.Should().HaveCount(1);
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be("Connection lost");
     }
 
     [Fact]

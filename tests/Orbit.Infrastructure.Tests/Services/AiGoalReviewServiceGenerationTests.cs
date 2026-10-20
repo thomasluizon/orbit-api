@@ -76,7 +76,7 @@ public class AiGoalReviewServiceGenerationTests
             });
         var aiClient = new AiCompletionClient(
             chatClient, NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
-        return new AiGoalReviewService(aiClient, NullLogger<AiGoalReviewService>.Instance);
+        return new AiGoalReviewService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(aiClient), NullLogger<AiGoalReviewService>.Instance);
     }
 
     private sealed class CannedChatHandler(string content, HttpStatusCode status) : HttpMessageHandler

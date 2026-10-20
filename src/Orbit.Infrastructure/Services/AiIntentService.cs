@@ -1,6 +1,7 @@
 #pragma warning disable OPENAI001
 
 using System.Text;
+using System.ClientModel.Primitives;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Orbit.Application.Common;
@@ -15,7 +16,7 @@ using Orbit.Infrastructure.Services.Prompts;
 namespace Orbit.Infrastructure.Services;
 
 public sealed partial class AiIntentService(
-    AiCompletionClient aiClient,
+    BudgetedAiCompletionClient aiClient,
     IAiUsageRecorder usageRecorder,
     ILogger<AiIntentService> logger) : IAiIntentService
 {
@@ -57,7 +58,7 @@ public sealed partial class AiIntentService(
         }
 
         var usageUserId = userId == Guid.Empty ? (Guid?)null : userId;
-        var options = aiClient.CreateOptions(maxOutputTokens: 8192, userId: usageUserId);
+        var options = aiClient.Inner.CreateOptions(maxOutputTokens: 8192, userId: usageUserId);
 
         foreach (var decl in toolDeclarations)
         {
@@ -142,13 +143,23 @@ public sealed partial class AiIntentService(
                 LogCallingAiWithTools(logger);
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-            var round = streamSink is null
-                ? await CompleteBufferedRoundAsync(messages, options, userId, cancellationToken)
-                : await CompleteStreamingRoundAsync(messages, options, userId, streamSink, stopwatch, cancellationToken);
+            SetInputItems(options, messages);
+            var round = await aiClient.RunAsync(userId, client => streamSink is null
+                ? CompleteBufferedRoundAsync(client, messages, options, userId, cancellationToken)
+                : CompleteStreamingRoundAsync(client, messages, options, userId, streamSink, stopwatch, cancellationToken),
+                cancellationToken, ModelReaderWriter.Write(options).ToString());
 
             stopwatch.Stop();
             if (logger.IsEnabled(LogLevel.Debug))
                 LogAiApiResponded(logger, stopwatch.ElapsedMilliseconds);
+
+            if (round.IsTruncated)
+                return Result.Success(new AiResponse
+                {
+                    TextMessage = round.Text,
+                    ReportedTokenCount = round.ReportedTokenCount,
+                    IsTruncated = true
+                });
 
             if (round.ToolCalls.Count > 0)
             {
@@ -187,6 +198,10 @@ public sealed partial class AiIntentService(
                 IsTruncated = round.IsTruncated
             });
         }
+        catch (AiBudgetExceededException)
+        {
+            return Result.Failure<AiResponse>(AiBudgetExceededException.Error);
+        }
         catch (JsonException ex)
         {
             if (logger.IsEnabled(LogLevel.Error))
@@ -202,6 +217,7 @@ public sealed partial class AiIntentService(
     }
 
     private async Task<CompletedRound> CompleteBufferedRoundAsync(
+        AiCompletionClient client,
         List<ResponseItem> messages,
         CreateResponseOptions options,
         Guid? userId,
@@ -209,11 +225,12 @@ public sealed partial class AiIntentService(
     {
         SetInputItems(options, messages);
         options.StreamingEnabled = false;
-        var completion = await aiClient.ResponsesClient.CreateResponseAsync(options, cancellationToken);
+        var completion = await client.ResponsesClient.CreateResponseAsync(options, cancellationToken);
         return await FinishRoundAsync(completion.Value, messages, "buffered", userId, cancellationToken);
     }
 
     private async Task<CompletedRound> CompleteStreamingRoundAsync(
+        AiCompletionClient client,
         List<ResponseItem> messages,
         CreateResponseOptions options,
         Guid? userId,
@@ -228,7 +245,7 @@ public sealed partial class AiIntentService(
         int? lastTextOutputIndex = null;
         ResponseResult? response = null;
 
-        await foreach (var update in aiClient.StreamingResponsesClient.CreateResponseStreamingAsync(options, cancellationToken))
+        await foreach (var update in client.StreamingResponsesClient.CreateResponseStreamingAsync(options, cancellationToken))
         {
             switch (update)
             {
@@ -295,7 +312,7 @@ public sealed partial class AiIntentService(
             LogResponseTruncated(logger);
 
         var toolCalls = response.OutputItems.OfType<FunctionCallResponseItem>().ToList();
-        if (response.Status == ResponseStatus.Incomplete && toolCalls.Count > 0)
+        if (response.Status == ResponseStatus.Incomplete && !truncated && toolCalls.Count > 0)
             throw new InvalidOperationException("AI returned incomplete tool calls.");
 
         return new CompletedRound(AiCompletionClient.GetAssistantOutputText(response), toolCalls, GetReportedTokenCount(response.Usage), truncated);
@@ -429,7 +446,8 @@ public sealed partial class AiIntentService(
                 usage.OutputTokenCount,
                 usage.TotalTokenCount,
                 cancellationToken,
-                userId);
+                userId,
+                usage.InputTokenDetails?.CacheWriteTokenCount ?? 0);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

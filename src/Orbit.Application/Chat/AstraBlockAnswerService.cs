@@ -31,9 +31,10 @@ public sealed class AstraBlockAnswerService(
     TimeSpan? claimLifetime = null)
 {
     public async Task<Result<ChatResponse>> ExecuteAsync(ProcessUserChatCommand request,
-        Func<PreparedAstraBlockAnswer, Task<Result<ChatResponse>>> produceResponse, CancellationToken ct)
+        Func<PreparedAstraBlockAnswer, Task<Result<ChatResponse>>> produceResponse, CancellationToken ct,
+        Func<string, CancellationToken, Task<Result>>? checkInput = null)
     {
-        var preparation = await PrepareAsync(request, ct);
+        var preparation = await PrepareAsync(request, ct, checkInput);
         if (preparation.IsFailure)
             return preparation.PropagateError<ChatResponse>();
         var prepared = preparation.Value;
@@ -141,7 +142,8 @@ public sealed class AstraBlockAnswerService(
             throw new InvalidOperationException(refund.Error);
     }
 
-    public async Task<Result<PreparedAstraBlockAnswer>> PrepareAsync(ProcessUserChatCommand request, CancellationToken ct)
+    public async Task<Result<PreparedAstraBlockAnswer>> PrepareAsync(ProcessUserChatCommand request, CancellationToken ct,
+        Func<string, CancellationToken, Task<Result>>? checkInput = null)
     {
         var answer = request.BlockAnswer ?? throw new ArgumentException("Block answer is required.", nameof(request));
         var validation = await new AstraBlockAnswerValidator().ValidateAsync(answer, ct);
@@ -175,7 +177,13 @@ public sealed class AstraBlockAnswerService(
                     return answerError;
                 var isChoice = definition.Form == AstraBlockKinds.Choice;
                 var message = BuildMessage(definition, answer);
-                var crisis = isChoice ? await DetectCrisisTurnAsync(request.UserId, message, token) : CrisisLocales.None;
+                var crisis = await DetectCrisisTurnAsync(request.UserId, message, token);
+                if (crisis == CrisisLocales.None && checkInput is not null)
+                {
+                    var inputCheck = await checkInput(message, token);
+                    if (inputCheck.IsFailure)
+                        return inputCheck.PropagateError<PreparedAstraBlockAnswer>();
+                }
                 var now = TimeProvider.System.GetUtcNow().UtcDateTime;
                 var answeredAtUtc = now.AddTicks(-(now.Ticks % TimeSpan.TicksPerMicrosecond));
                 if (!await store.MarkAnsweredAsync(block.Id, request.UserId, answeredAtUtc, token))
@@ -185,7 +193,7 @@ public sealed class AstraBlockAnswerService(
                 var user = await users.GetByIdAsync(request.UserId, token);
                 ChatResponse? response = null;
                 DateOnly? reservedAllowanceDate = null;
-                if (definition.Form == AstraBlockKinds.PickList)
+                if (definition.Form == AstraBlockKinds.PickList && crisis == CrisisLocales.None)
                 {
                     response = await BuildPickListResponseAsync(request, definition, answer, user, token);
                 }

@@ -1,3 +1,5 @@
+using Orbit.Infrastructure.Tests.Persistence;
+using Orbit.Infrastructure.Persistence;
 using Hangfire;
 using Hangfire.Common;
 using Hangfire.States;
@@ -43,6 +45,7 @@ namespace Orbit.Infrastructure.Tests.Controllers;
 [Collection("ProcessEnvironment")]
 public class OAuthControllerTests : IDisposable
 {
+    private readonly SqliteOrbitDbContextFactory _oauthDb = new();
     private readonly IMediator _mediator = Substitute.For<IMediator>();
     private readonly MutableTimeProvider _timeProvider = new();
     private readonly OAuthAuthorizationStore _authStore;
@@ -55,7 +58,9 @@ public class OAuthControllerTests : IDisposable
 
     public OAuthControllerTests()
     {
-        _authStore = new OAuthAuthorizationStore(NullLogger<OAuthAuthorizationStore>.Instance, _timeProvider);
+        _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<IActionResult>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<IActionResult>>>()(call.Arg<CancellationToken>()));
+        _authStore = new OAuthAuthorizationStore(new OAuthStateStore(_oauthDb.Context, _timeProvider), _timeProvider);
         var googleSettings = Options.Create(new GoogleSettings
         {
             ClientId = "test-google-client-id",
@@ -80,8 +85,57 @@ public class OAuthControllerTests : IDisposable
 
     public void Dispose()
     {
-        _authStore.Dispose();
+        _oauthDb.Dispose();
         GC.SuppressFinalize(this);
+    }
+
+    [Fact]
+    public async Task OAuthAccessToken_IsBounded_AndRefreshRotatesPreservingScopes()
+    {
+        var (verifier, challenge) = GeneratePkce();
+        var code = _authStore.CreateCode(UserId, challenge, "https://claude.ai/callback", "client", scopes: [AgentScopes.ReadHabits], isReadOnly: true);
+        ApiKey? minted = null;
+        await _apiKeyRepo.AddAsync(Arg.Do<ApiKey>(key => minted = key), Arg.Any<CancellationToken>());
+        var response = (OkObjectResult)await _controller.Token("authorization_code", code, verifier, "https://claude.ai/callback", default);
+        minted.Should().NotBeNull();
+        minted!.ExpiresAtUtc.Should().BeCloseTo(DateTime.UtcNow.AddHours(1), TimeSpan.FromSeconds(5));
+        var old = minted;
+        var payload = JsonSerializer.SerializeToElement(response.Value);
+        payload.GetProperty("expires_in").GetInt32().Should().Be(3600);
+        var refresh = payload.GetProperty("refresh_token").GetString()!;
+        _apiKeyRepo.GetByIdAsync(old.Id, Arg.Any<CancellationToken>()).Returns(old);
+        _apiKeyRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<ApiKey, bool>>>(), Arg.Any<Func<IQueryable<ApiKey>, IQueryable<ApiKey>>?>(), Arg.Any<CancellationToken>()).Returns(old);
+        var refreshed = await _controller.Token("refresh_token", null, null, null, default, refresh);
+        refreshed.Should().BeOfType<OkObjectResult>();
+        minted!.Id.Should().NotBe(old.Id);
+        minted.Scopes.Should().Equal(AgentScopes.ReadHabits);
+        minted.IsReadOnly.Should().BeTrue();
+        old.IsRevoked.Should().BeTrue();
+        (await _controller.Token("refresh_token", null, null, null, default, refresh)).Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public void GoogleRetry_PreservesReducedRequestedScopes()
+    {
+        _controller.HttpContext.Request.Host = new HostString("unconfigured.example.com");
+        var response = (RedirectResult)_controller.GoogleStart("client", "https://claude.ai/callback", "state",
+            "challenge", "S256", scope: AgentScopes.ReadHabits);
+        ExtractQueryParam(response.Url, "scope").Should().Be(AgentScopes.ReadHabits);
+    }
+
+    [Fact]
+    public void Consent_ListsRequestedScopes_AndPersistsReadOnlyChoice()
+    {
+        var (verifier, challenge) = GeneratePkce();
+        var ticket = _authStore.CreatePendingConsent(new ConsentEntry(UserId, challenge, "https://claude.ai/callback", "client", "state", null, "en", [AgentScopes.ReadHabits, AgentScopes.WriteHabits]));
+        var page = (ContentResult)_controller.Consent(ticket);
+        page.Content.Should().Contain(AgentScopes.ReadHabits).And.Contain(AgentScopes.WriteHabits).And.Contain("read_only");
+        var grant = (RedirectResult)_controller.GrantConsent(ticket, "read_only");
+        var code = ExtractQueryParam(grant.Url, "code");
+        var entry = _authStore.ExchangeCode(code, verifier, "https://claude.ai/callback");
+        entry!.Scopes.Should().Equal(AgentScopes.ReadHabits);
+        entry.IsReadOnly.Should().BeTrue();
+        _controller.GrantConsent(ticket, "requested").Should().BeOfType<ContentResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Theory]
@@ -179,7 +233,7 @@ public class OAuthControllerTests : IDisposable
 
             var response = await _controller.GoogleCallback(pending.GoogleState, "code", null, CancellationToken.None);
 
-            response.Should().BeOfType<RedirectResult>().Which.Url.Should().StartWith("https://claude.ai/callback?code=");
+            CompleteConsent(response.Should().BeOfType<RedirectResult>().Which.Url!).Should().StartWith("https://claude.ai/callback?code=");
             googleUser!.GoogleAccessToken.Should().BeNull();
             traces.Add(calls.ToArray());
         }
@@ -513,7 +567,7 @@ public class OAuthControllerTests : IDisposable
         var result = await _controller.GoogleCallback(
             pending.GoogleState, "google-code", null, CancellationToken.None);
 
-        var url = result.Should().BeOfType<RedirectResult>().Subject.Url!;
+        var url = CompleteConsent(result.Should().BeOfType<RedirectResult>().Subject.Url!);
         url.Should().StartWith("https://claude.ai/callback?code=");
         ExtractQueryParam(url, "state").Should().Be("client-state&code=forged");
         url.Should().NotContain("&code=forged");
@@ -849,8 +903,8 @@ public class OAuthControllerTests : IDisposable
         var ok = result.Should().BeOfType<OkObjectResult>().Subject;
         var json = JsonSerializer.Serialize(ok.Value);
         json.Should().Contain("redirectUrl");
-        json.Should().Contain("claude.ai/callback");
-        json.Should().Contain("state=state-abc");
+        json.Should().Contain("/oauth/consent?ticket=");
+        ExtractRedirectUrl(result).Should().Contain("claude.ai/callback").And.Contain("state=state-abc");
     }
 
     [Fact]
@@ -902,7 +956,7 @@ public class OAuthControllerTests : IDisposable
 
         var ok = result.Should().BeOfType<OkObjectResult>().Subject;
         var json = JsonSerializer.Serialize(ok.Value);
-        json.Should().Contain("callback?existing=1\\u0026code=");
+        ExtractRedirectUrl(result).Should().Contain("callback?existing=1&code=");
     }
 
     [Fact]
@@ -1020,8 +1074,8 @@ public class OAuthControllerTests : IDisposable
 
         var ok = (OkObjectResult)result;
         using var doc = JsonDocument.Parse(JsonSerializer.Serialize(ok.Value));
-        doc.RootElement.GetProperty("scope").GetString()
-            .Should().Be(string.Join(' ', AgentScopes.ClaudeDefaultScopes));
+        doc.RootElement.GetProperty("scope").GetString()!.Split(' ')
+            .Should().BeEquivalentTo(AgentScopes.ClaudeDefaultScopes);
     }
 
     [Fact]
@@ -1396,12 +1450,16 @@ public class OAuthControllerTests : IDisposable
         return (verifier, challenge);
     }
 
-    private static string ExtractRedirectUrl(IActionResult result)
+    private string ExtractRedirectUrl(IActionResult result)
     {
         var ok = result.Should().BeOfType<OkObjectResult>().Subject;
         using var doc = JsonDocument.Parse(JsonSerializer.Serialize(ok.Value));
-        return doc.RootElement.GetProperty("redirectUrl").GetString()!;
+        return CompleteConsent(doc.RootElement.GetProperty("redirectUrl").GetString()!);
     }
+
+    private string CompleteConsent(string url) => url.StartsWith("/oauth/consent", StringComparison.Ordinal)
+        ? ((RedirectResult)_controller.GrantConsent(ExtractQueryParam(url, "ticket"), "requested")).Url
+        : url;
 
     private static string ExtractQueryParam(string url, string key)
     {

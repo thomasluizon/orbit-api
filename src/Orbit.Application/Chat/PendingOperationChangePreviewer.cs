@@ -19,7 +19,8 @@ public sealed class PendingOperationChangePreviewer(
     IGenericRepository<Tag> tagRepository,
     IUserDateService userDateService,
     AiToolRegistry toolRegistry,
-    IDestructiveOperationPreviewer? destructivePreviewer = null) : IPendingOperationChangePreviewer
+    IDestructiveOperationPreviewer? destructivePreviewer = null,
+    IGenericRepository<ChecklistTemplate>? templateRepository = null) : IPendingOperationChangePreviewer
 {
     private const int MaxDisplayedEntries = 3;
     private const int MaxEntryLength = 60;
@@ -56,9 +57,8 @@ public sealed class PendingOperationChangePreviewer(
             return await PreviewOtherAsync(userId, operationId, arguments, cancellationToken);
         }
 
-        if (operationId == "bulk_update_habit_emojis"
-            && BulkUpdateHabitEmojisTool.ResolveEmojiOperation(arguments).Infer)
-            return null;
+        if (RequiresEmojiInference(operationId, arguments))
+            return await PreviewInferredEmojisAsync(userId, arguments, cancellationToken);
 
         if (operationId == "delete_habit")
             return await PreviewSingleHabitAsync(userId, arguments, cancellationToken);
@@ -114,6 +114,22 @@ public sealed class PendingOperationChangePreviewer(
         }
 
         return BuildPreview(operationId, rows, items);
+    }
+
+    private static bool RequiresEmojiInference(string operationId, JsonElement arguments) =>
+        operationId == "bulk_update_habit_emojis"
+        && BulkUpdateHabitEmojisTool.ResolveEmojiOperation(arguments).Infer;
+
+    private async Task<PendingOperationChangePreview?> PreviewInferredEmojisAsync(
+        Guid userId, JsonElement arguments, CancellationToken ct)
+    {
+        if (toolRegistry.GetTool("bulk_update_habit_emojis") is not BulkUpdateHabitEmojisTool emojiTool)
+            return null;
+        var prepared = await emojiTool.PreparePreviewArgumentsAsync(arguments, userId, ct);
+        if (prepared.IsFailure)
+            return null;
+        var preview = await PreviewAsync(userId, emojiTool.Name, prepared.Value, ct);
+        return preview is null ? null : preview with { ExecutionArguments = prepared.Value };
     }
 
     private async Task<PendingOperationChangePreview?> PreviewOtherAsync(Guid userId, string operationId,
@@ -274,6 +290,20 @@ public sealed class PendingOperationChangePreviewer(
             var tag = tags.FirstOrDefault();
             return tag is null ? null : new AgentPreviewTarget(
                 tag.Id, tag.Name, TagValues(tag), FingerprintTag(tag));
+        }
+
+        if (templateRepository is not null && TryReadId(arguments, "template_id", out var templateId))
+        {
+            var templates = await templateRepository.FindAsync(
+                item => item.Id == templateId && item.UserId == userId, cancellationToken);
+            var template = templates.FirstOrDefault();
+            return template is null ? null : new AgentPreviewTarget(template.Id, template.Name,
+                new Dictionary<string, string?>
+                {
+                    ["name"] = template.Name,
+                    ["items"] = JsonSerializer.Serialize(template.Items)
+                }, AgentOperationFingerprint.Compute(template.Id.ToString(),
+                    JsonSerializer.Serialize(new { template.Name, template.Items, template.UpdatedAtUtc })));
         }
 
         return null;

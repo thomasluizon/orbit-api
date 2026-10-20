@@ -82,6 +82,8 @@ public static class AgentArgumentSchema
         if (field == "days")
             return Enum.TryParse<DayOfWeek>(value, true, out var day) && Enum.IsDefined(day)
                 && !int.TryParse(value, out _);
+        if (field == "calendar_ids")
+            return !string.IsNullOrWhiteSpace(value);
         if (field.EndsWith("_id", StringComparison.Ordinal) || field.EndsWith("_ids", StringComparison.Ordinal))
             return Guid.TryParse(value, out _);
         if (field == "expires_at_utc")

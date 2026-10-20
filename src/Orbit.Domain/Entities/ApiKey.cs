@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 using Orbit.Domain.Common;
 
 namespace Orbit.Domain.Entities;
@@ -15,6 +16,7 @@ public class ApiKey : Entity
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime? LastUsedAtUtc { get; private set; }
     public bool IsRevoked { get; private set; }
+    public Guid? OAuthFamilyId { get; private set; }
 
     private ApiKey() { }
 
@@ -23,7 +25,8 @@ public class ApiKey : Entity
         string name,
         IReadOnlyList<string>? scopes = null,
         bool isReadOnly = false,
-        DateTime? expiresAtUtc = null)
+        DateTime? expiresAtUtc = null,
+        Guid? oauthFamilyId = null)
     {
         if (userId == Guid.Empty)
             return Result.Failure<(ApiKey, string)>(DomainErrors.UserIdRequired);
@@ -37,6 +40,9 @@ public class ApiKey : Entity
         if (expiresAtUtc.HasValue && expiresAtUtc.Value <= DateTime.UtcNow)
             return Result.Failure<(ApiKey, string)>(DomainErrors.ApiKeyExpiryInPast);
 
+        if (oauthFamilyId == Guid.Empty)
+            return Result.Failure<(ApiKey, string)>("An OAuth family id must not be empty.");
+
         var normalizedScopes = (scopes ?? [])
             .Where(scope => !string.IsNullOrWhiteSpace(scope))
             .Select(scope => scope.Trim())
@@ -48,7 +54,7 @@ public class ApiKey : Entity
             return Result.Failure<(ApiKey, string)>(DomainErrors.ApiKeyScopesInvalid);
 
         var rawKey = GenerateKey();
-        var keyHash = BCrypt.Net.BCrypt.HashPassword(rawKey);
+        var keyHash = Hash(rawKey);
         var keyPrefix = rawKey[..12];
         var apiKey = new ApiKey
         {
@@ -60,11 +66,28 @@ public class ApiKey : Entity
             IsReadOnly = isReadOnly,
             ExpiresAtUtc = expiresAtUtc,
             CreatedAtUtc = DateTime.UtcNow,
-            IsRevoked = false
+            IsRevoked = false,
+            OAuthFamilyId = oauthFamilyId
         };
 
         return Result.Success((apiKey, rawKey));
     }
+
+    public bool Verify(string rawKey)
+    {
+        if (KeyHash.Length != 64 || !KeyHash.All(Uri.IsHexDigit))
+            return false;
+        return CryptographicOperations.FixedTimeEquals(Convert.FromHexString(KeyHash), SHA256.HashData(Encoding.UTF8.GetBytes(rawKey)));
+    }
+
+    public void UpgradeHash(string rawKey)
+    {
+        if (!rawKey.StartsWith(KeyPrefix, StringComparison.Ordinal))
+            throw new ArgumentException("Key prefix does not match.", nameof(rawKey));
+        KeyHash = Hash(rawKey);
+    }
+
+    private static string Hash(string rawKey) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawKey)));
 
     public void Revoke() => IsRevoked = true;
 

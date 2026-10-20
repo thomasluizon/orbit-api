@@ -30,7 +30,7 @@ public sealed class AiHabitEmojiInferenceServiceTests
         var handler = new JsonHandler(body);
         var usageRecorder = Substitute.For<IAiUsageRecorder>();
         var client = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
-        var service = new AiHabitEmojiInferenceService(client, NullLogger<AiHabitEmojiInferenceService>.Instance);
+        var service = new AiHabitEmojiInferenceService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(client), NullLogger<AiHabitEmojiInferenceService>.Instance);
 
         var result = await service.InferAsync(
             userId,
