@@ -13,6 +13,17 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 
 public sealed class RestoreProactivePreferenceMigrationTests
 {
+    internal static void AssertRequiredPreference(IReadOnlyList<MigrationOperation> operations)
+    {
+        var column = operations.OfType<AlterColumnOperation>().Should().ContainSingle(operation =>
+            operation.Table == "Users" && operation.Name == nameof(User.ProactiveAstraEnabled)).Subject;
+        column.ClrType.Should().Be(typeof(bool));
+        column.ColumnType.Should().Be("boolean");
+        column.IsNullable.Should().BeFalse();
+        column.OldColumn.IsNullable.Should().BeTrue();
+        column.DefaultValue.Should().Be(true);
+    }
+
     [Fact]
     public void PostgresScript_NormalizesOldWritersAndBackfillsBeforeRequiringTheColumn()
     {
