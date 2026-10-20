@@ -95,6 +95,7 @@ public static partial class ErrorCopy
         (ValidationErrorCodes.UploadSizeLimit, $"File size must be {UploadContentTypes.MaxSizeBytes} bytes or less.", $"O arquivo deve ter no máximo {UploadContentTypes.MaxSizeBytes} bytes."),
         (ValidationErrorCodes.WaitlistLanguageSupported, "Language must be one of: en, pt-BR.", "O idioma deve ser um destes: en, pt-BR."),
         (ValidationErrorCodes.BulkLogLimit, $"Bulk log cannot exceed {AppConstants.MaxBulkOperationSize} items", $"Não é possível registrar mais de {AppConstants.MaxBulkOperationSize} itens de uma vez"),
+        (ValidationErrorCodes.BulkMoveParentLimit, $"Cannot move more than {AppConstants.MaxBulkOperationSize} habits at once", $"Não é possível mover mais de {AppConstants.MaxBulkOperationSize} hábitos de uma vez"),
         (ValidationErrorCodes.BulkSkipLimit, $"Bulk skip cannot exceed {AppConstants.MaxBulkOperationSize} items", $"Não é possível pular mais de {AppConstants.MaxBulkOperationSize} itens de uma vez"),
         ("NotEmptyValidator", "Enter {PropertyName}.", "Preencha {PropertyName}."),
         ("NotNullValidator", "{PropertyName} must not be empty.", "{PropertyName} não pode ser nulo."),

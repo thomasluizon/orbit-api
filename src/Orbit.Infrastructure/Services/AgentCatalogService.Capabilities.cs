@@ -258,7 +258,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.None,
                 ChatToolNames: ["bulk_update_habits", "bulk_reschedule_habits", "bulk_log_habits", "bulk_skip_habits", "bulk_create_habits"],
                 McpToolNames: ["bulk_update_habits", "bulk_reschedule_habits", "bulk_create_habits", "bulk_log_habits", "bulk_skip_habits"],
-                ControllerActionKeys: ["HabitsController.BulkCreate", "HabitsController.BulkLog", "HabitsController.BulkSkip"]),
+                ControllerActionKeys: ["HabitsController.BulkCreate", "HabitsController.BulkLog", "HabitsController.BulkSkip", "HabitsController.BulkMoveHabitParent"]),
 
             new AgentCapability(
                 AgentCapabilityIds.HabitsBulkDelete,

@@ -77,7 +77,9 @@ public record HabitDetailResponse(
     Domain.Enums.HabitSchedule? Schedule = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     DateOnly? StartDate = null,
-    IReadOnlyList<HabitTagItem>? Tags = null);
+    IReadOnlyList<HabitTagItem>? Tags = null,
+    DateOnly? ScheduledStartDate = null,
+    int? OriginalDayOfMonth = null);
 
 public record GetHabitByIdQuery(Guid UserId, Guid HabitId) : IRequest<Result<HabitDetailResponse>>;
 
@@ -151,7 +153,9 @@ public class GetHabitByIdQueryHandler(
             RelativeReminders: habit.RelativeReminders,
             Schedule: habit.Schedule,
             StartDate: habit.StartDate,
-            Tags: habit.Tags.Select(t => new HabitTagItem(t.Id, t.Name, t.Color)).ToList()));
+            Tags: habit.Tags.Select(t => new HabitTagItem(t.Id, t.Name, t.Color)).ToList(),
+            ScheduledStartDate: habit.ScheduledStartDate,
+            OriginalDayOfMonth: habit.OriginalDayOfMonth));
     }
 }
 

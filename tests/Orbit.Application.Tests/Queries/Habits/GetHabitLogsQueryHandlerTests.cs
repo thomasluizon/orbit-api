@@ -139,4 +139,43 @@ public class GetHabitLogsQueryHandlerTests
 
         await _userDateService.Received(1).GetUserTodayAsync(UserId, Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task Handle_ExplicitRange_PassesDatesAndCancellationWithoutResolvingToday()
+    {
+        var from = new DateOnly(2025, 1, 1);
+        var to = new DateOnly(2025, 1, 31);
+        var habit = CreateTestHabit();
+        var log = habit.Log(from).Value;
+        SetupHabitFound(habit);
+        using var cancellation = new CancellationTokenSource();
+        _habitLogReader.ReadRangeLogsAsync(HabitId, from, to, cancellation.Token).Returns([log]);
+
+        var result = await _handler.Handle(new GetHabitLogsQuery(UserId, HabitId, from, to), cancellation.Token);
+
+        result.Value.Should().ContainSingle().Which.Should().BeEquivalentTo(
+            new HabitLogResponse(log.Id, log.Date, log.Value, log.CreatedAtUtc));
+        await _habitLogReader.Received(1).ReadRangeLogsAsync(HabitId, from, to, cancellation.Token);
+        await _habitLogReader.DidNotReceive().ReadRecentLogsAsync(
+            Arg.Any<Guid>(), Arg.Any<DateOnly>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+        await _userDateService.DidNotReceive().GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_RangeForUnownedHabit_DoesNotReadLogs()
+    {
+        var owner = CreateTestHabit();
+        _habitRepo.FindOneTrackedAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Expression<Func<Habit, bool>>>().Compile()(owner) ? owner : null);
+
+        var result = await _handler.Handle(new GetHabitLogsQuery(
+            Guid.NewGuid(), owner.Id, new DateOnly(2025, 1, 1), new DateOnly(2025, 1, 31)), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("HABIT_NOT_FOUND");
+        await _habitLogReader.DidNotReceive().ReadRangeLogsAsync(
+            Arg.Any<Guid>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>());
+    }
 }

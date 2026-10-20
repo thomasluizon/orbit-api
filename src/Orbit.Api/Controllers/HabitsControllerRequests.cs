@@ -88,6 +88,8 @@ public partial class HabitsController
         int? IntervalWeeks = null,
         IReadOnlyList<RelativeReminderTime>? RelativeReminders = null);
 
+    public record BulkMoveHabitParentRequest(IReadOnlyList<Guid> HabitIds, Guid? ParentId);
+
     public record BulkDeleteHabitsRequest(IReadOnlyList<Guid> HabitIds);
 
     public record BulkLogHabitItem(Guid HabitId, DateOnly? Date = null);
