@@ -1,6 +1,6 @@
 const chat = "src/Orbit.Application/Chat/Tools/Implementations/"
 
-// Semantic bindings connect parameters and output projections; verdicts and source lines are generated.
+// Semantic bindings connect parameters and output projections; verdicts and member evidence are generated.
 export const entities = {
   Habit: { model: "Habit", editableRecord: "HabitUpdateParams", tools: {
     create: ["create_habit"], read: ["query_habits", "get_habit", "list_habits"],
@@ -95,6 +95,14 @@ export const rendered = {
 }
 
 export const deliberateFields = {
+  "Habit.Position": "Display order is managed through reorder operations; scalar position readback is not an AI field-editing capability.",
+  "SubHabit.Position": "Display order is managed through reorder operations; scalar position readback is not an AI field-editing capability.",
+  "Goal.Position": "Display order is managed through reorder operations; scalar position readback is not an AI field-editing capability.",
+  "HabitLog.HabitId": "The habit and date define a completion's identity. Undo and log again to change that identity rather than editing it in place.",
+  "HabitLog.Date": "The habit and date define a completion's identity. Undo and log again to change that identity rather than editing it in place.",
+  "Goal.Type": "Goal type is fixed at creation because it defines how progress is derived; create a replacement to change it.",
+  "Profile.Email": "An email change requires the account email verification flow; AI tools do not bypass that verification.",
+  "Profile.MarketingEmailConsent": "Marketing consent requires an explicit user choice in the account consent flow; an AI tool does not provide that consent.",
   "PushSubscription.Endpoint": "Push endpoints are device credentials. Only hashed endpoint metadata is exposed by the account API; AI tools do not read credentials back.",
   "PushSubscription.P256dh": "Device public-key material is managed through subscribe/unsubscribe, not AI readback.",
   "PushSubscription.Auth": "Device authentication material must not be read back to an AI client.",

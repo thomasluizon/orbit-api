@@ -1,27 +1,28 @@
 import assert from "node:assert/strict"
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { cpSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
-import { createHash } from "node:crypto"
+import { execFileSync, spawnSync } from "node:child_process"
 import { test } from "node:test"
-import { buildInventory, checkBaseline, gapReport } from "../capability-inventory.mjs"
+import { buildInventory, checkBaseline, gapReport, semanticSnapshot } from "../capability-inventory.mjs"
 
 const root = resolve(import.meta.dirname, "../..")
 const inventory = buildInventory(root)
-const baseline = value => ({ inputs: value.provenance.inputs, artifactDigest: createHash("sha256").update(JSON.stringify(value)).digest("hex") })
+const baseline = semanticSnapshot
 const field = (value, entity, name) => value.entities.find(row => row.entity === entity).fields.find(row => row.name === name)
 
-function mutate(path, transform, verify) {
-  const copy = mkdtempSync(join(tmpdir(), "orbit-inventory-"))
+function mutate(path, transform, verify, accept = false) {
+  const copy = realpathSync(mkdtempSync(join(tmpdir(), "orbit-inventory-")))
   try {
     cpSync(join(root, "src"), join(copy, "src"), { recursive: true, filter: source => !/[\\/](bin|obj|Migrations)([\\/]|$)/.test(source) })
     cpSync(join(root, "tools"), join(copy, "tools"), { recursive: true })
+    if (accept) execFileSync(process.execPath, [join(copy, "tools/capability-inventory.mjs"), "--accept"])
     const target = join(copy, path)
     const original = readFileSync(target, "utf8")
     const changed = transform(original)
     assert.notEqual(changed, original, "Mutation must exercise real source")
     writeFileSync(target, changed)
-    verify(() => buildInventory(copy))
+    verify(() => buildInventory(copy), copy)
   } finally {
     rmSync(copy, { recursive: true })
   }
@@ -34,7 +35,7 @@ test("both real registries, all scoped entity views and inherited fields have so
     const row = inventory.entities.find(item => item.entity === entity)
     assert.ok(row.fields.length, entity)
     for (const property of row.fields) {
-      assert.match(property.domain.source, /\.cs:\d+$/)
+      assert.match(property.domain.source, /\.cs#\w+\.\w+$/)
       assert.ok(property.persistence.length)
       for (const surface of ["chat", "mcp"]) assert.equal(Object.keys(property.surfaces[surface].operations).length, 6)
     }
@@ -42,6 +43,40 @@ test("both real registries, all scoped entity views and inherited fields have so
   assert.ok(inventory.capabilities.length > 0)
   assert.ok(inventory.capabilities.every(row => row.surfaces.chat && row.surfaces.mcp))
   assert.equal(field(inventory, "Profile", "xmin").shadow, true)
+})
+
+test("a blank line in Habit leaves the CLI drift check green", () => {
+  mutate("src/Orbit.Domain/Entities/Habit.cs", text => "\n" + text, (build, copy) => {
+    const result = spawnSync(process.execPath, [join(copy, "tools/capability-inventory.mjs"), "--check"], { encoding: "utf8" })
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /Generated \d+ chat tools/)
+    assert.deepEqual(build(), inventory)
+    assert.equal(gapReport(build()), gapReport(inventory))
+  }, true)
+})
+
+test("a registered chat parameter makes the CLI drift check name the changed tool", () => {
+  const tool = inventory.registries.chat.find(row => row.name === "create_tag")
+  mutate(tool.declaration.source.split(/[#:]/)[0], text => text.replace('name = new { type =', 'inventory_probe = new { type = JsonSchemaTypes.String },\n            name = new { type ='), (_build, copy) => {
+    const result = spawnSync(process.execPath, [join(copy, "tools/capability-inventory.mjs"), "--check"], { encoding: "utf8" })
+    assert.equal(result.status, 1, result.stderr)
+    assert.match(result.stderr, /registries\.chat\.create_tag/)
+    assert.match(result.stderr, /inventory_probe/)
+  }, true)
+})
+
+test("the committed semantic baseline has no hashes or line numbers", () => {
+  const text = readFileSync(join(root, "tools/capability-inventory.baseline.json"), "utf8")
+  assert.doesNotMatch(text, /[a-f0-9]{64}/i)
+  assert.doesNotMatch(text, /\.cs:\d+/)
+  const committed = JSON.parse(text)
+  assert.ok(committed.registries.chat.length)
+  assert.ok(committed.registries.mcp.length)
+  assert.ok(committed.entities.length)
+  assert.equal(committed.provenance, undefined)
+  assert.equal(committed.artifactDigest, undefined)
+  assert.equal(committed.inputs, undefined)
+  checkBaseline(inventory, committed)
 })
 
 test("generated output is deterministic and the accepted baseline passes", () => {
@@ -60,7 +95,7 @@ test("creation without update and partial readback are gaps", () => {
   assert.equal(field(inventory, "Habit", "Description").surfaces.chat.operations.read.status, "absent")
   assert.ok(field(inventory, "Profile", "Name").surfaces.chat.problems.includes("domain-edit-without-tool-update"))
   assert.ok(field(inventory, "Habit", "RelativeReminders").surfaces.chat.problems.includes("domain-edit-without-tool-update"))
-  assert.match(gapReport(inventory), /## Gaps to file/)
+  assert.match(gapReport(inventory), /## Field coverage gaps/)
   assert.match(gapReport(inventory), /### Profile.Name/)
 })
 
@@ -69,10 +104,20 @@ test("MCP gateway coverage retains direct differences, known tickets and deliber
   assert.equal(reminder.direct.length, 0)
   assert.equal(reminder.viaOperations[0].via, "execute_agent_operation_v2")
   assert.equal(field(inventory, "Habit", "Emoji").surfaces.mcp.operations.read.status, "covered")
-  for (const number of [513, 246, 396, 19, 235]) assert.ok(inventory.knownGaps.some(row => row.ticket.endsWith(`#${number}`)))
+  for (const number of [513, 246, 396, 19, 235, 1574, 1575, 1576]) assert.ok(inventory.knownGaps.some(row => row.ticket.endsWith(`#${number}`)))
   assert.ok(!inventory.gaps.some(row => row.entity === "UserFact"))
   assert.ok(!inventory.gaps.some(row => row.entity === "PushSubscription"))
   assert.ok(inventory.gaps.some(row => row.problems.includes("direct-update-requires-unchanged-title")))
+  assert.ok(inventory.gaps.every(row => row.ticket), "Existing findings must reference the tickets that own them")
+  for (const [entity, name] of [["Habit", "Position"], ["SubHabit", "Position"], ["HabitLog", "HabitId"], ["HabitLog", "Date"], ["Goal", "Position"], ["Goal", "Type"], ["Profile", "Email"], ["Profile", "MarketingEmailConsent"]]) {
+    assert.ok(!inventory.gaps.some(row => row.entity === entity && row.field === name))
+    for (const surface of ["chat", "mcp"]) {
+      const value = field(inventory, entity, name).surfaces[surface]
+      assert.equal(value.verdict, "deliberate")
+      assert.ok(value.operations.update.reason)
+    }
+  }
+  assert.doesNotMatch(gapReport(inventory), /Gaps to file|Requires capability review|\.cs:\d+/)
 })
 
 test("nested writable fields and filter predicates have distinct parameter paths", () => {
@@ -113,6 +158,6 @@ test("removing a returned field invalidates its semantic binding", () => {
 
 test("returned DTO drift is covered even outside Queries directories", () => {
   mutate("src/Orbit.Application/Subscriptions/SubscriptionDtos.cs", text => text.replace("string Plan", "string InventoryProbe"), build => {
-    assert.throws(() => checkBaseline(build(), baseline(inventory)), /SubscriptionDtos.cs/)
+    assert.throws(() => checkBaseline(build(), baseline(inventory)), /entities\.Subscription\.fields\.Plan/)
   })
 })
