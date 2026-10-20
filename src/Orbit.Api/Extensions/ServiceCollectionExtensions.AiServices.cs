@@ -19,7 +19,11 @@ public static partial class ServiceCollectionExtensions
         builder.Services.Configure<AgentPlatformSettings>(
             builder.Configuration.GetSection(AgentPlatformSettings.SectionName));
         builder.Services.AddSingleton<AiCompletionClient>();
-        builder.Services.AddSingleton<IAiUsageRecorder, AiUsageRecorder>();
+        builder.Services.AddSingleton<IAiRequestCostEstimator, AiRequestCostEstimator>();
+        builder.Services.AddSingleton<AiUsageRecorder>();
+        builder.Services.AddSingleton<IAiUsageRecorder, BudgetAwareAiUsageRecorder>();
+        builder.Services.AddSingleton<IAiDailyBudget, AiDailyBudget>();
+        builder.Services.AddScoped<BudgetedAiCompletionClient>();
         builder.Services.AddScoped<IAudioTranscriptionService, AudioTranscriptionService>();
         builder.Services.AddScoped<IAiIntentService, AiIntentService>();
         builder.Services.AddScoped<IHabitEmojiInferenceService, AiHabitEmojiInferenceService>();
@@ -41,7 +45,9 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAgentPolicyEvaluator, AgentPolicyEvaluator>();
         builder.Services.AddScoped<IAgentAuditService, AgentAuditService>();
         builder.Services.AddScoped<IAgentTargetOwnershipService, AgentTargetOwnershipService>();
-        builder.Services.AddScoped<IAgentOperationExecutor, AgentOperationExecutor>();
+        builder.Services.AddScoped<AgentOperationExecutor>();
+        builder.Services.AddScoped<Orbit.Application.Chat.Commands.IAgentMutationRunner>(sp => sp.GetRequiredService<AgentOperationExecutor>());
+        builder.Services.AddScoped<IAgentOperationExecutor, IdempotentAgentOperationExecutor>();
         builder.Services.AddScoped<IPendingOperationChangePreviewer, PendingOperationChangePreviewer>();
         builder.Services.AddScoped<IDestructiveOperationPreviewer, DestructiveOperationPreviewer>();
         builder.Services.AddScoped<PendingOperationRevisionService>();

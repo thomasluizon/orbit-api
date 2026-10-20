@@ -150,6 +150,9 @@ public sealed class CreateHabitToolPersistenceTests
         var logs = Substitute.For<IHabitScheduleLogReader>();
         logs.ReadDaysAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(),
             Arg.Any<CancellationToken>()).Returns(Array.Empty<HabitScheduleLogDay>());
+        var moderation = Substitute.For<IContentModerationService>();
+        moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult(false, false, []));
 
         return new ProcessUserChatCommandHandler(
             new(habits, goals, new GenericRepository<User>(db), tags, new GenericRepository<ChecklistTemplate>(db), flags),
@@ -157,6 +160,6 @@ public sealed class CreateHabitToolPersistenceTests
             new(dates, Substitute.For<IUserStreakService>(), quota, work, Substitute.For<IServiceScopeFactory>(), executor,
                 Substitute.For<IPendingClarificationStore>(), syncer, Substitute.For<IGamificationService>(),
                 Substitute.For<IMediator>(), Substitute.For<IProductAnalytics>(), logs, new IssuedAstraBlockStore(db), pending),
-            NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>());
+            NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>(), moderation);
     }
 }

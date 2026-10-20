@@ -1002,6 +1002,8 @@ public partial class AgentCatalogService
                     "OAuthController.GoogleStart",
                     "OAuthController.GoogleCallback",
                     "OAuthController.Token",
+                    "OAuthController.Consent",
+                    "OAuthController.GrantConsent",
                     "WaitlistController.Join",
                     "WaitlistController.Confirm"
                 ]),

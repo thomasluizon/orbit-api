@@ -8,6 +8,14 @@ public class ApiKeyTests
     private static readonly Guid ValidUserId = Guid.NewGuid();
 
     [Fact]
+    public void Create_ValidatesAndPreservesOAuthFamily()
+    {
+        var family = Guid.NewGuid();
+        ApiKey.Create(Guid.NewGuid(), "OAuth", oauthFamilyId: Guid.Empty).IsFailure.Should().BeTrue();
+        ApiKey.Create(Guid.NewGuid(), "OAuth", oauthFamilyId: family).Value.Entity.OAuthFamilyId.Should().Be(family);
+    }
+
+    [Fact]
     public void Create_ValidInput_ReturnsSuccess()
     {
         var result = ApiKey.Create(ValidUserId, "My API Key");

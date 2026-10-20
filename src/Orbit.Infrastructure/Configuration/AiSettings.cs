@@ -30,5 +30,6 @@ public sealed class AiModelPrice
 {
     public decimal InputPerMillionUsd { get; init; }
     public decimal CachedInputPerMillionUsd { get; init; }
+    public decimal? CacheWritePerMillionUsd { get; init; }
     public decimal OutputPerMillionUsd { get; init; }
 }

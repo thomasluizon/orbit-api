@@ -1,3 +1,5 @@
+using Orbit.Infrastructure.Persistence;
+using Orbit.Infrastructure.Tests.Persistence;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using FluentAssertions;
@@ -19,13 +21,14 @@ namespace Orbit.Infrastructure.Tests.Controllers;
 
 public class OAuthLoginPageTests : IDisposable
 {
-    private readonly OAuthAuthorizationStore _authStore =
-        new(NullLogger<OAuthAuthorizationStore>.Instance, TimeProvider.System);
+    private readonly SqliteOrbitDbContextFactory _oauthDb = new();
+    private readonly OAuthAuthorizationStore _authStore;
     private readonly OAuthController _controller;
     private readonly IConfigurationRoot _configuration = new ConfigurationBuilder().AddInMemoryCollection().Build();
 
     public OAuthLoginPageTests()
     {
+        _authStore = new OAuthAuthorizationStore(new OAuthStateStore(_oauthDb.Context, TimeProvider.System), TimeProvider.System);
         var googleSettings = Options.Create(new GoogleSettings
         {
             ClientId = "test-google-client-id",
@@ -46,7 +49,7 @@ public class OAuthLoginPageTests : IDisposable
 
     public void Dispose()
     {
-        _authStore.Dispose();
+        _oauthDb.Dispose();
         GC.SuppressFinalize(this);
     }
 
