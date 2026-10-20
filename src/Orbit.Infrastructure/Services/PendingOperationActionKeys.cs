@@ -55,6 +55,7 @@ public static class PendingOperationActionKeys
             "update_tag" => "updateTag",
             "assign_tags" => "assignTags",
             "create_checklist_template" => "createChecklistTemplate",
+            "update_checklist_template" => "updateChecklistTemplate",
             "delete_checklist_template" => "deleteChecklistTemplate",
             "update_profile_preferences" => "updateProfilePreferences",
             "set_ai_summary" => "setAiSummary",
