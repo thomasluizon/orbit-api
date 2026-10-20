@@ -29,6 +29,28 @@ public class HabitLogReader(OrbitDbContext context) : IHabitLogReader
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<HabitLog>> ReadRangeLogsAsync(
+        Guid habitId,
+        DateOnly from,
+        DateOnly to,
+        CancellationToken cancellationToken = default)
+    {
+        return await BuildRangeLogs(context.HabitLogs.AsNoTracking(), habitId, from, to)
+            .ToListAsync(cancellationToken);
+    }
+
+    internal static IOrderedQueryable<HabitLog> BuildRangeLogs(
+        IQueryable<HabitLog> logs,
+        Guid habitId,
+        DateOnly from,
+        DateOnly to)
+    {
+        return logs
+            .Where(l => l.HabitId == habitId && l.Date >= from && l.Date <= to)
+            .OrderByDescending(l => l.Date)
+            .ThenByDescending(l => l.CreatedAtUtc);
+    }
+
     internal static IQueryable<HabitLog> BuildRecentLogs(
         IQueryable<HabitLog> logs,
         Guid habitId,
