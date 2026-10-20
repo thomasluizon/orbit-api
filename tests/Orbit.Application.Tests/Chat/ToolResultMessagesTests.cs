@@ -19,6 +19,7 @@ public class ToolResultMessagesTests
     [InlineData("delete_habit", "deletedHabit")]
     [InlineData("duplicate_habit", "duplicatedHabit")]
     [InlineData("log_habit", "loggedHabit")]
+    [InlineData("unlog_habit", "unloggedHabit")]
     [InlineData("skip_habit", "skippedHabit")]
     [InlineData("undo_skip_habit", "undidSkipHabit")]
     [InlineData("move_habit", "movedHabit")]

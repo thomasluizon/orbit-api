@@ -117,6 +117,7 @@ internal static class ToolResultMessages
         "delete_habit" => "deletedHabit",
         "duplicate_habit" => "duplicatedHabit",
         "log_habit" => "loggedHabit",
+        "unlog_habit" => "unloggedHabit",
         "skip_habit" => "skippedHabit",
         "undo_skip_habit" => "undidSkipHabit",
         "move_habit" => "movedHabit",
