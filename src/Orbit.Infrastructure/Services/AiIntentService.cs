@@ -151,6 +151,14 @@ public sealed partial class AiIntentService(
             if (logger.IsEnabled(LogLevel.Debug))
                 LogAiApiResponded(logger, stopwatch.ElapsedMilliseconds);
 
+            if (round.IsTruncated)
+                return Result.Success(new AiResponse
+                {
+                    TextMessage = round.Text,
+                    ReportedTokenCount = round.ReportedTokenCount,
+                    IsTruncated = true
+                });
+
             if (round.ToolCalls.Count > 0)
             {
                 var toolCalls = ToAiToolCalls(round.ToolCalls);
@@ -296,7 +304,7 @@ public sealed partial class AiIntentService(
             LogResponseTruncated(logger);
 
         var toolCalls = response.OutputItems.OfType<FunctionCallResponseItem>().ToList();
-        if (response.Status == ResponseStatus.Incomplete && toolCalls.Count > 0)
+        if (response.Status == ResponseStatus.Incomplete && !truncated && toolCalls.Count > 0)
             throw new InvalidOperationException("AI returned incomplete tool calls.");
 
         return new CompletedRound(AiCompletionClient.GetAssistantOutputText(response), toolCalls, GetReportedTokenCount(response.Usage), truncated);
