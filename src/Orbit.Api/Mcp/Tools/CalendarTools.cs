@@ -1,5 +1,7 @@
 using System.ComponentModel;
 using System.Security.Claims;
+using System.Text.Json;
+using Orbit.Application.Chat.Tools.Implementations;
 using MediatR;
 using ModelContextProtocol.Server;
 using Orbit.Application.Calendar.Queries;
@@ -36,18 +38,44 @@ public class CalendarTools(IMediator mediator, McpExecutorBridge executorBridge)
         return $"Calendar Events ({events.Count}):\n{string.Join("\n", lines)}";
     }
 
-    [McpServerTool(Name = "manage_calendar_sync"), Description("Manage Google Calendar sync: set auto-sync on/off, dismiss an import, dismiss a suggestion, or run a sync now.")]
-    public async Task<string> ManageCalendarSync(
+    [McpServerTool(Name = "get_calendar_overview"), Description("Read calendar events, selected calendars, auto-sync state, and sync suggestions.")]
+    public async Task<string> GetCalendarOverview(ClaimsPrincipal user, CancellationToken cancellationToken = default)
+    {
+        var tool = new GetCalendarOverviewTool(mediator);
+        var result = await tool.ExecuteAsync(JsonSerializer.SerializeToElement(new { }),
+            McpToolHelpers.GetUserId(user), cancellationToken);
+        return result.Success ? JsonSerializer.Serialize(result.Payload) : $"Error: {result.Error}";
+    }
+
+    [McpServerTool(Name = "set_selected_calendars"), Description("Select Google Calendars to sync. An empty list resets to all owned calendars.")]
+    public async Task<string> SetSelectedCalendars(
         ClaimsPrincipal user,
-        [Description("Action to perform: set_auto_sync, dismiss_import, dismiss_suggestion, or run_sync")] string action,
-        [Description("For set_auto_sync: whether auto-sync should be enabled")] bool? enabled = null,
-        [Description("For dismiss_suggestion: the suggestion ID (GUID)")] string? suggestionId = null,
-        [Description("Confirmation token returned by confirm_agent_operation_v2 (required: calendar sync changes are destructive)")] string? confirmationToken = null,
+        [Description("Calendar IDs to sync; an empty list resets to all owned calendars")] string[] calendarIds,
+        [Description("Confirmation token returned by confirm_agent_operation_v2")] string? confirmationToken = null,
         CancellationToken cancellationToken = default)
     {
         var result = await executorBridge.ExecuteAsync(user, "manage_calendar_sync", new
         {
+            action = "set_selected_calendars",
+            calendar_ids = calendarIds
+        }, confirmationToken, cancellationToken);
+        return result.Succeeded ? "Calendar selection updated." : result.Message;
+    }
+
+    [McpServerTool(Name = "manage_calendar_sync"), Description("Manage Google Calendar sync: set auto-sync on/off, dismiss an import, dismiss a suggestion, run a sync now, or select calendars.")]
+    public async Task<string> ManageCalendarSync(
+        ClaimsPrincipal user,
+        [Description("Action to perform: set_auto_sync, dismiss_import, dismiss_suggestion, run_sync, or set_selected_calendars")] string action,
+        [Description("For set_auto_sync: whether auto-sync should be enabled")] bool? enabled = null,
+        [Description("For dismiss_suggestion: the suggestion ID (GUID)")] string? suggestionId = null,
+        [Description("Confirmation token returned by confirm_agent_operation_v2 (required: calendar sync changes are destructive)")] string? confirmationToken = null,
+        CancellationToken cancellationToken = default,
+        [Description("For set_selected_calendars: calendar IDs; empty resets to all owned calendars")] string[]? calendarIds = null)
+    {
+        var result = await executorBridge.ExecuteAsync(user, "manage_calendar_sync", new
+        {
             action,
+            calendar_ids = calendarIds,
             enabled,
             suggestion_id = suggestionId
         }, confirmationToken, cancellationToken);

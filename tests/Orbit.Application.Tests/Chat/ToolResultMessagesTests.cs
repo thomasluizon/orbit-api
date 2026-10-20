@@ -276,6 +276,24 @@ public class ToolResultMessagesTests
         failure.Params.Should().Be(new ToolResultMessageParams());
     }
 
+    [Theory]
+    [InlineData("update_checklist_template", "", "updatedChecklistTemplate")]
+    [InlineData("update_profile_preferences", "set_name", "nameSet")]
+    [InlineData("manage_calendar_sync", "set_selected_calendars", "calendarSelectionUpdated")]
+    public void CapabilityParityWrites_HaveSpecificResultMessages(string tool, string action, string key)
+    {
+        var arguments = JsonSerializer.Serialize(new { action, name = "Alex" });
+        var card = new ActionResult("Tool", ActionStatus.Success, EntityName: "Evening")
+            .WithToolResultMessage(Call(tool, arguments));
+        card.MessageKey.Should().Be("chat.toolResult." + key);
+        card.Params.Should().Be(tool switch
+        {
+            "update_profile_preferences" => new ToolResultMessageParams(EntityName: "Alex"),
+            "update_checklist_template" => new ToolResultMessageParams(EntityName: "Evening"),
+            _ => new ToolResultMessageParams()
+        });
+    }
+
     [Fact]
     public void RegistryWriteTools_EverySupportedActionHasNonFallbackKey()
     {
