@@ -114,6 +114,20 @@ public class QueryHabitsToolTests
         result.EntityName.Should().NotContain("Read books");
     }
 
+    [Theory]
+    [InlineData("medit")]
+    [InlineData("DIÁ MED")]
+    public async Task RoundFour_Search_MatchesNormalizedTitleWordPrefixes(string search)
+    {
+        SetupHabits(CreateHabit("Meditação diária", FrequencyUnit.Day, 1, dueDate: Today),
+            CreateHabit("Premeditação", FrequencyUnit.Day, 1, dueDate: Today));
+
+        var result = await Execute(JsonSerializer.Serialize(new { search }));
+
+        result.Success.Should().BeTrue();
+        result.EntityName.Should().Contain("Meditação diária").And.NotContain("Premeditação");
+    }
+
     [Fact]
     public async Task Search_MatchesChildReturnsParent()
     {

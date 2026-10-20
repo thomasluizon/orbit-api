@@ -14,18 +14,18 @@ internal static class BulkHabitToolArguments
             || values.ValueKind != JsonValueKind.Array || values.GetArrayLength() == 0)
             return (null, "revised_items must be a non-empty array.");
         var items = new List<(Guid HabitId, DateOnly Date)>();
-        var seen = new HashSet<Guid>();
+        var seen = new HashSet<(Guid, DateOnly)>();
         foreach (var value in values.EnumerateArray())
         {
             if (value.ValueKind != JsonValueKind.Object
                 || !value.TryGetProperty("habit_id", out var idValue)
                 || idValue.ValueKind != JsonValueKind.String
                 || !Guid.TryParse(idValue.GetString(), out var id)
-                || !seen.Add(id)
                 || !value.TryGetProperty("date", out var dateValue)
                 || dateValue.ValueKind != JsonValueKind.String
                 || !DateOnly.TryParseExact(dateValue.GetString(), "yyyy-MM-dd",
-                    CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+                    CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)
+                || !seen.Add((id, date)))
                 return (null, "revised_items contains an invalid habit or date.");
             items.Add((id, date));
         }
@@ -192,7 +192,7 @@ internal static class BulkHabitToolArguments
             all = new { type = JsonSchemaTypes.Boolean, description = "Select the complete matching set." },
             habit_ids = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String } },
             tag = new { type = JsonSchemaTypes.String, description = "Exact tag name, case-insensitive." },
-            search = new { type = JsonSchemaTypes.String, description = "Title or description contains text, case-insensitive." },
+            search = new { type = JsonSchemaTypes.String, description = "Search titles by word prefixes, ignoring case and accents. Every search word must start a title word; word order does not matter. Descriptions are not searched." },
             is_completed = new { type = JsonSchemaTypes.Boolean, description = "Select completed habits when true or active habits when false. Active habits are the default." },
             is_general = new { type = JsonSchemaTypes.Boolean },
             is_bad_habit = new { type = JsonSchemaTypes.Boolean },
