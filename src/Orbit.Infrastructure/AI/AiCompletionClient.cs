@@ -24,6 +24,7 @@ public sealed partial class AiCompletionClient
     private readonly string _subTaskModel;
     private readonly ILogger<AiCompletionClient> _logger;
     private readonly IAiUsageRecorder _usageRecorder;
+    private readonly TimeProvider _timeProvider;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -34,8 +35,9 @@ public sealed partial class AiCompletionClient
     public AiCompletionClient(
         IOptions<AiSettings> options,
         ILogger<AiCompletionClient> logger,
-        IAiUsageRecorder usageRecorder)
-        : this(options, logger, usageRecorder, null)
+        IAiUsageRecorder usageRecorder,
+        TimeProvider? timeProvider = null)
+        : this(options, logger, usageRecorder, null, timeProvider)
     {
     }
 
@@ -43,8 +45,11 @@ public sealed partial class AiCompletionClient
         IOptions<AiSettings> options,
         ILogger<AiCompletionClient> logger,
         IAiUsageRecorder usageRecorder,
-        PipelineTransport? transport)
+        PipelineTransport? transport,
+        TimeProvider? timeProvider = null,
+        ClientRetryPolicy? retryPolicy = null)
     {
+        _timeProvider = timeProvider ?? TimeProvider.System;
         _logger = logger;
         _usageRecorder = usageRecorder;
         var settings = options.Value;
@@ -58,7 +63,7 @@ public sealed partial class AiCompletionClient
                 Endpoint = new Uri(settings.BaseUrl),
                 NetworkTimeout = TimeSpan.FromSeconds(networkTimeoutSeconds),
                 Transport = transport,
-                RetryPolicy = new AiRetryLoggingPolicy(settings.MaxRetries, logger)
+                RetryPolicy = retryPolicy ?? new AiRetryLoggingPolicy(settings.MaxRetries, logger)
             };
             clientOptions.AddPolicy(new AiBudgetDispatchPolicy(), PipelinePosition.BeforeTransport);
             return new ResponsesClient(new ApiKeyCredential(settings.ApiKey), clientOptions);
@@ -90,8 +95,10 @@ public sealed partial class AiCompletionClient
         IAiUsageRecorder usageRecorder,
         TimeSpan? completionTimeout = null,
         string primaryModel = "gpt-6-luna",
-        string subTaskModel = "gpt-6-luna")
+        string subTaskModel = "gpt-6-luna",
+        TimeProvider? timeProvider = null)
     {
+        _timeProvider = timeProvider ?? TimeProvider.System;
         CompletionTimeout = completionTimeout ?? new AiSettings().CompletionTimeout;
         StreamingCompletionTimeout = completionTimeout ?? new AiSettings().StreamingCompletionTimeout;
         _responsesClient = responsesClient;
@@ -250,11 +257,28 @@ public sealed partial class AiCompletionClient
                 .Select(part => part.Text)))
             .Where(text => !string.IsNullOrEmpty(text)));
 
-    internal CancellationTokenSource CreateCompletionCancellation(CancellationToken cancellationToken, bool streaming = false)
+    internal CompletionCancellation CreateCompletionCancellation(CancellationToken cancellationToken, bool streaming = false)
+        => new(streaming ? StreamingCompletionTimeout : CompletionTimeout, _timeProvider, cancellationToken);
+
+    internal sealed class CompletionCancellation : IDisposable
     {
-        var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        cancellation.CancelAfter(streaming ? StreamingCompletionTimeout : CompletionTimeout);
-        return cancellation;
+        private readonly CancellationTokenSource _deadline;
+        private readonly CancellationTokenSource _linked;
+
+        internal CompletionCancellation(TimeSpan timeout, TimeProvider timeProvider, CancellationToken caller)
+        {
+            caller.ThrowIfCancellationRequested();
+            _deadline = new CancellationTokenSource(timeout, timeProvider);
+            _linked = CancellationTokenSource.CreateLinkedTokenSource(caller, _deadline.Token);
+        }
+
+        internal CancellationToken Token => _linked.Token;
+
+        public void Dispose()
+        {
+            _linked.Dispose();
+            _deadline.Dispose();
+        }
     }
 
     private async Task<ResponseResult> ExecuteResponseAsync(
