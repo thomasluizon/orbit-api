@@ -856,6 +856,7 @@ public class OrbitDbContext : DbContext
 
             entity.Property(u => u.StripeRenewalStoppedByDeletion).HasDefaultValue(false);
             entity.Property(u => u.PlayRenewalStoppedByDeletion).HasDefaultValue(false);
+            entity.Property(u => u.ProactiveAstraEnabled).HasDefaultValue(true).ValueGeneratedNever();
             entity.Property(u => u.Handle).HasMaxLength(DomainConstants.HandleMaxLength);
             entity.Property(u => u.PublicProfileSlug).HasMaxLength(32);
 

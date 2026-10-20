@@ -135,6 +135,16 @@ internal static class JsonArgumentParser
         return items.Count > 0 ? items : null;
     }
 
+    public static List<RelativeReminderTime>? ParseRelativeReminders(JsonElement element)
+    {
+        if (!element.TryGetProperty("relative_reminders", out var values) || values.ValueKind != JsonValueKind.Array)
+            return null;
+        return values.EnumerateArray().Select(value => new RelativeReminderTime(
+            GetOptionalInt(value, "minutes_before"),
+            GetOptionalString(value, "when") is { } when && TryParseScheduledReminderWhen(when, out var parsed) ? parsed : null,
+            ParseTimeOnly(value, "time"))).ToList();
+    }
+
     public static List<ChecklistItem>? ParseChecklistItems(JsonElement el)
     {
         if (!el.TryGetProperty("checklist_items", out var arrEl) || arrEl.ValueKind != JsonValueKind.Array)

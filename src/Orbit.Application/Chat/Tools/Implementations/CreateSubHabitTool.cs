@@ -28,7 +28,8 @@ public class CreateSubHabitTool(
             frequency_unit = new
             {
                 type = JsonSchemaTypes.String,
-                description = "Override parent frequency",
+                description = "Override parent frequency. Explicit null creates a one-time child.",
+                nullable = true,
                 @enum = JsonSchemaTypes.FrequencyUnitEnum
             },
             frequency_quantity = new { type = JsonSchemaTypes.Integer, description = "Override parent frequency quantity" },
@@ -46,22 +47,12 @@ public class CreateSubHabitTool(
             reminder_times = new { type = JsonSchemaTypes.Array, description = "Minutes before dueTime to send reminders", items = new { type = JsonSchemaTypes.Integer } },
             slip_alert_enabled = new { type = JsonSchemaTypes.Boolean, description = "Enable slip alert notifications" },
             is_flexible = new { type = JsonSchemaTypes.Boolean, description = "True for flexible frequency" },
+            end_date = new { type = JsonSchemaTypes.String, description = "End date (YYYY-MM-DD)", nullable = true },
+            relative_reminders = BulkHabitToolArguments.RelativeRemindersSchema(),
+            checklist_items = BulkHabitToolArguments.ChecklistItemsSchema(),
+            tag_ids = new { type = JsonSchemaTypes.Array, description = "Existing tag IDs", items = new { type = JsonSchemaTypes.String } },
             due_date = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD override for due date" },
-            scheduled_reminders = new
-            {
-                type = JsonSchemaTypes.Array,
-                description = "Absolute-time reminders for habits WITHOUT a due_time",
-                items = new
-                {
-                    type = JsonSchemaTypes.Object,
-                    properties = new
-                    {
-                        when = new { type = JsonSchemaTypes.String, description = "day_before or same_day", @enum = JsonSchemaTypes.ScheduledReminderWhenEnum },
-                        time = new { type = JsonSchemaTypes.String, description = "HH:mm 24h format" }
-                    },
-                    required = new[] { "when", "time" }
-                }
-            }
+            scheduled_reminders = BulkHabitToolArguments.ScheduledRemindersSchema()
         },
         required = new[] { "parent_habit_id", "title" }
     };
@@ -82,6 +73,12 @@ public class CreateSubHabitTool(
             return new ToolResult(false, Error: "title is required.");
 
         var title = titleEl.GetString() ?? string.Empty;
+        if (args.TryGetProperty("tag_ids", out var tagIds) && (tagIds.ValueKind != JsonValueKind.Array
+            || tagIds.EnumerateArray().Any(id => id.ValueKind != JsonValueKind.String || !Guid.TryParse(id.GetString(), out _))))
+            return new ToolResult(false, Error: "tag_ids must contain valid GUIDs.");
+        var fieldError = BulkHabitToolArguments.CheckHabitFields(args);
+        if (fieldError is not null)
+            return new ToolResult(false, Error: fieldError);
 
         var (frequencyUnit, frequencyQuantity, intervalWeeks) = ParseScheduleOptions(args);
         var days = JsonArgumentParser.ParseDays(args);
@@ -103,7 +100,8 @@ public class CreateSubHabitTool(
                 IsBadHabit: isBadHabit,
                 DueDate: dueDate,
                 Emoji: emoji,
-                InheritParentFrequency: true,
+                TagIds: JsonArgumentParser.ParseGuidArray(args, "tag_ids"),
+                InheritParentFrequency: !args.TryGetProperty("frequency_unit", out var frequencyValue) || frequencyValue.ValueKind != JsonValueKind.Null,
                 IntervalWeeks: intervalWeeks,
                 Options: new Orbit.Application.Habits.Commands.HabitCommandOptions(
                     Days: days,
@@ -113,7 +111,10 @@ public class CreateSubHabitTool(
                     ReminderTimes: reminderTimes,
                     SlipAlertEnabled: slipAlertEnabled,
                     IsFlexible: isFlexible,
-                    ScheduledReminders: scheduledReminders));
+                    ScheduledReminders: scheduledReminders,
+                    RelativeReminders: JsonArgumentParser.ParseRelativeReminders(args),
+                    ChecklistItems: JsonArgumentParser.ParseChecklistItems(args),
+                    EndDate: JsonArgumentParser.ParseDateOnly(args, "end_date")));
         if (checkOnly)
             return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
 

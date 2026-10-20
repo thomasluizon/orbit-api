@@ -169,6 +169,70 @@ internal static class RollingMigrationGate
         return failures;
     }
 
+    internal static IReadOnlyList<string> CheckRelease(
+        IReadOnlyList<(string Id, IReadOnlyList<MigrationOperation> Operations)> migrations,
+        IReadOnlyDictionary<string, DeploymentBarrier>? barriers = null,
+        Func<string, string, bool>? isAncestor = null,
+        string baseRef = "base")
+    {
+        var ordered = migrations.OrderBy(migration => migration.Id, StringComparer.Ordinal).ToArray();
+        var operations = ordered.SelectMany(migration => migration.Operations).ToArray();
+        var restores = ordered.SelectMany(migration => migration.Operations.OfType<AlterColumnOperation>()
+            .Where(column => IsCompatibleBooleanRestore(column, migration.Operations))).ToHashSet();
+        var compatible = new HashSet<MigrationOperation>(restores);
+        foreach (var column in operations.OfType<AlterColumnOperation>())
+        {
+            if (!SimpleBoolean(column) || !SimpleBoolean(column.OldColumn)
+                || !column.IsNullable || column.OldColumn.IsNullable
+                || column.DefaultValue is not null || column.OldColumn.DefaultValue is not bool)
+                continue;
+
+            var later = operations.Skip(Array.IndexOf(operations, column) + 1)
+                .OfType<AlterColumnOperation>()
+                .FirstOrDefault(other => other.Schema == column.Schema && other.Table == column.Table && other.Name == column.Name);
+            if (later is not null && restores.Contains(later))
+                compatible.Add(column);
+        }
+
+        return ordered.SelectMany(migration => Check(migration.Id,
+            migration.Operations.Where(operation => !compatible.Contains(operation)).ToArray(), barriers, isAncestor, baseRef)).ToArray();
+    }
+
+    private static bool IsCompatibleBooleanRestore(AlterColumnOperation column, IReadOnlyList<MigrationOperation> operations)
+    {
+        if (!SimpleBoolean(column) || !SimpleBoolean(column.OldColumn)
+            || column.IsNullable || !column.OldColumn.IsNullable || column.DefaultValue is not bool enabled
+            || column.Schema is not null
+            || !Regex.IsMatch(column.Table, @"\A[A-Za-z_][A-Za-z0-9_]*\z")
+            || !Regex.IsMatch(column.Name, @"\A[A-Za-z_][A-Za-z0-9_]*\z"))
+            return false;
+
+        var literal = enabled ? "TRUE" : "FALSE";
+        var normalization = $"""
+            CREATE FUNCTION "Normalize{column.Table}{column.Name}"() RETURNS trigger AS $normalize$
+            BEGIN
+                NEW."{column.Name}" := COALESCE(NEW."{column.Name}", {literal});
+                RETURN NEW;
+            END;
+            $normalize$ LANGUAGE plpgsql;
+            CREATE TRIGGER "Normalize{column.Name}OnWrite"
+            BEFORE INSERT OR UPDATE ON "{column.Table}"
+            FOR EACH ROW EXECUTE FUNCTION "Normalize{column.Table}{column.Name}"();
+            """;
+        var backfill = $"UPDATE \"{column.Table}\" SET \"{column.Name}\" = {literal} WHERE \"{column.Name}\" IS NULL;";
+        var prefix = operations.TakeWhile(operation => !ReferenceEquals(operation, column)).OfType<SqlOperation>().ToArray();
+        var triggerIndex = Array.FindIndex(prefix, sql => !sql.SuppressTransaction && NormalizeSql(sql.Sql) == NormalizeSql(normalization));
+        var backfillIndex = Array.FindIndex(prefix, sql => !sql.SuppressTransaction && NormalizeSql(sql.Sql) == NormalizeSql(backfill));
+        return triggerIndex >= 0 && backfillIndex > triggerIndex;
+    }
+
+    private static string NormalizeSql(string sql) => Regex.Replace(sql, @"\s+", " ").Trim();
+
+    private static bool SimpleBoolean(ColumnOperation column) => column.ClrType == typeof(bool) && column.ColumnType == "boolean"
+        && column.DefaultValueSql is null && column.ComputedColumnSql is null && !column.IsRowVersion
+        && column.MaxLength is null && column.Precision is null && column.Scale is null && column.Collation is null
+        && !column.GetAnnotations().Any();
+
     private static bool RequiresContract(MigrationOperation operation) => operation switch
     {
         DropColumnOperation or RenameColumnOperation or DropTableOperation or RenameTableOperation
@@ -188,6 +252,18 @@ internal static class RollingMigrationGate
         .OfType<string>()
         .Distinct(StringComparer.Ordinal)
         .ToArray();
+
+    internal static Dictionary<string, DeploymentBarrier> BarriersForRelease(
+        IReadOnlyDictionary<string, DeploymentBarrier> current,
+        IReadOnlyDictionary<string, DeploymentBarrier> baseline,
+        IReadOnlySet<string> changedPaths)
+    {
+        var barriers = current.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+        foreach (var (id, barrier) in baseline)
+            if (!changedPaths.Contains($"src/Orbit.Infrastructure/Migrations/{id}.cs"))
+                barriers[id] = barrier;
+        return barriers;
+    }
 }
 
 internal sealed record DeploymentBarrier(

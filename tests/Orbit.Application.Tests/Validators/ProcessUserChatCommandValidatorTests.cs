@@ -15,6 +15,15 @@ public class ProcessUserChatCommandValidatorTests
         Message: "Hello, how are you?");
 
     [Fact]
+    public void Validate_FortyHistoryMessagesStillAccepted_FortyOneRejected()
+    {
+        var history = Enumerable.Range(0, 40).Select(index => new ChatHistoryMessage("user", $"turn {index}")).ToList();
+        _validator.TestValidate(ValidCommand() with { History = history }).ShouldNotHaveAnyValidationErrors();
+        _validator.TestValidate(ValidCommand() with { History = history.Append(new("user", "one more")).ToList() })
+            .ShouldHaveValidationErrorFor(command => command.History);
+    }
+
+    [Fact]
     public void Validate_ValidCommand_NoErrors()
     {
         var result = _validator.TestValidate(ValidCommand());

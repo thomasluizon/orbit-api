@@ -100,7 +100,13 @@ public class FeatureFlagAccountsMigrationTests
             "20261019213536_AddDailyAiSafetyBudget",
             "20261019223729_TrackMcpRefreshTokenFamilies",
             "20261020005707_PriceDailyAiBudgetsInUsd");
-        context.Database.GetMigrations().Last().Should().EndWith("_PersistConversationTurns");
+        context.Database.GetMigrations().Should().ContainInOrder(
+            "20261020014306_PersistConversationTurns", "20261020033359_RestoreRequiredProactiveAstraPreference");
+        context.Database.GetMigrations().Last().Should().EndWith("_RestoreRequiredProactiveAstraPreference");
+        var preference = current.FindEntityType(typeof(User))!.FindProperty(nameof(User.ProactiveAstraEnabled))!;
+        preference.ClrType.Should().Be(typeof(bool));
+        preference.IsNullable.Should().BeFalse();
+        preference.GetDefaultValue().Should().Be(true);
     }
 
     private static void AssertHabitExpandColumns(IReadOnlyList<MigrationOperation> differences)

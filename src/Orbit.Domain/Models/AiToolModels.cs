@@ -17,7 +17,11 @@ public sealed record AiToolRequest(
     Guid UserId = default,
     byte[]? ImageData = null,
     string? ImageMimeType = null,
-    IReadOnlyList<ChatHistoryMessage>? History = null);
+    IReadOnlyList<ChatHistoryMessage>? History = null)
+{
+    public string? DynamicContext { get; init; }
+    public AiTurnTelemetry Telemetry { get; init; } = new();
+}
 
 public record AiToolCallResult(
     string Name,
@@ -40,6 +44,7 @@ public sealed class AiConversationContext
     public object Options { get; init; } = null!;
     /// <summary>User attributed to each model round in this conversation.</summary>
     public Guid? UserId { get; init; }
+    public AiTurnTelemetry Telemetry { get; init; } = new();
 }
 
 public record AiResponse

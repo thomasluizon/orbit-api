@@ -42,6 +42,70 @@ public partial class CreateHabitToolTests
             });
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task InvalidRelativeReminders_FailBeforeCreatingParentOrChild(bool onChild)
+    {
+        const string fields = "\"relative_reminders\":[{\"minutes_before\":30,\"when\":\"same_day\",\"time\":\"08:00\"}]";
+        var json = onChild
+            ? $$"""{"title":"Parent","frequency_unit":"Day","sub_habits":[{"title":"Child",{{fields}}}]}"""
+            : $$"""{"title":"Parent","frequency_unit":"Day",{{fields}}}""";
+        var result = await Execute(json);
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("relative_reminders");
+        await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task InlineChildTags_AreStoredOnChild()
+    {
+        var result = await Execute("""{"title":"Read","sub_habits":[{"title":"Book","tag_names":["Health"]}]}""");
+        result.Success.Should().BeTrue();
+        AddedHabits().Single(h => h.ParentHabitId != null).Tags.Should().ContainSingle().Which.Name.Should().Be("Health");
+    }
+
+    [Fact]
+    public async Task IsGeneral_IsStoredAndInheritedByInlineChildren()
+    {
+        var result = await Execute("""{"title":"Read","is_general":true,"sub_habits":[{"title":"Book"}]}""");
+        result.Success.Should().BeTrue();
+        var habits = _habitRepo.ReceivedCalls().Where(c => c.GetMethodInfo().Name == "AddAsync")
+            .Select(c => (Habit)c.GetArguments()[0]!).ToList();
+        habits.Should().HaveCount(2).And.OnlyContain(h => h.IsGeneral);
+    }
+
+    [Theory]
+    [InlineData("due_time", "\"09:00\"")]
+    [InlineData("due_end_time", "\"15:00\"")]
+    [InlineData("reminder_enabled", "true")]
+    [InlineData("reminder_times", "[30]")]
+    [InlineData("slip_alert_enabled", "true")]
+    [InlineData("end_date", "\"2026-12-31\"")]
+    [InlineData("is_flexible", "true")]
+    [InlineData("scheduled_reminders", "[{\"when\":\"same_day\",\"time\":\"08:00\"}]")]
+    [InlineData("relative_reminders", "[{\"minutes_before\":30}]")]
+    public async Task InlineChildren_StoreDomainFields(string field, string value)
+    {
+        var extraTime = field == "relative_reminders" ? ",\"due_time\":\"09:00\"" : "";
+        var result = await Execute($$"""{"title":"Read","frequency_unit":"Week","frequency_quantity":3,"sub_habits":[{"title":"Book","{{field}}":{{value}}{{extraTime}}}]}""");
+        result.Success.Should().BeTrue();
+        var child = _habitRepo.ReceivedCalls().Where(c => c.GetMethodInfo().Name == "AddAsync")
+            .Select(c => (Habit)c.GetArguments()[0]!).Single(h => h.ParentHabitId != null);
+        switch (field)
+        {
+            case "due_time": child.DueTime.Should().Be(new TimeOnly(9, 0)); break;
+            case "due_end_time": child.DueEndTime.Should().Be(new TimeOnly(15, 0)); break;
+            case "reminder_enabled": child.ReminderEnabled.Should().BeTrue(); break;
+            case "reminder_times": child.ReminderTimes.Should().Equal(30); break;
+            case "slip_alert_enabled": child.SlipAlertEnabled.Should().BeTrue(); break;
+            case "end_date": child.EndDate.Should().Be(new DateOnly(2026, 12, 31)); break;
+            case "is_flexible": child.IsFlexible.Should().BeTrue(); break;
+            case "scheduled_reminders": child.ScheduledReminders.Should().ContainSingle(); break;
+            case "relative_reminders": child.RelativeReminders.Should().ContainSingle(); break;
+        }
+    }
+
     [Fact]
     public async Task SuccessfulCreation_ReturnsSuccessWithTitleAndId()
     {
@@ -198,12 +262,12 @@ public partial class CreateHabitToolTests
     }
 
     [Fact]
-    public async Task InvalidFrequencyUnit_CreatesOneTimeTask()
+    public async Task InvalidFrequencyUnit_ReturnsValidationError()
     {
         var result = await Execute("""{"title": "Task", "frequency_unit": "InvalidUnit"}""");
 
-        result.Success.Should().BeTrue();
-        result.EntityName.Should().Be("Task");
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("frequency_unit");
     }
 
     [Fact]
