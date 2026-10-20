@@ -16,7 +16,7 @@ using Orbit.Infrastructure.Tests.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
-public class DistributedRateLimitServiceTests : IDisposable
+public partial class DistributedRateLimitServiceTests : IDisposable
 {
     private static readonly DateTimeOffset MidWindowInstant =
         new(2026, 1, 15, 12, 30, 30, TimeSpan.Zero);

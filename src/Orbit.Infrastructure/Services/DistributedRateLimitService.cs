@@ -181,6 +181,7 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
 
             try
             {
+                await AcquireTransactionLockAsync(token);
                 var decision = await TryAcquireCoreAsync(policyName, partitionKey, policy, token);
                 strategy.CommitStarted = true;
                 await transaction.CommitAsync(token);
@@ -194,6 +195,13 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
             }
         }, cancellationToken);
     }
+
+    internal virtual Task AcquireTransactionLockAsync(CancellationToken cancellationToken)
+        => dbContext.Database.IsNpgsql()
+            // https://www.postgresql.org/docs/17/sql-lock.html: lock before the first query establishes the Serializable snapshot.
+            ? dbContext.Database.ExecuteSqlRawAsync(
+                "LOCK TABLE \"DistributedRateLimitBuckets\" IN SHARE ROW EXCLUSIVE MODE", cancellationToken)
+            : Task.CompletedTask;
 
     private async Task<DistributedRateLimitDecision> TryAcquireCoreAsync(
         string policyName,
