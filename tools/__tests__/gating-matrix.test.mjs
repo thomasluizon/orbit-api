@@ -173,32 +173,32 @@ test("a gated capability with an unsupported condition fails closed", () => {
   const implementationPath = join(fixture, "src", "Orbit.Application", "Common", "PayGateService.cs")
   const implementationSource = readFileSync(implementationPath, "utf8")
   const normalizedSource = implementationSource.replaceAll("\r\n", "\n")
-  const quotaGuard = "        if (user.AiMessagesLocalDate == userToday && user.AiMessagesUsedToday >= messageLimit)"
+  const quotaGuard = "                    if (user.GetAiMessagesUsedForQuota(userToday) >= messageLimit)"
   const unsupportedGuard = "        if (user.AiMessagesLocalDate == userToday)"
   assert.ok(normalizedSource.includes(quotaGuard))
   writeFileSync(implementationPath, normalizedSource.replace(quotaGuard, unsupportedGuard), "utf8")
 
   const result = spawnSync(process.execPath, [TOOL, "--root", fixture], { encoding: "utf8" })
   assert.notEqual(result.status, 0)
-  assert.match(result.stderr, /CanSendAiMessage/)
+  assert.match(result.stderr, /TryConsumeAiMessage/)
 })
 
 test("a quota failure cannot hide an unrelated unsupported condition", () => {
   const fixture = copySourceFixture("mixed-quota-and-plan")
   const implementationPath = join(fixture, "src", "Orbit.Application", "Common", "PayGateService.cs")
   const source = readFileSync(implementationPath, "utf8").replaceAll("\r\n", "\n")
-  const anchor = `        if (IsProductionSmokeAccount(user.Email))
-            return Result.Success();`
+  const anchor = `            user =>
+            {`
   const replacement = `${anchor}
 
-        if (user.Email == "fixture@example.com")
-            return Result.PayGateFailure("Fixture unsupported gate");`
+                if (user.Email == "fixture@example.com")
+                    return Task.FromResult(Result.PayGateFailure("Fixture unsupported gate"));`
   assert.ok(source.includes(anchor))
   writeFileSync(implementationPath, source.replace(anchor, replacement), "utf8")
 
   const result = spawnSync(process.execPath, [TOOL, "--root", fixture], { encoding: "utf8" })
   assert.notEqual(result.status, 0)
-  assert.match(result.stderr, /CanSendAiMessage/)
+  assert.match(result.stderr, /TryConsumeAiMessage/)
 })
 
 test("plan and quota conditions keep separate access semantics", () => {
@@ -251,8 +251,8 @@ test("plan and quota conditions keep separate access semantics", () => {
     const fixture = copySourceFixture(fixtureCase.name)
     const implementationPath = join(fixture, "src", "Orbit.Application", "Common", "PayGateService.cs")
     const source = readFileSync(implementationPath, "utf8").replaceAll("\r\n", "\n")
-    const quotaDeclaration = "        var messageLimit = user.HasProAccess ? proLimit : freeLimit;"
-    const quotaGuard = "        if (user.AiMessagesLocalDate == userToday && user.AiMessagesUsedToday >= messageLimit)"
+    const quotaDeclaration = "                    var messageLimit = user.HasProAccess ? proLimit : freeLimit;"
+    const quotaGuard = "                    if (user.GetAiMessagesUsedForQuota(userToday) >= messageLimit)"
     assert.ok(source.includes(quotaDeclaration))
     assert.ok(source.includes(quotaGuard))
     writeFileSync(
@@ -264,7 +264,7 @@ test("plan and quota conditions keep separate access semantics", () => {
     )
 
     const matrix = JSON.parse(generate(fixture))
-    const gate = matrix.gates.find((candidate) => candidate.capability === "CanSendAiMessage")
+    const gate = matrix.gates.find((candidate) => candidate.capability === "TryConsumeAiMessage")
     assert.deepEqual(
       { planRequirement: gate?.planRequirement, quotaLiftedByPlan: gate?.quotaLiftedByPlan },
       fixtureCase.expected,
@@ -277,7 +277,7 @@ test("derived quota expressions fail closed", () => {
   const fixture = copySourceFixture("derived-quota-expression")
   const implementationPath = join(fixture, "src", "Orbit.Application", "Common", "PayGateService.cs")
   const source = readFileSync(implementationPath, "utf8").replaceAll("\r\n", "\n")
-  const quotaDeclaration = "        var messageLimit = user.HasProAccess ? proLimit : freeLimit;"
+  const quotaDeclaration = "                    var messageLimit = user.HasProAccess ? proLimit : freeLimit;"
   const derivedDeclaration =
     "        var selectedLimit = user.HasProAccess ? proLimit : freeLimit;\n"
     + "        var messageLimit = selectedLimit - selectedLimit + freeLimit;"
@@ -286,14 +286,14 @@ test("derived quota expressions fail closed", () => {
 
   const result = spawnSync(process.execPath, [TOOL, "--root", fixture], { encoding: "utf8" })
   assert.notEqual(result.status, 0)
-  assert.match(result.stderr, /cannot derive plan requirement for CanSendAiMessage/)
+  assert.match(result.stderr, /cannot derive plan requirement for TryConsumeAiMessage/)
 })
 
 test("unsupported plan-selected quota expressions fail closed", () => {
   const fixture = copySourceFixture("unsupported-plan-selected-quota")
   const implementationPath = join(fixture, "src", "Orbit.Application", "Common", "PayGateService.cs")
   const source = readFileSync(implementationPath, "utf8").replaceAll("\r\n", "\n")
-  const quotaDeclaration = "        var messageLimit = user.HasProAccess ? proLimit : freeLimit;"
+  const quotaDeclaration = "                    var messageLimit = user.HasProAccess ? proLimit : freeLimit;"
   const unsupportedDeclaration =
     "        var messageLimit = user.HasProAccess switch { true => proLimit, false => freeLimit };"
   assert.ok(source.includes(quotaDeclaration))
@@ -301,21 +301,21 @@ test("unsupported plan-selected quota expressions fail closed", () => {
 
   const result = spawnSync(process.execPath, [TOOL, "--root", fixture], { encoding: "utf8" })
   assert.notEqual(result.status, 0)
-  assert.match(result.stderr, /cannot derive plan requirement for CanSendAiMessage/)
+  assert.match(result.stderr, /cannot derive plan requirement for TryConsumeAiMessage/)
 })
 
 test("a condition with distinct plan guards fails closed", () => {
   const fixture = copySourceFixture("distinct-plan-guards")
   const implementationPath = join(fixture, "src", "Orbit.Application", "Common", "PayGateService.cs")
   const source = readFileSync(implementationPath, "utf8").replaceAll("\r\n", "\n")
-  const quotaGuard = "        if (user.AiMessagesLocalDate == userToday && user.AiMessagesUsedToday >= messageLimit)"
+  const quotaGuard = "                    if (user.GetAiMessagesUsedForQuota(userToday) >= messageLimit)"
   const ambiguousGuard = "        if (!user.HasProAccess && !user.HasTeamAccess)"
   assert.ok(source.includes(quotaGuard))
   writeFileSync(implementationPath, source.replace(quotaGuard, ambiguousGuard), "utf8")
 
   const result = spawnSync(process.execPath, [TOOL, "--root", fixture], { encoding: "utf8" })
   assert.notEqual(result.status, 0)
-  assert.match(result.stderr, /cannot derive plan requirement for CanSendAiMessage/)
+  assert.match(result.stderr, /cannot derive plan requirement for TryConsumeAiMessage/)
 })
 
 test("provenance is stable across LF and CRLF checkouts", () => {

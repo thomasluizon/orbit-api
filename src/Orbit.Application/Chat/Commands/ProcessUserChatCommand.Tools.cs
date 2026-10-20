@@ -283,7 +283,7 @@ public partial class ProcessUserChatCommandHandler
         var error = $"Repeated {call.Name} calls were blocked. Use one {bulkTool} call for the full matching set.";
         return new ToolCallOutcome(
             new AiToolCallResult(call.Name, call.Id, false, null, null, error),
-            new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: error),
+            new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: error).WithToolResultMessage(call, key: "repeatedSingleEntity", parameters: new(ToolName: call.Name, BulkTool: bulkTool)),
             null,
             null,
             null);
@@ -371,7 +371,7 @@ public partial class ProcessUserChatCommandHandler
                 executionResponse.PendingOperation),
             AgentOperationStatus.Denied or AgentOperationStatus.UnsupportedByPolicy => new ToolCallOutcome(
                 toolResult,
-                tool.IsReadOnly ? null : new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: toolResult.Error),
+                tool.IsReadOnly ? null : new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: toolResult.Error).WithToolResultMessage(call),
                 operationResult,
                 executionResponse.PolicyDenial,
                 null),
@@ -388,7 +388,7 @@ public partial class ProcessUserChatCommandHandler
     {
         return new ToolCallOutcome(
             new AiToolCallResult(call.Name, call.Id, false, null, null, $"Unknown tool: {call.Name}"),
-            new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: $"Unknown tool: {call.Name}"),
+            new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: $"Unknown tool: {call.Name}").WithToolResultMessage(call, key: "unknownTool", parameters: new(ToolName: call.Name)),
             new AgentOperationResult(
                 call.Name,
                 call.Name,
@@ -409,7 +409,7 @@ public partial class ProcessUserChatCommandHandler
     {
         return new ToolCallOutcome(
             new AiToolCallResult(call.Name, call.Id, false, null, null, "Operation is unsupported by policy."),
-            tool.IsReadOnly ? null : new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: "Operation is unsupported by policy."),
+            tool.IsReadOnly ? null : new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: "Operation is unsupported by policy.").WithToolResultMessage(call),
             new AgentOperationResult(
                 call.Name,
                 call.Name,
@@ -495,7 +495,7 @@ public partial class ProcessUserChatCommandHandler
                 new ActionResult(
                     ToolNameToPascalCase(call.Name),
                     ActionStatus.Failed,
-                    Error: "Tool arguments exceeded the clarification stash limit."),
+                    Error: "Tool arguments exceeded the clarification stash limit.").WithToolResultMessage(call),
                 operationResult,
                 executionResponse.PolicyDenial,
                 executionResponse.PendingOperation);
@@ -521,7 +521,7 @@ public partial class ProcessUserChatCommandHandler
                 ToolNameToPascalCase(call.Name),
                 ActionStatus.NeedsClarification,
                 EntityName: call.Name,
-                ClarificationRequest: clarification),
+                ClarificationRequest: clarification).WithToolResultMessage(call),
             operationResult,
             executionResponse.PolicyDenial,
             executionResponse.PendingOperation);
