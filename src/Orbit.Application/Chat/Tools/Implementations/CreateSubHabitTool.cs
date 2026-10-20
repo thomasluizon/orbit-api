@@ -14,23 +14,23 @@ public class CreateSubHabitTool(
     public int Order => 1;
 
     public string Description =>
-        "Create a sub-habit under an existing parent habit. Include a relevant emoji when the activity clearly suggests one, or the exact emoji requested by the user.";
+        "Create a sub-habit under an existing parent, with a requested or relevant emoji.";
 
     public object GetParameterSchema() => new
     {
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            parent_habit_id = new { type = JsonSchemaTypes.String, description = "ID of the existing parent habit" },
-            title = new { type = JsonSchemaTypes.String, description = "Name of the new sub-habit" },
-            description = new { type = JsonSchemaTypes.String, description = "Optional description" },
-            emoji = new { type = JsonSchemaTypes.String, description = "Emoji used as the sub-habit icon. Pick a relevant emoji when clear, or use the exact emoji requested by the user.", nullable = true },
+            parent_habit_id = new { type = JsonSchemaTypes.String },
+            title = new { type = JsonSchemaTypes.String },
+            description = new { type = JsonSchemaTypes.String },
+            emoji = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "Requested or relevant icon emoji." },
             frequency_unit = new
             {
                 type = JsonSchemaTypes.String,
-                description = "Override parent frequency. Explicit null creates a one-time child.",
+                description = "Override parent frequency. Use OneTime for a one-time child; null inherits.",
                 nullable = true,
-                @enum = JsonSchemaTypes.FrequencyUnitEnum
+                @enum = JsonSchemaTypes.FrequencyOrOneTimeEnum
             },
             frequency_quantity = new { type = JsonSchemaTypes.Integer, description = "Override parent frequency quantity" },
             interval_weeks = new { type = JsonSchemaTypes.Integer, description = "Override parent repeat interval in weeks. Minimum 1." },
@@ -38,10 +38,10 @@ public class CreateSubHabitTool(
             {
                 type = JsonSchemaTypes.Array,
                 description = "Specific weekdays, only when frequency_quantity is 1",
-                items = new { type = JsonSchemaTypes.String }
+                items = new { type = JsonSchemaTypes.String, @enum = JsonSchemaTypes.WeekdayEnum }
             },
-            due_time = new { type = JsonSchemaTypes.String, description = "HH:mm 24h format" },
-            due_end_time = new { type = JsonSchemaTypes.String, description = "HH:mm 24h format end time" },
+            due_time = new { type = JsonSchemaTypes.String, description = "HH:mm" },
+            due_end_time = new { type = JsonSchemaTypes.String, description = "HH:mm end time" },
             is_bad_habit = new { type = JsonSchemaTypes.Boolean, description = "True for habits the user wants to AVOID" },
             reminder_enabled = new { type = JsonSchemaTypes.Boolean, description = "Set true for reminder notifications" },
             reminder_times = new { type = JsonSchemaTypes.Array, description = "Minutes before dueTime to send reminders", items = new { type = JsonSchemaTypes.Integer } },
@@ -101,7 +101,8 @@ public class CreateSubHabitTool(
                 DueDate: dueDate,
                 Emoji: emoji,
                 TagIds: JsonArgumentParser.ParseGuidArray(args, "tag_ids"),
-                InheritParentFrequency: !args.TryGetProperty("frequency_unit", out var frequencyValue) || frequencyValue.ValueKind != JsonValueKind.Null,
+                InheritParentFrequency: !args.TryGetProperty("frequency_unit", out var frequencyValue)
+                    || frequencyValue.ValueKind != JsonValueKind.Null && frequencyValue.GetString() != "OneTime",
                 IntervalWeeks: intervalWeeks,
                 Options: new Orbit.Application.Habits.Commands.HabitCommandOptions(
                     Days: days,

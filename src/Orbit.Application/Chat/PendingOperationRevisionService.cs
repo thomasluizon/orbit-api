@@ -34,6 +34,9 @@ public sealed class PendingOperationRevisionService(
         if (execution is null)
             return Failure("pending_operation_not_found");
 
+        if (execution.RequiresReproposal)
+            return Failure("pending_operation_schema_changed");
+
         var preview = await previewer.PreviewAsync(userId, execution.OperationId,
             execution.Arguments, cancellationToken);
         if (preview?.Items is null || string.IsNullOrWhiteSpace(preview.PreviewFingerprint))
@@ -62,6 +65,9 @@ public sealed class PendingOperationRevisionService(
         var execution = store.GetExecution(userId, pendingOperationId);
         if (execution is null)
             return Failure("pending_operation_not_found");
+
+        if (execution.RequiresReproposal)
+            return Failure("pending_operation_schema_changed");
 
         var original = await previewer.PreviewAsync(userId, execution.OperationId,
             execution.Arguments, cancellationToken);
@@ -122,6 +128,8 @@ public sealed class PendingOperationRevisionService(
     public async Task<bool> IsCurrentAsync(Guid userId, PendingAgentOperationExecution execution,
         CancellationToken cancellationToken)
     {
+        if (execution.RequiresReproposal)
+            return false;
         if (string.IsNullOrWhiteSpace(execution.PreviewFingerprint))
             return execution.Surface != AgentExecutionSurface.Chat
                 || toolRegistry.GetTool(execution.OperationId)?.IsReadOnly == true;
@@ -133,6 +141,8 @@ public sealed class PendingOperationRevisionService(
     public async Task<bool> CanApproveAsync(Guid userId, PendingAgentOperationExecution execution,
         CancellationToken cancellationToken)
     {
+        if (execution.RequiresReproposal)
+            return false;
         if (execution.OperationId != "bulk_create_habits")
             return true;
 
@@ -153,6 +163,9 @@ public sealed class PendingOperationRevisionService(
         var edits = items.Where(HasEdits).SelectMany(item => item.Edits!.Value.EnumerateObject()).ToList();
         if (edits.Count == 0)
             return true;
+        if (edits.Any(edit => edit.Value.ValueKind == JsonValueKind.Null
+            && !OptionalToolArguments.ClearableFields(operationId).Contains(edit.Name)))
+            return false;
         var tool = toolRegistry.GetTool(operationId);
         if (tool is null)
             return false;
@@ -233,7 +246,7 @@ public sealed class PendingOperationRevisionService(
             root["action"] = "delete_selected";
             return true;
         }
-        return selected.Count == 1 && ApplyEdits(root, selected[0].Edits);
+        return selected.Count == 1 && ApplyEdits(root, selected[0].Edits, operationId);
     }
 
     private static bool BuildCalendarArguments(JsonObject root,
@@ -305,7 +318,7 @@ public sealed class PendingOperationRevisionService(
             var previousUpdates = previous?.OfType<JsonObject>().FirstOrDefault(candidate =>
                 candidate["habit_id"]?.ToString() == item.ItemId)?["updates"] as JsonObject;
             var copy = (JsonObject)(previousUpdates ?? updates).DeepClone();
-            if (!ApplyEdits(copy, item.Edits))
+            if (!ApplyEdits(copy, item.Edits, "bulk_update_habits"))
                 return false;
             items.Add(new JsonObject
             {
@@ -384,13 +397,26 @@ public sealed class PendingOperationRevisionService(
         return true;
     }
 
-    private static bool ApplyEdits(JsonObject target, JsonElement? edits)
+    private static bool ApplyEdits(JsonObject target, JsonElement? edits, string? operationId = null)
     {
         if (edits is not { ValueKind: JsonValueKind.Object } fields)
             return true;
         foreach (var field in fields.EnumerateObject())
+        {
+            if (OptionalToolArguments.ClearableFields(operationId ?? string.Empty).Contains(field.Name))
+                ReviseClearField(target, field);
             target[field.Name] = JsonNode.Parse(field.Value.GetRawText());
+        }
         return true;
+    }
+
+    private static void ReviseClearField(JsonObject target, JsonProperty field)
+    {
+        var clears = target["clear_fields"] as JsonArray ?? [];
+        for (var index = clears.Count - 1; index >= 0; index--)
+            if (clears[index]?.GetValue<string>() == field.Name) clears.RemoveAt(index);
+        if (field.Value.ValueKind == JsonValueKind.Null) clears.Add(field.Name);
+        target["clear_fields"] = clears;
     }
 
     private static PendingOperationRevisionResult Failure(string error) =>

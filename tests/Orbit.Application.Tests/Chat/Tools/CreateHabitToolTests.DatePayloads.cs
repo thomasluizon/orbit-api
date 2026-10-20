@@ -63,7 +63,7 @@ public partial class CreateHabitToolTests
             "due_end_time":"11:15",
             "sub_habits":[{
                 "title":"Aula extra",
-                "frequency_unit":null,
+                "frequency_unit":"OneTime",
                 "due_date":"2026-08-26"
             }]
         }
@@ -130,7 +130,7 @@ public partial class CreateHabitToolTests
         var clarification = result.Payload.Should().BeOfType<NeedsClarificationPayload>().Subject;
         var action = clarification.QuickActions!.Single(action => action.Label == "habits.clarification.quickAction.oneTime");
         using var patch = JsonDocument.Parse(action.Value);
-        patch.RootElement.GetProperty("frequency_unit").ValueKind.Should().Be(JsonValueKind.Null);
+        patch.RootElement.GetProperty("frequency_unit").GetString().Should().Be("OneTime");
         patch.RootElement.GetProperty("due_date").GetString().Should().Be("2026-08-26");
     }
 

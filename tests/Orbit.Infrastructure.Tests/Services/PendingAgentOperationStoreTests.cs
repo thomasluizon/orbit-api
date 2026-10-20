@@ -51,6 +51,35 @@ public class PendingAgentOperationStoreTests : IDisposable
     }
 
     [Theory]
+    [InlineData("update_goal", "{\"goal_id\":\"11111111-1111-1111-1111-111111111111\",\"deadline\":null}")]
+    [InlineData("update_habit", "{\"habit_id\":\"11111111-1111-1111-1111-111111111111\",\"description\":null}")]
+    [InlineData("bulk_update_habits", "{\"filter\":{\"all\":true},\"updates\":{\"due_time\":null}}")]
+    public void LegacyNullClear_RequiresReproposalAndCannotConfirmOrConsume(string operation, string arguments)
+    {
+        var capability = _catalogService.GetCapabilityByChatTool(operation)!
+            with
+        { ConfirmationRequirement = AgentConfirmationRequirement.FreshConfirmation };
+        var fingerprint = AgentOperationFingerprint.Compute(operation, arguments);
+        var pending = _store.Create(_userId, capability, operation, arguments, "Clear field", fingerprint, AgentExecutionSurface.Chat);
+        var entity = _dbContext.PendingAgentOperations.Single(item => item.Id == pending.Id);
+        entity.ArgumentSchemaVersion.Should().Be(PendingAgentOperationState.CurrentArgumentSchemaVersion);
+        _store.GetExecution(_userId, pending.Id)!.RequiresReproposal.Should().BeFalse();
+        var confirmation = _store.Confirm(_userId, pending.Id)!;
+        _dbContext.Entry(entity).Property(item => item.ArgumentSchemaVersion).CurrentValue = 0;
+        _dbContext.SaveChanges();
+
+        _store.GetExecution(_userId, pending.Id)!.RequiresReproposal.Should().BeTrue();
+        _store.GetConfirmedExecution(_userId, capability.Id, fingerprint, confirmation.ConfirmationToken)!
+            .RequiresReproposal.Should().BeTrue();
+        _store.Confirm(_userId, pending.Id).Should().BeNull();
+        _store.TryConsumeFreshConfirmation(_userId, capability.Id, fingerprint, confirmation.ConfirmationToken, false).Should().BeFalse();
+        _store.Revise(_userId, pending.Id, fingerprint, arguments, fingerprint, "preview").Should().BeFalse();
+        entity.ConsumedAtUtc.Should().BeNull();
+        var replacement = _store.Create(_userId, capability, operation, arguments, "Reproposed", fingerprint, AgentExecutionSurface.Chat);
+        replacement.Id.Should().NotBe(pending.Id);
+    }
+
+    [Theory]
     [InlineData("bulk_update_habits", "updateHabits")]
     [InlineData("bulk_reschedule_habits", "rescheduleHabits")]
     [InlineData("bulk_log_habits", "logHabits")]

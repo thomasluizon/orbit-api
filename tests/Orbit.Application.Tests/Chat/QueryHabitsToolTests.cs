@@ -11,6 +11,7 @@ using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Domain.ValueObjects;
 using Orbit.Application.Common;
+using Orbit.Application.Tests.Chat.Tools;
 
 namespace Orbit.Application.Tests.Chat;
 
@@ -33,6 +34,24 @@ public class QueryHabitsToolTests
         var user = User.Create("Test", "test@test.com").Value;
         user.SetTimeZone("UTC");
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+    }
+
+    [Theory]
+    [MemberData(nameof(OptionalParameterCases.Fields), typeof(QueryHabitsTool), "", MemberType = typeof(OptionalParameterCases))]
+    public async Task OptionalNull_ReturnsSameHabitFactsAsAbsent(string field)
+    {
+        var due = CreateHabit("Due", null, null, dueDate: Today);
+        var overdue = CreateHabit("Overdue", null, null, dueDate: Today.AddDays(-1));
+        var future = CreateHabit("Future", null, null, dueDate: Today.AddDays(1));
+        SetupHabits(due, overdue, future);
+        var body = new Dictionary<string, object?>();
+        if (field != "date") body["date"] = "today";
+        var absent = await Execute(JsonSerializer.Serialize(body));
+        body[field] = null;
+        var explicitNull = await Execute(JsonSerializer.Serialize(body));
+        absent.Success.Should().BeTrue();
+        explicitNull.Should().BeEquivalentTo(absent);
+        explicitNull.EntityName.Should().Contain("Overdue");
     }
 
     [Theory]

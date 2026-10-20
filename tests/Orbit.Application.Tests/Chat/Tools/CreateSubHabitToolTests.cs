@@ -66,13 +66,36 @@ public class CreateSubHabitToolTests
         }
     }
 
-    [Fact]
-    public async Task ExplicitNullFrequency_CreatesOneTimeChild()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("OneTime")]
+    public async Task ExplicitOneTimeFrequency_CreatesOneTimeChild(string? frequency)
     {
+        JsonSerializer.SerializeToElement(_tool.GetParameterSchema()).GetProperty("properties")
+            .GetProperty("frequency_unit").GetProperty("enum").EnumerateArray().Select(value => value.GetString())
+            .Should().Contain("OneTime");
         _mediator.Send(Arg.Any<CreateSubHabitCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success(Guid.NewGuid()));
-        var result = await Execute($$"""{"parent_habit_id":"{{ParentId}}","title":"Book","frequency_unit":null}""");
+        var result = await Execute(JsonSerializer.Serialize(new { parent_habit_id = ParentId, title = "Book", frequency_unit = frequency }));
         result.Success.Should().BeTrue();
         await _mediator.Received(1).Send(Arg.Is<CreateSubHabitCommand>(c => !c.InheritParentFrequency), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [MemberData(nameof(OptionalParameterCases.Fields), typeof(CreateSubHabitTool), "", MemberType = typeof(OptionalParameterCases))]
+    public async Task ModelOptionalNull_DispatchesLikeAbsent(string field)
+    {
+        var commands = new List<CreateSubHabitCommand>();
+        _mediator.Send(Arg.Any<CreateSubHabitCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call => { commands.Add(call.Arg<CreateSubHabitCommand>()); return Result.Success(Guid.NewGuid()); });
+        var body = new Dictionary<string, object?> { ["parent_habit_id"] = ParentId, ["title"] = "Book" };
+        var absent = OptionalToolArguments.OmitOptionalNulls(JsonSerializer.SerializeToElement(body), _tool.GetParameterSchema());
+        (await _tool.ExecuteAsync(absent, UserId, default)).Success.Should().BeTrue();
+        body[field] = null;
+        var withNull = OptionalToolArguments.OmitOptionalNulls(JsonSerializer.SerializeToElement(body), _tool.GetParameterSchema());
+        (await _tool.ExecuteAsync(withNull, UserId, default)).Success.Should().BeTrue();
+        commands.Should().HaveCount(2);
+        commands[1].Should().BeEquivalentTo(commands[0]);
+        commands[1].InheritParentFrequency.Should().BeTrue();
     }
 
     [Fact]

@@ -52,6 +52,8 @@ public sealed class PendingOperationChangePreviewer(
         JsonElement arguments,
         CancellationToken cancellationToken = default)
     {
+        if (!arguments.TryGetProperty("revised_items", out _) && toolRegistry.GetTool(operationId) is { } tool)
+            arguments = OptionalToolArguments.OmitOptionalNulls(arguments, tool.GetParameterSchema());
         arguments = await ResolveUnlogDateAsync(userId, operationId, arguments, cancellationToken);
         if (HasLogDates(operationId, arguments))
         {
@@ -146,8 +148,7 @@ public sealed class PendingOperationChangePreviewer(
 
     private static bool RequiresEmojiInference(string operationId, JsonElement arguments) =>
         operationId == "bulk_update_habit_emojis"
-        && (JsonArgumentParser.GetOptionalBool(arguments, "infer_from_title")
-            ?? !JsonArgumentParser.PropertyExists(arguments, "emoji"));
+        && BulkUpdateHabitEmojisTool.ResolveEmojiOperation(arguments).Infer;
 
     private async Task<PendingOperationChangePreview?> PreviewInferredEmojisAsync(
         Guid userId, JsonElement arguments, CancellationToken ct)

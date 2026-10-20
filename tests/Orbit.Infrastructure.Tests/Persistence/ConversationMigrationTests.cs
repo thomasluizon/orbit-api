@@ -33,9 +33,15 @@ public class ConversationMigrationTests
         var additions = differ.GetDifferences(preceding.GetRelationalModel(), target.GetRelationalModel());
         additions.Should().HaveCount(6);
         AssertConversationExpansion(additions);
-        var subsequent = differ.GetDifferences(target.GetRelationalModel(), model.GetRelationalModel());
-        subsequent.Should().ContainSingle();
-        RestoreProactivePreferenceMigrationTests.AssertRequiredPreference(subsequent);
+        var remaining = differ.GetDifferences(target.GetRelationalModel(), model.GetRelationalModel());
+        var schemaVersion = remaining.OfType<AddColumnOperation>().Should().ContainSingle().Subject;
+        schemaVersion.Table.Should().Be("PendingAgentOperations");
+        schemaVersion.Name.Should().Be("ArgumentSchemaVersion");
+        schemaVersion.ClrType.Should().Be(typeof(int));
+        schemaVersion.IsNullable.Should().BeFalse();
+        schemaVersion.DefaultValue.Should().Be(0);
+        remaining.Should().HaveCount(2);
+        RestoreProactivePreferenceMigrationTests.AssertRequiredPreference(remaining);
     }
 
     internal static void AssertConversationExpansion(IReadOnlyList<MigrationOperation> operations)

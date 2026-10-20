@@ -7,6 +7,7 @@ using Orbit.Application.Auth.Services;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
+using Orbit.Application.ApiKeys.Commands;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.ValueObjects;
@@ -153,6 +154,7 @@ public sealed class HeldWriteRevisionTests
         { "create_tag", """{"name":"Read","color":"#7c3aed"}""", """{"color":"invalid"}""" },
         { "update_tag", """{"tag_id":"$tag","name":"Read","color":"#7c3aed"}""", """{"name":""}""" },
         { "update_goal", """{"goal_id":"$goal","target_value":1}""", """{"target_value":0}""" },
+        { "update_goal", """{"goal_id":"$goal","title":"Read"}""", """{"title":""}""" },
         { "update_goal", """{"goal_id":"$goal","title":"Read"}""", """{"title":null}""" },
         { "update_goal_progress", """{"goal_id":"$goal","current_value":1}""", """{"current_value":-1}""" },
         { "update_goal_status", """{"goal_id":"$goal","status":"Completed"}""", """{"status":"Active"}""" }

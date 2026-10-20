@@ -26,9 +26,15 @@ public class FeatureFlagAccountsMigrationTests
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
 
-        differences.Should().HaveCount(44);
+        differences.Should().HaveCount(45);
         ExpandHabitScheduleAndStartDateMigrationTests.AssertAiSecurityAdditions(differences);
         ConversationMigrationTests.AssertConversationExpansion(differences);
+        var schemaVersion = differences.OfType<AddColumnOperation>().Should()
+            .ContainSingle(column => column.Table == "PendingAgentOperations" && column.Name == "ArgumentSchemaVersion").Subject;
+        schemaVersion.ClrType.Should().Be(typeof(int));
+        schemaVersion.IsNullable.Should().BeFalse();
+        schemaVersion.DefaultValue.Should().Be(0);
+
         var owedCancellations = differences.OfType<CreateTableOperation>()
             .Should().ContainSingle(table => table.Name == "OwedSubscriptionCancellations").Subject;
         owedCancellations.Name.Should().Be("OwedSubscriptionCancellations");
@@ -99,9 +105,10 @@ public class FeatureFlagAccountsMigrationTests
             "20261019213159_HardenMcpOAuthState",
             "20261019213536_AddDailyAiSafetyBudget",
             "20261019223729_TrackMcpRefreshTokenFamilies",
-            "20261020005707_PriceDailyAiBudgetsInUsd");
-        context.Database.GetMigrations().Should().ContainInOrder(
-            "20261020014306_PersistConversationTurns", "20261020033359_RestoreRequiredProactiveAstraPreference");
+            "20261020005707_PriceDailyAiBudgetsInUsd",
+            "20261020014306_PersistConversationTurns",
+            "20261020023110_VersionPendingToolArguments",
+            "20261020033359_RestoreRequiredProactiveAstraPreference");
         context.Database.GetMigrations().Last().Should().EndWith("_RestoreRequiredProactiveAstraPreference");
         var preference = current.FindEntityType(typeof(User))!.FindProperty(nameof(User.ProactiveAstraEnabled))!;
         preference.ClrType.Should().Be(typeof(bool));

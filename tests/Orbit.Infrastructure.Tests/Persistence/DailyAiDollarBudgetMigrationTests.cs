@@ -13,7 +13,7 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 public class DailyAiDollarBudgetMigrationTests
 {
     [Fact]
-    public void DollarExpansion_PreservesLegacyWritersWithOnlyConversationChangesInCurrentModel()
+    public void DollarExpansion_PreservesLegacyWritersWithConversationAndArgumentVersionAdditions()
     {
         var migration = new PriceDailyAiBudgetsInUsd { ActiveProvider = "Npgsql.EntityFrameworkCore.PostgreSQL" };
         migration.UpOperations.OfType<DropColumnOperation>().Should().BeEmpty();
@@ -41,7 +41,13 @@ public class DailyAiDollarBudgetMigrationTests
         var current = context.GetService<IDesignTimeModel>().Model;
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
-        differences.Should().HaveCount(7);
+        var schemaVersion = differences.OfType<AddColumnOperation>().Single(column => column.Table == "PendingAgentOperations");
+        schemaVersion.Table.Should().Be("PendingAgentOperations");
+        schemaVersion.Name.Should().Be("ArgumentSchemaVersion");
+        schemaVersion.ClrType.Should().Be(typeof(int));
+        schemaVersion.IsNullable.Should().BeFalse();
+        schemaVersion.DefaultValue.Should().Be(0);
+        differences.Should().HaveCount(8);
         RestoreProactivePreferenceMigrationTests.AssertRequiredPreference(differences);
         ConversationMigrationTests.AssertConversationExpansion(differences);
         var entity = current.FindEntityType(typeof(AiBudgetCall))!;

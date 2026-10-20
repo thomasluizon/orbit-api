@@ -459,7 +459,7 @@ public class ProfileNotificationCalendarToolTests
             Arg.Any<CancellationToken>());
         using var schema = JsonDocument.Parse(JsonSerializer.Serialize(tool.GetParameterSchema()));
         schema.RootElement.GetProperty("properties").GetProperty("release_other_account")
-            .GetProperty("type").GetString().Should().Be("boolean");
+            .GetProperty("type").EnumerateArray().Select(type => type.GetString()).Should().BeEquivalentTo("boolean", "null");
         schema.RootElement.GetProperty("required").EnumerateArray().Select(x => x.GetString())
             .Should().NotContain("release_other_account");
     }

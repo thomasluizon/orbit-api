@@ -84,8 +84,8 @@ public class UpdateChecklistTemplateTool(IMediator mediator) : IAiTool, IArgumen
         properties = new
         {
             template_id = new { type = JsonSchemaTypes.String },
-            name = new { type = JsonSchemaTypes.String, nullable = true },
-            items = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String }, nullable = true }
+            name = new { type = new[] { JsonSchemaTypes.String, "null" } },
+            items = new { type = new[] { JsonSchemaTypes.Array, "null" }, items = new { type = JsonSchemaTypes.String } }
         },
         required = new[] { "template_id" }
     };

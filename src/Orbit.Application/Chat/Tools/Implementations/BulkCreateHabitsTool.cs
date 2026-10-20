@@ -13,7 +13,7 @@ public class BulkCreateHabitsTool(
     public string Name => "bulk_create_habits";
 
     public string Description =>
-        "Create multiple habits in a single operation. Each habit may contain its own sub-habits.";
+        "Create multiple habits with inline sub-habits.";
 
     public object GetParameterSchema() => new
     {
@@ -46,6 +46,7 @@ public class BulkCreateHabitsTool(
 
     private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
+        args = OptionalToolArguments.OmitOptionalNulls(args, GetParameterSchema());
         if (!args.TryGetProperty("habits", out var habitsEl) || habitsEl.ValueKind != JsonValueKind.Array)
             return new ToolResult(false, Error: "habits is required and must be an array.");
 
@@ -123,7 +124,10 @@ public class BulkCreateHabitsTool(
             }
         }
 
-        var frequencyUnit = JsonArgumentParser.ParseFrequencyUnit(el);
+        var parsedFrequency = JsonArgumentParser.ParseFrequencyUnit(el);
+        if (parsedFrequency.IsFailure)
+            return null;
+        var frequencyUnit = parsedFrequency.Value;
         var frequencyQuantity = JsonArgumentParser.GetOptionalInt(el, "frequency_quantity")
             ?? (frequencyUnit is not null ? 1 : (int?)null);
 
@@ -149,16 +153,16 @@ public class BulkCreateHabitsTool(
     {
         var properties = new Dictionary<string, object>
         {
-            [TitleProperty] = new { type = JsonSchemaTypes.String, description = "Name of the habit" },
-            ["description"] = new { type = JsonSchemaTypes.String, description = "Optional description" },
-            ["emoji"] = new { type = JsonSchemaTypes.String, description = "Emoji icon. Pick a relevant one when clear.", nullable = true },
-            ["frequency_unit"] = new { type = JsonSchemaTypes.String, description = "Recurrence unit. Omit for one-time tasks.", nullable = true, @enum = JsonSchemaTypes.FrequencyUnitEnum },
+            [TitleProperty] = new { type = JsonSchemaTypes.String },
+            ["description"] = new { type = JsonSchemaTypes.String },
+            ["emoji"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "Emoji icon. Pick a relevant one when clear." },
+            ["frequency_unit"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "Recurrence unit. Omit for one-time tasks.", @enum = JsonSchemaTypes.FrequencyUnitEnum },
             ["frequency_quantity"] = new { type = JsonSchemaTypes.Integer, description = "How often. Defaults to 1." },
             ["interval_weeks"] = new { type = JsonSchemaTypes.Integer, description = "Repeat interval in weeks. Omit for every week. Minimum 1." },
-            ["days"] = new { type = JsonSchemaTypes.Array, description = "Specific weekdays. Only when frequency_quantity is 1.", items = new { type = JsonSchemaTypes.String } },
+            ["days"] = new { type = JsonSchemaTypes.Array, description = "Specific weekdays. Only when frequency_quantity is 1.", items = new { type = JsonSchemaTypes.String, @enum = JsonSchemaTypes.WeekdayEnum } },
             ["due_date"] = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD. Defaults to today." },
-            ["end_date"] = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD. Optional end date.", nullable = true },
-            ["due_time"] = new { type = JsonSchemaTypes.String, description = "HH:mm 24h format" },
+            ["end_date"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "YYYY-MM-DD. Optional end date." },
+            ["due_time"] = new { type = JsonSchemaTypes.String, description = "HH:mm" },
             ["is_bad_habit"] = new { type = JsonSchemaTypes.Boolean, description = "Whether this is a bad habit to reduce. Defaults to false." },
             ["is_general"] = new { type = JsonSchemaTypes.Boolean, description = "Whether this is a general habit with no schedule. Defaults to false." },
             ["is_flexible"] = new { type = JsonSchemaTypes.Boolean, description = "Window-based tracking. Requires frequency_unit." },
@@ -171,8 +175,8 @@ public class BulkCreateHabitsTool(
                     type = JsonSchemaTypes.Object,
                     properties = new
                     {
-                        text = new { type = JsonSchemaTypes.String, description = "Checklist item text" },
-                        is_checked = new { type = JsonSchemaTypes.Boolean, description = "Whether checked. Defaults to false." }
+                        text = new { type = JsonSchemaTypes.String },
+                        is_checked = new { type = JsonSchemaTypes.Boolean, description = "Default: false." }
                     },
                     required = new[] { "text" }
                 }

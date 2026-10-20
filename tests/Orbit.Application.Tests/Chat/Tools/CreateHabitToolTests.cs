@@ -43,6 +43,53 @@ public partial class CreateHabitToolTests
     }
 
     [Theory]
+    [MemberData(nameof(OptionalParameterCases.Fields), typeof(CreateHabitTool), "", MemberType = typeof(OptionalParameterCases))]
+    public async Task OptionalNull_CreatesSameHabitAsAbsent(string field)
+    {
+        var saved = new List<Habit>();
+        await _habitRepo.AddAsync(Arg.Do<Habit>(saved.Add), Arg.Any<CancellationToken>());
+        (await Execute("""{"title":"Read","due_date":"2027-01-01"}""")).Success.Should().BeTrue();
+        var baseline = OptionalParameterCases.HabitState(saved.Single());
+        saved.Clear();
+        var body = new Dictionary<string, object?> { ["title"] = "Read", ["due_date"] = "2027-01-01", [field] = null };
+        if (field == "due_date") body.Remove("due_date");
+        if (field == "due_date")
+        {
+            saved.Clear();
+            (await Execute("""{"title":"Read"}""")).Success.Should().BeTrue();
+            baseline = OptionalParameterCases.HabitState(saved.Single());
+            saved.Clear();
+            body[field] = null;
+        }
+        (await Execute(JsonSerializer.Serialize(body))).Success.Should().BeTrue();
+        OptionalParameterCases.HabitState(saved.Single()).Should().Be(baseline);
+    }
+
+    [Theory]
+    [MemberData(nameof(OptionalParameterCases.Fields), typeof(CreateHabitTool), "sub_habits.items", MemberType = typeof(OptionalParameterCases))]
+    public async Task OptionalNull_ChildInheritsLikeAbsent(string field)
+    {
+        var saved = new List<Habit>();
+        await _habitRepo.AddAsync(Arg.Do<Habit>(saved.Add), Arg.Any<CancellationToken>());
+        var child = new Dictionary<string, object?> { ["title"] = "Child" };
+        object Body() => new
+        {
+            title = "Parent",
+            frequency_unit = "Day",
+            frequency_quantity = 1,
+            days = new[] { "Monday" },
+            interval_weeks = 2,
+            sub_habits = new[] { child }
+        };
+        (await Execute(JsonSerializer.Serialize(Body()))).Success.Should().BeTrue();
+        var baseline = OptionalParameterCases.HabitState(saved.Single(habit => habit.ParentHabitId is not null));
+        saved.Clear();
+        child[field] = null;
+        (await Execute(JsonSerializer.Serialize(Body()))).Success.Should().BeTrue();
+        OptionalParameterCases.HabitState(saved.Single(habit => habit.ParentHabitId is not null)).Should().Be(baseline);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task InvalidRelativeReminders_FailBeforeCreatingParentOrChild(bool onChild)
@@ -261,10 +308,32 @@ public partial class CreateHabitToolTests
             .IntervalWeeks.Should().Be(1);
     }
 
-    [Fact]
-    public async Task InvalidFrequencyUnit_ReturnsValidationError()
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData("OneTime", false)]
+    public async Task HabitRecurrence_ExplicitOneTimeCreatesWhileNullRequestsClarification(string? frequency, bool clarifies)
     {
-        var result = await Execute("""{"title": "Task", "frequency_unit": "InvalidUnit"}""");
+        var result = await Execute(JsonSerializer.Serialize(new { title = "Exercise habit", frequency_unit = frequency }));
+        result.Success.Should().BeTrue(result.Error);
+        if (clarifies)
+        {
+            result.Payload.Should().NotBeNull();
+            await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+        }
+        else
+        {
+            result.EntityId.Should().NotBeNull();
+            await _habitRepo.Received(1).AddAsync(Arg.Is<Habit>(habit => habit.FrequencyUnit == null), Arg.Any<CancellationToken>());
+        }
+    }
+
+    [Theory]
+    [InlineData("InvalidUnit")]
+    [InlineData("99")]
+    [InlineData("0")]
+    public async Task InvalidFrequencyUnit_ReturnsCorrectableToolError(string value)
+    {
+        var result = await Execute(JsonSerializer.Serialize(new { title = "Task", frequency_unit = value }));
 
         result.Success.Should().BeFalse();
         result.Error.Should().Contain("frequency_unit");

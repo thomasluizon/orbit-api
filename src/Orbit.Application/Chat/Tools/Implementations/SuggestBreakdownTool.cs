@@ -7,7 +7,7 @@ public class SuggestBreakdownTool : IAiTool, IArgumentCheckTool
     public string Name => "suggest_breakdown";
 
     public string Description =>
-        "Suggest breaking down a broad/vague habit into smaller sub-habits. Returns suggestions for the user to review and accept - does NOT create anything. Use when the user's request is too vague for a direct CreateHabit.";
+        "Suggest sub-habits for a vague request, without creating them.";
 
     public object GetParameterSchema() => new
     {
@@ -24,15 +24,15 @@ public class SuggestBreakdownTool : IAiTool, IArgumentCheckTool
                     type = JsonSchemaTypes.Object,
                     properties = new
                     {
-                        title = new { type = JsonSchemaTypes.String, description = "Sub-habit title" },
-                        description = new { type = JsonSchemaTypes.String, description = "Optional description" },
+                        title = new { type = JsonSchemaTypes.String },
+                        description = new { type = JsonSchemaTypes.String },
                         frequency_unit = new
                         {
                             type = JsonSchemaTypes.String,
                             @enum = JsonSchemaTypes.FrequencyUnitEnum
                         },
                         frequency_quantity = new { type = JsonSchemaTypes.Integer },
-                        days = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String } }
+                        days = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String, @enum = JsonSchemaTypes.WeekdayEnum } }
                     },
                     required = new[] { "title" }
                 }

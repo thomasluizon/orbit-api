@@ -15,14 +15,14 @@ public class UpdateGoalStatusTool(
     public string Name => "update_goal_status";
 
     public string Description =>
-        "Update a goal's status. Use this to mark a goal as completed, abandoned, or active again.";
+        "Set a goal to active, completed or abandoned.";
 
     public object GetParameterSchema() => new
     {
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            goal_id = new { type = JsonSchemaTypes.String, description = "ID of the goal to update." },
+            goal_id = new { type = JsonSchemaTypes.String },
             status = new
             {
                 type = JsonSchemaTypes.String,

@@ -43,13 +43,13 @@ public class UpdateNotificationsTool(IMediator mediator) : IAiTool, IArgumentChe
                 type = JsonSchemaTypes.String,
                 @enum = new[] { "mark_read", "mark_all_read", "subscribe_push", "unsubscribe_push", "test_push" }
             },
-            notification_id = new { type = JsonSchemaTypes.String, nullable = true },
-            endpoint = new { type = JsonSchemaTypes.String, nullable = true },
-            p256dh = new { type = JsonSchemaTypes.String, nullable = true },
-            auth = new { type = JsonSchemaTypes.String, nullable = true },
+            notification_id = new { type = new[] { JsonSchemaTypes.String, "null" } },
+            endpoint = new { type = new[] { JsonSchemaTypes.String, "null" } },
+            p256dh = new { type = new[] { JsonSchemaTypes.String, "null" } },
+            auth = new { type = new[] { JsonSchemaTypes.String, "null" } },
             release_other_account = new
             {
-                type = JsonSchemaTypes.Boolean,
+                type = new[] { JsonSchemaTypes.Boolean, "null" },
                 description = "Opt in to removing a previous account's device registration using its credentials. Omit for ordinary sign-out."
             }
         },
@@ -167,8 +167,8 @@ public class DeleteNotificationsTool(IMediator mediator) : IAiTool, IArgumentChe
         properties = new
         {
             action = new { type = JsonSchemaTypes.String, @enum = new[] { "delete_one", "delete_all", "delete_selected" } },
-            notification_id = new { type = JsonSchemaTypes.String, nullable = true },
-            notification_ids = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String } }
+            notification_id = new { type = new[] { JsonSchemaTypes.String, "null" } },
+            notification_ids = new { type = new[] { JsonSchemaTypes.Array, "null" }, items = new { type = JsonSchemaTypes.String } }
         },
         required = new[] { "action" }
     };

@@ -102,6 +102,7 @@ public partial class ProcessUserChatCommandHandlerTests
         {
             tool = Substitute.For<IAiTool>();
             tool.Name.Returns("create_habit");
+            tool.GetParameterSchema().Returns(createHabit.GetParameterSchema());
             tool.ExecuteAsync(Arg.Any<System.Text.Json.JsonElement>(), UserId, Arg.Any<CancellationToken>())
                 .Returns(async call => (await createHabit.ExecuteAsync(call.Arg<System.Text.Json.JsonElement>(),
                     UserId, call.Arg<CancellationToken>())) with

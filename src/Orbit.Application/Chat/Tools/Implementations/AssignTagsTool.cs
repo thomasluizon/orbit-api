@@ -14,7 +14,7 @@ public class AssignTagsTool(
     public string Name => "assign_tags";
 
     public string Description =>
-        "Assign tags to a habit, replacing all existing tags. Provide either tag_names (existing names are reused, new names are auto-created) OR tag_ids (existing tag IDs, no auto-create). Only use when the user explicitly asks to tag a habit. WARNING: This REPLACES all existing tags. To add tags, include the existing tags in the list.";
+        "Replace requested habit tags using names (reuse or create) or existing IDs. Include current tags when adding; an empty list removes all.";
 
     public int Order => 2;
 
@@ -23,18 +23,18 @@ public class AssignTagsTool(
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            habit_id = new { type = JsonSchemaTypes.String, description = "ID of the habit to tag" },
+            habit_id = new { type = JsonSchemaTypes.String },
             habit_ids = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String }, description = "IDs of all existing habits to tag in one approval. Use instead of habit_id for multiple habits." },
             tag_names = new
             {
                 type = JsonSchemaTypes.Array,
-                description = "Tag names to assign. Existing names are reused; new names are auto-created. Provide either tag_names OR tag_ids.",
+                description = "Names to reuse or create.",
                 items = new { type = JsonSchemaTypes.String }
             },
             tag_ids = new
             {
                 type = JsonSchemaTypes.Array,
-                description = "Tag IDs (GUIDs). Provide either tag_ids OR tag_names. An empty array removes all tags.",
+                description = "Existing tag IDs; empty clears all tags.",
                 items = new { type = JsonSchemaTypes.String }
             }
         },
@@ -43,6 +43,7 @@ public class AssignTagsTool(
 
     public async Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
+        args = OptionalToolArguments.OmitOptionalNulls(args, GetParameterSchema());
         if (args.TryGetProperty("habit_ids", out _))
         {
             var batch = SingleHabitArguments(args);
@@ -99,6 +100,7 @@ public class AssignTagsTool(
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
+        args = OptionalToolArguments.OmitOptionalNulls(args, GetParameterSchema());
         if (args.TryGetProperty("habit_ids", out _))
             return await AssignBatchAsync(args, userId, ct);
 

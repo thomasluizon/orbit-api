@@ -24,15 +24,20 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
 
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
-        differences.Should().HaveCount(15);
+        differences.Should().HaveCount(16);
         RestoreProactivePreferenceMigrationTests.AssertRequiredPreference(differences);
         differences.OfType<CreateTableOperation>().Select(table => table.Name)
             .Should().BeEquivalentTo("ConversationTurns", "OAuthStates", "AiBudgetCalls");
         differences.OfType<CreateIndexOperation>().Should().HaveCount(7);
-        differences.OfType<AddColumnOperation>().Should().HaveCount(2);
+        differences.OfType<AddColumnOperation>().Should().HaveCount(3);
         differences.OfType<InsertDataOperation>().Should().HaveCount(2);
         AssertAiSecurityAdditions(differences);
         ConversationMigrationTests.AssertConversationExpansion(differences);
+        var schemaVersion = differences.OfType<AddColumnOperation>().Single(column => column.Name == "ArgumentSchemaVersion");
+        schemaVersion.Table.Should().Be("PendingAgentOperations");
+        schemaVersion.IsNullable.Should().BeFalse();
+        schemaVersion.DefaultValue.Should().Be(0);
+
         context.Database.HasPendingModelChanges().Should().BeFalse();
     }
 
