@@ -46,22 +46,28 @@ public class FeatureFlagService(OrbitDbContext dbContext, IMemoryCache cache) : 
             user => (IReadOnlyList<string>)Resolve(user, flags).Where(flag => flag.Enabled).Select(flag => flag.Key).ToList());
     }
 
-    private async Task<List<FlagSnapshot>> GetSnapshotAsync(CancellationToken cancellationToken)
+    private async Task<List<FlagSnapshot>> GetSnapshotAsync(CancellationToken cancellationToken, bool forceRefresh = false)
     {
-        if (cache.TryGetValue(FlagsCacheKey, out List<FlagSnapshot>? flags) && flags is not null)
-            return flags;
+        if (!forceRefresh && cache.TryGetValue(FlagsCacheKey, out List<FlagSnapshot>? cached) && cached is not null)
+            return cached;
 
-        flags = await SnapshotQuery().ToListAsync(cancellationToken);
+        var flags = await SnapshotQuery().ToListAsync(cancellationToken);
         cache.Set(FlagsCacheKey, flags, CacheTtl);
         return flags;
     }
 
     public async Task<IReadOnlyList<string>> GetEnabledKeysForUserAsync(
-        Guid userId, CancellationToken cancellationToken = default) =>
-        (await ResolveForUserAsync(userId, cancellationToken))
+        Guid userId, CancellationToken cancellationToken = default, bool forceRefresh = false)
+    {
+        var user = await dbContext.Users.AsNoTracking().FirstOrDefaultAsync(item => item.Id == userId, cancellationToken);
+        if (user is null)
+            return [];
+
+        return Resolve(user, await GetSnapshotAsync(cancellationToken, forceRefresh))
             .Where(flag => flag.Enabled)
             .Select(flag => flag.Key)
             .ToList();
+    }
 
     private IQueryable<FlagSnapshot> SnapshotQuery() => dbContext.AppFeatureFlags
         .AsNoTracking()

@@ -1,10 +1,12 @@
+#pragma warning disable OPENAI001
+
 using System.ClientModel;
+using System.ClientModel.Primitives;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using OpenAI;
-using OpenAI.Chat;
+using OpenAI.Responses;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Configuration;
 
@@ -12,8 +14,10 @@ namespace Orbit.Infrastructure.AI;
 
 public sealed partial class AiCompletionClient
 {
-    private readonly ChatClient _chatClient;
-    private readonly ChatClient _subTaskChatClient;
+    private readonly ResponsesClient _responsesClient;
+    private readonly ResponsesClient _streamingResponsesClient;
+    internal TimeSpan CompletionTimeout { get; }
+    internal TimeSpan StreamingCompletionTimeout { get; }
     private readonly string _primaryModel;
     private readonly string _subTaskModel;
     private readonly ILogger<AiCompletionClient> _logger;
@@ -29,58 +33,142 @@ public sealed partial class AiCompletionClient
         IOptions<AiSettings> options,
         ILogger<AiCompletionClient> logger,
         IAiUsageRecorder usageRecorder)
+        : this(options, logger, usageRecorder, null)
+    {
+    }
+
+    internal AiCompletionClient(
+        IOptions<AiSettings> options,
+        ILogger<AiCompletionClient> logger,
+        IAiUsageRecorder usageRecorder,
+        PipelineTransport? transport)
     {
         _logger = logger;
         _usageRecorder = usageRecorder;
         var settings = options.Value;
+        CompletionTimeout = settings.CompletionTimeout;
+        StreamingCompletionTimeout = settings.StreamingCompletionTimeout;
 
-        var clientOptions = new OpenAIClientOptions
+        ResponsesClient CreateClient(int networkTimeoutSeconds)
         {
-            Endpoint = new Uri(settings.BaseUrl),
-            NetworkTimeout = TimeSpan.FromSeconds(settings.NetworkTimeoutSeconds),
-            RetryPolicy = new AiRetryLoggingPolicy(settings.MaxRetries, logger)
-        };
-        var credential = new ApiKeyCredential(settings.ApiKey);
+            var clientOptions = new ResponsesClientOptions
+            {
+                Endpoint = new Uri(settings.BaseUrl),
+                NetworkTimeout = TimeSpan.FromSeconds(networkTimeoutSeconds),
+                Transport = transport,
+                RetryPolicy = new AiRetryLoggingPolicy(settings.MaxRetries, logger)
+            };
+            clientOptions.AddPolicy(new AiBudgetDispatchPolicy(), PipelinePosition.BeforeTransport);
+            return new ResponsesClient(new ApiKeyCredential(settings.ApiKey), clientOptions);
+        }
 
         _primaryModel = settings.Model;
-        _chatClient = new ChatClient(model: settings.Model, credential: credential, options: clientOptions);
+        _responsesClient = CreateClient(settings.BufferedNetworkTimeoutSeconds);
+        _streamingResponsesClient = CreateClient(settings.NetworkTimeoutSeconds);
 
         _subTaskModel = ResolveSubTaskModel(settings.SubTaskModel, settings.Model);
-        _subTaskChatClient = _subTaskModel == settings.Model
-            ? _chatClient
-            : new ChatClient(model: _subTaskModel, credential: credential, options: clientOptions);
     }
 
     internal static string ResolveSubTaskModel(string subTaskModel, string primaryModel)
         => string.IsNullOrWhiteSpace(subTaskModel) ? primaryModel : subTaskModel;
 
-    /// <summary>
-    /// The sub-task temperature is suppressed only when the sub-task tier actually routes to a distinct
-    /// reasoning model (which rejects a custom temperature). When the kill-switch aliases the sub-task
-    /// tier back to the primary model, the configured temperature must still be sent.
-    /// </summary>
     internal static bool ShouldApplyTemperature(AiModelTier tier, string primaryModel, string subTaskModel)
-        => tier == AiModelTier.Primary || subTaskModel == primaryModel;
+        => !IsReasoningModel(tier == AiModelTier.SubTask ? subTaskModel : primaryModel);
+
+    internal static bool IsReasoningModel(string model)
+        => model.StartsWith("gpt-5", StringComparison.OrdinalIgnoreCase)
+            || model.StartsWith("gpt-6", StringComparison.OrdinalIgnoreCase)
+            || model.StartsWith("o1", StringComparison.OrdinalIgnoreCase)
+            || model.StartsWith("o3", StringComparison.OrdinalIgnoreCase)
+            || model.StartsWith("o4", StringComparison.OrdinalIgnoreCase);
 
     internal AiCompletionClient(
-        ChatClient chatClient,
+        ResponsesClient responsesClient,
         ILogger<AiCompletionClient> logger,
-        IAiUsageRecorder usageRecorder)
+        IAiUsageRecorder usageRecorder,
+        TimeSpan? completionTimeout = null,
+        string primaryModel = "gpt-6-luna",
+        string subTaskModel = "gpt-6-luna")
     {
-        _chatClient = chatClient;
-        _subTaskChatClient = chatClient;
-        _primaryModel = "primary-test";
-        _subTaskModel = "subtask-test";
+        CompletionTimeout = completionTimeout ?? new AiSettings().CompletionTimeout;
+        StreamingCompletionTimeout = completionTimeout ?? new AiSettings().StreamingCompletionTimeout;
+        _responsesClient = responsesClient;
+        _streamingResponsesClient = responsesClient;
+        _primaryModel = primaryModel;
+        _subTaskModel = ResolveSubTaskModel(subTaskModel, primaryModel);
         _logger = logger;
         _usageRecorder = usageRecorder;
     }
 
-    /// <summary>
-    /// Direct access to the underlying ChatClient for advanced scenarios (tool calling, multi-turn).
-    /// </summary>
-    public ChatClient ChatClient => _chatClient;
+    internal ResponsesClient ResponsesClient => _responsesClient;
+    internal ResponsesClient StreamingResponsesClient => _streamingResponsesClient;
 
     internal string ChatModel => _primaryModel;
+
+    internal const int DefaultMaxOutputTokens = 8192;
+
+    internal string SerializeTextRequest(string systemPrompt, string userPrompt, double temperature, int maxOutputTokens,
+        AiModelTier tier, Guid? userId = null, bool json = false)
+    {
+        var options = CreateOptions(tier, temperature, maxOutputTokens, userId);
+        options.InputItems.Add(ResponseItem.CreateSystemMessageItem(systemPrompt));
+        options.InputItems.Add(ResponseItem.CreateUserMessageItem(userPrompt));
+        if (json)
+            options.TextOptions = new ResponseTextOptions { TextFormat = ResponseTextFormat.CreateJsonObjectFormat() };
+        return ModelReaderWriter.Write(options).ToString();
+    }
+
+    internal async Task<long> CountInputTokensAsync(string requestJson, CancellationToken cancellationToken)
+    {
+        using var request = JsonDocument.Parse(requestJson);
+        var allowed = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "model", "input", "tools", "text", "reasoning", "instructions", "tool_choice",
+            "parallel_tool_calls", "previous_response_id", "conversation", "truncation"
+        };
+        var fields = request.RootElement.EnumerateObject().Where(property => allowed.Contains(property.Name))
+            .ToDictionary(property => property.Name, property => property.Value);
+        using var content = BinaryContent.Create(BinaryData.FromObjectAsJson(fields));
+        var result = await _responsesClient.GetInputTokenCountAsync(content, "application/json",
+            new RequestOptions { CancellationToken = cancellationToken });
+        using var response = JsonDocument.Parse(result.GetRawResponse().Content);
+        var tokens = response.RootElement.GetProperty("input_tokens").GetInt64();
+        if (tokens < 0)
+            throw new InvalidOperationException("The provider returned an invalid input token count.");
+        return tokens;
+    }
+
+    internal CreateResponseOptions CreateOptions(
+        AiModelTier tier = AiModelTier.Primary,
+        double temperature = 0.1,
+        int? maxOutputTokens = null,
+        Guid? userId = null)
+    {
+        var model = tier == AiModelTier.SubTask ? _subTaskModel : _primaryModel;
+        var options = new CreateResponseOptions
+        {
+            Model = model,
+            StoredOutputEnabled = false,
+            MaxOutputTokenCount = maxOutputTokens
+        };
+        if (ShouldApplyTemperature(tier, _primaryModel, _subTaskModel))
+            options.Temperature = (float)temperature;
+        else
+        {
+            options.ReasoningOptions = new ResponseReasoningOptions
+            {
+                ReasoningEffortLevel = ResponseReasoningEffortLevel.Low
+            };
+            options.IncludedProperties.Add(IncludedResponseProperty.ReasoningEncryptedContent);
+        }
+
+        if (userId is { } id && id != Guid.Empty)
+        {
+            options.SafetyIdentifier = id.ToString("N");
+            options.PromptCacheKey = id.ToString("N");
+        }
+        return options;
+    }
 
     public async Task<string?> CompleteTextAsync(
         string systemPrompt,
@@ -91,26 +179,18 @@ public sealed partial class AiCompletionClient
         AiModelTier tier = AiModelTier.Primary,
         CancellationToken cancellationToken = default)
     {
-        var messages = new List<ChatMessage>
-        {
-            new SystemChatMessage(systemPrompt),
-            new UserChatMessage(userPrompt)
-        };
-
-        var options = new ChatCompletionOptions();
-        if (ShouldApplyTemperature(tier, _primaryModel, _subTaskModel))
-            options.Temperature = (float)temperature;
-
-        if (maxOutputTokens is int max)
-            options.MaxOutputTokenCount = max;
+        using var completionCancellation = CreateCompletionCancellation(cancellationToken);
+        cancellationToken = completionCancellation.Token;
+        var options = CreateOptions(tier, temperature, maxOutputTokens);
+        options.InputItems.Add(ResponseItem.CreateSystemMessageItem(systemPrompt));
+        options.InputItems.Add(ResponseItem.CreateUserMessageItem(userPrompt));
 
         LogCallingTextCompletion(_logger);
 
-        var client = tier == AiModelTier.SubTask ? _subTaskChatClient : _chatClient;
-        var model = tier == AiModelTier.SubTask ? _subTaskModel : _primaryModel;
-        var completion = await client.CompleteChatAsync(messages, options, cancellationToken);
-        await RecordUsageAsync(completion.Value.Usage, purpose, model, cancellationToken);
-        var text = completion.Value.Content.FirstOrDefault()?.Text;
+        var completion = await _responsesClient.CreateResponseAsync(options, cancellationToken);
+        await RecordUsageAsync(completion.Value.Usage, purpose, options.Model, cancellationToken);
+        EnsureSuccessful(completion.Value);
+        var text = GetAssistantOutputText(completion.Value);
 
         if (!string.IsNullOrWhiteSpace(text))
             LogTextCompletionSuccessful(_logger, text.Length);
@@ -128,29 +208,22 @@ public sealed partial class AiCompletionClient
         Guid? userId = null,
         CancellationToken cancellationToken = default)
     {
-        var messages = new List<ChatMessage>
+        using var completionCancellation = CreateCompletionCancellation(cancellationToken);
+        cancellationToken = completionCancellation.Token;
+        var options = CreateOptions(tier, temperature, maxOutputTokens, userId);
+        options.InputItems.Add(ResponseItem.CreateSystemMessageItem(systemPrompt));
+        options.InputItems.Add(ResponseItem.CreateUserMessageItem(userPrompt));
+        options.TextOptions = new ResponseTextOptions
         {
-            new SystemChatMessage(systemPrompt),
-            new UserChatMessage(userPrompt)
+            TextFormat = ResponseTextFormat.CreateJsonObjectFormat()
         };
-
-        var options = new ChatCompletionOptions
-        {
-            ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
-        };
-        if (ShouldApplyTemperature(tier, _primaryModel, _subTaskModel))
-            options.Temperature = (float)temperature;
-
-        if (maxOutputTokens is int max)
-            options.MaxOutputTokenCount = max;
 
         LogCallingJsonCompletion(_logger);
 
-        var client = tier == AiModelTier.SubTask ? _subTaskChatClient : _chatClient;
-        var model = tier == AiModelTier.SubTask ? _subTaskModel : _primaryModel;
-        var completion = await client.CompleteChatAsync(messages, options, cancellationToken);
-        await RecordUsageAsync(completion.Value.Usage, purpose, model, cancellationToken, userId);
-        var text = completion.Value.Content.FirstOrDefault()?.Text;
+        var completion = await _responsesClient.CreateResponseAsync(options, cancellationToken);
+        await RecordUsageAsync(completion.Value.Usage, purpose, options.Model, cancellationToken, userId);
+        EnsureSuccessful(completion.Value);
+        var text = GetAssistantOutputText(completion.Value);
 
         if (string.IsNullOrWhiteSpace(text))
         {
@@ -163,8 +236,29 @@ public sealed partial class AiCompletionClient
         return JsonSerializer.Deserialize<T>(text, JsonOptions);
     }
 
+    internal static void EnsureSuccessful(ResponseResult response)
+    {
+        if (response.Status is not (ResponseStatus.Completed or ResponseStatus.Incomplete))
+            throw new InvalidOperationException("AI response did not complete successfully.");
+    }
+
+    internal static string GetAssistantOutputText(ResponseResult response)
+        => string.Join("\n\n", response.OutputItems.OfType<MessageResponseItem>()
+            .Where(message => message.Role == MessageRole.Assistant)
+            .Select(message => string.Concat(message.Content
+                .Where(part => part.Kind == ResponseContentPartKind.OutputText)
+                .Select(part => part.Text)))
+            .Where(text => !string.IsNullOrEmpty(text)));
+
+    internal CancellationTokenSource CreateCompletionCancellation(CancellationToken cancellationToken, bool streaming = false)
+    {
+        var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cancellation.CancelAfter(streaming ? StreamingCompletionTimeout : CompletionTimeout);
+        return cancellation;
+    }
+
     private async Task RecordUsageAsync(
-        ChatTokenUsage? usage,
+        ResponseTokenUsage? usage,
         string purpose,
         string model,
         CancellationToken cancellationToken,
@@ -192,7 +286,8 @@ public sealed partial class AiCompletionClient
             usage.OutputTokenCount,
             usage.TotalTokenCount,
             cancellationToken,
-            userId);
+            userId,
+            usage.InputTokenDetails?.CacheWriteTokenCount ?? 0);
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Calling AI API for text completion...")]

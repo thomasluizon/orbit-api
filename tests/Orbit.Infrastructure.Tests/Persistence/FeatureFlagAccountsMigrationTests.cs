@@ -14,7 +14,7 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 public class FeatureFlagAccountsMigrationTests
 {
     [Fact]
-    public void TargetModel_PreservesRedesign()
+    public void TargetModel_PreservesPromotedRedesignAndCombinedSnapshotMatchesCurrentModel()
     {
         using var context = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
             .UseNpgsql("Host=unused;Database=unused").Options);
@@ -26,26 +26,32 @@ public class FeatureFlagAccountsMigrationTests
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
 
-        differences.Should().HaveCount(12).And.OnlyContain(operation =>
-            operation is DropForeignKeyOperation || operation is AddForeignKeyOperation
-            || operation is AddColumnOperation || operation is AlterColumnOperation
-            || operation is CreateTableOperation || operation is CreateIndexOperation);
-        var owedCancellations = differences.OfType<CreateTableOperation>().Should().ContainSingle().Subject;
+        differences.Should().HaveCount(44);
+        ExpandHabitScheduleAndStartDateMigrationTests.AssertAiSecurityAdditions(differences);
+        ConversationMigrationTests.AssertConversationExpansion(differences);
+        var owedCancellations = differences.OfType<CreateTableOperation>()
+            .Should().ContainSingle(table => table.Name == "OwedSubscriptionCancellations").Subject;
         owedCancellations.Name.Should().Be("OwedSubscriptionCancellations");
         owedCancellations.ForeignKeys.Should().BeEmpty();
         owedCancellations.Columns.Select(column => column.Name).Should().BeEquivalentTo(
             "Id", "Provider", "ProviderIdentifier", "Attempts", "CreatedAtUtc", "LastAttemptAtUtc",
             "NextAttemptAtUtc", "ExhaustedAtUtc");
-        var cancellationIndexes = differences.OfType<CreateIndexOperation>().ToArray();
+        var cancellationIndexes = differences.OfType<CreateIndexOperation>()
+            .Where(index => index.Table == "OwedSubscriptionCancellations").ToArray();
         cancellationIndexes.Should().HaveCount(2).And.OnlyContain(index => index.Table == "OwedSubscriptionCancellations");
         cancellationIndexes.Should().ContainSingle(index => index.Columns.SequenceEqual(new[] { "NextAttemptAtUtc" }) && !index.IsUnique);
         cancellationIndexes.Should().ContainSingle(index => index.Columns.SequenceEqual(new[] { "Provider", "ProviderIdentifier" }) && index.IsUnique);
-        differences.OfType<AlterColumnOperation>().Should().ContainSingle().Which
-            .Should().Match<AlterColumnOperation>(column => column.Table == "HabitLogs"
-                && column.Name == "IsSlip" && !column.IsNullable && column.OldColumn.IsNullable);
-        var renewalColumns = differences.OfType<AddColumnOperation>().Where(column => column.Table == "Users").ToArray();
+        differences.Where(operation => operation is DropForeignKeyOperation || operation is AddForeignKeyOperation)
+            .Should().HaveCount(4);
+        differences.OfType<AlterColumnOperation>().Should().ContainSingle(column =>
+            column.Table == "HabitLogs" && column.Name == "IsSlip"
+            && !column.IsNullable && column.OldColumn.IsNullable);
+        differences.OfType<AddColumnOperation>().Should().ContainSingle(column => column.Table == "Users"
+            && column.Name == "ConversationHistoryClearedAtUtc" && column.IsNullable && column.ClrType == typeof(DateTime));
+        var renewalColumns = differences.OfType<AddColumnOperation>()
+            .Where(column => column.Table == "Users" && column.Name != "ConversationHistoryClearedAtUtc").ToArray();
         renewalColumns.Should().HaveCount(2).And.OnlyContain(column =>
-            column.Table == "Users" && column.ClrType == typeof(bool) && !column.IsNullable
+            column.ClrType == typeof(bool) && !column.IsNullable
             && Equals(column.DefaultValue, false));
         renewalColumns.Select(column => column.Name).Should().BeEquivalentTo(
             "StripeRenewalStoppedByDeletion", "PlayRenewalStoppedByDeletion");
@@ -76,11 +82,25 @@ public class FeatureFlagAccountsMigrationTests
             "SignupLanguage", "SignupReferralCode", "SignupCompletedAtUtc",
             "SignupReferralCompletedAtUtc", "SignupAnalyticsCompletedAtUtc", "SignupWelcomeCompletedAtUtc");
         context.Database.HasPendingModelChanges().Should().BeFalse();
-        context.Database.GetMigrations().TakeLast(8).Should().Equal(
-            "20261001074038_AddHabitSkipUndo", "20261017011939_AddFeatureFlagAccounts",
-            "20261018093533_CascadeAccountabilityPairsOnUserDeletion", "20261018111350_AddDurableSignupWork",
-            "20261018111711_RecordDeletionStoppedRenewals", "20261019011031_ContractHabitLogSlip",
-            "20261019091925_AddOwedSubscriptionCancellations", "20261019165331_ExpandHabitScheduleAndStartDate");
+        context.Database.GetMigrations().Should().ContainInOrder(
+            "20261001074038_AddHabitSkipUndo",
+            "20261017011939_AddFeatureFlagAccounts",
+            "20261017083409_ReplaceProactiveCheckinsWithItems",
+            "20261017173456_AddIssuedAstraBlocks",
+            "20261017180536_AddNotionConnection",
+            "20261017182405_TrackNotionOAuthStateConsumption",
+            "20261018093533_CascadeAccountabilityPairsOnUserDeletion",
+            "20261018111350_AddDurableSignupWork",
+            "20261018111711_RecordDeletionStoppedRenewals",
+            "20261019011031_ContractHabitLogSlip",
+            "20261019091925_AddOwedSubscriptionCancellations",
+            "20261019124138_AddAstraBlockAnswerReplay",
+            "20261019165331_ExpandHabitScheduleAndStartDate",
+            "20261019213159_HardenMcpOAuthState",
+            "20261019213536_AddDailyAiSafetyBudget",
+            "20261019223729_TrackMcpRefreshTokenFamilies",
+            "20261020005707_PriceDailyAiBudgetsInUsd");
+        context.Database.GetMigrations().Last().Should().EndWith("_PersistConversationTurns");
     }
 
     private static void AssertHabitExpandColumns(IReadOnlyList<MigrationOperation> differences)

@@ -17,11 +17,33 @@ public class AgentCatalogServiceTests
 {
     private readonly AgentCatalogService _catalogService = new();
 
+    [Fact]
+    public void ProactiveAstraTool_UsesExistingProCapabilityAndAiSettingsScope()
+    {
+        var tool = (IAiTool)RuntimeHelpers.GetUninitializedObject(
+            typeof(Orbit.Application.Chat.Tools.Implementations.SetProactiveAstraTool));
+        var catalog = new AgentCatalogService([tool]);
+
+        var capability = catalog.GetCapabilityByChatTool("set_proactive_astra");
+        capability.Should().NotBeNull();
+        capability!.Id.Should().Be(AgentCapabilityIds.ProfileProactiveAstraWrite);
+        capability.PlanRequirement.Should().Be("Pro");
+        capability.Scope.Should().Be(AgentScopes.WriteAiSettings);
+        capability.ControllerActionKeys.Should().Contain("ProfileController.SetProactiveAstra");
+        var operation = catalog.GetOperation("set_proactive_astra");
+        operation.Should().NotBeNull();
+        operation!.CapabilityId.Should().Be(capability.Id);
+        operation.IsMutation.Should().BeTrue();
+        operation.IsAgentExecutable.Should().BeTrue();
+    }
+
     [Theory]
+    [InlineData("unlog_habit", AgentRiskClass.Low, AgentConfirmationRequirement.None)]
     [InlineData("bulk_create_habits", AgentRiskClass.Low, AgentConfirmationRequirement.None)]
     [InlineData("bulk_log_habits", AgentRiskClass.Low, AgentConfirmationRequirement.None)]
     [InlineData("bulk_skip_habits", AgentRiskClass.Low, AgentConfirmationRequirement.None)]
     [InlineData("bulk_update_habits", AgentRiskClass.Low, AgentConfirmationRequirement.None)]
+    [InlineData("bulk_update_habit_emojis", AgentRiskClass.Low, AgentConfirmationRequirement.None)]
     [InlineData("bulk_reschedule_habits", AgentRiskClass.Low, AgentConfirmationRequirement.None)]
     [InlineData("bulk_delete_habits", AgentRiskClass.Destructive, AgentConfirmationRequirement.FreshConfirmation)]
     [InlineData("delete_habit", AgentRiskClass.Destructive, AgentConfirmationRequirement.FreshConfirmation)]
@@ -29,7 +51,7 @@ public class AgentCatalogServiceTests
         AgentConfirmationRequirement confirmation)
     {
         var tool = typeof(IAiTool).Assembly.GetTypes()
-            .Where(type => type.IsClass && !type.IsAbstract && typeof(IAiTool).IsAssignableFrom(type))
+            .Where(type => type.IsClass && !type.IsAbstract && typeof(IAiTool).IsAssignableFrom(type) && !typeof(IChatOnlyAiTool).IsAssignableFrom(type))
             .Select(type => (IAiTool)RuntimeHelpers.GetUninitializedObject(type))
             .Single(tool => tool.Name == operationId);
         var catalog = new AgentCatalogService([tool]);
@@ -44,11 +66,21 @@ public class AgentCatalogServiceTests
     }
 
     [Fact]
+    public void Ask_IsExcludedFromAgentOperationsAndMcpCapabilities()
+    {
+        var tool = (IAiTool)RuntimeHelpers.GetUninitializedObject(typeof(Orbit.Application.Chat.Tools.Implementations.AskTool));
+        var catalog = new AgentCatalogService([tool]);
+        catalog.GetOperation("ask").Should().BeNull();
+        catalog.GetCapabilityByMcpTool("ask").Should().BeNull();
+        catalog.GetCapabilityByChatTool("ask").Should().BeNull();
+    }
+
+    [Fact]
     public void SetColorScheme_IsAvailableOnlyThroughTheHttpCompatibilityEndpoint()
     {
         var chatToolNames = typeof(AiToolRegistry).Assembly
             .GetTypes()
-            .Where(type => type.IsClass && !type.IsAbstract && typeof(IAiTool).IsAssignableFrom(type))
+            .Where(type => type.IsClass && !type.IsAbstract && typeof(IAiTool).IsAssignableFrom(type) && !typeof(IChatOnlyAiTool).IsAssignableFrom(type))
             .Select(type => ((IAiTool)RuntimeHelpers.GetUninitializedObject(type)).Name);
         var mcpToolNames = typeof(Orbit.Api.Mcp.Tools.HabitTools).Assembly
             .GetTypes()
@@ -117,11 +149,11 @@ public class AgentCatalogServiceTests
     }
 
     [Fact]
-    public void EveryChatTool_IsMappedToTheCatalog()
+    public void EveryAgentTool_IsMappedToTheCatalog()
     {
         var toolNames = typeof(AiToolRegistry).Assembly
             .GetTypes()
-            .Where(type => type.IsClass && !type.IsAbstract && typeof(IAiTool).IsAssignableFrom(type))
+            .Where(type => type.IsClass && !type.IsAbstract && typeof(IAiTool).IsAssignableFrom(type) && !typeof(IChatOnlyAiTool).IsAssignableFrom(type))
             .Select(type => ((IAiTool)RuntimeHelpers.GetUninitializedObject(type)).Name)
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToList();
@@ -252,6 +284,26 @@ public class AgentCatalogServiceTests
         capability.ControllerActionKeys.Should().ContainSingle("GamificationController.RepairStreak");
     }
 
+    [Theory]
+    [InlineData(AgentCapabilityIds.ProactiveItemsRead, AgentScopes.ReadNotifications, false, "ProactiveAstraController.Current")]
+    [InlineData(AgentCapabilityIds.ProactiveItemsRead, AgentScopes.ReadNotifications, false, "ProactiveAstraController.GetById")]
+    [InlineData(AgentCapabilityIds.ProactiveItemsWrite, AgentScopes.WriteNotifications, true, "ProactiveAstraController.Opened")]
+    [InlineData(AgentCapabilityIds.ProactiveItemsWrite, AgentScopes.WriteNotifications, true, "ProactiveAstraController.Acted")]
+    public void ProactiveItems_AreCatalogedAsProClientCapabilities(string capabilityId, string scope, bool isMutation, string action)
+    {
+        var capability = _catalogService.GetCapability(capabilityId);
+
+        capability.Should().NotBeNull();
+        capability!.PlanRequirement.Should().Be("Pro");
+        capability.Scope.Should().Be(scope);
+        capability.IsMutation.Should().Be(isMutation);
+        capability.RiskClass.Should().Be(AgentRiskClass.Low);
+        capability.ConfirmationRequirement.Should().Be(AgentConfirmationRequirement.None);
+        capability.ChatToolNames.Should().BeNullOrEmpty();
+        capability.McpToolNames.Should().BeNullOrEmpty();
+        capability.ControllerActionKeys.Should().Contain(action);
+    }
+
     [Fact]
     public void RequiredAppSurfaces_ArePresent()
     {
@@ -375,7 +427,7 @@ public class AgentCatalogServiceTests
     {
         return typeof(AiToolRegistry).Assembly
             .GetTypes()
-            .Where(type => type.IsClass && !type.IsAbstract && typeof(IAiTool).IsAssignableFrom(type))
+            .Where(type => type.IsClass && !type.IsAbstract && typeof(IAiTool).IsAssignableFrom(type) && !typeof(IChatOnlyAiTool).IsAssignableFrom(type))
             .Select(type => (IAiTool)RuntimeHelpers.GetUninitializedObject(type))
             .Select(tool => ($"chat tool {tool.Name}", tool.Description));
     }

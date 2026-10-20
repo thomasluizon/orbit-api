@@ -50,6 +50,24 @@ public class ChecklistTemplateTools(IMediator mediator, McpExecutorBridge execut
             : result.Message;
     }
 
+    [McpServerTool(Name = "update_checklist_template"), Description("Update a checklist template's name, items, or both. Omitted fields stay unchanged.")]
+    public async Task<string> UpdateChecklistTemplate(
+        ClaimsPrincipal user,
+        [Description("The template ID (GUID)")] string templateId,
+        [Description("Replacement template name")] string? name = null,
+        [Description("Replacement checklist item texts")] string[]? items = null,
+        [Description("Confirmation token if requested by the executor")] string? confirmationToken = null,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await executorBridge.ExecuteAsync(user, "update_checklist_template", new
+        {
+            template_id = templateId,
+            name,
+            items
+        }, confirmationToken, cancellationToken);
+        return result.Succeeded ? $"Updated checklist template {templateId}." : result.Message;
+    }
+
     [McpServerTool(Name = "delete_checklist_template"), Description("Delete a checklist template by ID.")]
     public async Task<string> DeleteChecklistTemplate(
         ClaimsPrincipal user,

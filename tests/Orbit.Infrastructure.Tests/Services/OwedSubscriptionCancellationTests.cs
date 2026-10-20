@@ -148,30 +148,32 @@ public class OwedSubscriptionCancellationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ExecuteAsync_SlowProvider_ClaimsBeforeIoWithoutHoldingTransaction(bool googlePlay)
+    public async Task ExecuteAsync_ProviderIo_UsesCallerTokenAfterPersistingClaim(bool googlePlay)
     {
         using var fixture = new Fixture();
         var record = await fixture.SeedAsync(googlePlay);
         using var context = fixture.Factory.CreateContext();
-        var unitOfWork = new UnitOfWork(context, new DatabaseConnectionSettings { TransactionTimeoutSeconds = 1 });
+        var unitOfWork = new UnitOfWork(context, new DatabaseConnectionSettings());
         bool? transactionDuringIo = null;
         int? persistedAttemptsDuringIo = null;
-        async Task FailSlowly(CancellationToken ct)
+        CancellationToken? providerToken = null;
+        async Task FailProvider(CancellationToken ct)
         {
             transactionDuringIo = unitOfWork.HasActiveTransaction;
+            providerToken = ct;
             using var observer = fixture.Factory.CreateContext();
             persistedAttemptsDuringIo = (await observer.OwedSubscriptionCancellations.SingleAsync()).Attempts;
-            await Task.Delay(TimeSpan.FromMilliseconds(1500), ct);
             throw new BillingProviderException("provider timeout");
         }
         fixture.Stripe.SetSubscriptionCancelAtPeriodEndAsync("sub_owed", true, Arg.Any<CancellationToken>(), Arg.Any<string?>())
-            .Returns(call => FailSlowly(call.Arg<CancellationToken>()));
+            .Returns(call => FailProvider(call.Arg<CancellationToken>()));
         fixture.Play.CancelAsync("token", Arg.Any<CancellationToken>())
-            .Returns(call => FailSlowly(call.Arg<CancellationToken>()));
+            .Returns(call => FailProvider(call.Arg<CancellationToken>()));
 
         await fixture.CreateJob(context, unitOfWork).ExecuteAsync(record.Id, CancellationToken.None);
 
         transactionDuringIo.Should().BeFalse();
+        providerToken.Should().Be(CancellationToken.None);
         persistedAttemptsDuringIo.Should().Be(1);
         using var final = fixture.Factory.CreateContext();
         var pending = await final.OwedSubscriptionCancellations.SingleAsync();

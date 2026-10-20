@@ -11,7 +11,7 @@ using Orbit.Infrastructure.Services.Prompts;
 namespace Orbit.Infrastructure.Services;
 
 public sealed partial class AiSummaryService(
-    AiCompletionClient aiClient,
+    BudgetedAiCompletionClient aiClient,
     ILogger<AiSummaryService> logger) : ISummaryService
 {
     private const int MaxSummaryChars = 300;
@@ -44,8 +44,9 @@ public sealed partial class AiSummaryService(
                 prompt,
                 temperature: 0.3,
                 cancellationToken: cancellationToken,
-                maxOutputTokens: 240,
-                purpose: "daily_summary");
+                maxOutputTokens: 8192,
+                purpose: "daily_summary",
+                userId: context.UserId);
 
             if (content is null || string.IsNullOrWhiteSpace(content.Summary))
                 return Result.Failure<DailySummaryContent>(ErrorMessages.AiEmptyResponse);
@@ -55,6 +56,10 @@ public sealed partial class AiSummaryService(
             if (logger.IsEnabled(LogLevel.Debug))
                 LogDailySummaryGenerated(logger, summary.Length);
             return Result.Success(new DailySummaryContent(summary, string.Empty));
+        }
+        catch (AiBudgetExceededException)
+        {
+            return Result.Failure<DailySummaryContent>(AiBudgetExceededException.Error);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

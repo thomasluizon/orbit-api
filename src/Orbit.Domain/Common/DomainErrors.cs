@@ -75,7 +75,7 @@ public static class DomainErrors
     public static readonly AppError RecurrenceScheduleUnsatisfiable = new("RECURRENCE_SCHEDULE_UNSATISFIABLE", "No future date satisfies this recurrence schedule.");
     public static readonly AppError FlexibleNeedsFrequencyUnit = new("FLEXIBLE_NEEDS_FREQUENCY_UNIT", "Flexible habits must have a frequency unit.");
     public static readonly AppError FlexibleHasDays = new("FLEXIBLE_HAS_DAYS", "Flexible habits cannot have specific days set.");
-    public static readonly AppError DaysRequireQuantityOne = new("DAYS_REQUIRE_QUANTITY_ONE", "Days can only be set when frequency quantity is 1.");
+    public static readonly AppError DaysRequireQuantityOne = new("DAYS_REQUIRE_QUANTITY_ONE", "Specific weekdays require frequency unit Day and frequency quantity 1.");
     public static readonly AppError EndTimeBeforeStartTime = new("END_TIME_BEFORE_START", "End time must be after start time.");
     public static readonly AppError OneTimeTaskHasEndDate = new("ONE_TIME_TASK_HAS_END_DATE", "One-time tasks cannot have an end date.");
     public static readonly AppError GeneralHabitHasEndDate = new("GENERAL_HABIT_HAS_END_DATE", "General habits cannot have an end date.");

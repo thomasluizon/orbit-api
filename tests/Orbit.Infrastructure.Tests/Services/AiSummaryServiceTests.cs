@@ -1,3 +1,5 @@
+#pragma warning disable OPENAI001
+
 using System.ClientModel;
 using System.ClientModel.Primitives;
 using System.Net;
@@ -7,14 +9,15 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
-using OpenAI;
-using OpenAI.Chat;
+using OpenAI.Responses;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.AI;
 using Orbit.Infrastructure.Services;
+
+using Orbit.Infrastructure.Tests.AI;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
@@ -28,6 +31,21 @@ public class AiSummaryServiceTests
 {
     private static readonly Guid ValidUserId = Guid.NewGuid();
     private static readonly DateOnly Today = new(2025, 4, 1);
+
+    [Fact]
+    public async Task GenerateSummaryAsync_ReservesOutputTokensForReasoningAndJson()
+    {
+        string? body = null;
+        var service = BuildSummaryService("{\"summary\":\"You kept going.\"}", request => body = request);
+
+        var result = await InvokeGenerateSummaryAsync(service);
+
+        result.IsSuccess.Should().BeTrue();
+        using var document = JsonDocument.Parse(body!);
+        document.RootElement.GetProperty("model").GetString().Should().Be("gpt-6-luna");
+        document.RootElement.GetProperty("reasoning").GetProperty("effort").GetString().Should().Be("low");
+        document.RootElement.GetProperty("max_output_tokens").GetInt32().Should().Be(8192);
+    }
 
     private static readonly BindingFlags PrivateStatic =
         BindingFlags.NonPublic | BindingFlags.Static;
@@ -889,17 +907,16 @@ public class AiSummaryServiceTests
 
     private static AiSummaryService BuildSummaryService(string modelJsonContent, Action<string>? captureRequest = null)
     {
-        var chatClient = new ChatClient(
-            model: "gpt-test",
+        var chatClient = new ResponsesClient(
             credential: new ApiKeyCredential("test-key"),
-            options: new OpenAIClientOptions
+            options: new ResponsesClientOptions
             {
                 Endpoint = new Uri("https://orbit.test/v1"),
                 Transport = new HttpClientPipelineTransport(
                     new HttpClient(new JsonResponseHandler(modelJsonContent, captureRequest))),
             });
         var aiClient = new AiCompletionClient(chatClient, NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
-        return new AiSummaryService(aiClient, NullLogger<AiSummaryService>.Instance);
+        return new AiSummaryService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(aiClient), NullLogger<AiSummaryService>.Instance);
     }
 
     private static Task<Result<DailySummaryContent>> InvokeGenerateSummaryAsync(AiSummaryService service) =>
@@ -914,11 +931,7 @@ public class AiSummaryServiceTests
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
             captureRequest?.Invoke(await request.Content!.ReadAsStringAsync(cancellationToken));
-            var escaped = JsonSerializer.Serialize(modelJsonContent);
-            var body =
-                "{\"id\":\"chatcmpl-test\",\"object\":\"chat.completion\",\"created\":1700000000,\"model\":\"gpt-test\","
-                + "\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":" + escaped + "},\"finish_reason\":\"stop\"}],"
-                + "\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":2,\"total_tokens\":3}}";
+            var body = ResponsesTestData.Text(modelJsonContent);
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 RequestMessage = request,

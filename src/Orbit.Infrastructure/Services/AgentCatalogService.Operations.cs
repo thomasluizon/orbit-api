@@ -38,6 +38,7 @@ public partial class AgentCatalogService
         });
 
         return tools
+            .Where(tool => tool is not IChatOnlyAiTool)
             .OrderBy(tool => tool.Name, StringComparer.OrdinalIgnoreCase)
             .Select(tool =>
             {
@@ -232,4 +233,3 @@ public partial class AgentCatalogService
         ];
     }
 }
-

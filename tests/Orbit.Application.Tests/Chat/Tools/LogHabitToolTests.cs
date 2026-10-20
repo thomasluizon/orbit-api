@@ -1,4 +1,7 @@
 using System.Text.Json;
+using System.Linq.Expressions;
+using Microsoft.EntityFrameworkCore;
+using Orbit.Infrastructure.Persistence;
 using FluentAssertions;
 using MediatR;
 using NSubstitute;
@@ -174,6 +177,56 @@ public class LogHabitToolTests
         result.Success.Should().BeTrue();
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PersistedCompletion_FromDisposedContext_FailsWithoutDispatchOrNewRows(bool explicitPastDate)
+    {
+        var date = explicitPastDate ? Today.AddDays(-2) : Today;
+        var options = new DbContextOptionsBuilder<OrbitDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+        var habit = CreateHabit("Water", FrequencyUnit.Day, 1);
+        habit.Log(date).IsSuccess.Should().BeTrue();
+        await using (var seed = new OrbitDbContext(options))
+        {
+            seed.Habits.Add(habit);
+            await seed.SaveChangesAsync();
+        }
+        await using var context = new OrbitDbContext(options);
+        var tool = new LogHabitTool(_mediator, new GenericRepository<Habit>(context), _userDateService);
+        var args = explicitPastDate
+            ? JsonSerializer.SerializeToElement(new { habit_id = habit.Id, date = date.ToString("yyyy-MM-dd") })
+            : ArgsFor(habit.Id);
+
+        var result = await tool.ExecuteAsync(args, UserId, default);
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("already");
+        await _mediator.DidNotReceive().Send(Arg.Any<LogHabitCommand>(), Arg.Any<CancellationToken>());
+        (await context.SaveChangesAsync()).Should().Be(0);
+        (await context.HabitLogs.IgnoreQueryFilters().ToListAsync()).Should().ContainSingle()
+            .Which.IsDeleted.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task SuccessfulLog_DisablesToggleForTheRequestedDate()
+    {
+        var habit = CreateHabit("Water", FrequencyUnit.Day, 1);
+        SetupHabitFound(habit);
+        var date = Today.AddDays(-1);
+
+        var result = await _tool.ExecuteAsync(JsonSerializer.SerializeToElement(new
+        {
+            habit_id = habit.Id,
+            date = date.ToString("yyyy-MM-dd")
+        }), UserId, default);
+
+        result.Success.Should().BeTrue();
+        await _mediator.Received(1).Send(Arg.Is<LogHabitCommand>(command =>
+            command.HabitId == habit.Id && command.Date == date && !command.ToggleExisting),
+            Arg.Any<CancellationToken>());
+    }
+
     private static Habit CreateHabit(string title, FrequencyUnit? freq, int? qty)
     {
         return Habit.Create(new HabitCreateParams(UserId, title, freq, qty, DueDate: Today)).Value;
@@ -182,6 +235,9 @@ public class LogHabitToolTests
     private void SetupHabitFound(Habit habit)
     {
         _habitRepo.GetByIdAsync(habit.Id, Arg.Any<CancellationToken>()).Returns(habit);
+        _habitRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Expression<Func<Habit, bool>>>().Compile()(habit) ? habit : null);
     }
 
     private async Task<ToolResult> Execute(string json)

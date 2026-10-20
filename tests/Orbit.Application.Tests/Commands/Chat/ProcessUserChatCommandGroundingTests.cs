@@ -17,6 +17,52 @@ namespace Orbit.Application.Tests.Commands.Chat;
 public partial class ProcessUserChatCommandHandlerTests
 {
     [Theory]
+    [InlineData(true, 12)]
+    [InlineData(true, 99)]
+    [InlineData(false, 12)]
+    [InlineData(false, 99)]
+    public async Task Handle_PartsClient_GroundsTextAndPreservesOrderedBlocks(bool enforce, int streak)
+    {
+        SetupUserAndPayGate();
+        _appConfig.GetAsync(AppConfigKeys.AstraGroundingEnforce, false, Arg.Any<CancellationToken>()).Returns(enforce);
+        var tool = FakeTool("log_habit");
+        tool.IsReadOnly.Returns(false);
+        tool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(new ToolResult(true, Payload: new { current_streak = 12 }));
+        SetupAiResponse(new AiResponse
+        {
+            ToolCalls = [new AiToolCall(tool.Name, "call_parts", JsonSerializer.SerializeToElement(new { }))],
+            ConversationContext = TestConversationContext
+        });
+        var message = $"Your streak is {streak} days.";
+        const string ending = "How can I help?";
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = $"{message}\n[[orbit:habits:today]]\n{ending}" }));
+        var events = new List<ChatStreamEvent>();
+
+        var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(UserId, "Log my habit and show today",
+            ClientContext: new AgentClientContext(SupportsParts: true, PartKinds: ["habitList"], SupportsHabitListCard: true),
+            StreamSink: item => { events.Add(item); return Task.CompletedTask; }), CancellationToken.None);
+
+        var suppressed = enforce && streak != 12;
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessage.Should().Be(suppressed ? null : $"{message}\n\n{ending}");
+        result.Value.Parts.Should().NotBeNull();
+        var parts = result.Value.Parts!;
+        parts.OfType<ChatTextPart>().Select(part => part.Text)
+            .Should().Equal(suppressed ? Array.Empty<string>() : new[] { message, ending });
+        parts.OfType<ChatBlockPart>().Should().ContainSingle().Which.Kind.Should().Be("habitList");
+        if (!suppressed)
+            parts[1].Should().BeOfType<ChatBlockPart>();
+        if (enforce)
+            events.Where(item => item.Type == "delta").Select(item => item.Text)
+                .Should().Equal(suppressed ? Array.Empty<string>() : new[] { result.Value.AiMessage });
+        result.Value.Actions.Should().ContainSingle().Which.Status.Should().Be(ActionStatus.Success);
+        result.Value.GroundingFacts.Facts.Should().Contain(new GroundingFact("Number", "12", tool.Name, "call_parts"));
+    }
+
+    [Theory]
     [InlineData(true)]
     [InlineData(false)]
     public async Task Handle_GroundingMode_ControlsBatchAndStreamText(bool enforce)

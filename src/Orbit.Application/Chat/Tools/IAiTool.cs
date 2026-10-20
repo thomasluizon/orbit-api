@@ -13,6 +13,8 @@ public interface IAiTool
     Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct);
 }
 
+public interface IChatOnlyAiTool : IAiTool;
+
 public interface IMcpOnlyAiTool;
 
 public interface IConcurrencyRetryableTool;

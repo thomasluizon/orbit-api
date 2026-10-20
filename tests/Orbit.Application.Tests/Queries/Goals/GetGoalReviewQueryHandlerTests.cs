@@ -2,6 +2,7 @@ using System.Globalization;
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
+using Orbit.Application.Chat.FeatureExplanations;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Queries;
 using Orbit.Application.Goals.Services;
@@ -210,6 +211,9 @@ public class GetGoalReviewQueryHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Review.Should().Be("Review content");
+        await _payGate.Received(1).TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>());
+        new FeatureExplanationService().Get("paygate")!.Body.Split("## What Pro unlocks")[1].Should()
+            .NotContain("AI goal reviews", "paygate.md must reflect goal reviews being available within the AI quota");
     }
 
     [Fact]

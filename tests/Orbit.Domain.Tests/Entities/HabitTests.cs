@@ -182,7 +182,7 @@ public class HabitTests
         var result = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Week, 2, DueDate: DateOnly.FromDateTime(DateTime.UtcNow), Days: days));
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Days can only be set when frequency quantity is 1");
+        result.Error.Should().Contain("frequency unit Day").And.Contain("frequency quantity 1");
     }
 
     [Fact]
@@ -193,7 +193,7 @@ public class HabitTests
         var result = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Week, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow), Days: days));
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Days can only be set when frequency quantity is 1");
+        result.Error.Should().Contain("frequency unit Day").And.Contain("frequency quantity 1");
     }
 
     [Fact]

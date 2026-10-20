@@ -10,6 +10,14 @@ public partial class ProcessUserChatCommandHandler
     private sealed record GroundingTurn(bool Enforce, IReadOnlyList<string> KnownNames, string? Language);
     private sealed record GroundedReply(string? Message, IReadOnlyList<string>? FollowUps, TurnFactSet Facts);
 
+    private static ResponseCards ApplyGroundingToCards(ResponseCards cards, string? message) => cards with
+    {
+        AiMessage = message,
+        Parts = message is null
+            ? cards.Parts?.Where(part => part is not ChatTextPart).ToArray()
+            : cards.Parts
+    };
+
     private async Task<GroundingTurn> LoadGroundingTurnAsync(ChatContext context, CancellationToken cancellationToken) => new(
         await appConfig.GetAsync(AppConfigKeys.AstraGroundingEnforce, false, cancellationToken),
         context.ActiveHabits.Select(habit => habit.Title)
@@ -19,13 +27,15 @@ public partial class ProcessUserChatCommandHandler
         GetUserLanguage(context.User));
 
     private static async Task<string?> GetGroundedCachedFaqAnswerAsync(
-        (string Key, string Locale)? match, GroundingTurn turn, Func<ChatStreamEvent, Task>? sink)
+        (string Key, string Locale)? match, GroundingTurn turn, ProcessUserChatCommand request)
     {
+        if (request.BlockAnswer is not null)
+            return null;
         var cached = TryGetCachedFaqAnswer(match);
         if (cached is null || GroundednessChecker.Check(cached, TurnFactSet.Empty, turn.KnownNames, turn.Language).Count > 0)
             return null;
-        if (turn.Enforce && sink is not null)
-            await sink(ChatStreamEvent.Delta(cached));
+        if (turn.Enforce && request.StreamSink is not null)
+            await request.StreamSink(ChatStreamEvent.Delta(cached));
         return cached;
     }
 

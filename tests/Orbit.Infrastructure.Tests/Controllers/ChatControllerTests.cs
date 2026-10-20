@@ -189,4 +189,53 @@ public class ChatControllerTests
         capturedCommand.Should().NotBeNull();
         capturedCommand!.UserId.Should().Be(UserId);
     }
+
+    [Theory]
+    [InlineData(false, "ASTRA_BLOCK_NOT_FOUND", 404)]
+    [InlineData(true, "ASTRA_BLOCK_NOT_FOUND", 404)]
+    [InlineData(false, "ASTRA_BLOCK_INVALIDATED", 410)]
+    [InlineData(true, "ASTRA_BLOCK_INVALIDATED", 410)]
+    [InlineData(false, "ASTRA_BLOCK_EXPIRED", 410)]
+    [InlineData(true, "ASTRA_BLOCK_EXPIRED", 410)]
+    [InlineData(false, "ASTRA_BLOCK_ANSWERED", 409)]
+    [InlineData(true, "ASTRA_BLOCK_ANSWERED", 409)]
+    [InlineData(false, "ASTRA_BLOCK_UNKNOWN_SELECTION", 400)]
+    [InlineData(true, "ASTRA_BLOCK_UNKNOWN_SELECTION", 400)]
+    public async Task BlockAnswerFailure_UsesHttpStatusBeforeStreaming(bool stream, string code, int status)
+    {
+        _mediator.Send(Arg.Any<ProcessUserChatCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure<ChatResponse>("Rejected answer.", code));
+        var json = System.Text.Json.JsonSerializer.Serialize(new { blockId = Guid.NewGuid(), selectedIds = new[] { "a" } });
+        var result = stream
+            ? await _controller.ProcessChatStream("Morning", null, null, default, blockAnswer: json)
+            : await _controller.ProcessChat("Morning", null, null, default, blockAnswer: json);
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(status);
+        _controller.Response.ContentType.Should().NotBe("text/event-stream");
+        _controller.Response.HasStarted.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MalformedBlockAnswer_IsRejectedBeforeDispatch(bool stream)
+    {
+        var result = stream
+            ? await _controller.ProcessChatStream("Morning", null, null, default, blockAnswer: "[]")
+            : await _controller.ProcessChat("Morning", null, null, default, blockAnswer: "[]");
+        result.Should().BeOfType<BadRequestObjectResult>();
+        await _mediator.DidNotReceiveWithAnyArgs().Send(default(ProcessUserChatCommand)!, default);
+    }
+
+    [Fact]
+    public async Task BlockAnswer_IsPassedToTheCommand()
+    {
+        var id = Guid.NewGuid();
+        var json = System.Text.Json.JsonSerializer.Serialize(new { blockId = id, selectedIds = new[] { "a" }, freeText = "Later" });
+        _mediator.Send(Arg.Any<ProcessUserChatCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new ChatResponse("Next", [])));
+        await _controller.ProcessChat("Morning", null, null, default, blockAnswer: json);
+        await _mediator.Received(1).Send(Arg.Is<ProcessUserChatCommand>(command => command.BlockAnswer != null
+            && command.BlockAnswer.BlockId == id && command.BlockAnswer.SelectedIds.Single() == "a"
+            && command.BlockAnswer.FreeText == "Later"), Arg.Any<CancellationToken>());
+    }
 }

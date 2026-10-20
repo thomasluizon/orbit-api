@@ -40,32 +40,6 @@ public class PayGateService(
         return Result.Success();
     }
 
-    public async Task<Result> CanSendAiMessage(Guid userId, CancellationToken ct = default)
-    {
-        var user = await userRepository.GetByIdAsync(userId, ct);
-        if (user is null)
-            return Result.Failure(ErrorMessages.UserNotFound);
-
-        if (IsProductionSmokeAccount(user.Email))
-            return Result.Success();
-
-        var freeLimit = await appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerDay, AppConstants.DefaultFreeAiMessages, ct);
-        var proLimit = await appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerDay, AppConstants.DefaultProAiMessages, ct);
-        var messageLimit = user.HasProAccess ? proLimit : freeLimit;
-        var userToday = await userDateService.GetUserTodayAsync(userId, ct);
-
-        if (user.AiMessagesLocalDate == userToday && user.AiMessagesUsedToday >= messageLimit)
-        {
-            var errorMessage = user.HasProAccess
-                ? $"You've reached your daily AI message limit ({messageLimit})."
-                : $"You've reached your daily AI message limit ({messageLimit}). Upgrade to Pro for {proLimit} messages per day.";
-
-            return Result.PayGateFailure(errorMessage);
-        }
-
-        return Result.Success();
-    }
-
     public async Task<Result> TryConsumeAiMessage(
         Guid userId,
         IUnitOfWork unitOfWork,
@@ -101,6 +75,19 @@ public class PayGateService(
             ct);
 
         return consumption.IsSuccess ? Result.Success() : consumption.PropagateError();
+    }
+
+    public async Task<Result> RefundAiMessage(Guid userId, DateOnly reservedDate, IUnitOfWork unitOfWork,
+        CancellationToken ct = default)
+    {
+        var refund = await ConcurrencyRetry.ExecuteAsync(userRepository, unitOfWork,
+            token => userRepository.FindOneTrackedAsync(user => user.Id == userId, cancellationToken: token),
+            user =>
+            {
+                user.RefundAiMessage(reservedDate);
+                return Task.FromResult(Result.Success());
+            }, ErrorMessages.UserNotFound, ct);
+        return refund.IsSuccess ? Result.Success() : refund.PropagateError();
     }
 
     public async Task<Result> CanUseDailySummary(Guid userId, CancellationToken ct = default)
@@ -144,6 +131,9 @@ public class PayGateService(
 
     public Task<Result> CanAccessCalendar(Guid userId, CancellationToken ct = default) =>
         RequireProAccess(userId, "Calendar integration is a Pro feature. Upgrade to unlock!", ct);
+
+    public Task<Result> CanAccessNotion(Guid userId, CancellationToken ct = default) =>
+        RequireProAccess(userId, ErrorMessages.ProFeature.Message, ct);
 
     public Task<Result> CanManageCalendar(Guid userId, CancellationToken ct = default) =>
         CanAccessCalendar(userId, ct);

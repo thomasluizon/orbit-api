@@ -29,7 +29,8 @@ public record LogHabitResponse(
 public record LogHabitCommand(
     Guid UserId,
     Guid HabitId,
-    DateOnly? Date = null) : IRequest<Result<LogHabitResponse>>, IIdempotentCommand;
+    DateOnly? Date = null,
+    bool ToggleExisting = true) : IRequest<Result<LogHabitResponse>>, IIdempotentCommand;
 
 /// <summary>
 /// Groups repository dependencies for habit logging to reduce constructor parameter count (S107).
@@ -79,6 +80,9 @@ public partial class LogHabitCommandHandler(
         var existingLog = habit.Logs.FirstOrDefault(l => l.Date == targetDate && l.Value > 0 && !l.IsDeleted);
         if (existingLog is not null && !habit.IsFlexible && !habit.IsBadHabit)
         {
+            if (!request.ToggleExisting)
+                return Result.Failure<LogHabitResponse>(DomainErrors.AlreadyLoggedForDate);
+
             return await HabitCeilingLock.ExecuteEntryAsync<Habit, LogHabitResponse>(
                 unitOfWork,
                 request.UserId,
@@ -124,7 +128,7 @@ public partial class LogHabitCommandHandler(
         if (window.IsFailure)
             return window;
         if (habit.Logs.Any(l => l.Date == target && l.Value > 0 && !l.IsDeleted) && !habit.IsFlexible && !habit.IsBadHabit)
-            return Result.Success();
+            return request.ToggleExisting ? Result.Success() : Result.Failure(DomainErrors.AlreadyLoggedForDate);
         var weekStart = await dates.GetUserWeekStartDayAsync(request.UserId, ct);
         var resolution = await HabitDueDateResolutionLoader.LoadAsync(logs, [habit], today.AddDays(-AppConstants.MaxRangeDays), ct);
         var schedule = ValidateTargetDate(habit, target, today, weekStart, resolution.Contains(habit.Id));
@@ -266,6 +270,8 @@ public partial class LogHabitCommandHandler(
              * statement aborts the whole block, and the reply below has to read rows.
              */
             unitOfWork.DiscardChanges();
+            if (!request.ToggleExisting)
+                return Result.Failure<LogHabitResponse>(DomainErrors.AlreadyLoggedForDate);
             return await BuildAlreadyLoggedResultAsync(habit, targetDate, today, cancellationToken);
         }
 

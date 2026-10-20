@@ -15,16 +15,14 @@ public interface IPayGateService
     Task<Result> CanCreateSubHabits(Guid userId, CancellationToken ct = default);
 
     /// <summary>
-    /// Checks if the user can send AI messages (free: 5/day, Pro: 50/day).
-    /// </summary>
-    Task<Result> CanSendAiMessage(Guid userId, CancellationToken ct = default);
-
-    /// <summary>
     /// Atomically consumes one AI message when the user has quota remaining.
     /// </summary>
     Task<Result> TryConsumeAiMessage(
         Guid userId,
         IUnitOfWork unitOfWork,
+        CancellationToken ct = default);
+
+    Task<Result> RefundAiMessage(Guid userId, DateOnly reservedDate, IUnitOfWork unitOfWork,
         CancellationToken ct = default);
 
     /// <summary>
@@ -46,6 +44,8 @@ public interface IPayGateService
     /// Checks if the user can read calendar integration data (Pro-only feature).
     /// </summary>
     Task<Result> CanAccessCalendar(Guid userId, CancellationToken ct = default);
+
+    Task<Result> CanAccessNotion(Guid userId, CancellationToken ct = default);
 
     /// <summary>
     /// Checks if the user can manage calendar integration state (Pro-only feature).

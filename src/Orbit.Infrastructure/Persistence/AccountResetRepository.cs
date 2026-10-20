@@ -8,6 +8,11 @@ public class AccountResetRepository(OrbitDbContext context, IAccountEventCollect
 {
     public async Task DeleteAllUserDataAsync(Guid userId, CancellationToken cancellationToken = default)
     {
+        await context.ConversationTurns.Where(turn => turn.UserId == userId).ExecuteDeleteAsync(cancellationToken);
+        await context.NotionTasks.Where(t => t.UserId == userId).ExecuteDeleteAsync(cancellationToken);
+        await context.NotionConnections.Where(c => c.UserId == userId).ExecuteDeleteAsync(cancellationToken);
+        await context.NotionOAuthStates.Where(s => s.UserId == userId).ExecuteDeleteAsync(cancellationToken);
+
         var habitIds = await context.Habits
             .IgnoreQueryFilters()
             .Where(h => h.UserId == userId)
@@ -65,7 +70,11 @@ public class AccountResetRepository(OrbitDbContext context, IAccountEventCollect
             .Where(sf => sf.UserId == userId)
             .ExecuteDeleteAsync(cancellationToken);
 
-        await context.SentProactiveCheckins
+        await context.ProactiveItems
+            .Where(p => p.UserId == userId)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        await context.ProactiveCalendarDays
             .Where(p => p.UserId == userId)
             .ExecuteDeleteAsync(cancellationToken);
 
@@ -102,6 +111,10 @@ public class AccountResetRepository(OrbitDbContext context, IAccountEventCollect
 
         await context.AgentAuditLogs
             .Where(a => a.UserId == userId)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        await context.IssuedAstraBlocks
+            .Where(block => block.UserId == userId)
             .ExecuteDeleteAsync(cancellationToken);
 
         await context.PendingClarifications

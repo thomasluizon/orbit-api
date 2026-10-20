@@ -25,6 +25,15 @@ public static partial class HabitListCardBuilder
     public const string StatusNone = "none";
     public const string StatusDone = "done";
 
+    public const string PartsPromptInstruction = """
+        ## Habit list rendering (this client)
+        When the user asks to see or list habits, or what is due, scheduled, left, or overdue, use a habit list block instead of enumerating habits in text. This overrides earlier instructions to list habits from the index. Place the matching directive on its own line where the block belongs in the reply:
+        - [[orbit:habits:today]] for habits due today, including those logged today, plus overdue habits.
+        - [[orbit:habits:remaining]] for habits still due today or overdue, excluding habits done today.
+        - [[orbit:habits:all]] for every active habit.
+        Never repeat the block's habits or figures in text.
+        """;
+
     public const string PromptInstruction = """
         ## Habit list rendering (this client)
         This app can display the user's habits as a live, interactive card. When the user asks to see or list their habits, or what is due, scheduled, left, or overdue (for example "what are my habits today", "show my habits", "list everything", "o que tenho pra hoje"), do NOT write the habits out as text and do NOT enumerate them. This rule overrides any earlier instruction to list habits from the index.

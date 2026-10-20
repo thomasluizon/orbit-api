@@ -1,0 +1,9 @@
+{
+  "Done": {
+    "id": "done",
+    "name": "Done",
+    "description": null,
+    "type": "checkbox",
+    "checkbox": {}
+  }
+}

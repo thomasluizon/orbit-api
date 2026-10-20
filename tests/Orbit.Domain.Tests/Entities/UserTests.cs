@@ -640,6 +640,25 @@ public class UserTests
     }
 
     [Fact]
+    public void RefundAiMessage_ReturnsOnlyTheReservedBucketAndNeverGoesNegative()
+    {
+        var user = User.Create("Alex", "refund@example.com").Value;
+        var reservedDate = new DateOnly(2026, 4, 3);
+        user.IncrementAiMessageCount(reservedDate);
+        user.IncrementAiMessageCount(reservedDate);
+        user.RefundAiMessage(reservedDate);
+        user.AiMessagesUsedToday.Should().Be(1);
+        user.RefundAiMessage(reservedDate);
+        user.RefundAiMessage(reservedDate);
+        user.AiMessagesUsedToday.Should().Be(0);
+
+        user.IncrementAiMessageCount(reservedDate.AddDays(1));
+        user.RefundAiMessage(reservedDate);
+        user.AiMessagesUsedToday.Should().Be(1);
+        user.AiMessagesLocalDate.Should().Be(reservedDate.AddDays(1));
+    }
+
+    [Fact]
     public void GetAiMessagesUsedForQuota_StoredFutureDate_ReturnsExistingUsage()
     {
         var user = CreateValidUser();

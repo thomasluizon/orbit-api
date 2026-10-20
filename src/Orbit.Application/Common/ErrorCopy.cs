@@ -80,7 +80,7 @@ public static partial class ErrorCopy
         (DomainErrors.RecurrenceScheduleUnsatisfiable.Code, "No future date fits that schedule. Widen the days or the interval.", "Nenhuma data futura encaixa nessa agenda. Amplie os dias ou o intervalo."),
         (DomainErrors.FlexibleNeedsFrequencyUnit.Code, "Pick how often this flexible habit repeats.", "Escolha com que frequência este hábito flexível se repete."),
         (DomainErrors.FlexibleHasDays.Code, "A flexible habit has no fixed days. Clear the days, or turn flexible off.", "Um hábito flexível não tem dias fixos. Limpe os dias, ou desative o modo flexível."),
-        (DomainErrors.DaysRequireQuantityOne.Code, "Specific days work only when the habit repeats once a day. Set it to once a day, or clear the days.", "Dias específicos só funcionam quando o hábito se repete uma vez ao dia. Defina uma vez ao dia, ou limpe os dias."),
+        (DomainErrors.DaysRequireQuantityOne.Code, "To choose specific weekdays, the habit must repeat every day, once a day. Change the frequency or clear the weekdays.", "Para escolher dias da semana, o hábito precisa se repetir todos os dias, uma vez por dia. Ajuste a frequência ou remova os dias selecionados."),
         (DomainErrors.EndTimeBeforeStartTime.Code, "Set the end time after the start time.", "Defina o horário de fim depois do horário de início."),
         (DomainErrors.OneTimeTaskHasEndDate.Code, "A one-time task carries no end date.", "Uma tarefa única não tem data de fim."),
         (DomainErrors.GeneralHabitHasEndDate.Code, "A general habit carries no end date.", "Um hábito geral não tem data de fim."),
@@ -235,6 +235,7 @@ public static partial class ErrorCopy
     /// <summary>Push delivery registration.</summary>
     private static readonly (string Code, string En, string PtBr)[] Notifications =
     [
+        (ErrorCodes.ProactiveItemNotFound, "That Astra item is not here any more.", "Esse item da Astra não está mais aqui."),
         (ErrorCodes.NotificationNotFound, "That notification is not here any more.", "Essa notificação não está mais aqui."),
         (ErrorCodes.NoPushSubscriptions, "No device on this account is set up for notifications. Turn them on in settings.", "Nenhum aparelho desta conta está configurado para notificações. Ative nas configurações."),
         (ErrorCodes.PushEndpointInvalid, "This device could not register for notifications. Turn them off and on again in settings.", "Este aparelho não conseguiu registrar as notificações. Desative e ative de novo nas configurações."),
@@ -377,6 +378,29 @@ public static partial class ErrorCopy
                 catalog[code] = (en, ptBr);
         }
 
+        foreach (var (code, sourceCode) in new[]
+        {
+            (ErrorCodes.AstraBlockNotFound, ErrorCodes.ClarificationNotFound),
+            (ErrorCodes.AstraBlockInvalidated, ErrorCodes.ClarificationNotFound),
+            (ErrorCodes.AstraBlockExpired, ErrorCodes.ClarificationNotFound),
+            (ErrorCodes.AstraBlockAnswered, ErrorCodes.ClarificationAlreadyResolved),
+            (ErrorCodes.AstraBlockIdRequired, ErrorCodes.ClarificationValueNotJsonObject),
+            (ErrorCodes.AstraBlockSelectionRequired, ErrorCodes.ClarificationValueEmpty),
+            (ErrorCodes.AstraBlockInvalidSelection, ErrorCodes.ClarificationValueNotOffered),
+            (ErrorCodes.AstraBlockUnknownSelection, ErrorCodes.ClarificationValueNotOffered),
+            (ErrorCodes.AstraBlockSingleSelection, ErrorCodes.ClarificationValueNotOffered),
+            (ErrorCodes.AstraBlockEmptySelection, ErrorCodes.ClarificationValueNotOffered),
+            (ErrorCodes.AstraBlockFreeTextDisabled, ErrorCodes.ClarificationValueNotOffered),
+            (ErrorCodes.AstraBlockEmptyAnswer, ErrorCodes.ClarificationValueEmpty),
+            (ErrorCodes.AstraBlockPreviewUnavailable, ErrorCodes.InternalServerError),
+            (ErrorCodes.AstraBlockInvalidJson, ErrorCodes.ClarificationValueNotJsonObject),
+            (ErrorCodes.AstraBlockInvalidDefinition, ErrorCodes.ValidationError),
+        })
+            catalog[code] = catalog[sourceCode];
+        var answerLengthCopy = catalog[ErrorCodes.ClarificationValueTooLong];
+        catalog[ErrorCodes.AstraBlockFreeTextTooLong] = (
+            string.Format(System.Globalization.CultureInfo.InvariantCulture, answerLengthCopy.En, 500),
+            string.Format(System.Globalization.CultureInfo.InvariantCulture, answerLengthCopy.PtBr, 500));
         return catalog;
     }
 }

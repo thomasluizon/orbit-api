@@ -46,6 +46,8 @@ public static class AgentArgumentPreview
         var entityId = target?.EntityId ?? Guid.Empty;
         var entityName = target?.EntityName ?? ReadName(arguments) ?? string.Empty;
         var fields = arguments.EnumerateObject()
+            .OrderBy(property => property.Name != "title")
+            .ThenBy(property => property.Name, StringComparer.Ordinal)
             .Select(property => new PendingOperationChange(
                 entityId,
                 entityName,
@@ -62,7 +64,7 @@ public static class AgentArgumentPreview
 
         var item = new PendingOperationItem(itemId, target?.EntityId, entityName, fields,
             target?.StateFingerprint ?? AgentOperationFingerprint.Compute(operationId, itemId),
-            RemovesData: operationId is "create_habit" or "log_habit" or "skip_habit" or "update_habit"
+            RemovesData: operationId is "create_habit" or "log_habit" or "unlog_habit" or "skip_habit" or "update_habit"
                 ? false : null);
         var fingerprint = AgentOperationFingerprint.Compute(
             operationId, JsonSerializer.Serialize<IReadOnlyList<PendingOperationItem>>([item]));
@@ -77,6 +79,7 @@ public static class AgentArgumentPreview
     {
         JsonValueKind.Null or JsonValueKind.Undefined => null,
         JsonValueKind.String => value.GetString(),
+        JsonValueKind.Object or JsonValueKind.Array => AgentOperationFingerprint.Canonicalize(value.GetRawText()),
         _ => value.ToString()
     };
 

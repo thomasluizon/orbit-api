@@ -47,6 +47,8 @@ public class FeatureFlagOperationTests
         var authorization = Substitute.For<IAuthorizationService>();
         authorization.AuthorizeAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<object?>(), AdminPolicy.Name).Returns(AuthorizationResult.Success());
         using var provider = new ServiceCollection().AddLogging()
+            .AddScoped<OrbitDbContext>(_ => factory.CreateContext())
+            .AddScoped<IAgentAuditService, AgentAuditService>()
             .AddMediatR(configuration =>
             {
                 configuration.RegisterServicesFromAssemblyContaining<ManageFeatureFlagsCommand>();
@@ -63,7 +65,7 @@ public class FeatureFlagOperationTests
         var stepUp = Substitute.For<IAgentStepUpAuthorizationBridge>();
         stepUp.GetRequiredConfirmationAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((AgentConfirmationRequirement?)null);
         var evaluator = new AgentPolicyEvaluator(context, catalog, pending, stepUp, settings, resolver);
-        var executor = new AgentOperationExecutor(catalog, evaluator, new AgentAuditService(context),
+        var executor = new AgentOperationExecutor(catalog, evaluator, provider.GetRequiredService<IAgentAuditService>(),
             new AgentTargetOwnershipService(context), stepUp, new AiToolRegistry([adapter]),
             Substitute.For<IPendingOperationChangePreviewer>(), pending,
             new UnitOfWork(context, new DatabaseConnectionSettings()), NullLogger<AgentOperationExecutor>.Instance);

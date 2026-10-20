@@ -34,6 +34,26 @@ public class DistributedRateLimitFilterTests
     private readonly ILogger<DistributedRateLimitFilter> _logger = Substitute.For<ILogger<DistributedRateLimitFilter>>();
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AnswerPolicy_OnlyAppliesWhenBlockAnswerIsPresent(bool hasAnswer)
+    {
+        var filter = new DistributedRateLimitFilter("ai-resolve", _service, _authSessionService, Options.Create(new BffForwardingSettings()), _logger, blockAnswersOnly: true);
+        _service.TryAcquireAsync("ai-resolve", Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new DistributedRateLimitDecision(false, 10, 10, DateTime.UtcNow.AddMinutes(1)));
+        var (context, _) = CreateExecutingContext();
+        context.ActionArguments["blockAnswer"] = hasAnswer ? "{}" : null;
+        var called = false;
+        await filter.OnActionExecutionAsync(context, () =>
+        {
+            called = true;
+            return Task.FromResult(CreateExecutedContext(context));
+        });
+        called.Should().Be(!hasAnswer);
+        await _service.Received(hasAnswer ? 1 : 0).TryAcquireAsync("ai-resolve", Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
     [InlineData(nameof(AuthController.GoogleCodeAuth))]
     [InlineData(nameof(AuthController.GoogleCodeAuthOperation))]
     public async Task GoogleCodeRoute_UsesAuthRateLimitPolicy(string action)

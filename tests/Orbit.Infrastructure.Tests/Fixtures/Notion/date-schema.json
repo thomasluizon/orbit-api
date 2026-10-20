@@ -1,0 +1,9 @@
+{
+  "Due date": {
+    "id": "dueD",
+    "name": "Due date",
+    "description": null,
+    "type": "date",
+    "date": {}
+  }
+}

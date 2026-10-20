@@ -1,3 +1,5 @@
+#pragma warning disable OPENAI001
+
 using System.ClientModel;
 using System.ClientModel.Primitives;
 using System.Net;
@@ -6,11 +8,12 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
-using OpenAI;
-using OpenAI.Chat;
+using OpenAI.Responses;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.AI;
 using Orbit.Infrastructure.Services;
+
+using Orbit.Infrastructure.Tests.AI;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
@@ -138,10 +141,9 @@ public class AiSlipAlertMessageServiceGenerationTests
 
     private static AiSlipAlertMessageService BuildService(string content, HttpStatusCode status = HttpStatusCode.OK)
     {
-        var chatClient = new ChatClient(
-            model: "gpt-test",
+        var chatClient = new ResponsesClient(
             credential: new ApiKeyCredential("test-key"),
-            options: new OpenAIClientOptions
+            options: new ResponsesClientOptions
             {
                 Endpoint = new Uri("https://orbit.test/v1"),
                 Transport = new HttpClientPipelineTransport(
@@ -149,7 +151,7 @@ public class AiSlipAlertMessageServiceGenerationTests
             });
         var aiClient = new AiCompletionClient(
             chatClient, NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
-        return new AiSlipAlertMessageService(aiClient, NullLogger<AiSlipAlertMessageService>.Instance);
+        return new AiSlipAlertMessageService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(aiClient), NullLogger<AiSlipAlertMessageService>.Instance);
     }
 
     private sealed class CannedChatHandler(string content, HttpStatusCode status) : HttpMessageHandler
@@ -164,11 +166,7 @@ public class AiSlipAlertMessageServiceGenerationTests
                     Content = new StringContent("{\"error\":{\"message\":\"bad\"}}", Encoding.UTF8, "application/json"),
                 });
 
-            var escaped = JsonSerializer.Serialize(content);
-            var body =
-                "{\"id\":\"chatcmpl-test\",\"object\":\"chat.completion\",\"created\":1700000000,\"model\":\"gpt-test\","
-                + "\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":" + escaped + "},\"finish_reason\":\"stop\"}],"
-                + "\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":2,\"total_tokens\":3}}";
+            var body = ResponsesTestData.Text(content);
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
                 RequestMessage = request,

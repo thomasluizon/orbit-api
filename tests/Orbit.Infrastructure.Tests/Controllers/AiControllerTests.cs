@@ -303,7 +303,7 @@ public class AiControllerTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task PendingOperation_ValidBulkCreateCanConfirmAndExecute(bool hasFingerprint)
+    public async Task PendingOperation_ValidBulkCreateExecutesOnlyWithStoredFingerprint(bool hasFingerprint)
     {
         var (controller, id) = await SetupBulkCreateAsync(
             """{"habits":[{"title":"Valid","frequency_unit":"Day","frequency_quantity":1}]}""",
@@ -314,6 +314,12 @@ public class AiControllerTests
             new AiController.ExecutePendingOperationRequest("agc_token"), CancellationToken.None);
 
         confirmation.Should().BeOfType<OkObjectResult>();
+        if (!hasFingerprint)
+        {
+            execution.Should().BeOfType<ConflictObjectResult>();
+            await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+            return;
+        }
         execution.Should().BeOfType<OkObjectResult>();
         _pendingOperationStore.Received(1).Confirm(UserId, id);
         await _operationExecutor.Received(1).ExecuteAsync(
@@ -475,7 +481,10 @@ public class AiControllerTests
                 "delete_habit",
                 argsDocument.RootElement.Clone(),
                 AgentExecutionSurface.Chat,
-                AgentConfirmationRequirement.FreshConfirmation));
+                AgentConfirmationRequirement.FreshConfirmation, PreviewFingerprint: "prepared"));
+        _changePreviewer.PreviewAsync(UserId, "delete_habit", Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
+            .Returns(new PendingOperationChangePreview([], 1,
+                [new PendingOperationItem("habit-123", null, "Exercise", [], "state")], "prepared"));
 
         var response = new AgentExecuteOperationResponse(new AgentOperationResult(
             "delete_habit",

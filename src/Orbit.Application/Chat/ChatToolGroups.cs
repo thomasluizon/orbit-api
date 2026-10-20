@@ -12,8 +12,11 @@ public static class ChatToolGroups
 
     private static readonly IReadOnlyList<ExtendedGroup> Groups =
     [
+        new("proactive_astra", ["set_proactive_astra"],
+            ["proactive", "proativa", "proativo"]),
         new("calendar", ["get_calendar_overview", "manage_calendar_sync"],
             ["calendar", "agenda", "google cal", "calendario", "event", "evento"]),
+        new("notion", ["get_notion_tasks"], ["notion"]),
         new("api_keys", ["get_api_keys", "manage_api_keys"],
             ["api key", "apikey", "api-key", "developer key", "mcp", "personal token"]),
         new("referrals", ["get_referral_overview", "get_referral_code"],
@@ -24,7 +27,7 @@ public static class ChatToolGroups
             ["support", "contact the team", "report a bug", "suporte", "fale conosco"]),
         new("account", ["manage_account"],
             ["my account", "delete account", "export data", "change password", "minha conta", "excluir conta", "senha"]),
-        new("checklist_templates", ["get_checklist_templates", "create_checklist_template", "delete_checklist_template"],
+        new("checklist_templates", ["get_checklist_templates", "create_checklist_template", "update_checklist_template", "delete_checklist_template"],
             ["template", "checklist template", "reusable checklist", "modelo"]),
         new("notifications", ["get_notifications", "update_notifications", "delete_notifications"],
             ["notification", "notificacao", "push alert", "reminder settings"]),

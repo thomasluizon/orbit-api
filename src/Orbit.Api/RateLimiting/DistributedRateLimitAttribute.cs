@@ -14,7 +14,7 @@ using Orbit.Domain.Models;
 namespace Orbit.Api.RateLimiting;
 
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
-public sealed class DistributedRateLimitAttribute(string policyName) : Attribute, IFilterFactory
+public sealed class DistributedRateLimitAttribute(string policyName, bool blockAnswersOnly = false) : Attribute, IFilterFactory
 {
     public bool IsReusable => false;
 
@@ -24,7 +24,7 @@ public sealed class DistributedRateLimitAttribute(string policyName) : Attribute
             serviceProvider.GetRequiredService<IDistributedRateLimitService>(),
             serviceProvider.GetRequiredService<IAuthSessionService>(),
             serviceProvider.GetRequiredService<IOptions<BffForwardingSettings>>(),
-            serviceProvider.GetRequiredService<ILogger<DistributedRateLimitFilter>>());
+            serviceProvider.GetRequiredService<ILogger<DistributedRateLimitFilter>>(), blockAnswersOnly);
 }
 
 public sealed partial class DistributedRateLimitFilter(
@@ -32,12 +32,18 @@ public sealed partial class DistributedRateLimitFilter(
     IDistributedRateLimitService distributedRateLimitService,
     IAuthSessionService authSessionService,
     IOptions<BffForwardingSettings> bffForwardingOptions,
-    ILogger<DistributedRateLimitFilter> logger) : IAsyncActionFilter
+    ILogger<DistributedRateLimitFilter> logger,
+    bool blockAnswersOnly = false) : IAsyncActionFilter
 {
     private const string FailOpenPolicy = "support";
 
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
+        if (blockAnswersOnly && (!context.ActionArguments.TryGetValue("blockAnswer", out var answer) || answer is null))
+        {
+            await next();
+            return;
+        }
         var partitions = await ResolvePartitionsAsync(
             policyName,
             context.HttpContext,

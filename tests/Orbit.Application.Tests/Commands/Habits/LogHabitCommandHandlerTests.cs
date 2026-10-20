@@ -164,6 +164,22 @@ public class LogHabitCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_NonTogglingLog_RejectsCompletionAddedAfterToolPreflight()
+    {
+        var habit = CreateTestHabit();
+        habit.Log(Today).IsSuccess.Should().BeTrue();
+        _habitRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(habit);
+
+        var result = await _handler.Handle(new LogHabitCommand(UserId, habit.Id, Today, ToggleExisting: false), default);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(DomainErrors.AlreadyLoggedForDate.Message);
+        habit.Logs.Should().ContainSingle().Which.IsDeleted.Should().BeFalse();
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_AlreadyLogged_TogglesUnlog()
     {
         var habit = CreateTestHabit();

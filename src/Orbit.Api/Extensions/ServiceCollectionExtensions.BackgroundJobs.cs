@@ -1,4 +1,5 @@
 using Hangfire;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Hangfire.PostgreSql;
 using Orbit.Application.Auth.Jobs;
 using Orbit.Application.Marketing.Jobs;
@@ -7,6 +8,7 @@ using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
+using Orbit.Infrastructure.Services.Notion;
 
 namespace Orbit.Api.Extensions;
 
@@ -16,6 +18,11 @@ public static partial class ServiceCollectionExtensions
     {
         builder.Services.AddScoped<ISlipAlertMessageService, AiSlipAlertMessageService>();
         builder.Services.AddScoped<IProactiveCheckinMessageService, AiProactiveCheckinMessageService>();
+        builder.Services.AddScoped<Orbit.Application.Proactive.Services.IProactiveEngine, ProactiveEngineService>();
+
+        builder.Services.AddSingleton<ConversationTurnRecorder>();
+        builder.Services.AddSingleton<Orbit.Application.Chat.IConversationTurnRecorder>(
+            sp => sp.GetRequiredService<ConversationTurnRecorder>());
 
         if (!BuildTimeDocumentGeneration.IsActive)
         {
@@ -25,7 +32,10 @@ public static partial class ServiceCollectionExtensions
             builder.Services.AddHostedService<DataEncryptionMigrationService>();
             builder.Services.AddHostedService<XpAwardLogBackfillHostedService>();
 
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<ConversationTurnRecorder>());
             AddDurableJobQueue(builder);
+            builder.Services.TryAddSingleton<ScheduledJobRunner>();
+            AddScheduledJob<ConversationRetentionJob>(builder);
             builder.Services.AddHostedService<HangfireRecurringJobRegistrar>();
 
             if (useDurableQueue)
@@ -46,7 +56,7 @@ public static partial class ServiceCollectionExtensions
         if (IsPeriodCloseNotificationEnabled(builder.Configuration))
             builder.Services.AddHostedService<PeriodCloseNotificationService>();
         builder.Services.AddHostedService<SlipAlertSchedulerService>();
-        builder.Services.AddHostedService<ProactiveCheckinSchedulerService>();
+        builder.Services.AddHostedService<ProactiveEngineSchedulerService>();
         builder.Services.AddHostedService<AccountDeletionService>();
         builder.Services.AddHostedService<OwedSubscriptionCancellationService>();
         builder.Services.AddHostedService<HabitDueDateAdvancementService>();
@@ -56,6 +66,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddHostedService<SyncCleanupService>();
         builder.Services.AddHostedService<PlayNotificationCleanupService>();
         builder.Services.AddHostedService<CalendarAutoSyncService>();
+        builder.Services.AddHostedService<NotionAutoSyncService>();
         builder.Services.AddHostedService<AiUsageSummaryService>();
         builder.Services.AddHostedService<FoundingAchievementReconciliationService>();
     }
@@ -89,13 +100,13 @@ public static partial class ServiceCollectionExtensions
 
     internal static void AddDurableRecurringJobs(WebApplicationBuilder builder)
     {
-        builder.Services.AddSingleton<ScheduledJobRunner>();
+        builder.Services.TryAddSingleton<ScheduledJobRunner>();
         AddScheduledJob<ReminderSchedulerService>(builder);
         AddScheduledJob<GoalDeadlineNotificationService>(builder);
         if (IsPeriodCloseNotificationEnabled(builder.Configuration))
             AddScheduledJob<PeriodCloseNotificationService>(builder);
         AddScheduledJob<SlipAlertSchedulerService>(builder);
-        AddScheduledJob<ProactiveCheckinSchedulerService>(builder);
+        AddScheduledJob<ProactiveEngineSchedulerService>(builder);
         AddScheduledJob<AccountDeletionService>(builder);
         AddScheduledJob<OwedSubscriptionCancellationService>(builder);
         AddScheduledJob<HabitDueDateAdvancementService>(builder);
@@ -105,6 +116,7 @@ public static partial class ServiceCollectionExtensions
         AddScheduledJob<SyncCleanupService>(builder);
         AddScheduledJob<PlayNotificationCleanupService>(builder);
         AddScheduledJob<CalendarAutoSyncService>(builder);
+        AddScheduledJob<NotionAutoSyncService>(builder);
         AddScheduledJob<AiUsageSummaryService>(builder);
         AddScheduledJob<FoundingAchievementReconciliationService>(builder);
 
