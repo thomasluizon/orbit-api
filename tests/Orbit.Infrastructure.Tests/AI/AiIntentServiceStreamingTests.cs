@@ -272,6 +272,33 @@ public class AiIntentServiceStreamingTests
         logger.WarningEventIds.Should().Contain(8);
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task SendWithToolsAsync_LengthFinishWithUnfinishedTool_PreservesPartialStatusWithoutParsingArguments(
+        bool streaming, bool hasText)
+    {
+        var response = ResponsesTestData.Response(hasText ? "Partial reply" : null);
+        response.Status = ResponseStatus.Incomplete;
+        response.IncompleteStatusDetails = new ResponseIncompleteStatusDetails { Reason = ResponseIncompleteStatusReason.MaxOutputTokens };
+        response.OutputItems.Add(ResponseItem.CreateFunctionCallItem("cut_off", "bulk_update_habits", BinaryData.FromString("{\"filter\":")));
+        HttpMessageHandler handler = streaming
+            ? new SseHandler(ResponsesTestData.Stream(response))
+            : new JsonHandler(ModelReaderWriter.Write(response).ToString());
+        var (service, sink) = BuildService(handler);
+
+        var result = await service.SendWithToolsAsync(new AiToolRequest("change all descriptions", "system", []),
+            streamSink: streaming ? sink.Handle : null);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.IsTruncated.Should().BeTrue();
+        result.Value.TextMessage.Should().Be(hasText ? "Partial reply" : string.Empty);
+        result.Value.HasToolCalls.Should().BeFalse();
+        result.Value.ReportedTokenCount.Should().Be(3);
+    }
+
     [Fact]
     public async Task SendWithToolsAsync_WithUserId_SetsSafetyIdentifierAndCacheKey()
     {

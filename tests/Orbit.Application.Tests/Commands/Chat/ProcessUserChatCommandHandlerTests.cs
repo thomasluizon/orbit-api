@@ -880,12 +880,26 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.AiMessage.Should().Be("Model reply");
     }
 
-    [Fact]
-    public async Task Handle_TruncatedAiResponse_AppendsExplicitPartialNotice()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_TruncatedAiResponse_AppendsExplicitPartialNotice(bool hasToolCalls)
     {
         SetupUserAndPayGate();
-        SetupAiResponse(new AiResponse { TextMessage = "First part", IsTruncated = true });
-        var handler = CreateHandler();
+        SetupAiResponse(new AiResponse
+        {
+            TextMessage = "First part",
+            IsTruncated = true,
+            ToolCalls = hasToolCalls ? [new AiToolCall("update_habit", "cut_off", ParseArguments("{}"))] : null,
+            ConversationContext = TestConversationContext
+        });
+        var tool = FakeTool("update_habit");
+        tool.IsReadOnly.Returns(false);
+        tool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>()).Returns(new ToolResult(true));
+        var handler = CreateHandler(tool);
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "First part", IsTruncated = true }));
 
         var result = await handler.Handle(
             new ProcessUserChatCommand(UserId, "List everything"),
@@ -895,6 +909,8 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.AiMessage.Should().Contain("First part");
         result.Value.AiMessage.Should().Contain("cut off before completion");
         result.Value.AiMessage.Should().Contain("partial");
+        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+        await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
     }
 
     [Fact]

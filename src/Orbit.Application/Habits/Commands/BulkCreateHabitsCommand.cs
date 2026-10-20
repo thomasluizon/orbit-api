@@ -1,4 +1,5 @@
 using MediatR;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
@@ -39,7 +40,20 @@ public record BulkHabitItem(
     int? IntervalWeeks = null,
     IReadOnlyList<RelativeReminderTime>? RelativeReminders = null);
 
-public record BulkCreateResult(IReadOnlyList<BulkCreateItemResult> Results);
+public record BulkCreateResult(IReadOnlyList<BulkCreateItemResult> Results)
+{
+    [JsonPropertyName("applied_count")]
+    public int AppliedCount => Results.Count(item => item.Status == BulkItemStatus.Success);
+
+    [JsonPropertyName("total_matched")]
+    public int TotalMatched => Results.Count;
+
+    [JsonPropertyName("skipped_count")]
+    public int SkippedCount => TotalMatched - AppliedCount;
+
+    [JsonPropertyName("partial")]
+    public bool Partial => AppliedCount != TotalMatched;
+}
 
 public record BulkCreateItemResult(
     int Index,

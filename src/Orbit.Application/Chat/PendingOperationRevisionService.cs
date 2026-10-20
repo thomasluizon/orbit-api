@@ -39,10 +39,12 @@ public sealed class PendingOperationRevisionService(
         if (preview?.Items is null || string.IsNullOrWhiteSpace(preview.PreviewFingerprint))
             return Failure("preview_unavailable");
 
-        var argumentsJson = execution.Arguments.GetRawText();
+        var expectedFingerprint = AgentOperationFingerprint.Compute(execution.OperationId,
+            execution.Arguments.GetRawText());
+        var argumentsJson = (preview.ExecutionArguments ?? execution.Arguments).GetRawText();
         var operationFingerprint = AgentOperationFingerprint.Compute(
             execution.OperationId, argumentsJson);
-        if (!store.Revise(userId, pendingOperationId, operationFingerprint,
+        if (!store.Revise(userId, pendingOperationId, expectedFingerprint,
             argumentsJson, operationFingerprint, preview.PreviewFingerprint))
             return Failure("revision_conflict");
 
@@ -92,7 +94,8 @@ public sealed class PendingOperationRevisionService(
                 : Failure("revision_conflict");
         }
 
-        var revised = BuildArguments(execution.OperationId, execution.Arguments, request.Items, offered);
+        var revised = BuildArguments(execution.OperationId, original.ExecutionArguments ?? execution.Arguments,
+            request.Items, offered);
         if (revised is null)
             return Failure("invalid_revision");
         if (!await AcceptsEditsAsync(userId, execution.OperationId, revised.Value, request.Items,
