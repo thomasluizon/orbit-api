@@ -38,6 +38,29 @@ public class HabitsControllerTests
         };
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BulkMoveHabitParent_ReturnsOkWithPerItemResults(bool promote)
+    {
+        var habitId = Guid.NewGuid();
+        var foreignId = Guid.NewGuid();
+        Guid? parentId = promote ? null : Guid.NewGuid();
+        var response = new BulkMoveHabitParentResult([
+            new(0, BulkItemStatus.Success, habitId),
+            new(1, BulkItemStatus.Failed, foreignId, ErrorMessages.HabitNotFound.Message, ErrorCodes.HabitNotFound)
+        ]);
+        _mediator.Send(Arg.Any<BulkMoveHabitParentCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(response));
+
+        var result = await _controller.BulkMoveHabitParent(new([habitId, foreignId], parentId), CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(response);
+        await _mediator.Received(1).Send(Arg.Is<BulkMoveHabitParentCommand>(command =>
+            command.UserId == UserId && command.ParentId == parentId
+            && command.HabitIds.SequenceEqual(new[] { habitId, foreignId })), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task GetHabits_Success_ReturnsOk()
     {
