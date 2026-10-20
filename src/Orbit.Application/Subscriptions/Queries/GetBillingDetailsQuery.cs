@@ -55,7 +55,8 @@ public partial class GetBillingDetailsQueryHandler(
                     inv.Status,
                     inv.HostedUrl,
                     inv.PdfUrl,
-                    inv.BillingReason)).ToList()));
+                    inv.BillingReason)).ToList(),
+                subscription.BilledAmountPerPeriod));
         }
         catch (BillingProviderException ex)
         {

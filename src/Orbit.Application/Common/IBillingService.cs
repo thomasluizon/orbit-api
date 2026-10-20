@@ -66,7 +66,8 @@ public sealed record BillingSubscriptionDetails(
     long UnitAmount,
     string Currency,
     BillingPaymentMethod? PaymentMethod,
-    string? DeletionOwner = null);
+    string? DeletionOwner = null,
+    long? BilledAmountPerPeriod = null);
 
 public sealed record BillingPaymentMethod(string Brand, string Last4, int ExpMonth, int ExpYear);
 

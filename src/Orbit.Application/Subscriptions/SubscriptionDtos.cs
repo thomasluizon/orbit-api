@@ -55,4 +55,5 @@ public record BillingDetailsResponse(
     long AmountPerPeriod,
     string Currency,
     PaymentMethodDto? PaymentMethod,
-    IReadOnlyList<InvoiceDto> RecentInvoices);
+    IReadOnlyList<InvoiceDto> RecentInvoices,
+    long? BilledAmountPerPeriod = null);

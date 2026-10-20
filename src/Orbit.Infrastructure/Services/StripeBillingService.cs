@@ -151,6 +151,7 @@ public sealed partial class StripeBillingService(
             var item = subscription.Items?.Data?.FirstOrDefault();
             var intervalString = item?.Price?.Recurring?.Interval;
             var interval = intervalString == "year" ? SubscriptionInterval.Yearly : SubscriptionInterval.Monthly;
+            var billedAmount = await GetUpcomingInvoiceAmountAsync(subscriptionId, cancellationToken);
 
             return new BillingSubscriptionDetails(
                 subscription.Status,
@@ -162,7 +163,8 @@ public sealed partial class StripeBillingService(
                 item?.Price?.UnitAmount ?? 0,
                 subscription.Currency ?? "usd",
                 paymentMethod,
-                subscription.Metadata?.GetValueOrDefault(DeletionOwnerMetadataKey));
+                subscription.Metadata?.GetValueOrDefault(DeletionOwnerMetadataKey),
+                billedAmount);
         }
         catch (StripeException ex) when (IsMissingSubscription(ex))
         {
@@ -171,6 +173,28 @@ public sealed partial class StripeBillingService(
         catch (Exception ex) when (IsProviderFailure(ex, cancellationToken))
         {
             throw new BillingProviderException("Failed to fetch subscription", ex);
+        }
+    }
+
+    private async Task<long?> GetUpcomingInvoiceAmountAsync(string subscriptionId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var invoice = await StripeRetryPolicy.ExecuteWithRetryAsync(
+                () => clients.Invoices.CreatePreviewAsync(new InvoiceCreatePreviewOptions
+                {
+                    Subscription = subscriptionId,
+                }, cancellationToken: cancellationToken),
+                cancellationToken);
+            return invoice.AmountDue;
+        }
+        catch (StripeException ex) when (ex.StripeError?.Code == "invoice_upcoming_none")
+        {
+            return null;
+        }
+        catch (Exception ex) when (IsProviderFailure(ex, cancellationToken))
+        {
+            throw new BillingProviderException("Failed to fetch upcoming invoice", ex);
         }
     }
 
