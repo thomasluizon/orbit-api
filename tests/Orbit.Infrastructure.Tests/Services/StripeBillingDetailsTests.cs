@@ -75,16 +75,43 @@ public class StripeBillingDetailsTests
 
     private void Preview(params InvoiceLineItem[] lines) =>
         _invoices.CreatePreviewAsync(Arg.Any<InvoiceCreatePreviewOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
-            .Returns(new Invoice
-            {
-                AmountDue = 0,
-                StartingBalance = -1000,
-                Currency = "brl",
-                Lines = new StripeList<InvoiceLineItem> { Data = [.. lines] }
-            });
+            .Returns(PreviewInvoice(lines));
 
-    [Fact]
-    public async Task Handle_ReferralDiscountChangesRecurringAmountWithoutChangingPlanPrice()
+    private static Invoice PreviewInvoice(params InvoiceLineItem[] lines) => new()
+    {
+        AmountDue = 0,
+        StartingBalance = -1000,
+        Currency = "brl",
+        Lines = new StripeList<InvoiceLineItem> { Data = [.. lines] }
+    };
+
+    private void PreviewCoupon(string duration)
+    {
+        var discount = new Discount
+        {
+            Id = "di_referral",
+            Source = new DiscountSource
+            {
+                Coupon = new Coupon { Id = "coupon_referral", PercentOff = AppConstants.ReferralDiscountPercent, Duration = duration }
+            }
+        };
+        _subscription.Discounts = [discount];
+        _invoices.CreatePreviewAsync(Arg.Any<InvoiceCreatePreviewOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var options = call.Arg<InvoiceCreatePreviewOptions>();
+                var line = RecurringLine();
+                // https://docs.stripe.com/api/invoices/create_preview#preview_invoice-preview_mode excludes once coupons from recurring previews.
+                if (options.PreviewMode is null or "next" || duration == "forever")
+                    line.DiscountAmounts = [new InvoiceLineItemDiscountAmount { Amount = 100, Discount = discount }];
+                return PreviewInvoice(line);
+            });
+    }
+
+    [Theory]
+    [InlineData("once")]
+    [InlineData("forever")]
+    public async Task Handle_ReferralDiscountChangesRecurringAmountWithoutChangingPlanPrice(string duration)
     {
         var line = RecurringLine();
         Preview(line);
@@ -92,30 +119,57 @@ public class StripeBillingDetailsTests
 
         var undiscounted = await _handler.Handle(new GetBillingDetailsQuery(_userId), cts.Token);
 
-        var referral = new Discount
-        {
-            Id = "di_referral",
-            Source = new DiscountSource
-            {
-                Coupon = new Coupon { Id = "coupon_referral", PercentOff = 20, Duration = "forever" }
-            }
-        };
-        _subscription.Discounts = [referral];
-        line.DiscountAmounts = [new InvoiceLineItemDiscountAmount { Amount = 200, Discount = referral }];
+        PreviewCoupon(duration);
 
         var discounted = await _handler.Handle(new GetBillingDetailsQuery(_userId), cts.Token);
 
         undiscounted.IsSuccess.Should().BeTrue();
         undiscounted.Value.BilledAmountPerPeriod.Should().Be(1000);
         discounted.IsSuccess.Should().BeTrue();
-        discounted.Value.BilledAmountPerPeriod.Should().Be(800);
+        discounted.Value.BilledAmountPerPeriod.Should().Be(900);
         discounted.Value.BilledAmountPerPeriod.Should().BeLessThan(undiscounted.Value.BilledAmountPerPeriod!.Value);
         discounted.Value.AmountPerPeriod.Should().Be(1000);
         discounted.Value.Currency.Should().Be("brl");
         await _invoices.Received(2).CreatePreviewAsync(
             Arg.Is<InvoiceCreatePreviewOptions>(options => options.Subscription == "sub_referral"
-                && options.PreviewMode == "recurring" && options.Discounts == null && options.SubscriptionDetails == null),
+                && options.PreviewMode == "next" && options.Discounts == null && options.SubscriptionDetails == null),
             Arg.Any<RequestOptions>(), cts.Token);
+    }
+
+    [Fact]
+    public async Task Handle_ConsumedReferralCouponRestoresNormalBilledAmount()
+    {
+        PreviewCoupon("once");
+
+        var discounted = await _handler.Handle(new GetBillingDetailsQuery(_userId), CancellationToken.None);
+
+        _subscription.Discounts = [];
+        Preview(RecurringLine());
+
+        var consumed = await _handler.Handle(new GetBillingDetailsQuery(_userId), CancellationToken.None);
+
+        discounted.IsSuccess.Should().BeTrue();
+        discounted.Value.BilledAmountPerPeriod.Should().Be(900);
+        consumed.IsSuccess.Should().BeTrue();
+        consumed.Value.BilledAmountPerPeriod.Should().Be(1000);
+        consumed.Value.AmountPerPeriod.Should().Be(1000);
+    }
+
+    [Theory]
+    [InlineData(-1000, 0)]
+    [InlineData(500, 1500)]
+    public async Task Handle_CustomerBalanceDoesNotChangeBilledAmount(long balance, long amountDue)
+    {
+        var invoice = PreviewInvoice(RecurringLine());
+        invoice.StartingBalance = balance;
+        invoice.AmountDue = amountDue;
+        _invoices.CreatePreviewAsync(Arg.Any<InvoiceCreatePreviewOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .Returns(invoice);
+
+        var result = await _handler.Handle(new GetBillingDetailsQuery(_userId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.BilledAmountPerPeriod.Should().Be(1000);
     }
 
     [Theory]

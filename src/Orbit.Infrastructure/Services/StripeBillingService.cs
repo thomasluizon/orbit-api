@@ -182,7 +182,7 @@ public sealed partial class StripeBillingService(
                 () => clients.Invoices.CreatePreviewAsync(new InvoiceCreatePreviewOptions
                 {
                     Subscription = subscriptionId,
-                    PreviewMode = "recurring",
+                    PreviewMode = "next",
                 }, cancellationToken: cancellationToken),
                 cancellationToken);
             if (invoice.Currency != currency || invoice.Lines is not { HasMore: false, Data: not null })
