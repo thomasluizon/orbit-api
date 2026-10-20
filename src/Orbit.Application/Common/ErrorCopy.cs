@@ -80,7 +80,7 @@ public static partial class ErrorCopy
         (DomainErrors.RecurrenceScheduleUnsatisfiable.Code, "No future date fits that schedule. Widen the days or the interval.", "Nenhuma data futura encaixa nessa agenda. Amplie os dias ou o intervalo."),
         (DomainErrors.FlexibleNeedsFrequencyUnit.Code, "Pick how often this flexible habit repeats.", "Escolha com que frequência este hábito flexível se repete."),
         (DomainErrors.FlexibleHasDays.Code, "A flexible habit has no fixed days. Clear the days, or turn flexible off.", "Um hábito flexível não tem dias fixos. Limpe os dias, ou desative o modo flexível."),
-        (DomainErrors.DaysRequireQuantityOne.Code, "Specific days work only when the habit repeats once a day. Set it to once a day, or clear the days.", "Dias específicos só funcionam quando o hábito se repete uma vez ao dia. Defina uma vez ao dia, ou limpe os dias."),
+        (DomainErrors.DaysRequireQuantityOne.Code, "To choose specific weekdays, the habit must repeat every day, once a day. Change the frequency or clear the weekdays.", "Para escolher dias da semana, o hábito precisa se repetir todos os dias, uma vez por dia. Ajuste a frequência ou remova os dias selecionados."),
         (DomainErrors.EndTimeBeforeStartTime.Code, "Set the end time after the start time.", "Defina o horário de fim depois do horário de início."),
         (DomainErrors.OneTimeTaskHasEndDate.Code, "A one-time task carries no end date.", "Uma tarefa única não tem data de fim."),
         (DomainErrors.GeneralHabitHasEndDate.Code, "A general habit carries no end date.", "Um hábito geral não tem data de fim."),

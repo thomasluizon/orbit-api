@@ -119,8 +119,9 @@ public sealed class PendingOperationRevisionService(
     public async Task<bool> IsCurrentAsync(Guid userId, PendingAgentOperationExecution execution,
         CancellationToken cancellationToken)
     {
-        if (execution.PreviewFingerprint is null)
-            return true;
+        if (string.IsNullOrWhiteSpace(execution.PreviewFingerprint))
+            return execution.Surface != AgentExecutionSurface.Chat
+                || toolRegistry.GetTool(execution.OperationId)?.IsReadOnly == true;
         var current = await previewer.PreviewAsync(userId, execution.OperationId,
             execution.Arguments, cancellationToken);
         return current?.PreviewFingerprint == execution.PreviewFingerprint;
@@ -211,6 +212,13 @@ public sealed class PendingOperationRevisionService(
     private static bool BuildOtherArguments(JsonObject root, string operationId,
         IReadOnlyList<RevisedPendingOperationItem> selected)
     {
+        if (operationId == "assign_tags" && root.ContainsKey("habit_ids"))
+        {
+            if (selected.Any(HasEdits))
+                return false;
+            root["habit_ids"] = new JsonArray(selected.Select(item => (JsonNode?)JsonValue.Create(item.ItemId)).ToArray());
+            return true;
+        }
         if (operationId is "delete_goal" or "delete_tag" or "delete_checklist_template")
             return selected.Count == 1 && !HasEdits(selected[0]);
         if (operationId == "manage_calendar_sync")
@@ -331,10 +339,17 @@ public sealed class PendingOperationRevisionService(
                 System.Globalization.CultureInfo.InvariantCulture,
                 System.Globalization.DateTimeStyles.None, out _))
                 return false;
-            items.Add(new JsonObject { ["habit_id"] = item.ItemId, ["date"] = date });
+            var targetId = offered[item.ItemId].EntityId?.ToString();
+            if (targetId is null)
+                return false;
+            var revisedItem = new JsonObject { ["habit_id"] = targetId, ["date"] = date };
+            if (item.ItemId != targetId)
+                revisedItem["preview_item_id"] = item.ItemId;
+            items.Add(revisedItem);
         }
         root.Remove("filter");
         root.Remove("habit_ids");
+        root.Remove("dates");
         root["revised_items"] = items;
         return true;
     }
