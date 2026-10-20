@@ -12,7 +12,7 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    [Migration("20261020001703_PriceDailyAiBudgetsInUsd")]
+    [Migration("20261020005707_PriceDailyAiBudgetsInUsd")]
     partial class PriceDailyAiBudgetsInUsd
     {
         /// <inheritdoc />

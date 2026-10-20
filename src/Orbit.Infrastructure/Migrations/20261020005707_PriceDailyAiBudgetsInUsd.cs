@@ -61,8 +61,8 @@ namespace Orbit.Infrastructure.Migrations
                 columns: new[] { "Key", "Description", "Value" },
                 values: new object[,]
                 {
-                    { "FreeAiTokensPerDay", "Daily AI token safety budget for Free users", "40000" },
-                    { "ProAiTokensPerDay", "Daily AI token safety budget for Pro users", "240000" }
+                    { "FreeAiTokensPerDay", "Daily AI token safety budget for Free users", "900000" },
+                    { "ProAiTokensPerDay", "Daily AI token safety budget for Pro users", "9000000" }
                 });
         }
     }

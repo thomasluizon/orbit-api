@@ -29,6 +29,11 @@ public class DailyAiDollarBudgetMigrationTests
         seeds.Values[0, 2].Should().Be("20000");
         seeds.Values[1, 0].Should().Be("ProAiMicroDollarsPerDay");
         seeds.Values[1, 2].Should().Be("120000");
+        var rollbackSeeds = migration.DownOperations.OfType<InsertDataOperation>().Single();
+        rollbackSeeds.Values[0, 0].Should().Be("FreeAiTokensPerDay");
+        rollbackSeeds.Values[0, 2].Should().Be("900000");
+        rollbackSeeds.Values[1, 0].Should().Be("ProAiTokensPerDay");
+        rollbackSeeds.Values[1, 2].Should().Be("9000000");
 
         using var context = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
             .UseNpgsql("Host=unused;Database=unused").Options);
