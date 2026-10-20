@@ -70,14 +70,21 @@ public class ProfileNotificationCalendarToolTests
     public async Task GetProfileTool_ReturnsSuccessPayload()
     {
         var mediator = Substitute.For<IMediator>();
+        var profile = new ProfileResponse(
+            UserId, "Alex", "alex@example.com", "America/Sao_Paulo",
+            false, true, true, true, true, true, true, true, "pt-BR", "Pro", true, false, null, null,
+            5, 100, false, false, false, null, null, false, 1, 500, 5, "Achiever",
+            0, 10, 12, 2, null, null,
+            false, GoogleCalendarAutoSyncStatus.Idle, null, true, null, false);
         mediator.Send(Arg.Any<GetProfileQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success<ProfileResponse>(null!));
+            .Returns(Result.Success(profile));
         var tool = new GetProfileTool(mediator);
 
         var result = await tool.ExecuteAsync(Parse("{}"), UserId, CancellationToken.None);
 
         result.Success.Should().BeTrue();
         result.Error.Should().BeNull();
+        result.Payload.Should().BeOfType<ProfileResponse>().Which.Name.Should().Be("Alex");
     }
 
     [Fact]
@@ -601,6 +608,8 @@ public class ProfileNotificationCalendarToolTests
             .Returns(Result.Success(new CalendarAutoSyncStateResponse(true, GoogleCalendarAutoSyncStatus.Idle, null, true)));
         mediator.Send(Arg.Any<GetCalendarSyncSuggestionsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new List<CalendarSyncSuggestionItem>()));
+        mediator.Send(Arg.Any<GetUserCalendarsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new List<UserCalendarItem>()));
         var tool = new GetCalendarOverviewTool(mediator);
 
         var result = await tool.ExecuteAsync(Parse("{}"), UserId, CancellationToken.None);
@@ -663,7 +672,7 @@ public class ProfileNotificationCalendarToolTests
         var tool = new GetCalendarOverviewTool(mediator);
 
         var result = await tool.ExecuteAsync(
-            Parse("""{"include_events":false,"include_auto_sync_state":false,"include_suggestions":false}"""),
+            Parse("""{"include_events":false,"include_auto_sync_state":false,"include_suggestions":false,"include_calendars":false}"""),
             UserId,
             CancellationToken.None);
 

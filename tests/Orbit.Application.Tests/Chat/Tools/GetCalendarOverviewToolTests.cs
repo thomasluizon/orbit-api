@@ -24,6 +24,9 @@ public class GetCalendarOverviewToolTests
         mediator.Send(Arg.Any<GetCalendarSyncSuggestionsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.PayGateFailure<List<CalendarSyncSuggestionItem>>("gated"));
 
+        mediator.Send(Arg.Any<GetUserCalendarsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.PayGateFailure<List<UserCalendarItem>>("gated"));
+
         var result = await new GetCalendarOverviewTool(mediator).ExecuteAsync(
             JsonDocument.Parse("{}").RootElement, userId, CancellationToken.None);
 

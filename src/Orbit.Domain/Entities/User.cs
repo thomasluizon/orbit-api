@@ -130,12 +130,6 @@ public partial class User : Entity
         });
     }
 
-    public void UpdateProfile(string name, string email)
-    {
-        Name = name.Trim();
-        Email = email.Trim().ToLowerInvariant();
-    }
-
     public void RecordPurgedCompletion(DateOnly date)
     {
         if (LastPurgedCompletionDate is null || date > LastPurgedCompletionDate.Value)

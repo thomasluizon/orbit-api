@@ -34,6 +34,21 @@ public class ProfileTools(IMediator mediator, McpExecutorBridge executorBridge)
                $"Clock: {(p.Uses24HourClock ? "24-hour" : "12-hour")}";
     }
 
+    [McpServerTool(Name = "set_name"), Description("Set the user's display name.")]
+    public async Task<string> SetName(
+        ClaimsPrincipal user,
+        [Description("Display name")] string name,
+        [Description("Confirmation token if requested by the executor")] string? confirmationToken = null,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await executorBridge.ExecuteAsync(user, "update_profile_preferences", new
+        {
+            action = "set_name",
+            name
+        }, confirmationToken, cancellationToken);
+        return result.Succeeded ? $"Name set to {name}" : result.Message;
+    }
+
     [McpServerTool(Name = "set_timezone"), Description("Set the user's timezone.")]
     public async Task<string> SetTimezone(
         ClaimsPrincipal user,
