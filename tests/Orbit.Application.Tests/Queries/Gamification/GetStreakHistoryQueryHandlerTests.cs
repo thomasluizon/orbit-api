@@ -102,6 +102,29 @@ public class GetStreakHistoryQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_RepairedYearlyGap_RetainsPredecessorAndRecentCompletion()
+    {
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(CreateProUser());
+        var today = new DateOnly(2024, 9, 6);
+        var gap = today.AddDays(-1);
+        var predecessor = gap.AddYears(-1);
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Annual review", FrequencyUnit.Year, 1,
+            DueDate: predecessor)).Value;
+        BackdateCreation(habit, predecessor);
+        Log(habit, predecessor, gap.AddYears(1));
+        ArrangeHabits(habit);
+        ArrangeFreezes(StreakFreeze.Create(UserId, gap, StreakFreezeOrigin.Manual));
+
+        var result = await _handler.Handle(
+            new GetStreakHistoryQuery(UserId, gap, gap.AddYears(1)), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Points[0].Streak.Should().Be(1);
+        result.Value.Points[^1].Streak.Should().Be(2);
+        result.Value.Points.Should().OnlyContain(point => point.Streak > 0);
+    }
+
+    [Fact]
     public async Task Handle_ProUser_IncrementsStreakForConsecutiveScheduledDays()
     {
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(CreateProUser());

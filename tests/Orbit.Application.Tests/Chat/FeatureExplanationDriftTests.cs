@@ -64,7 +64,7 @@ public class FeatureExplanationDriftTests
     [Fact]
     public void Streaks_MatchesLookbackConstant()
     {
-        Body("streaks").Should().Contain(N(AppConstants.MaxStreakLookbackDays));
+        Body("streaks").Should().Contain(N(AppConstants.StreakRepairWindowDays));
     }
 
     [Fact]

@@ -107,8 +107,16 @@ public static class HabitScheduleService
                 TimeZoneInfo.ConvertTimeFromUtc(habit.CreatedAtUtc, userTimeZone));
             var effectiveFrom = from < habitStart ? habitStart : from;
 
-            foreach (var date in GetStreakScheduledDates(habit, effectiveFrom, to, habitStart, weekStartDay))
-                union.Add(date);
+            var sliceFrom = effectiveFrom;
+            while (sliceFrom <= to)
+            {
+                var sliceTo = sliceFrom.AddDays(Math.Min(AppConstants.MaxRangeDays, to.DayNumber - sliceFrom.DayNumber));
+                foreach (var date in GetStreakScheduledDates(habit, sliceFrom, sliceTo, habitStart, weekStartDay))
+                    union.Add(date);
+                if (sliceTo == to)
+                    break;
+                sliceFrom = sliceTo.AddDays(1);
+            }
         }
         return union;
     }

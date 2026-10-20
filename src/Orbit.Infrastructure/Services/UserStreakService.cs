@@ -64,7 +64,7 @@ public class UserStreakService(
         if (user is null)
             return null;
 
-        var lookbackStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
+        var lookbackStart = userToday.AddDays(-AppConstants.StreakRepairWindowDays);
         var (completionDateSet, freezeDateSet, eligibleHabits) =
             await LoadStreakDataAsync(userId, lookbackStart, cancellationToken);
 
@@ -92,7 +92,7 @@ public class UserStreakService(
         if (user is null)
             return null;
 
-        var lookbackStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
+        var lookbackStart = userToday.AddDays(-AppConstants.StreakRepairWindowDays);
         var gapStart = dates.Min();
         if (gapStart <= lookbackStart)
             return null;
@@ -116,7 +116,7 @@ public class UserStreakService(
         if (user is null)
             return [];
 
-        var lookbackStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
+        var lookbackStart = userToday.AddDays(-AppConstants.StreakRepairWindowDays);
         var (completions, freezes, eligibleHabits) =
             await LoadStreakDataAsync(userId, lookbackStart, cancellationToken);
         var expectedDates = GetExpectedDates(user, lookbackStart, userToday, eligibleHabits);
@@ -245,7 +245,7 @@ public class UserStreakService(
         if (!contributingHabits.Any(habit => habit.FrequencyUnit is not null))
             return StreakRepairEvaluation.Unavailable(missedDate);
 
-        var lookbackStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
+        var lookbackStart = userToday.AddDays(-AppConstants.StreakRepairWindowDays);
 
         var userTimeZone = TimeZoneHelper.FindTimeZone(user.TimeZone, userId: user.Id);
         var expectedDates = HabitScheduleService.GetUnionScheduledDatesForStreak(
@@ -321,7 +321,7 @@ public class UserStreakService(
         CancellationToken cancellationToken)
     {
         var userToday = await userDateService.GetUserTodayAsync(userId, cancellationToken);
-        var lookbackStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
+        var lookbackStart = userToday.AddDays(-AppConstants.StreakRepairWindowDays);
         var (completionDateSet, freezeDateSet, eligibleHabits) =
             await LoadStreakDataAsync(userId, lookbackStart, cancellationToken);
         var contributingHabits = GetContributingHabits(eligibleHabits);
