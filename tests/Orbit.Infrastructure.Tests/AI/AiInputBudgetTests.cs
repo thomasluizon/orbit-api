@@ -13,6 +13,8 @@ using OpenAI.Responses;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Tools;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Entities;
+using Orbit.Domain.ValueObjects;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.AI;
 using Orbit.Infrastructure.Services;
@@ -55,11 +57,14 @@ public class AiInputBudgetTests(ITestOutputHelper output)
         var active = ChatToolGroups.ResolveActiveToolNames(tools.Select(tool => tool.Name), "log my run");
         for (var index = 0; index < 3; index++)
         {
-            var prompt = new PromptBuildRequest([], UserToday: new DateOnly(2026, 1, 1).AddDays(index));
+            var userId = index == 2 ? userB : userA;
+            var date = new DateOnly(2026, 1, 1).AddDays(index);
+            var habit = Habit.Create(new HabitCreateParams(userId, $"private-habit-{index}", null, null, DueDate: date)).Value;
+            var prompt = new PromptBuildRequest([habit], UserToday: date);
             var result = await service.SendWithToolsAsync(new AiToolRequest($"log my run {index}",
                 builder.BuildStatic(prompt) + catalog.BuildStaticSupplement(),
                 tools.Where(tool => active.Contains(tool.Name)).OrderBy(tool => tool.Name).Select(Declare).ToList(),
-                index == 2 ? userB : userA,
+                userId,
                 History: [new("user", $"history-{index}")])
             {
                 DynamicContext = builder.BuildDynamic(prompt) + $"private-facts-{index}",
@@ -77,6 +82,11 @@ public class AiInputBudgetTests(ITestOutputHelper output)
             Encoding.UTF8.GetBytes(prefixes[0]).Should().Equal(Encoding.UTF8.GetBytes(prefixes[2]));
             documents.Select(document => document.RootElement.GetProperty("input")[1].GetRawText()).Distinct().Should().HaveCount(3);
             documents[0].RootElement.GetProperty("input")[2].GetRawText().Should().Contain("history-0");
+            for (var index = 0; index < documents.Count; index++)
+            {
+                documents[index].RootElement.GetProperty("input")[1].GetRawText().Should().Contain($"private-habit-{index}");
+                prefixes[index].Should().NotContain("private-habit").And.NotContain("private-facts");
+            }
         }
         finally { documents.ForEach(document => document.Dispose()); }
     }
