@@ -24,6 +24,29 @@ public class CreateSubHabitToolTests
     }
 
     [Theory]
+    [InlineData("123")]
+    [InlineData("[null]")]
+    [InlineData("[\"invalid\"]")]
+    public async Task InvalidTagIds_FailBeforeCommand(string ids)
+    {
+        var result = await Execute($$"""{"parent_habit_id":"{{ParentId}}","title":"Child","tag_ids":{{ids}}}""");
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("tag_ids");
+        await _mediator.DidNotReceive().Send(Arg.Any<CreateSubHabitCommand>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("[{\"minutes_before\":30,\"when\":\"same_day\",\"time\":\"08:00\"}]")]
+    [InlineData("[{\"when\":\"same_day\",\"time\":\"25:00\"}]")]
+    public async Task InvalidRelativeReminders_FailBeforeCommand(string reminders)
+    {
+        var result = await Execute($$"""{"parent_habit_id":"{{ParentId}}","title":"Child","relative_reminders":{{reminders}}}""");
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("relative_reminders");
+        await _mediator.DidNotReceive().Send(Arg.Any<CreateSubHabitCommand>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
     [InlineData("end_date", "\"2026-12-31\"")]
     [InlineData("checklist_items", "[{\"text\":\"Shoes\",\"is_checked\":true}]")]
     [InlineData("tag_ids", "[\"11111111-1111-1111-1111-111111111111\"]")]

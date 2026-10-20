@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using MediatR;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
@@ -14,8 +15,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 public class UpdateHabitTool(
     IGenericRepository<Habit> habitRepository,
     IUserDateService userDateService,
-    IUnitOfWork unitOfWork,
-    IPayGateService payGate) : IAiTool, IArgumentCheckTool
+    IMediator mediator) : IAiTool, IArgumentCheckTool
 {
     public string Name => "update_habit";
 
@@ -101,19 +101,18 @@ public class UpdateHabitTool(
         if (!HabitToolHelpers.TryParseHabitId(args, out var habitId))
             return HabitToolHelpers.InvalidHabitIdResult();
 
-        var result = await HabitCeilingLock.ExecuteEntryAsync<UpdateToolState, ToolResult>(
-            unitOfWork,
-            userId,
-            payGate,
-            transactionToken => PrepareUpdateAsync(args, habitId, userId, transactionToken),
-            state => HabitLiveRootEntry.FromUpdate(state.Habit, state.Update),
-            ApplyUpdateAsync,
-            ct);
-
-        if (result.IsFailure)
-            return ToolResult.FromFailure(result);
-
-        return result.Value;
+        var fieldError = BulkHabitToolArguments.CheckHabitFields(args);
+        if (fieldError is not null)
+            return new ToolResult(false, Error: fieldError);
+        var habit = await HabitToolHelpers.FindHabitAsync(habitRepository, habitId, userId, ct);
+        if (habit is null)
+            return new ToolResult(false, Error: $"Habit {habitId} not found.");
+        var today = await userDateService.GetUserTodayAsync(userId, ct);
+        var update = ResolveUpdateParams(args, habit, today);
+        var result = await mediator.Send(HabitUpdateValidation.ToCommand(userId, habit.Id, update), ct);
+        return result.IsFailure
+            ? ToolResult.FromFailure(result)
+            : new ToolResult(true, EntityId: habit.Id.ToString(), EntityName: habit.Title);
     }
 
     public async Task<Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
@@ -140,55 +139,6 @@ public class UpdateHabitTool(
         return preview.IsFailure ? preview : Result.Success();
     }
 
-    private async Task<Result<UpdateToolState>> PrepareUpdateAsync(
-        JsonElement args,
-        Guid habitId,
-        Guid userId,
-        CancellationToken cancellationToken)
-    {
-        var fieldError = BulkHabitToolArguments.CheckHabitFields(args);
-        if (fieldError is not null)
-            return Result.Failure<UpdateToolState>(fieldError);
-        var habit = await HabitToolHelpers.FindHabitAsync(
-            habitRepository, habitId, userId, cancellationToken);
-        if (habit is null)
-            return Result.Failure<UpdateToolState>($"Habit {habitId} not found.");
-
-        var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
-        var update = ResolveUpdateParams(args, habit, today);
-        var validation = await HabitUpdateValidation.ValidateAsync(userId, habit, update, habitRepository, cancellationToken);
-        if (validation.IsFailure)
-            return validation.PropagateError<UpdateToolState>();
-        if (update.SlipAlertEnabled == true && !habit.SlipAlertEnabled)
-        {
-            var gate = await payGate.CanUseSlipAlerts(userId, cancellationToken);
-            if (gate.IsFailure)
-                return gate.PropagateError<UpdateToolState>();
-        }
-        return Result.Success(new UpdateToolState(habit, update));
-    }
-
-    private async Task<Result<ToolResult>> ApplyUpdateAsync(
-        UpdateToolState state,
-        CancellationToken cancellationToken)
-    {
-        var result = state.Habit.Update(state.Update);
-        if (result.IsFailure)
-            return result.PropagateError<ToolResult>();
-
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-        return Result.Success(new ToolResult(
-            true,
-            EntityId: state.Habit.Id.ToString(),
-            EntityName: state.Habit.Title));
-    }
-
-    private sealed record UpdateToolState(Habit Habit, HabitUpdateParams Update);
-
-    /// <summary>
-    /// Resolve each field: absent = keep existing, null = clear, value = update.
-    /// Extracted to reduce ExecuteAsync cognitive complexity.
-    /// </summary>
     private static HabitUpdateParams ResolveUpdateParams(JsonElement args, Habit habit, DateOnly today)
     {
         var title = ResolveTitle(args, habit);

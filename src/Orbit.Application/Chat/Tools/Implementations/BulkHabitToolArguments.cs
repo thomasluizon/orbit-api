@@ -7,6 +7,10 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 internal static class BulkHabitToolArguments
 {
+    private const string DueEndTimeField = "due_end_time";
+    private const string IsGeneralField = "is_general";
+    private const string SlipAlertEnabledField = "slip_alert_enabled";
+    private const string RelativeRemindersField = "relative_reminders";
     public static (IReadOnlyList<(Guid HabitId, DateOnly Date)>? Items, string? Error)
         ParseRevisedDatedItems(JsonElement args)
     {
@@ -117,8 +121,8 @@ internal static class BulkHabitToolArguments
         var allowed = new HashSet<string>(StringComparer.Ordinal)
         {
             "title", "description", "emoji", "frequency_unit", "frequency_quantity", "interval_weeks",
-            "days", "due_date", "end_date", "due_time", "due_end_time", "is_bad_habit", "is_flexible",
-            "is_general", "slip_alert_enabled", "relative_reminders",
+            "days", "due_date", "end_date", "due_time", DueEndTimeField, "is_bad_habit", "is_flexible",
+            IsGeneralField, SlipAlertEnabledField, RelativeRemindersField,
             "reminder_enabled", "reminder_times", "checklist_items", "scheduled_reminders"
         };
         if (updates.EnumerateObject().Any(property => !allowed.Contains(property.Name)))
@@ -165,13 +169,13 @@ internal static class BulkHabitToolArguments
             ChecklistItems: updates.TryGetProperty("checklist_items", out _) ? JsonArgumentParser.ParseChecklistItems(updates) ?? [] : null,
             HasScheduledReminders: updates.TryGetProperty("scheduled_reminders", out _),
             ScheduledReminders: updates.TryGetProperty("scheduled_reminders", out _) ? JsonArgumentParser.ParseScheduledReminders(updates) ?? [] : null,
-            HasDueEndTime: updates.TryGetProperty("due_end_time", out _),
-            DueEndTime: ParseNullableTime(updates, "due_end_time").Value,
-            HasIsGeneral: updates.TryGetProperty("is_general", out _),
-            IsGeneral: JsonArgumentParser.GetOptionalBool(updates, "is_general") ?? false,
-            HasSlipAlertEnabled: updates.TryGetProperty("slip_alert_enabled", out _),
-            SlipAlertEnabled: JsonArgumentParser.GetOptionalBool(updates, "slip_alert_enabled") ?? false,
-            HasRelativeReminders: updates.TryGetProperty("relative_reminders", out _),
+            HasDueEndTime: updates.TryGetProperty(DueEndTimeField, out _),
+            DueEndTime: ParseNullableTime(updates, DueEndTimeField).Value,
+            HasIsGeneral: updates.TryGetProperty(IsGeneralField, out _),
+            IsGeneral: JsonArgumentParser.GetOptionalBool(updates, IsGeneralField) ?? false,
+            HasSlipAlertEnabled: updates.TryGetProperty(SlipAlertEnabledField, out _),
+            SlipAlertEnabled: JsonArgumentParser.GetOptionalBool(updates, SlipAlertEnabledField) ?? false,
+            HasRelativeReminders: updates.TryGetProperty(RelativeRemindersField, out _),
             RelativeReminders: JsonArgumentParser.ParseRelativeReminders(updates));
 
         return (changes, null);
@@ -187,7 +191,7 @@ internal static class BulkHabitToolArguments
             ?? ParseNullableDate(fields, "due_date", allowNull: false).Error
             ?? ParseNullableDate(fields, "end_date", allowNull: true).Error
             ?? ParseNullableTime(fields, "due_time").Error
-            ?? ParseNullableTime(fields, "due_end_time").Error
+            ?? ParseNullableTime(fields, DueEndTimeField).Error
             ?? ParseFrequency(fields).Error;
 
     public static string? CheckCreateHabitFields(JsonElement fields) =>
@@ -214,11 +218,11 @@ internal static class BulkHabitToolArguments
     {
         var allowed = new HashSet<string>(StringComparer.Ordinal)
         {
-            "all", "habit_ids", "tag", "search", "is_completed", "is_general", "is_bad_habit", "frequency"
+            "all", "habit_ids", "tag", "search", "is_completed", IsGeneralField, "is_bad_habit", "frequency"
         };
         if (filter.EnumerateObject().Any(property => !allowed.Contains(property.Name)))
             return (null, "filter contains an unsupported field.");
-        foreach (var booleanName in new[] { "all", "is_completed", "is_general", "is_bad_habit" })
+        foreach (var booleanName in new[] { "all", "is_completed", IsGeneralField, "is_bad_habit" })
         {
             if (filter.TryGetProperty(booleanName, out var booleanValue)
                 && booleanValue.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
@@ -263,7 +267,7 @@ internal static class BulkHabitToolArguments
             HabitIds: ids,
             Tag: JsonArgumentParser.GetNullableString(filter, "tag"),
             Search: JsonArgumentParser.GetNullableString(filter, "search"),
-            IsGeneral: JsonArgumentParser.GetOptionalBool(filter, "is_general"),
+            IsGeneral: JsonArgumentParser.GetOptionalBool(filter, IsGeneralField),
             IsBadHabit: JsonArgumentParser.GetOptionalBool(filter, "is_bad_habit"),
             Frequency: frequency,
             OneTime: oneTime,
@@ -357,21 +361,17 @@ internal static class BulkHabitToolArguments
 
     private static string? ValidateBooleanKinds(JsonElement updates)
     {
-        foreach (var booleanName in new[] { "is_bad_habit", "is_flexible", "reminder_enabled", "is_general", "slip_alert_enabled" })
-        {
-            if (!HasKind(updates, booleanName, JsonValueKind.True, JsonValueKind.False))
-                return $"{booleanName} must be a boolean.";
-        }
+        foreach (var booleanName in new[] { "is_bad_habit", "is_flexible", "reminder_enabled", IsGeneralField, SlipAlertEnabledField }
+            .Where(name => !HasKind(updates, name, JsonValueKind.True, JsonValueKind.False)))
+            return $"{booleanName} must be a boolean.";
         return null;
     }
 
     private static string? ValidateArrayKinds(JsonElement updates)
     {
-        foreach (var arrayName in new[] { "days", "reminder_times", "checklist_items", "scheduled_reminders", "relative_reminders" })
-        {
-            if (!HasKind(updates, arrayName, JsonValueKind.Array))
-                return $"{arrayName} must be an array.";
-        }
+        foreach (var arrayName in new[] { "days", "reminder_times", "checklist_items", "scheduled_reminders", RelativeRemindersField }
+            .Where(name => !HasKind(updates, name, JsonValueKind.Array)))
+            return $"{arrayName} must be an array.";
         return null;
     }
 
@@ -426,24 +426,61 @@ internal static class BulkHabitToolArguments
 
     private static string? ValidateRelativeReminders(JsonElement fields)
     {
-        if (!fields.TryGetProperty("relative_reminders", out var reminders))
+        if (!fields.TryGetProperty(RelativeRemindersField, out var reminders))
             return null;
-        foreach (var reminder in reminders.EnumerateArray())
-        {
-            if (reminder.ValueKind != JsonValueKind.Object
-                || reminder.EnumerateObject().Any(p => p.Name is not ("minutes_before" or "when" or "time")))
-                return "relative_reminders must contain reminder objects.";
-            var hasMinutes = reminder.TryGetProperty("minutes_before", out var minutes);
-            var hasWhen = reminder.TryGetProperty("when", out var when);
-            var hasTime = reminder.TryGetProperty("time", out var time);
-            if (hasMinutes ? hasWhen || hasTime || minutes.ValueKind != JsonValueKind.Number || !minutes.TryGetInt32(out _)
-                : !hasWhen || !hasTime || when.ValueKind != JsonValueKind.String
-                    || !JsonArgumentParser.TryParseScheduledReminderWhen(when.GetString()!, out _)
-                    || time.ValueKind != JsonValueKind.String || ParseNullableTime(reminder, "time").Error is not null)
-                return "relative_reminders requires minutes_before or when and time.";
-        }
-        return null;
+        return reminders.EnumerateArray().Select(ValidateRelativeReminder).FirstOrDefault(error => error is not null);
     }
+
+    private static string? ValidateRelativeReminder(JsonElement reminder)
+    {
+        if (reminder.ValueKind != JsonValueKind.Object
+            || reminder.EnumerateObject().Any(p => p.Name is not ("minutes_before" or "when" or "time")))
+            return "relative_reminders must contain reminder objects.";
+        if (reminder.TryGetProperty("minutes_before", out var minutes))
+            return reminder.TryGetProperty("when", out _) || reminder.TryGetProperty("time", out _)
+                || minutes.ValueKind != JsonValueKind.Number || !minutes.TryGetInt32(out _)
+                ? "relative_reminders requires minutes_before or when and time." : null;
+        return ValidateRelativeClock(reminder);
+    }
+
+    private static string? ValidateRelativeClock(JsonElement reminder) =>
+        !reminder.TryGetProperty("when", out var when) || when.ValueKind != JsonValueKind.String
+            || !JsonArgumentParser.TryParseScheduledReminderWhen(when.GetString()!, out _)
+            || !reminder.TryGetProperty("time", out var time) || time.ValueKind != JsonValueKind.String
+            || ParseNullableTime(reminder, "time").Error is not null
+            ? "relative_reminders requires minutes_before or when and time." : null;
+
+    public static object ScheduledRemindersSchema() => new
+    {
+        type = JsonSchemaTypes.Array,
+        description = "Absolute-time reminders for habits WITHOUT a due_time",
+        items = new
+        {
+            type = JsonSchemaTypes.Object,
+            properties = new
+            {
+                when = new { type = JsonSchemaTypes.String, @enum = JsonSchemaTypes.ScheduledReminderWhenEnum },
+                time = new { type = JsonSchemaTypes.String, description = "HH:mm 24h format" }
+            },
+            required = new[] { "when", "time" }
+        }
+    };
+
+    public static object ChecklistItemsSchema() => new
+    {
+        type = JsonSchemaTypes.Array,
+        description = "Inline checklist items",
+        items = new
+        {
+            type = JsonSchemaTypes.Object,
+            properties = new
+            {
+                text = new { type = JsonSchemaTypes.String, description = "Checklist item text" },
+                is_checked = new { type = JsonSchemaTypes.Boolean, description = "Whether checked. Defaults to false." }
+            },
+            required = new[] { "text" }
+        }
+    };
 
     public static object RelativeRemindersSchema() => new
     {

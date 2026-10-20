@@ -76,7 +76,7 @@ public sealed class HeldWriteRevisionTests
         execution.Success.Should().BeTrue(execution.Error);
         object written = name switch
         {
-            "assign_tags" or "bulk_update_habit_emojis" or "update_habit" => context.Habit,
+            "assign_tags" or "bulk_update_habit_emojis" => context.Habit,
             "create_habit" => context.Added.OfType<Habit>().Single(),
             "create_goal" => context.Added.OfType<Goal>().Single(),
             "update_goal" or "update_goal_progress" or "update_goal_status" => context.Goal,

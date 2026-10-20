@@ -12,6 +12,8 @@ using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
+using Orbit.Application.Habits.Validators;
+using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -69,6 +71,97 @@ public class HabitToolsTests
             .ToList();
         calls.Should().NotBeEmpty();
         return (AgentExecuteOperationRequest)calls[^1].GetArguments()[0]!;
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public async Task UpdateHabit_DueTime_OmitKeepsAndEmptyClears(string? dueTime)
+    {
+        var userId = Guid.Parse(_user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var today = new DateOnly(2026, 10, 19);
+        var habit = Habit.Create(new HabitCreateParams(userId, "Read", FrequencyUnit.Day, 1, today,
+            DueTime: new TimeOnly(9, 0))).Value;
+        var repository = Substitute.For<IGenericRepository<Habit>>();
+        repository.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(habit);
+        _userDateService.GetUserTodayAsync(userId, Arg.Any<CancellationToken>()).Returns(today);
+        var unitOfWork = Substitute.For<IUnitOfWork>();
+        unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Result>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<Result>>>()(call.Arg<CancellationToken>()));
+        var handler = new UpdateHabitCommandHandler(repository, Substitute.For<IGenericRepository<SentReminder>>(),
+            Substitute.For<IGenericRepository<Goal>>(), Substitute.For<IPayGateService>(),
+            Substitute.For<IGoalCompletionService>(), _userDateService, unitOfWork,
+            new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()));
+        _mediator.Send(Arg.Any<UpdateHabitCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call => handler.Handle(call.Arg<UpdateHabitCommand>(), call.Arg<CancellationToken>()));
+        var tool = new UpdateHabitTool(repository, _userDateService, _mediator);
+        _executor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>()).Returns(async call =>
+        {
+            var request = call.Arg<AgentExecuteOperationRequest>();
+            if (dueTime is null)
+                request.Arguments.TryGetProperty("due_time", out _).Should().BeFalse();
+            else
+                request.Arguments.GetProperty("due_time").ValueKind.Should().Be(JsonValueKind.Null);
+            var result = await tool.ExecuteAsync(request.Arguments, userId, call.Arg<CancellationToken>());
+            result.Success.Should().BeTrue();
+            return new AgentExecuteOperationResponse(new AgentOperationResult("update_habit", "update_habit",
+                AgentRiskClass.Low, AgentConfirmationRequirement.None, AgentOperationStatus.Succeeded));
+        });
+        var result = await _tools.UpdateHabit(_user, habit.Id.ToString(), dueTime: dueTime);
+        result.Should().Be($"Updated habit {habit.Id}");
+        habit.DueTime.Should().Be(dueTime is null ? new TimeOnly(9, 0) : null);
+    }
+
+    [Theory]
+    [InlineData("update", "relative_reminders")]
+    [InlineData("child", "relative_reminders")]
+    [InlineData("child", "scheduled_reminders")]
+    [InlineData("child", "checklist_items")]
+    public async Task InvalidJson_ReturnsValidationErrorWithoutExecuting(string operation, string field)
+    {
+        var result = operation == "update"
+            ? await _tools.UpdateHabit(_user, Guid.NewGuid().ToString(), relativeReminders: "[")
+            : await _tools.CreateSubHabit(_user, Guid.NewGuid().ToString(), "Child",
+                relativeReminders: field == "relative_reminders" ? "[" : null,
+                scheduledReminders: field == "scheduled_reminders" ? "[" : null,
+                checklistItems: field == "checklist_items" ? "[" : null);
+        result.Should().StartWith("Error: ").And.Contain(field);
+        await _executor.DidNotReceive().ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CreateSubHabit_OmittedFrequency_InheritsThroughMcpAndCommand()
+    {
+        var userId = Guid.Parse(_user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var today = new DateOnly(2026, 10, 19);
+        var parent = Habit.Create(new HabitCreateParams(userId, "Parent", FrequencyUnit.Week, 3, today, IntervalWeeks: 2)).Value;
+        var habits = Substitute.For<IGenericRepository<Habit>>();
+        habits.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(parent);
+        var gate = Substitute.For<IPayGateService>();
+        gate.CanCreateSubHabits(userId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        var config = Substitute.For<IAppConfigService>();
+        config.GetAsync("MaxHabitDepth", 5, Arg.Any<CancellationToken>()).Returns(5);
+        _userDateService.GetUserTodayAsync(userId, Arg.Any<CancellationToken>()).Returns(today);
+        var handler = new CreateSubHabitCommandHandler(habits, Substitute.For<IGenericRepository<Tag>>(), gate,
+            _userDateService, Substitute.For<IUnitOfWork>(), config,
+            new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()));
+        _mediator.Send(Arg.Any<CreateSubHabitCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call => handler.Handle(call.Arg<CreateSubHabitCommand>(), call.Arg<CancellationToken>()));
+        var tool = new CreateSubHabitTool(_mediator);
+        _executor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>()).Returns(async call =>
+        {
+            var request = call.Arg<AgentExecuteOperationRequest>();
+            request.Arguments.TryGetProperty("frequency_unit", out _).Should().BeFalse();
+            var result = await tool.ExecuteAsync(request.Arguments, userId, call.Arg<CancellationToken>());
+            result.Success.Should().BeTrue();
+            return new AgentExecuteOperationResponse(new AgentOperationResult("create_sub_habit", "create_sub_habit",
+                AgentRiskClass.Low, AgentConfirmationRequirement.None, AgentOperationStatus.Succeeded, TargetId: result.EntityId));
+        });
+        await _tools.CreateSubHabit(_user, parent.Id.ToString(), "Child");
+        await habits.Received(1).AddAsync(Arg.Is<Habit>(h => h.FrequencyUnit == FrequencyUnit.Week
+            && h.FrequencyQuantity == 3 && h.IntervalWeeks == 2), Arg.Any<CancellationToken>());
     }
 
     [Theory]
@@ -199,6 +292,7 @@ public class HabitToolsTests
         result.Should().Contain("Read");
         result.Should().Contain("Emoji: 📚");
         result.Should().Contain("page 1/1");
+        result.Should().NotContain(" |  | Due:");
     }
 
     [Fact]
@@ -387,11 +481,17 @@ public class HabitToolsTests
         _userDateService.GetUserTodayAsync(userId, Arg.Any<CancellationToken>()).Returns(today);
         var unitOfWork = Substitute.For<IUnitOfWork>();
         unitOfWork.ExecuteInTransactionAsync(
-                Arg.Any<Func<CancellationToken, Task<Result<ToolResult>>>>(),
+                Arg.Any<Func<CancellationToken, Task<Result>>>(),
                 Arg.Any<CancellationToken>())
-            .Returns(call => call.ArgAt<Func<CancellationToken, Task<Result<ToolResult>>>>(0)(
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<Result>>>(0)(
                 call.ArgAt<CancellationToken>(1)));
-        var tool = new UpdateHabitTool(repository, _userDateService, unitOfWork, Substitute.For<IPayGateService>());
+        var handler = new UpdateHabitCommandHandler(repository, Substitute.For<IGenericRepository<SentReminder>>(),
+            Substitute.For<IGenericRepository<Goal>>(), Substitute.For<IPayGateService>(),
+            Substitute.For<IGoalCompletionService>(), _userDateService, unitOfWork,
+            new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()));
+        _mediator.Send(Arg.Any<UpdateHabitCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call => handler.Handle(call.Arg<UpdateHabitCommand>(), call.Arg<CancellationToken>()));
+        var tool = new UpdateHabitTool(repository, _userDateService, _mediator);
         var catalog = new AgentCatalogService([tool]);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
         policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>()).Returns(new AgentPolicyDecision(

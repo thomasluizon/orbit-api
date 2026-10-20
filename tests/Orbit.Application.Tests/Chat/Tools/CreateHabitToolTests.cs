@@ -42,6 +42,21 @@ public partial class CreateHabitToolTests
             });
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task InvalidRelativeReminders_FailBeforeCreatingParentOrChild(bool onChild)
+    {
+        const string fields = "\"relative_reminders\":[{\"minutes_before\":30,\"when\":\"same_day\",\"time\":\"08:00\"}]";
+        var json = onChild
+            ? $$"""{"title":"Parent","frequency_unit":"Day","sub_habits":[{"title":"Child",{{fields}}}]}"""
+            : $$"""{"title":"Parent","frequency_unit":"Day",{{fields}}}""";
+        var result = await Execute(json);
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("relative_reminders");
+        await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task InlineChildTags_AreStoredOnChild()
     {

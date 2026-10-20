@@ -153,17 +153,8 @@ public sealed partial class BulkUpdateHabitsCommandHandler(
         if (habits.Count == 0)
             return Result.Failure("No matching habits found.");
         var today = await dates.GetUserTodayAsync(request.UserId, ct);
-        foreach (var habit in habits)
-        {
-            var update = ResolveUpdate(habit, request.Changes, today);
-            var validation = await HabitUpdateValidation.ValidateAsync(request.UserId, habit, update, repository, ct);
-            if (validation.IsFailure)
-                return validation;
-            var result = habit.ValidateUpdate(update);
-            if (result.IsFailure)
-                return result;
-        }
-        return Result.Success();
+        var updates = habits.Select(habit => (Habit: habit, Update: ResolveUpdate(habit, request.Changes, today))).ToList();
+        return await ValidateUpdatesAsync(request.UserId, updates, repository, ct);
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Bulk habit update chunk failed after {AppliedCount} of {TotalMatched} matches")]
@@ -184,16 +175,9 @@ public sealed partial class BulkUpdateHabitsCommandHandler(
             .Select(habit => (Habit: habit, Update: ResolveUpdate(habit, changes, today)))
             .ToList();
 
-        foreach (var item in updates)
-        {
-            var validation = await HabitUpdateValidation.ValidateAsync(userId, item.Habit, item.Update,
-                habitRepository, cancellationToken);
-            if (validation.IsFailure)
-                return validation.PropagateError<int>();
-            validation = item.Habit.ValidateUpdate(item.Update);
-            if (validation.IsFailure)
-                return validation.PropagateError<int>();
-        }
+        var validation = await ValidateUpdatesAsync(userId, updates, habitRepository, cancellationToken);
+        if (validation.IsFailure)
+            return validation.PropagateError<int>();
 
         if (updates.Any(item => item.Update.SlipAlertEnabled == true && !item.Habit.SlipAlertEnabled))
         {
@@ -217,6 +201,25 @@ public sealed partial class BulkUpdateHabitsCommandHandler(
             await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result.Success(updates.Count);
+    }
+
+    private static async Task<Result> ValidateUpdatesAsync(Guid userId,
+        IReadOnlyList<(Habit Habit, HabitUpdateParams Update)> updates, IGenericRepository<Habit> repository,
+        CancellationToken ct)
+    {
+        var related = updates.Any(item => item.Update.IsGeneral.HasValue)
+            ? await HabitUpdateValidation.LoadRelatedAsync(updates.Select(item => item.Habit).ToList(), userId, repository, ct)
+            : [];
+        foreach (var (habit, update) in updates)
+        {
+            var validation = await HabitUpdateValidation.ValidateAsync(userId, habit, update, repository, ct, related);
+            if (validation.IsFailure)
+                return validation;
+            validation = habit.ValidateUpdate(update);
+            if (validation.IsFailure)
+                return validation;
+        }
+        return Result.Success();
     }
 
     internal static HabitUpdateParams ResolveUpdate(Habit habit, BulkHabitChanges changes, DateOnly today)

@@ -43,6 +43,43 @@ public sealed class BulkUpdateHabitsCommandHandlerTests
     }
 
     [Theory]
+    [InlineData(1)]
+    [InlineData(10)]
+    public async Task GeneralValidation_LoadsRelatedHabitsOncePerChunk(int count)
+    {
+        var habits = Enumerable.Range(0, count).Select(i => Habit.Create(new HabitCreateParams(UserId, $"Parent {i}", null, null, Today)).Value).ToArray();
+        SetupHabits(habits);
+        var result = await _handler.Handle(new BulkUpdateHabitsCommand(UserId, new BulkHabitFilter(true, []),
+            new BulkHabitChanges(HasIsGeneral: true, IsGeneral: true)), CancellationToken.None);
+        result.IsSuccess.Should().BeTrue();
+        habits.Should().OnlyContain(h => h.IsGeneral);
+        await _habitRepository.Received(1).FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GeneralMismatch_RejectsWholeChunkBeforeMutation(bool updateChild)
+    {
+        var parent = Habit.Create(new HabitCreateParams(UserId, "Parent", null, null, Today)).Value;
+        var child = Habit.Create(new HabitCreateParams(UserId, "Child", null, null,
+            Today, ParentHabitId: parent.Id)).Value;
+        SetupHabits(parent, child);
+        _habitRepository.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => new[] { parent, child }.Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).ToList());
+        _habitRepository.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(parent);
+        var selected = updateChild ? child : parent;
+        var result = await _handler.Handle(new BulkUpdateHabitsCommand(UserId, new BulkHabitFilter(false, [selected.Id]),
+            new BulkHabitChanges(HasIsGeneral: true, IsGeneral: true)), CancellationToken.None);
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(updateChild ? ErrorMessages.GeneralMismatchWithParent.Message : ErrorMessages.GeneralMismatchWithChildren.Message);
+        parent.IsGeneral.Should().BeFalse();
+        child.IsGeneral.Should().BeFalse();
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
     [InlineData("due_end_time", "\"15:00\"")]
     [InlineData("is_general", "true")]
     [InlineData("slip_alert_enabled", "true")]

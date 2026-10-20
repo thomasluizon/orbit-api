@@ -35,6 +35,23 @@ internal static class McpToolHelpers
     public static T? DeserializeJson<T>(string json) =>
         JsonSerializer.Deserialize<T>(json, CaseInsensitiveJsonOptions);
 
+    public static string? AddJsonArguments(Dictionary<string, object?> arguments,
+        params (string Field, string? Json)[] fields)
+    {
+        foreach (var (field, json) in fields.Where(value => value.Json is not null))
+        {
+            try
+            {
+                arguments[field] = JsonSerializer.Deserialize<JsonElement>(json!);
+            }
+            catch (JsonException)
+            {
+                return $"Error: {field} must be valid JSON.";
+            }
+        }
+        return null;
+    }
+
     public static object ToBulkHabitArgs(BulkHabitItemDto dto) => new
     {
         title = dto.Title,
@@ -75,10 +92,22 @@ internal static class McpToolHelpers
             lines.Add(FormatHabitLine(new HabitLineData(c.Id, c.Title, c.FrequencyUnit, c.FrequencyQuantity,
                 c.DueTime, c.IsCompleted, false, c.IsBadHabit, c.IsGeneral, c.IsFlexible,
                 c.ChecklistItems, c.Tags, c.Emoji,
-                new HabitFieldSummary(c.Description, c.DueTime, c.DueEndTime, c.IntervalWeeks, c.Days,
-                    c.EndDate, c.ReminderEnabled == true, c.ReminderTimes ?? [], c.ScheduledReminders ?? [],
-                    c.RelativeReminders ?? [], c.SlipAlertEnabled == true, c.IsFlexible, c.ChecklistItems).Format()
-                    + string.Create(CultureInfo.InvariantCulture, $" | Due: {c.DueDate:yyyy-MM-dd}")), indent));
+                new HabitFieldSummary
+                {
+                    Description = c.Description,
+                    DueTime = c.DueTime,
+                    DueEndTime = c.DueEndTime,
+                    IntervalWeeks = c.IntervalWeeks,
+                    Days = c.Days,
+                    EndDate = c.EndDate,
+                    ReminderEnabled = c.ReminderEnabled == true,
+                    ReminderTimes = c.ReminderTimes ?? [],
+                    ScheduledReminders = c.ScheduledReminders ?? [],
+                    RelativeReminders = c.RelativeReminders ?? [],
+                    SlipAlertEnabled = c.SlipAlertEnabled == true,
+                    IsFlexible = c.IsFlexible,
+                    ChecklistItems = c.ChecklistItems
+                }.Format(c.DueDate)), indent));
             if (c.Children.Count > 0)
                 AppendChildren(lines, c.Children, indent + 1);
         }
@@ -88,10 +117,22 @@ internal static class McpToolHelpers
     {
         foreach (var child in children)
         {
-            var details = new HabitFieldSummary(child.Description, child.DueTime, child.DueEndTime,
-                child.IntervalWeeks, child.Days, child.EndDate, child.ReminderEnabled == true,
-                child.ReminderTimes ?? [], child.ScheduledReminders ?? [], child.RelativeReminders ?? [],
-                child.SlipAlertEnabled == true, child.IsFlexible, child.ChecklistItems).Format();
+            var details = new HabitFieldSummary
+            {
+                Description = child.Description,
+                DueTime = child.DueTime,
+                DueEndTime = child.DueEndTime,
+                IntervalWeeks = child.IntervalWeeks,
+                Days = child.Days,
+                EndDate = child.EndDate,
+                ReminderEnabled = child.ReminderEnabled == true,
+                ReminderTimes = child.ReminderTimes ?? [],
+                ScheduledReminders = child.ScheduledReminders ?? [],
+                RelativeReminders = child.RelativeReminders ?? [],
+                SlipAlertEnabled = child.SlipAlertEnabled == true,
+                IsFlexible = child.IsFlexible,
+                ChecklistItems = child.ChecklistItems
+            }.Format();
             lines.Add(FormatHabitLine(new HabitLineData(child.Id, child.Title, child.FrequencyUnit,
                 child.FrequencyQuantity, child.DueTime, child.IsCompleted, child.IsOverdue, child.IsBadHabit,
                 child.IsGeneral, child.IsFlexible, child.ChecklistItems, child.Tags ?? [], child.Emoji,

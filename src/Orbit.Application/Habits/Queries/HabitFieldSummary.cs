@@ -5,27 +5,40 @@ using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Habits.Queries;
 
-public sealed record HabitFieldSummary(
-    string? Description,
-    TimeOnly? DueTime,
-    TimeOnly? DueEndTime,
-    int? IntervalWeeks,
-    IReadOnlyList<DayOfWeek> Days,
-    DateOnly? EndDate,
-    bool ReminderEnabled,
-    IReadOnlyList<int> ReminderTimes,
-    IReadOnlyList<ScheduledReminderTime> ScheduledReminders,
-    IReadOnlyList<RelativeReminderTime> RelativeReminders,
-    bool SlipAlertEnabled,
-    bool IsFlexible,
-    IReadOnlyList<ChecklistItem> ChecklistItems)
+public sealed record HabitFieldSummary
 {
-    public static HabitFieldSummary From(Habit habit) => new(
-        habit.Description, habit.DueTime, habit.DueEndTime, habit.IntervalWeeks, habit.Days.ToList(),
-        habit.EndDate, habit.ReminderEnabled, habit.ReminderTimes, habit.ScheduledReminders,
-        habit.RelativeReminders, habit.SlipAlertEnabled, habit.IsFlexible, habit.ChecklistItems);
+    public string? Description { get; init; }
+    public TimeOnly? DueTime { get; init; }
+    public TimeOnly? DueEndTime { get; init; }
+    public int? IntervalWeeks { get; init; }
+    public IReadOnlyList<DayOfWeek> Days { get; init; } = [];
+    public DateOnly? EndDate { get; init; }
+    public bool ReminderEnabled { get; init; }
+    public IReadOnlyList<int> ReminderTimes { get; init; } = [];
+    public IReadOnlyList<ScheduledReminderTime> ScheduledReminders { get; init; } = [];
+    public IReadOnlyList<RelativeReminderTime> RelativeReminders { get; init; } = [];
+    public bool SlipAlertEnabled { get; init; }
+    public bool IsFlexible { get; init; }
+    public IReadOnlyList<ChecklistItem> ChecklistItems { get; init; } = [];
 
-    public string Format()
+    public static HabitFieldSummary From(Habit habit) => new()
+    {
+        Description = habit.Description,
+        DueTime = habit.DueTime,
+        DueEndTime = habit.DueEndTime,
+        IntervalWeeks = habit.IntervalWeeks,
+        Days = habit.Days.ToList(),
+        EndDate = habit.EndDate,
+        ReminderEnabled = habit.ReminderEnabled,
+        ReminderTimes = habit.ReminderTimes,
+        ScheduledReminders = habit.ScheduledReminders,
+        RelativeReminders = habit.RelativeReminders,
+        SlipAlertEnabled = habit.SlipAlertEnabled,
+        IsFlexible = habit.IsFlexible,
+        ChecklistItems = habit.ChecklistItems
+    };
+
+    public string Format(DateOnly? dueDate = null)
     {
         var fields = new List<string>();
         if (!string.IsNullOrWhiteSpace(Description)) fields.Add($"Description: {Description}");
@@ -43,9 +56,12 @@ public sealed record HabitFieldSummary(
         if (SlipAlertEnabled) fields.Add("Slip alerts: enabled");
         if (IsFlexible) fields.Add("Flexible: true");
         if (ChecklistItems.Count > 0)
-            fields.Add($"Checklist items: {string.Join(", ", ChecklistItems.Select(i => $"[{(i.IsChecked ? "x" : " ")}] {i.Text}"))}");
+            fields.Add($"Checklist items: {string.Join(", ", ChecklistItems.Select(FormatChecklistItem))}");
+        if (dueDate is { } due) fields.Add($"Due: {due.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}");
         return string.Join(" | ", fields);
     }
+
+    private static string FormatChecklistItem(ChecklistItem item) => $"[{(item.IsChecked ? "x" : " ")}] {item.Text}";
 
     public static string FormatRelative(RelativeReminderTime reminder) => reminder.MinutesBefore is { } minutes
         ? $"{minutes.ToString(CultureInfo.InvariantCulture)} minutes before"

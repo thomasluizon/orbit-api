@@ -121,6 +121,7 @@ internal sealed class HeldWriteTestContext : IDisposable
         SetupWrite<CreateCheckoutCommand, CheckoutResponse>(new("https://example.com/checkout"));
         SetupWrite<CreateApiKeyCommand, CreateApiKeyResponse>(new(Guid.NewGuid(), "Key", "secret", "prefix", [], false, null, DateTime.MinValue));
         SetupWrite<ConfirmAccountDeletionCommand, DateTime>(DateTime.MinValue);
+        SetupWrite<UpdateHabitCommand>();
         SetupWrite<UpdateTagCommand>();
         SetupWrite<UpdateChecklistCommand>();
         SetupWrite<ReorderHabitsCommand>();

@@ -196,14 +196,19 @@ public class QueryHabitsTool(
                 && (!f.FrequencyOneTime || h.FrequencyUnit == null)
                 && (f.Frequency == null || h.FrequencyUnit == f.Frequency.Value)
                 && (!f.Date.HasValue || !h.IsGeneral),
-            q => deferMetrics ? q.Include(h => h.Tags).Include(h => h.Goals) : includeMetrics
-                ? q.Include(h => h.Tags).Include(h => h.Goals).Include(h => h.Logs).AsSplitQuery()
-                : q
-                    .Include(h => h.Tags)
-                    .Include(h => h.Goals)
-                    .Include(h => h.Logs.Where(l => !l.IsDeleted && l.Date == today && l.Value > 0))
-                    .AsSplitQuery(),
+            q => IncludeCandidates(q, today, includeMetrics, deferMetrics),
             ct);
+    }
+
+    private static IQueryable<Habit> IncludeCandidates(IQueryable<Habit> query, DateOnly today,
+        bool includeMetrics, bool deferMetrics)
+    {
+        var withRelations = query.Include(h => h.Tags).Include(h => h.Goals).AsSplitQuery();
+        if (deferMetrics)
+            return withRelations;
+        if (includeMetrics)
+            return withRelations.Include(h => h.Logs);
+        return withRelations.Include(h => h.Logs.Where(l => !l.IsDeleted && l.Date == today && l.Value > 0));
     }
 
     private static string? NormalizeSearchValue(string? value)
@@ -246,7 +251,7 @@ public class QueryHabitsTool(
                 schedule));
 
             if (includeSubs)
-                AppendChildren(sb, allHabits, habit.Id, today, weekStartDay, includeMetrics, 1, schedule);
+                AppendChildren(sb, allHabits, habit.Id, new OutputContext(today, weekStartDay, includeMetrics, schedule), 1);
         }
 
         return sb.ToString();
@@ -334,7 +339,9 @@ public class QueryHabitsTool(
             : $"Every {habit.FrequencyQuantity} {unitName}s";
     }
 
-    private static void AppendChildren(StringBuilder sb, IReadOnlyList<Habit> allHabits, Guid parentId, DateOnly today, int weekStartDay, bool includeMetrics, int depth, ScheduleContext? schedule)
+    private sealed record OutputContext(DateOnly Today, int WeekStartDay, bool IncludeMetrics, ScheduleContext? Schedule);
+
+    private static void AppendChildren(StringBuilder sb, IReadOnlyList<Habit> allHabits, Guid parentId, OutputContext context, int depth)
     {
         var indent = new string(' ', depth * 2);
         var children = allHabits
@@ -345,9 +352,9 @@ public class QueryHabitsTool(
 
         foreach (var child in children)
         {
-            sb.AppendLine(indent + BuildHabitLine(child, today, weekStartDay, includeMetrics,
-                childSuffixes.GetValueOrDefault(child.Id, string.Empty), schedule));
-            AppendChildren(sb, allHabits, child.Id, today, weekStartDay, includeMetrics, depth + 1, schedule);
+            sb.AppendLine(indent + BuildHabitLine(child, context.Today, context.WeekStartDay, context.IncludeMetrics,
+                childSuffixes.GetValueOrDefault(child.Id, string.Empty), context.Schedule));
+            AppendChildren(sb, allHabits, child.Id, context, depth + 1);
         }
     }
 }

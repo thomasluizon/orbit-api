@@ -49,37 +49,10 @@ public class CreateSubHabitTool(
             is_flexible = new { type = JsonSchemaTypes.Boolean, description = "True for flexible frequency" },
             end_date = new { type = JsonSchemaTypes.String, description = "End date (YYYY-MM-DD)", nullable = true },
             relative_reminders = BulkHabitToolArguments.RelativeRemindersSchema(),
-            checklist_items = new
-            {
-                type = JsonSchemaTypes.Array,
-                items = new
-                {
-                    type = JsonSchemaTypes.Object,
-                    properties = new
-                    {
-                        text = new { type = JsonSchemaTypes.String },
-                        is_checked = new { type = JsonSchemaTypes.Boolean }
-                    },
-                    required = new[] { "text" }
-                }
-            },
+            checklist_items = BulkHabitToolArguments.ChecklistItemsSchema(),
             tag_ids = new { type = JsonSchemaTypes.Array, description = "Existing tag IDs", items = new { type = JsonSchemaTypes.String } },
             due_date = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD override for due date" },
-            scheduled_reminders = new
-            {
-                type = JsonSchemaTypes.Array,
-                description = "Absolute-time reminders for habits WITHOUT a due_time",
-                items = new
-                {
-                    type = JsonSchemaTypes.Object,
-                    properties = new
-                    {
-                        when = new { type = JsonSchemaTypes.String, description = "day_before or same_day", @enum = JsonSchemaTypes.ScheduledReminderWhenEnum },
-                        time = new { type = JsonSchemaTypes.String, description = "HH:mm 24h format" }
-                    },
-                    required = new[] { "when", "time" }
-                }
-            }
+            scheduled_reminders = BulkHabitToolArguments.ScheduledRemindersSchema()
         },
         required = new[] { "parent_habit_id", "title" }
     };

@@ -133,36 +133,9 @@ public class CreateHabitTool(
                         is_flexible = new { type = JsonSchemaTypes.Boolean },
                         tag_names = new { type = JsonSchemaTypes.Array, description = "Tag names for this child", items = new { type = JsonSchemaTypes.String } },
                         relative_reminders = BulkHabitToolArguments.RelativeRemindersSchema(),
-                        scheduled_reminders = new
-                        {
-                            type = JsonSchemaTypes.Array,
-                            items = new
-                            {
-                                type = JsonSchemaTypes.Object,
-                                properties = new
-                                {
-                                    when = new { type = JsonSchemaTypes.String, @enum = JsonSchemaTypes.ScheduledReminderWhenEnum },
-                                    time = new { type = JsonSchemaTypes.String }
-                                },
-                                required = new[] { "when", "time" }
-                            }
-                        },
+                        scheduled_reminders = BulkHabitToolArguments.ScheduledRemindersSchema(),
                         is_bad_habit = new { type = JsonSchemaTypes.Boolean },
-                        checklist_items = new
-                        {
-                            type = JsonSchemaTypes.Array,
-                            description = "Inline checklist items",
-                            items = new
-                            {
-                                type = JsonSchemaTypes.Object,
-                                properties = new
-                                {
-                                    text = new { type = JsonSchemaTypes.String, description = "Checklist item text" },
-                                    is_checked = new { type = JsonSchemaTypes.Boolean, description = "Whether checked. Defaults to false." }
-                                },
-                                required = new[] { "text" }
-                            }
-                        }
+                        checklist_items = BulkHabitToolArguments.ChecklistItemsSchema()
                     },
                     required = new[] { TitleProperty }
                 }
@@ -323,15 +296,7 @@ public class CreateHabitTool(
         var children = new List<Habit>();
         foreach (var sub in subHabits)
         {
-            var childResult = BuildChildHabit(
-                sub,
-                userId,
-                parent.Id,
-                parent.FrequencyUnit,
-                parent.FrequencyQuantity,
-                parent.Days.ToList(),
-                parentDueDate,
-                parent.IntervalWeeks, parent.IsGeneral);
+            var childResult = BuildChildHabit(sub, userId, parent, parentDueDate);
             if (childResult.IsFailure)
                 return childResult.PropagateError<List<Habit>>();
 
@@ -342,9 +307,7 @@ public class CreateHabitTool(
     }
 
     private static Domain.Common.Result<Habit> BuildChildHabit(
-        JsonElement sub, Guid userId, Guid parentId,
-        FrequencyUnit? parentFreqUnit, int? parentFreqQty,
-        List<DayOfWeek>? parentDays, DateOnly parentDueDate, int? parentIntervalWeeks, bool parentIsGeneral)
+        JsonElement sub, Guid userId, Habit parent, DateOnly parentDueDate)
     {
         var subFrequencyUnit = JsonArgumentParser.ParseFrequencyUnit(sub);
         var subFrequencyQuantity = JsonArgumentParser.GetOptionalInt(sub, "frequency_quantity");
@@ -356,14 +319,14 @@ public class CreateHabitTool(
             || subFrequencyQuantity is not null
             || subIntervalWeeks is not null
             || subDays is not null;
-        var frequencyUnit = isOneTime ? null : subFrequencyUnit ?? parentFreqUnit;
-        var frequencyQuantity = isOneTime ? null : subFrequencyQuantity ?? (subFrequencyUnit is not null ? 1 : parentFreqQty);
+        var frequencyUnit = isOneTime ? null : subFrequencyUnit ?? parent.FrequencyUnit;
+        var frequencyQuantity = isOneTime ? null : subFrequencyQuantity ?? (subFrequencyUnit is not null ? 1 : parent.FrequencyQuantity);
         if (isOneTime)
             subDays = null;
         var isFlexible = JsonArgumentParser.GetOptionalBool(sub, "is_flexible") ?? false;
         frequencyUnit = NormalizeWeekdayUnit(frequencyUnit, frequencyQuantity, subDays, isFlexible);
         if (subDays is null && subDueDate is null && frequencyUnit == FrequencyUnit.Day && frequencyQuantity == 1)
-            subDays = parentDays;
+            subDays = parent.Days.ToList();
 
         return Habit.Create(new HabitCreateParams(
             userId,
@@ -374,20 +337,20 @@ public class CreateHabitTool(
             JsonArgumentParser.GetOptionalString(sub, "description"),
             Days: subDays,
             IsBadHabit: JsonArgumentParser.GetOptionalBool(sub, "is_bad_habit") ?? false,
-            ParentHabitId: parentId,
+            ParentHabitId: parent.Id,
             DueTime: JsonArgumentParser.ParseTimeOnly(sub, "due_time"),
             DueEndTime: JsonArgumentParser.ParseTimeOnly(sub, "due_end_time"),
             ReminderEnabled: JsonArgumentParser.GetOptionalBool(sub, "reminder_enabled") ?? false,
             ReminderTimes: JsonArgumentParser.ParseIntArray(sub, "reminder_times"),
             SlipAlertEnabled: JsonArgumentParser.GetOptionalBool(sub, "slip_alert_enabled") ?? false,
             IsFlexible: isFlexible,
-            IsGeneral: parentIsGeneral,
+            IsGeneral: parent.IsGeneral,
             EndDate: JsonArgumentParser.ParseDateOnly(sub, "end_date"),
             ScheduledReminders: JsonArgumentParser.ParseScheduledReminders(sub),
             RelativeReminders: JsonArgumentParser.ParseRelativeReminders(sub),
             Emoji: JsonArgumentParser.GetOptionalString(sub, "emoji"),
             ChecklistItems: JsonArgumentParser.ParseChecklistItems(sub),
-            IntervalWeeks: isOneTime ? null : subIntervalWeeks ?? (hasExplicitCadence ? null : parentIntervalWeeks)));
+            IntervalWeeks: isOneTime ? null : subIntervalWeeks ?? (hasExplicitCadence ? null : parent.IntervalWeeks)));
     }
 
     private static FrequencyUnit? NormalizeWeekdayUnit(

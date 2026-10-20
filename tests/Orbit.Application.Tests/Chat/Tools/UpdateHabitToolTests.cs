@@ -1,5 +1,10 @@
 using System.Linq.Expressions;
 using System.Text.Json;
+using MediatR;
+using Microsoft.Extensions.Caching.Memory;
+using Orbit.Application.Habits.Commands;
+using Orbit.Application.Habits.Validators;
+using Orbit.Application.Goals.Services;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using NSubstitute;
@@ -21,6 +26,7 @@ public class UpdateHabitToolTests
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly UpdateHabitTool _tool;
+    private readonly IGenericRepository<SentReminder> _sentReminders = Substitute.For<IGenericRepository<SentReminder>>();
 
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly DateOnly Today = new(2026, 4, 3);
@@ -32,7 +38,39 @@ public class UpdateHabitToolTests
         ConfigureTransaction(_unitOfWork);
         _payGate.CanCreateHabits(UserId, 1, Arg.Any<CancellationToken>())
             .Returns(Result.Success());
-        _tool = new UpdateHabitTool(_habitRepo, _userDateService, _unitOfWork, _payGate);
+        _tool = CreateTool(_habitRepo, _unitOfWork, _payGate);
+    }
+
+    [Fact]
+    public async Task DueTimeChange_ClearsOnlyTodaysSentReminder()
+    {
+        var habit = CreateHabitWithTime("Read", FrequencyUnit.Day, 1, new TimeOnly(9, 0));
+        SetupHabitFound(habit);
+        var reminders = _sentReminders;
+        var today = SentReminder.Create(habit.Id, Today, 15);
+        var yesterday = SentReminder.Create(habit.Id, Today.AddDays(-1), 15);
+        reminders.FindAsync(Arg.Any<Expression<Func<SentReminder, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => new[] { today, yesterday }.Where(call.Arg<Expression<Func<SentReminder, bool>>>().Compile()).ToList());
+        var result = await Execute($$"""{"habit_id":"{{habit.Id}}","due_time":"10:00"}""");
+        result.Success.Should().BeTrue();
+        reminders.Received(1).Remove(today);
+        reminders.DidNotReceive().Remove(yesterday);
+    }
+
+    [Fact]
+    public async Task ParentGeneralFlag_CannotDivergeFromActiveChildren()
+    {
+        var parent = CreateHabit("Parent", null, null);
+        var child = Habit.Create(new HabitCreateParams(UserId, "Child", FrequencyUnit.Day, 1,
+            Today, ParentHabitId: parent.Id)).Value;
+        SetupHabitFound(parent);
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => new[] { parent, child }.Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).ToList());
+        var result = await Execute($$"""{"habit_id":"{{parent.Id}}","is_general":true}""");
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be(Orbit.Application.Common.ErrorMessages.GeneralMismatchWithChildren.Message);
+        parent.IsGeneral.Should().BeFalse();
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Theory]
@@ -65,6 +103,7 @@ public class UpdateHabitToolTests
         _habitRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
             .Returns(call => call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile()(child) ? child : parent);
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns([parent]);
         var result = await Execute($$"""{"habit_id":"{{child.Id}}","is_general":true}""");
         result.Success.Should().BeFalse();
         child.IsGeneral.Should().BeFalse();
@@ -128,7 +167,7 @@ public class UpdateHabitToolTests
         var payGate = Substitute.For<IPayGateService>();
         payGate.CanCreateHabits(UserId, 1, Arg.Any<CancellationToken>())
             .Returns(Result.PayGateFailure("Habit limit reached"));
-        var tool = new UpdateHabitTool(_habitRepo, _userDateService, _unitOfWork, payGate);
+        var tool = CreateTool(_habitRepo, _unitOfWork, payGate);
 
         var args = JsonDocument.Parse($$$"""{"habit_id": "{{{habit.Id}}}", "end_date": null}""").RootElement;
         var result = await tool.ExecuteAsync(args, UserId, CancellationToken.None);
@@ -147,7 +186,7 @@ public class UpdateHabitToolTests
         var payGate = Substitute.For<IPayGateService>();
         payGate.CanCreateHabits(UserId, 1, Arg.Any<CancellationToken>())
             .Returns(Result.Success());
-        var tool = new UpdateHabitTool(_habitRepo, _userDateService, _unitOfWork, payGate);
+        var tool = CreateTool(_habitRepo, _unitOfWork, payGate);
 
         var args = JsonDocument.Parse($$$"""{"habit_id": "{{{habit.Id}}}", "end_date": null}""").RootElement;
         var result = await tool.ExecuteAsync(args, UserId, CancellationToken.None);
@@ -766,8 +805,7 @@ public class UpdateHabitToolTests
         ConfigureTransaction(unitOfWork);
         unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
             .Returns(call => context.SaveChangesAsync(call.Arg<CancellationToken>()));
-        var tool = new UpdateHabitTool(
-            new GenericRepository<Habit>(context), _userDateService, unitOfWork, _payGate);
+        var tool = CreateTool(new GenericRepository<Habit>(context), unitOfWork, _payGate);
 
         var attackerId = Guid.NewGuid();
         var attackerResult = await tool.ExecuteAsync(RenameArgs(habitId, "Hijacked"), attackerId, CancellationToken.None);
@@ -790,12 +828,27 @@ public class UpdateHabitToolTests
     private static JsonElement RenameArgs(Guid habitId, string title) =>
         JsonDocument.Parse($$"""{"habit_id":"{{habitId}}","title":"{{title}}"}""").RootElement;
 
+    private UpdateHabitTool CreateTool(IGenericRepository<Habit> repository, IUnitOfWork unitOfWork, IPayGateService gate)
+    {
+        var mediator = Substitute.For<IMediator>();
+        var handler = new UpdateHabitCommandHandler(repository, _sentReminders, Substitute.For<IGenericRepository<Goal>>(),
+            gate, Substitute.For<IGoalCompletionService>(), _userDateService, unitOfWork,
+            new MemoryCache(new MemoryCacheOptions()));
+        mediator.Send(Arg.Any<UpdateHabitCommand>(), Arg.Any<CancellationToken>()).Returns(async call =>
+        {
+            var command = call.Arg<UpdateHabitCommand>();
+            var validation = await new UpdateHabitCommandValidator(repository).ValidateAsync(command, call.Arg<CancellationToken>());
+            return validation.IsValid ? await handler.Handle(command, call.Arg<CancellationToken>()) : Result.Failure(validation.ToString());
+        });
+        return new UpdateHabitTool(repository, _userDateService, mediator);
+    }
+
     private static void ConfigureTransaction(IUnitOfWork unitOfWork)
     {
         unitOfWork.ExecuteInTransactionAsync(
-                Arg.Any<Func<CancellationToken, Task<Result<ToolResult>>>>(),
+                Arg.Any<Func<CancellationToken, Task<Result>>>(),
                 Arg.Any<CancellationToken>())
-            .Returns(call => call.ArgAt<Func<CancellationToken, Task<Result<ToolResult>>>>(0)(
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<Result>>>(0)(
                 call.ArgAt<CancellationToken>(1)));
     }
 

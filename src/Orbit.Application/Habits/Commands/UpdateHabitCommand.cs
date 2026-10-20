@@ -74,8 +74,8 @@ public class UpdateHabitCommandHandler(
 
         if (request.IsGeneral.HasValue)
         {
-            var generalMismatch = await HabitUpdateValidation.ValidateGeneralAsync(
-                habit, request.IsGeneral.Value, request.UserId, habitRepository, cancellationToken);
+            var related = await HabitUpdateValidation.LoadRelatedAsync([habit], request.UserId, habitRepository, cancellationToken);
+            var generalMismatch = HabitUpdateValidation.ValidateGeneral(habit, request.IsGeneral.Value, related);
             if (generalMismatch.IsFailure)
                 return generalMismatch.PropagateError<UpdateState>();
         }
