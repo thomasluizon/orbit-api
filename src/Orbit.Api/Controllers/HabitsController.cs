@@ -453,6 +453,27 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         return result.ToPayGateAwareResult(v => Ok(v));
     }
 
+    [HttpPost("bulk/parent")]
+    [ProducesResponseType<BulkMoveHabitParentResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> BulkMoveHabitParent(
+        [FromBody] BulkMoveHabitParentRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new BulkMoveHabitParentCommand(
+            HttpContext.GetUserId(), request.HabitIds, request.ParentId), cancellationToken);
+
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
+        {
+            var count = result.Value.Results.Count(item => item.Status == BulkItemStatus.Success);
+            if (count > 0)
+                logger.LogBulkParentMoved(count, HttpContext.GetUserId());
+        }
+
+        return result.ToPayGateAwareResult(v => Ok(v));
+    }
+
     [HttpPost("bulk/log")]
     [ProducesResponseType<BulkLogResult>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -653,4 +674,7 @@ internal static partial class HabitsControllerLogging
 
     [LoggerMessage(EventId = 8, Level = LogLevel.Information, Message = "Habit restored {HabitId} by user {UserId}")]
     internal static partial void LogHabitRestored(this ILogger logger, Guid habitId, Guid userId);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Information, Message = "Bulk moved {Count} habits to a new parent for user {UserId}")]
+    internal static partial void LogBulkParentMoved(this ILogger logger, int count, Guid userId);
 }
