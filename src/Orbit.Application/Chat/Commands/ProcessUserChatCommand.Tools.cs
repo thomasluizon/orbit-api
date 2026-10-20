@@ -33,7 +33,8 @@ public partial class ProcessUserChatCommandHandler
                 iteration);
         }
 
-        while (aiResponse.HasToolCalls && iteration < ChatTurnLimits.MaxToolIterations && !tokenBudgetExceeded)
+        while (aiResponse.HasToolCalls && !aiResponse.IsTruncated
+            && iteration < ChatTurnLimits.MaxToolIterations && !tokenBudgetExceeded)
         {
             iteration++;
             if (request.StreamSink is not null)
@@ -187,7 +188,8 @@ public partial class ProcessUserChatCommandHandler
         var writeCalls = orderedCalls
             .Where(call => call.Name != "ask" && ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly != true)
             .ToList();
-        var bulkRedirects = BulkToolRepeatGuard.FindRedirects(writeCalls);
+        var bulkRedirects = BulkToolRepeatGuard.FindRedirects(writeCalls, executionResults.PreviousWriteCalls);
+        executionResults.PreviousWriteCalls.AddRange(writeCalls);
         var resolvedWrites = writeCalls.ToDictionary(call => call.Id, call => ResolveHabitCall(call, executionResults));
         await CoalesceLogCallsAsync(writeCalls, resolvedWrites, request.UserId, executionResults, cancellationToken);
         CoalesceTagCalls(resolvedWrites, executionResults);

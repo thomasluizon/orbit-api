@@ -30,6 +30,7 @@ public partial class ProcessUserChatCommandHandler
         public HashSet<string> MissingHabitNames { get; } = new(StringComparer.OrdinalIgnoreCase);
         public HashSet<string> PreviewedCalls { get; } = new(StringComparer.Ordinal);
         public HashSet<string> MergedCallIds { get; } = new(StringComparer.Ordinal);
+        public List<AiToolCall> PreviousWriteCalls { get; } = [];
 
         public DateTime? AnsweredAtUtc { get; init; }
         public List<ActionResult> CommittedActions { get; } = [];

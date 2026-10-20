@@ -16,10 +16,14 @@ public static class BulkToolRepeatGuard
             ["delete_habit"] = "bulk_delete_habits"
         };
 
-    public static IReadOnlyDictionary<string, string> FindRedirects(IReadOnlyList<AiToolCall> calls)
+    public static IReadOnlyDictionary<string, string> FindRedirects(
+        IReadOnlyList<AiToolCall> calls,
+        IReadOnlyList<AiToolCall>? previousCalls = null)
     {
         var redirects = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var toolGroup in calls.GroupBy(call => call.Name, StringComparer.OrdinalIgnoreCase))
+        var currentIds = calls.Select(call => call.Id).ToHashSet(StringComparer.Ordinal);
+        foreach (var toolGroup in (previousCalls ?? []).Concat(calls)
+            .GroupBy(call => call.Name, StringComparer.OrdinalIgnoreCase))
         {
             if (!BulkAlternatives.TryGetValue(toolGroup.Key, out var bulkTool))
                 continue;
@@ -40,7 +44,7 @@ public static class BulkToolRepeatGuard
 
                 if (equivalent.Count < Threshold)
                     continue;
-                foreach (var call in equivalent)
+                foreach (var call in equivalent.Where(call => currentIds.Contains(call.Id)))
                     redirects[call.Id] = bulkTool;
             }
         }
