@@ -56,6 +56,7 @@ public partial class ProcessUserChatCommandHandlerTests
     private readonly IMediator _mediator = Substitute.For<IMediator>();
     private readonly IProductAnalytics _productAnalytics = Substitute.For<IProductAnalytics>();
     private readonly IHabitScheduleLogReader _scheduleLogReader = Substitute.For<IHabitScheduleLogReader>();
+    private readonly IConversationTurnRecorder _conversationRecorder = Substitute.For<IConversationTurnRecorder>();
     private readonly IAppConfigService _appConfig = Substitute.For<IAppConfigService>();
     private readonly ILogger<ProcessUserChatCommandHandler> _logger = Substitute.For<ILogger<ProcessUserChatCommandHandler>>();
 
@@ -87,6 +88,7 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData(false, true)]
     public async Task Moderation_RefusesBeforeCallingModel(bool flagged, bool unavailable)
     {
+        EnableRecording();
         _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult(flagged, unavailable, []));
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>())
@@ -95,6 +97,7 @@ public partial class ProcessUserChatCommandHandlerTests
             .Returns(Result.Success(new AiResponse { TextMessage = "Allowed" }));
         var result = await CreateHandler().Handle(new ProcessUserChatCommand(UserId, "screen this input"), CancellationToken.None);
         result.IsFailure.Should().BeTrue();
+        _conversationRecorder.DidNotReceiveWithAnyArgs().TryRecord(default!);
         await _blockStore.DidNotReceiveWithAnyArgs().InvalidateOpenAsync(default, default);
         await _unitOfWork.DidNotReceiveWithAnyArgs().AcquireAdvisoryLockAsync(default!, default);
         await _aiIntentService.DidNotReceive().SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
@@ -108,6 +111,7 @@ public partial class ProcessUserChatCommandHandlerTests
     public async Task CrisisDisclosure_BypassesModerationRefusal(string message, string resource, bool flagged, bool unavailable)
     {
         SetupUserAndPayGate();
+        EnableRecording();
         _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult(flagged, unavailable, []));
 
@@ -115,6 +119,9 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.AiMessage.Should().Contain(resource);
+        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn =>
+            turn.UserId == UserId && turn.UserContent == message && turn.AssistantContent == result.Value.AiMessage
+            && !turn.UsedModel && turn.ToolCallsJson == "[]"));
         await _moderation.DidNotReceiveWithAnyArgs().CheckTextAsync(default!, default);
         await _aiIntentService.DidNotReceiveWithAnyArgs().SendWithToolsAsync(default!, default, default);
         await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
@@ -177,7 +184,7 @@ public partial class ProcessUserChatCommandHandlerTests
             _scheduleLogReader, _blockStore, _pendingOperationStore);
 
         return new ProcessUserChatCommandHandler(
-            dataDeps, aiDeps, executionDeps, _logger, _appConfig, _moderation);
+            dataDeps, aiDeps, executionDeps, _logger, _appConfig, _moderation, _conversationRecorder);
     }
 
     public ProcessUserChatCommandHandlerTests()
@@ -3521,6 +3528,8 @@ public partial class ProcessUserChatCommandHandlerTests
     [Fact]
     public async Task Handle_ProductionCreateHabitFailure_DoesNotExposeToolSchemaArguments()
     {
+        _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new[] { "astra_conversation_recording" });
         var user = User.Create("Alex", "alex@test.com").Value;
         user.SetLanguage("pt-BR");
         SetupUserAndPayGate(user);
@@ -3542,6 +3551,11 @@ public partial class ProcessUserChatCommandHandlerTests
             "frequência diária");
         result.Value.Actions.Should().ContainSingle();
         result.Value.Actions[0].Error.Should().Be(PortugueseToolFailureMessage);
+        result.Value.Actions[0].Error.Should().NotContain("Days can only be set when frequency quantity is 1");
+        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn =>
+            turn.UserId == UserId && turn.ToolCallsJson.Contains("create_habit")
+            && turn.ToolCallsJson.Contains("Days can only be set when frequency quantity is 1")
+            && turn.ToolCallsJson.Contains("frequency_unit")));
         result.Value.Operations.Should().ContainSingle(operation =>
             operation.Status == AgentOperationStatus.Failed
             && operation.PolicyReason == "Days can only be set when frequency quantity is 1.");

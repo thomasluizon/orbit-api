@@ -28,7 +28,9 @@ public sealed class AstraBlockAnswerService(
     IPendingAgentOperationStore pendingOperations,
     ILogger? logger = null,
     IPendingOperationChangePreviewer? previewer = null,
-    TimeSpan? claimLifetime = null)
+    TimeSpan? claimLifetime = null,
+    Action<PreparedAstraBlockAnswer>? observePrepared = null,
+    Action<ConversationToolCall>? observeTool = null)
 {
     public async Task<Result<ChatResponse>> ExecuteAsync(ProcessUserChatCommand request,
         Func<PreparedAstraBlockAnswer, Task<Result<ChatResponse>>> produceResponse, CancellationToken ct,
@@ -38,6 +40,7 @@ public sealed class AstraBlockAnswerService(
         if (preparation.IsFailure)
             return preparation.PropagateError<ChatResponse>();
         var prepared = preparation.Value;
+        observePrepared?.Invoke(prepared);
         if (prepared.Response is { } storedResponse)
         {
             if (!prepared.IsReplay)
@@ -221,11 +224,16 @@ public sealed class AstraBlockAnswerService(
         AstraBlockDefinition definition, AstraBlockAnswer answer, User? user, CancellationToken token)
     {
         var chosen = definition.Items.Where(item => answer.SelectedIds.Contains(item.Id)).ToArray();
+        var arguments = AskTool.BuildBulkArguments(definition.Action!, chosen);
         var preview = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
             request.UserId, "bulk_" + definition.Action,
-            AskTool.BuildBulkArguments(definition.Action!, chosen), AgentExecutionSurface.Chat,
+            arguments, AgentExecutionSurface.Chat,
             request.AuthMethod, request.GrantedScopes, request.IsReadOnlyCredential,
             CorrelationId: request.CorrelationId, IncludeChangePreview: true, PreviewOnly: true), token);
+        observeTool?.Invoke(new ConversationToolCall("block-preview", "bulk_" + definition.Action,
+            arguments.Clone(), preview.Operation.Status == AgentOperationStatus.Succeeded,
+            preview.Operation.PolicyReason ?? (preview.Operation.Status == AgentOperationStatus.Succeeded
+                ? null : preview.Operation.Status.ToString())));
         if (preview.Operation.Status != AgentOperationStatus.PendingConfirmation
             || preview.PendingOperation?.Items?.Count != chosen.Length)
             throw new AnswerRejectedException(Failure(ErrorCodes.AstraBlockPreviewUnavailable));
