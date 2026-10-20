@@ -20161,7 +20161,8 @@
         "enum": [
           "same_day",
           "day_before"
-        ]
+        ],
+        "description": "MVC responses emit SameDay or DayBefore. MVC inputs also accept same_day and day_before, case-insensitive enum names and numeric enum forms. Reminder validation still applies. This component's enum retains the domain snake_case annotation and does not describe MVC response casing."
       },
       "SearchMatchField": {
         "required": [
