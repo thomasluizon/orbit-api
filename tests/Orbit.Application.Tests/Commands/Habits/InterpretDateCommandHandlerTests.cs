@@ -38,6 +38,16 @@ public class InterpretDateCommandHandlerTests
     [InlineData("em 2026-10-26 ou 2026-10-27", "pt-BR")]
     [InlineData("October 26 or October 27", "en")]
     [InlineData("26 de outubro ou 27 de outubro", "pt-BR")]
+    [InlineData("October 26 or 27", "en")]
+    [InlineData("26 or 27 October", "en")]
+    [InlineData("26 ou 27 de outubro", "pt-BR")]
+    [InlineData("26 de outubro ou 27", "pt-BR")]
+    [InlineData("October 26th or 27th", "en")]
+    [InlineData("26th or 27th of October", "en")]
+    [InlineData("October 26, 2026 or 27", "en")]
+    [InlineData("26 de outubro de 2026 ou 27", "pt-BR")]
+    [InlineData("26° de outubro ou 27°", "pt-BR")]
+    [InlineData("31° de fevereiro", "pt-BR")]
     [InlineData("2026-10-26 or October 27", "en")]
     [InlineData("February 29, 10000", "en")]
     [InlineData("29 de fevereiro de 10000", "pt-BR")]
@@ -50,6 +60,32 @@ public class InterpretDateCommandHandlerTests
         result.Value.Should().Be(new DateInterpretation(null, Reference));
         _gate.ReceivedCalls().Should().BeEmpty();
         _service.ReceivedCalls().Should().BeEmpty();
+        _work.ReceivedCalls().Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("October 26 or 26", "en")]
+    [InlineData("26 or 26 October", "en")]
+    [InlineData("26 ou 26 de outubro", "pt-BR")]
+    [InlineData("26 de outubro ou 26", "pt-BR")]
+    [InlineData("October 26 or October 26", "en")]
+    [InlineData("26 de outubro ou 26 de outubro", "pt-BR")]
+    [InlineData("2026-10-26 or 2026-10-26", "en")]
+    [InlineData("October 26 and after breakfast", "en")]
+    [InlineData("26 de outubro e depois do cafe", "pt-BR")]
+    [InlineData("after breakfast or after lunch", "en")]
+    [InlineData("depois do cafe ou depois do almoco", "pt-BR")]
+    [InlineData("October 26, 2026 or 26", "en")]
+    [InlineData("26 de outubro de 2026 ou 26", "pt-BR")]
+    public async Task RepeatedDateOrOrdinaryConjunction_ConsultsWithOneReservation(string phrase, string language)
+    {
+        var result = await Handler.Handle(new(_user, phrase, language), CancellationToken.None);
+
+        result.Value.Should().Be(new DateInterpretation(Reference.AddDays(6), Reference));
+        await _gate.Received(1).TryConsumeAiMessage(_user, _work, Arg.Any<CancellationToken>());
+        await _service.Received(1).InterpretAsync(_user,
+            Arg.Is<DateInterpretationInput>(input => input.Phrase == phrase && input.Language == language),
+            Reference, TimeZoneInfo.Utc, Arg.Any<CancellationToken>());
         _work.ReceivedCalls().Should().BeEmpty();
     }
 

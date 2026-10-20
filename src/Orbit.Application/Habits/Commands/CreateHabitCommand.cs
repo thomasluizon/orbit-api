@@ -187,7 +187,7 @@ public partial class CreateHabitCommandHandler(
                 return childResult.PropagateError();
 
             if (request.StartDate.HasValue)
-                childResult.Value.PostponeTo(parent.DueDate);
+                childResult.Value.InheritResolvedOccurrence(parent);
 
             await repos.HabitRepository.AddAsync(childResult.Value, cancellationToken);
         }

@@ -610,6 +610,16 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         UpdatedAtUtc = DateTime.UtcNow;
     }
 
+    public void InheritResolvedOccurrence(Habit parent)
+    {
+        if (ParentHabitId != parent.Id || UserId != parent.UserId)
+            throw new ArgumentException("The resolved occurrence must belong to this habit's parent.", nameof(parent));
+
+        DueDate = parent.DueDate;
+        IsCompleted = parent.IsCompleted;
+        UpdatedAtUtc = DateTime.UtcNow;
+    }
+
     public Result<HabitLog> SkipFlexible(DateOnly date)
     {
         if (!IsFlexible)

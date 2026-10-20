@@ -10,6 +10,68 @@ public class EditableHabitStartDateTests
 {
     private static readonly DateOnly Today = new(2026, 10, 20);
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void InheritResolvedOccurrence_PreservesChildAnchorAndCadence(bool terminal)
+    {
+        var userId = Guid.NewGuid();
+        var anchor = new DateOnly(2026, 10, 1);
+        var end = new DateOnly(2026, 10, terminal ? 10 : 30);
+        var parent = Habit.Create(new HabitCreateParams(userId, "Read", FrequencyUnit.Day, 1, anchor,
+            Days: [DayOfWeek.Wednesday], StartDate: anchor, EndDate: end)).Value;
+        parent.CatchUpDueDate(Today).IsSuccess.Should().BeTrue();
+        var child = Habit.Create(new HabitCreateParams(userId, "Chapter", FrequencyUnit.Day, 1, anchor,
+            ParentHabitId: parent.Id, StartDate: anchor, EndDate: end)).Value;
+
+        child.InheritResolvedOccurrence(parent);
+
+        child.DueDate.Should().Be(new DateOnly(2026, 10, terminal ? 14 : 21));
+        child.IsCompleted.Should().Be(terminal);
+        child.StartDate.Should().Be(anchor);
+        child.ScheduledStartDate.Should().Be(anchor);
+        child.Days.Should().BeEmpty();
+        child.EndDate.Should().Be(end);
+        child.FrequencyUnit.Should().Be(FrequencyUnit.Day);
+        child.FrequencyQuantity.Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public void InheritResolvedOccurrence_RejectsUnrelatedParentOrAccount(bool sameParent, bool sameAccount)
+    {
+        var userId = Guid.NewGuid();
+        var parent = Habit.Create(new HabitCreateParams(userId, "Read", FrequencyUnit.Day, 1, Today.AddDays(2))).Value;
+        var child = Habit.Create(new HabitCreateParams(sameAccount ? userId : Guid.NewGuid(), "Chapter",
+            FrequencyUnit.Day, 1, Today, ParentHabitId: sameParent ? parent.Id : Guid.NewGuid())).Value;
+        var updatedAtUtc = child.UpdatedAtUtc;
+
+        var act = () => child.InheritResolvedOccurrence(parent);
+
+        act.Should().Throw<ArgumentException>();
+        child.DueDate.Should().Be(Today);
+        child.IsCompleted.Should().BeFalse();
+        child.StartDate.Should().Be(Today);
+        child.UpdatedAtUtc.Should().Be(updatedAtUtc);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PostponeTo_PreservesOneTimeCompletionState(bool completed)
+    {
+        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Read", null, null, Today)).Value;
+        if (completed)
+            habit.Log(Today).IsSuccess.Should().BeTrue();
+
+        habit.PostponeTo(Today.AddDays(2));
+
+        habit.DueDate.Should().Be(Today.AddDays(2));
+        habit.IsCompleted.Should().Be(completed);
+        habit.StartDate.Should().Be(Today);
+    }
+
     [Fact]
     public void UnchangedAnchor_ChangedWeekdayRecomputesEligibleOccurrence()
     {

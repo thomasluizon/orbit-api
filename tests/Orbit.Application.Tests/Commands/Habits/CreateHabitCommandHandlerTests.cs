@@ -101,6 +101,77 @@ public class CreateHabitCommandHandlerTests
     }
 
     [Theory]
+    [InlineData(false, false, true)]
+    [InlineData(false, true, true)]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, true)]
+    [InlineData(false, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, false, false)]
+    [InlineData(true, true, false)]
+    public async Task Handle_HistoricalStart_ChildrenInheritResolvedTerminalState(
+        bool restrictedWeekdays, bool legacyDueDate, bool terminal)
+    {
+        var selected = new DateOnly(2026, 10, 1);
+        var today = new DateOnly(2026, 10, 20);
+        var end = new DateOnly(2026, 10, terminal ? 10 : 30);
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(today);
+        _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(1);
+        var created = new List<Habit>();
+        _habitRepo.AddAsync(Arg.Do<Habit>(created.Add), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        var command = new CreateHabitCommand(UserId, "Read", null, FrequencyUnit.Day, 1,
+            SubHabits: ["Chapter", "Notes"], StartDate: selected, DueDate: legacyDueDate ? selected : null,
+            Options: new HabitCommandOptions(EndDate: end, Days: restrictedWeekdays ? [DayOfWeek.Wednesday] : null));
+        new Orbit.Application.Habits.Validators.CreateHabitCommandValidator().Validate(command).IsValid.Should().BeTrue();
+
+        (await _handler.Handle(command, CancellationToken.None)).IsSuccess.Should().BeTrue();
+
+        var parent = created.Single(habit => habit.ParentHabitId is null);
+        parent.DueDate.Should().Be(new DateOnly(2026, 10, terminal
+            ? restrictedWeekdays ? 14 : 11
+            : restrictedWeekdays ? 21 : 20));
+        parent.IsCompleted.Should().Be(terminal);
+        var children = created.Where(habit => habit.ParentHabitId == parent.Id).ToList();
+        children.Should().HaveCount(2);
+        children.Should().AllSatisfy(child =>
+        {
+            child.DueDate.Should().Be(parent.DueDate);
+            child.IsCompleted.Should().Be(terminal);
+            child.StartDate.Should().Be(selected);
+            child.ScheduledStartDate.Should().Be(selected);
+            child.EndDate.Should().Be(end);
+            child.FrequencyUnit.Should().Be(parent.FrequencyUnit);
+            child.FrequencyQuantity.Should().Be(parent.FrequencyQuantity);
+            child.Days.Should().BeEmpty();
+        });
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_LegacyDate_ChildrenRetainExistingDueDateInheritance(bool explicitDueDate)
+    {
+        var today = new DateOnly(2026, 10, 20);
+        DateOnly? requestedDueDate = explicitDueDate ? new DateOnly(2026, 10, 26) : null;
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(today);
+        var created = new List<Habit>();
+        _habitRepo.AddAsync(Arg.Do<Habit>(created.Add), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        var command = new CreateHabitCommand(UserId, "Read", null, FrequencyUnit.Day, 1,
+            SubHabits: ["Chapter"], DueDate: requestedDueDate,
+            Options: new HabitCommandOptions(Days: [DayOfWeek.Wednesday]));
+
+        (await _handler.Handle(command, CancellationToken.None)).IsSuccess.Should().BeTrue();
+
+        var parent = created.Single(habit => habit.ParentHabitId is null);
+        var child = created.Single(habit => habit.ParentHabitId == parent.Id);
+        parent.DueDate.Should().Be(new DateOnly(2026, 10, explicitDueDate ? 28 : 21));
+        child.DueDate.Should().Be(requestedDueDate ?? parent.DueDate);
+        child.StartDate.Should().Be(child.DueDate);
+        child.IsCompleted.Should().BeFalse();
+        child.Days.Should().BeEmpty();
+    }
+
+    [Theory]
     [InlineData(HabitSchedule.OneTime)]
     [InlineData(HabitSchedule.Recurring)]
     [InlineData(HabitSchedule.Flexible)]
