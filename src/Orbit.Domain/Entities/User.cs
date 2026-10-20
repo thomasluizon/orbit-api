@@ -7,6 +7,7 @@ namespace Orbit.Domain.Entities;
 
 public partial class User : Entity
 {
+    private TimeProvider _timeProvider = TimeProvider.System;
     private const int DefaultStreakDaysPerFreeze = 7;
 
     [GeneratedRegex(@"^[^@\s]+@[^@\s]+\.[^@\s]+$", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]
@@ -29,6 +30,7 @@ public partial class User : Entity
     public string? StripeCustomerId { get; private set; }
     public string? StripeSubscriptionId { get; private set; }
     public DateTime? PlanExpiresAt { get; private set; }
+    public DateTime? BonusProExpiresAtUtc { get; private set; }
     public DateTime? TrialEndsAt { get; private set; }
     public bool IsLifetimePro { get; private set; } = false;
     public int AiMessagesUsedToday { get; private set; } = 0;
@@ -96,17 +98,25 @@ public partial class User : Entity
     public bool PublicProfileShowTopHabits { get; private set; } = false;
 
     [NotMapped]
-    public bool IsPro => IsLifetimePro || (Plan == UserPlan.Pro && PlanExpiresAt.HasValue && PlanExpiresAt.Value > DateTime.UtcNow);
+    public bool IsPro => IsLifetimePro || (Plan == UserPlan.Pro && PlanExpiresAt > _timeProvider.GetUtcNow().UtcDateTime);
 
     [NotMapped]
-    public bool IsTrialActive => !IsPro && TrialEndsAt.HasValue && TrialEndsAt.Value > DateTime.UtcNow;
+    public bool IsTrialActive => !IsPro && TrialEndsAt > _timeProvider.GetUtcNow().UtcDateTime;
 
     [NotMapped]
     public bool HasProAccess => IsPro || IsTrialActive;
 
+    [NotMapped]
+    public bool IsBonusPro => Plan == UserPlan.Pro && PlanExpiresAt.HasValue && PlanExpiresAt == BonusProExpiresAtUtc;
+
+    [NotMapped]
+    public bool HasActivePaidSubscription => !IsBonusPro && Plan == UserPlan.Pro && PlanExpiresAt > _timeProvider.GetUtcNow().UtcDateTime
+        && (SubscriptionSource == Enums.SubscriptionSource.Stripe && !string.IsNullOrWhiteSpace(StripeSubscriptionId)
+            || SubscriptionSource == Enums.SubscriptionSource.GooglePlay && !string.IsNullOrWhiteSpace(PlayPurchaseToken));
+
     private User() { }
 
-    public static Result<User> Create(string name, string email)
+    public static Result<User> Create(string name, string email, TimeProvider? timeProvider = null)
     {
         if (string.IsNullOrWhiteSpace(name))
             return Result.Failure<User>(DomainErrors.NameRequired);
@@ -118,9 +128,11 @@ public partial class User : Entity
         if (!EmailRegex().IsMatch(trimmedEmail))
             return Result.Failure<User>(DomainErrors.InvalidEmailFormat);
 
-        var now = DateTime.UtcNow;
+        var clock = timeProvider ?? TimeProvider.System;
+        var now = clock.GetUtcNow().UtcDateTime;
         return Result.Success(new User
         {
+            _timeProvider = clock,
             Name = name.Trim(),
             Email = trimmedEmail.ToLowerInvariant(),
             CreatedAtUtc = now,
@@ -272,6 +284,20 @@ public partial class User : Entity
 
     public void SetStripeCustomerId(string customerId) => StripeCustomerId = customerId;
 
+    public void GrantBonusProDays(int days)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(days);
+        if (HasActivePaidSubscription)
+            throw new InvalidOperationException("Bonus days cannot extend a paid subscription period.");
+
+        var nowAtUtc = _timeProvider.GetUtcNow().UtcDateTime;
+        var expiresAtUtc = PlanExpiresAt > nowAtUtc ? PlanExpiresAt.Value : nowAtUtc;
+        var bonusExpiresAtUtc = expiresAtUtc.AddDays(days);
+        Plan = UserPlan.Pro;
+        PlanExpiresAt = bonusExpiresAtUtc;
+        BonusProExpiresAtUtc = bonusExpiresAtUtc;
+    }
+
     public void SetStripeSubscription(
         string subscriptionId,
         DateTime expiresAt,
@@ -284,6 +310,7 @@ public partial class User : Entity
         if (StripeSubscriptionId != subscriptionId)
             StripeRenewalStoppedByDeletion = false;
         StripeSubscriptionId = subscriptionId;
+        BonusProExpiresAtUtc = null;
         PlanExpiresAt = expiresAt;
         Plan = UserPlan.Pro;
         SubscriptionSource = Enums.SubscriptionSource.Stripe;
@@ -301,6 +328,7 @@ public partial class User : Entity
         if (PlayPurchaseToken != purchaseToken)
             PlayRenewalStoppedByDeletion = false;
         PlayPurchaseToken = purchaseToken;
+        BonusProExpiresAtUtc = null;
         PlanExpiresAt = expiresAt;
         Plan = UserPlan.Pro;
         SubscriptionSource = Enums.SubscriptionSource.GooglePlay;

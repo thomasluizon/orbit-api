@@ -341,6 +341,8 @@ public class OrbitDbContext : DbContext
         {
             entity.HasIndex(r => r.ReferrerId);
             entity.HasIndex(r => r.ReferredUserId).IsUnique();
+            entity.Property(r => r.ReferrerReward).HasDefaultValue(ReferralRewardKind.None);
+            entity.Property(r => r.ReferredReward).HasDefaultValue(ReferralRewardKind.None);
         });
     }
 

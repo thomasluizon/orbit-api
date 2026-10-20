@@ -57,7 +57,9 @@ public class SubscriptionTools(
                $"Successful Referrals: {s.SuccessfulReferrals}\n" +
                $"Pending Referrals: {s.PendingReferrals}\n" +
                $"Max Referrals: {s.MaxReferrals}\n" +
-               $"Reward: {s.DiscountPercent}% discount ({s.RewardType})";
+               (s.RewardType == "pro_days"
+                   ? $"Reward: {s.ProDaysPerReferral} days of Pro ({s.RewardType})"
+                   : $"Reward: {s.DiscountPercent}% discount ({s.RewardType})");
     }
 
     [McpServerTool(Name = "get_referral_code"), Description("Get or create the user's referral code and shareable link.")]
