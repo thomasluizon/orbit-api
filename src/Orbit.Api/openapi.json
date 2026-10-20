@@ -2715,6 +2715,13 @@
         ],
         "parameters": [
           {
+            "name": "X-Orbit-Eval-Trace",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "api-version",
             "in": "header",
             "schema": {
@@ -2952,6 +2959,13 @@
           "Chat"
         ],
         "parameters": [
+          {
+            "name": "X-Orbit-Eval-Trace",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
           {
             "name": "api-version",
             "in": "header",

@@ -377,18 +377,16 @@ internal static class BulkHabitToolArguments
 
     private static string? ValidateBooleanKinds(JsonElement updates)
     {
-        foreach (var booleanName in new[] { "is_bad_habit", "is_flexible", "reminder_enabled", IsGeneralField, SlipAlertEnabledField }
-            .Where(name => !HasKind(updates, name, JsonValueKind.True, JsonValueKind.False)))
-            return $"{booleanName} must be a boolean.";
-        return null;
+        var booleanName = new[] { "is_bad_habit", "is_flexible", "reminder_enabled", IsGeneralField, SlipAlertEnabledField }
+            .FirstOrDefault(name => !HasKind(updates, name, JsonValueKind.True, JsonValueKind.False));
+        return booleanName is null ? null : $"{booleanName} must be a boolean.";
     }
 
     private static string? ValidateArrayKinds(JsonElement updates)
     {
-        foreach (var arrayName in new[] { "days", "reminder_times", "checklist_items", "scheduled_reminders", RelativeRemindersField }
-            .Where(name => !HasKind(updates, name, JsonValueKind.Array)))
-            return $"{arrayName} must be an array.";
-        return null;
+        var arrayName = new[] { "days", "reminder_times", "checklist_items", "scheduled_reminders", RelativeRemindersField }
+            .FirstOrDefault(name => !HasKind(updates, name, JsonValueKind.Array));
+        return arrayName is null ? null : $"{arrayName} must be an array.";
     }
 
     private static string? ValidateArrayContents(JsonElement updates)
