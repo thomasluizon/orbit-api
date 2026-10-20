@@ -622,14 +622,6 @@ namespace Orbit.Infrastructure.Migrations
                         },
                         new
                         {
-                            Key = "notion_integration",
-                            Description = "Notion task integration",
-                            Enabled = false,
-                            PlanRequirement = "Pro",
-                            UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, 0, DateTimeKind.Utc)
-                        },
-                        new
-                        {
                             Key = "api_keys",
                             Description = "Personal API keys",
                             Enabled = true,
@@ -1460,57 +1452,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("HabitSkipUndos");
                 });
 
-            modelBuilder.Entity("Orbit.Domain.Entities.IssuedAstraBlock", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("AnswerJson")
-                        .HasColumnType("jsonb");
-
-                    b.Property<DateTime?>("AnsweredAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("CommittedResponseJson")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("DefinitionJson")
-                        .IsRequired()
-                        .HasColumnType("jsonb");
-
-                    b.Property<DateTime>("ExpiresAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Form")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
-
-                    b.Property<DateTime?>("InvalidatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateOnly?>("ReservedAllowanceDate")
-                        .HasColumnType("date");
-
-                    b.Property<string>("ResponseJson")
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ExpiresAtUtc");
-
-                    b.HasIndex("UserId", "CreatedAtUtc");
-
-                    b.ToTable("IssuedAstraBlocks");
-                });
-
             modelBuilder.Entity("Orbit.Domain.Entities.MarketingContact", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1609,135 +1550,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasIndex("UserId", "UpdatedAtUtc");
 
                     b.ToTable("Notifications");
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.NotionConnection", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("AccessToken")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("BotId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("LastPollAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("RefreshToken")
-                        .HasColumnType("text");
-
-                    b.Property<string>("SharedDatabasesJson")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("WorkspaceId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("WorkspaceName")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId")
-                        .IsUnique();
-
-                    b.ToTable("NotionConnections");
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.NotionOAuthState", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("ExpiresAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsConsumed")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("RedirectUri")
-                        .IsRequired()
-                        .HasMaxLength(2048)
-                        .HasColumnType("character varying(2048)");
-
-                    b.Property<string>("StateHash")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ExpiresAtUtc");
-
-                    b.HasIndex("StateHash")
-                        .IsUnique();
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("NotionOAuthStates");
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.NotionTask", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("DatabaseId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateOnly?>("DueDate")
-                        .HasColumnType("date");
-
-                    b.Property<DateTime>("FetchedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("NotionLastEditedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("PageId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Status")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("Url")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId", "PageId")
-                        .IsUnique();
-
-                    b.ToTable("NotionTasks");
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.OwedSubscriptionCancellation", b =>
@@ -1916,106 +1728,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasIndex("UserId", "CreatedAtUtc");
 
                     b.ToTable("PendingClarifications");
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.ProactiveCalendarDay", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateOnly>("LocalDate")
-                        .HasColumnType("date");
-
-                    b.Property<int?>("TimedEventCount")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("TimedMinutes")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId", "LocalDate")
-                        .IsUnique();
-
-                    b.ToTable("ProactiveCalendarDays");
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.ProactiveItem", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("ActedAtUtc")
-                        .IsConcurrencyToken()
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("ActionLabel")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("ActionPrompt")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int?>("EndReason")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("EndedAtUtc")
-                        .IsConcurrencyToken()
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("FactsJson")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<Guid?>("GoalId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateOnly>("LocalDate")
-                        .HasColumnType("date");
-
-                    b.Property<DateTime?>("OpenedAtUtc")
-                        .IsConcurrencyToken()
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("PushedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("ShownAtUtc")
-                        .IsConcurrencyToken()
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Text")
-                        .IsRequired()
-                        .HasMaxLength(140)
-                        .HasColumnType("character varying(140)");
-
-                    b.Property<int>("Trigger")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId", "LocalDate")
-                        .IsUnique()
-                        .HasFilter("\"PushedAtUtc\" IS NOT NULL");
-
-                    b.HasIndex("UserId", "Trigger", "EndedAtUtc");
-
-                    b.HasIndex("UserId", "Trigger", "LocalDate")
-                        .IsUnique();
-
-                    b.ToTable("ProactiveItems");
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.ProcessedPlayNotification", b =>
@@ -2243,7 +1955,7 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasIndex("UserId", "Date")
                         .IsUnique();
 
-                    b.ToTable("SentProactiveCheckins", (string)null);
+                    b.ToTable("SentProactiveCheckins");
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.SentReminder", b =>
@@ -2533,7 +2245,7 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<DateOnly?>("PreGapLastActiveDate")
                         .HasColumnType("date");
 
-                    b.Property<bool?>("ProactiveAstraEnabled")
+                    b.Property<bool>("ProactiveAstraEnabled")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("PublicProfileShowAchievements")
@@ -3097,61 +2809,7 @@ namespace Orbit.Infrastructure.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Orbit.Domain.Entities.IssuedAstraBlock", b =>
-                {
-                    b.HasOne("Orbit.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.NotionConnection", b =>
-                {
-                    b.HasOne("Orbit.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.NotionOAuthState", b =>
-                {
-                    b.HasOne("Orbit.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.NotionTask", b =>
-                {
-                    b.HasOne("Orbit.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("Orbit.Domain.Entities.PendingClarification", b =>
-                {
-                    b.HasOne("Orbit.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.ProactiveCalendarDay", b =>
-                {
-                    b.HasOne("Orbit.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.ProactiveItem", b =>
                 {
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()
